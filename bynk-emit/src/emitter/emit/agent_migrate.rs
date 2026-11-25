@@ -99,6 +99,8 @@ pub(super) struct MigrateNames<'a> {
     pub(super) encode_fn: Option<&'a str>,
     /// The current shape's `store Map` fields.
     pub(super) map_names: &'a HashSet<String>,
+    /// #4037: the `Map`, `Set` and `Cache` fields keyed by the canonical encoding.
+    pub(super) composite_keys: &'a HashSet<String>,
 }
 
 /// `["a", "b"]`: a list of names as an array literal.
@@ -324,7 +326,14 @@ fn migrate_step_try_body(
                             call(
                                 member(ident("__h"), "put"),
                                 vec![
-                                    call(persist_global("String"), vec![ident("__k")]),
+                                    if names.composite_keys.contains(n) {
+                                        call(
+                                            ident("__bynkStoreKey"),
+                                            vec![str_lit(n), ident("__k")],
+                                        )
+                                    } else {
+                                        call(persist_global("String"), vec![ident("__k")])
+                                    },
                                     ident("__v"),
                                 ],
                             ),

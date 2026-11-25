@@ -815,6 +815,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
     },
     Explain {
+        code: "bynk.agent.write_after_erase",
+        blurb: "`self.erase()` marks the instance for deletion, and the handler's commit then deletes everything stored for the key instead of writing the handler's state. A `:=` after it in the same block has nothing to write to, so it is dropped. Remove the write. A write before `self.erase()` is dropped the same way. If something should outlive the erasure, emit an event first: events emitted in the handler are still released at the commit, so a subscriber can keep what it needs.",
+        example: "on call close() -> Effect[()] {\n\x20 self.erase()\n\x20 closed := true    // ✗ the commit deletes the instance, so nothing is written\n}\n\non call close() -> Effect[()] given Events {\n\x20 do Events.emit[AccountClosed](AccountClosed { id: self.id })\n\x20 self.erase()    // ✓ the event records it; the state goes\n}",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
@@ -825,6 +830,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Secret = opaque String\n\n\
                   store secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\n\
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
+    },
+    Explain {
+        code: "bynk.agents.self_operation",
+        blurb: "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+        example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
     },
     Explain {
         code: "bynk.asset.duplicate",
@@ -2534,6 +2544,26 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
     },
     Explain {
+        code: "bynk.http.errors_duplicate",
+        blurb: "A handler has one `@errors`, which says which shape its error bodies take. Two would name two shapes for the same response, and neither could be said to win, so the second is refused. Keep one. See also `bynk.http.json_duplicate`.",
+        example: "@errors(format: problem)\n@errors(format: bynk)       // ✗ already set above\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@errors(format: problem)     // ✓ one shape\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.errors_invalid_field",
+        blurb: "`format` chooses the shape of an HTTP service's error bodies, and has two values, written bare: `bynk` (Bynk's own bodies, the default) or `problem` (RFC 9457 `application/problem+json`). Anything else, a string included, is refused, and `@errors` also needs its `format:` argument. See also `bynk.http.json_invalid_field`.",
+        example: "@errors(format: \"problem\")   // ✗ bare, not a string\n\n@errors(format: problem)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.errors_not_http",
+        blurb: "An `errors { }` section, or an `@errors` annotation, chooses the shape of a service's HTTP error bodies. Only a `from http` service has them, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `json` section has the same rule: `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    errors { format: problem }   // ✗ a schedule has no error body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    errors { format: problem }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.errors_unknown_field",
+        blurb: "`errors { }` has one field, `format`, and `@errors` has one argument, also `format:`. Any other name is refused rather than ignored, so a misspelling does not silently leave the default in place. See also `bynk.http.json_unknown_field`.",
+        example: "errors { format: problem, title: short }   // ✗ only `format`\n\nerrors { format: problem }                  // ✓",
+    },
+    Explain {
         code: "bynk.http.extra_param",
         blurb: "A handler's parameters are not free-form. Each is a path parameter, matching a `:name` in the route, or one of the three the router fills itself: `body`, `headers` and `query`. Any other name has nowhere to come from. Read a value from the query string with `query: RequestQuery` or a record, move it into the path, or drop it. A `:name` with no parameter is `bynk.http.unbound_path_param`.",
         example: "on GET(\"/items\") (page: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ not in the path, and not `body`, `headers` or `query`\n\non GET(\"/items\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -2582,6 +2612,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.invalid_path",
         blurb: "The router matches a route against the request's path, which always begins with `/`, so a route that does not is refused rather than guessed at. A `:` segment must also carry a name, since the name is what binds the value to a handler parameter. Start the route with `/` and name each parameter, as in `\"/items/:id\"`. A route under a reserved prefix is `bynk.http.reserved_prefix`.",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.invalid_response_header",
+        blurb: "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+        example: "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
     },
     Explain {
         code: "bynk.http.json_duplicate",
@@ -2737,6 +2772,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.reserved_response_header",
+        blurb: "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+        example: "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.reserved_route_syntax",
         blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
         example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -2798,8 +2838,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.index.unkeyable_key",
-        blurb: "An index is looked up by equality on its key, so the field has to be a value the store can compare and key on: `Int`, `String`, or a refined or opaque type over one of them. A `Bool`, a record or a list cannot be. Index another field, or add a field of a keyable type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
-        example: "type Order = { id: String, paid: Bool, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: paid)         // ✗ a `Bool` is not keyable\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
+        blurb: "An index is looked up by equality on its key, so the field has to be a `Key` type: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. A `Float` is never a key, at any depth, because `NaN` is not equal to itself. Index another field, or add a field of a key type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
+        example: "type Order = { id: String, weight: Float, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: weight)       // ✗ a `Float` is not a key\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
     },
     Explain {
         code: "bynk.internal.missing_checker_fact",
@@ -3343,6 +3383,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.parse.duplicate_delivery",
         blurb: "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_errors",
+        blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
+        example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -4132,7 +4177,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
-        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
     },
     Explain {
@@ -4734,8 +4779,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.store.unkeyable_key",
-        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
-        example: "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
+        example: "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
     },
     Explain {
         code: "bynk.store.unknown_annotation",
@@ -5964,13 +6009,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
-                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
+                nothing else. An `Instant` prints as RFC 3339 UTC and a `Duration` as units, \
+                largest first (`1h30m`), the text their `toString()` gives. A record or \
                 sum has no canonical text, and Bynk will not print an unreadable stand-in \
                 such as `[object Object]`. An opaque type hides its base, so use `.raw` \
                 first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
-                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
-                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
-                `DecodeError`.",
+                on `Bytes` (hex or base64 is a real choice), or interpolate the fields of a \
+                record, a `ValidationError` or a `DecodeError`.",
         example: "type User = { name: String }\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",
@@ -6164,6 +6210,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.negative_length",
         blurb: "`MinLength`, `MaxLength` and `Length` count the characters of a string, and a length cannot be below zero, so `MinLength(-1)` would hold for every string and `MaxLength(-1)` for none. The compiler takes a negative argument to be a mistake and refuses it. Give a length of zero or more. A set of predicates that no value can satisfy is `bynk.types.empty_refinement`.",
         example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
+    },
+    Explain {
+        code: "bynk.types.nested_effect",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
     },
     Explain {
         code: "bynk.types.never_inferred",
@@ -6651,8 +6702,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
                 but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
-                the same goes for a record or sum that reaches one. A `for all` over such a type \
-                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                the same goes for a record or sum that reaches one, and the message names the \
+                field that does. A `for all` is different: it draws a `Matches` or `IsoDate` \
+                string, and pins only a `Cron` or a pattern it cannot walk. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
                 refinement, or give the type an `@example` and use bare `Val`. See the \
                 `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
         example: "// demo/codes.bynk\n\
@@ -7328,6 +7380,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agent.version_without_path",
         "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning).",
     )),
+    warn(d(
+        "bynk.agent.write_after_erase",
+        "A `:=` follows `self.erase()` in the same block, so the commit drops it (warning).",
+    )),
     dg(
         "bynk.agents.bad_state_initialiser",
         "An agent `store` field initialiser is not a static value of the field's type.",
@@ -7337,6 +7393,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agents.non_zeroable_state_field",
         "An agent `store` field has no initialiser and no implicit zero value.",
         &["store_field"],
+    ),
+    d(
+        "bynk.agents.self_operation",
+        "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
     ),
     d(
         "bynk.asset.duplicate",
@@ -8454,6 +8514,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.error_status_position",
         "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
     ),
+    d(
+        "bynk.http.errors_duplicate",
+        "A handler carries more than one `@errors` annotation.",
+    ),
+    d(
+        "bynk.http.errors_invalid_field",
+        "An `errors` `format`, or an `@errors` `format:`, is missing or is not `bynk` or `problem`.",
+    ),
+    d(
+        "bynk.http.errors_not_http",
+        "An `errors { }` section or an `@errors` annotation is not on a `from http` service.",
+    ),
+    d(
+        "bynk.http.errors_unknown_field",
+        "An `errors { }` section or an `@errors` annotation names something other than `format`.",
+    ),
     dg(
         "bynk.http.extra_param",
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
@@ -8508,6 +8584,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.invalid_path",
         "An HTTP route path is malformed.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.invalid_response_header",
+        "A response header method is given a malformed name, value, URL, filename or delay.",
     ),
     d(
         "bynk.http.json_duplicate",
@@ -8634,6 +8714,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.reserved_prefix",
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.reserved_response_header",
+        "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`.",
     ),
     dg(
         "bynk.http.reserved_route_syntax",
@@ -9039,6 +9123,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_delivery",
         "A service declares more than one `delivery { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_errors",
+        "A service declares more than one `errors { }` policy.",
         &["service_decl"],
     ),
     dg(
@@ -10775,6 +10864,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.nested_effect",
+        "An `Effect` wraps another `Effect`, as written or through a call's instantiation; effects are promises and flatten, so the shape cannot exist (use `andThen`).",
     ),
     dg(
         "bynk.types.never_inferred",

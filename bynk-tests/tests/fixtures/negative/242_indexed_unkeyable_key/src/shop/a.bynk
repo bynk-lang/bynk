@@ -2,7 +2,7 @@ context shop.a
 
 type R = {
   id: String,
-  active: Bool,
+  active: Float,
 }
 
 agent A {

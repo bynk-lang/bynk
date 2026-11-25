@@ -152,6 +152,25 @@ pub fn complete_in(
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
+    let mut items = complete_base(project_root, line_prefix, doc_text, files);
+    // #3931: `self.<cursor>` in a document with an agent — `erase`, offered beside whatever else the
+    // position offers (the key's fields), not instead of it.
+    if let Some(erase) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
+        for e in erase {
+            if !items.iter().any(|i| i.label == e.label) {
+                items.push(e);
+            }
+        }
+    }
+    items
+}
+
+fn complete_base(
+    project_root: Option<&Path>,
+    line_prefix: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
     // #2223: the project's own files and its dependencies' reachable units,
     // resolved once per request and only by the branches that name units.
     let split = || split_dependency_files(files, project_root);
@@ -1119,6 +1138,93 @@ pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
         "plain JSON for non-Bynk clients: `Some(v)` is `v`, `None` is `null`",
     ),
 ];
+
+/// #3916: the error-body policy fields, offered at a field-name position inside
+/// an `errors { }` block (and as `@errors( … )` arguments). The closed set is
+/// this one.
+pub const ERRORS_FIELDS: &[(&str, &str)] = &[(
+    "format",
+    "the shape of error bodies: `bynk` (Bynk's own, the default) or `problem` (RFC 9457 `application/problem+json`)",
+)];
+
+/// #3916: the values of an `errors` / `@errors` `format`.
+pub const ERRORS_FORMAT_VALUES: &[(&str, &str)] = &[
+    (
+        "bynk",
+        "Bynk's own bodies: `{ \"error\": message }` from a variant, `{ \"kind\", \"details\" }` from a router rejection (the default)",
+    ),
+    (
+        "problem",
+        "RFC 9457 `application/problem+json` with `type`, `title`, `status` and `detail`",
+    ),
+];
+
+/// #3916: the cursor is at a field-*name* position inside an `errors { … }`
+/// block. Mirrors [`in_json_field_position`].
+pub fn in_errors_field_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "errors" {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #3916: the cursor is at the value of `format:` — inside `errors { … }` or
+/// `@errors( … )` — where `bynk` / `problem` are offered.
+pub fn in_errors_format_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_block = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "errors");
+    let in_annotation = innermost_open_paren(text, offset).is_some_and(|open| {
+        word_before_brace(text, open) == "errors"
+            && text[..open]
+                .trim_end()
+                .trim_end_matches("errors")
+                .trim_end()
+                .ends_with('@')
+    });
+    if !in_block && !in_annotation {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '(', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("format")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
+}
+
+/// #3916: the cursor is at an argument-*name* position inside an `@errors( … )`
+/// annotation. Mirrors [`in_json_arg_position`].
+pub fn in_errors_arg_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "errors" {
+        return false;
+    }
+    let head = text[..open].trim_end();
+    let before = head[..head.len() - "errors".len()].trim_end();
+    if !before.ends_with('@') {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
 
 /// #3875: whether the cursor is inside the parentheses of `on schedule(`, at a
 /// bare (possibly empty) name: a schedule written as a string literal has
@@ -2164,7 +2270,7 @@ pub fn nested_variant_completions(
 }
 
 /// The built-in variant names of `Result`/`Option` as `Variant` completions.
-fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
+pub(crate) fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
     names
         .iter()
         .map(|v| {
@@ -3752,13 +3858,7 @@ pub fn value_member_candidates(
 ) -> Vec<Completion> {
     let mut out: Vec<Completion> = kernel_methods::methods_for(ty, tys)
         .iter()
-        .map(|km| {
-            Completion::item(
-                km.name,
-                CompletionKind::Member,
-                Some(km.signature.to_string()),
-            )
-        })
+        .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail())))
         .collect();
     // #3955: `compare` on every orderable receiver. A named type is orderable
     // when its declaration says `derives Ord`.
@@ -3779,13 +3879,11 @@ pub fn value_member_candidates(
         }
     });
     if kernel_methods::is_ord_receiver(ty, tys, &|n| ord_names.contains(n)) {
-        out.extend(kernel_methods::ORD_RECEIVER_TABLE.iter().map(|km| {
-            Completion::item(
-                km.name,
-                CompletionKind::Member,
-                Some(km.signature.to_string()),
-            )
-        }));
+        out.extend(
+            kernel_methods::ORD_RECEIVER_TABLE
+                .iter()
+                .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail()))),
+        );
     }
     // An asset's one field (#1883).
     if matches!(&*tys.get(ty), Ty::Asset) {

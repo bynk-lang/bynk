@@ -542,6 +542,34 @@ pub(super) fn emit_agent_load_commit_state(
     )
     .private();
     methods.push(commit_state_method);
+    // #3931: a handler that calls `self.erase()` commits by deleting the instance's storage.
+    if a.handlers
+        .iter()
+        .any(|h| bynk_model::block_uses_erase(&h.body, &commons.callees))
+    {
+        methods.push(
+            bynk_ts::TsClassMethod::new(
+                "eraseState",
+                true,
+                Vec::new(),
+                Some(bynk_ts::TsType::named_with_args(
+                    "globalThis.Promise",
+                    vec![bynk_ts::TsType::named("void")],
+                )),
+                vec![bynk_ts::TsStmt::expr_stmt(
+                    bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Ident("__eraseStored".to_string())),
+                        args: vec![
+                            bynk_ts::TsExpr::Ident("this".to_string()),
+                            bynk_ts::TsExpr::Ident("this.state.storage".to_string()),
+                        ],
+                    })),
+                    None,
+                )],
+            )
+            .private(),
+        );
+    }
 }
 
 /// `commitState`'s parameters and body. #3581: a `bynk dev` build's `commitState` also records the transition. It takes the
@@ -1323,6 +1351,7 @@ pub(super) fn emit_agent_state_persistence(
                     hydrate_fn: has_collections.then_some(hydrate_fn.as_str()),
                     encode_fn: has_encode.then_some(encode_fn.as_str()),
                     map_names: &map_names,
+                    composite_keys: &layout.composite_keys,
                 },
                 &step_fn,
                 plan,

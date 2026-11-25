@@ -1,0 +1,6 @@
+suite demo.d {
+  case "a case" {
+    let o = Val[Order]
+    expect true
+  }
+}

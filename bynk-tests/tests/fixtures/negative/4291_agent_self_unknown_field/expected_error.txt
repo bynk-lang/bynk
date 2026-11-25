@@ -1,0 +1,2 @@
+bynk.types.unknown_field `self` in agent `Counter` has no field `nope`
+# exact

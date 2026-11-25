@@ -144,12 +144,40 @@ as a plain value keeps its pure-collection methods).
 | `Cache[K, V]` | the `Map` op set, with per-entry TTL expiry | requires `@ttl`; an expired entry reads as absent (check-on-read, needs `given Clock`) and is deleted when a handler that uses a `Cache` commits (at most 64 per commit, shared by all the agent's `Cache` fields) |
 | `Log[T]` | `append`; lazy `Query` reads via `since`/`before`/`between`/`recent`/`reversed` | `append` stamps the time (`given Clock`); the window roots take explicit `Instant`s, so reads need no clock |
 
-A `Map`'s or `Cache`'s key and a `Set`'s element must be `String`, `Int`, or a
-refined or opaque type over them (`bynk.store.unkeyable_key`, #1680). A value
-`Map` or `Set` accepts any [`Key`](/reference/types/#keys) type, but a store
-collection persists as a JSON object keyed by the key's string form, so a composite
-store key is not supported yet. A store collection is keyed by the key's
-string form, so a record has no stable key: key by one of its id fields instead.
+A `Map`'s or `Cache`'s key and a `Set`'s element may be any [`Key`](/reference/types/#keys)
+type, as for a value `Map` or `Set`: a record, a sum, an `Option`, a `Decimal`, `Bytes`.
+Two keys are the same entry exactly when they are `==`. A `String` or `Int` key (or a refined
+or opaque type over one) is stored under its own text, as it always has been, so existing
+state reads unchanged. Any other key is stored under its canonical encoding, which counts
+towards the platform's 2 KiB limit on one storage key: an operation whose key encodes over it,
+a read (`get`, `contains`) as much as a write, faults with a message naming the field, never the
+key's value, as does an index posting whose indexed value and entry key together are over it. A type that is not a `Key`
+(a `Float` at any depth, a `Map`, a `Set`, a function) is `bynk.store.unkeyable_key`. Changing
+an existing field's key type from a scalar to a composite one is not an additive schema change,
+and the schema lock refuses it. Nor is adding a field to a key record, even with a default: the
+encoding is the stored key, so it would change every stored key and orphan the entries. A new
+variant of a sum key is additive, and so is a new field in the map's value. An `@indexed(by:)` field may itself be any `Key` type, encoded the
+same way.
+
+```bynk
+context shop
+
+type StockKey = {
+	region: String,
+	code: Int,
+}
+
+agent Warehouse {
+	key id: String
+
+	store stock: Map[StockKey, Int]
+	store blocked: Set[StockKey]
+
+	on call add(k: StockKey, n: Int) -> Effect[()] {
+		let _ <- stock.upsert(k, n, (q) => q + n)
+	}
+}
+```
 
 Every entry is subject to the [size limits](#size-and-cost-of-an-agents-state).
 
@@ -484,6 +512,43 @@ project deploys to. Raising it drops the lock's snapshots below it.
 
 See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
 and [§5.4.3 of the specification](/reference/spec/static-semantics/#543-rehydration-validation-v097).
+
+## Erasing an instance {#erase}
+
+A handler deletes its own instance's stored state with `self.erase()`:
+
+```bynk,fragment
+agent Account {
+	key id: String
+	store email: Cell[Option[String]]
+	store orders: Map[String, Order]
+
+	on call close() -> Effect[()] given Events {
+		do Events.emit[AccountClosed](AccountClosed { id: self.id })
+		self.erase()
+	}
+}
+```
+
+When the handler commits, everything stored for the key is deleted: every field, every `Map`, `Set`,
+`Cache` and `Log` entry, every `@indexed` posting, and the schema markers. The next call to the key
+starts from the agent's **initial state**, as a key never seen does: each field reads its initialiser
+or its zero. Nothing is left, so a closed account's data is gone and a finished order stops costing
+storage.
+
+- **The erasure is the commit.** The handler's other writes, before or after the call, are discarded,
+  and a `:=` after `do self.erase()` in the same block is a warning (`bynk.agent.write_after_erase`),
+  since it has nothing to write to.
+- **It is atomic with the handler.** A handler that faults commits nothing, so it erases nothing, even
+  if it called `self.erase()` first.
+- **No invariant is checked** against the initial state the instance returns to. It is the state every
+  new key starts in.
+- **Events are still released.** Emit one first, as above, so a subscriber learns of the erasure and
+  the erasure can be audited.
+- **Only in an `on call` handler.** Not in a `migrate` step, an invariant or a function. To remove
+  every instance of a class, see [Renaming and removing an agent](#renaming-and-removing-an-agent).
+- **Tests** observe the reset by calling a read handler, as a user of the agent would
+  ([guide](/book/guides/agents-and-state/delete-a-users-data/)).
 
 ## Renaming and removing an agent
 

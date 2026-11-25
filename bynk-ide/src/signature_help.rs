@@ -75,12 +75,23 @@ pub fn value_receiver_rewrite(
     Some((rewritten, dot.saturating_sub(1)))
 }
 
-/// The kernel-method signature for `method` on receiver type `ty`, if any.
+/// The kernel-method signature for `method` on receiver type `ty`, if any: the
+/// first form when the method has several arities.
 pub fn kernel_method_signature(
     ty: bynk_check::checker::TyId,
     tys: &bynk_check::checker::Types,
     method: &str,
 ) -> Option<String> {
+    kernel_method_signatures(ty, tys, method).into_iter().next()
+}
+
+/// #4262: every form of the kernel method `method` on receiver type `ty`, one
+/// signature per arity; empty when there is no such method.
+pub fn kernel_method_signatures(
+    ty: bynk_check::checker::TyId,
+    tys: &bynk_check::checker::Types,
+    method: &str,
+) -> Vec<String> {
     // #3955: `compare` applies to every orderable receiver. A named type is
     // taken as orderable here (its `derives` is not known to this lookup; a
     // receiver that is not `Ord` is reported by the checker at the call).
@@ -93,7 +104,28 @@ pub fn kernel_method_signature(
         .iter()
         .chain(ord)
         .find(|m| m.name == method)
-        .map(|m| m.signature.to_string())
+        .map(|m| m.signatures.iter().map(|s| s.to_string()).collect())
+        .unwrap_or_default()
+}
+
+/// #4262: which of a method's forms signature help marks active while the
+/// parameter at index `active_param` is being typed: the narrowest form that
+/// has that parameter, else (the call has more arguments than any form takes)
+/// the widest form, as the closest fit. Ties go to the earlier form.
+pub fn active_signature(labels: &[String], active_param: usize) -> usize {
+    let widths: Vec<usize> = labels.iter().map(|l| param_ranges(l).len()).collect();
+    let fitting = widths
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| **w > active_param)
+        .min_by_key(|(_, w)| **w);
+    let widest = || {
+        widths
+            .iter()
+            .enumerate()
+            .max_by_key(|(i, w)| (**w, std::cmp::Reverse(*i)))
+    };
+    fitting.or_else(widest).map_or(0, |(i, _)| i)
 }
 
 /// Scan back for the `(` that is open at the cursor. A depth-0 `[` or `{` means
@@ -825,6 +857,46 @@ mod tests {
         let (rw, off) = value_receiver_rewrite(text, "xs.fold", open, text.len()).unwrap();
         assert_eq!(rw, "  let r = xs", "the `.fold(0, ` is dropped");
         assert_eq!(&text[off..=off], "s", "offset lands inside `xs`");
+    }
+
+    #[test]
+    fn an_overloaded_kernel_method_has_one_signature_per_arity() {
+        use bynk_check::checker::{Ty, Types};
+        use bynk_syntax::ast::BaseType;
+        let tys = &Types::new();
+        let list = tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::Int))));
+        for (method, arities) in [("min", [1, 0]), ("max", [1, 0]), ("count", [0, 1])] {
+            let forms = kernel_method_signatures(list, tys, method);
+            let widths: Vec<usize> = forms.iter().map(|f| param_ranges(f).len()).collect();
+            assert_eq!(widths, arities, "{method}: {forms:?}");
+        }
+        let join = kernel_method_signatures(list, tys, "join");
+        assert_eq!(join.len(), 2, "{join:?}");
+        assert!(join.iter().all(|f| !f.contains(", or")), "{join:?}");
+    }
+
+    #[test]
+    fn the_active_form_follows_the_arguments_typed() {
+        use bynk_check::checker::{Ty, Types};
+        use bynk_syntax::ast::BaseType;
+        let tys = &Types::new();
+        let list = tys.intern(Ty::List(tys.intern(Ty::Base(BaseType::Int))));
+        // `xs.min(`: only the keyed form has a first parameter.
+        let min = kernel_method_signatures(list, tys, "min");
+        assert_eq!(active_signature(&min, 0), 0);
+        // `xs.count(`: the predicate form, not `count()`.
+        let count = kernel_method_signatures(list, tys, "count");
+        assert_eq!(active_signature(&count, 0), 1);
+        // `xs.join(a`: the narrow separator form; `xs.join(a, ` the three-argument
+        // form, whose second parameter is the one highlighted.
+        let join = kernel_method_signatures(list, tys, "join");
+        let sep = join.iter().position(|f| f.starts_with("join(sep")).unwrap();
+        let on = 1 - sep;
+        assert_eq!(active_signature(&join, 0), sep);
+        assert_eq!(active_signature(&join, 1), on);
+        // More arguments than any form takes: the widest form.
+        assert_eq!(active_signature(&join, 5), on);
+        assert_eq!(active_signature(&min, 3), 0);
     }
 
     #[test]

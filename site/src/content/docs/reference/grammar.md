@@ -1323,6 +1323,38 @@ requires the section be on a `from http` service.
 
 One `name: value` field inside a `json { }` policy.
 
+### errors_policy {#rule-errors_policy}
+
+{{#grammar errors_policy}}
+
+The optional error-body policy of a `from http` service (#3916), in header
+position after `json`. `errors` is a contextual keyword, so it stays an ordinary
+identifier elsewhere.
+
+**Example.**
+```bynk
+context api
+
+service api from http {
+	errors {
+		format: problem,
+	}
+
+	on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+		Conflict("busy")
+	}
+}
+```
+
+The checker validates the closed field set (`format`: `bynk` or `problem`) and
+requires the section be on a `from http` service.
+
+### errors_field {#rule-errors_field}
+
+{{#grammar errors_field}}
+
+One `name: value` field inside an `errors { }` policy.
+
 ### delivery_policy {#rule-delivery_policy}
 
 {{#grammar delivery_policy}}
