@@ -1375,7 +1375,58 @@ impl SecurityPolicy {
             _ => None,
         }
     }
+
+    /// #3923: the `frameAncestors` entries as written (exact origins, `"self"`, or
+    /// `"*"`), if the field is a list of string literals; `None` when absent or
+    /// malformed (the checker has already reported it).
+    pub fn frame_ancestors(&self) -> Option<Vec<String>> {
+        match &self.field("frameAncestors")?.kind {
+            ExprKind::ListLit(items, ..) => items
+                .iter()
+                .map(|i| match &i.kind {
+                    ExprKind::StrLit(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => None,
+        }
+    }
+
+    /// #3923: the `referrerPolicy` identifier as written (camel case), if present.
+    pub fn referrer_policy(&self) -> Option<&str> {
+        match &self.field("referrerPolicy")?.kind {
+            ExprKind::Ident(id) => Some(id.name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// #3923: the verbatim `csp` policy, if the field is a string literal.
+    pub fn csp(&self) -> Option<&str> {
+        match &self.field("csp")?.kind {
+            ExprKind::StrLit(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
 }
+
+/// #3923: the `referrerPolicy` values, as `(written in Bynk, sent as the header)`.
+/// The standard Referrer-Policy tokens, in camel case.
+pub const REFERRER_POLICIES: &[(&str, &str)] = &[
+    ("noReferrer", "no-referrer"),
+    ("noReferrerWhenDowngrade", "no-referrer-when-downgrade"),
+    ("origin", "origin"),
+    ("originWhenCrossOrigin", "origin-when-cross-origin"),
+    ("sameOrigin", "same-origin"),
+    ("strictOrigin", "strict-origin"),
+    (
+        "strictOriginWhenCrossOrigin",
+        "strict-origin-when-cross-origin",
+    ),
+    ("unsafeUrl", "unsafe-url"),
+];
+
+/// #3923: the `Referrer-Policy` an HTML response gets when `security { }` names none.
+pub const DEFAULT_REFERRER_POLICY: &str = "strict-origin-when-cross-origin";
 
 /// A request-body-size policy on a `from http` service (v0.142, ADR 0165): the
 /// `limits { }` section in the service body. Parsed leniently as a list of
