@@ -282,7 +282,7 @@ export async function dispatchToEventsFanout(
   events: Array<{
     type: string;
     payload: unknown;
-    envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number };
+    envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string };
   }>,
 ): Promise<void> {
   // The whole round trip is wrapped, not just the status check: a rejected

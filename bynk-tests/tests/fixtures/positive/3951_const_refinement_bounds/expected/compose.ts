@@ -4,7 +4,7 @@
 import * as shop_placed from "./shop/placed.js";
 
 export function composeApp() {
-  const shop_placedDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => {
+  const shop_placedDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => {
     for (const ev of events) {
       switch (ev.type) {
       }

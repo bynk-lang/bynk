@@ -2643,9 +2643,12 @@ match. A filter does not narrow the handler parameter's type, and two
 subscribers whose filters overlap are not diagnosed.
 
 **The envelope.** `EventEnvelope`, exported by `bynk`, is
-`{ eventId: String, publisherId: String, emittedAt: Instant, schemaVersion: Int }`.
+`{ eventId: String, publisherId: String, emittedAt: Instant, schemaVersion: Int, trace: Option[String] = None }`.
 `eventId` identifies the emission: every subscriber of one emission observes the
-same value. `publisherId` is the emitting context's qualified name.
+same value. `publisherId` is the emitting context's qualified name. `trace` is the
+id of the trace the emission happened in (32 lowercase hex digits), `None` outside
+one; it is additive, so an envelope without it decodes with `None`, and it never
+affects whether an event is delivered.
 
 **Schema versions.** Every build reconciles each event's field shape — names,
 types, and which fields carry a default — against the project's committed

@@ -1,0 +1,6 @@
+# #4038: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# `@unique(by:)` refuses a commit that gives two entries one value.
+passed=6 failed=3
+fail a duplicate put is refused
+fail two puts of one email in one handler are refused
+fail two entries with the same nick are refused

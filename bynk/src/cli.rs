@@ -305,6 +305,11 @@ pub enum Command {
         /// `node_modules` themselves, and CI. Also set by `BYNK_NO_INSTALL=1`.
         #[arg(long)]
         no_install: bool,
+        /// Refuse a deploy to a named environment whose `env(…)` constants take
+        /// a `[vars]` or default value instead of the environment's own: the
+        /// staging Worker would use production's value (#3941).
+        #[arg(long)]
+        strict_environments: bool,
         /// Plan output format. `short` is line-oriented; `json` is for CI.
         #[arg(long, value_enum, default_value = "short")]
         format: DeployFormatArg,

@@ -1345,6 +1345,23 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
     async putBytes(key, value, options) {
       write(key, value.slice(), options);
     },
+    // #4048: the encoded text is stored, so a test runs the round trip production does; the reply
+    // is the encoding of an `Option` over the parsed JSON, which the call site decodes.
+    async getValue(key) {
+      checkKey(key);
+      const e = store.get(key);
+      if (e === undefined) return { kind: "None" };
+      let value: unknown;
+      try {
+        value = globalThis.JSON.parse(dec.decode(e.bytes));
+      } catch {
+        fault("getValue returned a value that is not JSON");
+      }
+      return { kind: "Some", value };
+    },
+    async putValue(key, value, options) {
+      write(key, enc.encode(globalThis.JSON.stringify(value)), options);
+    },
     async listPage(options) {
       const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
       if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);

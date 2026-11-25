@@ -1,0 +1,11 @@
+context shop.a
+
+agent A {
+	key k: String
+
+	store c: Cell[Int] @unique(by: id) = 0
+
+	on call touch() -> Effect[()] {
+		c.update((x) => x)
+	}
+}
