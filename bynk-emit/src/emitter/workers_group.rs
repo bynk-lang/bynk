@@ -948,7 +948,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     // finds it, as it does a member entry's.
     for stmt in crate::emitter::runtime_files::runtime_import_stmts(
         false,
-        &["__verifyCall".to_string()],
+        &["__verifyCall".to_string(), "__enterTrace".to_string()],
         "../../runtime.js",
     ) {
         program.push(stmt);
@@ -977,7 +977,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
         handlers.push(email(&members));
     }
     program.push(TsStmt::decl(
-        TsDecl::ExportDefault(TsExpr::multiline_object_entries(handlers)),
+        TsDecl::ExportDefault(super::workers_entry::trace_scope::export_default(handlers)),
         None,
     ));
     program
@@ -1089,7 +1089,7 @@ mod tests {
         let text = printed(&entry_of(&members));
         assert!(
             text.contains(
-                "      case \"jobs\":\n      case \"mail\":\n        return __m0.queue(batch as never, __loopback(env, ctx) as never, ctx);\n      default:\n        return;"
+                "        case \"jobs\":\n        case \"mail\":\n          return __m0.queue(batch as never, __loopback(env, ctx) as never, ctx);\n        default:\n          return;"
             ),
             "{text}"
         );

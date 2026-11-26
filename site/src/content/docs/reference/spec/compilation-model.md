@@ -19,7 +19,7 @@ its layout. Its keys:
 | | `out` | the default output directory |
 | `[fmt]` | `indent`, `indent_width`, `max_line_width`, `trailing_comma` | formatter settings (read by `bynk fmt` and by format-on-save; CLI flags override them) |
 | `[lsp]` | `diagnostics_mode` | language-server settings |
-| `[workers]` | `compatibility_flags` | extra Cloudflare compatibility flags for every emitted `wrangler.toml`, after the default `global_fetch_strictly_public` (array of strings) |
+| `[workers]` | `compatibility_flags` | extra Cloudflare compatibility flags for every emitted `wrangler.toml`, after the defaults `global_fetch_strictly_public` and `nodejs_als` (the latter left out where `nodejs_compat` is listed) (array of strings) |
 
 ### §8.1.1 Packages and path dependencies
 

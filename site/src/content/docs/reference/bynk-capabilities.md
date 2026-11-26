@@ -483,7 +483,10 @@ The record is `{ message, level, fields }`, with `level` in lowercase:
 - **In the browser** it is the message, then the fields.
 
 Fields are nested under `fields`, so a field named `message` or `level` cannot
-overwrite the record's own. Values are text: format a number with `toString()`
+overwrite the record's own. Inside a request, `log` adds `trace`, the request's
+[trace id](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/),
+to `fields` (a field of your own named `trace` is replaced); `debug`, `info`, `warn` and
+`error` write the message as it is and carry none. Values are text: format a number with `toString()`
 and a structure with `Json.encode`. `log` is experimental: list
 `"bynk.Logger.log"` under `[unstable] allow`. In tests every level is a no-op
 that `expect Logger.log called once with …` can observe.
