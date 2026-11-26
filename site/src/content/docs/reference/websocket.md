@@ -87,12 +87,14 @@ covered by CORS, so a page on another site could open the socket as the signed-i
 actor must therefore declare which pages may open it, in a `cors` block, and the upgrade checks the
 `Origin` header against it **before the cookie is read**:
 
-```bynk
+```bynk,fragment
 actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 service chat from websocket(in: ClientFrame, out: ServerFrame) {
   cors { origins: ["https://app.example.com"], credentials: true }
-  on open (room: RoomId) -> Effect[()] by user: Member { … }
+  on open (room: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(user.identity, connection)
+  }
 }
 ```
 

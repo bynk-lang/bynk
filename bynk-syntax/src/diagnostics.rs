@@ -7114,7 +7114,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.ws.cookie_needs_origins",
         blurb: "A browser sends the session cookie on a WebSocket upgrade from any site, and a WebSocket is not covered by CORS, so a page on another site could open the socket as the signed-in user (cross-site WebSocket hijacking). The upgrade therefore checks `Origin` against the service's `cors` origins: exactly one of them, scheme, host and port, or it is refused with `403` before the cookie is read, and a missing `Origin` is refused too. So a `from websocket` service whose `on open` authenticates a `SignedCookie` actor must declare `cors { origins: [...], credentials: true }` with the exact origins that may open it, and a wildcard is not one. Add the `cors` block.",
-        example: "service gateway from websocket(in: Frame, out: Frame) {   // ✗ a `SignedCookie` actor and no `cors`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✗ a `SignedCookie` actor and no `cors`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
     },
     Explain {
         code: "bynk.ws.lifecycle_by_mismatch",

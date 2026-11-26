@@ -4,7 +4,7 @@
   "categoryAnchor": "other",
   "code": "bynk.ws.cookie_needs_origins",
   "constructs": [],
-  "example": "service gateway from websocket(in: Frame, out: Frame) {   // ✗ a `SignedCookie` actor and no `cors`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+  "example": "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✗ a `SignedCookie` actor and no `cors`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
   "severity": "error",
   "summary": "A `from websocket` service whose `on open` authenticates a `SignedCookie` actor does not declare `cors { origins: [...], credentials: true }` with exact origins, so there is nothing to check the upgrade's `Origin` against (#3904)."
 }

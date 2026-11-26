@@ -54,7 +54,7 @@ A page that already has a [`SignedCookie`](/reference/actors/#signed-cookies) se
 without handling a token: the browser sends the cookie on the upgrade. Because a cookie is sent from
 any site, and a WebSocket is not covered by CORS, the service says which pages may open it:
 
-```bynk
+```bynk,fragment
 actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {

@@ -1,2 +1,3 @@
 bynk.actor.scheme_not_admissible a `SignedCookie` actor is not admissible as a member of a WebSocket actor sum
+bynk.actor.scheme_not_admissible a `SignedCookie` actor is not admissible as a member of a WebSocket actor sum
 # exact
