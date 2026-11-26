@@ -43,4 +43,24 @@ suite calc as unit {
     expect s == "pos"
     expect s == "neg"
   }
+  case "bare then eq" {
+    let b = flag(1)
+    expect b
+    expect b == false
+  }
+  case "conjunction narrows left to right" {
+    let a = total(3, 500)
+    expect a == 1 && a == 2
+  }
+  case "conjunction then eq" {
+    let a = total(3, 500)
+    let b = flag(1)
+    expect a == 1500 && b
+    expect a == 7
+  }
+  case "negation then eq" {
+    let b = flag(1)
+    expect !b
+    expect b == true
+  }
 }

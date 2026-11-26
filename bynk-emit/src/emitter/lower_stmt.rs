@@ -1067,8 +1067,9 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 was = Some((r, head));
                 (c, ExpectDetail::Message(text))
             } else {
+                let c = pre.lower_node(&a.value, cx);
                 (
-                    pre.lower_node(&a.value, cx),
+                    narrowing_proof_cond(c, cx),
                     ExpectDetail::Message(format!("expect {src}")),
                 )
             };
@@ -1183,8 +1184,7 @@ fn read_key(e: &bynk_ts::TsExpr) -> Option<String> {
 /// #3775: `expect a == 1500` throws unless `a === 1500`, so TypeScript narrows `a` to `1500` for
 /// the statements after it, and a later `expect a == 7` is a TS2367 error. After one `==` of a
 /// read against a literal, the read is widened to the literal's base type (`a as number`) in every
-/// later comparison, so the check never relies on narrowing. Not covered: a bare `expect b` or a
-/// comparison inside a conjunction (`expect a == 1 && ok`), which narrow the same way.
+/// later comparison, so the check never relies on narrowing.
 fn narrowing_proof(
     op: BinOp,
     lv: bynk_ts::TsExpr,
@@ -1218,6 +1218,66 @@ fn narrowing_proof(
     } else {
         (lv, wide(rv))
     }
+}
+
+/// [`narrowing_proof`] over a whole `expect` condition that is not a single comparison: a bare
+/// boolean read (`expect b`, `expect !b`) narrows that read, and the comparisons of a conjunction or
+/// disjunction (`expect a == 1 && ok`) narrow left to right, so each leaf is widened if an earlier
+/// one narrowed its read.
+fn narrowing_proof_cond(cond: bynk_ts::TsExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsBinaryOp, TsExpr, TsUnaryOp};
+    if let Some(key) = read_key(&cond) {
+        cx.expect_narrowed.insert(key);
+        return cond;
+    }
+    if let TsExpr::Binary { op, left, right } = cond {
+        let (left, right) = match op {
+            TsBinaryOp::And | TsBinaryOp::Or => {
+                let left = narrowing_proof_cond(*left, cx);
+                (left, narrowing_proof_cond(*right, cx))
+            }
+            TsBinaryOp::StrictEq => narrowing_proof(BinOp::Eq, *left, *right, cx),
+            TsBinaryOp::StrictNotEq => narrowing_proof(BinOp::NotEq, *left, *right, cx),
+            other @ (TsBinaryOp::NullishCoalescing
+            | TsBinaryOp::GreaterThan
+            | TsBinaryOp::InstanceOf
+            | TsBinaryOp::LessThan
+            | TsBinaryOp::Add
+            | TsBinaryOp::In
+            | TsBinaryOp::GreaterThanEq
+            | TsBinaryOp::LessThanEq
+            | TsBinaryOp::Mul
+            | TsBinaryOp::Exp
+            | TsBinaryOp::Sub
+            | TsBinaryOp::Div) => {
+                return TsExpr::Binary {
+                    op: other,
+                    left,
+                    right,
+                };
+            }
+        };
+        return TsExpr::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        };
+    }
+    if let TsExpr::Unary {
+        op: TsUnaryOp::Not,
+        expr,
+    } = cond
+    {
+        let inner = narrowing_proof_cond(*expr, cx);
+        return TsExpr::Unary {
+            op: TsUnaryOp::Not,
+            expr: Box::new(inner),
+        };
+    }
+    if let TsExpr::Paren(inner) = cond {
+        return TsExpr::Paren(Box::new(narrowing_proof_cond(*inner, cx)));
+    }
+    cond
 }
 
 /// `__bynkExpectFailure(<location>, <start>, <end>, <detail>)`.

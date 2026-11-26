@@ -73,10 +73,14 @@ fn successive_literal_comparisons_never_rely_on_narrowing() {
         "✗ negative literals",
         "✗ boolean ne then eq",
         "✗ string fails at run time",
+        "✗ bare then eq",
+        "✗ conjunction narrows left to right",
+        "✗ conjunction then eq",
+        "✗ negation then eq",
     ] {
         assert!(all.contains(failing), "{all}");
     }
     assert!(all.contains("actual:   \"pos\" == \"neg\""), "{all}");
-    assert!(all.contains("4 passed, 4 failed."), "{all}");
+    assert!(all.contains("4 passed, 8 failed."), "{all}");
     assert!(!out.status.success(), "{all}");
 }
