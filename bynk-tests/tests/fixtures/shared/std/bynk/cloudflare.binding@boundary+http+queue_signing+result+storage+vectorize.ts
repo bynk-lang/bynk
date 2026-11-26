@@ -6,7 +6,9 @@ import { FetchProvider } from "../bynk-cloudflare.js";
 import { Err, None, Ok, Some, type Option, type Result } from "../__bynk_runtime/result.js";
 import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, WorkerAiBinding, WorkerImagesBinding, AnalyticsSqlBinding, AiSearchInstance, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
 import type { VectorizeIndex } from "../__bynk_runtime/vectorize.js";
+import { EDGE_TO_PREFIX, edgeKeyOf } from "../__bynk_runtime/boundary.js";
 import { claimStream } from "../__bynk_runtime/http.js";
+import { signQueueMessage } from "../__bynk_runtime/queue_signing.js";
 
 // The integration doubles mark the fault they throw for an unstubbed call
 // (`bynkNotStubbed`, #3589). Every catch that maps a platform failure to an
@@ -791,12 +793,21 @@ export class WorkersRateLimit implements RateLimit {
 // `contentType: "json"`: a Bynk consumer decodes `msg.body` as an already-parsed
 // JSON value, so forwarding the text would hand it a JSON string instead. The
 // parse is lossless for what `Json.encode` writes (an `Int` is a safe integer).
+//
+// #3899: when the queue's consumer admits Bynk producers by a `Producer` refinement, the compiler
+// passes the sending context, the consumer's context and the queue's name, and every message goes out
+// in a signed envelope, signed under the edge key to the consumer's context (`BYNK_CALL_TO_<CONSUMER>`,
+// the key `bynk deploy` sets for a call edge) so the consumer can verify which context sent it.
 export class WorkersQueue implements Queue {
   private env?: unknown;
   private binding: string;
-  constructor(env: unknown, binding: string) {
+  private signing?: { sender: string; consumer: string; queue: string };
+  constructor(env: unknown, binding: string, sender?: string, consumer?: string, queue?: string) {
     this.env = env;
     this.binding = binding;
+    if (sender !== undefined && consumer !== undefined && queue !== undefined) {
+      this.signing = { sender, consumer, queue };
+    }
   }
 
   // The platform's longest delay: 24 hours.
@@ -822,6 +833,26 @@ export class WorkersQueue implements Queue {
     }
   }
 
+  // The body as it is sent: itself for an unsigned consumer, in a signed envelope for a signed one.
+  // Every message has its own id, which the consumer claims so a replay is recognised.
+  private async signed(body: unknown): Promise<unknown> {
+    const signing = this.signing;
+    if (signing === undefined) return body;
+    const key = edgeKeyOf(this.env, EDGE_TO_PREFIX, signing.consumer);
+    if (key === undefined) {
+      throw new Error(
+        `bynk.cloudflare.Queue: queue ${signing.queue} is read by a signed consumer, so its messages are signed, and no key is set for the edge to ${signing.consumer} (${EDGE_TO_PREFIX}…) — \`bynk deploy\` sets one key per edge`,
+      );
+    }
+    return signQueueMessage(key, {
+      from: signing.sender,
+      id: crypto.randomUUID(),
+      ts: Math.floor(Date.now() / 1000),
+      queue: signing.queue,
+      body,
+    });
+  }
+
   // A `Duration` is whole milliseconds; the platform takes whole seconds, so a
   // part second rounds up (a message is never delivered early). A `QueueDelay`
   // is already between 0 seconds and 24 hours, so the check below only guards a
@@ -838,13 +869,13 @@ export class WorkersQueue implements Queue {
   }
 
   async send(body: string): Promise<void> {
-    await this.producer().send(this.parsed(body), { contentType: "json" });
+    await this.producer().send(await this.signed(this.parsed(body)), { contentType: "json" });
   }
 
   async sendWith(body: string, options: QueueSend): Promise<void> {
     const delaySeconds = this.delaySeconds(options.delay);
     await this.producer().send(
-      this.parsed(body),
+      await this.signed(this.parsed(body)),
       delaySeconds === undefined ? { contentType: "json" } : { contentType: "json", delaySeconds },
     );
   }
@@ -855,14 +886,14 @@ export class WorkersQueue implements Queue {
   // writes and `parsed` reads, so the queue receives exactly the message
   // `send(Json.encode(v))` sends (an absent field stays absent, `-0` is `0`).
   async sendValue(message: unknown): Promise<void> {
-    await this.producer().send(this.parsed(JSON.stringify(message)), { contentType: "json" });
+    await this.producer().send(await this.signed(this.parsed(JSON.stringify(message))), { contentType: "json" });
   }
 
   // `sendValueWith[T: Codable]`: `sendValue` with `sendWith`'s delay.
   async sendValueWith(message: unknown, options: QueueSend): Promise<void> {
     const delaySeconds = this.delaySeconds(options.delay);
     await this.producer().send(
-      this.parsed(JSON.stringify(message)),
+      await this.signed(this.parsed(JSON.stringify(message))),
       delaySeconds === undefined ? { contentType: "json" } : { contentType: "json", delaySeconds },
     );
   }
@@ -872,17 +903,21 @@ export class WorkersQueue implements Queue {
   // `JSON.parse` as `sendValue`'s does, and all are parsed before anything is
   // sent, as `sendBatch` does.
   async sendValueBatch(messages: unknown): Promise<void> {
-    const encoded = (messages as readonly unknown[]).map((m) => ({
-      body: this.parsed(JSON.stringify(m)),
-      contentType: "json" as const,
-    }));
+    const encoded = await Promise.all(
+      (messages as readonly unknown[]).map(async (m) => ({
+        body: await this.signed(this.parsed(JSON.stringify(m))),
+        contentType: "json" as const,
+      })),
+    );
     if (encoded.length === 0) return;
     await this.producer().sendBatch(encoded);
   }
 
   // All or none: every body is parsed before anything is sent.
   async sendBatch(bodies: readonly string[]): Promise<void> {
-    const messages = bodies.map((b) => ({ body: this.parsed(b), contentType: "json" as const }));
+    const messages = await Promise.all(
+      bodies.map(async (b) => ({ body: await this.signed(this.parsed(b)), contentType: "json" as const })),
+    );
     if (messages.length === 0) return;
     await this.producer().sendBatch(messages);
   }

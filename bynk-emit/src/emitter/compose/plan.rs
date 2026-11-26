@@ -82,6 +82,9 @@ pub struct ComposeUnitFacts {
     /// A body calls `Idempotency`, so its Worker declares the implicit
     /// database that holds the claims (W30, #2840).
     pub idempotency: bool,
+    /// #3899: each `Queue` instance whose consumer is signed and admits this context, by capability
+    /// key, with the consumer's context: the instance signs what it sends.
+    pub signed_queues: BTreeMap<String, String>,
 }
 
 /// Everything [`ComposePlan::decide`] needs, as plain data.
@@ -188,6 +191,7 @@ impl ComposeFacts {
                         table,
                         unit_callees.get(name),
                     ),
+                    signed_queues: signed_queues(name, table, unit_tables),
                     consumes,
                     aliases,
                 },
@@ -245,6 +249,9 @@ pub struct ComposeUnit {
     pub bare_singletons: Vec<String>,
     /// A body calls `Idempotency`.
     pub idempotency: bool,
+    /// The `Queue` instances that sign what they send, by capability key
+    /// ([`ComposeUnitFacts::signed_queues`]).
+    pub signed_queues: BTreeMap<String, String>,
 }
 
 impl ComposeUnit {
@@ -357,8 +364,28 @@ impl ComposePlan {
             bare_kv: f.bare_kv,
             bare_singletons: f.bare_singletons.clone(),
             idempotency: f.idempotency,
+            signed_queues: f.signed_queues.clone(),
         }
     }
+}
+
+/// #3899: the unit's `Queue` instances that sign what they send, by capability key, each with the
+/// context of the signed consumer that admits `unit`.
+fn signed_queues(
+    unit: &str,
+    table: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> BTreeMap<String, String> {
+    table
+        .derived
+        .iter()
+        .filter(|(_, d)| d.base_cap == "Queue")
+        .filter_map(|(cap, d)| {
+            let consumer =
+                bynk_check::queue_producers::signed_consumer_of(d.queue()?, unit, unit_tables)?;
+            Some((cap.clone(), consumer))
+        })
+        .collect()
 }
 
 /// The binding facts of a context ([`ComposeUnitFacts::called`], `bare_kv` and

@@ -27,3 +27,11 @@ service api from http {
 		Ok("Hello from hello!")
 	}
 }
+--- tests/hello.test.bynk ---
+suite hello {
+	case "the home page greets the visitor" {
+		let r <- api.GET("/") by Visitor
+		expect r is Ok("Hello from hello!")
+		expect Logger.info called once
+	}
+}
