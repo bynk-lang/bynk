@@ -5780,7 +5780,9 @@ fn cors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
         return vec![CompletionItem {
             label: "cors".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("a cross-origin (CORS) policy for this HTTP service".to_string()),
+            detail: Some(
+                "a cross-origin (CORS) policy for this HTTP or WebSocket service".to_string(),
+            ),
             insert_text: Some("cors {\n\torigins: [$0],\n}".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()

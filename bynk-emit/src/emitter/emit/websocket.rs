@@ -46,6 +46,8 @@ pub(super) struct WsOpenHost<'a> {
     pub(super) message: Option<&'a Handler>,
     pub(super) close: Option<&'a Handler>,
     pub(super) seam: Option<bynk_check::actors::BearerSeam>,
+    /// #3904: the credential is an `Oidc` token, offered after `bynk.oidc` rather than `bynk.bearer`.
+    pub(super) oidc: bool,
     /// An actor-sum `by who: A | B`: the members in first-wins order. The edge
     /// forwards which one verified (`{ tag, identity? }`) and the DO rebuilds
     /// `deps.who` from it. Mutually exclusive with `seam`, which a sum never has.
@@ -147,8 +149,12 @@ pub(super) fn ws_open_hosts_for<'a>(
                     seam: if h.by_clause.as_ref().is_some_and(|by| by.is_sum()) {
                         None
                     } else {
-                        bynk_check::actors::bearer_seam_for(h, actors)
+                        bynk_check::actors::ws_principal_seam_for(h, actors)
                     },
+                    oidc: h
+                        .by_clause
+                        .as_ref()
+                        .is_some_and(|by| bynk_check::actors::by_clause_is_oidc(by, actors)),
                     agent_key: None,
                     rebuild: WsDepsRebuild::default(),
                 });
@@ -946,18 +952,21 @@ pub(super) fn ws_open_fetch_branch_stmt(
             callee: Box::new(bynk_ts::TsExpr::Ident(
                 "__webSocketBearerProtocol".to_string(),
             )),
-            args: vec![bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Member {
-                        object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
-                        property: "headers".to_string(),
+            args: protocol_args(
+                host,
+                bynk_ts::TsExpr::Call {
+                    callee: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
+                            property: "headers".to_string(),
+                        }),
+                        property: "get".to_string(),
                     }),
-                    property: "get".to_string(),
-                }),
-                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                    "Sec-WebSocket-Protocol".to_string(),
-                ))],
-            }],
+                    args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                        "Sec-WebSocket-Protocol".to_string(),
+                    ))],
+                },
+            ),
         });
     }
     stmts.push(bynk_ts::TsStmt::return_stmt(
@@ -981,6 +990,18 @@ pub(super) fn ws_open_fetch_branch_stmt(
         bynk_ts::TsStmt::block(stmts, None),
         None,
     )
+}
+
+/// #3904: the arguments of `__webSocketBearerProtocol`: the offered subprotocols, then the marker an
+/// `Oidc` upgrade selects in place of `bynk.bearer`.
+fn protocol_args(host: &WsOpenHost<'_>, offered: bynk_ts::TsExpr) -> Vec<bynk_ts::TsExpr> {
+    let mut args = vec![offered];
+    if host.oidc {
+        args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+            "bynk.oidc".to_string(),
+        )));
+    }
+    args
 }
 
 /// v0.106 (slice 3b-iii): the deps argument a hosted `on message`/`on close` body

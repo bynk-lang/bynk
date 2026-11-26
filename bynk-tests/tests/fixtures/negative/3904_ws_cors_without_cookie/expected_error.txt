@@ -1,0 +1,2 @@
+bynk.http.cors_not_http a `cors { }` policy on a `from websocket` service takes effect only when its `on open` is `by` a `SignedCookie` actor
+# exact

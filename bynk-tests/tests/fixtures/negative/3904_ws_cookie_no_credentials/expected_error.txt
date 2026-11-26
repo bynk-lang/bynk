@@ -1,0 +1,2 @@
+bynk.ws.cookie_needs_origins the `from websocket` service `gateway` authenticates a `SignedCookie`, so it must declare `cors
+# exact

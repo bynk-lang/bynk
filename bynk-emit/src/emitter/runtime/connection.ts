@@ -248,6 +248,8 @@ export function webSocketUpgradeResponse(client: WorkersWebSocket, protocol?: st
 // response selects the marker only, so the credential is never echoed in a response header, where
 // proxies and logs may record it.
 export const BEARER_SUBPROTOCOL = "bynk.bearer";
+// #3904: an `Oidc` upgrade offers its provider's token the same way, after this marker.
+export const OIDC_SUBPROTOCOL = "bynk.oidc";
 
 // What a Bearer upgrade's `Sec-WebSocket-Protocol` offers: no token (`Absent`), a token after the
 // marker (`Token`), or subprotocols without the marker (`Legacy`: the old `[token]` form, which only
@@ -257,7 +259,10 @@ export type WebSocketBearerOffer =
   | { readonly tag: "Legacy" }
   | { readonly tag: "Token"; readonly token: string };
 
-export function webSocketBearerOffer(offered: string | null): WebSocketBearerOffer {
+export function webSocketBearerOffer(
+  offered: string | null,
+  marker: string = BEARER_SUBPROTOCOL,
+): WebSocketBearerOffer {
   if (offered === null) {
     return { tag: "Absent" };
   }
@@ -265,7 +270,7 @@ export function webSocketBearerOffer(offered: string | null): WebSocketBearerOff
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p !== "");
-  const at = protocols.indexOf(BEARER_SUBPROTOCOL);
+  const at = protocols.indexOf(marker);
   if (at === -1) {
     return protocols.length === 0 ? { tag: "Absent" } : { tag: "Legacy" };
   }
@@ -273,16 +278,28 @@ export function webSocketBearerOffer(offered: string | null): WebSocketBearerOff
   return token === undefined ? { tag: "Absent" } : { tag: "Token", token };
 }
 
+// #3904: whether a cookie-authenticated upgrade came from a page the service trusts. A browser sends
+// the cookie on a cross-site upgrade and a WebSocket is not bound by the same-origin policy, so
+// `Origin` must be exactly one of the service's `cors` origins (scheme, host and port). A missing
+// `Origin`, `null` or `*` never qualifies, and `Sec-Fetch-Site` is not consulted: it is not enough.
+export function webSocketOriginAllowed(origin: string | null, allowed: readonly string[]): boolean {
+  if (origin === null || origin === "null" || origin === "*") return false;
+  return allowed.some((o) => o === origin && o !== "*" && o !== "null");
+}
+
 // The subprotocol the 101 selects: the marker when the client offered it, else none.
-export function webSocketBearerProtocol(offered: string | null): string | undefined {
-  const marked = (offered ?? "").split(",").some((p) => p.trim() === BEARER_SUBPROTOCOL);
-  return marked ? BEARER_SUBPROTOCOL : undefined;
+export function webSocketBearerProtocol(
+  offered: string | null,
+  marker: string = BEARER_SUBPROTOCOL,
+): string | undefined {
+  const marked = (offered ?? "").split(",").some((p) => p.trim() === marker);
+  return marked ? marker : undefined;
 }
 
 // The refusal of the old single-element `[token]` form: `400`, and a fixed message naming the form
 // that works (a `401` would hide the cause). It never echoes what the client sent.
-export function webSocketBearerRefusal(): Response {
-  return new Response('Offer the subprotocols ["bynk.bearer", <token>]', { status: 400 });
+export function webSocketBearerRefusal(marker: string = BEARER_SUBPROTOCOL): Response {
+  return new Response(`Offer the subprotocols ["${marker}", <token>]`, { status: 400 });
 }
 
 // #3902/#4491: what the Durable Object's `webSocketClose`, `webSocketError` and expiry check run. A close
@@ -372,4 +389,4 @@ export function webSocketAuthExpired(attachment: unknown, nowSeconds: number = M
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketAuthExpired as __webSocketAuthExpired, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketClosing as __webSocketClosing, webSocketErrored as __webSocketErrored, webSocketUpgradeResponse as __webSocketUpgradeResponse };
+export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketAuthExpired as __webSocketAuthExpired, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketOriginAllowed as __webSocketOriginAllowed, webSocketClosing as __webSocketClosing, webSocketErrored as __webSocketErrored, webSocketUpgradeResponse as __webSocketUpgradeResponse };

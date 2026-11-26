@@ -2484,8 +2484,12 @@ connection-lifecycle handlers:
 
 - **`on open`** — exactly one per service. The upgrade is authenticated **at the
   edge**: like a `from http` handler it MUST name its actor with `by` (there is no
-  anonymous upgrade), and the boundary admits `None`/`Bearer` actors and rejects
-  `Signature` (a browser cannot set an `Authorization` header). The handler
+  anonymous upgrade), and the boundary admits `None`, `Bearer`, `Oidc` and `SignedCookie` actors and rejects
+  `Signature` (a browser cannot set an `Authorization` header). An `Oidc` or `SignedCookie` actor is the
+  handler's only actor (an actor sum admits `None` and `Bearer` members), a `SignedCookie` actor with
+  `sessions = true` is not admissible, and a service whose `on open` authenticates a `SignedCookie` MUST declare
+  a `cors` list of exact origins with `credentials: true`, no wildcard (`bynk.ws.cookie_needs_origins`),
+  which the upgrade's `Origin` is checked against. The handler
   receives a fresh, **owned** `connection: Connection[O]` that it MUST dispose of
   under the held-resource linearity discipline
   ([§5.4.2](/reference/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
