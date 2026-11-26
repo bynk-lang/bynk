@@ -229,6 +229,7 @@ deploy of each locally, as above. The action can also smoke-test a deploy
 declares, a KV namespace or a queue, and it is also what lets a deploy go
 ahead after an Email Routing address has been removed. Deleting a namespace
 loses its data and cannot be undone, and with `--yes` no one is asked, so the action has no input for it. `--yes` answers the creation
-confirmation but never stands in for an agent-class `--confirm-delete`. Review the
+confirmation but never stands in for an agent-class `--confirm-delete`, or for the
+`--confirm-jurisdiction` a changed agent `@jurisdiction` needs. Review the
 orphans in the plan, then run `bynk deploy --prune` yourself, where it asks for
 its own confirmation.

@@ -15,6 +15,7 @@ Workers.
 - [Apply a breaking-change migration without an editor](/book/guides/projects-build-and-deployment/apply-a-migration-without-an-editor/)
 - [Run your project locally](/book/guides/projects-build-and-deployment/run-locally/)
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
+- [Keep a project's data in one jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/)
 - [Roll back a deployment](/book/guides/projects-build-and-deployment/roll-back-a-deployment/)
 - [Follow a request across contexts](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/)
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/)

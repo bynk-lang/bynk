@@ -698,9 +698,27 @@ pub const R2_BINDING_PREFIX: &str = "R2";
 /// The one creation option of an `R2` instance: the bucket's jurisdiction.
 pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
 
-/// The jurisdictions an `R2` bucket may be pinned to, as `@jurisdiction(…)`
-/// takes them and `wrangler r2 bucket create --jurisdiction` accepts them.
-pub const R2_JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+/// The jurisdictions a resource may be pinned to, as `@jurisdiction(…)` takes them: an `R2`
+/// bucket (`wrangler r2 bucket create --jurisdiction`), a `D1` database and an agent's Durable
+/// Object namespace (`namespace.jurisdiction(…)`) all take the same two (#3819, #3820).
+pub const JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+
+/// Whether `text` names a jurisdiction (the shared check of `R2`, `D1` and `agent`).
+pub fn is_jurisdiction(text: &str) -> bool {
+    JURISDICTIONS.contains(&text)
+}
+
+/// The note every invalid `@jurisdiction` carries: `the jurisdictions are "eu" and "fedramp"`.
+pub fn jurisdictions_note() -> String {
+    format!(
+        "the jurisdictions are {}",
+        JURISDICTIONS
+            .iter()
+            .map(|j| format!("`\"{j}\"`"))
+            .collect::<Vec<_>>()
+            .join(" and ")
+    )
+}
 
 /// The Worker binding prefix of a `RateLimit` instance (standard-library P3,
 /// #2342): `capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`

@@ -197,6 +197,17 @@ pub(crate) struct Environment {
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     renamed_classes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3819: per Worker, each agent class its last successful push hosted, with the
+    /// `@jurisdiction` its Durable Object ids were minted under (`"none"` for an agent with
+    /// none: the unrestricted namespace). An id minted under another jurisdiction is a
+    /// different id for the same name, so a changed value would orphan every instance, and the
+    /// next plan compares against this record and asks to confirm the change. Replaced on every
+    /// push of the Worker, so a class that is later removed leaves nothing behind. A record of
+    /// what was pushed, never a claim about the namespace, which Cloudflare owns. Additive and
+    /// `default`ed, so an older ledger still reads (a class it does not list reads as
+    /// unrestricted, which is what every agent was before `@jurisdiction`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    agent_jurisdictions: BTreeMap<String, BTreeMap<String, String>>,
     /// #3328: per Worker, the Email Routing `addresses` its last successful push
     /// carried in this environment. Wrangler deletes the rule of an address no
     /// longer listed, so mail to it would bounce: the next deploy compares the
@@ -207,6 +218,10 @@ pub(crate) struct Environment {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     email_addresses: BTreeMap<String, BTreeSet<String>>,
 }
+
+/// #3819: what the ledger records for an agent class whose ids come from the unrestricted
+/// namespace. Not a jurisdiction name, so it cannot be mistaken for one.
+pub(crate) const UNRESTRICTED_AGENT: &str = "none";
 
 /// P3 (#2342): the `namespace_id` this project allocated for one rate limiter.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -576,6 +591,42 @@ impl DeployLock {
             .and_then(|env| env.renamed_classes.get(worker))
             .and_then(|renames| renames.get(from))
             .is_some_and(|recorded| recorded == to)
+    }
+
+    /// #3819: the jurisdiction `class` of `worker` was last pushed under in `environment`:
+    /// [`UNRESTRICTED_AGENT`] for an agent with none. `None` when the ledger does not record the
+    /// class (a ledger from before `@jurisdiction`, or a class never pushed), which callers read
+    /// as unrestricted for a Worker that has been deployed, and as new otherwise.
+    pub(crate) fn recorded_agent_jurisdiction(
+        &self,
+        environment: &str,
+        worker: &str,
+        class: &str,
+    ) -> Option<&str> {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.agent_jurisdictions.get(worker))
+            .and_then(|classes| classes.get(class))
+            .map(String::as_str)
+    }
+
+    /// #3819: record the classes a successful push of `worker` hosted, and the jurisdiction each
+    /// one's ids were minted under, replacing what was recorded for it.
+    pub(crate) fn record_agent_jurisdictions(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        classes: BTreeMap<String, String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if classes.is_empty() {
+            env.agent_jurisdictions.remove(worker);
+        } else {
+            env.agent_jurisdictions.insert(worker.to_string(), classes);
+        }
     }
 
     /// #2276 Decision D: record the `renamed` tombstones a successful push of
@@ -1643,6 +1694,7 @@ pub(crate) mod tests {
                 Environment {
                     deleted_classes: BTreeMap::new(),
                     renamed_classes: BTreeMap::new(),
+                    agent_jurisdictions: BTreeMap::new(),
                     email_addresses: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(

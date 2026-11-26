@@ -1008,7 +1008,15 @@ export function makeIntegrationDoNamespace(
   queueWaitMs?: number,
 ): DurableObjectNamespace {
   const instances = new Map<string, { fetch(request: Request): Promise<Response> }>();
-  return {
+  const namespace: DurableObjectNamespace = {
+    // #3819: a jurisdiction-restricted view mints its own ids, as Cloudflare's does, so an instance
+    // reached through `jurisdiction("eu")` is not the one the unrestricted namespace reaches.
+    jurisdiction(jurisdiction: string): DurableObjectNamespace {
+      return {
+        idFromName: (name: string): unknown => `${jurisdiction}/${name}`,
+        get: (id: unknown): DurableObjectStub => namespace.get(id),
+      };
+    },
     idFromName(name: string): unknown {
       return name;
     },
@@ -1026,6 +1034,7 @@ export function makeIntegrationDoNamespace(
       };
     },
   };
+  return namespace;
 }
 
 // #1653: the `__` aliases emitted code imports.

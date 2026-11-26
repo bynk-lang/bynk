@@ -991,6 +991,13 @@ returns (ADR 0109). Constructing or calling an agent MUST use the right key arit
 and type and a declared handler (`bynk.agent.construction_arity`,
 `bynk.agent.key_mismatch`, `bynk.agent.handler_arity`, `bynk.agent.handler_not_found`).
 
+An agent MAY carry `@busyAfter(d)` and `@jurisdiction("eu" | "fedramp")` immediately before `agent`,
+each at most once, each with one positional literal (`bynk.agent.bad_annotation`,
+`bynk.agent.busy_after_out_of_range`). `@jurisdiction` pins every instance's Durable Object ids to that
+jurisdiction (#3819), the values being those of an `R2` bucket's `@jurisdiction`. The id of a pinned
+agent differs from the unrestricted one for the same key, so a change after deploy orphans its
+instances and `bynk deploy` requires it to be confirmed by name.
+
 ### §5.4.1 Invariants (v0.80)
 
 An **invariant** is a universally-quantified property that MUST hold of every

@@ -716,7 +716,8 @@ capability Indexes = R2 @jurisdiction("eu")
 `Archives` binds as `env.R2_ARCHIVES`, an `[[r2_buckets]]` entry. The second
 `consumes` line names the types below. `@jurisdiction("eu")` (or `"fedramp"`)
 pins the bucket's jurisdiction when `bynk deploy` creates it; any other value
-is `bynk.capability.invalid_option`.
+is `bynk.capability.invalid_option`. An agent takes the same annotation
+([data residency](/reference/agents/#jurisdiction)).
 
 `get`, `put` and `putWith` move objects whole, as `Bytes`, buffered in the
 Worker's memory, so keep each well under the 128 MB isolate limit. Larger

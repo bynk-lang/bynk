@@ -34,6 +34,7 @@ struct ReadmeDoctests;
 
 pub mod actors;
 pub mod agent_busy;
+pub mod agent_jurisdiction;
 pub mod agent_state;
 pub mod analysis;
 pub mod annotation_consts;

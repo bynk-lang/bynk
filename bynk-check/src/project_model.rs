@@ -1752,7 +1752,7 @@ fn r2_jurisdiction_ok(
     path: &std::path::Path,
     errors: &mut ErrorSink,
 ) -> bool {
-    if crate::firstparty::R2_JURISDICTIONS.contains(&text) {
+    if crate::firstparty::is_jurisdiction(text) {
         return true;
     }
     errors.push_for(
@@ -1762,14 +1762,7 @@ fn r2_jurisdiction_ok(
             ann.span,
             format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
         )
-        .with_note(format!(
-            "the jurisdictions are {}",
-            crate::firstparty::R2_JURISDICTIONS
-                .iter()
-                .map(|j| format!("`\"{j}\"`"))
-                .collect::<Vec<_>>()
-                .join(" and ")
-        )),
+        .with_note(crate::firstparty::jurisdictions_note()),
     );
     false
 }
