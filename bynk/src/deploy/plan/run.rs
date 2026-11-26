@@ -11,7 +11,7 @@ use super::shared::{
     shared_constants, strict_refusal, without_deliberate,
 };
 use super::{Entry, Stop, code, refusals, refused_report};
-use crate::cloudflare::Wrangler;
+use crate::cloudflare::{Account, Wrangler};
 use crate::deploy::LOCK_FILE;
 use crate::deploy::agent_move::{AgentGate, checked_agent_moves};
 use crate::deploy::apply::LedgerWriter;
@@ -494,6 +494,7 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account()
+    .noting_unchecked_kv(!opts.dry_run)
     .with_report(Vec::new(), warnings);
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
@@ -542,7 +543,7 @@ fn deploy(
         return Err(ExitCode::FAILURE.into());
     }
 
-    let api = Wrangler::new(&probe.provenance, project_root);
+    let api = Account::new(Wrangler::new(&probe.provenance, project_root));
     let tools = Tools {
         api: &api,
         project_root,

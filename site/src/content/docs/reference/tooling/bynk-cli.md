@@ -775,6 +775,17 @@ namespace of one title, so the deploy cannot create it. The token needs read
 access to the kinds listed. Without the variables, the plan stays the ledger's
 and a note says so. A listing that fails is a warning, never a failure.
 
+**Credentials for account resources.** The push runs through wrangler, so
+`wrangler login` is enough for it. Creating or deleting a KV namespace goes
+through Cloudflare's API, as Hyperdrive and the linked kinds already do. That
+needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers
+KV Storage: Edit". When a step needs them, `deploy` checks for both after the plan
+and before the confirmation, and refuses, with nothing created, naming the
+missing variable and the permission. A run that needs nothing asks nothing:
+a redeploy whose namespaces are all recorded works with `wrangler login` alone.
+In that case the check that a recorded namespace still exists on the account is
+skipped, and the plan notes it.
+
 Each context's Cloudflare ids and its deployed state are recorded in the
 committed, secret-free `bynk.deploy.lock` at the project root, written as each
 resource lands. A recorded id is reused on later deploys. CI refuses to create an
@@ -2425,3 +2436,9 @@ bynk doctor [PATH] [--only CAPABILITY] [--strict] [--format human|short|json]
 **Exit code** — Bare `bynk doctor` is informational: it exits `0` unless the
 compiler itself is unusable. `--only <capability>` gates on that capability; `--strict`
 fails on any warning.
+
+In a project that declares account resources (KV, R2, D1, queues, Vectorize,
+Hyperdrive or a linked kind), the `deploy` block carries a `cloudflare api` row:
+whether `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set. It never reads
+their values. It is a warning at most, never a failure, so neither `bynk dev` nor
+`--only deploy` stops on it.

@@ -1957,7 +1957,8 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
-        // #4105: the typed Analytics operations, lowered over `query` and `write`.
+        // #4105, #4099: the typed Analytics and Ai operations, lowered over `query`, `write` and
+        // the binding's JSON-mode generation.
         if let Some(typed) = super::analytics::check_typed(
             &type_name.name,
             cap.derived_from.as_ref(),
@@ -5071,6 +5072,17 @@ pub(crate) fn record_principal(
     kind
 }
 
+/// #3821: whether the route's lone `Bearer` actor declares the claim a `by WrongIssuer` or `by
+/// WrongAudience` token gets wrong, so its seam checks it.
+fn declares(by: Option<&ByClause>, bad: BadCredential, ctx: &Ctx) -> bool {
+    by.and_then(|by| crate::actors::bearer_claims_of_route(by, &ctx.test_actors))
+        .is_some_and(|c| match bad {
+            BadCredential::WrongIssuer => c.issuer.is_some(),
+            BadCredential::WrongAudience => c.audience.is_some(),
+            _ => false,
+        })
+}
+
 /// #3052, #3225: what an `Oidc`-only failure principal is, for the diagnostic
 /// raised when the call does not reach an `Oidc` seam.
 struct OidcOnlyPrincipal {
@@ -5089,12 +5101,12 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
         BadCredential::WrongIssuer => (
             "bynk.test.wrong_issuer_needs_oidc_route",
             "a token for another issuer",
-            "; a `Bearer` token has no issuer to check",
+            "; a `Bearer` route takes it when its actor declares an `issuer`",
         ),
         BadCredential::WrongAudience => (
             "bynk.test.wrong_audience_needs_oidc_route",
             "a token for another audience",
-            "; a `Bearer` token has no audience to check",
+            "; a `Bearer` route takes it when its actor declares an `audience`",
         ),
         BadCredential::WrongAlgorithm => (
             "bynk.test.wrong_algorithm_needs_oidc_route",
@@ -5614,7 +5626,8 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Revoked, _) => {}
-            (n, _) if !oidc && oidc_only_principal(n).is_some() => {
+            // #3821: a `Bearer` route that declares the claim is driven by `WrongIssuer`/`WrongAudience` too.
+            (n, _) if !oidc && oidc_only_principal(n).is_some() && !declares(by, n, ctx) => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
                     CompileError::new(

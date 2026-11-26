@@ -92,6 +92,26 @@ the version and the fix. A project with no agent still
 deploys, which is why `doctor` keeps this a warning rather than failing
 `--only deploy`.
 
+A project that declares an account resource gets a `cloudflare api` row in
+the `deploy` block. That means a `capability … =` of `Kv`, `R2`, `D1`, `Queue`,
+`Vectorize`, `Postgres`, `MySql`, `StoredSecret`, `AiSearch` or
+`MtlsCertificate`, a `queue(…)` source, or a use of the bare `Kv`. The row says
+whether `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set: `bynk deploy`
+creates, checks and deletes those resources through Cloudflare's API, which a
+`wrangler login` session does not reach.
+
+```text
+    cloudflare api — CLOUDFLARE_ACCOUNT_ID not set
+      ↳ fix: set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: `bynk deploy` creates, checks and deletes this project's account resources through Cloudflare's API; `wrangler login` covers the push only
+```
+
+It is a warning at most, never a failure. `bynk dev` runs the same gate and
+needs no token, and a redeploy whose resources are all recorded needs none
+either. `bynk deploy` itself refuses, before its confirmation, exactly when a
+step needs one. `--strict` escalates the warning, as it does every warning. The
+row is offline: it reads only whether each variable is set, never its value,
+and makes no call to check the token.
+
 The emitted TypeScript is verified under **TypeScript 7** (what `npm install -g
 typescript` installs), the only supported major. A
 `tsc` below 7 is a warning, `below supported (≥ 7)`, with the fix

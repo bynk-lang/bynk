@@ -6009,6 +6009,15 @@ mod tests {
     }
 
     #[test]
+    fn hover_on_a_bearer_actor_lists_its_issuer_and_audience() {
+        // #3821
+        let src = "context a\ntype UserId = String where NonEmpty\nactor Learner { auth = Bearer(secret = \"S\", issuer = \"web\", audience = \"api\"), identity = UserId }\n";
+        let hover = describe_symbol(src, "Learner").expect("hovers the actor");
+        assert!(hover.contains("issuer = \"web\""), "{hover}");
+        assert!(hover.contains("audience = \"api\""), "{hover}");
+    }
+
+    #[test]
     fn hover_on_form_annotation_shows_the_decoding_rule_and_effective_cap() {
         let svc = "context api\ntype Q = { q: String }\nservice api from http {\n  limits { maxBody: 4096 }\n  @form\n  on POST(\"/s\") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(body.q)\n  }\n}\n";
         let hover = describe_handler_annotation_at(svc, svc.find("form").unwrap() + 1)

@@ -42,6 +42,8 @@ pub(crate) use keys::unknown_edge_key_notice;
 #[cfg(test)]
 pub(crate) use messages::foreign_binding_refusal;
 #[cfg(test)]
+pub(crate) use model::kv_unchecked_note;
+#[cfg(test)]
 pub(crate) use model::{derive_plan, plan_report};
 pub use run::{DeployFormat, DeployOptions, run};
 pub(crate) use run::{

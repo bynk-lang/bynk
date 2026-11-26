@@ -104,6 +104,11 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.bearer_bad_arg",
+        blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_identity_not_string_constructible",
         blurb: "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a \
                 string, so the identity type must be one a string can become: a refined or \
@@ -130,6 +135,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\n\n\
                   actor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\n\
                   actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
+    },
+    Explain {
+        code: "bynk.actor.bearer_secret_shared",
+        blurb: "Two `Bearer` actors that read one secret accept each other's tokens: a token is only a signature over its claims, so one minted for `Learner` verifies at a route that names `Internal`, and a learner who can obtain their own token can replay it there (RFC 8725, cross-JWT confusion). Bind each token to its purpose: declare a different `audience` on each actor and mint each actor's tokens with its own, which `bynk token <Actor>` does. Or give each actor its own secret. A refinement of an actor shares its base's secret by design and is exempt.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }                          // ✗ shares its secret with `Internal`, and says nothing of who a token is for\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\n\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"api\"), identity = UserId }          // ✓\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"internal\"), identity = UserId }",
+    },
+    Explain {
+        code: "bynk.actor.bearer_unknown_key",
+        blurb: "A `Bearer` actor's config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other key is refused rather than ignored, because an ignored key is a check you believed you had written: a misspelt `iss` or `aud` would leave tokens that share the secret interchangeable. Use `issuer` and `audience`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", iss = \"web\"), identity = UserId }      // ✗ not a key of `Bearer`\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
     },
     Explain {
         code: "bynk.actor.binder_shadows_param",
@@ -5790,13 +5805,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.wrong_audience_needs_oidc_route",
-        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ a `Bearer` token has no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
+        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor, or a `Bearer` actor that declares an `audience`, has an audience to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ this `Bearer` actor declares no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
     },
     Explain {
         code: "bynk.test.wrong_issuer_needs_oidc_route",
-        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor has an issuer to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ a `Bearer` token has no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
+        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor, or a `Bearer` actor that declares an `issuer`, has an issuer to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ this `Bearer` actor declares no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
     },
     Explain {
         code: "bynk.test.ws_lifecycle_by",
@@ -5852,6 +5867,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.transition.not_bool",
         blurb: "A `transition` is a claim about a step, from `old` to `new`, that is either kept or broken, so its predicate must be a `Bool`. A bare `new.count` is a value, not a claim. Compare it with the old state: `new.count >= old.count`. An `invariant` is held to the same rule (`bynk.invariant.not_bool`).",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
+    },
+    Explain {
+        code: "bynk.types.ai_value_shape",
+        blurb: "`Ai.generateValue[T]` gives the model `T`'s JSON Schema, so `T` must be a type a schema can describe: records, enums, sums, lists, `Option`, `String`-keyed maps and refined base types. A type that contains itself (a tree whose nodes list their children), a generic type, or a `Map` whose key is not a `String` has no schema, so the call is refused naming the field. Flatten the type, or ask for a flat one and build the nested value yourself.",
+        example: "type Node = { label: String, children: List[Node] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✗ `Node` contains itself\n\ntype Node = { label: String, parent: Option[String] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✓",
     },
     Explain {
         code: "bynk.types.analytics_point_shape",
@@ -6319,7 +6339,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.key_at_boundary",
-        blurb: "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform \
+        blurb: "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` is a handle to a key the platform \
                 holds non-extractable, and it lives only for the call that imported it. \
                 Storing, serialising, logging or sending it would either leak the secret or \
                 mean nothing on the other side, so one cannot be a `store` field, a record or \
@@ -7359,12 +7379,24 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
+        "bynk.actor.bearer_bad_arg",
+        "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
+    ),
+    d(
         "bynk.actor.bearer_identity_not_string_constructible",
         "A `Bearer` actor's identity is not a string-constructible type.",
     ),
     d(
         "bynk.actor.bearer_missing_secret",
         "A `Bearer` actor does not name its signing secret.",
+    ),
+    d(
+        "bynk.actor.bearer_secret_shared",
+        "Two `Bearer` actors read one secret without each declaring a different `audience`, so a token minted for one is accepted by the other (#3821).",
+    ),
+    d(
+        "bynk.actor.bearer_unknown_key",
+        "A `Bearer` actor's config has a key other than `secret`, `issuer`, `audience` and `trustFrom`, which would have been ignored (#3821).",
     ),
     d(
         "bynk.actor.binder_shadows_param",
@@ -11143,6 +11175,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A transition predicate does not have type `Bool`.",
     ),
     dg(
+        "bynk.types.ai_value_shape",
+        "`Ai.generateValue[T]` asks the model for a type that has no JSON Schema: one that contains itself, a generic type, or a `Map` with a key that is not a `String` (#4099).",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.analytics_point_shape",
         "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
         &["method_call"],
@@ -11449,7 +11486,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.key_at_boundary",
-        "A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
+        "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
     ),
     dg(
         "bynk.types.key_not_orderable",

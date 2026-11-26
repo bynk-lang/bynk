@@ -503,7 +503,10 @@ mod tests {
             std::cell::RefCell::new(BTreeSet::from(["jobs".to_string(), "outbound".to_string()]));
         let site = Site {
             tools: Tools {
-                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                api: &crate::cloudflare::Account::new(Wrangler::new(
+                    &provenance,
+                    Path::new("/nonexistent"),
+                )),
                 project_root: Path::new("/nonexistent"),
             },
             environment: "default",

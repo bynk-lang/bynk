@@ -136,7 +136,10 @@ pub(crate) fn allocate_in(
             lock,
             live: (),
             tools: Tools {
-                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                api: &crate::cloudflare::Account::new(Wrangler::new(
+                    &provenance,
+                    Path::new("/nonexistent"),
+                )),
                 project_root: Path::new("/nonexistent"),
             },
         },
@@ -420,7 +423,10 @@ mod tests {
         let e = provision_kind::<RateLimit>(
             Site {
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                    api: &crate::cloudflare::Account::new(Wrangler::new(
+                        &provenance,
+                        Path::new("/nonexistent"),
+                    )),
                     project_root: Path::new("/nonexistent"),
                 },
                 environment: "default",
