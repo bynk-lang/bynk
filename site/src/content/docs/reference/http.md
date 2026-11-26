@@ -1384,7 +1384,7 @@ are the first and last byte, inclusive, and `total` is the size of the whole rep
 the handler works the range out (an object store such as R2 does it for you) and states what it
 sent. A range that is not one (`start` below 0 or past `end`, or `end` at or past a known `total`)
 is a fault, so the answer is `500` and the route is logged, and a malformed `Content-Range` is never
-sent. The body is streamed like `RawStreamed`'s: no `ETag`, no `content-length`, and a fault mid-body
+sent. The body is streamed like `RawStreamed`'s: no `ETag` of the router's own (the handler may attach one with [`etag`](#the-handlers-validator-and-if-range)), no `content-length`, and a fault mid-body
 aborts the response. So does a body that yields more or fewer bytes than the range says (`end - start + 1`),
 rather than going out under a `Content-Range` it does not match.
 
@@ -1438,8 +1438,9 @@ match sends the `206`. A mismatch, or a `206` with no validator, is not sent: th
 logs `PartialContent for a stale If-Range: check ifRangeHolds before answering 206`. The router does not
 fall back to a `200` itself, for it cannot build the body.
 
-The router's own conditional handling still applies: a `GET` whose `If-None-Match` matches the validator
-on a handler's `206` is answered `304`.
+The router's own conditional handling still applies, and comes first (RFC 9110 §13.2.2 evaluates
+`If-None-Match` before `If-Range`): a `GET` whose `If-None-Match` matches the validator on a handler's
+`206` is answered `304`, even if its `If-Range` is stale, since a bodyless answer cannot leak stale bytes.
 
 Both are answers to a `GET`. A route of another method that names either in its own body is
 [`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/). A variant built in a

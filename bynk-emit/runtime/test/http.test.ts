@@ -2200,7 +2200,9 @@ test("etag and lastModified reach a PartialContent and a NotModified", () => {
 test("etag refuses a value that is not an entity tag, and lastModified a non-finite time", () => {
   assert.throws(() => withETag(partial(), "v2"), /is not an entity tag/);
   assert.throws(() => withETag(partial(), '"a"b"'), /is not an entity tag/);
-  assert.throws(() => withLastModified(partial(), Number.NaN), /not a finite time/);
+  assert.throws(() => withLastModified(partial(), Number.NaN), /outside the years an HTTP-date can write/);
+  assert.throws(() => withLastModified(partial(), 9e15), /outside the years/);
+  assert.throws(() => withLastModified(partial(), -62_167_219_200_001), /outside the years/);
 });
 
 function rangeRequest(ifRange?: string): Request {
@@ -2227,4 +2229,13 @@ test("ifRangeGuard: a stale, weak or missing validator is a fault, never a 206",
 test("ifRangeGuard: only a 206 is guarded", () => {
   const ok = httpResultToResponse(HttpResult.NotModified, id);
   assert.equal(ifRangeGuard(ok, rangeRequest('"v1"')).status, 304);
+});
+
+test("notModifiedIfMatch: a matching If-None-Match is a 304 before a stale If-Range is judged", () => {
+  const res = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const req = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v2"', "if-range": '"v1"' } });
+  assert.equal(notModifiedIfMatch(res, req).status, 304);
+  const stale = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const noMatch = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v9"', "if-range": '"v1"' } });
+  assert.throws(() => notModifiedIfMatch(stale, noMatch), /stale If-Range/);
 });

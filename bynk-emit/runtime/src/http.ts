@@ -560,9 +560,14 @@ export function withETag<R extends object>(result: R, tag: string): R {
 
 /** `result.lastModified(at)` (#4466): `Last-Modified` for a `PartialContent` or `NotModified`, in IMF-fixdate. */
 export function withLastModified<R extends object>(result: R, epochMillis: number): R {
-  if (!Number.isFinite(epochMillis)) throw new Error("lastModified: the instant is not a finite time");
+  const at = new Date(Math.floor(epochMillis / 1000) * 1000);
+  // An IMF-fixdate has a four-digit year, so an instant outside `Date`'s range or before year 0 or after
+  // 9999 is a fault, not a malformed `Last-Modified`.
+  if (Number.isNaN(at.getTime()) || at.getUTCFullYear() < 0 || at.getUTCFullYear() > 9999) {
+    throw new Error("lastModified: the instant is outside the years an HTTP-date can write (0 to 9999)");
+  }
   // `toUTCString` is the IMF-fixdate form (`Sun, 06 Nov 1994 08:49:37 GMT`), at whole seconds.
-  return withHeaderTriple(result, ["last-modified", new Date(Math.floor(epochMillis / 1000) * 1000).toUTCString(), true]);
+  return withHeaderTriple(result, ["last-modified", at.toUTCString(), true]);
 }
 
 /**
@@ -2386,8 +2391,8 @@ export function applySecurityHeaders<R extends Response>(
 // v0.140 (ADR 0163): a **weak** validator over a response's serialised body, from
 // a fast non-cryptographic hash (FNV-1a, 32-bit). Weak (`W/"…"`) is correct here —
 // the guarantee is *semantic* equivalence of the representation, which weak
-// validators exist for, and Bynk serves no byte-range requests (the one place a
-// strong validator is required). Synchronous, so `httpResultToResponse` stays sync
+// validators exist for, and a byte range (the one place a strong validator is
+// required) is answered only by a handler's own `PartialContent`, which carries its own strong tag (#4466). Synchronous, so `httpResultToResponse` stays sync
 // (no `await crypto.subtle`); a stronger hash (SHA-256) is a drop-in swap behind
 // this name if ever needed.
 export function weakETag(body: string): string {
@@ -2527,13 +2532,14 @@ export function notModifiedIfMatch<R extends Response>(
   response: R,
   request: Request,
 ): R | Response {
-  // #4466: a `206` is checked against `If-Range` before anything else, so a stale one is never sent.
-  ifRangeGuard(response, request);
+  // #4466: RFC 9110 §13.2.2 evaluates `If-None-Match` (step 3) before `If-Range` (step 5), so a
+  // matching `If-None-Match` is answered `304` first: a bodyless answer cannot leak stale bytes. A
+  // `206` that does not short-circuit is checked against `If-Range` before it is sent.
   const etag = response.headers.get("etag");
-  if (etag === null) return response;
   const ifNoneMatch = request.headers.get("if-none-match");
-  if (ifNoneMatch === null) return response;
-  if (!ifNoneMatchMatches(ifNoneMatch, etag)) return response;
+  if (etag === null || ifNoneMatch === null || !ifNoneMatchMatches(ifNoneMatch, etag)) {
+    return ifRangeGuard(response, request);
+  }
   const headers = new Headers();
   headers.set("etag", etag);
   const cacheControl = response.headers.get("cache-control");
