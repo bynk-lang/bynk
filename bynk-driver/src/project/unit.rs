@@ -780,6 +780,8 @@ pub(super) fn check_unit_files(
                     }
                     // #3879: a send to a queue, for the producer check.
                     c if bynk_check::queue_producers::is_queue_send(c) => true,
+                    // #4105: a typed Analytics write, for the schema lock's column mappings.
+                    bynk_check::checker::Callee::AnalyticsWrite { .. } => true,
                     // `Events.emit`: whether the bundle has a composition
                     // root (`project_model::phase_bundle_composition_unprovided`),
                     // which `bynk check` decides as the build does.
@@ -825,6 +827,8 @@ pub(super) fn check_unit_files(
         unit_callees.extend(program.program().callees.iter().filter_map(|(id, c)| {
             let keep = match c {
                 bynk_check::checker::Callee::Cross { .. } => true,
+                // #4105: a typed Analytics write, for the schema lock's column mappings.
+                bynk_check::checker::Callee::AnalyticsWrite { .. } => true,
                 bynk_check::checker::Callee::Capability {
                     op, first_party, ..
                 } => {

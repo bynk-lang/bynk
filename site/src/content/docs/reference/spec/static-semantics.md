@@ -1172,6 +1172,19 @@ is left as it was until `bynk lock accept-order` rewrites it. Dropping
 had; one with entries is at version 3, which an older toolchain refuses rather
 than drops.
 
+**Recorded Analytics mappings (#4105).** A build also reconciles the column mapping of each
+`Analytics` instance written with `writeValue` against the lock's `[analytics]` section, keyed
+`<unit>.<Instance>`: the record written (informational), the `@index` field, and the blob and double
+fields in column order, each as `name:kind` (`text`, `enum`, `bool`, `number`, `decimal`). It is read
+from the checked units, so it is reconciled after them. A new instance is recorded; an unchanged
+mapping keeps its entry. A field appended at the end of a column family, and a field renamed in place
+(its column keeps its place and its kind), update the entry. Any other change is
+`bynk.analytics.mapping_changed` and the entry is left as it was until `bynk lock accept-analytics`
+rewrites it: a recorded column removed, moved, or changed in kind, or the `@index` field changed or
+removed, since points already written keep their positions. An instance no longer written has its
+entry dropped; one written with more than one record type has no single mapping and is left as it was.
+A lock with an `[analytics]` entry is at version 4, which an older toolchain refuses rather than drops.
+
 **Recorded state shapes.** A build also reconciles each agent class's stored shape
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
