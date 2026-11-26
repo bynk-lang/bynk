@@ -658,6 +658,30 @@ the account whether each such Worker exists (`wrangler deployments list --name`)
 and **warns, never refuses**, when one does not: Cloudflare then rejects the
 upload itself. `--dry-run` does not ask.
 
+**The JSON plan.** With `--format json`, `deploy` always writes one JSON document to
+stdout, a refused plan included, so a client reads why a run stopped from a field and
+never from the stderr line. Two arrays are always present beside `environment`:
+`refusals`, why the run cannot go ahead (the exit status is then non-zero), and
+`warnings`, what it says about itself but goes ahead with. A run that stops before its
+plan is derived prints `environment`, `refusals`, `warnings` and the upload `order`;
+one that gets as far as the plan prints the whole plan (`orphans`, `order`,
+`contexts`, …) with the arrays beside it. The human `bynk: …` line is still written to
+stderr.
+
+Each entry is `{"code", "message", …}`: a stable `code`, the readable `message`, the facts
+of its subject beside them, and `override`, the flag that overrides a refusal, where one
+does. A client matches on `code` and treats a code it does not know as an unexplained
+refusal or warning, never as a pass.
+
+| Code | In | Subject fields |
+|---|---|---|
+| `bynk.deploy.agent_move_refused` | `refusals` | `reason` (`not_accepted`, `renamed_in_place` or `old_script_stays`), `context`, `agents`, `from` and `to` (the scripts). `override` is `--accept-fresh-agent <context>` for `not_accepted`; the other two cannot be accepted. |
+| `bynk.deploy.accept_fresh_agent_unused` | `refusals` | `name`: an `--accept-fresh-agent` name that matches no move of this run. |
+| `bynk.deploy.agent_starts_fresh` | `warnings` | `context`, `agents`, `from`, `to`: an accepted move, whose old script keeps the data. |
+
+Only the refusals and warnings in this table are entries so far; any other refusal a run
+makes is reported on stderr alone.
+
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:
 
 - **`declared`** — an `actor`'s `auth` secret (`Bearer(secret = "…")`,

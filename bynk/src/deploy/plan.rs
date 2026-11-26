@@ -1,10 +1,11 @@
-//! `bynk deploy`'s plan/apply flow, as five concerns:
+//! `bynk deploy`'s plan/apply flow, as six concerns:
 //!
 //! - `run.rs` — the run: the options, `run` and `deploy`, and the helpers that select and record.
 //! - `model.rs` — the plan: its types and derivation, its report, and the confirmations.
 //! - `keys.rs` — the managed and edge keys a run decides.
 //! - `skew.rs` — the contract-skew policy and its refusals.
 //! - `messages.rs` — the messages a run prints as it goes.
+//! - `report.rs` — the `refusals` and `warnings` entries of the JSON plan (#3797).
 //!
 //! This parent only declares them and re-exports what the rest of `deploy` names.
 
@@ -14,6 +15,7 @@ use super::on_account;
 mod keys;
 mod messages;
 mod model;
+mod report;
 mod run;
 mod shared;
 mod skew;
@@ -32,6 +34,7 @@ pub(super) use model::print_plan;
 pub(crate) use model::{
     ContextPlan, GroupNames, Plan, requires_interactive_confirmation, unrecordable_in_ci,
 };
+pub(crate) use report::{Entry, refused_report};
 // What `deploy`'s own tests and the sibling test modules reach through `use plan::*`.
 #[cfg(test)]
 pub(crate) use keys::unknown_edge_key_notice;

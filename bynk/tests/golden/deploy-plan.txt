@@ -69,6 +69,8 @@ deploy api
 # --format json
 {
   "environment": "default",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],
@@ -127,6 +129,8 @@ deploy api
 # --format json, a context that computes a secret name
 {
   "environment": "default",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],
@@ -159,6 +163,8 @@ deploy api
 # --format json, with declared and supplied secrets
 {
   "environment": "default",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],
@@ -206,6 +212,8 @@ deploy api
 # --format json, with a queue and a durable object
 {
   "environment": "default",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],
@@ -256,6 +264,8 @@ redeploy shop-cart-staging
 # --format json, the same rename
 {
   "environment": "staging",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [
       {
@@ -312,6 +322,8 @@ order commerce-payment-staging → commerce-orders-staging
 # --format json, the same plan under --env staging
 {
   "environment": "staging",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],
