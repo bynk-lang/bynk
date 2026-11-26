@@ -5482,6 +5482,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
     },
     Explain {
+        code: "bynk.test.key_principal_needs_api_key_route",
+        blurb: "`by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals: `Malformed` sends a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup, and `Unknown` sends well-formed keys that were never minted, which it refuses after comparing against a dummy digest. Only a route guarded by an `ApiKey` actor has that seam. On another route, test its own seam with `by Nobody`, `by Forged` or `by Expired`.",
+        example: "case \"refused\" {\n    let r <- api.GET(\"/me\") by Malformed   // ✗ `/me` is a `Bearer` route\n}\n\ncase \"refused\" {\n    let r <- keys.GET(\"/me\") by Malformed   // ✓ an `ApiKey` route\n}",
+    },
+    Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
         blurb: "`by NoSubject` sends two correctly signed, unexpired tokens whose `sub` the seam must refuse: one empty, one missing. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.wrong_algorithm_needs_oidc_route`.",
         example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by NoSubject      // ✗ a `Bearer` route is not an `Oidc` one\nlet r <- api.GET(\"/who\") by NoSubject     // ✓",
@@ -11006,6 +11011,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.peek_write",
         "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only.",
         &["case"],
+    ),
+    d(
+        "bynk.test.key_principal_needs_api_key_route",
+        "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939).",
     ),
     d(
         "bynk.test.principal_claims_not_oidc",
