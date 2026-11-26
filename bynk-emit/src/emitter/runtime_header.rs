@@ -74,6 +74,7 @@ const ORDER: &[&str] = &[
     "__rehydrationViolation",
     "__migrationFailed",
     "__reportUnknownStoredKeys",
+    "__renameStoredFields",
     "__checkStoredLayout",
     "__readStored",
     "__commitStored",

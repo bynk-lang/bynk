@@ -486,6 +486,8 @@ module.exports = grammar({
         optional(seq("where", field("refinement", $.refinement))),
         // #2686: `@example(…)` after the refinement.
         repeat(field("annotation", $.store_annotation)),
+        // #3793: `name: T replaces old`, the field's previous name. `replaces` is contextual.
+        optional(seq("replaces", field("replaces", $.identifier))),
         // v0.11: an optional initial-value expression. Meaningful on agent
         // `store` fields; the checker restricts where it applies.
         optional(seq("=", field("init", $._expression))),
@@ -1250,6 +1252,8 @@ module.exports = grammar({
         ":",
         field("kind", $.store_kind),
         repeat(field("annotation", $.store_annotation)),
+        // #3793: `store name: Kind[T] replaces old`.
+        optional(seq("replaces", field("replaces", $.identifier))),
         optional(seq("=", field("init", $._expression))),
       ),
     store_kind: ($) =>

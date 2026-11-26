@@ -1,0 +1,60 @@
+===========================
+A record field renamed (#3793)
+===========================
+
+commons app.users
+
+type User = { displayName: String replaces name, age: Int where Positive replaces years = 1 }
+
+---------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (type_decl
+      (identifier)
+      (record_type
+        (record_field
+          (identifier)
+          (base_type)
+          (identifier))
+        (record_field
+          (identifier)
+          (base_type)
+          (refinement
+            (pred_atom
+              (predicate_name)))
+          (identifier)
+          (number_literal))))))
+
+===========================
+A store field renamed (#3793)
+===========================
+
+context shop
+
+agent Basket {
+  key id: String
+  store owner: Cell[String] replaces customer = ""
+}
+
+---
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (agent_decl
+      (identifier)
+      (key_decl
+        (identifier)
+        (base_type))
+      (store_field
+        (identifier)
+        (store_kind
+          (identifier)
+          (base_type))
+        (identifier)
+        (string_literal)))))

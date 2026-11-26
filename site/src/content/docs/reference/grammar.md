@@ -572,7 +572,8 @@ default.
 
 {{#grammar record_field}}
 
-One field of a record: a name, a type, an optional inline refinement, and an
+One field of a record: a name, a type, an optional inline refinement, an optional
+`replaces <old>` clause naming the name the field was renamed from (#3793), and an
 optional default value.
 
 **Static semantics.**
@@ -1599,8 +1600,9 @@ The agent's identity: a key field whose value names an instance.
 
 {{#grammar store_field}}
 
-A `store` field (storage track): `store <name>: <Kind>[…] [@annotations] [= <init>]`
-— an access-pattern slot of a declared storage kind. `store` is a contextual
+A `store` field (storage track): `store <name>: <Kind>[…] [@annotations] [replaces <old>] [= <init>]`
+— an access-pattern slot of a declared storage kind. `replaces <old>` renames a `Cell` field from `<old>`
+(#3793). `store` is a contextual
 keyword (also a valid identifier elsewhere). It is the agent's sole state surface
 (ADR 0108); the legacy `state { }` block was removed at the parity slice.
 
