@@ -17,6 +17,26 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.762.0
+
+A generated client's response union for a route with `@rateLimit` gains a `RateLimited` member (`{ status: 429, kind: "RateLimited", ... }`), so a `switch (res.kind)` that ends in an exhaustive `never` check on such a route no longer type-checks until it handles it; regenerate the client with `bynk client` and add a `case "RateLimited":` (for example, wait `Retry-After` seconds and retry). The route's contract hash moves with it, for `@rateLimit` routes only.
+
+## v0.761.0
+
+`bynk deploy --env <name>` no longer writes the source's `from email` addresses for a named environment (Wrangler applies `addresses` at the top level only, so they were production's, and a deploy either took production's rules over or failed after the Worker was live); the environment now claims none, and the plan says `email: none (no mapping for ...)`. To give it an address, map one: `[deploy.email."support@shop.example"]` with `address = { staging = "support@staging.shop.example" }`
+
+## v0.760.0
+
+every generated `wrangler.toml` gains the `nodejs_als` compatibility flag, which gives a Worker the `AsyncLocalStorage` the trace is held in; it is left out where the project's `[workers] compatibility_flags` already lists `nodejs_compat`, which provides it. A project that commits its generated `wrangler.toml` or reads its flags sees a diff on the next build. A `Logger.log` record gains `fields.trace` inside a request, replacing a field of that name, and the text of a fault or call log line ends ` trace=<id>`; a log query that matches those lines exactly needs to allow the suffix.
+
+## v0.758.0
+
+Mail to `user+tag@domain` now reaches the service that claims `user@domain` instead of the domain's catch-all; a catch-all that relied on receiving tagged mail should claim the tagged address explicitly (`from email("user+tag@domain")`) or read `mail.subaddress` in the service that now receives it
+
+## v0.752.0
+
+On an actor sum, a bare `by Forged`, `by Expired` or `by Stale` that more than one member could refuse is now `bynk.test.bad_principal_needs_arm`; name the member, as `by Forged(Browser)` (it used to act on the sum's first Bearer or Signature member).
+
 ## v0.743.0
 
 `BoundaryRejection` gains `RateLimited(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `RateLimited(_)`, or a wildcard

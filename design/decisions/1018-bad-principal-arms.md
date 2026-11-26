@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A bad-credential principal names the member of an actor sum it tests: `by Forged(Browser)`, `by Expired(Machine)`, `by Stale(Hook)`, on any member kind (`Bearer`, `Signature`, `Oidc`, `SignedCookie`), so each arm's refusal can be tested
-breaking: On an actor sum, a bare `by Forged`, `by Expired` or `by Stale` that more than one member could refuse is now `bynk.test.bad_principal_needs_arm`; name the member, as `by Forged(Browser)` (it used to act on the sum's first Bearer or Signature member).
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 1018 — A bad-credential principal names the sum member it tests
 
-## ADR: bad-principal-arms
-title: A bad-credential principal names the sum member it tests
-summary: `by Forged(Arm)` on an actor sum targets that member; a bare principal stays only where one Bearer or Signature member could refuse it
+- **Status:** Accepted (v0.752)
 
 **Context.** `by Forged`, `by Expired` and `by Stale` present a bad credential to a route's seam. On an actor sum they always acted on the sum's first Bearer or Signature member, so a test could not present a forged OIDC token, or an expired or tampered session cookie, to a sum route and check that the arm refuses it (#4385, found while landing #3936).
 

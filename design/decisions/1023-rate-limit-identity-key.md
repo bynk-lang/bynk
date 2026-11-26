@@ -1,14 +1,6 @@
----
-level: minor
-changelog: `@rateLimit(Limiter, key: identity)` counts per verified caller on a `Bearer`, `Oidc` or `SignedCookie` route: the router verifies the actor once, ahead of the body read, then asks the limiter; an unverified caller never touches it
-probes: ast_importers, ts_writes, ts_any
-raises: ts_writes — the verify step's return type and the entry's refusal guards are spelt as TS text, the same shape the neighbouring actor wrappers keep (#3926)
-raises: ts_any — the identity route's verify result and run step carry the actor's principal, whose concrete type (the handler's own actor-deps shape) cannot be spelt at that seam; two `any` sites, the same shape the event wrapper keeps (#3926)
----
+# 1023 — A route counted by identity verifies its caller before the body is read
 
-## ADR: rate-limit-identity-key
-title: A route counted by identity verifies its caller before the body is read
-summary: `key: identity` splits the actor wrapper into a verify step and a run step; `401`/`403` come before `429`, verification runs once, unannotated routes are unchanged
+- **Status:** Accepted (v0.759)
 
 **Context.** `@rateLimit(Limiter, key: clientIp)` counts by address and is asked before anything else. A limit per user needs the caller's identity, and the router reads and decodes a non-sum route's body in the entry before its compose wrapper verifies the actor, so an identity-keyed limit asked after the verification would be asked after the body read, which is what the annotation exists to avoid. The route's verification therefore has to move ahead of the body read, for the routes that ask for it.
 
