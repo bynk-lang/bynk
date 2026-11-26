@@ -51,6 +51,29 @@ fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<byn
     }
 }
 
+/// #3905: the entries a service object starts with: a bundle-target `from websocket` service carries
+/// `maxFrame: <bytes>`, its frame ceiling, which a test's `svc.open(tc, …)` hands the `TestConnection`
+/// so an oversized `send` faults there as it does on the platform. Every other service starts empty.
+fn ws_frame_entries(
+    s: &ServiceDecl,
+    protocol: &ProtocolIr,
+    ctx: &EmitProjectCtx,
+) -> Vec<bynk_ts::TsObjectEntry> {
+    if !matches!(protocol, ProtocolIr::WebSocket { .. })
+        || matches!(ctx.target, BuildTarget::Workers)
+    {
+        return Vec::new();
+    }
+    vec![bynk_ts::TsObjectEntry::prop(
+        "maxFrame".to_string(),
+        crate::ts_build::num_lit(
+            s.limits
+                .as_ref()
+                .map_or(bynk_syntax::ast::DEFAULT_MAX_FRAME, |l| l.max_frame()),
+        ),
+    )]
+}
+
 /// A service's declarations (1A.32a, Decision A of #3733): its doc comment, if any, then
 /// `export const {name} = { .. };` as a [`bynk_ts::TsDecl::ConstDecl`] over a multiline object
 /// with one [`bynk_ts::TsObjectEntry::Method`] per handler.
@@ -67,7 +90,7 @@ pub(crate) fn emit_service(
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsStmt> {
     let tys = UnitFacts::of(ctx).render(commons);
-    let mut entries: Vec<bynk_ts::TsObjectEntry> = Vec::new();
+    let mut entries = ws_frame_entries(s, protocol, ctx);
     let mut cron_idx = 0usize;
     let mut queue_idx = 0usize;
     let ws_proto = matches!(protocol, ProtocolIr::WebSocket { .. });

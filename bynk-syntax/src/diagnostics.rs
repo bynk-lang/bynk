@@ -2796,17 +2796,17 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.limits_invalid_field",
-        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody` and `maxFile` are byte counts, and `maxParts` counts parts. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the three is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
+        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody`, `maxFile` and a WebSocket service's `maxFrame` are byte counts, and `maxParts` counts parts. `maxFrame` is also at most 33_554_432, Cloudflare's own limit on an inbound message. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the set is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: \"1MB\" }       // ✗ a byte count, not a string\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_048_576 }   // ✓ 1 MiB\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_not_http",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service's routes, and only a `from http` service has routes that take requests, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of an HTTP service's routes, or a WebSocket service's `maxFrame`, and only a `from http` or `from websocket` service has requests or frames to bound, so on a `cron` or other service it is refused. Move it to the service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
         example: "type Note = { text: String }\n\nservice jobs from cron {\n    limits { maxBody: 1_000_000 }   // ✗ a schedule takes no request body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }   // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_unknown_field",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`; on a `from websocket` service the one field is `maxFrame`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -9130,11 +9130,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.limits_invalid_field",
-        "A `limits` policy field (`maxBody`) has the wrong value shape.",
+        "A `limits` policy field (`maxBody`, `maxFrame`) has the wrong value shape.",
     ),
     d(
         "bynk.http.limits_not_http",
-        "A `limits { }` policy appears on a service that is not `from http`.",
+        "A `limits { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.limits_unknown_field",

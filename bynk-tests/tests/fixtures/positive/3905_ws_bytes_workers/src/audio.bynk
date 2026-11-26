@@ -1,0 +1,43 @@
+context audio
+
+type RoomId = opaque String
+type UserId = opaque String
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+// #3905: on Workers, an `in: Bytes` service reads each binary message as it arrives, with no JSON decode, and
+// sends binary messages; `maxFrame` is checked before anything else and recorded in the socket's attachment.
+service Audio from websocket(in: Bytes, out: Bytes) {
+  limits { maxFrame: 8 }
+
+  on open (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- connection.send(Bytes.fromUtf8("hello"))
+    let _ <- Room(room).join(user.identity, connection)
+    ()
+  }
+
+  on message (room: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+    ()
+  }
+
+  on close (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).leave(user.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Bytes]]
+
+  on call join(u: UserId, conn: Connection[Bytes]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}

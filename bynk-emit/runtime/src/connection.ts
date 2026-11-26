@@ -45,6 +45,62 @@ export function closeArguments(code?: number, reason?: string): { code?: number;
   return { code, reason: cut };
 }
 
+// #3905: the size of a frame the server sends, in bytes: a `Bytes` frame as it is, any other frame as
+// the UTF-8 of its JSON. A frame over the service's `maxFrame` faults the send, so a server bug cannot
+// push oversized frames at clients.
+const frameEncoder = new TextEncoder();
+
+function outboundFrame(frame: unknown, binary?: boolean): { data: string | Uint8Array; size: number } {
+  if (frame instanceof Uint8Array && binary !== false) return { data: frame, size: frame.byteLength };
+  const data = JSON.stringify(frame);
+  return { data, size: frameEncoder.encode(data).byteLength };
+}
+
+function checkOutboundFrame(frame: unknown, maxFrame: number): { data: string | Uint8Array } {
+  const out = outboundFrame(frame);
+  if (out.size > maxFrame) {
+    throw new Error(`Connection.send: a frame of ${out.size} bytes is over the service's maxFrame of ${maxFrame}`);
+  }
+  return out;
+}
+
+// Whether an inbound text frame is over `max` bytes of UTF-8. A UTF-16 unit is at least one byte and at
+// most three, so the length alone decides all but a narrow band, and only that band is encoded.
+function textExceeds(text: string, max: number): boolean {
+  if (text.length > max) return true;
+  if (text.length * 3 <= max) return false;
+  return frameEncoder.encode(text).byteLength > max;
+}
+
+// #3905: the first thing an inbound frame meets, before it is decoded or parsed. A frame over `maxFrame`
+// closes the socket with `1009` (as Cloudflare does for its own 32 MiB limit), logging its size and
+// nothing of its content. A frame of the wrong kind closes with `1003`: a text frame to a `Bytes`
+// service, a binary one to a JSON service, which no longer reads it as UTF-8. Returns whether the frame
+// may go on.
+export function webSocketAdmit(
+  ws: { close(code?: number, reason?: string): void },
+  message: string | ArrayBuffer,
+  maxFrame: number,
+  binary: boolean,
+): boolean {
+  const text = typeof message === "string";
+  if (text ? textExceeds(message, maxFrame) : message.byteLength > maxFrame) {
+    const size = text ? frameEncoder.encode(message).byteLength : message.byteLength;
+    console.error(`bynk: a websocket frame of ${size} bytes is over maxFrame ${maxFrame}`);
+    ws.close(1009, "message too large");
+    return false;
+  }
+  if (binary && text) {
+    ws.close(1003, "text frame not accepted");
+    return false;
+  }
+  if (!binary && !text) {
+    ws.close(1003, "binary frame not accepted");
+    return false;
+  }
+  return true;
+}
+
 // v0.103: the bundle/test realisation of a `Connection[F]` — a capture-and-inspect
 // channel. The runtime-managed lifecycle in production becomes an inspectable
 // record in tests (design notes §20): `sent` holds every frame `send`-given, and
@@ -57,8 +113,12 @@ export class TestConnection<F> implements Connection<F> {
   closeCode: number | undefined = undefined;
   closeReason: string | undefined = undefined;
 
+  // #3905: the service's `maxFrame`, handed over by `svc.open(tc, …)`; a frame over it faults the send.
+  maxFrame: number | undefined = undefined;
+
   async send(frame: F): Promise<void> {
     if (this.closed) throw new Error("send on a closed TestConnection");
+    if (this.maxFrame !== undefined) checkOutboundFrame(frame, this.maxFrame);
     this.sent.push(frame);
   }
 
@@ -87,12 +147,13 @@ export class TestConnection<F> implements Connection<F> {
   private minted = false;
 
   /** Record `open`'s route values and `deps`; one socket is opened once, and not once it was handed out. */
-  remember(route: unknown[], deps: unknown): void {
+  remember(route: unknown[], deps: unknown, maxFrame?: number): void {
     if (this.routeValues !== undefined || this.minted) {
       throw new Error("TestConnection: this connection was already opened or handed to an agent — build a new TestConnection");
     }
     this.routeValues = route;
     this.depsValue = deps;
+    this.maxFrame = maxFrame;
   }
 
   /** The route values and `deps` from `open`; a case that skipped `open` fails. */
@@ -119,20 +180,37 @@ export class TestConnection<F> implements Connection<F> {
 // hibernation tag the socket was accepted under (slice 3b-ii): a stored connection
 // persists this id, and `resolveConnection` re-presents the live socket by it
 // after the DO wakes — so the held value survives eviction (§2.9.6).
+interface SendSocket {
+  send(data: string | Uint8Array): void;
+  close(code?: number, reason?: string): void;
+  deserializeAttachment?(): unknown;
+}
+
 export class WorkersConnection<F> implements Connection<F> {
   // Explicit fields + assignment, not constructor parameter properties — Node's
   // `--experimental-strip-types` (the `--inspect` debug path runs the emitted `.ts`
   // directly) rejects parameter properties, which are not erasable.
-  private readonly ws: { send(data: string): void; close(code?: number, reason?: string): void };
+  private readonly ws: SendSocket;
   readonly connId: string;
 
-  constructor(ws: { send(data: string): void; close(code?: number, reason?: string): void }, connId: string) {
+  constructor(ws: SendSocket, connId: string) {
     this.ws = ws;
     this.connId = connId;
   }
 
+  // A `Bytes` frame goes out as a binary message, any other frame as JSON text. A frame over the
+  // service's `maxFrame`, which the upgrade wrote into the socket's attachment so it is known after any
+  // wake, faults the send (#3905). A socket accepted before that has no ceiling recorded.
   async send(frame: F): Promise<void> {
-    this.ws.send(JSON.stringify(frame));
+    const attachment = this.ws.deserializeAttachment?.() as { max?: number; bin?: boolean } | null | undefined;
+    const max = attachment?.max;
+    // `bin` is the `out: Bytes` service the upgrade recorded: its frames go out as binary messages, and any
+    // other service's as JSON, whatever the frame's representation, as the inbound side decides by type.
+    const out = outboundFrame(frame, attachment?.bin === true);
+    if (max !== undefined && out.size > max) {
+      throw new Error(`Connection.send: a frame of ${out.size} bytes is over the service's maxFrame of ${max}`);
+    }
+    this.ws.send(out.data);
   }
 
   async close(code?: number, reason?: string): Promise<void> {
@@ -160,7 +238,7 @@ export function connIdOf(conn: Connection<unknown>): string {
 // runtime object is richer but compatible.
 export interface WorkersWebSocket {
   accept(): void;
-  send(data: string): void;
+  send(data: string | Uint8Array): void;
   close(code?: number, reason?: string): void;
   // v0.105 (slice 3b-ii): hibernation attachment — small per-socket data the
   // platform preserves across hibernation (the connId, so a waking dispatch can

@@ -169,6 +169,9 @@ suite chat {
   `Connection[F]` an agent's handler takes, so a case can drive the agent
   without the service: `Room(r).join(u, tc.connection())`. A `TestConnection`
   gives up one connection; asking again fails the case.
+- **Frame limits.** `svc.open(tc, …)` hands the `TestConnection` the service's `limits { maxFrame }`, so a
+  `connection.send` of a frame over it faults the send, as in production; a `TestConnection` given to an agent
+  directly is not bounded. A service with `in: Bytes` takes a `Bytes` frame in `message`.
 - **Tiers.** The address works at `unit` and `integration`. A `system` case
   can't use it (`bynk.test.ws_needs_in_process`): a deployed WebSocket is a real
   upgrade through the Worker and a Durable Object, which a `system` case does

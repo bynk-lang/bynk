@@ -1,0 +1,19 @@
+// #3905: binary frames pass through as `Bytes`, and a frame the server sends over the service's
+// `maxFrame` (8 bytes here) faults the send.
+suite audio {
+  case "a binary frame is echoed as it is" {
+    let tc = TestConnection[Bytes]()
+    let room = RoomId.unsafe("r1")
+    let _ <- Audio.open(tc, room) by Participant(UserId.unsafe("ada"))
+    let _ <- Audio.message(tc, Bytes.fromUtf8("abcdefgh"))
+    expect tc.sent() == [Bytes.fromUtf8("hello"), Bytes.fromUtf8("abcdefgh")]
+  }
+
+  case "a frame over maxFrame faults the send" {
+    let tc = TestConnection[Bytes]()
+    let room = RoomId.unsafe("r2")
+    let _ <- Audio.open(tc, room) by Participant(UserId.unsafe("ada"))
+    expect Audio.message(tc, Bytes.fromUtf8("abcdefghi")) faults
+    expect tc.sent() == [Bytes.fromUtf8("hello")]
+  }
+}
