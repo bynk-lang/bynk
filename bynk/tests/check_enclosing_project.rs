@@ -72,10 +72,49 @@ fn a_subdirectory_of_a_project_is_checked_with_the_projects_manifest() {
     let (ok, text) = check(&dir.join("src"), &["."]);
     assert!(ok, "`bynk check .` in `src` reads the manifest:\n{text}");
 
-    // A machine format keeps stdout to the document.
+    // The note is for the human format: `short` carries none.
     let (ok, text) = check(&dir, &["src", "--format", "short"]);
     assert!(ok, "{text}");
     assert!(!text.contains("checking the project"), "{text}");
+}
+
+/// A machine format's stdout stays one clean document under the redirect, and says nothing of it.
+#[test]
+fn a_machine_format_stays_a_clean_document_under_the_redirect() {
+    let dir = scratch("check-enclosing-json", true);
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args(["check", "src", "--format", "json"])
+        .current_dir(&dir)
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run bynk");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.trim_start().starts_with('{'),
+        "one JSON document: {stdout}"
+    );
+    assert!(!stdout.contains("checking the project"), "{stdout}");
+    assert!(!String::from_utf8_lossy(&out.stderr).contains("checking the project"));
+}
+
+/// Run from above the project, the directory is still resolved to it.
+#[test]
+fn a_directory_named_from_above_the_project_is_resolved_to_it() {
+    let dir = scratch("check-enclosing-above", true);
+    let parent = dir.parent().unwrap();
+    let name = dir.file_name().unwrap().to_str().unwrap();
+
+    let (ok, text) = check(parent, &[&format!("{name}/src")]);
+    assert!(
+        ok,
+        "`bynk check {name}/src` from the parent reads the manifest:\n{text}"
+    );
+    assert!(text.contains("checking the project"), "{text}");
 }
 
 #[test]
