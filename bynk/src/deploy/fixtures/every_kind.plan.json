@@ -1,6 +1,8 @@
 == default ==
 {
   "environment": "default",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [
       {
@@ -346,6 +348,8 @@ bynk: warning: the KV namespace `shop-cart` (`KV_CART` of `shop`) is already on 
 == staging ==
 {
   "environment": "staging",
+  "refusals": [],
+  "warnings": [],
   "orphans": {
     "kv": [],
     "workers": [],

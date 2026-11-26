@@ -6,13 +6,14 @@ use super::model::confirm;
 use super::model::confirm_destructive;
 use super::model::derive_plan;
 use super::model::recreate_refusal;
+use super::refused_report;
 use super::shared::{
     SharedWithDefault, comparison_skipped, has_comparable_bindings, shared_bindings,
     shared_constants, strict_refusal, without_deliberate,
 };
 use crate::cloudflare::Wrangler;
 use crate::deploy::LOCK_FILE;
-use crate::deploy::agent_move::checked_agent_moves;
+use crate::deploy::agent_move::{AgentGate, checked_agent_moves};
 use crate::deploy::apply::LedgerWriter;
 use crate::deploy::apply::PlanApply;
 use crate::deploy::apply::apply_plan;
@@ -395,9 +396,30 @@ fn deploy(
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
-    let Some(moves) = checked_agent_moves(&lock, opts, &resources, &order, &groups) else {
+    let agents = checked_agent_moves(&lock, opts, &resources, &order, &groups);
+    agents.eprint();
+    if !agents.may_go_on() {
+        // #3797: a client that asked for JSON gets the document, with the refusals in it.
+        if opts.format == DeployFormat::Json {
+            let upload_order: Vec<String> = order
+                .iter()
+                .map(|worker| deployed_worker_name(&opts.environment, worker))
+                .collect();
+            print!(
+                "{}",
+                refused_report(
+                    &opts.environment,
+                    &upload_order,
+                    &agents.refusals,
+                    &agents.warnings
+                )
+            );
+        }
         return Err(ExitCode::FAILURE);
-    };
+    }
+    let AgentGate {
+        moves, warnings, ..
+    } = agents;
 
     check_foreign_pins(project_root, &workers_dir, &order, opts)?;
 
@@ -448,7 +470,8 @@ fn deploy(
         &lock,
         Lives::for_plan(&hyperdrive_wants),
     )
-    .checked_against_account();
+    .checked_against_account()
+    .with_report(Vec::new(), warnings);
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
     let Ok(shared) = shared_with_default(project_root, opts, &model, &own_scripts) else {
