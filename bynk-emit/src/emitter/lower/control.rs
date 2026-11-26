@@ -140,6 +140,8 @@ enum QuestionExit {
         start: usize,
         end: usize,
         src: String,
+        /// #3982: the operand is an `Option`, so `None` (not `Err`) fails the case.
+        none: bool,
     },
     /// v0.153 (ADR 0177): `None` early-returns `HttpResult.NotFound`.
     NotFound,
@@ -156,7 +158,12 @@ enum QuestionExit {
 /// byte-identical to the text form. The case form is an `InlineBlock`, which
 /// prints `{ throw …; }` on the one line today's text has.
 fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
-    let tag = if matches!(exit, QuestionExit::NotFound | QuestionExit::NoneUnchanged) {
+    let tag = if matches!(
+        exit,
+        QuestionExit::NotFound
+            | QuestionExit::NoneUnchanged
+            | QuestionExit::Case { none: true, .. }
+    ) {
         "None"
     } else {
         "Err"
@@ -172,11 +179,17 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
             start,
             end,
             src,
+            none,
         } => {
-            let detail = bynk_ts::TsExpr::Binary {
-                op: bynk_ts::TsBinaryOp::Add,
-                left: Box::new(str_lit(format!("{src}\n  the operand was Err: "))),
-                right: Box::new(call(ident("__bynkShow"), vec![member_node(tmp, "error")])),
+            let detail = if *none {
+                // #3982: a `None` carries no value to show.
+                str_lit([src.as_str(), "\n  the operand was None"].concat())
+            } else {
+                bynk_ts::TsExpr::Binary {
+                    op: bynk_ts::TsBinaryOp::Add,
+                    left: Box::new(str_lit(format!("{src}\n  the operand was Err: "))),
+                    right: Box::new(call(ident("__bynkShow"), vec![member_node(tmp, "error")])),
+                }
             };
             let failure = call(
                 ident("__bynkExpectFailure"),
@@ -247,13 +260,13 @@ pub(super) fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lower
     let exit = if cx.question_fails_case() {
         // #2857: a case returns a `CaseResult`, not the operand's
         // `Result` — so the `?` fails the case, reporting the `Err`
-        // value at the `?`'s location. (The checker rejects an `Option`
-        // operand outside an `HttpResult` or `Option` body.)
+        // value at the `?`'s location. #3982: and an `Option`'s `None` fails it too.
         QuestionExit::Case {
             location: expect_location_raw(cx, e.span.start),
             start: e.span.start,
             end: e.span.end,
             src: expect_source_text_raw(cx, e.span),
+            none: is_option,
         }
     } else if is_option && option_returns_option(cx) {
         QuestionExit::NoneUnchanged

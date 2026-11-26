@@ -1,0 +1,55 @@
+suite orders
+
+case "? on an Ok of any error type unwraps the value" {
+	let n = parse("7")?
+	expect n == 7
+}
+
+case "? on an Err(String) fails the case" {
+	let n = parse("x")?
+	expect n == 0
+}
+
+case "? on an Err of a sum type fails the case, reporting the variant" {
+	let n = place(0)?
+	expect n == 0
+}
+
+case "? on a Some unwraps the value" {
+	let n = first_line([4, 5])?
+	expect n == 4
+}
+
+case "? on a None fails the case" {
+	let n = first_line([])?
+	expect n == 0
+}
+
+// A helper declared in the suite follows its own return type too.
+fn doubled(s: String) -> Result[Int, String] {
+	let n = parse(s)?
+	Ok(n + n)
+}
+
+case "? in a suite helper keeps its meaning" {
+	expect doubled("7") is Ok(14)
+	expect doubled("x") is Err(_)
+}
+
+case "? in a helper keeps its meaning" {
+	expect twice("7") is Ok(14)
+	expect twice("x") is Err(_)
+}
+
+property "a property's ? fails it for that input" {
+  for all n: Int {
+    expect parse("7")? == 7
+    expect first_line([n])? == n
+  }
+}
+
+property "an Err in a property fails it" {
+  for all n: Int {
+    expect parse("x")? == n
+  }
+}

@@ -35,17 +35,17 @@ const __bynkOidcRemote: boolean = false;
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["PARTNER_KEY"] = "__bynk_test_secret";
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SESSION_KEY"] = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
-async function __sysdrive_api_http_POST_ingest(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_POST_ingest(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __body = globalThis.JSON.stringify(__ns_shop_api.__serialise_Event(body));
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Browser") {
     __auth["cookie"] = `__Host-session=${await __signSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "Browser", __sub, 43200, (__bynkNow()) * 1000)}`;
   }
   if (__as === "Partner") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
   }
   if (__as === "Machine") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   if (__as === "Hook") {
     const __sig = await __bynkSignHmacSha256(__body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
@@ -57,16 +57,16 @@ async function __sysdrive_api_http_POST_ingest(body: any, __extraHeaders: { get(
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_ingest(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_raw_api_http_POST_ingest(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Browser") {
     __auth["cookie"] = `__Host-session=${await __signSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "Browser", __sub, 43200, (__bynkNow()) * 1000)}`;
   }
   if (__as === "Partner") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
   }
   if (__as === "Machine") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   if (__as === "Hook") {
     const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
@@ -209,7 +209,7 @@ async function test_a_valid_cookie_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("ada" as any), "Browser");
+    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("ada" as any), {}, "Browser");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "browser ada"))) { throw __bynkExpectFailure("tests/api.bynk:4:10", 142, 164, "expect r is Ok(\"browser ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -225,7 +225,7 @@ async function test_a_valid_token_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("p1" as any), "Partner");
+    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("p1" as any), {}, "Partner");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "partner p1"))) { throw __bynkExpectFailure("tests/api.bynk:9:10", 282, 303, "expect r is Ok(\"partner p1\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -241,7 +241,7 @@ async function test_a_valid_OIDC_token_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("m1" as any), "Machine");
+    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, ("m1" as any), {}, "Machine");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "machine m1"))) { throw __bynkExpectFailure("tests/api.bynk:14:10", 426, 447, "expect r is Ok(\"machine m1\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -257,7 +257,7 @@ async function test_a_valid_signature_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, "", "Hook");
+    const r = await __sysdrive_api_http_POST_ingest({ id: "e1" }, undefined, "", {}, "Hook");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hook"))) { throw __bynkExpectFailure("tests/api.bynk:19:10", 560, 575, "expect r is Ok(\"hook\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

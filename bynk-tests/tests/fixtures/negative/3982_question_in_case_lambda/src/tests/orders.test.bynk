@@ -1,0 +1,7 @@
+suite orders
+
+// A `?` in a lambda returns from the lambda, by the lambda's own return type, not from the case.
+case "a lambda's ? is not the case's" {
+	let f = (s: String) => parse(s)?
+	expect f("7") == 7
+}
