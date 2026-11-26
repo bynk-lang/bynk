@@ -1247,17 +1247,25 @@ pub fn narrow_qualified_edits(
             continue;
         };
         for s in spans.iter_mut() {
-            let Some(written) = text.get(s.start..s.end) else {
-                continue;
-            };
-            if let Some(dot) = written.rfind('.')
-                && &written[dot + 1..] == old.as_str()
-            {
-                *s = Span::new_in(s.file, s.start + dot + 1, s.end);
-            }
+            *s = narrow_qualified_span(text, *s, &old);
         }
         spans.sort();
         spans.dedup();
+    }
+}
+
+/// #4352: `span` of `text`, narrowed to the segment after the last dot when it is `name` written
+/// through a qualifier (`Y.Status`), else unchanged. The one place both `prepareRename`'s range
+/// and a rename's edits take the name alone.
+pub fn narrow_qualified_span(text: &str, span: Span, name: &str) -> Span {
+    match text
+        .get(span.start..span.end)
+        .and_then(|w| w.rfind('.').map(|d| (w, d)))
+    {
+        Some((written, dot)) if &written[dot + 1..] == name => {
+            Span::new_in(span.file, span.start + dot + 1, span.end)
+        }
+        _ => span,
     }
 }
 
@@ -1344,7 +1352,7 @@ fn renamed_key_name(old: &str, new_segment: &str) -> String {
 
 /// The member segment of a (possibly compound) key name — the text the rename
 /// actually edits (every site span covers exactly this).
-fn key_segment(name: &str) -> &str {
+pub fn key_segment(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
 }
 
@@ -1374,6 +1382,35 @@ pub fn no_new_diagnostics(
 
 #[cfg(test)]
 mod tests {
+    /// #4352: a qualified site narrows to the name after the last dot; a bare one is unchanged.
+    #[test]
+    fn a_qualified_site_narrows_to_its_name() {
+        let text = "fn f(a: Y.Status, b: lib.y.Status, c: Status) {}";
+        let at = |needle: &str| {
+            let start = text.find(needle).unwrap();
+            Span::new(start, start + needle.len())
+        };
+        let seg = |s: Span| &text[s.start..s.end];
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Status")),
+            "Status"
+        );
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("lib.y.Status"), "Status")),
+            "Status"
+        );
+        let bare = Span::new(
+            text.rfind("Status").unwrap(),
+            text.rfind("Status").unwrap() + 6,
+        );
+        assert_eq!(narrow_qualified_span(text, bare, "Status"), bare);
+        // A qualified name that is not the symbol's own is left whole.
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Other")),
+            "Y.Status"
+        );
+    }
+
     /// Context-free resolution, as the unit-scope tests read it.
     fn resolve_doc_link(
         index: &ProjectIndex,

@@ -5009,8 +5009,14 @@ impl LanguageServer for Backend {
         let Some(text) = analysis.snapshots.get(&rel) else {
             return Ok(None);
         };
+        // #4352: a name written through a `uses` qualifier highlights the name alone.
+        let span = crate::index_queries::narrow_qualified_span(
+            text,
+            site.span,
+            crate::index_queries::key_segment(&key.name),
+        );
         Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-            range: crate::position::span_to_range(text, site.span),
+            range: crate::position::span_to_range(text, span),
             placeholder: key.name.clone(),
         }))
     }

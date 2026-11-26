@@ -351,7 +351,7 @@ fn build_view(
 ) -> (UnitTable, Vec<(usize, CompileError)>) {
     let mut errors: Vec<(usize, CompileError)> = Vec::new();
     // Qualified names read: declared name -> each qualified spelling written, in
-    // source order. Every spelling of a declaration resolves to the one declaration
+    // `uses` clause order. Every spelling of a declaration resolves to the one declaration
     // (Decision C of #4045): filed under each, all of them naming it by one key.
     let mut qualified: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let bare_key_of = |name: &str| bare.iter().find(|(_, o)| o == name).map(|(k, _)| k.clone());
@@ -368,7 +368,7 @@ fn build_view(
         }
     }
     // The key each declared name is named by: its bare one, else the first
-    // qualified spelling written, else the unit's canonical qualified one. A type's
+    // qualified spelling written (in clause order), else the unit's canonical qualified one. A type's
     // references to the commons' other types are renamed to these.
     let key_of = |name: &str| -> String {
         bare_key_of(name)
