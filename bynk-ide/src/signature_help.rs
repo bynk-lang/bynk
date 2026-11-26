@@ -462,7 +462,10 @@ fn resolve_qualified_from(
         }
     });
     // #4502, #4099: `AnalyticsSql.select[T]` and `Ai.generateValue[T]` are compiler-lowered, so declared nowhere.
-    if out.is_none() && (recv == "AnalyticsSql" || recv == "Ai") {
+    if out.is_none()
+        && matches!(recv, "AnalyticsSql" | "Ai")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, recv)
+    {
         out = typed_read(recv, member).map(str::to_string);
     }
     match (out, derived_base) {
@@ -765,6 +768,9 @@ mod tests {
         );
         // The declared operations keep theirs.
         assert!(resolve_label("Ai.generate", DOC, None).is_some());
+        // A project's own `Ai` is not the first-party one, so it has no such operation.
+        let own = "context a\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        assert!(resolve_label("Ai.generateValue", own, None).is_none());
     }
 
     /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`

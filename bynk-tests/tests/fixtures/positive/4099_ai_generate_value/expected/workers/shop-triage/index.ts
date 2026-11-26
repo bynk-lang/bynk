@@ -39,6 +39,70 @@ export default {
         }
 
         {
+          if (method === "POST" && __matchPath("/maybe", path) !== null) {
+            __route = "POST /maybe";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 4096);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            let __body_json: __JsonValue;
+            try {
+              __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            const body = __r_body.value;
+            const result = await surface.http_POST_maybe(body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /maybe" }), request, ["Bynk realm=\"shop.triage\""]), __security_triage);
+          }
+        }
+        {
+          if (method === "POST" && __matchPath("/severity", path) !== null) {
+            __route = "POST /severity";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 4096);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            let __body_json: __JsonValue;
+            try {
+              __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            }
+            const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_triage);
+            const body = __r_body.value;
+            const result = await surface.http_POST_severity(body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /severity" }), request, ["Bynk realm=\"shop.triage\""]), __security_triage);
+          }
+        }
+        {
           if (method === "POST" && __matchPath("/triage", path) !== null) {
             __route = "POST /triage";
             if (!__jsonMediaTypeMatches(request)) {
@@ -69,6 +133,16 @@ export default {
             const result = await surface.http_POST_triage(body);
             return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /triage" }), request, ["Bynk realm=\"shop.triage\""]), __security_triage);
           }
+        }
+        if (__matchPath("/maybe", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_triage);
+        }
+        if (__matchPath("/severity", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_triage);
         }
         if (__matchPath("/triage", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;

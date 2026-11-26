@@ -33,4 +33,28 @@ service triage from http {
 			Err(_) => ServerError("model unavailable"),
 		}
 	}
+	// A type that is not a record is asked for as the one field of an object, and unwrapped.
+	@limit(maxBody: 4096)
+	on POST("/severity") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let ask = GenerateRequest { messages: [ChatMessage { role: ChatRole.User, content: body }] }
+		let reply <- Ai.generateValue[Severity]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+		match reply {
+			Ok(Severity.High) => Ok("high"),
+			Ok(_) => Ok("not high"),
+			Err(BadReply(why)) => ServerError(why),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+
+	@limit(maxBody: 4096)
+	on POST("/maybe") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let ask = GenerateRequest { messages: [ChatMessage { role: ChatRole.User, content: body }] }
+		let reply <- Ai.generateValue[Option[Severity]]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+		match reply {
+			Ok(Some(_)) => Ok("some"),
+			Ok(None) => Ok("none"),
+			Err(BadReply(why)) => ServerError(why),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
 }

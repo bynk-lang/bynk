@@ -38,11 +38,31 @@ type Triage = {
 type Counts = { byTag: Map[String, Int], at: Instant }
 
 type Drawing = { shapes: List[Shape], title: Option[Summary] }
+
+type Pos = Int where Positive
+
+type Count = Int where NonNegative
+
+type Wait = Duration where InRange(1.second, 1.day)
+
+type Mixed =
+  | Circle(radius: Ratio)
+  | Dot
+
+type Misc = {
+  data: Bytes,
+  price: Decimal,
+  wait: Duration,
+  flags: Set[String],
+  outcome: Result[Int, String],
+  shape: Mixed,
+}
 "#;
 
 /// The types the table puts through both derivations.
 const NAMES: &[&str] = &[
-    "Severity", "Summary", "Qty", "Ratio", "Shape", "Triage", "Counts", "Drawing",
+    "Severity", "Summary", "Qty", "Ratio", "Shape", "Triage", "Counts", "Drawing", "Pos", "Count",
+    "Wait", "Mixed", "Misc",
 ];
 
 fn scratch() -> PathBuf {
@@ -145,13 +165,21 @@ fn inline(v: &Value, components: &Value) -> Value {
 ///   not need and a published document does;
 /// - `additionalProperties: false`, which the model's schema states to keep the reply to the
 ///   declared fields (the decoder ignores unknown keys, so it is not a wire rule);
+/// - a `Duration`'s `type`: the publisher says `number`, and the model's schema says `integer`,
+///   which is what the decoder reads (whole milliseconds, a safe integer), so a model is not
+///   invited to answer `1.5`; the publisher's `x-bynk-base` marks it, and it is read as `integer`;
 /// - `required`'s order, which is the declaration order on one side and the publisher's on the
 ///   other.
 fn normalise(v: &Value) -> Value {
     match v {
         Value::Object(m) => {
             let mut out = serde_json::Map::new();
+            let duration = m.get("x-bynk-base").and_then(Value::as_str) == Some("Duration");
             for (k, v) in m {
+                if duration && k == "type" {
+                    out.insert(k.clone(), Value::String("integer".to_string()));
+                    continue;
+                }
                 if k == "description"
                     || k == "title"
                     || k.starts_with("x-bynk")

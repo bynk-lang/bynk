@@ -6,4 +6,4 @@ version = "0.1.0"
 include = ["src", "tests"]
 
 [unstable]
-allow = ["bynk.cloudflare.Ai", "bynk.cloudflare.Ai.generateValue"]
+allow = ["bynk.cloudflare.Ai"]

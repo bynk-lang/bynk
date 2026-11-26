@@ -696,7 +696,7 @@ fn generate_value_schema(
     text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> String {
-    use bynk_syntax::ast::{CommonsItem, Ident, SourceUnit, TypeRef};
+    use bynk_syntax::ast::{Ident, TypeRef};
     let Some(name) = after
         .strip_prefix('[')
         .and_then(|r| r.split(']').next())
@@ -706,6 +706,49 @@ fn generate_value_schema(
         return String::new();
     };
     let mut types: HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>> = HashMap::new();
+    // The unit's own declarations first (the compiler reads the calling unit's type table), then
+    // the project's for a name it does not declare.
+    for scope in [None, files] {
+        collect_type_decls(text, scope, &mut types);
+    }
+    if !types.contains_key(name) {
+        return String::new();
+    }
+    let t = TypeRef::Named(Ident {
+        name: name.to_string(),
+        span: bynk_syntax::span::Span::default(),
+    });
+    match bynk_check::ai_schema::request_schema(&t, name, &types) {
+        Ok(request) => {
+            let pretty = serde_json::from_str::<serde_json::Value>(&request.schema)
+                .and_then(|v| serde_json::to_string_pretty(&v))
+                .unwrap_or(request.schema);
+            let wrapped = if request.wrapped {
+                format!(
+                    " (`{name}` is not a record, so it is asked for as the one field of an object, `value`, and unwrapped)"
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                "\n\n**Sent to the model** as a JSON Schema (`response_format`){wrapped}; the reply is decoded as `{name}`:\n\n```json\n{pretty}\n```"
+            )
+        }
+        Err(why) => format!(
+            "\n\n`{name}` has no JSON Schema, so the call is refused (`bynk.types.ai_value_shape`): `{}`: {}.",
+            why.path, why.reason
+        ),
+    }
+}
+
+/// The type declarations of the units `text` (and `files`, when given) parse to, by name; a name
+/// already in `types` keeps its first declaration.
+fn collect_type_decls(
+    text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+    types: &mut HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit};
     crate::completion::for_each_unit(text, files, |unit| {
         let items = match unit {
             SourceUnit::Commons(c) => &c.items,
@@ -721,27 +764,6 @@ fn generate_value_schema(
             }
         }
     });
-    if !types.contains_key(name) {
-        return String::new();
-    }
-    let t = TypeRef::Named(Ident {
-        name: name.to_string(),
-        span: bynk_syntax::span::Span::default(),
-    });
-    match bynk_check::ai_schema::schema_of(&t, name, &types) {
-        Ok(schema) => {
-            let pretty = serde_json::from_str::<serde_json::Value>(&schema)
-                .and_then(|v| serde_json::to_string_pretty(&v))
-                .unwrap_or(schema);
-            format!(
-                "\n\n**Sent to the model** as the JSON Schema of `{name}` (`response_format`); the reply is decoded as `{name}`:\n\n```json\n{pretty}\n```"
-            )
-        }
-        Err(why) => format!(
-            "\n\n`{name}` has no JSON Schema, so the call is refused (`bynk.types.ai_value_shape`): `{}`: {}.",
-            why.path, why.reason
-        ),
-    }
 }
 
 /// #2620: hover for a call to the ambient `unreachable(…)` / `todo(…)`: the
@@ -1265,6 +1287,34 @@ mod tests {
         assert!(h.contains("**Sent to the model**"), "{h}");
         assert!(h.contains("\"maxLength\": 200"), "{h}");
         assert!(h.contains("\"enum\": ["), "{h}");
+    }
+
+    /// #4099: a type that is not a record is shown as the object it is asked for in.
+    #[test]
+    fn generate_value_of_an_enum_shows_the_object_it_is_wrapped_in() {
+        let src = GENERATE_VALUE.replace("generateValue[Triage]", "generateValue[Severity]");
+        let h = hover_at(&src, "generateValue", 0).expect("hovers");
+        assert!(
+            h.contains("is not a record") && h.contains("\"value\""),
+            "{h}"
+        );
+    }
+
+    /// #4099: the calling unit's own declaration of a name is the one shown, not another unit's.
+    #[test]
+    fn generate_value_reads_the_calling_units_types_first() {
+        let other = "context other.m\n\ntype Triage = { elsewhere: Int }\n";
+        let files: HashMap<PathBuf, String> =
+            HashMap::from([(PathBuf::from("a_other.bynk"), other.to_string())]);
+        let offset = GENERATE_VALUE.find("generateValue").unwrap();
+        let h = hover_content(&HoverInput {
+            analysis: None,
+            doc: Some((GENERATE_VALUE, offset)),
+            path: None,
+            files: Some(&files),
+        })
+        .expect("hovers");
+        assert!(h.contains("severity") && !h.contains("elsewhere"), "{h}");
     }
 
     /// #4099: a type with no schema says so, naming the field, instead of showing one.

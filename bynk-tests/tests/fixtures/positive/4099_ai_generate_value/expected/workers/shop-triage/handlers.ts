@@ -77,6 +77,90 @@ export const triage = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_POST_severity(body: string, deps: { Ai: bynk_cloudflare.Ai }): globalThis.Promise<HttpResult<string>> {
+    const ask = { messages: [{ role: ChatRole.User, content: body }], maxTokens: { tag: "None" as const }, temperature: { tag: "None" as const }, topP: { tag: "None" as const }, seed: { tag: "None" as const } };
+    const reply = await (async () => {
+      const __decode = (__s: string): Result<Severity, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_Severity(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as Severity);
+        const __be = __r.error;
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      };
+      const __r = await (deps.Ai as unknown as { generateJson(model: unknown, request: unknown, schema: string): globalThis.Promise<Result<string, unknown>> }).generateJson("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask, "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"]}},\"required\":[\"value\"],\"additionalProperties\":false}");
+      if (__r.tag === "Err") return Err(__r.error as never);
+      let __t: string = __r.value;
+      try {
+        const __w = globalThis.JSON.parse(__r.value) as { value?: unknown } | null;
+        const __v = __w?.value;
+        if (__v !== undefined) __t = globalThis.JSON.stringify(__v);
+      } catch (__e) {
+      }
+      const __d = __decode(__t);
+      return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "BadReply" as const, message: `the reply is not a Severity (${__d.error.kind.tag} at ${__d.error.path})` });
+    })();
+    if (reply.tag === "Ok" && reply.value.tag === "High") {
+      return HttpResult.Ok("high");
+    }
+    if (reply.tag === "Ok") {
+      return HttpResult.Ok("not high");
+    }
+    if (reply.tag === "Err" && reply.error.tag === "BadReply") {
+      const why = reply.error.message;
+      return HttpResult.ServerError(why);
+    }
+    if (reply.tag === "Err") {
+      return HttpResult.ServerError("model unavailable");
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_maybe(body: string, deps: { Ai: bynk_cloudflare.Ai }): globalThis.Promise<HttpResult<string>> {
+    const ask = { messages: [{ role: ChatRole.User, content: body }], maxTokens: { tag: "None" as const }, temperature: { tag: "None" as const }, topP: { tag: "None" as const }, seed: { tag: "None" as const } };
+    const reply = await (async () => {
+      const __decode = (__s: string): Result<Option<Severity>, DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_Option_Severity(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as Option<Severity>);
+        const __be = __r.error;
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      };
+      const __r = await (deps.Ai as unknown as { generateJson(model: unknown, request: unknown, schema: string): globalThis.Promise<Result<string, unknown>> }).generateJson("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask, "{\"type\":\"object\",\"properties\":{\"value\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"]},{\"type\":\"null\"}]}},\"required\":[\"value\"],\"additionalProperties\":false}");
+      if (__r.tag === "Err") return Err(__r.error as never);
+      let __t: string = __r.value;
+      try {
+        const __w = globalThis.JSON.parse(__r.value) as { value?: unknown } | null;
+        const __v = __w?.value;
+        if (__v !== undefined) __t = globalThis.JSON.stringify(__v);
+      } catch (__e) {
+      }
+      const __d = __decode(__t);
+      return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "BadReply" as const, message: `the reply is not a Option[Severity] (${__d.error.kind.tag} at ${__d.error.path})` });
+    })();
+    if (reply.tag === "Ok" && reply.value.tag === "Some") {
+      return HttpResult.Ok("some");
+    }
+    if (reply.tag === "Ok" && reply.value.tag === "None") {
+      return HttpResult.Ok("none");
+    }
+    if (reply.tag === "Err" && reply.error.tag === "BadReply") {
+      const why = reply.error.message;
+      return HttpResult.ServerError(why);
+    }
+    if (reply.tag === "Err") {
+      return HttpResult.ServerError("model unavailable");
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
 };
 
 export function __serialise_Severity(value: Severity): __JsonValue {
@@ -166,6 +250,46 @@ export function __deserialise_Triage(json: __JsonValue, path: string = "$"): Res
   return Ok({ severity: __severity, summary: __summary, tags: __tags, owner: __owner } as Triage);
 }
 
+
+export function __serialise_Option_Severity(value: Option<Severity>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_Severity(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Severity(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_Severity(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Severity(json: __JsonValue, path: string = "$"): Result<Option<Severity>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<Severity>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<Severity>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Severity(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as Severity) as Option<Severity>);
+    }
+  }
+  const __b = __option_value_Severity(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as Severity) as Option<Severity>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 export function __serialise_List_String(value: readonly string[]): __JsonValue {
   return value.map((v) => v as __JsonValue);

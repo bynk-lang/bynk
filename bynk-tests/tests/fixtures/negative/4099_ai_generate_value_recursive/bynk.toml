@@ -3,4 +3,4 @@ name = "x"
 version = "0.1.0"
 
 [unstable]
-allow = ["bynk.cloudflare.Ai", "bynk.cloudflare.Ai.generateValue"]
+allow = ["bynk.cloudflare.Ai"]

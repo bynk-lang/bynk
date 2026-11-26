@@ -1408,9 +1408,12 @@ match t {
 The schema is the shape a plain-JSON route writes: an `enum` is a string, an `Option` is the value
 or `null`, a `String`-keyed `Map` is an object, an `Instant` is RFC 3339 text and a sum with
 payloads is an object with `"kind"` beside the payload fields. `T` may be a record, an enum, a sum,
-a `List`, an `Option` or a refined base type. A type with no schema (one that contains itself, a
-generic type, a `Map` with a key that is not a `String`) is `bynk.types.ai_value_shape`, naming the
-field.
+a `List`, an `Option` or a refined base type. A model's JSON mode answers with an object, so a `T`
+that is not a record is asked for as the one field of one, `{"value": …}`, and the call unwraps it:
+the model is shown `{"value": "High"}` for a `Severity`, and the handler gets `High`. A type with no
+schema (one that contains itself, a generic type, a `Map` with a key that is not a `String`) is
+`bynk.types.ai_value_shape`, naming the field, and so is one whose schema, with every named type
+written out in place, is larger than 32 KiB (the schema is sent on every call).
 
 A reply that is not JSON, or that does not decode as `T`, is `Err(BadReply(message))`, never a
 fault: models do not always follow a schema. The message names the kind of failure and the path
@@ -1424,8 +1427,8 @@ page. The reply is still untrusted input: it is checked as `T`, not trusted beca
 In a test, `generateValue` reads the text of a stubbed `generate`: `stub Ai.generate(_, _) returns
 Ok(Generation { text: "{…}", usage: None })` is the JSON the model answered, and the case runs the
 same decode production does. Unstubbed, it faults, like every `Ai` operation. `generateValue` is
-experimental: list `"bynk.cloudflare.Ai.generateValue"` under `[unstable] allow`, beside
-`"bynk.cloudflare.Ai"`. In the editor, hovering the call shows the schema it sends.
+experimental, like `Ai`: `"bynk.cloudflare.Ai"` under `[unstable] allow` covers it. In the editor,
+hovering the call shows the schema it sends.
 
 ### Images: `Images`
 

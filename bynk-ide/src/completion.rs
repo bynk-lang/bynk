@@ -3120,7 +3120,9 @@ fn member_candidates_from(
     }
     // #4099: `Ai.generateValue[T]` and `AnalyticsSql.select[T]`, which the compiler lowers, are
     // members of the bare capabilities once the capability's own operations are in scope.
-    if matches!(receiver, "Ai" | "AnalyticsSql") && !seen.is_empty() {
+    if matches!(receiver, "Ai" | "AnalyticsSql")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, receiver)
+    {
         for member in ["generateValue", "select"] {
             if let Some(sig) = crate::signature_help::typed_read(receiver, member)
                 && seen.insert(member.to_string())
@@ -5295,6 +5297,11 @@ mod tests {
         );
         assert!(find(&items, "generate", CompletionKind::Member).is_some());
         assert!(find(&items, "generateJson", CompletionKind::Member).is_none());
+        // A project's own capability of the same name is not the first-party one.
+        let own = "context a.b\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        let items = complete("    Ai.", own, None);
+        assert!(find(&items, "generateValue", CompletionKind::Member).is_none());
+        assert!(find(&items, "ask", CompletionKind::Member).is_some());
     }
 
     #[test]

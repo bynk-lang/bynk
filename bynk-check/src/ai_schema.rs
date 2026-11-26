@@ -106,13 +106,58 @@ fn quote(s: &str, out: &mut String) {
 
 type Types = HashMap<String, Arc<TypeDecl>>;
 
+/// The most a schema may be once every named type is written out in place (the schema is sent on
+/// every call, and a platform bounds what it takes). A type graph with shared subtypes grows
+/// quickly, so the limit is a diagnostic and not a surprise from the platform.
+pub const MAX_SCHEMA_BYTES: usize = 32 * 1024;
+
 /// The schema of `t` as compact JSON, or why it has none. `root` names the type in a message.
 pub fn schema_of(t: &TypeRef, root: &str, types: &Types) -> Result<String, SchemaError> {
     let mut stack = Vec::new();
     let j = type_schema(t, root, types, &mut stack)?;
     let mut out = String::new();
     j.render(&mut out);
+    if out.len() > MAX_SCHEMA_BYTES {
+        return fail(
+            root,
+            format!(
+                "its schema is {} bytes once every named type is written out, past the {MAX_SCHEMA_BYTES} a call sends",
+                out.len()
+            ),
+        );
+    }
     Ok(out)
+}
+
+/// What a call to `Ai.generateValue[T]` sends: `schema` is the one to give the model, and
+/// `wrapped` says it is `T`'s schema inside `{"value": …}`, which the call unwraps. A model's JSON
+/// mode answers with an object, so a type that is not a record (an enum, a number, an `Option`, a
+/// list, a sum) is asked for as the one field of one.
+pub struct RequestSchema {
+    pub schema: String,
+    pub wrapped: bool,
+}
+
+/// [`schema_of`] shaped for a request: a record as it is, anything else wrapped in an object.
+pub fn request_schema(
+    t: &TypeRef,
+    root: &str,
+    types: &Types,
+) -> Result<RequestSchema, SchemaError> {
+    let schema = schema_of(t, root, types)?;
+    let record = schema.starts_with("{\"type\":\"object\",\"properties\":{");
+    if record {
+        return Ok(RequestSchema {
+            schema,
+            wrapped: false,
+        });
+    }
+    Ok(RequestSchema {
+        schema: format!(
+            "{{\"type\":\"object\",\"properties\":{{\"value\":{schema}}},\"required\":[\"value\"],\"additionalProperties\":false}}"
+        ),
+        wrapped: true,
+    })
 }
 
 fn fail<T>(path: &str, reason: impl Into<String>) -> Result<T, SchemaError> {
@@ -514,6 +559,74 @@ mod tests {
         .expect_err("recursive");
         assert_eq!(err.path, "Tree.children[]");
         assert!(err.reason.contains("contains itself"), "{err:?}");
+    }
+
+    #[test]
+    fn a_root_that_is_not_a_record_is_asked_for_inside_an_object() {
+        let types = types_of(TRIAGE);
+        let named = |n: &str| {
+            TypeRef::Named(bynk_syntax::ast::Ident {
+                name: n.to_string(),
+                span: bynk_syntax::span::Span::default(),
+            })
+        };
+        let record = request_schema(&named("Triage"), "Triage", &types).expect("a schema");
+        assert!(!record.wrapped && record.schema.starts_with("{\"type\":\"object\""));
+        let en = request_schema(&named("Severity"), "Severity", &types).expect("a schema");
+        assert!(en.wrapped, "{}", en.schema);
+        assert_eq!(
+            en.schema,
+            "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"enum\":[\"Low\",\"Medium\",\"High\"]}},\"required\":[\"value\"],\"additionalProperties\":false}"
+        );
+        assert!(
+            request_schema(&named("Summary"), "Summary", &types)
+                .unwrap()
+                .wrapped
+        );
+    }
+
+    #[test]
+    fn a_map_without_a_string_key_has_no_schema() {
+        let err = schema("type Grid = { cells: Map[Int, String] }", "Grid").expect_err("no schema");
+        assert_eq!(err.path, "Grid.cells");
+        assert!(err.reason.contains("key is a `String`"), "{err:?}");
+    }
+
+    #[test]
+    fn a_generic_type_has_no_schema() {
+        let declared = schema("type Page[T] = { items: List[T] }", "Page").expect_err("generic");
+        assert!(declared.reason.contains("is generic"), "{declared:?}");
+        let applied = schema(
+            "type Page[T] = { items: List[T] }\ntype Box = { page: Page[Int] }",
+            "Box",
+        )
+        .expect_err("a generic application");
+        assert_eq!(applied.path, "Box.page");
+        assert!(applied.reason.contains("generic"), "{applied:?}");
+    }
+
+    #[test]
+    fn a_unit_field_has_no_schema() {
+        let err = schema("type Ping = { ack: () }", "Ping").expect_err("unit");
+        assert_eq!(err.path, "Ping.ack");
+        assert!(err.reason.contains("`()`"), "{err:?}");
+    }
+
+    /// Shared subtypes are written out in place, so a graph of them grows by doubling; the call is
+    /// refused past a size and not left to the platform.
+    #[test]
+    fn a_type_graph_that_grows_too_large_is_refused() {
+        let mut src = String::from("type L0 = { a: String, b: String }\n");
+        for i in 1..=14 {
+            src.push_str(&format!("type L{i} = {{ x: L{}, y: L{} }}\n", i - 1, i - 1));
+        }
+        let err = schema(&src, "L14").expect_err("too large");
+        assert!(
+            err.reason.contains("bytes once every named type"),
+            "{err:?}"
+        );
+        // A small one in the same shape is fine.
+        assert!(schema(&src, "L3").is_ok());
     }
 
     #[test]

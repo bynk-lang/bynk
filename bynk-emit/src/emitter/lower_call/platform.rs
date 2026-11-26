@@ -10,13 +10,14 @@ use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 
 use super::super::emit::flatten_emit_ident_chain;
 use super::super::lower::Pre;
+use super::super::lower::member_node;
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
-    num_lit, paren, ret, str_lit,
+    arrow_with, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member,
+    method_call, num_lit, paren, ret, str_lit,
 };
 use bynk_ts::TsParam;
 
@@ -571,8 +572,12 @@ pub(in crate::emitter) fn lower_ai_generate_value_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
-    let Some(Callee::AiGenerateValue { value, schema, .. }) =
-        cx.commons().callees.get(&e.id).cloned()
+    let Some(Callee::AiGenerateValue {
+        value,
+        schema,
+        wrapped,
+        ..
+    }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
     };
@@ -613,7 +618,7 @@ pub(in crate::emitter) fn lower_ai_generate_value_call(
             chain(d(), &["error", "path"]),
         ],
     };
-    let body = vec![
+    let mut body = vec![
         const_typed("__decode", None, decoder),
         const_typed(
             "__r",
@@ -634,11 +639,59 @@ pub(in crate::emitter) fn lower_ai_generate_value_call(
             )),
             None,
         ),
-        const_typed(
-            "__d",
+    ];
+    // A type that is not a record was asked for as `{"value": …}`: read the answer from there, and
+    // leave anything else for the decoder to refuse at the path it names.
+    if wrapped {
+        let json = || member_node("globalThis", "JSON");
+        body.push(TsStmt::let_stmt(
+            bynk_ts::TsBindingName::Ident("__t".to_string()),
+            Some(TsType::named("string")),
+            Some(member(r(), "value")),
             None,
-            call(ident("__decode"), vec![member(r(), "value")]),
-        ),
+        ));
+        let parsed = TsExpr::As {
+            expr: Box::new(call(member(json(), "parse"), vec![member(r(), "value")])),
+            ty: TsType::named("{ value?: unknown } | null"),
+        };
+        let unwrap = vec![
+            const_typed("__w", None, parsed),
+            const_typed(
+                "__v",
+                None,
+                TsExpr::OptionalMember {
+                    object: Box::new(ident("__w")),
+                    property: "value".to_string(),
+                },
+            ),
+            TsStmt::if_stmt(
+                binary(
+                    bynk_ts::TsBinaryOp::StrictNotEq,
+                    ident("__v"),
+                    ident("undefined"),
+                ),
+                TsStmt::assign(
+                    ident("__t"),
+                    call(member(json(), "stringify"), vec![ident("__v")]),
+                    None,
+                ),
+                None,
+            ),
+        ];
+        body.push(TsStmt::try_catch(
+            block(unwrap),
+            Some("__e"),
+            block(Vec::new()),
+            None,
+        ));
+    }
+    let text = if wrapped {
+        ident("__t")
+    } else {
+        member(r(), "value")
+    };
+    body.extend(vec![
+        const_typed("__d", None, call(ident("__decode"), vec![text])),
         ret(TsExpr::Conditional {
             test: Box::new(tag_is(d(), "Ok")),
             consequent: Box::new(call(ident("Ok"), vec![member(d(), "value")])),
@@ -650,7 +703,7 @@ pub(in crate::emitter) fn lower_ai_generate_value_call(
                 ])],
             )),
         }),
-    ];
+    ]);
     Some(call(paren(block_arrow(vec![], true, body)), vec![]))
 }
 

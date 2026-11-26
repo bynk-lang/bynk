@@ -949,6 +949,8 @@ pub enum Callee {
     AiGenerateValue {
         value: TyId,
         schema: String,
+        /// `schema` is `T`'s inside `{"value": …}` (`T` is not a record), which the call unwraps.
+        wrapped: bool,
         /// The type argument, which names `T` where the editor shows the schema.
         span: Span,
     },

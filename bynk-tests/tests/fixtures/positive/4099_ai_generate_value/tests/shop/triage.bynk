@@ -44,3 +44,33 @@ case "a platform refusal comes through as it is" {
 	let r <- triage.POST("/triage", "t") by Visitor
 	expect r is ServerError("model unavailable")
 }
+
+case "an enum is asked for inside an object and read from it" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"value\":\"High\"}", usage: None })
+	let r <- triage.POST("/severity", "t") by Visitor
+	expect r is Ok("high")
+}
+
+case "an enum answer outside the object is still read, as the decoder reads a bare string" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "\"High\"", usage: None })
+	let r <- triage.POST("/severity", "t") by Visitor
+	expect r is Ok("high")
+}
+
+case "an enum answer that is not a variant is a BadReply at the root" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"value\":\"Urgent\"}", usage: None })
+	let r <- triage.POST("/severity", "t") by Visitor
+	expect r is ServerError("the reply is not a Severity (StructuralMismatch at $)")
+}
+
+case "an Option root answered null is None" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"value\":null}", usage: None })
+	let r <- triage.POST("/maybe", "t") by Visitor
+	expect r is Ok("none")
+}
+
+case "an Option root answered with a value is Some" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"value\":\"Low\"}", usage: None })
+	let r <- triage.POST("/maybe", "t") by Visitor
+	expect r is Ok("some")
+}

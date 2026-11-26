@@ -16,5 +16,11 @@ export function compose(env: Env) {
     async http_POST_triage(body: string) {
       return handlers.triage.http_POST_triage(body, deps);
     },
+    async http_POST_severity(body: string) {
+      return handlers.triage.http_POST_severity(body, deps);
+    },
+    async http_POST_maybe(body: string) {
+      return handlers.triage.http_POST_maybe(body, deps);
+    },
   };
 }

@@ -124,8 +124,8 @@ fn check_generate_value(
         return None;
     }
     let shown = t.display(tys);
-    let schema = match crate::ai_schema::schema_of(&type_args[0], &shown, &ctx.input.types) {
-        Ok(schema) => schema,
+    let request = match crate::ai_schema::request_schema(&type_args[0], &shown, &ctx.input.types) {
+        Ok(request) => request,
         Err(why) => {
             ctx.errors.push(
                 CompileError::new(
@@ -147,7 +147,8 @@ fn check_generate_value(
         expr_id,
         Callee::AiGenerateValue {
             value: t,
-            schema,
+            schema: request.schema,
+            wrapped: request.wrapped,
             span: type_args[0].span(),
         },
     );
