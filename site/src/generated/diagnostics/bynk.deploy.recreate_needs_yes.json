@@ -6,5 +6,5 @@
   "constructs": [],
   "example": null,
   "severity": "error",
-  "summary": "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` refuses to plan that without `--yes`; move the data first, then re-run with `--yes`."
+  "summary": "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` prints the plan but will not apply it without `--yes` (a `--dry-run` only shows it); move the data first, then re-run with `--yes`."
 }

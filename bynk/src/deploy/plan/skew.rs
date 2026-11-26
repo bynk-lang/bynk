@@ -490,3 +490,77 @@ pub(crate) fn unrecorded_caller_warning(environment: &str, worker: &str, caller:
         deploy_command(environment)
     )
 }
+
+#[cfg(test)]
+mod entry_tests {
+    use super::*;
+
+    fn skew() -> ContractSkew {
+        ContractSkew {
+            dependency: "shop.billing".into(),
+            service: "charge".into(),
+            expected: "aaaa".into(),
+            live: "bbbb".into(),
+            compat: None,
+        }
+    }
+
+    fn callee() -> CalleeSkew {
+        CalleeSkew {
+            caller: "shop-orders".into(),
+            dependency: "shop.billing".into(),
+            service: "charge".into(),
+            expected: "aaaa".into(),
+            provided: "cccc".into(),
+            compat: None,
+        }
+    }
+
+    #[test]
+    fn a_caller_skew_entry_names_the_side_the_worker_and_each_hash() {
+        let e = contract_skew_entry("default", "shop-orders", &[skew()], "bynk: error: skew\n");
+        assert_eq!(e.code, "bynk.deploy.contract_skew");
+        assert_eq!(e.subject["side"], "caller");
+        assert_eq!(
+            e.subject["worker"],
+            deployed_worker_name("default", "shop-orders")
+        );
+        assert_eq!(
+            e.subject["skews"],
+            serde_json::json!([{
+                "dependency": "shop.billing",
+                "service": "charge",
+                "expected": "aaaa",
+                "live": "bbbb",
+            }])
+        );
+    }
+
+    #[test]
+    fn a_callee_skew_entry_names_its_side_and_the_live_caller() {
+        for side in ["callee", "orphaned_caller"] {
+            let e = callee_skew_entry(
+                side,
+                "bynk: error: skew\n",
+                ("default", "shop-billing"),
+                &[callee()],
+            );
+            assert_eq!(e.code, "bynk.deploy.contract_skew");
+            assert_eq!(e.subject["side"], side);
+            assert_eq!(
+                e.subject["worker"],
+                deployed_worker_name("default", "shop-billing")
+            );
+            assert_eq!(
+                e.subject["skews"],
+                serde_json::json!([{
+                    "caller": deployed_worker_name("default", "shop-orders"),
+                    "dependency": "shop.billing",
+                    "service": "charge",
+                    "expected": "aaaa",
+                    "provided": "cccc",
+                }])
+            );
+        }
+    }
+}

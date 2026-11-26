@@ -159,6 +159,14 @@ impl Stop {
         Self::refused(entry)
     }
 
+    /// The upload order, for a stop made after the run had one and which did not carry it.
+    pub(crate) fn with_order(mut self, order: &[String]) -> Self {
+        if self.order.is_empty() {
+            self.order = order.to_vec();
+        }
+        self
+    }
+
     /// A refusal whose text the run prints itself, as it always did (it starts `bynk: error: ` and
     /// may run over several lines): the entry carries the text without that prefix.
     pub(crate) fn printed(code: &str, printed: &str, subject: &[(&str, Value)]) -> Self {

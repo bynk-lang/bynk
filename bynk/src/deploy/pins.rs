@@ -312,6 +312,35 @@ mod tests {
     const C: &str = "26a626d0a1391c3d";
 
     #[test]
+    fn a_broken_pin_entry_names_each_pin_and_what_the_build_has() {
+        let pin = |actor: &str, built: Built| BrokenPin {
+            context: "shop.orders".into(),
+            actor: actor.into(),
+            service: "ping".into(),
+            pinned: A.into(),
+            built,
+        };
+        let e = broken_pins_entry(
+            &[
+                pin("Hash", Built::Hash(B.into())),
+                pin("NotCallable", Built::NotCallable),
+                pin("Undeclared", Built::Undeclared),
+                pin("NoContext", Built::NoContext),
+            ],
+            "bynk: error: broken pins\n",
+        );
+        assert_eq!(e.code, "bynk.deploy.foreign_contract_skew");
+        let pins = e.subject["pins"].as_array().unwrap();
+        let built: Vec<_> = pins.iter().map(|p| p["built"].as_str().unwrap()).collect();
+        assert_eq!(built, ["hash", "not_callable", "undeclared", "no_context"]);
+        assert_eq!(pins[0]["built_hash"], B);
+        assert!(pins[1]["built_hash"].is_null());
+        assert_eq!(pins[0]["context"], "shop.orders");
+        assert_eq!(pins[0]["service"], "ping");
+        assert_eq!(pins[0]["pinned"], A);
+    }
+
+    #[test]
     fn parses_the_documented_shape() {
         let pins = parse_pins(&format!(
             "[\"shop.orders\".Legacy]\nping = \"{A}\"\nstatus = \"{B}\"\n\n[\"shop.orders\".Ledger]\nstatus = \"{B}\"\n"

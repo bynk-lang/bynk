@@ -8239,7 +8239,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.pins_unreadable",
-        "`bynk deploy` could not read the agent pin file, so it stopped before planning. The message names the file and why; fix or remove it and run again.",
+        "`bynk deploy` could not read `bynk.foreign.toml`, the contract hashes each declared foreign caller is pinned at, so it stopped before planning. The message names the problem; fix the file (it is plain TOML) and run again.",
     ),
     d(
         "bynk.deploy.preflight_failed",
@@ -8255,7 +8255,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.recreate_needs_yes",
-        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` refuses to plan that without `--yes`; move the data first, then re-run with `--yes`.",
+        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` prints the plan but will not apply it without `--yes` (a `--dry-run` only shows it); move the data first, then re-run with `--yes`.",
     ),
     d(
         "bynk.deploy.route_conflict",
@@ -8263,7 +8263,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.deploy.secrets_file_passthrough",
-        "A `--secrets-file` that passes values through would be a second source of secrets on a first deploy. `bynk deploy` stopped before planning; the message says which file.",
+        "A `--secrets-file` was passed through to Wrangler after `--` while the run includes a Worker's first deploy, which uploads its secrets with `bynk deploy`'s own secrets file, so Wrangler would get two. `bynk deploy` stopped before planning; pass the file to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.",
     ),
     d(
         "bynk.deploy.secrets_source_unreadable",

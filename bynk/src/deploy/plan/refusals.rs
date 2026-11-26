@@ -69,8 +69,14 @@ pub(crate) fn secrets_file_passthrough(printed: &str) -> Entry {
 }
 
 /// `--strict-environments`: the environment shares values with `default`.
-pub(crate) fn strict_environments_shared(printed: &str, environment: &str) -> Entry {
-    Entry::from_printed(code::STRICT_ENVIRONMENTS_SHARED, printed).with("environment", environment)
+pub(crate) fn strict_environments_shared(
+    printed: &str,
+    environment: &str,
+    shared: &[String],
+) -> Entry {
+    Entry::from_printed(code::STRICT_ENVIRONMENTS_SHARED, printed)
+        .with("environment", environment)
+        .with("shared", shared)
 }
 
 /// `--strict-environments`: `default` could not be built, so nothing was compared.
@@ -171,9 +177,14 @@ mod tests {
         let e = secrets_file_passthrough("bynk: error: a passthrough file\n");
         assert_eq!(e.code, "bynk.deploy.secrets_file_passthrough");
         assert_eq!(e.message, "a passthrough file");
-        let e = strict_environments_shared("bynk: error: `staging` shares X", "staging");
+        let e = strict_environments_shared(
+            "bynk: error: `staging` shares X",
+            "staging",
+            &["X".to_string()],
+        );
         assert_eq!(e.code, "bynk.deploy.strict_environments_shared");
         assert_eq!(e.subject["environment"], "staging");
+        assert_eq!(e.subject["shared"], serde_json::json!(["X"]));
         let e =
             strict_environments_unchecked("bynk: error: `default` could not be built", "staging");
         assert_eq!(e.code, "bynk.deploy.strict_environments_unchecked");

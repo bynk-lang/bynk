@@ -715,10 +715,10 @@ refusal or warning, never as a pass.
 | `bynk.deploy.upload_order_cycle` | `refusals` | `cycle`: the Workers that bind to each other in a cycle. |
 | `bynk.deploy.contract_skew` | `refusals` | `side` (`caller`, `callee` or `orphaned_caller`), `worker`, and `skews`: each a `dependency`, `service`, `expected` and `live` hash for a `caller`, or a `caller`, `dependency`, `service`, `expected` and `provided` hash for the other sides. |
 | `bynk.deploy.foreign_contract_skew` | `refusals` | `pins`: each a `context`, `service`, `actor`, the `pinned` hash and what was `built` (`hash`, `not_callable`, `undeclared` or `no_context`) with its `built_hash`. |
-| `bynk.deploy.pins_unreadable` | `refusals` | `path`: the agent pin file did not read. |
+| `bynk.deploy.pins_unreadable` | `refusals` | `path`: `bynk.foreign.toml`, the foreign callers' contract pins, did not read. |
 | `bynk.deploy.account_name_conflict` | `refusals` | none: two instances would take the same name on the account. |
 | `bynk.deploy.secrets_file_passthrough` | `refusals` | none: a passthrough `--secrets-file` on a first deploy. |
-| `bynk.deploy.strict_environments_shared` | `refusals` | `environment`: it shares values with `default`. |
+| `bynk.deploy.strict_environments_shared` | `refusals` | `environment`, `shared`: the names it shares with `default`. |
 | `bynk.deploy.strict_environments_unchecked` | `refusals` | `environment`: `default` could not be built, so nothing was compared. |
 | `bynk.deploy.hyperdrive_settings_unreadable` | `refusals` | none: `[deploy.hyperdrive]` did not read. |
 | `bynk.deploy.hyperdrive_unresolved` | `refusals` | none: a Hyperdrive binding did not resolve. |
