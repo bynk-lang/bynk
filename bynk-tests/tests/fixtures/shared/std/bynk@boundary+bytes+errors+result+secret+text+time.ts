@@ -398,14 +398,18 @@ export const LogLevel = {
 /**
  * An HTTP response: a status code, its headers, and a body. `headers` keys
  * are lowercased (`res.headers.get("etag")`); a header the server repeated
- * arrives as one value, joined with ", ". That includes `set-cookie`, and
- * there the join is lossy: a cookie's `Expires` attribute holds a comma, so
- * a joined `set-cookie` cannot be split back into its cookies reliably.
+ * arrives as one value, joined with ", ". `set-cookie` is the one header
+ * that cannot be joined: a cookie's `Expires` attribute holds a comma, so a
+ * joined `set-cookie` cannot be split back into its cookies. `setCookies`
+ * holds every `set-cookie` value separately, as received and in the order
+ * received (`[]` when there was none); `headers` keeps the joined value, for
+ * compatibility. A value is not parsed: it is the header text.
  */
 export interface Response {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: string;
+  readonly setCookies: readonly string[];
 }
 
 export const Response = {
@@ -414,13 +418,14 @@ export const Response = {
 /**
  * An HTTP response whose body is raw bytes, as `Fetch.receiveBytes` and
  * `Fetch.sendBytes` return it: every byte as the server sent it, where
- * `Response.body` would have decoded it as UTF-8. `headers` are as
- * `Response`'s. `b.decodeUtf8()` reads a body that is really text.
+ * `Response.body` would have decoded it as UTF-8. `headers` and `setCookies`
+ * are as `Response`'s. `b.decodeUtf8()` reads a body that is really text.
  */
 export interface BytesResponse {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: globalThis.Uint8Array;
+  readonly setCookies: readonly string[];
 }
 
 export const BytesResponse = {
@@ -544,15 +549,16 @@ export const ContentRange = {
 
 /**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
- * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
- * single-pass: a second read faults. A network failure partway through the
- * body faults the read, since the result is already `Ok`. An unread body
- * holds its connection until the request ends.
+ * and `Fetch.sendStream` return it. `headers` and `setCookies` are as
+ * `Response`'s. `body` is single-pass: a second read faults. A network
+ * failure partway through the body faults the read, since the result is
+ * already `Ok`. An unread body holds its connection until the request ends.
  */
 export interface StreamResponse {
   readonly status: number;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: AsyncIterable<globalThis.Uint8Array>;
+  readonly setCookies: readonly string[];
 }
 
 export const StreamResponse = {
@@ -879,6 +885,7 @@ export function __serialise_BytesResponse(value: BytesResponse): __JsonValue {
     status: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.status),
     headers: __serialise_Map_String_String(value.headers),
     body: __bynkBytesToBase64(value.body) as __JsonValue,
+    setCookies: __serialise_List_String(value.setCookies),
   };
 }
 
@@ -905,7 +912,11 @@ export function __deserialise_BytesResponse(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "base64 string", actual: "invalid base64" });
   }
   const __body = __b_body.value;
-  return Ok({ status: __status, headers: __headers, body: __body } as BytesResponse);
+  const __d_setCookies: __JsonValue = "setCookies" in obj ? obj["setCookies"] : [];
+  const __r_setCookies = __deserialise_List_String(__d_setCookies, `${path}.setCookies`);
+  if (__r_setCookies.tag === "Err") return __r_setCookies;
+  const __setCookies = __r_setCookies.value;
+  return Ok({ status: __status, headers: __headers, body: __body, setCookies: __setCookies } as BytesResponse);
 }
 
 export function __serialise_CallFailure(value: CallFailure): __JsonValue {
@@ -1557,6 +1568,7 @@ export function __serialise_Response(value: Response): __JsonValue {
     status: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.status),
     headers: __serialise_Map_String_String(value.headers),
     body: value.body as __JsonValue,
+    setCookies: __serialise_List_String(value.setCookies),
   };
 }
 
@@ -1579,7 +1591,11 @@ export function __deserialise_Response(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path: `${path}.body`, expected: "string", actual: typeof obj["body"] });
   }
   const __body = obj["body"];
-  return Ok({ status: __status, headers: __headers, body: __body } as Response);
+  const __d_setCookies: __JsonValue = "setCookies" in obj ? obj["setCookies"] : [];
+  const __r_setCookies = __deserialise_List_String(__d_setCookies, `${path}.setCookies`);
+  if (__r_setCookies.tag === "Err") return __r_setCookies;
+  const __setCookies = __r_setCookies.value;
+  return Ok({ status: __status, headers: __headers, body: __body, setCookies: __setCookies } as Response);
 }
 
 export function __serialise_SameSite(value: SameSite): __JsonValue {
@@ -1813,6 +1829,26 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
     }
     const __v = entryV;
     out.set(__k as string, __v as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_String(value: readonly string[]): __JsonValue {
+  return value.map((v) => v as __JsonValue);
+}
+
+export function __deserialise_List_String(json: __JsonValue, path: string = "$"): Result<readonly string[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: string[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
   }
   return Ok(out);
 }

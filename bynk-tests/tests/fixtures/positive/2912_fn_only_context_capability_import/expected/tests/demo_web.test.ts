@@ -53,7 +53,7 @@ class __Stub_Fetch {
     type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "inline") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "" });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "", setCookies: [] });
     }
     throw new globalThis.Error("bynk: no stub clause matched for Fetch.send");
   }
