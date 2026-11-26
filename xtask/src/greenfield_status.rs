@@ -1499,10 +1499,7 @@ pub(crate) fn top_level_crate_dirs(root: &Path) -> Vec<PathBuf> {
 /// Decision A: this cross-reference is what makes the exclusion correct by
 /// construction rather than a second hand-maintained list).
 fn emit_diagnostics(root: &Path) -> Probe {
-    let registry: BTreeSet<&str> = bynk_syntax::diagnostics::REGISTRY
-        .iter()
-        .map(|d| d.code)
-        .collect();
+    let registry = registry_codes(root);
     let mut parts = Vec::new();
     for (label, dir) in [
         ("bynk-emit", "bynk-emit/src"),
@@ -4509,11 +4506,8 @@ fn module_lines(root: &Path) -> Probe {
 ///   which fails only on an emitter bug.
 ///
 /// `cargo xtask greenfield-status --list-unasserted` prints the codes.
-pub fn unasserted_codes(root: &Path) -> Vec<&'static str> {
-    let registry: BTreeSet<&'static str> = bynk_syntax::diagnostics::REGISTRY
-        .iter()
-        .map(|d| d.code)
-        .collect();
+pub fn unasserted_codes(root: &Path) -> Vec<String> {
+    let registry = registry_codes(root);
     let mut asserted: BTreeSet<String> = BTreeSet::new();
     let mut note = |text: &str| {
         for code in registry_tokens(text) {
@@ -4552,7 +4546,7 @@ pub fn unasserted_codes(root: &Path) -> Vec<&'static str> {
     }
     registry
         .into_iter()
-        .filter(|c| !asserted.contains(*c))
+        .filter(|c| !asserted.contains(c))
         .collect()
 }
 
@@ -4624,7 +4618,7 @@ fn text_files(dir: &Path) -> Vec<(PathBuf, String)> {
 }
 
 fn diagnostic_coverage(root: &Path) -> Probe {
-    let total = bynk_syntax::diagnostics::REGISTRY.len();
+    let total = registry_codes(root).len();
     let unasserted = unasserted_codes(root).len();
     Probe {
         name: "diagnostic_coverage",
@@ -4634,6 +4628,96 @@ fn diagnostic_coverage(root: &Path) -> Probe {
             total - unasserted
         ),
     }
+}
+
+// --- The diagnostics registry, read from a tree --------------------------------
+
+/// Where a tree keeps the registry and the curated explanations.
+const DIAGNOSTICS_SOURCE: &str = "bynk-syntax/src/diagnostics.rs";
+
+/// The source of `decl` (`pub const REGISTRY`, `pub const EXPLANATIONS`) up to its closing
+/// `];`, with `//` comments removed so a code named in prose is not counted.
+fn const_span(src: &str, decl: &str) -> Option<String> {
+    let start = src.find(decl)?;
+    let rest = &src[start..];
+    let end = rest.find("\n];")?;
+    Some(strip_line_comments(&rest[..end]))
+}
+
+/// The `"bynk.…"` string literal at the start of `text`, if it begins with one.
+fn leading_code(text: &str) -> Option<&str> {
+    let body = text.trim_start().strip_prefix('"')?;
+    let end = body.find('"')?;
+    body[..end].starts_with("bynk.").then(|| &body[..end])
+}
+
+/// The codes of `REGISTRY` in the tree at `root`: the code literal each `d(` / `dg(` entry
+/// opens with (`warn(d(…))` is an entry through its inner `d(`).
+///
+/// This reads `root`'s own source, not the registry compiled into this binary. The
+/// per-PR attribution (#4428) measures the base revision and the PR's tree with the same
+/// binary, so a reading taken from compiled-in data is the same on both and a PR that adds
+/// a code never appears to have moved it (#4476). A tree without the file (a synthetic root
+/// in a test) reads the compiled-in registry instead; `registry_source_matches_the_compiled_in_one`
+/// pins the two together on the live tree, so the scan cannot drift unseen.
+pub fn registry_codes(root: &Path) -> BTreeSet<String> {
+    let compiled_in = || {
+        bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect()
+    };
+    let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
+        return compiled_in();
+    };
+    let Some(span) = const_span(&src, "pub const REGISTRY") else {
+        return compiled_in();
+    };
+    let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut codes = BTreeSet::new();
+    for (i, _) in span.match_indices('(') {
+        // The whole identifier before the `(`, so `odd(` is not `d(`.
+        let head = &span[..i];
+        let name_len = head.bytes().rev().take_while(|&b| ident(b)).count();
+        let name = &head[head.len() - name_len..];
+        if (name == "d" || name == "dg")
+            && let Some(code) = leading_code(&span[i + 1..])
+        {
+            codes.insert(code.to_string());
+        }
+    }
+    codes
+}
+
+/// How many `EXPLANATIONS` entries the tree at `root` carries: the `code: "bynk.…"` field of
+/// each `Explain`. Read from source for the reason [`registry_codes`] is.
+pub fn explained_code_count(root: &Path) -> usize {
+    let compiled_in = || bynk_syntax::diagnostics::EXPLANATIONS.len();
+    let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
+        return compiled_in();
+    };
+    let Some(span) = const_span(&src, "pub const EXPLANATIONS") else {
+        return compiled_in();
+    };
+    span.lines()
+        .filter(|l| {
+            l.trim_start()
+                .strip_prefix("code: ")
+                .and_then(leading_code)
+                .is_some()
+        })
+        .count()
+}
+
+/// The gated probes whose reading comes from the diagnostics registry (#4476), taken of the tree
+/// at `root` and nothing else of it. `run_gated` reads these among all the rest; the attribution
+/// tests read only these, from a synthetic tree that holds a registry and no workspace.
+pub fn diagnostics_probes(root: &Path) -> Vec<Probe> {
+    vec![
+        emit_diagnostics(root),
+        diagnostic_coverage(root),
+        explained_codes(root),
+    ]
 }
 
 // --- explained_codes ------------------------------------------------------
@@ -4646,9 +4730,9 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 /// `explained_codes_never_fall` refuses a fall even when a pending file
 /// acknowledges the probe. A new error code should ship with an explanation
 /// (`design/proposals/README.md`, "Documentation is part of done").
-fn explained_codes(_root: &Path) -> Probe {
-    let total = bynk_syntax::diagnostics::REGISTRY.len();
-    let explained = bynk_syntax::diagnostics::EXPLANATIONS.len();
+fn explained_codes(root: &Path) -> Probe {
+    let total = registry_codes(root).len();
+    let explained = explained_code_count(root);
     Probe {
         name: "explained_codes",
         gated: true,
@@ -6473,6 +6557,28 @@ mod tests {
         assert!(registry.contains("bynk.parse.expected_expression"));
         // A commons/namespace path, not a diagnostic code — #999's own verified survey.
         assert!(!registry.contains("bynk.locale"));
+    }
+
+    /// #4476: the source-reading scan must equal the registry compiled into this binary on the
+    /// live tree. If someone adds a constructor shape the scan does not know, this goes red and
+    /// the per-PR attribution is not silently blind to those codes.
+    #[test]
+    fn registry_source_matches_the_compiled_in_one() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let compiled: BTreeSet<String> = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect();
+        assert_eq!(
+            registry_codes(&root),
+            compiled,
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with REGISTRY: teach `registry_codes` the new entry shape"
+        );
+        assert_eq!(
+            explained_code_count(&root),
+            bynk_syntax::diagnostics::EXPLANATIONS.len(),
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with EXPLANATIONS: teach `explained_code_count` the new shape"
+        );
     }
 
     // --- ast_importers (#1176) ------------------------------------------------
