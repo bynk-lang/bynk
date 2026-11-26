@@ -197,10 +197,18 @@ pub(crate) fn check_write_value(
         ));
         return bail(ctx);
     }
-    // The record is written, or inferred from the argument.
-    let (t, t_span) = match type_args.first() {
-        Some(written) => (resolve_expr_type_ref(written, ctx)?, written.span()),
-        None => (type_of(&args[0], None, ctx)?, args[0].span),
+    // The record is written, or inferred from the argument (typed once either way).
+    let (t, t_span, actual) = match type_args.first() {
+        Some(written) => {
+            let Some(t) = resolve_expr_type_ref(written, ctx) else {
+                return bail(ctx);
+            };
+            (t, written.span(), type_of(&args[0], Some(t), ctx))
+        }
+        None => {
+            let actual = type_of(&args[0], None, ctx)?;
+            (actual, args[0].span, Some(actual))
+        }
     };
     let record = match &*tys.get(t) {
         Ty::Named {
@@ -238,7 +246,7 @@ pub(crate) fn check_write_value(
             None
         }
     };
-    let actual = type_of(&args[0], Some(t), ctx)?;
+    let actual = actual?;
     if !compatible(actual, t, tys) {
         ctx.errors.push(CompileError::new(
             "bynk.types.argument_mismatch",

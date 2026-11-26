@@ -841,6 +841,16 @@ stripped before the value is parsed, so `1_000` and `1000` denote the same value
 As with `Float` literals, the **as-written lexeme is preserved**, so `bynk fmt`
 keeps the author's grouping verbatim.
 
+### §5.2a Record field annotations {#field-annotations}
+
+A record field MAY be annotated. `@name("…")` gives the field its external name on an HTTP request
+(§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
+key of an Analytics Engine data point; it is accepted on a field of any record and has meaning only
+where the record is written with `writeValue` (#4105), which requires at most one `@index` field, a
+`String` (or a refined or opaque `String`), and refuses a second or a non-`String` one
+(`bynk.types.analytics_point_shape`). `@index` does not change the type's values, equality or codecs.
+Any other field annotation is `bynk.types.field_annotation_unknown`.
+
 ### §5.2b Record field defaults {#field-defaults}
 
 A field of a record type (`type R = { … }`) or of an `event` MAY declare a

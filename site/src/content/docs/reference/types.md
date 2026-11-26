@@ -1814,6 +1814,24 @@ The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token 
 duplicate and case checks run on the resolved text, and a diagnostic points at the reference
 and names the constant. Go-to-definition, hover and rename work on it.
 
+### Field annotations: `@index` {#field-index}
+
+A record field may carry `@index`, with no argument, to mark it as the sampling key when the record
+is written as an Analytics Engine data point (`Signups.writeValue(point)`, see
+[`Analytics`](/reference/bynk-capabilities/#writing-events-analytics)). At most one field of a record
+is `@index`, and it is a `String` (or a refined or opaque `String`); anything else is
+`bynk.types.analytics_point_shape` when the record is written. The annotation is accepted on a field
+of any record and means something only to `writeValue`: it changes nothing about the type, its
+codecs or its construction.
+
+```bynk,fragment
+type Signup = {
+  @index plan: String,
+  channel: String,
+  seats: Int,
+}
+```
+
 ### Field defaults {#field-defaults}
 
 A field may declare a default, `field: T = expr`. A literal may leave that field
