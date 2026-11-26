@@ -2016,10 +2016,6 @@
       "summary": "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
     },
     {
-      "code": "bynk.uses.second_spelling",
-      "summary": "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type."
-    },
-    {
       "code": "bynk.uses.self_reference",
       "summary": "A commons `uses` itself."
     },

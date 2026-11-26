@@ -5,7 +5,7 @@ import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -32,7 +32,7 @@ export function compose(env: Env) {
             const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
             if (__claims.tag === "Ok") {
               const __id = handlers.UserId.of(__claims.value.sub);
-              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
             }
           }
         }

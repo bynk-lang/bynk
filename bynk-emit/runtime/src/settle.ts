@@ -1,5 +1,6 @@
 import { Ok, Err } from "./result.ts";
 import type { Result } from "./result.ts";
+import { withTraceField } from "./traceparent.ts";
 
 // Concurrent effects, slice 0 (#2640): the join behind a `par { … }` block.
 //
@@ -307,7 +308,7 @@ export function __bynkDetach(
       console.error({
         message: "a detached effect returned Err",
         level: "error",
-        fields: { site, type: errType, variant: variant ?? "" },
+        fields: withTraceField({ site, type: errType, variant: variant ?? "" }),
       });
     },
     (reason: unknown) => {
@@ -348,10 +349,10 @@ export function __bynkProcessExec(): __BynkDetachExec {
         console.error({
           message: "a detached effect faulted",
           level: "error",
-          fields: {
+          fields: withTraceField({
             site: typeof site === "string" ? site : "",
             error: String(reason),
-          },
+          }),
         });
       });
     },

@@ -1,0 +1,4 @@
+bynk.types.question_outside_result
+bynk.resolve.param_as_function
+# exact
+# #3982: a `?` in a lambda returns from the lambda, by the lambda's own return type, not from the case (the second diagnostic is the lambda binding it leaves untyped).

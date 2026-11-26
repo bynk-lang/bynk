@@ -1,0 +1,15 @@
+context pay.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor Browser { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+	on GET("/me") () -> Effect[HttpResult[String]] by who: User | Browser {
+		match who {
+			User(u) => Ok("user \(u)")
+			Browser(b, c) => Ok("browser \(b)")
+		}
+	}
+}

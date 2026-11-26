@@ -1,0 +1,31 @@
+// #4352: one declaration read by several spellings inside a context, where a bare used name is
+// rebranded for the context and a qualified one is read through the commons' namespace: the
+// spellings are still one type, built through the commons' own builders and matched through any.
+context app.api
+
+uses lib.y
+
+fn start() -> lib.y.Status { lib.y.begin() }
+
+fn again() -> Status { begin() }
+
+fn flip(s: lib.y.Status) -> Int {
+  match s {
+    On => 0,
+    Off => 1,
+  }
+}
+
+fn origin() -> lib.y.Point { lib.y.mk(1) }
+
+fn read(p: Point) -> Int { p.a }
+
+fn level(n: Int) -> Result[lib.y.Level, ValidationError] { lib.y.Level.of(n) }
+
+fn level2(n: Int) -> Result[Level, ValidationError] { Level.of(n) }
+
+service flipper {
+  on call(s: lib.y.Status) -> Effect[Status] by Caller {
+    Effect.pure(s)
+  }
+}

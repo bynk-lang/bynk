@@ -85,29 +85,20 @@ struct DepsArg {
     plain: bool,
 }
 
-/// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
-fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let tag = str_lit(actor);
-    let who = |tag: TsExpr, identity: Option<TsExpr>| {
-        let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
-        fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
-        deps_with(vec![TsObjectEntry::prop(
-            "who".to_string(),
-            TsExpr::object_entries(fields),
-        )])
-    };
-    match identity {
-        Some(identity) => {
-            let c = vec![tag, identity];
-            let [tag, identity] = take(c);
-            who(tag, Some(identity))
-        }
-        None => {
-            let c = vec![tag];
-            let [tag] = take(c);
-            who(tag, None)
-        }
-    }
+/// I3 (#1971), #2020: `{ ...deps, who: { tag, identity?, claims? } }`, a sum handler's principal. A
+/// `Bearer` arm also carries its verified `claims` (#4344).
+fn who_deps(
+    actor: &str,
+    identity: Option<bynk_ts::TsExpr>,
+    claims: Option<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let mut fields = vec![TsObjectEntry::prop("tag".to_string(), str_lit(actor))];
+    fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
+    fields.extend(claims.map(|c| TsObjectEntry::prop("claims".to_string(), c)));
+    deps_with(vec![TsObjectEntry::prop(
+        "who".to_string(),
+        TsExpr::object_entries(fields),
+    )])
 }
 
 /// `{ ...deps, identity: (identity as any), claims? }`; an `Oidc` handler also reads its token's
@@ -159,16 +150,33 @@ fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
     }
 }
 
+/// #4344: whether `actor` is a `Bearer` arm of the addressed http handler's actor sum, so an in-process
+/// call gives that arm `claims` beside its identity.
+fn is_claims_sum_arm(cx: &LowerCtx, (service, key): (&str, &str), actor: &str) -> bool {
+    matches!(&cx.mode, crate::emitter::ctx::BodyMode::TestCase { sum_handlers, .. }
+        if sum_handlers.contains(&(service.to_string(), ["claimsarm", key, actor].join(":"))))
+}
+
 /// The `deps` argument of an addressed call: the call-site principal folded in, or `deps`.
 fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
     let plain = |value| DepsArg { value, plain: true };
     let deps = || ident("deps");
     let is_sum = sum_key.is_some_and(|k| cx.is_sum_handler(service, k));
     match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
-        (Some(actor), identity) if is_sum => DepsArg {
-            value: who_deps(&actor, identity),
-            plain: false,
-        },
+        (Some(actor), identity) if is_sum => {
+            // #4344: a `Bearer` arm gets the principal's claims, or none.
+            let claims = sum_key
+                .is_some_and(|k| is_claims_sum_arm(cx, (service, k), &actor))
+                .then(|| {
+                    cx.call_site_claims.clone().unwrap_or_else(|| {
+                        call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])
+                    })
+                });
+            DepsArg {
+                value: who_deps(&actor, identity, claims),
+                plain: false,
+            }
+        }
         (_, Some(_)) if sum_key.is_some_and(|k| cx.is_binderless_handler(service, k)) => {
             plain(deps())
         }
@@ -333,6 +341,12 @@ pub(in crate::emitter) fn lower_system_schedule_call(
                     rest.push(ident("undefined"));
                 }
                 rest.push(str_lit(actor));
+                // A `Producer` refinement is acted as a Bynk context: `by Orders("shop.orders")`.
+                if let Some(identity) = cx.call_site_identity.clone() {
+                    rest.push(identity);
+                } else {
+                    rest.push(ident("undefined"));
+                }
             }
             return Some({
                 let nodes = rest;
@@ -926,9 +940,9 @@ mod tests {
     #[test]
     fn a_sum_principal_prints() {
         let want = r#"{ ...deps, who: { tag: "User", identity: id } }"#;
-        assert_eq!(printed(who_deps("User", Some(node("id")))), want);
+        assert_eq!(printed(who_deps("User", Some(node("id")), None)), want);
         assert_eq!(
-            printed(who_deps("Visitor", None)),
+            printed(who_deps("Visitor", None, None)),
             r#"{ ...deps, who: { tag: "Visitor" } }"#
         );
     }

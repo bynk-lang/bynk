@@ -128,19 +128,24 @@ The file is never part of the deployable. See
 
 ## Unwrap a fixture with `?`
 
-A refined type's `.of` returns a `Result`. In a `case`, `?` unwraps it, and an
-`Err` **fails the case** rather than propagating — the failure names the error
-and the `?`'s location, like a failed `expect`:
+In a `case`, `?` unwraps a `Result` or an `Option`, and an `Err` or a `None` **fails the
+case** rather than propagating. The failure names what the operand was and the `?`'s
+location, like a failed `expect`. A refined type's `.of` returns a `Result`, but any
+`Result` works, whatever its error type, which is what you want for the code under test:
 
 ```bynk,fragment
 case "a day reads" {
-  let d = Day.of("2026-11-01")?
+  let d = Day.of("2026-11-01")?        // Result[Day, ValidationError]
+  let saved <- place.call(d)
+  let id = saved?                      // Result[OrderId, PlaceError]: an Err fails the case
+  let line = lines.first()?            // Option[Line]: a None fails the case
   expect len(d) == 10
 }
 ```
 
-The error must be a `ValidationError`, the error type of `.of`.
-See [`?` in a case](/reference/testing/#question-in-case).
+The same holds in a `property` body, where it fails the property for that input. A `?`
+inside a lambda, or in a helper `fn`, keeps its ordinary meaning: it returns from that
+function. See [`?` in a case](/reference/testing/#question-in-case).
 
 ## Fabricate values with `Val[T]`
 

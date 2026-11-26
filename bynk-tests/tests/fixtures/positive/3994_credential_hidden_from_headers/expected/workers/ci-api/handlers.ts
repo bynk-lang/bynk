@@ -54,7 +54,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_GET_sum(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_sum(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
     const __r0 = headers.bearer();
     switch (__r0.tag) {
       case "Some": {

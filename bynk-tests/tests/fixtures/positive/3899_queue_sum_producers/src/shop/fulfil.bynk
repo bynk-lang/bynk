@@ -1,0 +1,5 @@
+context shop.fulfil
+
+service ping {
+  on call() -> Effect[String] by Caller { "pong" }
+}

@@ -173,6 +173,27 @@
           "description": "Container settings, keyed by the `Container` capability's name\n(`capability Renderer = Container …` is `Renderer`).",
           "type": "object"
         },
+        "email": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `from email` address, as a named environment claims it.",
+            "properties": {
+              "address": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The address each deployment environment claims in place of this one,\nby `--env` name (`default` is never mapped: it claims the address as\nthe source writes it). Wrangler applies `addresses` to a Worker at its\ntop level only, so an environment with no entry here claims nothing\nand leaves production's routing rules alone. The Worker for a mapped\nenvironment accepts mail to the mapped address, and the domain needs\nEmail Routing enabled.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "address"
+            ],
+            "type": "object"
+          },
+          "description": "Inbound-email addresses per environment, keyed by an address a\n`from email` service names (`from email(\"support@shop.example\")` is\n`support@shop.example`). A named environment claims no address unless\nit is mapped here.",
+          "type": "object"
+        },
         "hyperdrive": {
           "additionalProperties": {
             "additionalProperties": false,

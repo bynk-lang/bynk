@@ -138,12 +138,12 @@ case "principals" {
         false,
     );
     for line in [
-        r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id } });"#,
+        r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id, claims: __tokenClaims([]) } });"#,
         "const b = await api.http_GET_plain({ ...deps, identity: (id as any), claims: __tokenClaims([]) });",
         r#"const c = await api.http_GET({ ...deps, who: { tag: "Visitor" } });"#,
         "const d = await api.http_GET_open(deps);",
         r#"const e = await api.http_GET_item_Param_id("7", deps);"#,
-        r#"const f = await api.http_GET({ ...deps, who: { tag: "User", identity: UserId.unsafe("bob") } });"#,
+        r#"const f = await api.http_GET({ ...deps, who: { tag: "User", identity: UserId.unsafe("bob"), claims: __tokenClaims([]) } });"#,
         "const g = await api.http_GET_open(deps);",
     ] {
         assert_line(&text, line);
@@ -198,7 +198,7 @@ service api from http {
 fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
     let text = emit("2020_test_actor_sum_principal", &[]);
     for line in [
-        r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });"#,
+        r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any), claims: __tokenClaims([]) } });"#,
         r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any), claims: __tokenClaims([]) });"#,
         r#"const v = await api.http_GET_greet({ ...deps, who: { tag: "Visitor" } });"#,
     ] {
@@ -332,7 +332,7 @@ fn a_system_http_call_drives_the_driver_its_principal_picks() {
         true,
     );
     for line in [
-        r#"const c = await __sysdrive_api_http_GET(undefined, "", "Visitor");"#,
+        r#"const c = await __sysdrive_api_http_GET(undefined, "", {}, "Visitor");"#,
         r#"const d = await __sysdrive_api_http_GET_open(undefined, "");"#,
         r#"const e = await __sysdrive_api_http_GET_item_Param_id("7", undefined, "");"#,
         r#"const f = await __sysdrive_noauth_api_http_GET_plain(undefined, "");"#,
@@ -450,7 +450,7 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
     let sum = emit("2155_system_sum_route_credential", &[]);
     assert_line(
         &sum,
-        r#"const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", "Processor");"#,
+        r#"const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", {}, "Processor");"#,
     );
     assert_line(
         &sum,

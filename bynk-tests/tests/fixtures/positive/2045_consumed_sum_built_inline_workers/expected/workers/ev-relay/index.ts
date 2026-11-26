@@ -2,6 +2,7 @@
 // Worker entry point for context `ev.relay`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
@@ -16,96 +17,98 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "ev.relay");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          case "active": {
-            __route = "call active";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "cbc57093110e9eec") {
-              globalThis.console.error("ContractMismatch ev.relay call active", { service: "active", expected: "cbc57093110e9eec", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "active", expected: "cbc57093110e9eec", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "ev.relay");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            case "active": {
+              __route = "call active";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "cbc57093110e9eec") {
+                globalThis.console.error("ContractMismatch ev.relay call active", { service: "active", expected: "cbc57093110e9eec", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "active", expected: "cbc57093110e9eec", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+              const argsObj = args as { [k: string]: __JsonValue };
+              const result = await surface.active();
+              const body = handlers.__serialise_Status(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+            case "held": {
+              __route = "call held";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "06ac269a6c4020d3") {
+                globalThis.console.error("ContractMismatch ev.relay call held", { service: "held", expected: "06ac269a6c4020d3", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "held", expected: "06ac269a6c4020d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              const __r_b = handlers.__deserialise_Batch(args, "$");
+              if (__r_b.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_b.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const b = __r_b.value;
+              const result = await surface.held(b);
+              const body = result as __JsonValue;
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
-            const argsObj = args as { [k: string]: __JsonValue };
-            const result = await surface.active();
-            const body = handlers.__serialise_Status(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            case "hold": {
+              __route = "call hold";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "673cedb038c7fd83") {
+                globalThis.console.error("ContractMismatch ev.relay call hold", { service: "hold", expected: "673cedb038c7fd83", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "hold", expected: "673cedb038c7fd83", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+              const argsObj = args as { [k: string]: __JsonValue };
+              const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
+              if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const id = __r_id.value;
+              const __r_b = handlers.__deserialise_Batch(argsObj["b"], "$.b");
+              if (__r_b.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_b.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const b = __r_b.value;
+              const result = await surface.hold(id, b);
+              const body = handlers.__serialise_Option_Batch(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            }
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
           }
-          case "held": {
-            __route = "call held";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "06ac269a6c4020d3") {
-              globalThis.console.error("ContractMismatch ev.relay call held", { service: "held", expected: "06ac269a6c4020d3", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "held", expected: "06ac269a6c4020d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
-            }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
-            }
-            const __r_b = handlers.__deserialise_Batch(args, "$");
-            if (__r_b.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_b.error)), { status: 400, headers: { "content-type": "application/json" } });
-            const b = __r_b.value;
-            const result = await surface.held(b);
-            const body = result as __JsonValue;
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-          }
-          case "hold": {
-            __route = "call hold";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "673cedb038c7fd83") {
-              globalThis.console.error("ContractMismatch ev.relay call hold", { service: "hold", expected: "673cedb038c7fd83", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "hold", expected: "673cedb038c7fd83", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
-            }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
-            }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
-            const argsObj = args as { [k: string]: __JsonValue };
-            const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
-            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
-            const id = __r_id.value;
-            const __r_b = handlers.__deserialise_Batch(argsObj["b"], "$.b");
-            if (__r_b.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_b.error)), { status: 400, headers: { "content-type": "application/json" } });
-            const b = __r_b.value;
-            const result = await surface.hold(id, b);
-            const body = handlers.__serialise_Option_Batch(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-          }
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
         }
-      }
 
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      const __busy = __agentBusyResponse(e, __route);
-      if (__busy !== null) return __busy;
-      globalThis.console.error(`ev.relay ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("ev.relay", __route);
-    }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`ev.relay ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("ev.relay", __route);
+      }
+    });
   },
 };

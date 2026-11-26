@@ -307,6 +307,10 @@ pub(crate) struct Resources {
     /// to a missing queue fails the deploy too), but recorded in the ledger
     /// only when Bynk created it.
     pub(crate) producer_queues: Vec<String>,
+    /// #3899: the Workers of the signed queue consumers this context's producers send to, by
+    /// directory. Each is an edge key's other end ([`secrets::project_edges`]), though no Service
+    /// Binding joins them, so it never orders the deploy.
+    pub(crate) signs_queue_to: Vec<String>,
     /// #1796: the Durable Object classes the config declares in `exports`
     /// (each agent, plus the events fan-out class), in class-name order.
     /// **Advisory** — Cloudflare reconciles the declared set against the
@@ -380,6 +384,11 @@ pub(crate) struct Resources {
     /// Advisory in the plan, like a Durable Object export: Cloudflare owns the
     /// rules, and a rule for an address no longer listed is removed by the push.
     pub(crate) email_addresses: Vec<String>,
+    /// #3883: the addresses the source's `from email` services name, before the environment
+    /// decides which of them it claims. `email_addresses` is what is left for the
+    /// environment being deployed (see `deploy::email`), so a plan can say a Worker that has
+    /// addresses claims none in this environment.
+    pub(crate) email_source: Vec<String>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -434,6 +443,13 @@ pub(crate) struct ForeignCaller {
 }
 
 impl Resources {
+    /// #3883: whether this Worker has `from email` addresses in the source but, in the named
+    /// `environment`, claims none (`[deploy.email]` maps it none). Its push leaves `addresses`
+    /// out, so there is no rule to add and none to prune.
+    pub(crate) fn email_unclaimed(&self, environment: &str) -> bool {
+        environment != "default" && !self.email_source.is_empty() && self.email_addresses.is_empty()
+    }
+
     /// P2 (#2578): every queue this context names, consumed or produced to,
     /// in name order, each once: what deploy creates and what keeps a queue
     /// from being an orphan.
@@ -456,6 +472,7 @@ impl Default for Resources {
             foreign_services: Vec::new(),
             queues: Vec::new(),
             producer_queues: Vec::new(),
+            signs_queue_to: Vec::new(),
             durable_objects: Vec::new(),
             renamed_durable_objects: Vec::new(),
             deleted_durable_objects: Vec::new(),
@@ -473,6 +490,7 @@ impl Default for Resources {
             mtls_certificates: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
+            email_source: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -649,6 +667,7 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         foreign_services: declared.foreign_services,
         queues,
         producer_queues,
+        signs_queue_to: declared.signs_queue_to,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
@@ -666,6 +685,7 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         mtls_certificates: declared.mtls_certificates,
         email_senders: declared.email_senders,
         email_addresses: addresses,
+        email_source: Vec::new(),
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
@@ -1653,6 +1673,7 @@ max_batch_size = 10
                 BindingSource::QueueProducer {
                     capability: cap(),
                     queue: "jobs".into(),
+                    signs_to: None,
                 },
             ),
             sample(
@@ -2028,6 +2049,7 @@ max_batch_size = 10
                 BindingSource::QueueProducer {
                     capability: "Cap".into(),
                     queue: queue.into(),
+                    signs_to: None,
                 },
             )
         };
