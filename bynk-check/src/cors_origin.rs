@@ -21,12 +21,23 @@ pub struct Problem {
     pub reason: String,
     /// The origin to write instead, when one follows from the entry without guessing.
     pub suggestion: Option<String>,
+    /// The suggestion supplied a scheme the entry did not have (`https`), which is a guess about
+    /// how the site is served, so the author is told to use the real one.
+    pub scheme_assumed: bool,
 }
 
 /// `None` when `entry` is an origin a browser can send (or `*` / `null`); otherwise what is wrong.
 pub fn check(entry: &str) -> Option<Problem> {
     if entry == "*" || entry == "null" || is_serialised(entry) {
         return None;
+    }
+    // `Null` is `null` a browser does not send: say that, not "no scheme".
+    if entry.eq_ignore_ascii_case("null") {
+        return Some(Problem {
+            reason: "is `null` in upper case: a browser sends it in lower case".into(),
+            suggestion: Some("null".into()),
+            scheme_assumed: false,
+        });
     }
     Some(diagnose(entry))
 }
@@ -106,12 +117,14 @@ fn diagnose(entry: &str) -> Problem {
         return Problem {
             reason: "is empty".into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
     if entry.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Problem {
             reason: "contains whitespace, which an origin never does".into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
     let (scheme, rest, scheme_written) = match entry.split_once("://") {
@@ -124,6 +137,7 @@ fn diagnose(entry: &str) -> Problem {
         return Problem {
             reason: "has user information (`user@`), which an origin never carries".into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
     let (host, port) = split_authority(authority);
@@ -133,6 +147,7 @@ fn diagnose(entry: &str) -> Problem {
                      subdomain wildcard, and a browser never sends a `*`"
                 .into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
     if !host.is_ascii() {
@@ -141,6 +156,7 @@ fn diagnose(entry: &str) -> Problem {
                      its punycode (`xn--`) form"
                 .into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
     let host_lower = host.to_ascii_lowercase();
@@ -149,16 +165,18 @@ fn diagnose(entry: &str) -> Problem {
         return Problem {
             reason: "is not `scheme://host[:port]`".into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     }
 
     // Every fault past here has a repair, so the suggestion is the entry with all of them made.
-    let keep_port = port.filter(|p| default_port(&scheme_lower) != Some(*p));
     let repaired_scheme = if scheme_written {
         scheme_lower.clone()
     } else {
         "https".to_string()
     };
+    // The default port is the repaired scheme's: `app.example.com:443` is `https://app.example.com`.
+    let keep_port = port.filter(|p| default_port(&repaired_scheme) != Some(*p));
     let suggestion = format!(
         "{repaired_scheme}://{host_lower}{}",
         keep_port.map(|p| format!(":{p}")).unwrap_or_default()
@@ -169,6 +187,7 @@ fn diagnose(entry: &str) -> Problem {
         return Problem {
             reason: "is not `scheme://host[:port]`".into(),
             suggestion: None,
+            scheme_assumed: false,
         };
     } else if scheme != scheme_lower {
         "has an upper-case scheme: a browser sends the scheme in lower case".to_string()
@@ -191,6 +210,7 @@ fn diagnose(entry: &str) -> Problem {
     Problem {
         reason,
         suggestion: Some(suggestion),
+        scheme_assumed: !scheme_written,
     }
 }
 
@@ -219,6 +239,10 @@ mod tests {
         ("app.example.com", Some("https://app.example.com")),
         ("//app.example.com", Some("https://app.example.com")),
         ("localhost:8787", Some("https://localhost:8787")),
+        // The default port is the repaired scheme's, so it goes with the scheme that is added.
+        ("app.example.com:443", Some("https://app.example.com")),
+        ("Null", Some("null")),
+        ("NULL", Some("null")),
         (
             "https://app.example.com:443",
             Some("https://app.example.com"),
@@ -246,6 +270,29 @@ mod tests {
                 "`{entry}`: {problem:?}"
             );
         }
+    }
+
+    /// Advice must be followed by the checker that gave it: every suggestion is itself accepted.
+    #[test]
+    fn every_suggestion_is_an_origin_the_check_accepts() {
+        for (entry, _) in REFUSED {
+            if let Some(fixed) = check(entry).and_then(|p| p.suggestion) {
+                assert_eq!(
+                    check(&fixed),
+                    None,
+                    "`{entry}` suggests `{fixed}`, which is refused"
+                );
+            }
+        }
+    }
+
+    /// Only a repair that invented the scheme says so.
+    #[test]
+    fn a_supplied_scheme_is_flagged_and_a_kept_one_is_not() {
+        assert!(check("app.example.com").unwrap().scheme_assumed);
+        assert!(check("//app.example.com:443").unwrap().scheme_assumed);
+        assert!(!check("https://app.example.com/").unwrap().scheme_assumed);
+        assert!(!check("https://*.example.com").unwrap().scheme_assumed);
     }
 
     #[test]

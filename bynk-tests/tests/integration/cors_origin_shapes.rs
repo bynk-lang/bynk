@@ -85,6 +85,21 @@ fn each_shape_a_browser_never_sends_is_refused_at_the_entry_with_its_repair() {
     );
     refuses("https://App.example.com/", Some("https://app.example.com"));
     refuses("https://*.example.com", None);
+    // The default port is the scheme that is added's, and `Null` is `null` in the wrong case.
+    refuses("app.example.com:443", Some("https://app.example.com"));
+    refuses("Null", Some("null"));
+}
+
+/// A repair that supplies the scheme says it is a guess; one that keeps the scheme does not.
+#[test]
+fn a_supplied_scheme_is_called_an_assumption() {
+    let assumed = |entry: &str| {
+        let src = source(&format!("[\"{entry}\"]"), "");
+        let e = sole(&errors(&src), "bynk.http.cors_invalid_origins");
+        e.notes.iter().any(|n| n.contains("`https` is assumed"))
+    };
+    assert!(assumed("app.example.com"));
+    assert!(!assumed("https://app.example.com/"));
 }
 
 /// Only the bad entry of a list is refused, and at its own span.

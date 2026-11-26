@@ -5548,6 +5548,12 @@ fn validate_cors_origin_shape(origin: &str, span: Span, errors: &mut Vec<Compile
     );
     if let Some(fixed) = problem.suggestion {
         error = error.with_note(format!("write `{fixed}`"));
+        if problem.scheme_assumed {
+            error = error.with_note(
+                "the entry has no scheme, so `https` is assumed; use the scheme the site is \
+                 served on (a browser sends `http://…` from a page served over `http`)",
+            );
+        }
     }
     errors.push(error);
 }
