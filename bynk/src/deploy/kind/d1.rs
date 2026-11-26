@@ -172,9 +172,22 @@ impl ResourceKind for D1 {
         d1: &mut PlanD1<'_>,
         _shown_worker: &str,
         on: &on_account::OnAccount,
-        _notes: &mut Vec<String>,
+        notes: &mut Vec<String>,
     ) {
-        d1.action = held_verb(d1.action, on.holds(Self::ID, None, &d1.database));
+        let held = on.holds(Self::ID, None, &d1.database);
+        // #3820: a database already on the account that the ledger does not hold would be
+        // adopted, and it was not created in the jurisdiction the source names: say so, and do
+        // not call it `reuse`.
+        if let (Some(jurisdiction), Some(true), "create" | "create or reuse") =
+            (d1.jurisdiction, held, d1.action)
+        {
+            notes.push(format!(
+                "d1 {} already exists on the account and the ledger does not hold it; its jurisdiction cannot be confirmed, so the deploy will refuse to adopt it as `{jurisdiction}`",
+                d1.database
+            ));
+            return;
+        }
+        d1.action = held_verb(d1.action, held);
     }
 
     fn name_problem(cx: &ProjectCx<'_>) -> Option<String> {
@@ -249,12 +262,21 @@ impl ResourceKind for D1 {
         if let Some(id) = &step.recorded {
             return Ok(Applied::bound(&db.binding, (physical, id.clone())));
         }
-        let id = create_d1(cx.tools.api, &physical, db.jurisdiction.as_deref()).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+        let (id, adopted) = create_d1(cx.tools.api, &physical, db.jurisdiction.as_deref())
+            .map_err(|e| {
+                DeployFailure::driver(format!(
+                    "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+                    db.binding
+                ))
+            })?;
+        // #3820: a database that was already there was not created in the jurisdiction, and
+        // Cloudflare does not say which it has, so the ledger is never told it is pinned.
+        if let (true, Some(jurisdiction)) = (adopted, db.jurisdiction.as_deref()) {
+            return Err(DeployFailure::driver(format!(
+                "the D1 database `{physical}` for `{worker}`'s `{}` already exists on the account, so it was not created with `--jurisdiction {jurisdiction}`, and Bynk cannot read the jurisdiction of an existing database back; it will not record one it did not apply. Check the database in the Cloudflare dashboard, then either remove `@jurisdiction` to adopt it as it is, or delete it so the next deploy creates it in `{jurisdiction}`",
                 db.binding
-            ))
-        })?;
+            )));
+        }
         let record = cx.recording(
             &db.binding,
             D1Record::of(&physical, &id, db.jurisdiction.as_deref()),
@@ -392,16 +414,16 @@ pub(crate) fn apply_d1_migrations(
         .map_err(CloudflareError::from)
 }
 
-/// Create the D1 database `name` and return its `database_id`, or adopt the
-/// one already there under that name (P4a, #2602). Run from the project root,
-/// as KV and buckets are.
+/// Create the D1 database `name` and return its `database_id` and whether it was adopted (not
+/// created), the one already there under that name (P4a, #2602). Run from the project root, as KV
+/// and buckets are.
 pub(crate) fn create_d1(
     api: &dyn CloudflareApi,
     name: &str,
     jurisdiction: Option<&str>,
-) -> Result<String, CloudflareError> {
+) -> Result<(String, bool), CloudflareError> {
     let e = match api.d1_create(name, jurisdiction) {
-        Ok(id) => return Ok(id),
+        Ok(id) => return Ok((id, false)),
         Err(e) => e,
     };
     if !e.already_exists() {
@@ -415,6 +437,7 @@ pub(crate) fn create_d1(
         }
     })?;
     parse_d1_listed_id(&listed, name)
+        .map(|id| (id, true))
         .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".into())
 }
 
@@ -731,8 +754,14 @@ mod tests {
         // #3820: the `--jurisdiction` argument is what pins it; whether Cloudflare honours it
         // needs a live account, so this covers the argument, the record and the plan line.
         let api = crate::cloudflare::fake::Recording::new(|_| Ok("id-9".to_string()));
-        assert_eq!(create_d1(&api, "shop-orders", Some("eu")).unwrap(), "id-9");
-        assert_eq!(create_d1(&api, "shop-audit", None).unwrap(), "id-9");
+        assert_eq!(
+            create_d1(&api, "shop-orders", Some("eu")).unwrap(),
+            ("id-9".to_string(), false)
+        );
+        assert_eq!(
+            create_d1(&api, "shop-audit", None).unwrap(),
+            ("id-9".to_string(), false)
+        );
         assert_eq!(
             api.calls(),
             [
@@ -764,6 +793,90 @@ mod tests {
             out,
             "d1 create shop-orders (D1_ORDERS) in jurisdiction eu\n"
         );
+    }
+
+    #[test]
+    fn an_adopted_database_is_never_recorded_as_pinned() {
+        // #3820: `d1 create` says it already exists, so nothing was created in the jurisdiction.
+        let adopting = || {
+            crate::cloudflare::fake::Recording::new(|op| match op {
+                crate::cloudflare::Op::D1Create { .. } => Err(crate::cloudflare::fake::failed(
+                    op,
+                    "",
+                    "A database with that name already exists",
+                )),
+                _ => Ok("[{\"uuid\": \"u-1\", \"name\": \"shop-orders\"}]".to_string()),
+            })
+        };
+        assert_eq!(
+            create_d1(&adopting(), "shop-orders", Some("eu")).unwrap(),
+            ("u-1".to_string(), true)
+        );
+        let lock = DeployLock::default();
+        let project = BTreeMap::new();
+        let api = adopting();
+        let cx = StepCx {
+            environment: "default",
+            worker: "shop",
+            project: &project,
+            lock: &lock,
+            live: (),
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+        };
+        let pinned = D1Decl {
+            binding: "D1_ORDERS".to_string(),
+            name: "shop-orders".to_string(),
+            migrations: Vec::new(),
+            jurisdiction: Some("eu".to_string()),
+        };
+        let unpinned = D1Decl {
+            jurisdiction: None,
+            ..pinned.clone()
+        };
+        let step = |db: &'static D1Decl| D1Step {
+            db,
+            database: "shop-orders".to_string(),
+            recorded: None,
+        };
+        let (pinned, unpinned): (&'static D1Decl, &'static D1Decl) =
+            (Box::leak(Box::new(pinned)), Box::leak(Box::new(unpinned)));
+        let refused = match D1::apply(&cx, &step(pinned)) {
+            Ok(_) => panic!("an adopted database must not be recorded as pinned"),
+            Err(e) => e.message,
+        };
+        assert!(
+            refused.contains("cannot read the jurisdiction"),
+            "{refused}"
+        );
+        // Without a jurisdiction it is adopted as before, and recorded with none.
+        let done = D1::apply(&cx, &step(unpinned)).expect("adopted");
+        assert!(done.commits.len() == 1);
+        // The plan says the same, and does not call it `reuse`.
+        struct Holds;
+        impl on_account::Listings for Holds {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
+                Ok(BTreeSet::from(["shop-orders".to_string()]))
+            }
+        }
+        let on = on_account::OnAccount::read(&BTreeSet::from([(KindId::D1, None)]), &Holds);
+        let mut line = PlanD1 {
+            binding: "D1_ORDERS",
+            action: "create",
+            database: "shop-orders".to_string(),
+            jurisdiction: Some("eu"),
+            migrations: &[],
+        };
+        let mut notes = Vec::new();
+        D1::checked_against(&mut line, "shop", &on, &mut notes);
+        assert_eq!(line.action, "create");
+        assert!(notes[0].contains("cannot be confirmed"), "{notes:?}");
     }
 
     #[test]

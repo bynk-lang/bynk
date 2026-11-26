@@ -58,6 +58,12 @@ annotation on a database that is already provisioned is refused, and the plan ne
 data. Keep the annotation the database was made with, or create a new `D1` capability, move the data
 across and remove the old one.
 
+A database that is already on the account but not in the lock (a lost lock, or one made by hand) was not
+created by this deploy, and Cloudflare does not say which jurisdiction it has. With `@jurisdiction` on its
+capability, `bynk deploy` refuses to adopt it rather than record a jurisdiction it did not apply: check the
+database, then remove the annotation to adopt it as it is, or delete it so the next deploy creates it in
+the jurisdiction.
+
 ## What to check yourself
 
 A jurisdiction is invisible to a query and to `bynk test`, so nothing in a test run proves it. Bynk
@@ -65,3 +71,8 @@ cannot show it either. For an agent, Cloudflare reports it from inside the Durab
 `ctx.id.jurisdiction`, so a check on a deployed Worker has to read it there. For an `R2` bucket or a `D1`
 database, look at the resource in the Cloudflare dashboard. See [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 for how the plan reports a change.
+
+Two things the annotation does not cover. A Worker's implicit idempotency database (the one
+`Idempotency.claim` uses) is always created with no jurisdiction, so a project that pins every `D1` of its
+own still stores idempotency keys outside it. And a database adopted by name keeps whatever jurisdiction it
+was made with.

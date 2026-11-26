@@ -1030,7 +1030,7 @@ impl DerivedInstance {
     /// or any other kind.
     pub fn jurisdiction(&self) -> Option<&str> {
         (self.is_r2() || self.is_d1())
-            .then(|| self.option(crate::firstparty::R2_JURISDICTION_OPTION))
+            .then(|| self.option(crate::firstparty::JURISDICTION_OPTION))
             .flatten()
     }
 

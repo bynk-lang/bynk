@@ -1266,7 +1266,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
 /// A sample value of option `option`, as a note writes it.
 fn option_sample(option: &str) -> &'static str {
     match option {
-        firstparty::R2_JURISDICTION_OPTION => "\"eu\"",
+        firstparty::JURISDICTION_OPTION => "\"eu\"",
         firstparty::RATELIMIT_LIMIT_OPTION => "100",
         firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
         firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
@@ -1611,7 +1611,7 @@ fn instance_option_value(
         );
         return None;
     }
-    if option == crate::firstparty::R2_JURISDICTION_OPTION
+    if option == crate::firstparty::JURISDICTION_OPTION
         && !jurisdiction_ok(text, base, ann, path, errors)
     {
         return None;
