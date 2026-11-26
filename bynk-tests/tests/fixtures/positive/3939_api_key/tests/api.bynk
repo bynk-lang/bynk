@@ -43,4 +43,10 @@ suite acme.api as system {
 		let r <- api.GET("/auth-header", RequestHeaders.of([])) by Client("acct-7")
 		expect r is Ok("none")
 	}
+
+	// §9: `mint` answers the key once, as `Created`; the store caps an identity at 100 keys.
+	case "a key is minted for an account" {
+		let r <- api.POST("/accounts/:id/keys", "acct-9", NewKey { label: "ci" }) by Visitor
+		expect r is Created(_)
+	}
 }
