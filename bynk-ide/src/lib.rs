@@ -51,6 +51,7 @@ pub use bynk_project::SchemaLock;
 /// language server never analyses it as a project.
 pub use bynk_project::is_workspace_root;
 
+pub mod actor_refinement;
 pub mod actor_sum;
 pub mod agent_busy;
 pub mod agent_effects;
@@ -69,6 +70,7 @@ mod duration_completion;
 pub mod email_fallback;
 pub mod env_const;
 pub mod expected_type;
+pub mod field_rename;
 pub mod first_party_docs;
 pub mod header_completion;
 pub mod hover;

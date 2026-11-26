@@ -17,6 +17,7 @@ import {
   edgeSuffix,
   migrationFailed,
   rehydrationViolation,
+  renameStoredFields,
   reportUnknownStoredKeys,
   signedHeaders,
   verifyCall,
@@ -460,6 +461,37 @@ test("reportUnknownStoredKeys: once per key, by name only", () => {
   assert.ok(warned[0].includes('agent Ledger has stored field "owner"'));
   assert.ok(warned[1].includes('agent Other has stored field "owner"'));
   assert.ok(!warned.some((w) => w.includes("secret-owner") || w.includes("__v")));
+});
+
+// #3793: a `store` field renamed with `replaces` is read from whichever of its names the record
+// holds, and the next commit writes only the new one.
+test("renameStoredFields: the old key is read as the new one", () => {
+  const stored = { owner: "ada", count: 1, __v: 2 };
+  const out = renameStoredFields({ customer: "ada", count: 1, __v: 2 }, [["customer", "owner"]]);
+  assert.deepEqual(out, stored);
+});
+
+test("renameStoredFields: a value the new build wrote is never replaced by a stale one", () => {
+  const out = renameStoredFields({ customer: "stale", owner: "fresh" }, [["customer", "owner"]]);
+  assert.deepEqual(out, { owner: "fresh" });
+});
+
+test("renameStoredFields: a field renamed twice reads whichever name the record holds", () => {
+  const pairs: readonly (readonly [string, string])[] = [
+    ["b", "c"],
+    ["a", "c"],
+  ];
+  assert.deepEqual(renameStoredFields({ b: 2 }, pairs), { c: 2 });
+  assert.deepEqual(renameStoredFields({ a: 1 }, pairs), { c: 1 });
+  assert.deepEqual(renameStoredFields({ c: 3, b: 2, a: 1 }, pairs), { c: 3 });
+});
+
+test("renameStoredFields: a record with none of the old keys comes back as it is, and is never mutated", () => {
+  const stored = { owner: "ada" };
+  assert.equal(renameStoredFields(stored, [["customer", "owner"]]), stored);
+  const old = { customer: "ada" };
+  renameStoredFields(old, [["customer", "owner"]]);
+  assert.deepEqual(old, { customer: "ada" });
 });
 
 // #1825 review: a fault's payload is non-enumerable, so logging the error

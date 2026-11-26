@@ -341,6 +341,12 @@ pub struct StoreShape {
     /// (Decision C).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<PathShape>,
+    /// #3793: the names this field was renamed from (`store new: Cell[T] replaces old`),
+    /// most recent first: the old name, then the names it was itself renamed from. A record
+    /// stored at an earlier version holds its value under one of them. Additive and omitted
+    /// when empty, so the lock is unchanged for a field never renamed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renamed_from: Vec<String>,
 }
 
 /// #2676: one position in a stored value. `path` starts at the `store` field's
@@ -383,6 +389,11 @@ pub struct FieldShape {
     #[serde(rename = "type")]
     pub ty: String,
     pub default: bool,
+    /// #3793: the names this field was renamed from (`new: T replaces old`), most recent first.
+    /// An event recorded under an earlier schema holds the value under one of them. Additive and
+    /// omitted when empty, so the lock is unchanged for a field never renamed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renamed_from: Vec<String>,
 }
 
 /// Parse `bynk.schema.lock`'s content. `existing: None` means the project
@@ -473,6 +484,7 @@ mod tests {
             name: name.to_string(),
             ty: ty.to_string(),
             default,
+            renamed_from: Vec::new(),
         }
     }
 
@@ -569,6 +581,7 @@ mod tests {
                             ty: "String".to_string(),
                             refinement: "String".to_string(),
                             paths: Vec::new(),
+                            renamed_from: Vec::new(),
                         }],
                     },
                     AgentShape {

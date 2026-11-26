@@ -75,6 +75,14 @@ pub fn find_declaration_span(source: &str, name: &str) -> Option<Span> {
 /// Build a Markdown summary of a named declaration suitable for an LSP
 /// hover response. Returns `None` if no declaration matches.
 pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
+    describe_symbol_with(source, name, &[])
+}
+
+/// [`describe_symbol`] with the project's other files in view (#4393): an actor that refines the
+/// prelude `Sender` / `Producer` is described as a refinement only when no file of the unit
+/// declares a shadowing actor of that name, as the checker's whole-unit actor table decides.
+/// `others` may hold files of other units; they are skipped.
+pub fn describe_symbol_with(source: &str, name: &str, others: &[&str]) -> Option<String> {
     let tokens = tokenize(source).ok()?;
     let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
     let unit = unit?;
@@ -117,6 +125,17 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
         return Some(describe_fixture(f));
     }
     for item in items {
+        // #4393: an actor is rendered with its siblings in view, to tell a refinement of the
+        // prelude `Sender` / `Producer` from one of a local actor that shadows it.
+        if let CommonsItem::Actor(a) = item
+            && a.name.name == name
+        {
+            let declares = |n: &str| {
+                crate::actor_refinement::declares_actor(items, n)
+                    || crate::documentation::unit_siblings_declare(&unit, others, n)
+            };
+            return Some(crate::actor_refinement::describe_actor_in(a, &declares));
+        }
         if let Some(summary) = describe_item(item, name) {
             return Some(summary);
         }
@@ -136,9 +155,20 @@ pub fn describe_key(
     source: &str,
     name: &str,
 ) -> Option<String> {
+    describe_key_with(kind, source, name, &[])
+}
+
+/// [`describe_key`] with the project's other files in view, for what depends on the rest of the
+/// declaring unit ([`describe_symbol_with`]).
+pub fn describe_key_with(
+    kind: bynk_check::index::SymbolKind,
+    source: &str,
+    name: &str,
+    others: &[&str],
+) -> Option<String> {
     match kind {
         bynk_check::index::SymbolKind::Unit => describe_unit(std::iter::once(source), name),
-        _ => describe_symbol(source, name),
+        _ => describe_symbol_with(source, name, others),
     }
 }
 
@@ -454,7 +484,24 @@ fn store_field_hover(f: &StoreField) -> String {
         sig.push(' ');
         sig.push_str(&bynk_fmt::annotation_to_string(ann));
     }
-    render_state_hover(&sig, "store")
+    // #3793: `replaces old` shows in the signature, with a line saying what it does.
+    let Some(old) = &f.replaces else {
+        return render_state_hover(&sig, "store");
+    };
+    sig.push_str(&format!(" replaces {}", old.name));
+    format!(
+        "{}\n\n{}",
+        render_state_hover(&sig, "store"),
+        renamed_from_prose(&old.name)
+    )
+}
+
+/// #3793: the line a renamed field's hover adds: what the rename does at each place it is read.
+fn renamed_from_prose(old: &str) -> String {
+    format!(
+        "Renamed from `{old}`: stored state, a locked event and an incoming wire payload that \
+         still use `{old}` are read as this field."
+    )
 }
 
 /// #611: hover for a `store` field's operation — the `<op>` of a
@@ -1095,6 +1142,7 @@ pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String
     describe_advance_at(source, offset)
         .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
         .or_else(|| crate::email_fallback::describe_fallback_at(source, offset))
+        .or_else(|| crate::field_rename::describe_replaces_at(source, offset))
         .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 
@@ -3287,19 +3335,28 @@ pub(crate) fn describe_record_field(t: &TypeDecl, f: &RecordField) -> String {
     if let Some(r) = &f.refinement {
         sig.push_str(&format!(" where {}", bynk_fmt::refinement_to_string(r)));
     }
+    // #3793: `replaces old` shows in the signature.
+    if let Some(old) = &f.replaces {
+        sig.push_str(&format!(" replaces {}", old.name));
+    }
     // #972 (Events slice 3a): render a field default the same way the
     // formatter does — `= <expr>` — so a subscriber-visible default is not
     // silently dropped from hover.
     if let Some(init) = &f.init {
         sig.push_str(&format!(" = {}", bynk_fmt::expr_to_string(init)));
     }
-    format!(
+    let mut out = format!(
         "```bynk\n{sig}\n```\n\n{}",
         member_prose(&f.documentation, || format!(
             "A field of `{}`.",
             t.name.name
         ))
-    )
+    );
+    if let Some(old) = &f.replaces {
+        out.push_str("\n\n");
+        out.push_str(&renamed_from_prose(&old.name));
+    }
+    out
 }
 
 /// #1888: a member's doc, trailing whitespace trimmed, or `fallback` when it

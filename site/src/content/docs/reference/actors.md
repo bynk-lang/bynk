@@ -385,7 +385,9 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   an unsigned or wrongly signed message is acknowledged, reported and never handled, and a
   replayed one likewise. A refinement of `Producer` (`actor Shop = Producer where
   IsContext(shop)`) admits only messages a Bynk producer in one of those contexts signed, and a
-  `Queue` instance in such a context signs what it sends with nothing written. A `Foreign` actor or a
+  `Queue` instance in such a context signs what it sends with nothing written. Hover on a
+  `Producer` refinement, or on its name in a `by` clause, lists the contexts it admits and says
+  it requires signatures. A `Foreign` actor or a
   refinement beside an unsigned one, or alone with a binder, is `bynk.actor.queue_actor_not_enforced`.
   Foreign actors and refinements may share a sum, `by who: Legacy | Shop`; a refinement's member carries
   the sending context's name. An email `on message` handler writes at least `by Sender`, the explicit
@@ -428,7 +430,10 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   `Sender`; over another base it is `bynk.actor.refinement_predicate_unsupported`.
   The refinement inherits `Sender`'s scheme and `SenderIdentity`, so `by s: Authenticated`
   binds the same record. `Sender` and its refinements share the `Internal` scheme, so at
-  most one of them appears in a sum.
+  most one of them appears in a sum. Hover on the refinement, or on its name in a `by`
+  clause, lists the verdicts it admits and says the Worker refuses the rest before the
+  handler runs; a unit that declares its own actor named `Sender` shadows the prelude one,
+  and then hover says nothing of the kind.
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
   own actor, never by `Caller`, so a handler that names only `Caller` refuses

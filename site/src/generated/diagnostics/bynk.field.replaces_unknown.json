@@ -1,0 +1,13 @@
+{
+  "blurb": "`replaces old` carries the data of a field the project's schema lock already records, so `old` has to be one. A name the lock does not record for this event or agent has nothing to rename: it is usually a misspelling, a clause added to a field that was never renamed, or a rename already applied and since dropped from the lock. Check the old name against the lock's entry for the type, and that it was built with this project. If the field was not renamed, drop the clause.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.field.replaces_unknown",
+  "constructs": [
+    "record_field",
+    "store_field"
+  ],
+  "example": "store owner: Cell[String] replaces customer   // ✗ the lock records no field `customer`\n\nstore owner: Cell[String]                     // ✓ no clause: the field was never renamed",
+  "severity": "error",
+  "summary": "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename."
+}
