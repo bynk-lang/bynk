@@ -476,7 +476,7 @@ pub(crate) fn check_compare_method(
                 "`compare` answers an `Ordering` from `bynk.ordering`, which is not in scope here"
                     .to_string(),
             ).with_note(
-                "a type of your own named `Ordering` hides it, and `bynk.ordering` is then not the `Ordering` in scope",
+                "a type of your own named `Ordering` hides it; rename yours to use the `Ordering` of `bynk.ordering`",
             ));
             for a in args {
                 let _ = super::type_of(a, None, ctx);

@@ -117,11 +117,15 @@ pub fn inline_prelude_units(commons: &mut bynk_syntax::ast::Commons, source: &st
         let Some((SourceUnit::Commons(unit_commons), _)) = parsed else {
             continue;
         };
-        for item in unit_commons.items {
-            let shadowed = matches!(&item, CommonsItem::Type(t) if declares(commons, &t.name.name));
-            if !shadowed {
-                commons.items.push(item);
-            }
+        // A unit's types refer to each other (`ValidationRule` holds a `Bound`), so a program
+        // type that shares a name with any of them keeps the whole unit out: merging the rest
+        // would resolve the unit's own references to the program's type.
+        let clashes = unit_commons
+            .items
+            .iter()
+            .any(|item| matches!(item, CommonsItem::Type(t) if declares(commons, &t.name.name)));
+        if !clashes {
+            commons.items.extend(unit_commons.items);
         }
     }
 }
@@ -337,6 +341,24 @@ mod tests {
             .filter(|i| matches!(i, bynk_syntax::ast::CommonsItem::Type(t) if t.name.name == "Ordering"))
             .count();
         assert_eq!(n, 1, "one `Ordering`: the program's");
+    }
+
+    /// A program's own `Bound` must not capture the `Bound` inside the merged `ValidationRule`: the
+    /// unit stays out whole, so `ValidationRule` is not declared at all.
+    #[test]
+    fn a_program_type_named_like_another_type_of_the_unit_keeps_the_whole_unit_out() {
+        let out = inlined(
+            "commons a.b\n\ntype Bound = enum { Open, Shut }\n\nfn f(s: String) -> String {\n  match Json.decode[Int](s) {\n    Ok(_) => \"ok\",\n    Err(e) => \"\\(e.rule)\",\n  }\n}\n",
+        );
+        let names: Vec<&str> = out
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                bynk_syntax::ast::CommonsItem::Type(t) => Some(t.name.name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, ["Bound"], "only the program's own type: {names:?}");
     }
 
     /// #4181: a name counts only as an identifier token, not in prose or a string.

@@ -34,7 +34,7 @@ fn kind_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
             "`e.kind` is a `DecodeErrorKind` from `bynk.decode`, which is not in scope here",
         )
         .with_note(
-            "a type of your own named `DecodeErrorKind` hides it, and `bynk.decode` is then not the `DecodeErrorKind` in scope",
+            "a type of your own named `DecodeErrorKind` hides it; rename yours to use the `DecodeErrorKind` of `bynk.decode`",
         ),
     );
     None

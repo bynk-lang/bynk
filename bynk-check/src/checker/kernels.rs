@@ -4838,7 +4838,7 @@ fn check_sort_with(args: &[Expr], elem: TyId, span: Span, ctx: &mut Ctx) -> Opti
                 "`List.sortWith` needs the `Ordering` of `bynk.ordering`, which is not in scope here",
             )
             .with_note(
-                "a type of your own named `Ordering` hides it, and `bynk.ordering` is then not the `Ordering` in scope",
+                "a type of your own named `Ordering` hides it; rename yours to use the `Ordering` of `bynk.ordering`",
             ),
         );
         let _ = type_of(&args[0], None, ctx);

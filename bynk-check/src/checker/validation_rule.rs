@@ -36,7 +36,7 @@ pub(crate) fn rule_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
             "`e.rule` is a `ValidationRule` from `bynk.validation`, which is not in scope here",
         )
         .with_note(
-            "a type of your own named `ValidationRule` hides it, and `bynk.validation` is then not the `ValidationRule` in scope",
+            "a type of your own named `ValidationRule` or `Bound` hides it; rename yours to use the `ValidationRule` of `bynk.validation`",
         ),
     );
     None
