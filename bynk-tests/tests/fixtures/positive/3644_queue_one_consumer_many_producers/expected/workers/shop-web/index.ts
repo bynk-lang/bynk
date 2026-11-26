@@ -41,7 +41,7 @@ export default {
           if (method === "POST" && __matchPath("/web", path) !== null) {
             __route = "POST /web";
             const result = await surface.http_POST_web();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.web\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.web\""]), __security_api);
           }
         }
         if (__matchPath("/web", path) !== null) {

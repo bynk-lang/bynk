@@ -5,6 +5,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
   allowUnion,
+  RESERVED_RESPONSE_HEADERS,
   decodePath,
   matchPath,
   cfObject,
@@ -282,6 +283,121 @@ test("httpResultToResponse: RawStreamed writes its chunks in order, with no ETag
   assert.equal(res.headers.get("content-type"), "text/plain");
   assert.equal(res.headers.get("etag"), null);
   assert.equal(await res.text(), "hello, world");
+});
+
+// #4389: a partial answer.
+function partialBody(): AsyncIterable<Uint8Array> {
+  return (async function* () {
+    yield new TextEncoder().encode("lo, wo");
+  })();
+}
+const someRange = (value: number) => ({ tag: "Some", value }) as const;
+const noTotal = { tag: "None" } as const;
+
+test("httpResultToResponse: PartialContent answers 206 with its Content-Range and no ETag", async () => {
+  const res = httpResultToResponse(
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: someRange(12) }),
+    id,
+    { weakEtag: true },
+  );
+  assert.equal(res.status, 206);
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(res.headers.get("content-range"), "bytes 3-8/12");
+  assert.equal(res.headers.get("etag"), null);
+  assert.equal(await res.text(), "lo, wo");
+});
+
+test("httpResultToResponse: an unknown total is written *", () => {
+  const res = httpResultToResponse(
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 0, end: 5, total: noTotal }),
+    id,
+  );
+  assert.equal(res.headers.get("content-range"), "bytes 0-5/*");
+});
+
+test("httpResultToResponse: a range that is not one is a fault, never a malformed Content-Range", () => {
+  for (const [start, end, total] of [
+    [5, 4, someRange(12)], // start past end
+    [0, 12, someRange(12)], // end at the total
+    [0, 20, someRange(12)], // end past the total
+    [-1, 4, noTotal], // negative
+    [0, 4.5, noTotal], // not an integer
+    [0, 4, someRange(-3)], // negative total
+  ] as const) {
+    assert.throws(
+      () => httpResultToResponse(HttpResult.PartialContent(partialBody(), "text/plain", { start, end, total }), id),
+      /is not a byte range/,
+      `${start}-${end}`,
+    );
+  }
+});
+
+test("httpResultToResponse: a PartialContent body that does not match its range aborts the response", async () => {
+  const enc = new TextEncoder();
+  const body = (...parts: string[]) =>
+    (async function* () {
+      for (const p of parts) yield enc.encode(p);
+    })();
+  const range = { start: 0, end: 4, total: someRange(10) };
+  const ok = httpResultToResponse(HttpResult.PartialContent(body("he", "llo"), "text/plain", range), id);
+  assert.equal(await ok.text(), "hello");
+  const short = httpResultToResponse(HttpResult.PartialContent(body("hel"), "text/plain", range), id);
+  await assert.rejects(short.arrayBuffer(), /is 3 bytes, but its range covers 5/);
+  const long = httpResultToResponse(HttpResult.PartialContent(body("hello", "!"), "text/plain", range), id);
+  await assert.rejects(long.arrayBuffer(), /longer than its range/);
+});
+
+test("httpResultToResponse: a PartialContent or NotModified returned from a non-GET route is a fault", () => {
+  for (const result of [
+    HttpResult.NotModified,
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: noTotal }),
+  ]) {
+    assert.throws(() => httpResultToResponse(result, id, { notGet: true }), /only a GET route serves/);
+  }
+});
+
+test("withHeader: Content-Range is a header the router owns", () => {
+  assert.ok(RESERVED_RESPONSE_HEADERS.has("content-range"));
+});
+
+test("responseToHttpResult: a 206 with a missing or malformed Content-Range is a fault, not an invented range", async () => {
+  for (const headers of [{} as Record<string, string>, { "content-range": "bytes 0-4" }, { "content-range": "items 0-4/9" }]) {
+    await assert.rejects(
+      responseToHttpResult(new Response("hello", { status: 206, headers }), () => ({ tag: "Ok", value: null }) as never),
+      /Content-Range is missing or malformed/,
+    );
+  }
+});
+
+test("httpResultToResponse: NotModified answers a bodyless 304", async () => {
+  const res = httpResultToResponse(HttpResult.NotModified, id);
+  assert.equal(res.status, 304);
+  assert.equal(await res.text(), "");
+});
+
+test("responseToHttpResult: a 206 reads back as PartialContent with its range, and a 304 as NotModified", async () => {
+  const partial = await responseToHttpResult(
+    new Response("lo, wo", {
+      status: 206,
+      headers: { "content-type": "text/plain", "content-range": "bytes 3-8/12" },
+    }),
+    () => ({ tag: "Ok", value: null }) as never,
+  );
+  assert.equal(partial.tag, "PartialContent");
+  if (partial.tag === "PartialContent") {
+    assert.deepEqual(partial.range, { start: 3, end: 8, total: someRange(12) });
+    assert.equal(partial.contentType, "text/plain");
+    let text = "";
+    for await (const chunk of partial.body) text += new TextDecoder().decode(chunk);
+    assert.equal(text, "lo, wo");
+  }
+  const star = await responseToHttpResult(
+    new Response("x", { status: 206, headers: { "content-range": "bytes 0-0/*" } }),
+    () => ({ tag: "Ok", value: null }) as never,
+  );
+  assert.equal(star.tag === "PartialContent" && star.range.total.tag, "None");
+  const notModified = await responseToHttpResult(new Response(null, { status: 304 }), () => ({ tag: "Ok", value: null }) as never);
+  assert.equal(notModified.tag, "NotModified");
 });
 
 test("httpResultToResponse: a RawStreamed source that throws errors the body", async () => {

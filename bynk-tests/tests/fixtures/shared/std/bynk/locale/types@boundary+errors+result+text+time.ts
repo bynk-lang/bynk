@@ -2,6 +2,7 @@
 // commons bynk.locale.types
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
@@ -148,13 +149,14 @@ export function __deserialise_MessageArg(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "Num", value: __value } as MessageArg);
     }
     case "Moment": {
-      if (typeof obj["value"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      const __value$ms = __bynkInstantFromWire(obj["value"]);
+      if (typeof __value$ms !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
-      if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      if (!globalThis.Number.isSafeInteger(__value$ms)) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
       }
-      const __value = obj["value"];
+      const __value = __value$ms;
       return Ok({ tag: "Moment", value: __value } as MessageArg);
     }
     default:
@@ -172,6 +174,9 @@ export function __serialise_Map_String_MessageArg(value: ReadonlyMap<string, Mes
 }
 
 export function __deserialise_Map_String_MessageArg(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, MessageArg>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_MessageArg(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

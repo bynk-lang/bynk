@@ -68,6 +68,16 @@ export function __serialise_Refused(value: Refused): __JsonValue {
 }
 
 export function __deserialise_Refused(json: __JsonValue, path: string = "$"): Result<Refused, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Overdue":
+        return Ok({ tag: "Overdue" } as Refused);
+      case "Stale":
+        return Ok({ tag: "Stale" } as Refused);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

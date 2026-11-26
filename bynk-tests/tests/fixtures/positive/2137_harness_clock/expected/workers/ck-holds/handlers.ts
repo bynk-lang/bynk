@@ -2,6 +2,7 @@
 // context ck.holds
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
@@ -126,13 +127,14 @@ export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
 }
 
 function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  const __v$ms = __bynkInstantFromWire(raw);
+  if (typeof __v$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
   }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  if (!globalThis.Number.isSafeInteger(__v$ms)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
   }
-  const __v = raw;
+  const __v = __v$ms;
   return Ok(__v);
 }
 

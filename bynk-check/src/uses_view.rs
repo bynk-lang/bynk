@@ -617,6 +617,53 @@ pub fn phase_use_views(
     }
 }
 
+/// #4455: the item of a braced `uses` list (`uses lib.y { Status as S }`) is a reference to the
+/// declaration it selects, so the editor can find it, and a rename rewrites it. Only the source
+/// name is recorded: an alias is the unit's own spelling, which a rename of the declaration
+/// leaves alone. A name the commons does not declare publicly is the clause's own
+/// `bynk.uses.unknown_name`, not a reference.
+pub fn record_selected_items(
+    unit_uses: &HashMap<String, Vec<String>>,
+    parsed: &[bynk_project::ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    refs: &mut crate::index::RefSink,
+) {
+    use crate::index::SymbolKind;
+    for (name, indices) in groups {
+        let valid = unit_uses.get(name).cloned().unwrap_or_default();
+        for &i in indices {
+            refs.enter_file(&parsed[i].identity_path(), name, parsed[i].is_synthetic());
+            for u in parsed[i].uses() {
+                let target = u.target.joined();
+                let (Some(items), true) = (&u.selected, valid.contains(&target)) else {
+                    continue;
+                };
+                let Some(used) = unit_tables.get(&target) else {
+                    continue;
+                };
+                for item in items {
+                    let n = &item.name.name;
+                    let kind = if used.types.contains_key(n) {
+                        SymbolKind::Type
+                    } else if used.fns.contains_key(n) {
+                        SymbolKind::Fn
+                    } else if used.consts.contains_key(n) {
+                        SymbolKind::Const
+                    } else if used.assets.contains_key(n) {
+                        SymbolKind::Asset
+                    } else if used.embeds.contains_key(n) {
+                        SymbolKind::Embed
+                    } else {
+                        continue;
+                    };
+                    refs.record_in_unit(item.name.span, kind, n, &target);
+                }
+            }
+        }
+    }
+}
+
 /// Record each bare name two used commons both bring in as a shadowed import
 /// whose reference is `bynk.uses.ambiguous_name`, so the reference sites that
 /// report a hidden import report it ([`UnitTable::ambiguous_uses`]).
@@ -794,10 +841,12 @@ mod tests {
                         .count()
                 })
         };
+        // The list item (#4455) and the alias's one use: a rename edits the item and leaves
+        // the alias spelling alone (`narrow_qualified_edits`).
         assert_eq!(
             refs_in_app("lib.y", "Status"),
-            1,
-            "the rename reaches lib.y's Status"
+            2,
+            "the rename reaches lib.y's Status: its list item and the alias's use"
         );
         assert_eq!(
             refs_in_app("lib.billing", "Amount"),

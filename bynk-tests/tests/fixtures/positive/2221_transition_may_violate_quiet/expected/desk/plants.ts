@@ -257,6 +257,16 @@ export function __serialise_Level(value: Level): __JsonValue {
 }
 
 export function __deserialise_Level(json: __JsonValue, path: string = "$"): Result<Level, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Low":
+        return Ok({ tag: "Low" } as Level);
+      case "High":
+        return Ok({ tag: "High" } as Level);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -284,6 +294,18 @@ export function __serialise_Stage(value: Stage): __JsonValue {
 }
 
 export function __deserialise_Stage(json: __JsonValue, path: string = "$"): Result<Stage, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Seed":
+        return Ok({ tag: "Seed" } as Stage);
+      case "Grown":
+        return Ok({ tag: "Grown" } as Stage);
+      case "Dead":
+        return Ok({ tag: "Dead" } as Stage);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

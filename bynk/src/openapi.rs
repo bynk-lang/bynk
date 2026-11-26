@@ -51,6 +51,9 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
 
+mod partial;
+mod plain;
+
 use crate::cli::OpenapiFormatArg;
 
 /// The OpenAPI version the document declares.
@@ -1025,9 +1028,14 @@ fn responses_of(
             HttpVariantPayload::Raw
             | HttpVariantPayload::RawTagged
             | HttpVariantPayload::RawStreamed
+            | HttpVariantPayload::Partial
             | HttpVariantPayload::RawError => {
                 // Author-owned bytes under an author-chosen media type; no codec.
                 body("*/*", json!({ "type": "string", "format": "binary" }), e);
+                if v.payload == HttpVariantPayload::Partial {
+                    e.headers
+                        .insert("Content-Range".into(), partial::content_range_header());
+                }
                 if v.payload == HttpVariantPayload::RawTagged {
                     e.headers.insert(
                         "ETag".into(),
@@ -1371,6 +1379,11 @@ impl Renderer<'_> {
     /// The schema for one occurrence of a type.
     fn ref_schema(&self, components: &mut Components, r: &WireRef) -> Value {
         match r {
+            // #3974: a plain route writes an `Instant` as an RFC 3339 string.
+            WireRef::Base {
+                base: BaseType::Instant,
+                ..
+            } if self.plain => plain::instant_schema(),
             WireRef::Base { base, .. } => Value::Object(base_schema(*base)),
             WireRef::Bytes => Value::Object(base_schema(BaseType::Bytes)),
             WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
@@ -1427,6 +1440,10 @@ impl Renderer<'_> {
                 s.insert("required".into(), Value::Array(required));
                 s
             }
+            // #3974: a plain route writes a payload-less sum as its variant's name.
+            WireBody::Sum(sum) if self.plain && plain::enum_schema(sum).is_some() => {
+                plain::enum_schema(sum).unwrap_or_default()
+            }
             WireBody::Sum(sum) => {
                 let variants: Vec<Value> = sum
                     .variants
@@ -1482,6 +1499,15 @@ impl Renderer<'_> {
                 "items": self.ref_schema(components, &shape(elem)),
                 "uniqueItems": true,
             }),
+            // #3974: a plain route writes a `String`-keyed map as a JSON object.
+            WireInst::MapInst { key, val }
+                if self.plain && plain::is_string_key(self.types, key) =>
+            {
+                json!({
+                    "type": "object",
+                    "additionalProperties": self.ref_schema(components, &shape(val)),
+                })
+            }
             // Entries array, insertion-ordered: `[[k, v], …]`.
             WireInst::MapInst { key, val } => json!({
                 "type": "array",

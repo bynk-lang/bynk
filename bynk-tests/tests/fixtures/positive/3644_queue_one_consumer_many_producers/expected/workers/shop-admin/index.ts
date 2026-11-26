@@ -41,7 +41,7 @@ export default {
           if (method === "POST" && __matchPath("/admin", path) !== null) {
             __route = "POST /admin";
             const result = await surface.http_POST_admin();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.admin\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.admin\""]), __security_api);
           }
         }
         if (__matchPath("/admin", path) !== null) {
