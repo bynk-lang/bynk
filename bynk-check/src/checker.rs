@@ -26,8 +26,8 @@ use crate::index::{RefSink, SymbolKind};
 use crate::kernel_op::{
     BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
     InstantOp, IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestCookiesOp,
-    RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
-    TokenClaimsOp,
+    RequestHeadersOp, RequestQueryOp, ResultOp, SecretOp, SetOp, StreamOp, StringOp,
+    TestConnectionOp, TokenClaimsOp,
 };
 use crate::kernel_op::{
     CellStoreOp, IntrinsicNs, LogStoreOp, LogWindowOp, MapStoreOp, SetStoreOp, StaticOp,

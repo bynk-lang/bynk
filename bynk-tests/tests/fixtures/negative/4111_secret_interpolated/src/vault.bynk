@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn banner(s: Secret) -> String {
+    "token: \(s)"
+}

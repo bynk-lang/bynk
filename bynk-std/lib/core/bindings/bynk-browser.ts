@@ -9,7 +9,7 @@ import type {
   Response as FetchResponse,
   StreamResponse,
 } from "./bynk.js";
-import type { FetchError } from "./bynk.js";
+import type { FetchError, Secret } from "./bynk.js";
 import { Claim, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { None, Some, type Option, type Result, withTraceField } from "./runtime.js";
@@ -127,7 +127,7 @@ export class FetchProvider implements Fetch {
 // construction, then ignores it — there is nothing to read.)
 export class SecretsProvider implements Secrets {
   constructor(_env?: unknown) {}
-  async get(_name: string): Promise<Option<string>> {
+  async get(_name: string): Promise<Option<Secret>> {
     throw new Error(
       "bynk.Secrets is unavailable in the browser playground: there is no secret store. Run the program on a platform that provides Secrets (node or cloudflare).",
     );

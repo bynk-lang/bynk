@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn index(s: Secret) -> Map[Secret, Int] {
+    Map.empty()
+}

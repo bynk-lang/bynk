@@ -9,7 +9,7 @@ export const ordering = {
     switch (key.tag) {
       case "Some": {
         const k = key.value;
-        return k;
+        return k.reveal();
       }
       case "None": {
         return "missing";

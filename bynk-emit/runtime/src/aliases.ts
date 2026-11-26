@@ -4,6 +4,7 @@
 // importing module can collide with an imported runtime name (a user
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
+import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
@@ -259,4 +260,5 @@ export type {
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,
+  BynkSecret as __BynkSecret,
 };

@@ -1,0 +1,13 @@
+context vault
+
+// #4111: a type of the project's own that happens to be called `Secret` is an ordinary type:
+// it can be a record field and be compared with `==`. Only `bynk`'s `Secret` is refused.
+type Secret = String where NonEmpty
+
+type Holder = {
+    key: Secret,
+}
+
+fn same(a: Secret, b: Secret) -> Bool {
+    a == b
+}

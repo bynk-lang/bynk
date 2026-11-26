@@ -79,7 +79,7 @@ service verify {
 				None => Effect.pure(false),
 				Some(mac) => Crypto.verifyHmac(
 					Sha256,
-					Bytes.fromUtf8(key),
+					Bytes.fromUtf8(key.reveal()),
 					Bytes.fromUtf8(body),
 					mac
 				),
@@ -110,7 +110,7 @@ service signLine {
 		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
 		match stored {
 			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),
-			Some(b64) => match Bytes.fromBase64(b64) {
+			Some(b64) => match Bytes.fromBase64(b64.reveal()) {
 				None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't base64"))),
 				Some(pkcs8) => {
 					let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
