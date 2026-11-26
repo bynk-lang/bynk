@@ -97,6 +97,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("DurableObjectTransaction", "storage"),
     ("EDGE_FROM_PREFIX", "boundary"),
     ("EDGE_TO_PREFIX", "boundary"),
+    ("EMAIL_FALLBACK_HEADER", "email"),
     ("EMAIL_MAX_ATTACHMENTS", "email"),
     ("EMAIL_MAX_FORWARDED_ADDRESSES", "email"),
     ("EMAIL_MAX_HEADER_BYTES", "email"),

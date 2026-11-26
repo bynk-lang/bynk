@@ -1,0 +1,37 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+// #3885: a message the handler faults on is forwarded to the fallback instead of bounced. Anything
+// else the handler decides is applied as before.
+service support from email("support@shop.example") {
+  fallback { forward: "ops@ops.example" }
+
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "boom" {
+      // Dividing by zero is a fault, not a value.
+      let share = 10 / (mail.subject.length() - 4)
+      if share > 0 { Reject("unreachable") } else { Accept }
+    } else if mail.subject == "spam" {
+      Reject("not wanted")
+    } else {
+      Accept
+    }
+  }
+}
+
+// No fallback: a fault is still a rejection.
+service sales from email("sales@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "boom" {
+      // Dividing by zero is a fault, not a value.
+      let share = 10 / (mail.subject.length() - 4)
+      if share > 0 { Reject("unreachable") } else { Accept }
+    } else {
+      Accept
+    }
+  }
+}
