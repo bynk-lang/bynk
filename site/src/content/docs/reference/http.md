@@ -1401,6 +1401,9 @@ itself like the others:
 
 ```bynk,fragment
 PartialContent(body, "video/mp4", range).etag(object.etag)
+```
+
+```bynk,fragment
 NotModified.etag(object.etag).lastModified(object.uploaded)
 ```
 

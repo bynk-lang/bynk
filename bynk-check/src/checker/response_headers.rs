@@ -338,7 +338,9 @@ fn reserved_hint(name: &str) -> &'static str {
         | "cdn-cache-control"
         | "cloudflare-cdn-cache-control"
         | "surrogate-control" => "caching headers come from `@cache` and the router",
-        "etag" | "last-modified" => "a `PartialContent` or `NotModified` takes its own with `.etag(tag)` and `.lastModified(at)`; the router sets it elsewhere",
+        "etag" | "last-modified" => {
+            "a `PartialContent` or `NotModified` takes its own with `.etag(tag)` and `.lastModified(at)`; the router sets it elsewhere"
+        }
         "cache-control" | "vary" => "caching headers come from `@cache` and the router",
         "content-type" | "content-length" => "the body and its media type decide these",
         "x-content-type-options"

@@ -15,8 +15,8 @@ commons bynk.range {
 	---
 	fn ifRangeHolds(ifRange: Option[String], etag: String) -> Bool {
 		match ifRange {
-			None => true
-			Some(held) => held == etag && !etag.startsWith("W/")
+			None => true,
+			Some(held) => held == etag && !etag.startsWith("W/"),
 		}
 	}
 }
