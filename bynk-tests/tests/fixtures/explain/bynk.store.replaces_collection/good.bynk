@@ -2,7 +2,7 @@ context shop.cart
 
 agent Cart {
   key id: String
-  store visited: Cell[Int] replaces seen
+  store visited: Set[String] replaces seen
 
   on call ping() -> Effect[Int] {
     1
