@@ -405,7 +405,7 @@ export class SecretsProvider implements Secrets {
     }
     const v = (globalThis as { process?: { env?: Record<string, string | undefined> } })
       .process?.env?.[name];
-    return typeof v === "string" ? Some(v) : None;
+    return typeof v === "string" ? Some(Secret.unsafe(v)) : None;
   }
 }
 
