@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A named deploy environment claims no inbound-email address unless `[deploy.email]` maps it one, so `bynk deploy --env staging` no longer takes production's Email Routing rules over
-breaking: `bynk deploy --env <name>` no longer writes the source's `from email` addresses for a named environment (Wrangler applies `addresses` at the top level only, so they were production's, and a deploy either took production's rules over or failed after the Worker was live); the environment now claims none, and the plan says `email: none (no mapping for ...)`. To give it an address, map one: `[deploy.email."support@shop.example"]` with `address = { staging = "support@staging.shop.example" }`
----
+# 1025 — A named environment claims only the inbound-email addresses it is mapped
 
-## ADR: email-environment-addresses
-title: A named environment claims only the inbound-email addresses it is mapped
-summary: Why `--env staging` omits `addresses` unless `[deploy.email]` maps it one, and how a mapped address reaches the service
+- **Status:** Accepted (v0.761)
 
 **Context.** Wrangler's `addresses` is top-level only, applies to every environment of a Worker, and is ignored under `env`. Bynk writes the `from email` services' addresses there (ADR 0808 F) and runs `wrangler deploy --env <name>` against the same file, so a named environment was handed production's list. Wrangler documents that naming an address another rule holds takes that rule over: interactively it asks before applying the destructive change, and non-interactively it applies nothing and exits with an error after deploying the Worker, so every staging deploy failed with the Worker already live. It also documents that an omitted `addresses` changes no Email Routing rule, while an empty list removes every rule the Worker manages. **This is derived from Wrangler's documentation and the deploy code; it has not been observed against a live account.** The live check (deploy a `from email` project to `default`, then `--env staging`, and record what Wrangler does) is filed as #4427, and this decision does not wait for it.
 

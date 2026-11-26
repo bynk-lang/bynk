@@ -669,7 +669,8 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
         ],
     )
     .unwrap_or_default();
-    let consumed = xtask::consumed_raised_probes(&base_pending(&root, &base), &root);
+    let base_files = base_pending(&root, &base);
+    let consumed = xtask::consumed_raised_probes(&base_files, &root);
     let live = xtask::greenfield_status::run_gated(&root);
     match xtask::greenfield_status::check_growth_against(
         &live,
@@ -677,8 +678,37 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
         (&base_ledger, &consumed),
         &root,
     ) {
+        Ok(()) => println!("greenfield-status: no growth probe rose against {base}"),
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth (against {base}): {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    // #4428: the growth check above, like the table gate, is excused by any pending file in the
+    // tree, including another increment's. What this PR moved must be named by this PR's own.
+    let tree = match xtask::pr_attribution::BaseTree::checkout(&root, &base) {
+        Ok(tree) => tree,
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth: cannot attribute the PR's moves: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let base_live = xtask::greenfield_status::run_gated(tree.root());
+    match xtask::pr_attribution::check(
+        &base_live,
+        &live,
+        &xtask::pr_attribution::read_pending(&root),
+        &base_files,
+        (
+            &base_table,
+            &std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+                .unwrap_or_default(),
+        ),
+    ) {
         Ok(()) => {
-            println!("greenfield-status: no growth probe rose against {base}");
+            println!(
+                "greenfield-status: every probe this PR moved is named by its own pending files"
+            );
             ExitCode::SUCCESS
         }
         Err(e) => {
