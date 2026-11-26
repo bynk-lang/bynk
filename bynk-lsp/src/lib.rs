@@ -535,6 +535,135 @@ impl Backend {
             .flatten()
     }
 
+    /// #3941: the live text of an open document, and the `env(NAME)` variable the
+    /// cursor is on in it.
+    async fn env_variable_at(
+        &self,
+        uri: &Url,
+        pos: Position,
+    ) -> Option<(String, String, usize, usize)> {
+        let text = {
+            let state = self.state.read().await;
+            state.docs.get(uri)?.text.clone()
+        };
+        let offset = crate::position::position_to_offset(&text, pos)?;
+        let (name, start, end) = crate::env_const::variable_at(&text, offset)?;
+        Some((text, name, start, end))
+    }
+
+    /// #3941: rename the `bynk.toml` variable under the cursor in an `env(NAME)`
+    /// constant: its name in every constant that reads it and its key in each
+    /// `bynk.toml` table that sets it. `None` when the cursor is on no variable.
+    async fn env_variable_rename(
+        &self,
+        uri: &Url,
+        pos: Position,
+        new_name: &str,
+    ) -> Option<Result<WorkspaceEdit, String>> {
+        let (text, name, _, _) = self.env_variable_at(uri, pos).await?;
+        let root = self.root_for_uri(uri).await?;
+        let mut sources = self
+            .project_content(uri)
+            .await
+            .map(|c| (*c).clone())
+            .unwrap_or_default();
+        let here = uri.to_file_path().ok()?;
+        let here = here.canonicalize().unwrap_or(here);
+        sources.insert(here, text);
+        let manifest_path = root.join("bynk.toml");
+        // The open buffer's text wins over the disk's, and its version stamps the
+        // edit: the client rejects the rename if a buffer drifted past it.
+        let (manifest_text, versions) = {
+            let state = self.state.read().await;
+            let versions: std::collections::HashMap<PathBuf, i32> = state
+                .docs
+                .iter()
+                .filter_map(|(u, d)| {
+                    let p = u.to_file_path().ok()?;
+                    Some((p.canonicalize().unwrap_or(p), d.version))
+                })
+                .collect();
+            // Match by canonical path: the root is canonical, an editor's URI need not be.
+            let manifest_canonical = manifest_path
+                .canonicalize()
+                .unwrap_or_else(|_| manifest_path.clone());
+            let open = state.docs.iter().find_map(|(u, d)| {
+                let p = u.to_file_path().ok()?;
+                (p.canonicalize().unwrap_or(p) == manifest_canonical).then(|| d.text.clone())
+            });
+            (open, versions)
+        };
+        let manifest_text = match manifest_text {
+            Some(t) => Some(t),
+            None => tokio::fs::read_to_string(&manifest_path).await.ok(),
+        };
+        // The variables come from the same text the edits are computed on.
+        let vars = {
+            let root = root.clone();
+            let text = manifest_text.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::env_const::read_vars_from(&root, text.as_deref())
+            })
+            .await
+            .ok()
+            .flatten()
+        };
+        let Some(vars) = vars else {
+            return Some(Err(
+                "`bynk.toml` does not parse, so a variable cannot be renamed".into(),
+            ));
+        };
+        let plan = match crate::env_const::plan_rename(
+            &name,
+            new_name,
+            &sources,
+            manifest_text
+                .as_deref()
+                .map(|t| (manifest_path.as_path(), t)),
+            &vars,
+        ) {
+            Ok(plan) => plan,
+            Err(reason) => return Some(Err(reason)),
+        };
+        let mut document_edits: Vec<TextDocumentEdit> = Vec::new();
+        for (path, spans) in &plan {
+            let file_text = if *path == manifest_path {
+                manifest_text.as_deref()
+            } else {
+                sources.get(path).map(String::as_str)
+            };
+            let (Some(file_text), Ok(file_uri)) = (file_text, Url::from_file_path(path)) else {
+                continue;
+            };
+            let edits = spans
+                .iter()
+                .map(|(s, e)| {
+                    OneOf::Left(TextEdit {
+                        range: crate::position::span_to_range(
+                            file_text,
+                            bynk_syntax::span::Span::new(*s, *e),
+                        ),
+                        new_text: new_name.to_string(),
+                    })
+                })
+                .collect();
+            document_edits.push(TextDocumentEdit {
+                text_document: OptionalVersionedTextDocumentIdentifier {
+                    uri: file_uri,
+                    version: versions
+                        .get(&path.canonicalize().unwrap_or_else(|_| path.clone()))
+                        .copied(),
+                },
+                edits,
+            });
+        }
+        Some(Ok(WorkspaceEdit {
+            changes: None,
+            document_changes: Some(DocumentChanges::Edits(document_edits)),
+            change_annotations: None,
+        }))
+    }
+
     /// #682: whether a `root_for_uri` write-back computed while the cache was
     /// at `read_generation` should still be applied, given the cache is now at
     /// `current_generation` — `false` once an invalidating clear has bumped it
@@ -2591,6 +2720,17 @@ impl Backend {
                     }
                 }),
         );
+        // #3941: the variable name in an `env(NAME)` constant, as `property`.
+        dt.extend(
+            bynk_ide::env_const::variable_spans(text)
+                .into_iter()
+                .map(|(s, e)| {
+                    (
+                        bynk_syntax::span::Span::new(s, e),
+                        crate::semantic_tokens::TOK_PROPERTY,
+                    )
+                }),
+        );
         crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
     }
 
@@ -4046,6 +4186,7 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
+        items.extend(rate_limit_completions(&text, offset, &line_prefix));
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
@@ -4845,6 +4986,17 @@ impl LanguageServer for Backend {
     ) -> JsonRpcResult<Option<PrepareRenameResponse>> {
         let uri = params.text_document.uri;
         let pos = params.position;
+        // #3941: the variable name in an `env(NAME)` constant renames with its
+        // `bynk.toml` keys; the index does not cover it.
+        if let Some((text, name, start, end)) = self.env_variable_at(&uri, pos).await {
+            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                range: crate::position::span_to_range(
+                    &text,
+                    bynk_syntax::span::Span::new(start, end),
+                ),
+                placeholder: name,
+            }));
+        }
         // Refuse (None) for anything the index does not cover — locals,
         // methods, record fields, capability ops, unit names — rather than
         // falling through to a partial or name-matched rename.
@@ -4873,6 +5025,10 @@ impl LanguageServer for Backend {
             message: msg.into(),
             data: None,
         };
+        // #3941: an `env(NAME)` variable is renamed with its `bynk.toml` keys.
+        if let Some(result) = self.env_variable_rename(&uri, pos, &new_name).await {
+            return result.map(Some).map_err(refused);
+        }
         // Slice B: rename emits versioned edits across *every* file that
         // references the symbol, so it needs the round current for **all** open
         // buffers, not just the cursor's (`analysis_for` would leave a dirty
@@ -5845,6 +6001,63 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
                     .to_string(),
             ),
             insert_text: Some("@limit(maxBody: ${1:1048576})".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// #3926: the `@rateLimit` completion cells: inside `@rateLimit( … )`, the `RateLimit`
+/// instances the document declares, then the `key:` label, then the two keys; at a
+/// service-body item start, the annotation snippet.
+fn rate_limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::rate_limit_completion::{
+        RATE_LIMIT_KEYS, RateLimitArg, rate_limit_arg_position, rate_limit_limiters,
+    };
+    match rate_limit_arg_position(text, offset) {
+        Some(RateLimitArg::Limiter) => {
+            return rate_limit_limiters(text)
+                .into_iter()
+                .map(|name| CompletionItem {
+                    label: name,
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some("a `RateLimit` this context declares".to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        Some(RateLimitArg::KeyLabel) => {
+            return vec![CompletionItem {
+                label: "key".to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some("what the limit counts by".to_string()),
+                insert_text: Some("key: ".to_string()),
+                ..Default::default()
+            }];
+        }
+        Some(RateLimitArg::KeyValue) => {
+            return RATE_LIMIT_KEYS
+                .iter()
+                .map(|(name, doc)| CompletionItem {
+                    label: name.to_string(),
+                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                    detail: Some((*doc).to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        None => {}
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "@rateLimit".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            detail: Some(
+                "refuse a client over its limit before the request body is read (`429`)"
+                    .to_string(),
+            ),
+            insert_text: Some("@rateLimit(${1:Limiter}, key: ${2|clientIp,identity|})".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
@@ -8353,6 +8566,96 @@ mod tests {
             Some(2),
             "the dirty non-cursor file's edit must carry its current version (2), \
              not the stale round's (1) — else the client rejects the whole rename",
+        );
+    }
+
+    /// #3941: the variable name in an `env(NAME)` constant renames with every
+    /// constant that reads it and every `bynk.toml` table that sets it; a name
+    /// already in use is refused.
+    #[tokio::test]
+    async fn renaming_an_env_variable_edits_its_constants_and_the_manifest() {
+        let manifest = "[project]\nname = \"demo\"\n\n[vars]\nAPP_ORIGIN = \"https://app\"\nTAKEN = 1\n\n[env.production.vars]\nAPP_ORIGIN = \"https://prod\"\n";
+        let a = "commons demo.a\n\nconst Origin: String = env(APP_ORIGIN)\nconst Taken: Int = env(TAKEN, 1)\n";
+        let b = "commons demo.b\n\nconst Again: String = env(APP_ORIGIN, \"x\")\n";
+        let s = scratch_project(
+            "rename_env_var",
+            &[
+                ("bynk.toml", manifest),
+                ("src/demo/a.bynk", a),
+                ("src/demo/b.bynk", b),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = |rel: &str| {
+            let abs = s.0.join(rel);
+            Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap()
+        };
+        let a_uri = uri("src/demo/a.bynk");
+        let b_uri = uri("src/demo/b.bynk");
+        for (u, text) in [(&a_uri, a), (&b_uri, b)] {
+            backend
+                .did_open(DidOpenTextDocumentParams {
+                    text_document: TextDocumentItem {
+                        uri: u.clone(),
+                        language_id: "bynk".into(),
+                        version: 1,
+                        text: text.to_string(),
+                    },
+                })
+                .await;
+        }
+        let pos = crate::position::offset_to_position(a, a.find("APP_ORIGIN").unwrap() + 2);
+        let at = TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier { uri: a_uri.clone() },
+            position: pos,
+        };
+        let prepared = backend
+            .prepare_rename(at.clone())
+            .await
+            .unwrap()
+            .expect("the variable name can be renamed");
+        let PrepareRenameResponse::RangeWithPlaceholder { placeholder, .. } = prepared else {
+            panic!("expected a range with a placeholder");
+        };
+        assert_eq!(placeholder, "APP_ORIGIN");
+
+        let rename = |new_name: &str| {
+            backend.rename(RenameParams {
+                text_document_position: at.clone(),
+                new_name: new_name.into(),
+                work_done_progress_params: Default::default(),
+            })
+        };
+        let edit = rename("SITE_ORIGIN").await.unwrap().expect("edits");
+        let DocumentChanges::Edits(edits) = edit.document_changes.unwrap() else {
+            panic!("expected document-change edits");
+        };
+        let count = |u: &Url| {
+            edits
+                .iter()
+                .find(|e| &e.text_document.uri == u)
+                .map_or(0, |e| e.edits.len())
+        };
+        assert_eq!(count(&a_uri), 1);
+        assert_eq!(count(&b_uri), 1);
+        // An open buffer's edit carries its version, so the client rejects the
+        // rename if the buffer drifted; the unopened manifest carries none.
+        let version = |u: &Url| {
+            edits
+                .iter()
+                .find(|e| &e.text_document.uri == u)
+                .and_then(|e| e.text_document.version)
+        };
+        assert_eq!(version(&a_uri), Some(1));
+        assert_eq!(version(&b_uri), Some(1));
+        let manifest_uri = uri("bynk.toml");
+        assert_eq!(count(&manifest_uri), 2, "[vars] and [env.production.vars]");
+
+        let err = rename("TAKEN").await.expect_err("a name in use is refused");
+        assert!(
+            err.message.contains("already a variable"),
+            "{}",
+            err.message
         );
     }
 
@@ -11394,6 +11697,46 @@ mod tests {
             values.contains(&"AppOrigin".to_string()),
             "an in-scope String constant: {values:?}"
         );
+    }
+
+    /// #3926: inside `@rateLimit( … )` the declared `RateLimit` instances are offered for the
+    /// limiter, then the two keys after `key:`, through the real `Backend::completion`.
+    #[tokio::test]
+    async fn rate_limit_annotation_offers_limiters_and_keys() {
+        let head = "context shop\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\ncapability Sessions = Kv\n\nservice api from http {\n";
+        let tail = "\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
+        let s = scratch_project(
+            "rate_limit_completion",
+            &[("bynk.toml", "[project]\nname=\"shop\"\n")],
+        );
+        let backend = backend_at(&s.0).await;
+        for (tag, line, needle, want, not_want) in [
+            (
+                "limiter",
+                "  @rateLimit(",
+                "@rateLimit(",
+                "SignupLimit",
+                "Sessions",
+            ),
+            (
+                "key",
+                "  @rateLimit(SignupLimit, key: ",
+                "key: ",
+                "identity",
+                "SignupLimit",
+            ),
+        ] {
+            let src = format!("{head}{line}{tail}");
+            let rel = format!("src/{tag}.bynk");
+            std::fs::create_dir_all(s.0.join("src")).unwrap();
+            std::fs::write(s.0.join(&rel), &src).unwrap();
+            let uri = file_uri(&s.0, &rel);
+            open(&backend, &uri, &src).await;
+            backend.run_round().await;
+            let labels = complete_at(&backend, &uri, &src, needle).await;
+            assert!(labels.contains(&want.to_string()), "{tag}: {labels:?}");
+            assert!(!labels.contains(&not_want.to_string()), "{tag}: {labels:?}");
+        }
     }
 
     /// #4312: a store collection read in an agent predicate through `old.`,

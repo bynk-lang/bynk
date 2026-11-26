@@ -1,0 +1,108 @@
+// #3926: at `system`, the Worker verifies the token before it asks the limiter, which counts per `sub` on
+// the harness clock.
+suite pay.api as system {
+	env { API_TOKEN_SECRET = "test-api-secret" }
+
+	case "a verified caller over the limit is refused with 429" {
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		let c <- api.POST("/notes", Wire("\"three\"")) by Reader("ada")
+		expect a is Handled(Ok("noted ada"))
+		expect b is Handled(Ok("noted ada"))
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "two callers count separately" {
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		let other <- api.POST("/notes", Wire("\"one\"")) by Reader("bob")
+		expect other is Handled(Ok("noted bob"))
+	}
+
+	case "a forged credential is refused and never consumes the limiter" {
+		let f1 <- api.POST("/notes", Wire("\"x\"")) by Forged
+		let f2 <- api.POST("/notes", Wire("\"x\"")) by Forged
+		let f3 <- api.POST("/notes", Wire("\"x\"")) by Forged
+		expect f1 is Rejected(Unauthorized)
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		expect a is Handled(Ok("noted ada"))
+		expect b is Handled(Ok("noted ada"))
+	}
+
+	case "an expired credential is refused and never consumes the limiter" {
+		let e1 <- api.POST("/notes", Wire("\"x\"")) by Expired
+		let e2 <- api.POST("/notes", Wire("\"x\"")) by Expired
+		let e3 <- api.POST("/notes", Wire("\"x\"")) by Expired
+		expect e2 is Rejected(Unauthorized)
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		expect b is Handled(Ok("noted ada"))
+	}
+
+	case "a missing credential is refused and never consumes the limiter" {
+		let n1 <- api.POST("/notes", Wire("\"x\"")) by Nobody
+		let n2 <- api.POST("/notes", Wire("\"x\"")) by Nobody
+		let n3 <- api.POST("/notes", Wire("\"x\"")) by Nobody
+		expect n3 is Rejected(Unauthorized)
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		expect b is Handled(Ok("noted ada"))
+	}
+
+	case "a verified caller over the limit gets 429, not 413, for a body over the cap" {
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		let big <- api.POST("/notes", Wire("\"this body is a good deal longer than sixteen bytes\"")) by Reader("ada")
+		expect big is Rejected(RateLimited(_))
+	}
+
+	case "a body over the cap is a 413 while the caller's limit holds" {
+		let big <- api.POST("/notes", Wire("\"this body is a good deal longer than sixteen bytes\"")) by Reader("ada")
+		expect big is Rejected(PayloadTooLarge(_))
+	}
+
+	case "the window recovers" {
+		let a <- api.POST("/notes", Wire("\"one\"")) by Reader("ada")
+		let b <- api.POST("/notes", Wire("\"two\"")) by Reader("ada")
+		let c <- api.POST("/notes", Wire("\"three\"")) by Reader("ada")
+		expect c is Rejected(RateLimited(_))
+		advance Clock by 60.seconds
+		let again <- api.POST("/notes", Wire("\"four\"")) by Reader("ada")
+		expect again is Handled(Ok("noted ada"))
+	}
+
+	case "a route without the annotation is not counted" {
+		let a <- api.GET("/activity") by Reader("ada")
+		let b <- api.GET("/activity") by Reader("ada")
+		let c <- api.GET("/activity") by Reader("ada")
+		expect c is Ok("activity for ada")
+	}
+
+	case "a GET with a path parameter is counted by caller" {
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("cy")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("cy")
+		let c <- api.GET("/notes/:id", Wire("\"n3\"")) by Reader("cy")
+		expect a is Handled(Ok(_))
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "a GET with a forged credential never consumes the limiter" {
+		let f1 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		let f2 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		let f3 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("dee")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("dee")
+		expect b is Handled(Ok(_))
+	}
+
+	case "a bad path segment is refused after the caller was counted" {
+		let bad <- api.GET("/notes/:id", Wire("\"far-too-long-an-id\"")) by Reader("eve")
+		expect bad is Rejected(RefinementViolation(_))
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("eve")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("eve")
+		expect b is Rejected(RateLimited(_))
+	}
+}

@@ -103,7 +103,7 @@ async function test_a_refund_goes_to_billing() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "refund", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "refund", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 240, 276, "expect r is Forward(\"billing@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -207,7 +207,7 @@ async function test_anything_else_goes_to_the_team() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     void (((__d) => {
       switch (__d.tag) {
         case "Forward": {

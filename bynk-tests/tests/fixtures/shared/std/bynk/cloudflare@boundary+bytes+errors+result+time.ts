@@ -611,8 +611,13 @@ export const InboundAttachment = {
  * envelope recipient the service was routed by. `headers` holds the message's
  * headers by lower-case name. `text`, `html` and `attachments` come from the
  * parsed MIME body (`None` or empty when the message has no such part); a test
- * builds them directly. `size` is the raw message in bytes. Every field after
- * `to` has a default, so a test writes only what it cares about.
+ * builds them directly. `size` is the raw message in bytes. `subaddress` is the
+ * text after the first `+` of the envelope recipient's local part (RFC 5233, as
+ * Email Routing defines it), so mail to `support+1234@shop.example` reaches the
+ * service claiming `support@shop.example` with `subaddress = Some("1234")`; it
+ * is `None` without a `+`. `to` keeps the full recipient. A case at the `system`
+ * tier posts `to` through the Worker's entry, which reads the tag from it. Every
+ * field after `to` has a default, so a test writes only what it cares about.
  */
 export interface InboundEmail {
   readonly from: string;
@@ -624,6 +629,7 @@ export interface InboundEmail {
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
   readonly size: number;
+  readonly subaddress: Option<string>;
 }
 
 export const InboundEmail = {
@@ -3399,6 +3405,7 @@ export function __serialise_InboundEmail(value: InboundEmail): __JsonValue {
     html: __serialise_Option_String(value.html),
     attachments: __serialise_List_InboundAttachment(value.attachments),
     size: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.size),
+    subaddress: __serialise_Option_String(value.subaddress),
   };
 }
 
@@ -3449,7 +3456,11 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.size`, expected: "safe integer", actual: String(__d_size) });
   }
   const __size = __d_size;
-  return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, headers: __headers, text: __text, html: __html, attachments: __attachments, size: __size } as InboundEmail);
+  const __d_subaddress: __JsonValue = "subaddress" in obj ? obj["subaddress"] : { kind: "None" };
+  const __r_subaddress = __deserialise_Option_String(__d_subaddress, `${path}.subaddress`);
+  if (__r_subaddress.tag === "Err") return __r_subaddress;
+  const __subaddress = __r_subaddress.value;
+  return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, headers: __headers, text: __text, html: __html, attachments: __attachments, size: __size, subaddress: __subaddress } as InboundEmail);
 }
 
 export function __serialise_IndexInfo(value: IndexInfo): __JsonValue {
