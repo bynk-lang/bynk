@@ -33,8 +33,8 @@ pub(crate) trait CloudflareApi {
         binding: &str,
         environment: &str,
     ) -> Result<(), WranglerError>;
-    /// `d1 create <name>`: the new database's id.
-    fn d1_create(&self, name: &str) -> Result<String, WranglerError>;
+    /// `d1 create <name> [--jurisdiction <j>]`: the new database's id.
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError>;
     /// `d1 list --json`: what it printed.
     fn d1_list(&self) -> Result<String, WranglerError>;
     /// `r2 bucket create <name> [--jurisdiction <j>]`.
@@ -177,6 +177,7 @@ pub(crate) enum Op<'a> {
     },
     D1Create {
         name: &'a str,
+        jurisdiction: Option<&'a str>,
     },
     D1List,
     R2Create {
@@ -263,7 +264,13 @@ impl Op<'_> {
                 }
                 argv
             }
-            Op::D1Create { name } => words(&["d1", "create", name]),
+            Op::D1Create { name, jurisdiction } => {
+                let mut argv = words(&["d1", "create", name]);
+                if let Some(jurisdiction) = jurisdiction {
+                    argv.extend(words(&["--jurisdiction", jurisdiction]));
+                }
+                argv
+            }
             Op::D1List => words(&["d1", "list", "--json"]),
             Op::R2Create { name, jurisdiction } => {
                 let mut argv = words(&["r2", "bucket", "create", name]);
@@ -434,7 +441,20 @@ mod tests {
                 },
                 "d1 migrations apply DB --remote --env staging",
             ),
-            (Op::D1Create { name: "db" }, "d1 create db"),
+            (
+                    Op::D1Create {
+                        name: "db",
+                        jurisdiction: None,
+                    },
+                    "d1 create db",
+                ),
+                (
+                    Op::D1Create {
+                        name: "db",
+                        jurisdiction: Some("eu"),
+                    },
+                    "d1 create db --jurisdiction eu",
+                ),
             (Op::D1List, "d1 list --json"),
             (
                 Op::R2Create {

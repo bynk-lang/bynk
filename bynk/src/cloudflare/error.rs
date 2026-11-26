@@ -360,7 +360,10 @@ mod tests {
         };
         assert!(exit(&r2, 1, "", "already exists, and you own it").already_exists());
         assert!(!exit(&r2, 1, "", "already exists and is not available").already_exists());
-        let d1 = Op::D1Create { name: "d" };
+        let d1 = Op::D1Create {
+            name: "d",
+            jurisdiction: None,
+        };
         assert!(exit(&d1, 1, "", "A database with that name already exists").already_exists());
         assert!(!exit(&d1, 1, "", "already exists").already_exists());
         let meta = Op::Vectorize(VectorizeOp::CreateMetadataIndex {

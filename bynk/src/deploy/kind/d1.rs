@@ -18,10 +18,11 @@ pub(crate) struct D1Table;
 
 impl D1Record {
     /// The record of database `name` with id `id`, with nothing superseded yet.
-    pub(crate) fn of(name: &str, id: &str) -> Self {
+    pub(crate) fn of(name: &str, id: &str, jurisdiction: Option<&str>) -> Self {
         D1Record {
             name: name.to_string(),
             id: id.to_string(),
+            jurisdiction: jurisdiction.map(str::to_string),
             superseded: Vec::new(),
         }
     }
@@ -121,6 +122,7 @@ impl ResourceKind for D1 {
             action: step.action(),
             database: step.database,
             migrations: &db.migrations,
+            jurisdiction: db.jurisdiction.as_deref(),
         }
     }
 
@@ -144,9 +146,13 @@ impl ResourceKind for D1 {
     /// bound and before the push.
     fn short_line(d1: &PlanD1<'_>, out: &mut String) {
         out.push_str(&format!(
-            "d1 {} {} ({})\n",
+            "d1 {} {} ({})",
             d1.action, d1.database, d1.binding
         ));
+        if let Some(jurisdiction) = d1.jurisdiction {
+            out.push_str(&format!(" in jurisdiction {jurisdiction}"));
+        }
+        out.push('\n');
         if !d1.migrations.is_empty() {
             let n = d1.migrations.len();
             out.push_str(&format!(
@@ -243,7 +249,7 @@ impl ResourceKind for D1 {
         if let Some(id) = &step.recorded {
             return Ok(Applied::bound(&db.binding, (physical, id.clone())));
         }
-        let id = create_d1(cx.tools.api, &physical).map_err(|e| {
+        let id = create_d1(cx.tools.api, &physical, db.jurisdiction.as_deref()).map_err(|e| {
             DeployFailure::driver(format!(
                 "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
                 db.binding
@@ -251,7 +257,7 @@ impl ResourceKind for D1 {
         })?;
         let record = cx.recording(
             &db.binding,
-            D1Record::of(&physical, &id),
+            D1Record::of(&physical, &id, db.jurisdiction.as_deref()),
             &format!("created the D1 database `{physical}`"),
         );
         Ok(Applied::bound(&db.binding, (physical, id)).with(record))
@@ -295,6 +301,9 @@ pub(crate) struct PlanD1<'a> {
     pub(crate) action: &'static str,
     /// The database's account-facing name, [`d1_database_name`]d.
     pub(crate) database: String,
+    /// #3820: the jurisdiction the database is created in, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<&'a str>,
     /// P4b (#2608): its migration files. `bynk deploy` applies the ones the
     /// database hasn't recorded before the push; the plan does not read the
     /// databases, so it can't say which those are.
@@ -318,6 +327,23 @@ pub(crate) fn d1_database_problem(
     for (worker, declared) in resources {
         for db in &declared.d1_databases {
             let name = d1_database_name(environment, &db.name);
+            // #3820: a database's jurisdiction is fixed when it is made. A source that now names
+            // another is refused, never recreated: the database holds data.
+            let provisioned = ledger
+                .recorded::<D1>(worker, &db.binding)
+                .filter(|recorded| recorded.name == name);
+            if let Some(recorded) = provisioned.filter(|r| r.jurisdiction != db.jurisdiction) {
+                let shown = |j: &Option<String>| match j {
+                    Some(j) => format!("jurisdiction `{j}`"),
+                    None => "no jurisdiction".to_string(),
+                };
+                return Some(format!(
+                    "`{}` of `{worker}` is the D1 database `{name}`, which was created with {}; the source now asks for {}. A database's jurisdiction is fixed when it is created, and `bynk deploy` will not recreate a database that holds data. Restore the `@jurisdiction` the database was created with, or create a new `D1` capability, move the data across, and remove this one",
+                    db.binding,
+                    shown(&recorded.jurisdiction),
+                    shown(&db.jurisdiction)
+                ));
+            }
             if let Some((other_worker, other_binding)) =
                 seen.insert(name.clone(), (worker, &db.binding))
             {
@@ -369,8 +395,12 @@ pub(crate) fn apply_d1_migrations(
 /// Create the D1 database `name` and return its `database_id`, or adopt the
 /// one already there under that name (P4a, #2602). Run from the project root,
 /// as KV and buckets are.
-pub(crate) fn create_d1(api: &dyn CloudflareApi, name: &str) -> Result<String, CloudflareError> {
-    let e = match api.d1_create(name) {
+pub(crate) fn create_d1(
+    api: &dyn CloudflareApi,
+    name: &str,
+    jurisdiction: Option<&str>,
+) -> Result<String, CloudflareError> {
+    let e = match api.d1_create(name, jurisdiction) {
         Ok(id) => return Ok(id),
         Err(e) => e,
     };
@@ -449,7 +479,10 @@ mod tests {
     fn the_d1_id_is_read_from_either_snippet_format() {
         let exists = |stderr: &str| {
             crate::cloudflare::fake::failed(
-                &crate::cloudflare::Op::D1Create { name: "d" },
+                &crate::cloudflare::Op::D1Create {
+                    name: "d",
+                    jurisdiction: None,
+                },
                 "",
                 stderr,
             )
@@ -488,20 +521,20 @@ mod tests {
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         D1Table::insert(
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         assert!(env.d1_instances["shop"]["D1_ORDERS"].superseded.is_empty());
         D1Table::insert(
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-2"),
+            D1Record::of("shop-orders-v2", "id-2", None),
         );
         let record = D1Table::get(&env, "shop", "D1_ORDERS").expect("recorded");
         assert_eq!(
@@ -526,7 +559,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         let mut declared = Resources::default()
             .d1_databases(&[("D1_NEW", "shop-new"), ("D1_ORDERS", "shop-orders")]);
@@ -579,6 +612,7 @@ mod tests {
             binding: "D1_NEW",
             action: "create",
             database: "shop-new".to_string(),
+            jurisdiction: None,
             migrations: &[],
         };
         D1::checked_against(&mut line, "shop", &on, &mut Vec::new());
@@ -599,19 +633,19 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-2"),
+            D1Record::of("shop-orders-v2", "id-2", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_OLD",
-            D1Record::of("shop-old", "id-3"),
+            D1Record::of("shop-old", "id-3", None),
         );
         let declared = || Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders-v2")]);
         let resources = project(vec![("shop", declared())]);
@@ -649,7 +683,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
@@ -657,6 +691,7 @@ mod tests {
             binding: "D1_ORDERS".to_string(),
             name: "shop-orders".to_string(),
             migrations: Vec::new(),
+            jurisdiction: None,
         };
         let step = d1_step(
             &PlanCx {
@@ -689,6 +724,43 @@ mod tests {
             )]
         );
         assert!(done.commits.is_empty(), "nothing to record");
+    }
+
+    #[test]
+    fn a_database_is_created_in_its_jurisdiction_and_the_plan_says_so() {
+        // #3820: the `--jurisdiction` argument is what pins it; whether Cloudflare honours it
+        // needs a live account, so this covers the argument, the record and the plan line.
+        let api = crate::cloudflare::fake::Recording::new(|_| Ok("id-9".to_string()));
+        assert_eq!(create_d1(&api, "shop-orders", Some("eu")).unwrap(), "id-9");
+        assert_eq!(create_d1(&api, "shop-audit", None).unwrap(), "id-9");
+        assert_eq!(
+            api.calls(),
+            [
+                "d1 create shop-orders --jurisdiction eu",
+                "d1 create shop-audit"
+            ]
+        );
+        let record = D1Record::of("shop-orders", "id-9", Some("eu"));
+        assert_eq!(record.jurisdiction.as_deref(), Some("eu"));
+        let toml = toml::to_string(&record).unwrap();
+        assert!(toml.contains("jurisdiction = \"eu\""), "{toml}");
+        assert!(
+            !toml::to_string(&D1Record::of("shop-audit", "id-9", None))
+                .unwrap()
+                .contains("jurisdiction")
+        );
+        let mut out = String::new();
+        D1::short_line(
+            &PlanD1 {
+                binding: "D1_ORDERS",
+                action: "create",
+                database: "shop-orders".to_string(),
+                jurisdiction: Some("eu"),
+                migrations: &[],
+            },
+            &mut out,
+        );
+        assert_eq!(out, "d1 create shop-orders (D1_ORDERS) in jurisdiction eu\n");
     }
 
     #[test]

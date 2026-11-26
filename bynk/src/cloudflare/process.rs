@@ -294,8 +294,8 @@ impl CloudflareApi for Wrangler<'_> {
         self.run(&op, worker_dir, true).map(drop)
     }
 
-    fn d1_create(&self, name: &str) -> Result<String, WranglerError> {
-        let op = Op::D1Create { name };
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError> {
+        let op = Op::D1Create { name, jurisdiction };
         let stdout = self.run(&op, self.project_root, false)?;
         parse_d1_id(&stdout).ok_or_else(|| {
             WranglerError::new(

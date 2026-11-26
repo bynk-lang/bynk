@@ -69,7 +69,7 @@ fn account(root: PathBuf) -> crate::cloudflare::fake::Recording {
         };
         Ok(match *op {
             Op::KvCreate { title } => format!("kv-{title}"),
-            Op::D1Create { name } => format!("0d1d0000-0000-4000-8000-0000000000{:02}", name.len()),
+            Op::D1Create { name, .. } => format!("0d1d0000-0000-4000-8000-0000000000{:02}", name.len()),
             Op::Vectorize(VectorizeOp::List) => {
                 let names: Vec<String> = listed("index.")
                     .iter()

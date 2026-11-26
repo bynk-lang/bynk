@@ -1152,7 +1152,7 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "D1",
                 binding_prefix: D1_BINDING_PREFIX,
-                options: &[],
+                options: &[(R2_JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,
