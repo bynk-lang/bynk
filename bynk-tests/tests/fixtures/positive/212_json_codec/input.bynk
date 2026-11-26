@@ -30,7 +30,7 @@ commons orders {
   fn describe(s: String) -> String {
     match Json.decode[Order](s) {
       Ok(o) => o.id
-      Err(e) => e.kind.concat(" at ").concat(e.path).concat(": ").concat(e.message)
+      Err(e) => "\(e.path): \(e.message)"
     }
   }
 }

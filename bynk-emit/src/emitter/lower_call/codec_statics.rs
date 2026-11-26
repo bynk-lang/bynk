@@ -284,10 +284,13 @@ fn decoder_result_ty(ts: &TsType) -> TsType {
 }
 
 /// `let __j: __JsonValue; try { __j = JSON.parse(__s) as __JsonValue; } catch (__e) { return
-/// Err({ kind: "Malformed", path: "$", message: String(__e) }); }`.
+/// Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) }); }`.
 fn json_parse_step() -> Vec<TsStmt> {
     let malformed = TsExpr::object(vec![
-        ("kind".to_string(), str_lit("Malformed")),
+        (
+            "kind".to_string(),
+            TsExpr::object(vec![("tag".to_string(), str_lit("Malformed"))]),
+        ),
         ("path".to_string(), str_lit("$")),
         (
             "message".to_string(),
@@ -361,19 +364,33 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
     // The one message chain: a structural mismatch reads what it expected and what it found, a
     // refinement violation its own message, anything else its details.
     let message = TsExpr::Conditional {
-        test: Box::new(structural),
+        test: Box::new(structural.clone()),
         consequent: Box::new(TsExpr::template_lit(
             vec!["expected ".to_string(), ", got ".to_string(), String::new()],
             vec![be("expected"), call(ident("String"), vec![be("actual")])],
         )),
         alternate: Box::new(TsExpr::Conditional {
-            test: Box::new(refinement),
+            test: Box::new(refinement.clone()),
             consequent: Box::new(member(be("violation"), "message")),
             alternate: Box::new(be("details")),
         }),
     };
+    // #3976: the `DecodeErrorKind` variant, `{ tag }`. A boundary error that is neither a
+    // mismatch nor a violation reads as a malformed input.
+    let kind = TsExpr::object(vec![(
+        "tag".to_string(),
+        TsExpr::Conditional {
+            test: Box::new(structural.clone()),
+            consequent: Box::new(str_lit("StructuralMismatch")),
+            alternate: Box::new(TsExpr::Conditional {
+                test: Box::new(refinement.clone()),
+                consequent: Box::new(str_lit("RefinementViolation")),
+                alternate: Box::new(str_lit("Malformed")),
+            }),
+        },
+    )]);
     let mapped = TsExpr::object(vec![
-        ("kind".to_string(), be("kind")),
+        ("kind".to_string(), kind),
         ("path".to_string(), path),
         ("message".to_string(), message),
     ]);

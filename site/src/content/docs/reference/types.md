@@ -780,23 +780,49 @@ Two refusals keep it honest. An `Option` whose payload can itself be `null`
 witness, which writes the tagged form, so encode at a concrete type. `Queue.sendValue`
 and the other typed capability writes stay tagged, because a Bynk consumer reads them.
 
-`DecodeError` is a record of three `String` fields, so a failed decode can be
-explained in Bynk. It was called `JsonError` before it became the error type of
+`DecodeError` is a record of two `String` fields and a `DecodeErrorKind`, so a failed
+decode can be explained in Bynk. It was called `JsonError` before it became the error type of
 every decoder: the old spelling still compiles, as the same type, with a
 `bynk.types.deprecated_json_error` warning whose fix rewrites it (`bynk fmt`
 rewrites it too). Its fields let a failed decode be explained in Bynk:
 
 | Field | Meaning |
 |---|---|
-| `kind` | what went wrong: `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate) |
+| `kind` | what went wrong, a `DecodeErrorKind` (below): `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate); `Yaml.decode` adds the refusals listed under [`Yaml.decode`](#yaml-decode) |
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
 | `message` | a human-readable description, such as `expected number, got string` |
 
 A `DecodeError` has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.kind) at \(e.path): \(e.message)"` reads `StructuralMismatch at $.a:
-expected number, got string`. `kind` is a `String`, not a sum type, so compare it
-as text.
+expected number, got string`. `kind` interpolates as the variant's name.
+
+`DecodeErrorKind` is a closed sum, shared by every decoder (`Json.decode`,
+`Json.decodeSql`, `Yaml.decode`, `Form.decode`), declared in `bynk.decode`, which a
+unit reaches with no `uses` as soon as it names the type or reads `.kind`. Its variants are
+`Malformed`, `StructuralMismatch`, `RefinementViolation`, `UnsupportedAnchor`,
+`UnsupportedAlias`, `UnsupportedMergeKey`, `UnsupportedTag`, `MultipleDocuments`,
+`UnsupportedSyntax`, `UnsupportedValue`, `DuplicateKey` and `LimitExceeded`. A `match` on
+it is checked for exhaustiveness (use `_` to opt out), and the variants name a
+`DecodeErrorKind` only where the context says so (a `match` or `is` on one, an expected
+type, the other side of `==` or `!=`), so a sum of your own with a `Malformed` variant is
+unaffected:
+
+```bynk,fragment
+fn explain(e: DecodeError) -> String {
+	match e.kind {
+		Malformed => "not JSON",
+		RefinementViolation => "invalid value at \(e.path)",
+		_ => "\(e.path): \(e.message)",
+	}
+}
+```
+
+Comparing `e.kind` with a string, `e.kind == "Malformed"`, is a type error with a fix to
+`e.kind == Malformed` (`bynk check --fix`); a string that names no kind gets no fix, and
+the error says so. An HTTP `400` body still writes the kind as text. A single-file
+program cannot reach `bynk.decode`, so it can no longer read `e.kind` at all (it was a `String` there
+before): `e.kind` is available in a project only, as `e.rule` on a `ValidationError` is.
 
 `Json.decode` accepts the tagged form and also the forms other JSON producers
 use for an optional value:

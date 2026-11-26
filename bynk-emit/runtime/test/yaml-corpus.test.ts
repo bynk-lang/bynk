@@ -29,7 +29,7 @@ test("every refused corpus case stays refused, with its kind", () => {
   for (const [id, kind] of Object.entries(manifest.refused)) {
     const r = __bynkYamlParse(read(id, "in.yaml"));
     assert.equal(r.tag, "Err", `${id} is now accepted: move it to \`pass\` after checking it`);
-    assert.equal((r as { error: { kind: string } }).error.kind, kind, id);
+    assert.equal((r as { error: { kind: { tag: string } } }).error.kind.tag, kind, id);
   }
 });
 

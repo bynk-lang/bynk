@@ -48,13 +48,30 @@ export interface WireViolation {
   readonly rule: WireValidationRule;
 }
 
+// #3976: why a decode failed (`bynk.decode`'s `DecodeErrorKind`). A plain tagged object,
+// as the compiler shapes every sum, so a `match` on `e.kind` reads it with no conversion.
+// The HTTP `400` bodies and `rejectionDetail` keep writing the name as text.
+export type DecodeErrorKind =
+  | { readonly tag: "Malformed" }
+  | { readonly tag: "StructuralMismatch" }
+  | { readonly tag: "RefinementViolation" }
+  | { readonly tag: "UnsupportedAnchor" }
+  | { readonly tag: "UnsupportedAlias" }
+  | { readonly tag: "UnsupportedMergeKey" }
+  | { readonly tag: "UnsupportedTag" }
+  | { readonly tag: "MultipleDocuments" }
+  | { readonly tag: "UnsupportedSyntax" }
+  | { readonly tag: "UnsupportedValue" }
+  | { readonly tag: "DuplicateKey" }
+  | { readonly tag: "LimitExceeded" };
+
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information
 // (the discriminating kind and the tracked field path) flattened into a
-// uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse
-// failure, else the BoundaryError kind ("StructuralMismatch",
-// "RefinementViolation").
+// uniform, Bynk-inspectable record. `kind` is `Malformed` for a JSON.parse
+// failure, else the BoundaryError kind (`StructuralMismatch`,
+// `RefinementViolation`), or one of the YAML decoder's refusals.
 export interface DecodeError {
-  readonly kind: string;
+  readonly kind: DecodeErrorKind;
   readonly path: string;
   readonly message: string;
 }

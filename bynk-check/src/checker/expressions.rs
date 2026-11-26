@@ -1646,7 +1646,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                     return None;
                 }
             } else if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
-                ctx.errors.push(CompileError::new(
+                let err = CompileError::new(
                     "bynk.types.type_mismatch",
                     span,
                     format!(
@@ -1655,7 +1655,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                         lt.display(tys),
                         rt.display(tys)
                     ),
-                ));
+                );
+                let err =
+                    super::decode_kind::migrate_string_comparison(err, (lhs, lt), (rhs, rt), ctx);
+                ctx.errors.push(err);
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
@@ -4164,19 +4167,7 @@ pub(crate) fn check_field_access(
     // v0.22b: `DecodeError` is a compiler-known record (ADR 0047) — uniform
     // `String` fields so a decode failure is inspectable in Bynk.
     if recv_ty == tys.intern(Ty::DecodeError) {
-        return match field.name.as_str() {
-            "kind" | "path" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
-            other => {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.unknown_field",
-                    field.span,
-                    format!(
-                        "`DecodeError` has no field `{other}` — its fields are `kind`, `path`, `message`"
-                    ),
-                ));
-                None
-            }
-        };
+        return super::decode_kind::decode_error_field(field, ctx);
     }
     // #2866: `ValidationError` is compiler-known too — a refined type's `.of`
     // failure exposes `field` and `message`. Its runtime `value` is `unknown`
