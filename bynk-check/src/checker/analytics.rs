@@ -286,31 +286,103 @@ pub(crate) fn is_select(cap: &str, method: &str, ctx: &Ctx) -> bool {
             .is_some_and(|unit| unit == crate::firstparty::CLOUDFLARE_UNIT)
 }
 
-/// The names a select tail defines: each `AS <name>` or `AS "<name>"` before its first `FROM`
-/// word that follows a comma-continued list (a tail that starts at `FROM` defines none).
+/// A word of a select tail at nesting depth 0: a bare word (`FROM`, `AS`, a name) or a quoted
+/// identifier (`"n"`, `` `n` ``), whose text is its name.
+struct TailWord {
+    text: String,
+    quoted: bool,
+}
+
+/// The depth-0 words of a select tail: parentheses nest (a `CAST(x AS Float64)` or a subquery is
+/// one expression, whose own words are skipped), and a `'…'` string is skipped whole.
+fn tail_words(tail: &str) -> Vec<TailWord> {
+    let chars: Vec<char> = tail.chars().collect();
+    let mut words = Vec::new();
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '(' => {
+                depth += 1;
+                i += 1;
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                i += 1;
+            }
+            '\'' => {
+                i += 1;
+                while i < chars.len() {
+                    if chars[i] == '\'' {
+                        if chars.get(i + 1) == Some(&'\'') {
+                            i += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    i += 1;
+                }
+                i += 1;
+            }
+            '"' | '`' => {
+                let start = i + 1;
+                i += 1;
+                while i < chars.len() && chars[i] != c {
+                    i += 1;
+                }
+                if depth == 0 {
+                    words.push(TailWord {
+                        text: chars[start..i.min(chars.len())].iter().collect(),
+                        quoted: true,
+                    });
+                }
+                i += 1;
+            }
+            c if c.is_alphanumeric() || c == '_' => {
+                let start = i;
+                while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                    i += 1;
+                }
+                if depth == 0 {
+                    words.push(TailWord {
+                        text: chars[start..i].iter().collect(),
+                        quoted: false,
+                    });
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    words
+}
+
+fn is_keyword(w: &TailWord, keyword: &str) -> bool {
+    !w.quoted && w.text.eq_ignore_ascii_case(keyword)
+}
+
+/// The names a select tail defines: the word after each depth-0 `AS` before the first depth-0
+/// `FROM`, bare or quoted, in any case (a tail that starts at `FROM` defines none).
 fn tail_aliases(tail: &str) -> Vec<String> {
     let mut found = Vec::new();
-    let mut words = tail
-        .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
-        .filter(|w| !w.is_empty());
-    while let Some(word) = words.next() {
-        if word.eq_ignore_ascii_case("from") {
+    let mut after_as = false;
+    for w in tail_words(tail) {
+        if is_keyword(&w, "from") {
             break;
         }
-        if word.eq_ignore_ascii_case("as")
-            && let Some(name) = words.next()
-        {
-            found.push(name.trim_matches('"').to_string());
+        if after_as {
+            found.push(w.text);
+            after_as = false;
+        } else if is_keyword(&w, "as") {
+            after_as = true;
         }
     }
     found
 }
 
-/// Whether the tail has a `FROM` word at all (outside quotes is not decided here; the platform
-/// refuses SQL that does not parse).
+/// Whether the tail has a depth-0 `FROM` word.
 fn has_from(tail: &str) -> bool {
-    tail.split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
-        .any(|w| w.eq_ignore_ascii_case("from"))
+    tail_words(tail).iter().any(|w| is_keyword(w, "from"))
 }
 
 /// `AnalyticsSql.select[T](Instance, tail, params)`: the instance is named first (as for
@@ -452,6 +524,9 @@ pub(crate) fn check_select(
             "bynk.types.select_tail_has_select",
             args[1].span,
             format!("the SQL of `{name}` has no `FROM`"),
+        )
+        .with_note(
+            "end the select list and name the dataset: `\", count() AS n FROM {dataset} WHERE …\"`",
         ));
         return bail(ctx);
     }
@@ -485,6 +560,30 @@ fn column_of(mapping: &AnalyticsMapping, field: &str) -> Option<(String, ColumnK
             .map(|i| (format!("{family}{}", i + 1), columns[i].kind))
     };
     find(&mapping.blobs, "blob").or_else(|| find(&mapping.doubles, "double"))
+}
+
+/// The base type of a number field (through `Option`, refinement and opacity).
+fn number_base(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> Option<BaseType> {
+    match r {
+        TypeRef::Option(inner, _) => number_base(inner, types),
+        TypeRef::Base(b, _) => Some(*b),
+        TypeRef::Named(id) => match &types.get(&id.name)?.body {
+            TypeBody::Refined { base, .. } | TypeBody::Opaque { base, .. } => Some(*base),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn base_name(b: BaseType) -> &'static str {
+    match b {
+        BaseType::Int => "Int",
+        BaseType::Float => "Float",
+        BaseType::Decimal => "Decimal",
+        BaseType::Duration => "Duration",
+        BaseType::Instant => "Instant",
+        _ => "a number",
+    }
 }
 
 /// How a read field's type reads a column: text, or a number (an `Option` of either reads the
@@ -538,12 +637,25 @@ pub(crate) fn resolve_selects(
         else {
             continue;
         };
-        let Ty::Named { name: row_name, .. } = &*tys.get(row) else {
+        let record_decl = match &*tys.get(row) {
+            Ty::Named { name, .. } => types.get(name).map(|d| (name.clone(), &d.body)),
+            _ => None,
+        };
+        let Some((row_name, TypeBody::Record(read))) = record_decl else {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.sql_row_shape",
+                    span,
+                    format!(
+                        "`AnalyticsSql.select` reads each row into a record, but `{}` is not a record declared in this project",
+                        row.display(tys)
+                    ),
+                )
+                .with_note("`T` is a record whose fields are text or numbers"),
+            );
             continue;
         };
-        let Some(TypeBody::Record(read)) = types.get(row_name).map(|d| &d.body) else {
-            continue;
-        };
+        let row_name = &row_name;
         let records = written.get(&cap);
         if records.is_some_and(|r| r.len() > 1) {
             let names: Vec<&String> = records.into_iter().flatten().collect();
@@ -580,6 +692,11 @@ pub(crate) fn resolve_selects(
                 ok = false;
                 continue;
             };
+            // A name the tail defines with `AS` is the tail's: it takes the place of the written
+            // column of that name, so a field can total itself (`sum(seats) AS seats`).
+            if aliases.iter().any(|a| a == field) {
+                continue;
+            }
             if let Some((column, have)) = mapping.as_ref().and_then(|m| column_of(m, field)) {
                 let numeric = matches!(have, ColumnKind::Number | ColumnKind::Decimal);
                 if numeric != (want == ColumnKind::Number) {
@@ -598,8 +715,42 @@ pub(crate) fn resolve_selects(
                     ok = false;
                     continue;
                 }
+                // Both numbers: the read type is the written one, or `Float`, which any number
+                // reads (an `Int` read of a `Float` column, or a `Duration` of an `Instant`, would
+                // fail on the first value that does not fit).
+                let written_ref = records
+                    .and_then(|r| r.iter().next())
+                    .and_then(|rec| match types.get(rec).map(|d| &d.body) {
+                        Some(TypeBody::Record(w)) => w
+                            .fields
+                            .iter()
+                            .find(|x| x.name.name == *field)
+                            .map(|x| &x.type_ref),
+                        _ => None,
+                    });
+                if numeric
+                    && let Some(w) = written_ref.and_then(|r| number_base(r, types))
+                    && let Some(r) = number_base(&f.type_ref, types)
+                    && r != w
+                    && r != BaseType::Float
+                {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.sql_row_shape",
+                            f.type_ref.span(),
+                            format!(
+                                "field `{field}` of `{row_name}` is read as `{}`, but `{cap}` writes it as `{}` (`{column}`)",
+                                base_name(r),
+                                base_name(w),
+                            ),
+                        )
+                        .with_note("read a number column as the type it was written with, or as `Float`"),
+                    );
+                    ok = false;
+                    continue;
+                }
                 columns.push(format!("{column} AS \"{field}\""));
-            } else if !aliases.iter().any(|a| a == field) {
+            } else {
                 errors.push(
                     CompileError::new(
                         "bynk.types.sql_row_shape",

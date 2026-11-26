@@ -2,6 +2,7 @@
 // context shop.cart
 
 import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkPgRow } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -35,6 +36,22 @@ export interface Seats {
 export const Seats = {
 };
 
+export interface ByPlan {
+  readonly plan: string;
+  readonly seats: number;
+}
+
+export const ByPlan = {
+};
+
+export interface Top {
+  readonly top: number;
+  readonly label: string;
+}
+
+export const Top = {
+};
+
 export type Signups = bynk_cloudflare.Analytics;
 
 export const __SignupsToken: symbol = globalThis.Symbol("Signups");
@@ -53,12 +70,78 @@ export const api = {
         } catch (__e) {
           return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
+        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["seats"]);
+        if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
+        else __fix(__j);
         const __r = __deserialise_List_Seats(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Seats[]);
         const __be = __r.error;
         return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       };
       const __r = await deps.AnalyticsSql.query(await deps.Signups.dataset(), "SELECT index1 AS \"plan\", double1 AS \"seats\" FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", []);
+      if (__r.tag === "Err") return Err({ tag: "AnalyticsQuery" as const, error: __r.error });
+      const __d = __decode(__r.value.data);
+      return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "AnalyticsDecode" as const, error: __d.error });
+    })();
+    switch (res.tag) {
+      case "Ok": {
+        const rows = res.value;
+        return HttpResult.Ok((rows).length);
+      }
+      case "Err": {
+        return HttpResult.ServerError("the query failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_GET_plans(deps: { AnalyticsSql: bynk_cloudflare.AnalyticsSql; Signups: Signups }): globalThis.Promise<HttpResult<number>> {
+    const res = await (async () => {
+      const __decode = (__s: string): Result<readonly ByPlan[], DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        }
+        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["seats"]);
+        if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
+        else __fix(__j);
+        const __r = __deserialise_List_ByPlan(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as readonly ByPlan[]);
+        const __be = __r.error;
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      };
+      const __r = await deps.AnalyticsSql.query(await deps.Signups.dataset(), "SELECT index1 AS \"plan\", sum(double1) AS seats FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY plan", []);
+      if (__r.tag === "Err") return Err({ tag: "AnalyticsQuery" as const, error: __r.error });
+      const __d = __decode(__r.value.data);
+      return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "AnalyticsDecode" as const, error: __d.error });
+    })();
+    switch (res.tag) {
+      case "Ok": {
+        const rows = res.value;
+        return HttpResult.Ok((rows).length);
+      }
+      case "Err": {
+        return HttpResult.ServerError("the query failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_GET_top(deps: { AnalyticsSql: bynk_cloudflare.AnalyticsSql; Signups: Signups }): globalThis.Promise<HttpResult<number>> {
+    const res = await (async () => {
+      const __decode = (__s: string): Result<readonly Top[], DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_List_Top(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as readonly Top[]);
+        const __be = __r.error;
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      };
+      const __r = await deps.AnalyticsSql.query(await deps.Signups.dataset(), "SELECT (SELECT max(double1) FROM {dataset}) AS top, CAST(blob1 AS String) AS label FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", []);
       if (__r.tag === "Err") return Err({ tag: "AnalyticsQuery" as const, error: __r.error });
       const __d = __decode(__r.value.data);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "AnalyticsDecode" as const, error: __d.error });
@@ -83,6 +166,9 @@ export const api = {
         } catch (__e) {
           return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
+        const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [], ["n"]);
+        if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
+        else __fix(__j);
         const __r = __deserialise_List_ByCountry(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly ByCountry[]);
         const __be = __r.error;
@@ -133,6 +219,32 @@ export function __deserialise_ByCountry(json: __JsonValue, path: string = "$"): 
   return Ok({ country: __country, n: __n } as ByCountry);
 }
 
+export function __serialise_ByPlan(value: ByPlan): __JsonValue {
+  return {
+    plan: value.plan as __JsonValue,
+    seats: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.seats),
+  };
+}
+
+export function __deserialise_ByPlan(json: __JsonValue, path: string = "$"): Result<ByPlan, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["plan"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.plan`, expected: "string", actual: typeof obj["plan"] });
+  }
+  const __plan = obj["plan"];
+  if (typeof obj["seats"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "number", actual: typeof obj["seats"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["seats"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: String(obj["seats"]) });
+  }
+  const __seats = obj["seats"];
+  return Ok({ plan: __plan, seats: __seats } as ByPlan);
+}
+
 export function __serialise_Seats(value: Seats): __JsonValue {
   return {
     plan: value.plan as __JsonValue,
@@ -159,6 +271,32 @@ export function __deserialise_Seats(json: __JsonValue, path: string = "$"): Resu
   return Ok({ plan: __plan, seats: __seats } as Seats);
 }
 
+export function __serialise_Top(value: Top): __JsonValue {
+  return {
+    top: ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(value.top),
+    label: value.label as __JsonValue,
+  };
+}
+
+export function __deserialise_Top(json: __JsonValue, path: string = "$"): Result<Top, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["top"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.top`, expected: "number", actual: typeof obj["top"] });
+  }
+  if (!globalThis.Number.isFinite(obj["top"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.top`, expected: "finite number", actual: String(obj["top"]) });
+  }
+  const __top = obj["top"];
+  if (typeof obj["label"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.label`, expected: "string", actual: typeof obj["label"] });
+  }
+  const __label = obj["label"];
+  return Ok({ top: __top, label: __label } as Top);
+}
+
 
 export function __serialise_List_Seats(value: readonly Seats[]): __JsonValue {
   return value.map((v) => __serialise_Seats(v));
@@ -175,6 +313,44 @@ export function __deserialise_List_Seats(json: __JsonValue, path: string = "$"):
     if (__r_el.tag === "Err") return __r_el;
     const __el = __r_el.value;
     out.push(__el as Seats);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_ByPlan(value: readonly ByPlan[]): __JsonValue {
+  return value.map((v) => __serialise_ByPlan(v));
+}
+
+export function __deserialise_List_ByPlan(json: __JsonValue, path: string = "$"): Result<readonly ByPlan[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: ByPlan[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_ByPlan(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as ByPlan);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_Top(value: readonly Top[]): __JsonValue {
+  return value.map((v) => __serialise_Top(v));
+}
+
+export function __deserialise_List_Top(json: __JsonValue, path: string = "$"): Result<readonly Top[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Top[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_Top(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Top);
   }
   return Ok(out);
 }

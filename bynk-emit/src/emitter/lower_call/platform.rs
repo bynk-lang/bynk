@@ -494,18 +494,21 @@ pub(in crate::emitter) fn lower_analytics_select_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
-    let Some(Callee::AnalyticsSelect {
-        cap,
-        row,
-        sql: Some(sql),
-        ..
-    }) = cx.commons().callees.get(&e.id).cloned()
+    let Some(Callee::AnalyticsSelect { cap, row, sql, .. }) =
+        cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
     };
+    // The checker writes every accepted select's SQL; one without it was refused, so this is a
+    // missing fact, never a call to a `select` the binding does not have.
+    let Some(sql) = sql else {
+        return Some(cx.missing_fact(e.span, "the SQL of a typed Analytics read"));
+    };
     let params = args.get(2)?;
     let target = cx.ty_render().intern(Ty::List(row));
-    let decoder = json_decoder_fn(target, DecodeSource::Json, cx)
+    // The reply's rows are JSON; the platform quotes a 64-bit integer (`count()`) as text, as
+    // `int8` is quoted for Postgres, so an `Int` field reads either form (`DecodeSource::Pg`).
+    let decoder = json_decoder_fn(target, DecodeSource::Pg, cx)
         .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type"));
     let params = pre.lower_node(params, cx);
     let deps_node = deps_receiver(cx.in_test_case(), cx);

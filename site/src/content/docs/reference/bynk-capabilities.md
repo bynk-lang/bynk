@@ -1187,12 +1187,17 @@ let by_country <- AnalyticsSql.select[ByCountry](Signups,
 - The tail is a literal, as for `query`, and starts at `FROM`, or at a comma that continues the
   select list with what the compiler cannot know, as `count() AS n`.
 - Each field of `T` is a field of the record `Signups` is written with (`Signups.writeValue`
-  anywhere in the context), read from its column, or an alias the tail defines with `AS`. A field
+  anywhere in the context), read from its column, or an alias the tail defines with `AS`. An
+  alias the tail defines takes the place of the written column of that name, so a field can total
+  itself (`, sum(double1) AS seats FROM …`). Aliases are found at the top level of the select
+  list, in any case, bare or quoted; an `AS` inside a cast or a subquery is not one. A field
   that is neither is `bynk.types.sql_row_shape`, naming it; so is a field read as the wrong kind
   (text for a number column, or a number for a blob), and a `T` that is not a record.
-- A text field is a `String` (or a refined or opaque one) and reads a blob or the index, a number
-  field is an `Int`, `Float`, `Duration` or `Instant` and reads a double; an `Option` of either is
-  read too. A `Bool` or an enum is written as text, so it is read as a `String`.
+- A text field is a `String` (or a refined or opaque one) and reads a blob or the index; a number
+  field reads a double as the type it was written with, or as `Float` (a `Float` column read as
+  `Int`, or an `Instant` as a `Duration`, is refused, because the first fractional value would
+  fail); an `Option` of either is read too. An `Int` field also reads a 64-bit integer the platform
+  returns as text, as `count()` may be. A `Bool` or an enum is written as text, so it is read as a `String`.
 - `Signups` written with more than one record type is refused
   (`bynk.types.argument_mismatch`): which columns a typed read means would be a guess.
 - The call gives `Result[List[T], AnalyticsReadError]`: `AnalyticsQuery(error)` is the query's

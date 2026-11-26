@@ -46,9 +46,25 @@ export default {
           }
         }
         {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/plans", path) !== null) {
+            __route = "GET /plans";
+            const result = await surface.http_GET_plans();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"shop.cart\""]), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
           if ((method === "GET" || method === "HEAD") && __matchPath("/seats", path) !== null) {
             __route = "GET /seats";
             const result = await surface.http_GET_seats();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"shop.cart\""]), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/top", path) !== null) {
+            __route = "GET /top";
+            const result = await surface.http_GET_top();
             const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"shop.cart\""]), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
@@ -71,6 +87,11 @@ export default {
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__res, __security_api);
         }
+        if (__matchPath("/plans", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
         if (__matchPath("/seats", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
@@ -79,6 +100,11 @@ export default {
         if (__matchPath("/signup/:plan", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
+        if (__matchPath("/top", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__res, __security_api);
         }
         return new globalThis.Response("Not Found", { status: 404 });

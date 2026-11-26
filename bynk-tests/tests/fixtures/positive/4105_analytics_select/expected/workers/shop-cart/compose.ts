@@ -21,6 +21,12 @@ export function compose(env: Env) {
     async http_GET_seats() {
       return handlers.api.http_GET_seats(deps);
     },
+    async http_GET_plans() {
+      return handlers.api.http_GET_plans(deps);
+    },
+    async http_GET_top() {
+      return handlers.api.http_GET_top(deps);
+    },
     async http_GET_countries() {
       return handlers.api.http_GET_countries(deps);
     },
