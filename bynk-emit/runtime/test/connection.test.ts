@@ -157,7 +157,7 @@ function socket() {
   };
 }
 
-test("webSocketClosing runs the handler with the peer's details, marks the socket, then echoes the code", async () => {
+test("webSocketClosing echoes the code, then runs the handler with the peer's details and marks the socket", async () => {
   const s = socket();
   const seen: unknown[] = [];
   await webSocketClosing(s.ws, { connId: "c" }, { code: 4001, reason: "bye", clean: true }, async (i) => void seen.push(i));
@@ -174,7 +174,7 @@ test("a close code that cannot be sent is acknowledged with a bare close()", asy
   }
 });
 
-test("the handshake completes after a faulting handler, and the fault still propagates", async () => {
+test("the close is sent even when the handler faults, and the fault still propagates", async () => {
   const s = socket();
   await assert.rejects(
     webSocketClosing(s.ws, { connId: "c" }, { code: 1000, reason: "", clean: true }, async () => {
@@ -254,7 +254,7 @@ test("the default clock reads whole seconds, as the HTTP Bearer check does", () 
   }
 });
 
-test("a close-first reply ends the connection with its code before on close runs", async () => {
+test("the close goes out before on close runs, so a release that closes the socket cannot replace its code", async () => {
   const s = socket();
   const order: string[] = [];
   const close = s.ws.close;
@@ -265,10 +265,9 @@ test("a close-first reply ends the connection with its code before on close runs
   await webSocketClosing(
     s.ws,
     { connId: "c" },
-    { code: 1008, reason: "authentication expired", clean: false },
+    { code: 4001, reason: "bye", clean: true },
     async () => void order.push("on close"),
-    "first",
   );
   assert.deepEqual(order, ["close", "on close"]);
-  assert.deepEqual(s.closes, [[1008, "authentication expired"]], "and it is not replied to again afterwards");
+  assert.deepEqual(s.closes, [[4001, "bye"]], "and it is not sent again afterwards");
 });

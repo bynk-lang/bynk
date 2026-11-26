@@ -1165,11 +1165,12 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   token's `exp`, which the attachment keeps, and `webSocketMessage` closes the connection with `1008
   authentication expired`, running `on close` once, when a frame arrives after it (`exp < now`),
   before decoding the frame. The Durable Object's
-  `webSocketClose` runs the service's `on close` with the client's `CloseInfo` and then
-  completes the close handshake, replying with the client's code and reason when that code can
-  be sent (`1000`–`4999` except `1004`, `1005`, `1006`, `1015`) and with a bare `close()`
-  otherwise, even if `on close` faults; `webSocketError` logs the error's class name, closes
-  with `1011` and runs `on close` with `CloseInfo { code: 1011, reason: "error", clean: false }`,
+  `webSocketClose` completes the close handshake first, replying with the client's code and reason when
+  that code can be sent (`1000`–`4999` except `1004`, `1005`, `1006`, `1015`) and with a bare
+  `close()` otherwise, and then runs the service's `on close` with the client's `CloseInfo` (the close
+  goes first because the release `on close` performs closes a held connection with no code);
+  `webSocketError` logs the error's class name, closes with `1011` and runs `on close` with
+  `CloseInfo { code: 1011, reason: "error", clean: false }`,
   once per socket. A held
   `Map[K, Connection]` cannot be JSON-persisted (a live socket), so it lives in an
   in-memory side-table split out of the durable record. `parForEach` over the map
