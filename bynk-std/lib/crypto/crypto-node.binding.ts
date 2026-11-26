@@ -336,7 +336,12 @@ export class CryptoProvider implements Crypto {
     let candidate: Bytes;
     try {
       candidate = await pbkdf2(password, parsed.salt, parsed.iterations, parsed.hash.length);
-    } catch {
+    } catch (e) {
+      // Not a silent lockout: say which hash and why, naming no password and no platform text.
+      const name = (e as { name?: unknown } | null)?.name;
+      globalThis.console?.warn(
+        `bynk.crypto: verifyPassword could not check a stored hash: this platform's Web Crypto refused PBKDF2 at ${parsed.iterations} iterations (${typeof name === "string" ? name : "error"})`,
+      );
       return false;
     }
     return constantTimeEqual(candidate, parsed.hash);

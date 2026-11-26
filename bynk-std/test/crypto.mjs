@@ -533,12 +533,19 @@ export function cryptoSuite(stem, b, platform) {
       }
       return real(algorithm, key, length);
     };
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (line) => warnings.push(String(line));
     try {
       assert.equal(await c.verifyPassword(PW, stored(150000)), false);
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0], /150000 iterations \(NotSupportedError\)/);
+      assert.ok(!warnings[0].includes(PW));
       assert.equal(await c.verifyPassword(PW, stored(4096)), true);
       await assert.rejects(() => c.hashPassword("x"), /not supported/);
     } finally {
       globalThis.crypto.subtle.deriveBits = real;
+      console.warn = realWarn;
     }
   });
 }
