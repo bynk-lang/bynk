@@ -39,7 +39,7 @@ async function test_a_reply_and_two_forwards__with_the_tag_on_the_forwards() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "billing", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "billing", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     void (((__d) => {
       switch (__d.tag) {
         case "Route": {
@@ -70,7 +70,7 @@ async function test_destinations_that_differ_only_in_case_are_forwarded_once() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "duplicates", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "duplicates", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "audit@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:19:12", 907, 941, "expect r is Forward(\"audit@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -86,7 +86,7 @@ async function test_a_route_with_nothing_to_do_is_accepted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "nothing", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "nothing", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:24:12", 1123, 1134, "expect r is Accept", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -102,7 +102,7 @@ async function test_a_plain_forward_is_still_a_forward() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "other", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "other", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:29:12", 1310, 1346, "expect r is Forward(\"billing@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -118,7 +118,7 @@ async function test_a_service_with_a_fallback_still_reads_its_Route__tags_and_al
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "route", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "route", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     void (((__d) => {
       switch (__d.tag) {
         case "Route": {
@@ -148,7 +148,7 @@ async function test_a_fault_in_a_service_with_a_fallback_is_the_fallback_s_forwa
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "boom", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "ops@ops.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:46:12", 2019, 2050, "expect r is Forward(\"ops@ops.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
