@@ -230,6 +230,7 @@ fn the_full_ladder_keeps_the_capability_description_and_appends_the_path() {
             doc_scope: &p.result.doc_scope,
             boundary_info: &p.result.boundary_info,
             context_count: 1,
+            analytics: &p.result.analytics,
         }),
         doc: Some((&text, offset)),
         path: uri.to_file_path().ok().as_deref(),

@@ -3133,7 +3133,7 @@ fn member_candidates_from(
         .as_deref()
         .filter(|b| crate::signature_help::TYPED_READ_BASES.contains(b))
     {
-        for member in ["select", "firstAs"] {
+        for member in ["select", "firstAs", "writeValue"] {
             if let Some(sig) = crate::signature_help::typed_read(base, member)
                 && seen.insert(member.to_string())
             {

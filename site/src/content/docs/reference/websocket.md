@@ -104,6 +104,9 @@ service chat from websocket(in: ClientFrame, out: ServerFrame) {
   and port, compared as written. `https://app.example.com` does not accept `http://app.example.com`,
   `https://app.example.com:8443`, `https://APP.example.com`, `https://app.example.com/` or
   `https://app.example.com.evil.example`. There are no wildcards, and `null` and `*` never match.
+  The list is compared in the serialised form a browser sends, `scheme://host[:port]` in lower case
+  with no path or trailing slash and no default port, so an entry written any other way is refused at
+  compile time as `bynk.http.cors_invalid_origins`; see [Origin form](/reference/http/#origin-form).
 - **A missing `Origin` is `403`.** A browser always sends one on a WebSocket upgrade, so a request
   without it is not a browser page and is refused, however good its cookie. An unlisted `Origin` is `403` too.
 - **`Sec-Fetch-Site` is not an origin check.** It is not consulted: `same-origin` with no `Origin`

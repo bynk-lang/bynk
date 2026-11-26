@@ -49,6 +49,7 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     } = analysis;
@@ -111,6 +112,11 @@ pub fn canonical_report(analysis: &ProjectAnalysis) -> String {
 
     section(&mut out, "unit_sources", sorted_map(unit_sources));
     section(&mut out, "doc_scope", sorted_map(doc_scope));
+    section(
+        &mut out,
+        "analytics",
+        analytics.iter().map(|e| format!("{e:?}")).collect(),
+    );
     section(
         &mut out,
         "contract_diff",

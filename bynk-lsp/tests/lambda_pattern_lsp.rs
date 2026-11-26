@@ -92,6 +92,7 @@ fn hover_at(r: &bynk_ide::ProjectDiagnostics, root: &Path, offset: usize) -> Opt
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((SRC, offset)),
         path: uri.to_file_path().ok().as_deref(),
