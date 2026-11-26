@@ -398,7 +398,7 @@ const failing = (message, retryable) => () => {
 
 t("WorkersAnalyticsSql.query: sends the query and positional params, and reads the documented reply", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
     { tag: "Text", value: "uk" },
   ]);
   assert.deepEqual(b.calls, [
@@ -412,7 +412,7 @@ t("WorkersAnalyticsSql.query: sends the query and positional params, and reads t
 
 t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean parameters", async () => {
   const b = fakeAnalyticsSql();
-  await sqlOf(b).query("SELECT 1", [
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT 1", [
     { tag: "Null" },
     { tag: "Integer", value: 7 },
     { tag: "Real", value: 1.5 },
@@ -424,7 +424,7 @@ t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean paramet
 
 t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and nothing is sent", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /parameter \$2 is a Blob/);
@@ -433,24 +433,24 @@ t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and no
 
 t("WorkersAnalyticsSql.query: an unsafe Integer or non-finite Real is SqlRejected", async () => {
   const b = fakeAnalyticsSql();
-  const big = await sqlOf(b).query("SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
+  const big = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
   assert.equal(big.error.tag, "SqlRejected");
-  const nan = await sqlOf(b).query("SELECT $1", [{ tag: "Real", value: Number.NaN }]);
+  const nan = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Real", value: Number.NaN }]);
   assert.equal(nan.error.tag, "SqlRejected");
   assert.equal(b.calls.length, 0);
 });
 
 t("WorkersAnalyticsSql.query: a retryable failure is SqlRetryable, any other is SqlRejected", async () => {
-  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("SELECT 1", []);
+  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.deepEqual(retry, { tag: "Err", error: { tag: "SqlRetryable", message: "busy" } });
-  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("SELECT", []);
+  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.deepEqual(bad, { tag: "Err", error: { tag: "SqlRejected", message: "syntax error" } });
-  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("SELECT", []);
+  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.equal(bare.error.tag, "SqlRejected");
 });
 
 t("WorkersAnalyticsSql.query: a reply of another shape is SqlRejected", async () => {
-  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("SELECT 1", []);
+  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /not the shape Analytics SQL documents/);
@@ -462,14 +462,14 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
   console.warn = (m) => warned.push(m);
   try {
     const dev = sqlEnv(fakeAnalyticsSql(), { BYNK_DEV: "1" });
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 1, "once");
     assert.match(warned[0], /Analytics SQL has no local implementation/);
     assert.match(warned[0], /analytics-sql = "allow" under \[dev\]/);
     assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
     warned.length = 0;
-    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("SELECT 1", []);
+    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 0, "silenced");
   } finally {
     console.warn = warn;
@@ -477,7 +477,29 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
 });
 
 t("WorkersAnalyticsSql.query: a missing binding names it", async () => {
-  await assert.rejects(new WorkersAnalyticsSql({}).query("SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+  await assert.rejects(new WorkersAnalyticsSql({}).query("events.analyticsEngine.signups", "SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+});
+
+t("WorkersAnalyticsSql.query: {dataset} is the instance's table, once, several times or never", async () => {
+  const b = fakeAnalyticsSql();
+  const table = "events.analyticsEngine.shop_signups_signups_staging";
+  await sqlOf(b).query(table, "SELECT count() FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", []);
+  await sqlOf(b).query(table, "SELECT (SELECT count() FROM {dataset}) AS a, count() AS n FROM {dataset}", []);
+  await sqlOf(b).query(table, "SELECT 1", []);
+  assert.deepEqual(
+    b.calls.map((c) => c.query),
+    [
+      `SELECT count() FROM ${table} WHERE timestamp > NOW() - INTERVAL '1' DAY`,
+      `SELECT (SELECT count() FROM ${table}) AS a, count() AS n FROM ${table}`,
+      "SELECT 1",
+    ],
+  );
+});
+
+t("WorkersAnalyticsSql.query: a parameter that looks like the placeholder is never substituted", async () => {
+  const b = fakeAnalyticsSql();
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1 FROM {dataset}", [{ tag: "Text", value: "{dataset}" }]);
+  assert.deepEqual(b.calls[0], { query: "SELECT $1 FROM events.analyticsEngine.signups", params: ["{dataset}"] });
 });
 
 // P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
@@ -3329,7 +3351,7 @@ t("WorkersAi: an unstubbed integration double faults every operation, never an E
 
 t("WorkersAnalyticsSql: an unstubbed integration double faults the query, never an Err", async () => {
   const sql = new WorkersAnalyticsSql({ CF_ANALYTICS_SQL: __makeIntegrationAnalyticsSql() });
-  await assert.rejects(sql.query("SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
+  await assert.rejects(sql.query("events.analyticsEngine.signups", "SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
 });
 
 t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {

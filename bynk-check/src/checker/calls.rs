@@ -2021,6 +2021,12 @@ pub(crate) fn check_static_call(
             args,
             ctx,
         );
+        // #4104: `AnalyticsSql.query` names its dataset by an `Analytics` instance and takes literal SQL.
+        let analytics_query = d1::is_analytics_sql_query(&type_name.name, &method.name, ctx)
+            && op.params.len() == args.len();
+        if analytics_query {
+            d1::check_analytics_sql_query(args, ctx);
+        }
         if op.params.len() != args.len() {
             ctx.errors.push(CompileError::new(
                 "bynk.capability.op_arity",
@@ -2176,6 +2182,8 @@ pub(crate) fn check_static_call(
             let param_ty = substitute(*param_ty, &subst, tys);
             let arg_ty = match &arg_tys {
                 Some(cached) => cached[i],
+                // #4104: the instance was checked above and is no value to type.
+                None if analytics_query && i == 0 => Some(param_ty),
                 None => type_of(arg, Some(param_ty), ctx),
             };
             if let Some(actual) = arg_ty
