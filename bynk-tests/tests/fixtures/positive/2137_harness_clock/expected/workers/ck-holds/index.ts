@@ -64,7 +64,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_holds_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), request, ["Bynk realm=\"ck.holds\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"ck.holds\""]), __security_api);
           }
         }
         if (__matchPath("/holds/:id", path) !== null) {

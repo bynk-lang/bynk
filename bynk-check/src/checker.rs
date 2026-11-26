@@ -75,6 +75,7 @@ mod list_par_with;
 pub(crate) mod nested_effect;
 pub(crate) mod nested_wrapper;
 mod par;
+mod partial_content;
 mod query_more;
 mod query_par;
 mod refined_range;
@@ -2052,6 +2053,9 @@ pub struct HandlerBodyCheck<'a> {
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
+    /// #4389: the body is an `on http` handler of a method other than `GET`, where
+    /// `PartialContent` and `NotModified` are refused.
+    pub http_non_get: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -2080,6 +2084,7 @@ impl<'a> HandlerBodyCheck<'a> {
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             service_handler: false,
+            http_non_get: false,
         }
     }
 }
@@ -2107,6 +2112,7 @@ pub fn check_handler_body(
         claims_binder,
         claims_sum_arms,
         service_handler: in_service_handler,
+        http_non_get,
     } = check;
     let CheckSinks {
         tys,
@@ -2209,6 +2215,7 @@ pub fn check_handler_body(
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
         in_service_handler,
+        http_non_get,
         in_fn_body: false,
         test_values: false,
     };
@@ -2387,6 +2394,7 @@ pub fn check_body(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        http_non_get: false,
         in_fn_body: false,
         test_values: false,
     };
@@ -2768,6 +2776,7 @@ pub fn check_invariants(
             store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -2928,6 +2937,7 @@ pub(crate) fn check_contracts(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -3173,6 +3183,7 @@ pub fn check_transitions(
             store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -3370,6 +3381,7 @@ pub fn check_migrations(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -3868,6 +3880,8 @@ pub(crate) struct Ctx<'a> {
     /// abandoned effect to the execution context, which only a service
     /// handler's `deps` carry.
     pub in_service_handler: bool,
+    /// #4389: see [`HandlerBodyCheck::http_non_get`].
+    pub http_non_get: bool,
     /// #2719: true while checking the body of a `fn` or a method, lambdas
     /// included. A function takes the execution context as a hidden trailing
     /// parameter when its body (or a function it calls) hands work to it, so
@@ -7119,6 +7133,21 @@ pub fn variants_of(
                                 (
                                     "contentType".to_string(),
                                     tys.intern(Ty::Base(BaseType::String)),
+                                ),
+                            ]
+                        }
+                        // #4389: a test drains the bound body.
+                        HttpVariantPayload::Partial => {
+                            let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+                            vec![
+                                ("body".to_string(), tys.intern(Ty::Stream(bytes))),
+                                (
+                                    "contentType".to_string(),
+                                    tys.intern(Ty::Base(BaseType::String)),
+                                ),
+                                (
+                                    "range".to_string(),
+                                    partial_content::content_range_for_binding(tys),
                                 ),
                             ]
                         }

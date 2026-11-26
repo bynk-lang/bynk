@@ -1909,33 +1909,46 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
 /// embedded source. A system suite sees only the types of the context it
 /// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
 fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    std_decl("Cookie")
+}
+
+/// A record of the `bynk` adapter by name, from its embedded source (parsed once).
+pub(crate) fn std_decl(name: &str) -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
     use bynk_syntax::ast::{CommonsItem, SourceUnit};
-    static COOKIE: std::sync::OnceLock<Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>>> =
-        std::sync::OnceLock::new();
-    COOKIE
+    type Decls = Vec<std::sync::Arc<bynk_syntax::ast::TypeDecl>>;
+    static TYPES: std::sync::OnceLock<Decls> = std::sync::OnceLock::new();
+    TYPES
         .get_or_init(|| {
-            let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
-            let file = crate::project_model::firstparty_file_id(unit);
-            let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
-            let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
-                + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
-            let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
-                &tokens,
-                unit.source,
-                &mut next_id,
-            )
-            .ok()?;
-            let SourceUnit::Adapter(a) = &parsed else {
-                return None;
+            let parsed_types = || -> Option<Decls> {
+                let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+                let file = crate::project_model::firstparty_file_id(unit);
+                let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
+                let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+                    + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+                let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
+                    &tokens,
+                    unit.source,
+                    &mut next_id,
+                )
+                .ok()?;
+                let SourceUnit::Adapter(a) = &parsed else {
+                    return None;
+                };
+                Some(
+                    a.items
+                        .iter()
+                        .filter_map(|i| match i {
+                            CommonsItem::Type(t) => Some(std::sync::Arc::new(t.clone())),
+                            _ => None,
+                        })
+                        .collect(),
+                )
             };
-            a.items.iter().find_map(|i| match i {
-                CommonsItem::Type(t) if t.name.name == "Cookie" => {
-                    Some(std::sync::Arc::new(t.clone()))
-                }
-                _ => None,
-            })
+            parsed_types().unwrap_or_default()
         })
-        .clone()
+        .iter()
+        .find(|t| t.name.name == name)
+        .cloned()
 }
 
 /// #3386: the `SignedCookie` actor `name` declared in this context, if it is one.

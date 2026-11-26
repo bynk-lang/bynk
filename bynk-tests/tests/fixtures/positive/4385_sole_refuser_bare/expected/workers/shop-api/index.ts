@@ -55,7 +55,7 @@ export default {
               return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             }
             const result = await surface.http_POST_session(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Cookie realm=\"shop.api\"", "Bynk-Signature realm=\"shop.api\", header=\"X-Sig\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\"", "Bynk-Signature realm=\"shop.api\", header=\"X-Sig\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -69,7 +69,7 @@ export default {
               return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             }
             const result = await surface.http_POST_token(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"shop.api\"", "Bynk-Signature realm=\"shop.api\", header=\"X-Sig\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bearer realm=\"shop.api\"", "Bynk-Signature realm=\"shop.api\", header=\"X-Sig\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/session", path) !== null) {

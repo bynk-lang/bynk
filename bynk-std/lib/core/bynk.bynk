@@ -15,6 +15,7 @@ adapter bynk {
 		Cookie,
 		SameSite,
 		SseEvent,
+		ContentRange,
 		FetchOptions,
 		ParOptions,
 		Redirect,
@@ -282,6 +283,20 @@ adapter bynk {
 		event: Option[String] = None,
 		id: Option[String] = None,
 		retry: Option[Duration] = None,
+	}
+
+	---
+	The part of a representation a `PartialContent(...)` response carries, as the
+	`Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+	bytes in all (`None` when the total is not known, written `*`). `start` is at
+	least 0 and at most `end`, and `end` is below `total` when there is one: a
+	response whose range breaks this faults, so a malformed `Content-Range` is
+	never sent.
+	---
+	type ContentRange = {
+		start: Int,
+		end: Int,
+		total: Option[Int] = None,
 	}
 
 	---

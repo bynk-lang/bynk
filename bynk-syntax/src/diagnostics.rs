@@ -2905,6 +2905,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ not a field of `security`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
+        code: "bynk.http.status_needs_get",
+        blurb: "`PartialContent` (206) answers a range request and `NotModified` (304) answers a conditional read, and only a `GET` route serves either: a range or a validator is how a client re-reads a representation it already knows, and `HEAD` is answered by the `GET` route. Return them from a `GET` handler; a write that fails a precondition answers `PreconditionFailed` (412) instead.",
+        example: "service api from http {\n    on POST(\"/blob\") (body: String) -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✗ not a `GET` route\n    }\n}\n\nservice api from http {\n    on GET(\"/blob\") () -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.http.stream_body_not_raw",
         blurb: "A `Stream[Bytes]` `body` is a request body handed to the handler chunk by chunk, so the router must be told to leave it as octets: without `@raw` a body is JSON (or base64 inside JSON for `Bytes`), which has no streamed form. Add `@raw(contentType: \"…\")` and a `@limit`, or take the body as a value (`T`, or `Bytes`) to have it read whole.",
         example: "@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✗ not `@raw`\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✓",
@@ -9111,6 +9116,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.security_unknown_field",
         "A `security { }` policy declares a field outside the closed set.",
+    ),
+    d(
+        "bynk.http.status_needs_get",
+        "`PartialContent` or `NotModified` is returned from a route that is not a `GET`.",
     ),
     d(
         "bynk.http.stream_body_not_raw",
