@@ -625,7 +625,8 @@ export const EmailHeader = {
  * the message ids the sender says this message answers, as `messageId` is
  * written (`<id@host>`), `references` in the message's order; `replyTo` and `cc`
  * are bare addresses, display names dropped; and `date` is the sender's own
- * `Date` header, `None` when it is missing or cannot be read. All of these are
+ * `Date` header, `None` when it is missing or cannot be read (a date has whole
+ * seconds, so a `system` case gets its `date` back to the second). All of these are
  * the sender's claims, as `from` is: `date` is not when the message arrived.
  * `text`, `html` and `attachments` come from the parsed MIME body (`None` or
  * empty when the message has no such part); a test builds them directly. `size`

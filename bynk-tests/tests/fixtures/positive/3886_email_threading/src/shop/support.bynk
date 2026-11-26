@@ -2,6 +2,8 @@ context shop.support
 
 consumes bynk.cloudflare {
   InboundEmail,
+  DmarcVerdict,
+  SenderIdentity,
   EmailVerdict,
   EmailHeader,
 }
@@ -19,5 +21,14 @@ service support from email("support@shop.example") {
       None => "undated"
     }
     Reject("\(answers) refs=\(chain) cc=\(mail.cc.length()) reply-to=\(mail.replyTo.length()) received=\(received) \(when)")
+  }
+}
+
+// #3886: the verdict is read from the first occurrence of `authentication-results` across `headers`
+// and then `headerList`, the order a case's message is written in, so a case that sets it in either
+// reads the same at the `unit` and the `system` tier.
+service audit from email("audit@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    if s.identity.dmarc == DmarcPass { Reject("pass") } else { Reject("none") }
   }
 }

@@ -343,10 +343,15 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
  * The same rule as the Worker's, so a case that sets `authentication-results:
  * mx.cloudflare.net; dmarc=pass` reads `DmarcPass` at every tier.
  */
-export function dmarcVerdictOf(headers: ReadonlyMap<string, string>): DmarcVerdict {
+export function dmarcVerdictOf(headers: ReadonlyMap<string, string>, headerList: readonly EmailHeader[] = []): DmarcVerdict {
   // Header names are case-insensitive (RFC 5322), and the Worker's parser lower-cases them, so a case's
   // `Authentication-Results` must read as the Worker reads it. The first spelling of a header wins.
-  return dmarcVerdict([...headers].map(([key, value]) => ({ key: key.toLowerCase(), value })));
+  // #3886: a case writes `headers` and then `headerList` into the raw message, so the first occurrence
+  // across the two is the one the Worker reads, and the unit tier reads it the same way.
+  return dmarcVerdict([
+    ...[...headers].map(([key, value]) => ({ key: key.toLowerCase(), value })),
+    ...headerList.map((h) => ({ key: h.name.toLowerCase(), value: h.value })),
+  ]);
 }
 
 // ------------------------------------------------------------------- parsing

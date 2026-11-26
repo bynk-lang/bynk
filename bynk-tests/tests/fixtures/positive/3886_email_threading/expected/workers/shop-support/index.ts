@@ -47,6 +47,7 @@ export default {
     await __handleEmail(message, () => {
       const surface = compose(env);
       return [
+        { address: "audit@shop.example", handle: (mail, sender) => surface.queue_audit_0(mail, sender) },
         { address: "support@shop.example", handle: (mail, sender) => surface.queue_support_0(mail, sender) },
       ];
     });

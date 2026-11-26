@@ -842,3 +842,11 @@ test("replyMime: a reply to a threaded message carries the chain from `reference
   assert.match(out, /^In-Reply-To: <m@x>$/m);
   assert.match(out, /^References: <a@x> <b@x> <m@x>$/m);
 });
+
+test("dmarcVerdictOf: the first occurrence across headers and then headerList decides, as the Worker reads a case's message", () => {
+  const pass = { name: "Authentication-Results", value: "mx.cloudflare.net; dmarc=pass header.from=x" };
+  assert.deepEqual(dmarcVerdictOf(new Map(), [pass]), { tag: "DmarcPass" });
+  const fail = new Map([["authentication-results", "mx.cloudflare.net; dmarc=fail"]]);
+  assert.deepEqual(dmarcVerdictOf(fail, [pass]), { tag: "DmarcFail" });
+  assert.deepEqual(dmarcVerdictOf(new Map(), []), { tag: "DmarcNone" });
+});

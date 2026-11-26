@@ -1,6 +1,15 @@
 // #3886: a `system` case posts the message as raw MIME to the Worker's real `email()` entry, which
 // parses it with `postal-mime`; the handler reads the new fields back.
 suite shop.support as system {
+  case "the verdict is read from headerList too, as the Worker reads it" {
+    let r <- audit.message(InboundEmail {
+      from: "a@b.example",
+      to: "audit@shop.example",
+      headerList: [EmailHeader { name: "authentication-results", value: "mx.cloudflare.net; dmarc=pass header.from=b.example" }],
+    })
+    expect r is Reject("pass")
+  }
+
   case "threading, recipients, date and repeated headers reach the handler" {
     let mail = InboundEmail {
       from: "a@b.example",
@@ -19,5 +28,18 @@ suite shop.support as system {
   case "a message with none of them has the defaults" {
     let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
     expect r is Reject("none refs=0 cc=0 reply-to=0 received=0 undated")
+  }
+}
+
+suite shop.support {
+  consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailHeader }
+
+  case "the unit tier reads the verdict from headerList as the system tier does" {
+    let r <- audit.message(InboundEmail {
+      from: "a@b.example",
+      to: "audit@shop.example",
+      headerList: [EmailHeader { name: "authentication-results", value: "mx.cloudflare.net; dmarc=pass header.from=b.example" }],
+    })
+    expect r is Reject("pass")
   }
 }

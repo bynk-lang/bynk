@@ -115,7 +115,7 @@ on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Tickets {
 not the arrival time. `headerList` has every header occurrence in order, for the ones that repeat,
 such as `Received`. A `Reply` verdict still extends the incoming chain for you.
 
-
+## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The
 handler states its actor with `by` (`by Sender` is "any mail"), and `Sender` carries the address and whether

@@ -104,7 +104,7 @@ async function test_the_sender_s_dmarc_verdict_reaches_a_DmarcVerdict_parameter(
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "hi", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers, __m.headerList) } }))({ from: "a@b.example", to: "support@shop.example", subject: "hi", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/inbox.bynk:5:12", 273, 284, "expect r is Accept", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

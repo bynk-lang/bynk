@@ -134,7 +134,7 @@ consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
 | `references` | `List[String]` | The `References` message ids, in the message's order. A claim. |
 | `replyTo` | `List[String]` | The `Reply-To` addresses, bare (display names dropped). A claim: where to answer. |
 | `cc` | `List[String]` | The `Cc` addresses, bare. A claim: who else received it, as the sender wrote it. |
-| `date` | `Option[Instant]` | The sender's `Date` header. A claim, not the arrival time; `None` when it is missing or cannot be read. |
+| `date` | `Option[Instant]` | The sender's `Date` header. A claim, not the arrival time; `None` when it is missing or cannot be read. An RFC 5322 date has whole seconds, so a `system` case that sets `date` gets back its whole-second value. |
 | `headers` | `Map[String, String]` | The headers, by lower-case name, the first occurrence of each. |
 | `headerList` | `List[EmailHeader]` | Every header occurrence, in the order they appear, by lower-case name. |
 | `text` | `Option[String]` | The plain-text body, if there is one. |
