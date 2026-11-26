@@ -18,14 +18,14 @@ capability Sessions = Kv
 capability PriceCache = Kv
 
 service remember {
-	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+	on call(k: String, v: String) -> Effect[Option[String]] by Caller given Sessions {
 		let _ <- Sessions.put(k, v)
 		Sessions.get(k)
 	}
 }
 
 service peek {
-	on call(k: String) -> Effect[Option[String]] given PriceCache {
+	on call(k: String) -> Effect[Option[String]] by Caller given PriceCache {
 		PriceCache.get(k)
 	}
 }
@@ -79,5 +79,5 @@ instance to its recorded namespace. Renaming an instance creates a new namespace
 and reports the old one as an orphan: see
 [Several KV namespaces](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#several-kv-namespaces).
 
-**See also:** [Derived capabilities](/book/reference/capabilities/#derived-capabilities),
-[The Cloudflare surface](/book/reference/bynk-capabilities/#the-cloudflare-surface--bynkcloudflare).
+**See also:** [Derived capabilities](/reference/capabilities/#derived-capabilities),
+[The Cloudflare surface](/reference/bynk-capabilities/#the-cloudflare-surface--bynkcloudflare).

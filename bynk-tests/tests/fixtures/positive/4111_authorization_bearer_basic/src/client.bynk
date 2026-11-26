@@ -1,0 +1,37 @@
+context client
+
+consumes bynk { Fetch, Method, Request, Secrets }
+
+// #4111: a credential for `Fetch` is made from a `Secret` and never becomes text in the program:
+// `bearer()` for a token, `basic(user)` for a password. `Fetch` is the one place it is revealed.
+service call {
+	on call(url: String) -> Effect[Int] by Caller given Fetch, Secrets {
+		let token <- Secrets.get("API_TOKEN")
+		let pass <- Secrets.get("API_PASSWORD")
+		match token {
+			None => Effect.pure(0),
+			Some(t) => match pass {
+				None => Effect.pure(0),
+				Some(p) => {
+					let first <- Fetch.send(Request {
+						method: Get,
+						url: url,
+						contentType: None,
+						authorization: Some(t.bearer()),
+						headers: Map.empty(),
+						body: None,
+					})
+					let second <- Fetch.send(Request {
+						method: Get,
+						url: url,
+						contentType: None,
+						authorization: Some(p.basic("alice")),
+						headers: Map.empty(),
+						body: None,
+					})
+					Effect.pure(1)
+				},
+			},
+		}
+	}
+}

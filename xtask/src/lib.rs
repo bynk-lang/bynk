@@ -18,15 +18,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub mod bench;
+pub mod delivery_isolation;
 pub mod editor_contract;
 pub mod fn_length;
 pub mod grammar;
 pub mod greenfield_status;
 pub mod manifest_schema;
+pub mod module_lines;
+pub mod pr_attribution;
 pub mod release_notes;
 pub mod release_pages;
 pub mod site_page;
+pub mod sorted_lists;
 pub mod stamp;
+pub mod stamped;
 pub mod tiers;
 
 /// The bump level an increment declares. The stamp turns this into the next
@@ -122,7 +127,35 @@ pub fn pending_dir() -> PathBuf {
 /// number of pending files validated, or every error found across all files
 /// (each prefixed with its filename) so one run reports the whole picture.
 pub fn check_all() -> Result<usize, Vec<String>> {
-    validated_pending_in(&repo_root()).map(|ps| ps.len())
+    check_all_in(&repo_root())
+}
+
+/// [`check_all`] over `root`. Besides the per-file validation, a pending file whose slug and
+/// content the stamp ledger already holds fails (#4319): `main` has consumed it, so the branch
+/// carries a stale copy that would be stamped a second time.
+pub fn check_all_in(root: &Path) -> Result<usize, Vec<String>> {
+    let pending = validated_pending_in(root)?;
+    let ledger = stamped::read(root).map_err(|e| {
+        vec![format!(
+            "cannot read {}: {e}",
+            root.join(stamped::LEDGER_PATH).display()
+        )]
+    })?;
+    let mut errors = Vec::new();
+    for (file, _) in &pending {
+        let Ok(bytes) = fs::read(root.join("design/pending").join(file)) else {
+            continue;
+        };
+        let slug = file.strip_suffix(".md").unwrap_or(file);
+        if let Some(entry) = stamped::find(&ledger, slug, &stamped::content_hash(&bytes)) {
+            errors.push(stamped::already_stamped_message(file, entry));
+        }
+    }
+    if errors.is_empty() {
+        Ok(pending.len())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Read and validate the pending files under `root/design/pending` (skipping
@@ -192,6 +225,36 @@ pub fn validated_pending_in(root: &Path) -> Result<Vec<(String, Pending)>, Vec<S
     } else {
         Err(errors)
     }
+}
+
+/// Warnings for pending files whose slug the stamp ledger holds with different content (#4319):
+/// a reused slug, or an edited near-copy of a consumed file. They never fail the check.
+pub fn check_warnings_in(root: &Path) -> Vec<String> {
+    let Ok(ledger) = stamped::read(root) else {
+        return Vec::new();
+    };
+    let Ok(names) = fs::read_dir(root.join("design/pending")) else {
+        return Vec::new();
+    };
+    let mut files: Vec<String> = names
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".md") && n != "README.md")
+        .collect();
+    files.sort();
+    let mut warnings = Vec::new();
+    for file in files {
+        let Ok(bytes) = fs::read(root.join("design/pending").join(&file)) else {
+            continue;
+        };
+        let slug = file.strip_suffix(".md").unwrap_or(&file);
+        let hash = stamped::content_hash(&bytes);
+        let same_slug = ledger.iter().rev().find(|e| e.slug == slug);
+        if let Some(entry) = same_slug.filter(|_| stamped::find(&ledger, slug, &hash).is_none()) {
+            warnings.push(stamped::reused_slug_warning(&file, entry));
+        }
+    }
+    warnings
 }
 
 /// Validate a single pending file's `content`. `filename` is used to check the
@@ -521,6 +584,21 @@ pub fn raised_probes_checked(
             .flat_map(|(_, p)| p.raises.into_iter().map(|r| r.probe))
             .collect()
     })
+}
+
+/// The growth probes raised by the pending files of a base revision that `root` no longer has:
+/// the `raises:` the stamp consumed. `base` is each base file's `(file name, text)`; a file
+/// `root` still has is not consumed, and one that does not parse is ignored. This is what a
+/// stamp PR's raise-ledger rows must be backed by (see `greenfield_status::check_growth_against`).
+pub fn consumed_raised_probes(
+    base: &[(String, String)],
+    root: &Path,
+) -> std::collections::BTreeSet<String> {
+    base.iter()
+        .filter(|(name, _)| !root.join("design/pending").join(name).exists())
+        .filter_map(|(name, text)| validate(name, text).ok())
+        .flat_map(|p| p.raises.into_iter().map(|r| r.probe))
+        .collect()
 }
 
 /// The gated probes acknowledged by every pending file under `root` — the union
@@ -1078,7 +1156,7 @@ mod tests {
         // links and anchors resolve independently of the page too.
         for cl in [
             "Close [#548](https://github.com/accuser/bynk/issues/548)",
-            "See [the roadmap](/book/about/versioning-and-roadmap/)",
+            "See [the roadmap](/project/versioning-and-roadmap/)",
             "See [below](#notes)",
         ] {
             let content = format!("---\nlevel: minor\nchangelog: {cl}\n---\n");
@@ -1599,6 +1677,26 @@ mod tests {
         assert_eq!(ids.len(), 2, "expected exactly 2 distinct ids: {ids:?}");
         assert!(ids.contains("R2.3"));
         assert!(ids.contains("R10.11"));
+    }
+
+    #[test]
+    fn consumed_raised_probes_are_the_base_raises_the_tree_lost() {
+        let root = std::env::temp_dir().join("xtask-consumed-raises");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("design/pending")).unwrap();
+        let raising =
+            |probe: &str| format!("---\nlevel: patch\nchangelog: x\nraises: {probe} — why\n---\n");
+        let base = vec![
+            ("gone.md".to_string(), raising("ts_writes")),
+            ("kept.md".to_string(), raising("ts_any")),
+            ("bad.md".to_string(), "no frontmatter\n".to_string()),
+        ];
+        fs::write(root.join("design/pending/kept.md"), raising("ts_any")).unwrap();
+        let consumed = consumed_raised_probes(&base, &root);
+        assert_eq!(
+            consumed,
+            std::collections::BTreeSet::from(["ts_writes".to_string()])
+        );
     }
 
     #[test]

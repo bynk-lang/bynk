@@ -100,11 +100,6 @@ pub(crate) fn build_facts(
         declared,
         &mut ids,
     );
-    for binding in &declared.ratelimits {
-        if let Some(id) = recorded_ratelimit(lock, worker, binding, environment) {
-            ids.insert(binding.clone(), id.to_string());
-        }
-    }
     let mut classes: Vec<String> = declared
         .durable_objects
         .iter()
@@ -228,10 +223,12 @@ mod tests {
                 binding: "D1_ORDERS".into(),
                 name: "shop-orders".into(),
                 migrations: vec!["0001_init.sql".into()],
+                jurisdiction: None,
             }],
             durable_objects: vec![DurableObject {
                 class: "Cart".into(),
                 storage: "sqlite".into(),
+                jurisdiction: None,
             }],
             ..Default::default()
         };
@@ -250,6 +247,37 @@ mod tests {
         assert_eq!(f.migrations["D1_ORDERS"], ["0001_init.sql"]);
         assert_eq!(f.agents, BTreeMap::from([("shop.Cart".to_string(), 3)]));
         assert_eq!(f.classes, ["Cart"]);
+    }
+
+    /// #3970: a declared Hyperdrive binding's recorded config id is in the facts, so
+    /// `bynk revert` can tell when the config has since been replaced.
+    #[test]
+    fn build_facts_records_a_hyperdrive_configs_id() {
+        let mut lock = DeployLock::default();
+        lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-1".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        let f = build_facts(
+            "shop",
+            "default",
+            &Resources::default().hyperdrive(&["HYPERDRIVE_MAIN"]),
+            &ContractsManifest::default(),
+            &lock,
+            &BTreeMap::new(),
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+        );
+        assert_eq!(
+            f.ids.get("HYPERDRIVE_MAIN").map(String::as_str),
+            Some("id-1")
+        );
     }
 
     /// #3686: a group's Worker carries its members' agent versions, which the

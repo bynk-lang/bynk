@@ -33,6 +33,41 @@ package's own `src/surface.ts`, concatenated the same way, so a non-Bynk caller
 runs the boundary code a Bynk caller runs. It is versioned with the wire
 format, not with this runtime; `npm run check` guards both artifacts.
 
+## The test runtime and the client runtime (1B.3a, #4047)
+
+Two more artifact families are generated from sources under `src/`:
+
+- **`src/testing/`** is the runtime a generated test module embeds. Each module is an ordinary
+  module, type-checked with the rest of the runtime by `npm run typecheck` whether or not a fixture
+  uses it, and a module's use of another is an `import`. `bundle.mjs` writes its **splice form**,
+  the module with its relative `import`s dropped and its line-initial `export`s removed (a splice
+  is a script, not a module), to `../src/testgen/test_runtime/<name>.ts`, and the table
+  `../src/testgen/test_runtime_modules.rs` the emitter reads them through. A generated test module
+  still *splices* that text rather than importing it, so each module keeps its own clock, snapshot
+  state and timer queue. `src/testing/harness.ts` declares the names a generated module
+  supplies (`__bynkSnapshotFiles`, `__bynkAssetFiles`); it is a contract for the type-check and is
+  never spliced. A name a fragment must keep exporting when spliced is listed in `SPLICE_EXPORTS`
+  in `bundle.mjs`.
+- **A fragment's runtime names are a table column** (1B.5e, #4054 Decision C). Each row records
+  the names the module imports from the runtime's own modules (`../*.ts`), beside its name, the
+  sibling modules it imports and its splice text. `TestRuntimeModule::splice` carries them as the
+  `raw_using` names of the spliced statement, so a generated test module — whose imports come
+  from its tree since 1B.5e — imports what the spliced text spells. A `testgen` unit test holds
+  each row's column against the runtime exports its artifact spells, so a fragment that starts
+  using `Ok` cannot leave a module under-importing it.
+- **The test doubles are imported, not spliced** (1B.3b, #4047). `src/testing/bindings.ts` holds
+  every `makeIntegration*` factory a multi-Worker test binds as a participant's `env.*`, and
+  `src/testing/pglite.ts` the opt-in PGlite `Postgres` double, which alone imports
+  `@electric-sql/pglite`. They are ordinary per-module runtime modules (emitted as
+  `__bynk_runtime/testing/<name>.ts`, with the `__` aliases), and no production module defines one:
+  `test/testing_boundary.test.ts` fails if one does. `makeTestState` and `InMemoryStorage` stay in
+  `storage.ts`, because the Bundle target's agent storage is built on them.
+- **`src/client/http_client.ts`** is the runtime `bynk client` inlines. `bundle.mjs` writes it, with
+  its `import` dropped, to `../src/emitter/http_client_runtime.ts`.
+
+`npm run check` fails if an artifact is stale or has no source module. **Edit `src/testing/` and
+`src/client/`, never the artifacts.**
+
 ## Per-module form (ADR 0615)
 
 `bundle.mjs` also writes each module to `../src/emitter/runtime/<module>.ts`

@@ -37,10 +37,8 @@ fn fixture() -> PathBuf {
 /// Run `bynk test <fixture> --seed <seed>` and return combined stdout+stderr.
 fn run_with_seed(seed: &str, out_dir: &str) -> String {
     // Emit under the target tmpdir so no build artifacts land in the source tree.
-    // Each run gets its own parent dir: the runner derives the executed
-    // `out-js` tree as a *sibling* of `--output`, so a shared parent (e.g. two
-    // behavioural tests both rooted directly under `CARGO_TARGET_TMPDIR`)
-    // would race the emitted `.js` a concurrent test's `tsc`/`node` run reads.
+    // Each run gets its own output dir: the runner writes the executed `out-js` tree
+    // inside `--output` (#4159), so concurrent runs cannot race each other's `.js`.
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)
         .join("out");
@@ -188,8 +186,9 @@ fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
         failed["message"]
             .as_str()
             .unwrap()
-            .contains("property failed after 74 cases (seed 0x5f3a)"),
-        "the message text is unchanged: {failed}"
+            // #4199: a widened draw changes which case first hits the counterexample.
+            .contains("property failed after 38 cases (seed 0x5f3a)"),
+        "the message text is the pinned one: {failed}"
     );
     let passed = case_named(&whole, "stays at least zero");
     assert_eq!(passed["outcome"], "pass");
@@ -325,5 +324,333 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
     assert_eq!(
         expect["location"]["line"], 10,
         "the failing expect's line: {expect}"
+    );
+}
+
+/// #4198: a shrunk counterexample over `Decimal` or `Bytes` prints in Bynk's own
+/// form, not `[object Object]` (a `bigint` makes `JSON.stringify` throw) or an
+/// index map.
+#[test]
+fn a_decimal_or_bytes_counterexample_prints_in_bynk_form() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-show")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_show"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert_eq!(
+        case_named(&doc, "a decimal differs from itself")["counterexample"],
+        "x = 0d"
+    );
+    assert_eq!(
+        case_named(&doc, "bytes differ from themselves")["counterexample"],
+        "b = Bytes.fromHex(\"\")"
+    );
+    // #4229: a `Duration` and an `Instant` print in Bynk's form, not as bare milliseconds.
+    assert_eq!(
+        case_named(&doc, "durations differ from themselves")["counterexample"],
+        "d = 0.seconds"
+    );
+    assert_eq!(
+        case_named(&doc, "instants differ from themselves")["counterexample"],
+        "t = Instant.fromEpochMillis(0)"
+    );
+}
+
+/// #4199: `for all` draws each plain type across its realistic domain, so a claim that held only
+/// in the old narrow domain (an `Int` within 1000, a string of at most eight lowercase
+/// characters, a float below 1001, a duration under a day) is found false and shrunk to a small
+/// counterexample; a refined `Int` still stays inside its range.
+#[test]
+fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-domain")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_domain"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    let shown = |name: &str| {
+        let c = case_named(&doc, name);
+        assert_eq!(c["outcome"], "fail", "{name}: {c}");
+        c["counterexample"].as_str().unwrap().to_string()
+    };
+    // An `Int` beyond 1000 shrinks to the smallest value that breaks the claim.
+    assert_eq!(shown("ints stay below 1001"), "n = 1001");
+    // A string draws whitespace, punctuation, accented, CJK or astral characters beside a-z.
+    let s = shown("strings stay within eight characters");
+    assert!(
+        s.chars()
+            .any(|c| !c.is_ascii_lowercase() && c != '"' && c != ' ' && c != '=' && c != 's'),
+        "a string outside lowercase a-z: {s}"
+    );
+    // A float beyond 1000 shrinks to an ordinary size.
+    let x: f64 = shown("floats stay below 1001")
+        .trim_start_matches("x = ")
+        .parse()
+        .expect("a float");
+    assert!((1001.0..1_000_000.0).contains(&x), "{x}");
+    // A duration beyond a day.
+    assert_eq!(shown("durations stay under a day"), "d = 1.day");
+    // These claims fail only inside a band no boundary value reaches, so they are found false
+    // through the random draw alone. The first number in a counterexample is the value.
+    // The counterexample prints in Bynk form: a decimal literal, `<n>.<unit>` for a duration, or
+    // `Instant.fromEpochMillis(n)`; read each back as a number (milliseconds for the times).
+    let number = |name: &str| -> f64 {
+        let text = shown(name);
+        let start = text.find(|c: char| c.is_ascii_digit()).expect("a number");
+        let digits: String = text[start..]
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        let digits = digits.trim_end_matches('.');
+        let n: f64 = digits.parse().expect("a number");
+        let unit = &text[start + digits.len()..];
+        let unit = unit.trim_start_matches('.');
+        let per = [
+            ("milliseconds", 1.0),
+            ("millisecond", 1.0),
+            ("seconds", 1_000.0),
+            ("second", 1_000.0),
+            ("minutes", 60_000.0),
+            ("minute", 60_000.0),
+            ("hours", 3_600_000.0),
+            ("hour", 3_600_000.0),
+            ("days", 86_400_000.0),
+            ("day", 86_400_000.0),
+        ];
+        match per.iter().find(|(u, _)| unit.starts_with(u)) {
+            Some((_, ms)) if name.contains("duration") => n * ms,
+            _ => n,
+        }
+    };
+    let d = number("decimals stay out of the thousands");
+    assert!((1000.0..100_000_000.0).contains(&d), "{d}");
+    let hex = shown("byte strings stay short");
+    assert!(
+        hex.matches("00").count() + hex.matches("ff").count() >= 5 || hex.len() > 24,
+        "{hex}"
+    );
+    let d = number("durations avoid two days to a year");
+    assert!((172_800_000.0..31_536_000_000.0).contains(&d), "{d}");
+    let t = number("instants avoid a band of epoch milliseconds");
+    assert!((200_000_000.0..30_000_000_000.0).contains(&t), "{t}");
+    assert!(number("floats stay below a trillion") >= 1e12);
+    // A refinement narrows the draw: the claim over `Percent` holds.
+    for name in [
+        "a refined int stays inside its range",
+        "a length-bounded string stays within its limit",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+}
+
+/// #4121: `for all` over a `Matches` type draws members of the pattern (a record's patterned
+/// field and a length-bounded pattern too) and real `IsoDate` dates, and a failing claim shrinks
+/// to the shortest member.
+#[test]
+fn for_all_draws_members_of_a_matches_pattern_and_shrinks_to_the_shortest() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-matches")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_matches"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a sku has the shape its pattern gives",
+        "a slug obeys its pattern and its length bound",
+        "a date is ten characters",
+        "a record's patterned fields are drawn too",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let c = case_named(&doc, "a code is shorter than five characters");
+    assert_eq!(c["outcome"], "fail");
+    assert_eq!(c["counterexample"], "c = \"aaaaa\"");
+}
+
+/// #4120: `for all` and `Val` work over `List`, `Set`, `Map` and `Option` and over records holding
+/// them; a failing claim shrinks to its smallest counterexample, printed as it is written.
+#[test]
+fn for_all_draws_collections_and_options_and_shrinks_them() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-collections")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_collections"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a list is at most eight long",
+        "a record's collections are drawn",
+        "sets and maps are drawn",
+        "Val of a collection or an option is the empty one",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let shown = |name: &str| {
+        let c = case_named(&doc, name);
+        assert_eq!(c["outcome"], "fail", "{name}: {c}");
+        c["counterexample"].as_str().unwrap().to_string()
+    };
+    // A list shrinks to the fewest elements that break the claim, each shrunk to `0`.
+    assert_eq!(shown("a list is shorter than three"), "xs = [0,0,0]");
+    // An option shrinks to a `Some` of the smallest payload (`None` satisfies the claim).
+    assert_eq!(shown("an option is none"), "o = Some(0)");
+}
+
+/// #4120: a type that recurses through a collection or an option (a tree, a linked node, a JSON-like
+/// sum) is generated, terminates, and its emitted generator stays small: an element is drawn a few
+/// levels deep and the empty collection ends the recursion.
+#[test]
+fn a_type_recursing_through_a_collection_is_generated_and_its_generator_stays_small() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-recursive-collections")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_recursive_collections"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a tree is drawn",
+        "a linked node is drawn",
+        "a json-like sum recursing through a list and a map is drawn",
+        "Val of a recursive type ends at the empty collection",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let module =
+        std::fs::read_to_string(out_root.join("tests/demo_m.test.ts")).expect("the module");
+    assert!(
+        module.len() < 100_000,
+        "the test module is {} bytes: a generator inlined at every level of a recursive type",
+        module.len()
     );
 }

@@ -220,10 +220,10 @@ vectorize = "allow"
 The first call prints a one-time warning that links to Cloudflare's pricing page,
 and goes ahead; `vectorize = "allow"` silences it. A capability with no entry is
 unbound, and a call to it fails, naming the entry to add. See
-[Binding a Vectorize index under `bynk dev`](/docs/manifest/#binding-a-vectorize-index-under-bynk-dev).
+[Binding a Vectorize index under `bynk dev`](/reference/tooling/manifest/#binding-a-vectorize-index-under-bynk-dev).
 
 ## See also
 
-- [`Vectorize` in the Cloudflare capabilities reference](/book/reference/bynk-capabilities/#vector-indexes-vectorize)
+- [`Vectorize` in the Cloudflare capabilities reference](/reference/bynk-capabilities/#vector-indexes-vectorize)
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes)

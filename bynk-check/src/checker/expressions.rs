@@ -6,6 +6,27 @@
 use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
+/// #3918: whether `ty` is a `Stream[SseEvent]`, the `bynk` record a `Streaming` body may carry
+/// beside `Stream[String]`. The element is found by name and by its first-party declaration, so a
+/// user type of the same name is not mistaken for it.
+fn is_sse_event_stream(ty: TyId, ctx: &Ctx) -> bool {
+    let Ty::Stream(elem) = &*ctx.tys.get(ty) else {
+        return false;
+    };
+    let Ty::Named { name, .. } = &*ctx.tys.get(*elem) else {
+        return false;
+    };
+    name == "SseEvent"
+        && ctx.input.types.get("SseEvent").is_some_and(|d| {
+            crate::context_checks::is_std_bynk_type("SseEvent", &ctx.input.types, d)
+        })
+}
+
+/// #3918: whether a `Streaming` body is a `Stream[String]` or a `Stream[SseEvent]`.
+fn is_streaming_body(arg_ty: TyId, string_stream: TyId, tys: &Types, ctx: &Ctx) -> bool {
+    compatible(arg_ty, string_stream, tys) || is_sse_event_stream(arg_ty, ctx)
+}
+
 /// v0.26 (ADR 0054): the deletion span for `given` entry `i`, list-aware so
 /// the result never double-commas, leading-commas, or leaves `given ,`:
 /// an entry with a successor deletes through the successor's start
@@ -372,17 +393,36 @@ pub(crate) fn check_ident(
         );
         return None;
     }
-    ctx.errors.push(
-        CompileError::new(
-            "bynk.resolve.unknown_name",
-            id.span,
-            format!("unknown name `{}`", id.name),
-        )
-        .with_note(
-            "only parameters, `let` bindings, and functions declared \
-             in this commons are in scope",
-        ),
+    let mut err = CompileError::new(
+        "bynk.resolve.unknown_name",
+        id.span,
+        format!("unknown name `{}`", id.name),
+    )
+    .with_note(
+        "only parameters, `let` bindings, and functions declared \
+         in this commons are in scope",
     );
+    // #4306: a capability is called from a body that is given it. A pure position (a
+    // transition, a `migrate` step, an invariant, a contract) has none in scope, whether the
+    // capability is declared here or consumed from another unit.
+    if ctx
+        .input
+        .commons
+        .items
+        .iter()
+        .any(|i| matches!(i, CommonsItem::Capability(c) if c.name.name == id.name))
+        || ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .contains_key(&id.name)
+    {
+        err = err.with_note(format!(
+            "`{}` is a capability: only a handler or function body that is `given` it can call it, and this position is pure",
+            id.name
+        ));
+    }
+    ctx.errors.push(err);
     None
 }
 
@@ -546,11 +586,36 @@ pub(crate) fn check_val(
                     CompileError::new(
                         "bynk.val.needs_pin",
                         span,
-                        format!(
-                            "bare `Val[{name}]` cannot generate a value — it (transitively) needs a `Matches` refinement or is recursively unbounded"
-                        ),
+                        match mock_pin_reason(ty, &ctx.input.types, MOCK_DEPTH, tys) {
+                            Some(why) => format!("bare `Val[{name}]` cannot generate a value: {why}"),
+                            None => format!(
+                                "bare `Val[{name}]` cannot generate a value: it is recursively unbounded"
+                            ),
+                        },
                     )
                     .with_note("provide an explicit value in the test instead"),
+                );
+            }
+        }
+        // #4120: bare `Val` of a collection or an option is the empty one.
+        Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => {
+            if !is_value_type(ty, tys) {
+                ctx.errors.push(CompileError::new(
+                    "bynk.val.unsupported_kind",
+                    span,
+                    format!("`Val` is not a value type: `{}`", ty.display(tys)),
+                ));
+            } else if !args.is_empty() {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.val.pin_unsupported",
+                        span,
+                        format!(
+                            "pinned `Val[{}](...)` is not supported for a collection or an option — use bare `Val`",
+                            ty.display(tys)
+                        ),
+                    )
+                    .with_note("a bare `Val` of one is the empty collection, or `None`"),
                 );
             }
         }
@@ -624,6 +689,80 @@ fn can_mock_bare(
                 }),
             }
         }
+        // #4120: `Val`'s fixed choice for a collection or an option is the empty one (`[]`, an empty
+        // set or map, `None`), which needs nothing of the elements.
+        Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => true,
+        _ => false,
+    }
+}
+
+/// #4120: why a bare `Val` cannot be built for `ty`, as the path to the part that cannot
+/// (`Order.code: Code: needs a pin`), or `None` when the cause is recursion or unknown.
+fn mock_pin_reason(
+    ty: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    depth: u32,
+    tys: &Types,
+) -> Option<String> {
+    if depth == 0 {
+        return None;
+    }
+    let component = |t: &TypeRef| {
+        resolve_type_ref(t, types, tys).and_then(|t| mock_pin_reason(t, types, depth - 1, tys))
+    };
+    let Ty::Named { name, .. } = &*tys.get(ty) else {
+        // A base type and a collection or option always have a value; anything else has none.
+        return match &*tys.get(ty) {
+            Ty::Base(_) | Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => None,
+            _ => Some(format!("`{}` cannot be fabricated", ty.display(tys))),
+        };
+    };
+    match &types.get(name.as_str())?.body {
+        TypeBody::Refined { refinement, .. } => refinement
+            .as_ref()
+            .is_some_and(refinement_needs_pin_without_example)
+            .then(|| format!("`{name}` has a `Matches`, `IsoDate` or `Cron` refinement")),
+        TypeBody::Opaque { .. } => None,
+        TypeBody::Sum(s) => s
+            .variants
+            .first()
+            .and_then(|v| v.payload.iter().find_map(|f| component(&f.type_ref))),
+        TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+            if f.refinement
+                .as_ref()
+                .is_some_and(refinement_needs_pin_without_example)
+            {
+                return Some(format!(
+                    "`{name}.{}` has a `Matches`, `IsoDate` or `Cron` refinement",
+                    f.name.name
+                ));
+            }
+            // #2686: a named type's `@example` is checked against that type alone, so a field that
+            // narrows it with inline predicates needs a pin.
+            if f.refinement.is_some()
+                && let TypeRef::Named(id) = &f.type_ref
+                && types
+                    .get(&id.name)
+                    .and_then(|d| type_decl_refinement(d))
+                    .is_some_and(refinement_needs_pin)
+            {
+                return Some(format!(
+                    "`{name}.{}` narrows `{}`, whose `@example` was checked against `{}` alone",
+                    f.name.name, id.name, id.name
+                ));
+            }
+            component(&f.type_ref).map(|why| format!("`{name}.{}`: {why}", f.name.name))
+        }),
+    }
+}
+
+/// #4120: whether `Val` can name `ty`: a base type, a declared type, or a collection or option
+/// of one. Anything else is not a value type (`Val[Result[Int, String]]`).
+fn is_value_type(ty: TyId, tys: &Types) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(_) | Ty::Named { .. } => true,
+        Ty::List(t) | Ty::Set(t) | Ty::Option(t) => is_value_type(*t, tys),
+        Ty::Map(k, v) => is_value_type(*k, tys) && is_value_type(*v, tys),
         _ => false,
     }
 }
@@ -719,6 +858,7 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
         return None;
     }
     let op_info = resolve_observation_seam(&o.cap, &o.op, ctx);
+    let op_info = op_info.map(|info| observation_type_args(info, o, ctx));
     match &o.matcher {
         ObservationMatcher::Called { count, with_pred } => {
             // The parser accepts only `once` or a bare integer-literal token as a
@@ -776,6 +916,76 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
     Some(tys.intern(Ty::Base(BaseType::Bool)))
 }
 
+/// #3945: the operation an observation reads, with the observation's explicit type arguments
+/// substituted for its type parameters (`Idempotency.dedup[Outcome]`), so a `with` predicate
+/// types its parameters at `Outcome`. A generic operation observed without any keeps its
+/// parameter types as declared, and counts every call. The wrong number of them, or any on an
+/// operation that is not generic, is `bynk.generics.type_arg_mismatch`.
+fn observation_type_args(
+    mut info: CapabilityOpInfo,
+    o: &ObservationExpr,
+    ctx: &mut Ctx,
+) -> CapabilityOpInfo {
+    let tys = ctx.tys;
+    // #4116: the key a first-party `Idempotency` provider receives is the call site's encoded
+    // `String`, so `with key == "…"` reads it as one whatever `K` the call has.
+    if super::calls::local_first_party(&o.cap.name, ctx)
+        == Some(crate::firstparty::FirstPartyCap::Idempotency)
+        && let Some(first) = info.params.first().copied()
+        && let Ty::Var(name) = &*first.get(tys)
+    {
+        let text = HashMap::from([(name.clone(), tys.intern(Ty::Base(BaseType::String)))]);
+        info.params = info
+            .params
+            .iter()
+            .map(|p| crate::checker::substitute(*p, &text, tys))
+            .collect();
+    }
+    if o.type_args.is_empty() {
+        return info;
+    }
+    if o.type_args.len() > info.type_params.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            o.op.span,
+            format!(
+                "`{}.{}` takes {} type argument(s), but the observation gives {}",
+                o.cap.name,
+                o.op.name,
+                info.type_params.len(),
+                o.type_args.len()
+            ),
+        ));
+        return info;
+    }
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    for (name, t) in info.type_params.iter().zip(&o.type_args) {
+        match resolve_type_ref(t, &ctx.input.types, tys) {
+            Some(ty) => {
+                subst.insert(name.clone(), ty);
+            }
+            None => {
+                ctx.errors.push(CompileError::new(
+                    "bynk.resolve.unknown_type",
+                    t.span(),
+                    format!(
+                        "unknown type `{}` in the type arguments of an observation",
+                        crate::context_checks::ts_type_ref_display(t)
+                    ),
+                ));
+                return info;
+            }
+        }
+    }
+    let mut out = info;
+    out.params = out
+        .params
+        .iter()
+        .map(|p| crate::checker::substitute(*p, &subst, tys))
+        .collect();
+    out
+}
+
 /// `bynk.observe.impure_with` at `span`.
 fn impure_with_error(span: Span) -> CompileError {
     CompileError::new(
@@ -807,7 +1017,9 @@ fn impure_with_error(span: Span) -> CompileError {
 /// `bynk.test.faults_needs_in_process` and it is not validated here — the
 /// route-shape diagnostics would only bury that one.
 pub(crate) fn check_faults(faults: &FaultsExpr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
-    let FaultsExpr { call, principal } = faults;
+    let FaultsExpr {
+        call, principal, ..
+    } = faults;
     let tys = ctx.tys;
     let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
     if !ctx.in_test_body {
@@ -1059,6 +1271,42 @@ fn push_no_numeric_coercion(op: BinOp, span: Span, lt: TyId, rt: TyId, ctx: &mut
     );
 }
 
+/// The operand types of a binary operator (#1659, #3987): for a comparison, the
+/// operand that cannot type itself is checked against the other's type.
+fn type_binop_operands(
+    op: BinOp,
+    lhs: &Expr,
+    rhs: &Expr,
+    ctx: &mut Ctx,
+) -> (Option<TyId>, Option<TyId>) {
+    let eq = matches!(
+        op,
+        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
+    );
+    // #3987: a bare variant name several sums share also takes the other
+    // operand's type (`e == Failed("down")`, `o == Some(Failed("x"))`,
+    // `p > Medium`); two such operands decide nothing and stay ambiguous.
+    let (lhs_needs, rhs_needs) = if eq {
+        (
+            needs_expected_type_in(lhs, ctx),
+            needs_expected_type_in(rhs, ctx),
+        )
+    } else {
+        (false, false)
+    };
+    if lhs_needs && !rhs_needs {
+        let rt = type_of(rhs, None, ctx);
+        let lt = type_of(lhs, rt, ctx);
+        (lt, rt)
+    } else if rhs_needs {
+        let lt = type_of(lhs, None, ctx);
+        let rt = type_of(rhs, lt, ctx);
+        (lt, rt)
+    } else {
+        (type_of(lhs, None, ctx), type_of(rhs, None, ctx))
+    }
+}
+
 pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     // For `&&` (and v0.80 `implies`), if the lhs is or contains an `is` test,
@@ -1118,21 +1366,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
     // (`q == 0` against `Int where Positive` would become a
     // `literal_violates` error), a new rejection this does not intend (review
     // of #1696).
-    let eq = matches!(
-        op,
-        BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::LtEq | BinOp::Gt | BinOp::GtEq
-    );
-    let (lt, rt) = if eq && needs_expected_type(lhs) && !needs_expected_type(rhs) {
-        let rt = type_of(rhs, None, ctx);
-        let lt = type_of(lhs, rt, ctx);
-        (lt, rt)
-    } else if eq && needs_expected_type(rhs) {
-        let lt = type_of(lhs, None, ctx);
-        let rt = type_of(rhs, lt, ctx);
-        (lt, rt)
-    } else {
-        (type_of(lhs, None, ctx), type_of(rhs, None, ctx))
-    };
+    let (lt, rt) = type_binop_operands(op, lhs, rhs, ctx);
     let (lt, rt) = (lt?, rt?);
     let span = lhs.span.merge(rhs.span);
     let lt_base = lt.base(tys);
@@ -1367,6 +1601,14 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                             op.name()
                         ),
                     ),
+                    super::equality::NotComparable::Secret => (
+                        "bynk.types.secret_not_comparable",
+                        format!(
+                            "operator `{}` cannot compare `{shown}` — a `Secret` is compared with `matches`, never `{}`, and an `Authorization` is not compared at all: comparing text is variable-time",
+                            op.name(),
+                            op.name()
+                        ),
+                    ),
                     super::equality::NotComparable::Computation(part) => (
                         "bynk.types.not_comparable",
                         if top {
@@ -1404,7 +1646,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                     return None;
                 }
             } else if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
-                ctx.errors.push(CompileError::new(
+                let err = CompileError::new(
                     "bynk.types.type_mismatch",
                     span,
                     format!(
@@ -1413,7 +1655,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                         lt.display(tys),
                         rt.display(tys)
                     ),
-                ));
+                );
+                let err =
+                    super::decode_kind::migrate_string_comparison(err, (lhs, lt), (rhs, rt), ctx);
+                ctx.errors.push(err);
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
@@ -1652,6 +1897,7 @@ pub(crate) fn check_lambda(
     let saved_return_ty_span = ctx.return_ty_span;
     let saved_agent_state_ty = ctx.agent_state_ty.take();
     let saved_commit_seen = ctx.commit_seen;
+    ctx.lambda_depth += 1;
     ctx.effectful = body_effectful;
     ctx.return_ty = match &expected_fn {
         Some((_, er)) if ret_constrained => *er,
@@ -1674,6 +1920,7 @@ pub(crate) fn check_lambda(
     ctx.return_ty_span = saved_return_ty_span;
     ctx.agent_state_ty = saved_agent_state_ty;
     ctx.commit_seen = saved_commit_seen;
+    ctx.lambda_depth -= 1;
     ctx.pop_scope();
 
     match expected_fn {
@@ -1793,11 +2040,16 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                 method.name.as_str(),
                 FOLD_EFF
                     | FOR_EACH
+                    | PAR_FOR_EACH
                     | PAR_TRAVERSE
                     | TRAVERSE_ALL
                     | PAR_TRAVERSE_ALL
                     | TRAVERSE_TRY
                     | PAR_TRAVERSE_TRY
+                    | "parForEachWith"
+                    | "parTraverseWith"
+                    | "parTraverseAllWith"
+                    | "parTraverseTryWith"
             ) {
                 return true;
             }
@@ -1928,7 +2180,7 @@ pub(crate) fn left_out_variant_owner<'a>(
         return None;
     };
     types.get(want).filter(|t| {
-        unselected.contains(want)
+        (unselected.contains(want) || crate::resolver::is_prelude_type(t))
             && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
     })
 }
@@ -1984,7 +2236,9 @@ pub(crate) fn nullary_variant_ty(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    if reject_rebrand_construction(&owner.name.name, span, ctx) {
+    if reject_rebrand_construction(&owner.name.name, span, ctx)
+        || super::call_outcome::reject_outcome_construction(&owner.name.name, span, ctx)
+    {
         return None;
     }
     if owner.type_params.is_empty() {
@@ -2024,7 +2278,9 @@ pub(crate) fn check_variant_construction(
     let TypeBody::Sum(s) = &owner.body else {
         return None;
     };
-    if reject_rebrand_construction(&owner.name.name, span, ctx) {
+    if reject_rebrand_construction(&owner.name.name, span, ctx)
+        || super::call_outcome::reject_outcome_construction(&owner.name.name, span, ctx)
+    {
         return None;
     }
     let variant = s.variants.iter().find(|v| v.name.name == variant_name)?;
@@ -2149,6 +2405,10 @@ pub(crate) fn check_variant_construction(
             }
         }
         if !ok {
+            return None;
+        }
+        // #3958: an inferred instantiation holds the type's declared bounds.
+        if !super::applied_bounds::check_applied_ty_bounds(owner, &inferred, span, ctx) {
             return None;
         }
         return Some(named_ty_with_args(owner, inferred, tys));
@@ -2317,6 +2577,37 @@ fn keeps_flexible_context(e: &Expr) -> bool {
     }
 }
 
+/// #3987: [`needs_expected_type`], also true for a bare variant name that
+/// several sums in scope declare (`Failed`, `Failed("down")`), alone or inside
+/// a `Some(…)`, a parenthesis or the first element of a list literal: only the
+/// other operand's type can pick its owner.
+fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
+    let shared = |name: &str| {
+        let owners = crate::resolver::bare_variant_owners(
+            name,
+            &ctx.input.types,
+            &ctx.input.unselected_types,
+        );
+        // #3955, #4231: a prelude sum shares its variants' names with a sum of the
+        // author's own, and only the context says which is meant.
+        let beside_prelude = ctx.input.types.values().any(|o| {
+            crate::resolver::is_prelude_type(o)
+                && matches!(&o.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
+                && owners.iter().any(|t| !crate::resolver::is_prelude_type(t))
+        });
+        owners.len() > 1 || beside_prelude
+    };
+    match &e.kind {
+        ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
+        ExprKind::Call { name, .. } => shared(&name.name) || needs_expected_type(e),
+        ExprKind::Some(inner) | ExprKind::Paren(inner) => needs_expected_type_in(inner, ctx),
+        ExprKind::ListLit(items, ..) => items
+            .first()
+            .is_none_or(|first| needs_expected_type_in(first, ctx)),
+        _ => needs_expected_type(e),
+    }
+}
+
 /// #1659: an expression whose type comes only from its context: a bare
 /// `None`, an `Ok(…)`/`Err(…)` (the other type parameter is unknown), an
 /// empty list literal, or a `Some(…)`/list whose payload/first element is one
@@ -2382,7 +2673,7 @@ pub(crate) fn check_ok(
             let given = (!flexible || keeps_flexible_context(inner)).then_some(t_ty);
             let inner_ty = type_of(inner, given, ctx)?;
             if flexible {
-                return Some(tys.intern(Ty::HttpResult(inner_ty)));
+                return Some(tys.intern(Ty::HttpResult(inner_ty, None)));
             }
             if !compatible(inner_ty, t_ty, tys) {
                 ctx.errors.push(CompileError::new(
@@ -2396,7 +2687,7 @@ pub(crate) fn check_ok(
                 ));
                 return None;
             }
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         (Some((t_ty, e_ty)), _) => {
             // As in `check_some`: a flexible expected value type is left for
@@ -2496,7 +2787,159 @@ pub(crate) fn check_queue_variant(
             }
             Some(tys.intern(Ty::QueueResult))
         }
+        QueueVariantPayload::MessageDelay => check_retry_after(span, variant, args, ctx),
     }
+}
+
+/// #3881: `RetryAfter(reason, delay)`: a `String` reason and a `Duration` delay. A
+/// delay written as a literal must be within Cloudflare's 1 second to 24 hours
+/// (`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up and
+/// clamped when the entry settles the message.
+fn check_retry_after(
+    span: Span,
+    variant: QueueVariant,
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    if args.len() != 2 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.variant_arity",
+            span,
+            format!(
+                "`QueueResult.{}` expects a `String` reason and a `Duration` delay, but {} were given",
+                variant.name,
+                args.len(),
+            ),
+        ));
+        return None;
+    }
+    let want = [
+        (tys.intern(Ty::Base(BaseType::String)), "`String` reason"),
+        (tys.intern(Ty::Base(BaseType::Duration)), "`Duration` delay"),
+    ];
+    for (arg, (ty, what)) in args.iter().zip(want) {
+        let arg_ty = type_of(arg, Some(ty), ctx)?;
+        if !compatible(arg_ty, ty, tys) {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.argument_mismatch",
+                arg.span,
+                format!(
+                    "`QueueResult.{}` expects a {what}, but got `{}`",
+                    variant.name,
+                    arg_ty.display(tys),
+                ),
+            ));
+            return None;
+        }
+    }
+    if let ExprKind::DurationLit { millis, .. } = &args[1].kind
+        && !(MIN_RETRY_DELAY_MS..=MAX_RETRY_DELAY_MS).contains(millis)
+    {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.queue.retry_delay_out_of_range",
+                args[1].span,
+                if *millis < MIN_RETRY_DELAY_MS {
+                    "this retry delay is under 1 second; write a delay from 1 second to 24 hours"
+                } else {
+                    "this retry delay is over 24 hours; write a delay from 1 second to 24 hours"
+                },
+            )
+            .with_note(
+                "Cloudflare retries a message after a whole number of seconds, at most 24 hours; a delay computed at run time is rounded up and clamped to that range, but a literal outside it is a mistake",
+            ),
+        );
+        return None;
+    }
+    Some(tys.intern(Ty::QueueResult))
+}
+
+/// Cloudflare's range for `msg.retry({ delaySeconds })`: 1 second to 24 hours.
+const MIN_RETRY_DELAY_MS: i64 = 1_000;
+const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
+
+/// `Streaming(s)` (#4394): the stream body of an `HttpResult`. A route that names the element it streams,
+/// `HttpResult[T, E]`, has a body that is exactly a `Stream[E]`; one that names none accepts a
+/// `Stream[String]` or a `Stream[SseEvent]`, as it always did. `(expected_t, expected_e)` are the
+/// surrounding context's `T` and `E`.
+fn check_streaming_variant(
+    span: Span,
+    variant: HttpVariant,
+    args: &[Expr],
+    (expected_t, expected_e): (Option<TyId>, Option<TyId>),
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+
+    let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+                "bynk.types.variant_arity",
+                span,
+                format!(
+                    "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
+                    variant.name,
+                    args.len(),
+                ),
+            ));
+        return None;
+    }
+    if let Some(element) = expected_e {
+        // #4394: the route declares what it streams, `HttpResult[T, E]`: the body is exactly
+        // a `Stream[E]`, and a mismatch is a type error.
+        let want = tys.intern(Ty::Stream(element));
+        let arg_ty = type_of(&args[0], Some(want), ctx)?;
+        if !compatible(arg_ty, want, tys) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `{}` body, because the route declares `HttpResult[_, {}]`, but got `{}`",
+                        variant.name,
+                        want.display(tys),
+                        element.display(tys),
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    } else {
+        let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
+        if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
+                        variant.name,
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    }
+    let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
+    Some(tys.intern(Ty::HttpResult(t_ty, expected_e)))
+}
+
+/// #4389: `check_http_variant`, with the two variants that answer a range or conditional read
+/// handled first: both are refused off a `GET` route, and `PartialContent` has its own shape.
+pub(crate) fn check_http_variant(
+    span: Span,
+    variant: HttpVariant,
+    args: &[Expr],
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    super::partial_content::refuse_off_get(span, variant, ctx);
+    if variant.payload == HttpVariantPayload::Partial {
+        let expected_t = expected
+            .and_then(|t| peel_to_http_result(t, ctx.tys))
+            .or_else(|| peel_to_http_result(ctx.return_ty, ctx.tys));
+        return super::partial_content::check_partial_content(span, variant, args, expected_t, ctx);
+    }
+    check_http_variant_inner(span, variant, args, expected, ctx)
 }
 
 /// Type-check construction of an `HttpResult[T]` variant (v0.9 §4.3).
@@ -2508,7 +2951,8 @@ pub(crate) fn check_queue_variant(
 ///   — argument must be `String`.
 /// - `Location` (`Found`, `SeeOther`, `PermanentRedirect`, …) — argument must
 ///   be `String`: the redirect target URL, emitted as a `Location` header.
-/// - `Streamed` (`Streaming`) — argument must be `Stream[String]`, SSE-framed.
+/// - `Streamed` (`Streaming`) — argument must be `Stream[String]` or (#3918)
+///   `Stream[SseEvent]`, SSE-framed.
 /// - `Raw` (`Raw`) — two arguments, a `Bytes` body then a `String` content-type;
 ///   the only two-argument shape.
 /// - `None` (`NoContent`, `NotFound`, `MethodNotAllowed`, …) — no argument
@@ -2516,7 +2960,7 @@ pub(crate) fn check_queue_variant(
 /// - `RawError` (`RawError`) — three arguments: an `ErrorStatus` name
 ///   (`Forbidden`, or `ErrorStatus.Forbidden`), a `Bytes` body and a `String`
 ///   content-type (#2341, L4).
-pub(crate) fn check_http_variant(
+fn check_http_variant_inner(
     span: Span,
     variant: HttpVariant,
     args: &[Expr],
@@ -2527,6 +2971,14 @@ pub(crate) fn check_http_variant(
     let expected_t = expected
         .and_then(|t| peel_to_http_result(t, tys))
         .or_else(|| peel_to_http_result(ctx.return_ty, tys));
+    // #4394: the streaming element the surrounding `HttpResult[T, E]` declares, from the same context
+    // as `T`: the expected type when it is an `HttpResult`, the enclosing return type otherwise.
+    let expected_e = peel_to_http_result_element(
+        expected
+            .filter(|&t| peel_to_http_result(t, tys).is_some())
+            .unwrap_or(ctx.return_ty),
+        tys,
+    );
     match variant.payload {
         HttpVariantPayload::Value => {
             if args.len() != 1 {
@@ -2561,7 +3013,7 @@ pub(crate) fn check_http_variant(
                 }
                 (None, t) => t,
             };
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         HttpVariantPayload::Message => {
             if args.len() != 1 {
@@ -2593,7 +3045,7 @@ pub(crate) fn check_http_variant(
             // a concrete payload. Pick `()` when nothing is known; otherwise
             // use the propagated expected type.
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         HttpVariantPayload::Location => {
             if args.len() != 1 {
@@ -2624,40 +3076,13 @@ pub(crate) fn check_http_variant(
             // A redirect carries no body; inner T is irrelevant, so fall back
             // to the propagated expected type or `()`.
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
-        // v0.101 (real-time track slice 1): `Streaming(s)` carries a
-        // `Stream[String]` body, SSE-framed at the boundary. Like the redirect
-        // and message shapes, the JSON body parameter `T` is irrelevant.
+        // v0.101 (real-time track slice 1): `Streaming(s)` carries a stream body, SSE-framed at the
+        // boundary (#4394: exactly a `Stream[E]` when the route names `E`). Like the redirect and
+        // message shapes, the JSON body parameter `T` is irrelevant.
         HttpVariantPayload::Streamed => {
-            let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
-            if args.len() != 1 {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.variant_arity",
-                    span,
-                    format!(
-                        "`HttpResult.{}` expects 1 `Stream[String]` argument, but {} were given",
-                        variant.name,
-                        args.len(),
-                    ),
-                ));
-                return None;
-            }
-            let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
-            if !compatible(arg_ty, tys.intern(stream_str), tys) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.argument_mismatch",
-                    args[0].span,
-                    format!(
-                        "`HttpResult.{}` expects a `Stream[String]` body, but got `{}`",
-                        variant.name,
-                        arg_ty.display(tys),
-                    ),
-                ));
-                return None;
-            }
-            let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            check_streaming_variant(span, variant, args, (expected_t, expected_e), ctx)
         }
         // v0.111: `Raw(body, contentType)` — the first two-argument shape. The
         // body is a `Bytes` written straight into the response; the content-type
@@ -2715,7 +3140,7 @@ pub(crate) fn check_http_variant(
                 }
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         // K-streams (#2623): `RawStreamed(body, contentType)` — `Raw`'s shape
         // with a `Stream[Bytes]` body, streamed into the response.
@@ -2754,7 +3179,7 @@ pub(crate) fn check_http_variant(
                 }
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         // #2341 (L4): `RawError(status, body, contentType)`. The status is an
         // `ErrorStatus` name — one of the vocabulary's own 4xx/5xx variant
@@ -2831,9 +3256,9 @@ pub(crate) fn check_http_variant(
                 return None;
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
-        HttpVariantPayload::None => {
+        HttpVariantPayload::None | HttpVariantPayload::Partial => {
             if !args.is_empty() {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.variant_arity",
@@ -2847,7 +3272,7 @@ pub(crate) fn check_http_variant(
                 return None;
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
     }
 }
@@ -3022,45 +3447,103 @@ fn lint_header_question(inner: &Expr, span: Span, ctx: &mut Ctx) {
     ctx.errors.push(err);
 }
 
+/// #3946: `T.of(x)?` where `T` is a named type with no predicate. `.of` cannot
+/// fail there, so it returns `T` and the `?` is the error; say why and offer to
+/// drop it.
+fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx) -> CompileError {
+    let Some(Callee::Refine(decl)) = ctx.callees.get(&inner.id) else {
+        return err;
+    };
+    let Some(base) = type_decl_base(decl) else {
+        return err;
+    };
+    if !crate::context_checks::is_secret_decl(decl)
+        && !bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
+        return err;
+    }
+    err.with_note(format!(
+        "`{0}` has no predicate, so `{0}.of` cannot fail and returns `{0}` directly",
+        decl.name.name
+    ))
+    .with_suggestion(
+        "drop the `?`",
+        vec![(
+            Span::new_in(question.file, inner.span.end, question.end),
+            String::new(),
+        )],
+        Applicability::MachineApplicable,
+    )
+}
+
 pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let inner_ty = type_of(inner, None, ctx)?;
+    // #3982: in a test case or property body, outside any lambda, `?` fails the case (or the
+    // property for that input) on any `Err` and on `None`, so any `Result` or `Option` is
+    // accepted: a case returns no type an author sees for the error to convert to.
+    if ctx.in_test_body
+        && ctx.lambda_depth == 0
+        && let Ty::Option(t) | Ty::Result(t, _) = &*tys.get(inner_ty)
+    {
+        return Some(*t);
+    }
     // v0.153 (ADR 0177): `Option[T]?` lifts into an HttpResult-returning
     // handler — `Some(v)` yields `v`, `None` early-returns `NotFound` (404).
-    // Allowed ONLY where the enclosing return peels to `HttpResult[_]` (a bare
-    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`); anywhere else an
-    // `Option` has no error channel to propagate into.
+    // Allowed where the enclosing return peels to `HttpResult[_]` (a bare
+    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`), or (#3966) to `Option[_]`;
+    // anywhere else an `Option` has nowhere to propagate to.
     if let Ty::Option(t) = &*tys.get(inner_ty) {
         if peel_to_http_result(ctx.return_ty, tys).is_some() {
             lint_header_question(inner, span, ctx);
             return Some(*t);
         }
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.question_option_outside_http",
-                span,
-                "the `?` operator lifts an `Option` only inside a handler returning `HttpResult` (where `None` becomes `NotFound`)",
-            )
-            .with_label(
-                ctx.return_ty_span,
-                format!("function returns `{}`", ctx.return_ty.display(tys)),
-            )
-            .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`"),
-        );
+        // #3966: in a body returning `Option[_]` (or `Effect[Option[_]]`) `None` returns
+        // early as `None`. `Option` and `Result` never convert, so a `Result` body keeps the
+        // refusal, with a fix that makes the `Option` a `Result`.
+        if peel_to_option(ctx.return_ty, tys).is_some() {
+            return Some(*t);
+        }
+        let mut err = CompileError::new(
+            "bynk.types.question_option_outside_http",
+            span,
+            "the `?` operator on an `Option` needs a function returning `Option` (where `None` returns early) or `HttpResult` (where `None` becomes `NotFound`)",
+        )
+        .with_label(
+            ctx.return_ty_span,
+            format!("function returns `{}`", ctx.return_ty.display(tys)),
+        )
+        .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`");
+        if peel_to_result(ctx.return_ty, tys).is_some() {
+            err = err.with_suggestion(
+                "make the `Option` a `Result`, naming the error for `None`",
+                // `todo` has every type, so the placeholder checks, and it warns
+                // (`bynk.fault.todo`) until the author names the error.
+                vec![(
+                    Span::new_in(span.file, inner.span.end, inner.span.end),
+                    ".okOr(todo(\"the error for None\"))".to_string(),
+                )],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        ctx.errors.push(err);
         return None;
     }
     let Ty::Result(t, e) = &*tys.get(inner_ty) else {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.question_on_non_result",
-                inner.span,
-                format!(
-                    "the `?` operator requires a `Result[T, E]` value (or an `Option[T]` in an HttpResult handler), but got `{}`",
-                    inner_ty.display(tys)
-                ),
-            )
-            .with_label(span, "this `?` requires a Result"),
-        );
+        let err = CompileError::new(
+            "bynk.types.question_on_non_result",
+            inner.span,
+            format!(
+                "the `?` operator requires a `Result[T, E]` value (or an `Option[T]` in an HttpResult handler), but got `{}`",
+                inner_ty.display(tys)
+            ),
+        )
+        .with_label(span, "this `?` requires a Result");
+        ctx.errors.push(with_total_of_fix(err, inner, span, ctx));
         return None;
     };
     // v0.5: `?` is also valid inside `Effect[Result[T, E]]` — the `Err` is
@@ -3293,7 +3776,10 @@ pub(crate) fn check_record_construction(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let decl = ctx.input.types.get(&type_name.name)?.clone();
+    let decl = crate::prelude_record::lookup(&type_name.name, &ctx.input.types)?;
+    // #4192: the prelude record's spans are offsets into its own source, so no
+    // label may point at them from the user's file.
+    let prelude = !ctx.input.types.contains_key(&type_name.name);
     ctx.refs
         .record(type_name.span, SymbolKind::Type, &type_name.name);
     // An opaque type built with record-literal syntax is reported by the
@@ -3470,23 +3956,32 @@ pub(crate) fn check_record_construction(
                 && !contains_var(actual_ty, tys)
                 && !compatible(actual_ty, expected_ty, tys)
             {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.types.field_value_mismatch",
-                        fspan,
-                        format!(
-                            "field `{}` expects `{}`, but the value has type `{}`",
-                            declared_field.name.name,
-                            expected_ty.display(tys),
-                            actual_ty.display(tys)
-                        ),
-                    )
-                    .with_label(declared_field.name.span, "field declared here"),
+                let mismatch = CompileError::new(
+                    "bynk.types.field_value_mismatch",
+                    fspan,
+                    format!(
+                        "field `{}` expects `{}`, but the value has type `{}`",
+                        declared_field.name.name,
+                        expected_ty.display(tys),
+                        actual_ty.display(tys)
+                    ),
                 );
+                ctx.errors.push(if prelude {
+                    mismatch
+                } else {
+                    mismatch.with_label(declared_field.name.span, "field declared here")
+                });
             }
         }
     }
 
+    // #3958: an inferred instantiation holds the type's declared bounds.
+    if !prelude
+        && !decl.type_params.is_empty()
+        && !super::applied_bounds::check_applied_ty_bounds(&decl, &args, span, ctx)
+    {
+        return None;
+    }
     Some(named_ty_with_args(&decl, args, tys))
 }
 
@@ -3535,7 +4030,7 @@ pub(crate) fn check_field_access(
                 "bynk.held.query_accessor_on_held_map",
                 field.span,
                 format!(
-                    "`.{}` is not available on a held `Map[K, {}]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`/`traverseAll`), not a key query",
+                    "`.{}` is not available on a held `Map[K, {}]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`/`traverseAll`), not a key query",
                     field.name,
                     v.display(tys)
                 ),
@@ -3602,9 +4097,9 @@ pub(crate) fn check_field_access(
         if field.name == "identity" {
             return Some(*identity);
         }
-        // #2380 (L5): an `Oidc` binder also exposes its token's verified claims.
-        let oidc = matches!(&receiver.kind, ExprKind::Ident(id) if ctx.oidc_binder.as_deref() == Some(id.name.as_str()));
-        if field.name == "claims" && oidc {
+        // #2380 (L5), #3937: an `Oidc` or `Bearer` binder also exposes its token's verified claims.
+        let has_claims = matches!(&receiver.kind, ExprKind::Ident(id) if ctx.claims_binder.as_deref() == Some(id.name.as_str()));
+        if field.name == "claims" && has_claims {
             return Some(tys.intern(Ty::TokenClaims));
         }
         ctx.errors.push(
@@ -3613,12 +4108,12 @@ pub(crate) fn check_field_access(
                 field.span,
                 format!(
                     "a verified actor exposes `.identity`{}, not `.{}`",
-                    if oidc { " and `.claims`" } else { "" },
+                    if has_claims { " and `.claims`" } else { "" },
                     field.name
                 ),
             )
             .with_note(if field.name == "claims" {
-                "`.claims` is on an `Oidc` actor's binder: the verified token's claims"
+                "`.claims` is on the binder of an `Oidc` or `Bearer` actor: the verified token's claims"
             } else {
                 "`.identity` is the identity the actor's seam verified"
             }),
@@ -3672,37 +4167,13 @@ pub(crate) fn check_field_access(
     // v0.22b: `DecodeError` is a compiler-known record (ADR 0047) — uniform
     // `String` fields so a decode failure is inspectable in Bynk.
     if recv_ty == tys.intern(Ty::DecodeError) {
-        return match field.name.as_str() {
-            "kind" | "path" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
-            other => {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.unknown_field",
-                    field.span,
-                    format!(
-                        "`DecodeError` has no field `{other}` — its fields are `kind`, `path`, `message`"
-                    ),
-                ));
-                None
-            }
-        };
+        return super::decode_kind::decode_error_field(field, ctx);
     }
     // #2866: `ValidationError` is compiler-known too — a refined type's `.of`
     // failure exposes `field` and `message`. Its runtime `value` is `unknown`
     // and stays unreachable until it has a Bynk type.
     if recv_ty == tys.intern(Ty::ValidationError) {
-        return match field.name.as_str() {
-            "field" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
-            other => {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.unknown_field",
-                    field.span,
-                    format!(
-                        "`ValidationError` has no field `{other}` — its fields are `field`, `message`"
-                    ),
-                ));
-                None
-            }
-        };
+        return super::validation_rule::validation_error_field(field, ctx);
     }
     // v0.158 (ADR 0184): `MapEntry[K, V]` is a compiler-known generic record
     // (the element of a map's `.entries` query) with exactly `.key`/`.value` —
@@ -3800,16 +4271,8 @@ pub(crate) fn check_field_access(
         return None;
     };
     let Some(field_decl) = r.fields.iter().find(|f| f.name.name == field.name) else {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.unknown_field",
-                field.span,
-                format!("record type `{}` has no field `{}`", name, field.name),
-            )
-            // Finding #46: `decl` comes from the combined cross-file symbol
-            // table — see resolver.rs:1029 for the full rationale.
-            .with_note("type declared here"),
-        );
+        ctx.errors
+            .push(unknown_record_field_error(name, field, ctx));
         return None;
     };
     // v0.36 (ADR 0069, slice 2): the field is an index symbol, keyed by the
@@ -4535,6 +4998,26 @@ fn bind_as_error(pat: &Pattern, ctx: &mut Ctx) {
     }
 }
 
+/// #4279: `Undecodable` reads a body that did not decode, which only a `system` case's queue
+/// address can produce. Everywhere else a `QueueResult` pattern of it is a dead arm. A test body
+/// reports it unconditionally; the suite drops it for a `system` case, where it can match.
+fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
+    if variant.name != QUEUE_UNDECODABLE || !matches!(&*ctx.tys.get(ty), Ty::QueueResult) {
+        return;
+    }
+    ctx.errors.push(
+        CompileError::new(
+            UNDECODABLE_UNREACHABLE,
+            variant.span,
+            "`Undecodable` can never match here: only a `system` case's queue address returns it",
+        )
+        .with_note(
+            "a message fails to decode only when a real queue delivers it, so `unit` and `integration` cases and handlers never see this verdict",
+        )
+        .with_note("replace the arm with `_` (a `match` must still be exhaustive), or move the case to `as system` and address the queue by context path"),
+    );
+}
+
 fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     match pat {
@@ -4613,6 +5096,13 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             check_pattern(inner, ty, ctx);
             if let Some(base) = literal_base_of(ty, tys) {
                 check_refinement(base, *span, Some(predicate), ctx.errors);
+                // #3972: on an `Int` a range pattern is the stronger spelling.
+                if base == BaseType::Int
+                    && let Some(w) =
+                        super::refined_range::refined_pattern_is_range(inner, predicate, *span)
+                {
+                    ctx.errors.push(w);
+                }
             } else {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.pattern_type_mismatch",
@@ -4644,6 +5134,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 bind_as_error(pat, ctx);
                 return;
             };
+            warn_unreachable_undecodable(variant, ty, ctx);
             // v0.25: a qualified `T.Variant` references `T`, and its qualifier
             // must match the scrutinee type's name.
             if let Some(tn) = type_name {
@@ -4679,20 +5170,35 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             };
             // Clone the payload so the immutable borrow of `ctx.input` (via
             // `expected_variants`) is released before we recurse with `&mut ctx`.
-            let payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            let mut payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            // #4344: a `Bearer` arm of an HTTP actor sum also carries its verified claims, bound by a
+            // second binder, `User(u, c)`. The one-binder form is unchanged.
+            let claims_arm = bindings.len() >= 2
+                && payload.len() == 1
+                && matches!(&*tys.get(ty), Ty::ActorSum(_))
+                && ctx.claims_sum_arms.contains(&variant.name);
+            if claims_arm {
+                payload.push(("claims".to_string(), tys.intern(Ty::TokenClaims)));
+            }
             if bindings.is_empty() {
                 // Nullary pattern (or "don't bind the payload"): matches the tag.
                 return;
             }
             if payload.is_empty() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
                         "variant `{}` has no payload, but the pattern binds fields",
                         variant.name
                     ),
-                ));
+                );
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "this arm (an open or a `Signature` actor) carries no identity and no claims; write it without bindings",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
                 return;
             }
@@ -4732,7 +5238,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                     }
                 }
             } else if bindings.len() != payload.len() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
@@ -4741,7 +5247,14 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                         payload.len(),
                         bindings.len()
                     ),
-                ));
+                );
+                // #4344: only a `Bearer` arm of an http actor sum carries claims beside its identity.
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "an actor-sum arm binds its identity, `User(u)`; only a `Bearer` or `Oidc` arm of an `http` sum also binds its verified claims, `User(u, c)`",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
             } else {
                 for (b, (_, field_ty)) in bindings.iter().zip(payload.iter()) {
@@ -5356,6 +5869,7 @@ fn check_is_pattern(
             {
                 ctx.refs.record(tn.span, SymbolKind::Type, &tn.name);
             }
+            warn_unreachable_undecodable(variant, value_ty, ctx);
             // 1. Sum-variant interpretation: the name is a variant of `value`'s
             //    sum type. (Takes priority when `value` is that sum.)
             let info = variants
@@ -5594,7 +6108,7 @@ fn validate_is_nested_payloads(
 /// The bindings the `is` tests in a condition introduce when it is true: the
 /// tests [`crate::narrowing::matched_is_tests`] proves matched (#1654, the rule
 /// the resolver and the emitter share). Later wins on a name collision.
-fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
+pub(crate) fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
     collect_is_bindings_when(expr, true, ctx)
 }
 
@@ -5638,7 +6152,7 @@ pub(crate) fn collect_is_bindings_when(
 /// them in. Hover, go-to-definition, references and rename read these. Types come
 /// from the same per-test bindings the checker binds; a name the checker does not
 /// bind (a nested sub-pattern's) has no type here and is skipped.
-fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
+pub(crate) fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
     let tys = ctx.tys;
     for test in crate::narrowing::matched_is_tests(cond, when_true) {
         let ExprKind::Is { pattern, .. } = &test.kind else {
@@ -5973,4 +6487,138 @@ mod future_witness_tests {
         );
         assert_eq!(future_variant_witness("Pair(_, _)"), None);
     }
+}
+
+#[cfg(test)]
+mod retry_after_tests {
+    use crate::testkit::analyse;
+
+    fn verdict(expr: &str) -> Vec<&'static str> {
+        let source = format!(
+            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ {expr} }}\n}}\n"
+        );
+        analyse(&[("t/q.bynk", &source)]).categories()
+    }
+
+    #[test]
+    fn a_reason_and_a_duration_are_accepted() {
+        assert!(verdict("RetryAfter(\"x\", 30.seconds)").is_empty());
+    }
+
+    #[test]
+    fn the_wrong_number_of_arguments_is_a_variant_arity_error() {
+        assert_eq!(verdict("RetryAfter(\"x\")"), ["bynk.types.variant_arity"]);
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 1.second, 2)"),
+            ["bynk.types.variant_arity"]
+        );
+    }
+
+    #[test]
+    fn the_wrong_argument_type_is_an_argument_mismatch() {
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 5)"),
+            ["bynk.types.argument_mismatch"]
+        );
+        assert_eq!(
+            verdict("RetryAfter(1, 1.second)"),
+            ["bynk.types.argument_mismatch"]
+        );
+    }
+
+    #[test]
+    fn a_literal_outside_the_range_is_refused_on_either_side() {
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 999.milliseconds)"),
+            ["bynk.queue.retry_delay_out_of_range"]
+        );
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 25.hours)"),
+            ["bynk.queue.retry_delay_out_of_range"]
+        );
+        assert!(verdict("RetryAfter(\"x\", 24.hours)").is_empty());
+        assert!(verdict("RetryAfter(\"x\", 1.second)").is_empty());
+    }
+}
+
+/// The agent a synthetic `self` record (`__<Agent>Self`) stands for.
+pub(super) fn self_record_agent(record: &str) -> Option<&str> {
+    record.strip_prefix("__")?.strip_suffix("Self")
+}
+
+/// #4291: `self.<name>` inside an agent handler where `<name>` is not the key.
+/// An operation is refused with the supported spelling; any other name is an
+/// unknown field of the agent, named by the agent.
+pub(super) fn agent_self_member_error(
+    agent: &str,
+    field: &Ident,
+    unknown: (&'static str, &str),
+    ctx: &Ctx,
+) -> CompileError {
+    let is_op = ctx.input.agents.get(agent).is_some_and(|a| {
+        a.handlers
+            .iter()
+            .any(|h| h.method_name.as_ref().is_some_and(|n| n.name == field.name))
+    });
+    if is_op {
+        return CompileError::new(
+            "bynk.agents.self_operation",
+            field.span,
+            format!(
+                "`self.{op}` cannot call the agent's own operation: `self` is the agent's key, \
+                 not a handle to `{agent}`",
+                op = field.name
+            ),
+        )
+        .with_note(format!(
+            "call it on the agent, `{agent}(key).{}(…)`",
+            field.name
+        ));
+    }
+    let (code, noun) = unknown;
+    CompileError::new(
+        code,
+        field.span,
+        format!("`self` in agent `{agent}` has no {noun} `{}`", field.name),
+    )
+    .with_note(
+        "`self` carries the agent's key; its `store` fields are read by name, without `self`",
+    )
+}
+
+/// The error for a field a record lacks. #4291: `self` in an agent handler is a
+/// synthetic record, so it names the agent, never that record.
+fn unknown_record_field_error(name: &str, field: &Ident, ctx: &Ctx) -> CompileError {
+    if let Some(agent) = self_record_agent(name) {
+        return agent_self_member_error(agent, field, ("bynk.types.unknown_field", "field"), ctx);
+    }
+    CompileError::new(
+        "bynk.types.unknown_field",
+        field.span,
+        format!("record type `{}` has no field `{}`", name, field.name),
+    )
+    // Finding #46: `decl` comes from the combined cross-file symbol
+    // table — see resolver.rs:1029 for the full rationale.
+    .with_note("type declared here")
+}
+
+/// The error for a method a receiver type lacks. #4291: `self` in an agent handler is a synthetic
+/// record, so it names the agent, never that record.
+pub(super) fn method_not_found_error(type_name: &str, method: &Ident, ctx: &Ctx) -> CompileError {
+    if let Some(agent) = self_record_agent(type_name) {
+        return agent_self_member_error(
+            agent,
+            method,
+            ("bynk.types.method_not_found", "method"),
+            ctx,
+        );
+    }
+    CompileError::new(
+        "bynk.types.method_not_found",
+        method.span,
+        format!(
+            "type `{type_name}` has no instance method named `{}`",
+            method.name
+        ),
+    )
 }

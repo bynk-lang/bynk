@@ -29,7 +29,8 @@
 //! - **A route's answer is a union keyed by status**, built from the response set
 //!   `bynk openapi` documents, and never thrown.
 //!
-//! The runtime half is `http_client_runtime.ts`, inlined: a browser-safe subset
+//! The runtime half is `http_client_runtime.ts` (generated from `runtime/src/client/http_client.ts`
+//! by `bundle.mjs`), inlined: a browser-safe subset
 //! with no signing and no Workers types, plus the runtime's own `result`, `bytes`,
 //! `decimal` and `keys` modules for just the names the codecs use.
 
@@ -52,6 +53,19 @@ use super::serialisation;
 
 mod route;
 
+/// #3918: whether `r` is a `GET` that answers `Streaming`, and so also has an `EventSource` form.
+fn has_event_source(r: &RouteInput) -> bool {
+    r.method == "GET"
+        && r.replies
+            .iter()
+            .any(|reply| reply.payload == ReplyPayload::Events)
+}
+
+/// The name of a route's `EventSource` form.
+fn event_source_name(function: &str) -> String {
+    format!("{function}EventSource")
+}
+
 /// The generated module's own type names. A boundary type of the same name is
 /// renamed (`Client` to `Client_`), never the surface.
 const SURFACE_TYPES: &[&str] = &[
@@ -61,6 +75,7 @@ const SURFACE_TYPES: &[&str] = &[
     "ClientOptions",
     "JsonValue",
     "Option",
+    "Problem",
     "Result",
     "ValidationError",
 ];
@@ -90,12 +105,14 @@ const FILE_CODEC_USES: &[&str] = &[
 const WIRE_PREFIX: &str = "__Wire_";
 
 /// The runtime modules the codecs may reach, in dependency order: `bytes`, `decimal`,
-/// `time` (`IsoDate`), `keys` (`Map` and `Set`, which reads `decimal`).
-const OPTIONAL_MODULES: [(&str, &str); 4] = [
+/// `time` (`IsoDate`), `keys` (`Map` and `Set`, which reads `decimal`), `text`
+/// (the code-point length of a `String` predicate).
+const OPTIONAL_MODULES: [(&str, &str); 5] = [
     ("bytes", BYTES_MODULE),
     ("decimal", DECIMAL_MODULE),
     ("time", TIME_MODULE),
     ("keys", KEYS_MODULE),
+    ("text", TEXT_MODULE),
 ];
 
 const RUNTIME: &str = include_str!("http_client_runtime.ts");
@@ -104,6 +121,7 @@ const BYTES_MODULE: &str = include_str!("../../runtime/src/bytes.ts");
 const DECIMAL_MODULE: &str = include_str!("../../runtime/src/decimal.ts");
 const KEYS_MODULE: &str = include_str!("../../runtime/src/keys.ts");
 const TIME_MODULE: &str = include_str!("../../runtime/src/time.ts");
+const TEXT_MODULE: &str = include_str!("../../runtime/src/text.ts");
 
 /// The `bynk client` experimental notice, in the generated header.
 const EXPERIMENTAL: &str = "Experimental: member names and the shape of this module may change in a minor version until it is stabilised.";
@@ -153,6 +171,8 @@ pub enum ParamInput {
     Query { ty: TypeRef },
     /// The typed `cookies` record, whose type is a named record.
     Cookies { ty: TypeRef },
+    /// The typed `headers` record, whose type is a named record.
+    Headers { ty: TypeRef },
 }
 
 /// How a route reads its `body`.
@@ -193,6 +213,13 @@ pub enum ReplyPayload {
     BoundaryError,
     /// The boundary's own `413`/`415` body: `{ kind, details }`.
     BoundaryRefusal,
+    /// RFC 9457 problem details (#3916): an error variant's or a router rejection's body on a
+    /// route that answers its errors as `application/problem+json`.
+    Problem,
+    /// RFC 9457 problem details a router rejection writes (#3916): the same shape with a `kind`
+    /// and a `https://bynk-lang.org/problems/<kind>` type, which the client tells apart from an
+    /// error variant's `about:blank` problem when both answer at one status.
+    ProblemRejection,
     /// An author-owned body, untouched (`RawCreated`, `RawStreamed`, `RawError`).
     Raw,
     /// A `Raw`: untouched, and on a small `GET` carrying a weak `ETag` the server made.
@@ -222,6 +249,8 @@ impl ReplyPayload {
             Self::None => "None",
             Self::BoundaryError => "BoundaryError",
             Self::BoundaryRefusal => "BoundaryRefusal",
+            Self::Problem => "Problem",
+            Self::ProblemRejection => "ProblemRejection",
             Self::Raw => "Raw",
             Self::RawEtag => "RawEtag",
             Self::RawTagged => "RawTagged",
@@ -311,7 +340,8 @@ fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
                     ParamInput::Path { ty, .. }
                     | ParamInput::Body { ty, .. }
                     | ParamInput::Query { ty }
-                    | ParamInput::Cookies { ty } => roots.push(ty.clone()),
+                    | ParamInput::Cookies { ty }
+                    | ParamInput::Headers { ty } => roots.push(ty.clone()),
                 }
             }
             roots.extend(r.success.iter().cloned());
@@ -396,6 +426,8 @@ struct RoutePlan {
     query: Option<String>,
     /// The cookies argument's type name, when the route takes one.
     cookies: Option<String>,
+    /// The headers argument's type name, when the route takes one.
+    headers: Option<String>,
 }
 
 /// One declared boundary type, as the two declarations need it.
@@ -474,11 +506,19 @@ impl Gen {
             let mut routes = Vec::new();
             for r in &s.routes {
                 let function = function_name(&r.method, &r.path);
-                if let Some(other) = fns.insert(function.clone(), r) {
-                    return fail(format!(
-                        "`{} {}` and `{} {}` of service `{}` both make the function `{function}`; the client cannot name them apart",
-                        other.method, other.path, r.method, r.path, s.name
-                    ));
+                // #3918: a streaming `GET` also makes `<function>EventSource`, so that name is
+                // taken too.
+                let mut made = vec![function.clone()];
+                if has_event_source(r) {
+                    made.push(event_source_name(&function));
+                }
+                for name in made {
+                    if let Some(other) = fns.insert(name.clone(), r) {
+                        return fail(format!(
+                            "`{} {}` and `{} {}` of service `{}` both make the function `{name}`; the client cannot name them apart",
+                            other.method, other.path, r.method, r.path, s.name
+                        ));
+                    }
                 }
                 let stem = if seen[&function] > 1 {
                     format!("{}{}", pascal(&s.name), pascal(&function))
@@ -496,11 +536,17 @@ impl Gen {
                     .iter()
                     .any(|p| matches!(p, ParamInput::Cookies { .. }));
                 let cookies = has_cookies.then(|| unique(format!("{stem}Cookies"), &mut taken));
+                let has_headers = r
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, ParamInput::Headers { .. }));
+                let headers = has_headers.then(|| unique(format!("{stem}Headers"), &mut taken));
                 routes.push(RoutePlan {
                     function,
                     response,
                     query,
                     cookies,
+                    headers,
                 });
             }
             services.push(ServicePlan { key, routes });
@@ -973,6 +1019,7 @@ impl Gen {
                 unions.extend(route.response_type.into_iter().flatten());
                 unions.extend(route.arg_types);
                 methods.push(route.method);
+                methods.extend(route.event_source);
             }
             services.push(TsObjectEntry::prop(
                 property(&sp.key),
@@ -1288,7 +1335,7 @@ struct Parts {
 /// The `// @generated` header every file of a client carries.
 fn header(input: &HttpClientInput) -> String {
     format!(
-        "// @generated by `bynk client` — do not edit by hand.\n// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/book/reference/http-client/\n// {EXPERIMENTAL}\n\n",
+        "// @generated by `bynk client` — do not edit by hand.\n// bynk {}. Regenerate with `bynk client`; see https://bynk-lang.org/reference/http-client/\n// {EXPERIMENTAL}\n\n",
         input.compiler_version
     )
 }
@@ -1532,6 +1579,51 @@ mod tests {
         ] {
             assert_eq!(function_name(method, path), name, "{method} {path}");
         }
+    }
+
+    /// #3918: a streaming `GET` also makes `<function>EventSource`, so another route that makes that
+    /// name is refused like any two routes of one name, not left as a duplicate key.
+    #[test]
+    fn an_event_source_name_is_taken_too() {
+        let route = |method: &str, path: &str, payload: ReplyPayload| RouteInput {
+            method: method.to_string(),
+            path: path.to_string(),
+            doc: None,
+            params: Vec::new(),
+            success: None,
+            replies: vec![ReplyInput {
+                status: 200,
+                variant: "Streaming".to_string(),
+                payload,
+            }],
+        };
+        let service = |routes| HttpClientInput {
+            services: vec![ServiceInput {
+                unit: "u".to_string(),
+                name: "api".to_string(),
+                doc: None,
+                types: HashMap::new(),
+                routes,
+            }],
+            compiler_version: "0".to_string(),
+        };
+        let clash = service(vec![
+            route("GET", "/ticks", ReplyPayload::Events),
+            route("GET", "/ticks/event-source", ReplyPayload::None),
+        ]);
+        let err = emit_http_client(&clash, Layout::File).expect_err("the names clash");
+        assert!(
+            err.0
+                .contains("both make the function `getTicksEventSource`"),
+            "{}",
+            err.0
+        );
+        // A route that does not stream makes no such name, so the same paths are fine.
+        let fine = service(vec![
+            route("GET", "/ticks", ReplyPayload::None),
+            route("GET", "/ticks/event-source", ReplyPayload::None),
+        ]);
+        assert!(emit_http_client(&fine, Layout::File).is_ok());
     }
 
     #[test]

@@ -54,7 +54,7 @@ fn describeDb(e: DbError) -> String {
 }
 
 service go {
-  on call(to: String) -> Effect[String] given Mailer {
+  on call(to: String) -> Effect[String] by Caller given Mailer {
     let r <- Mailer.send(to)
     match r {
       Ok(id) => id
@@ -64,7 +64,7 @@ service go {
 }
 
 service local {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     let m = match mailFailure() {
       Ok(_) => "none"
       Err(e) => describe(e)

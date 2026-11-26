@@ -40,7 +40,7 @@ context ops.jobs
 consumes platform.time
 
 service tick {
-	on call() -> Effect[Int] given platform.time.Clock {
+	on call() -> Effect[Int] by Caller given platform.time.Clock {
 		let t <- platform.time.Clock.now()
 		t
 	}
@@ -52,7 +52,7 @@ Prefer an alias for brevity when the context path is long:
 ```bynk,ignore
 consumes platform.time as Time
 // ...
-on call() -> Effect[Int] given Time.Clock {
+on call() -> Effect[Int] by Caller given Time.Clock {
   let t <- Time.Clock.now()
   t
 }
@@ -72,14 +72,14 @@ what stateless platform capabilities want. No Worker hop is involved.
 ## The rules
 
 - `exports capability` names must be declared **and** provided
-  ([`bynk.exports.undeclared_capability`](/book/reference/diagnostics/bynk.exports.undeclared_capability/),
-  [`bynk.exports.capability_not_provided`](/book/reference/diagnostics/bynk.exports.capability_not_provided/)).
+  ([`bynk.exports.undeclared_capability`](/reference/diagnostics/bynk.exports.undeclared_capability/),
+  [`bynk.exports.capability_not_provided`](/reference/diagnostics/bynk.exports.capability_not_provided/)).
 - `given B.Cap` requires `B` to be `consumes`-d (otherwise
   `bynk.resolve.unconsumed_context`) and to export `Cap`
-  ([`bynk.given.cross_context_unknown_capability`](/book/reference/diagnostics/bynk.given.cross_context_unknown_capability/)).
+  ([`bynk.given.cross_context_unknown_capability`](/reference/diagnostics/bynk.given.cross_context_unknown_capability/)).
 
 ## Related
 
-- Reference: [Capabilities & providers](/book/reference/capabilities/).
+- Reference: [Capabilities & providers](/reference/capabilities/).
 - [Compose a provider from other capabilities](/book/guides/effects-and-capabilities/compose-a-provider/).
 - [Consume another context's services](/book/guides/program-structure/consume-services/).

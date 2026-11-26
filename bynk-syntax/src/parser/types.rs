@@ -90,6 +90,78 @@ impl<'a> Parser<'a> {
         Ok(out)
     }
 
+    /// #3975: zero or more `@name(args)` annotations at the current position.
+    pub(crate) fn parse_leading_annotations(&mut self) -> Result<Vec<Annotation>, CompileError> {
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            annotations.push(self.parse_annotation()?);
+        }
+        Ok(annotations)
+    }
+
+    /// #3975: whether the item at the cursor is a `type`: the keyword itself, or annotations (and
+    /// then an optional `private`) before it. Reads ahead over each `@name(args)` by its brackets.
+    pub(crate) fn leads_type_item(&self) -> bool {
+        let kind = |i: usize| self.nth(i).map(|t| t.kind);
+        let mut i = 0;
+        loop {
+            match kind(i) {
+                Some(TokenKind::Type) => return true,
+                Some(TokenKind::At) => {
+                    i += 2;
+                    if kind(i) == Some(TokenKind::LParen) {
+                        let mut depth = 0;
+                        loop {
+                            match kind(i) {
+                                Some(TokenKind::LParen) => depth += 1,
+                                Some(TokenKind::RParen) => {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        i += 1;
+                                        break;
+                                    }
+                                }
+                                None => return false,
+                                _ => {}
+                            }
+                            i += 1;
+                        }
+                    }
+                }
+                Some(TokenKind::Ident)
+                    if i > 0 && self.nth(i).is_some_and(|t| self.slice(t.span) == "private") =>
+                {
+                    i += 1;
+                }
+                _ => return false,
+            }
+        }
+    }
+
+    /// #3975: a type declaration at item position, after its annotations when it has them
+    /// (`@discriminator("type") private type E = …`). `allow_private` is whether the unit may
+    /// declare a `private` type, as for the modifier before the annotations.
+    pub(crate) fn parse_type_decl_at_item(
+        &mut self,
+        allow_private: bool,
+    ) -> Result<TypeDecl, CompileError> {
+        if self.peek_kind() != Some(TokenKind::At) {
+            return self.parse_type_decl();
+        }
+        let annotations = self.parse_leading_annotations()?;
+        let private = self.take_private_modifier(allow_private)?;
+        let mut decl = self.parse_type_decl()?;
+        if let Some(first) = annotations.first() {
+            decl.span = first.span.merge(decl.span);
+        }
+        decl.annotations = annotations;
+        if let Some(sp) = private {
+            decl.private = Some(sp);
+            decl.span = sp.merge(decl.span);
+        }
+        Ok(decl)
+    }
+
     pub(crate) fn parse_type_decl(&mut self) -> Result<TypeDecl, CompileError> {
         let kw = self.expect(TokenKind::Type, "to start a type declaration")?;
         let name = self.expect_ident("after `type`")?;
@@ -185,6 +257,7 @@ impl<'a> Parser<'a> {
             derives,
             derives_kw,
             documentation: None,
+            annotations: Vec::new(),
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),
             private: None,
@@ -258,10 +331,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_record_field(&mut self) -> Result<RecordField, CompileError> {
         // #3343: annotations before the field name.
-        let mut annotations = Vec::new();
-        while self.peek_kind() == Some(TokenKind::At) {
-            annotations.push(self.parse_annotation()?);
-        }
+        let annotations = self.parse_leading_annotations()?;
         let name = self.expect_label("as a record field name")?;
         self.expect(TokenKind::Colon, "after the field name")?;
         let type_ref = self.parse_type_ref("as the field type")?;
@@ -271,6 +341,12 @@ impl<'a> Parser<'a> {
             let mut r = self.parse_refinement()?;
             end_span = self.parse_refinement_annotations(&mut r)?;
             refinement = Some(r);
+        }
+        // #3793: `name: T replaces old`, between the type (and its refinement) and the
+        // initialiser.
+        let replaces = self.parse_field_replaces(true)?;
+        if let Some(r) = &replaces {
+            end_span = r.span;
         }
         // v0.11: an optional `= <expr>` initial-value, used by agent state
         // fields. Parsed for every record field; the checker restricts where it
@@ -287,6 +363,7 @@ impl<'a> Parser<'a> {
             name: name.clone(),
             type_ref,
             refinement,
+            replaces,
             init,
             span: start.merge(end_span),
             // The caller takes a field's doc, as it does its comments.
@@ -353,6 +430,8 @@ impl<'a> Parser<'a> {
             let (lead, documentation) = self.collect_member_lead(TokenKind::RBrace);
             leading.extend(lead);
             let bar = self.expect(TokenKind::Pipe, "to start a sum variant")?;
+            // #3975: annotations between the `|` and the variant name.
+            let annotations = self.parse_leading_annotations()?;
             let name = self.expect_variant_name("after `|` in a sum variant")?;
             let mut payload = Vec::new();
             let mut end_span = name.span;
@@ -384,6 +463,7 @@ impl<'a> Parser<'a> {
                 None
             };
             variants.push(Variant {
+                annotations,
                 name,
                 payload,
                 span: v_span,
@@ -490,10 +570,14 @@ impl<'a> Parser<'a> {
                 eq_line = leading;
                 break;
             }
+            let annotations = self.parse_leading_annotations()?;
             let name = self.expect_variant_name("as an enum tag name")?;
-            let span = name.span;
+            let span = annotations
+                .first()
+                .map_or(name.span, |a| a.span.merge(name.span));
             let comma = self.eat(TokenKind::Comma);
             variants.push(Variant {
+                annotations,
                 name,
                 payload: Vec::new(),
                 span,
@@ -525,6 +609,8 @@ impl<'a> Parser<'a> {
     /// with the lead, and `bynk fmt`'s comment-loss guard refuses rather than
     /// lose it.
     fn parse_variant_field(&mut self) -> Result<VariantField, CompileError> {
+        // #3975: annotations before the payload field name.
+        let annotations = self.parse_leading_annotations()?;
         let name = self.expect_label("as a variant payload field name")?;
         self.expect(TokenKind::Colon, "after the variant payload field name")?;
         let type_ref = self.parse_type_ref("as the variant payload field type")?;
@@ -545,8 +631,12 @@ impl<'a> Parser<'a> {
                  field, or hold the optional values in a record with defaults",
             ));
         }
-        let span = name.span.merge(type_ref.span());
+        let span = annotations
+            .first()
+            .map_or(name.span, |a| a.span)
+            .merge(type_ref.span());
         Ok(VariantField {
+            annotations,
             name,
             type_ref,
             span,
@@ -662,14 +752,17 @@ impl<'a> Parser<'a> {
                 ),
             )
             .with_note(
-                "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                 NonNegative, Positive, NonEmpty, IsoDate",
+                "valid predicates: Matches, InRange, AtLeast, AtMost, MinLength, MaxLength, \
+                 Length, NonNegative, Positive, NonEmpty, IsoDate, Cron",
             ));
         }
         self.bump();
         let name = self.slice(t.span);
         let start = t.span;
         let mut arg_text = None;
+        if let Some(pred) = self.try_parse_pending_pred(name, start)? {
+            return Ok(pred);
+        }
         let (kind, end_span) = match name {
             "Matches" => {
                 self.expect(TokenKind::LParen, "after `Matches`")?;
@@ -690,6 +783,9 @@ impl<'a> Parser<'a> {
                     (SignedNumLit::Decimal(a), SignedNumLit::Decimal(b)) => {
                         PredKind::InRangeD(a, b)
                     }
+                    (SignedNumLit::Duration(a), SignedNumLit::Duration(b)) => {
+                        PredKind::InRangeDur(a, b)
+                    }
                     _ => {
                         return Err(CompileError::new(
                             "bynk.types.no_numeric_coercion",
@@ -698,9 +794,23 @@ impl<'a> Parser<'a> {
                         )
                         .with_note(
                             "both bounds must be the same numeric type — \
-                             write `InRange(0, 1)`, `InRange(0.0, 1.0)` or `InRange(0.00d, 1.00d)`",
+                             write `InRange(0, 1)`, `InRange(0.0, 1.0)`, `InRange(0.00d, 1.00d)` \
+                             or `InRange(1.second, 1.day)`",
                         ));
                     }
+                };
+                (kind, close.span)
+            }
+            "AtLeast" | "AtMost" => {
+                self.expect(TokenKind::LParen, &format!("after `{name}`"))?;
+                let bound = self
+                    .parse_signed_num_literal(&format!("as the bound of `{name}`"))?
+                    .into_pred_bound();
+                let close = self.expect(TokenKind::RParen, &format!("after the `{name}` bound"))?;
+                let kind = if matches!(name, "AtLeast") {
+                    PredKind::AtLeast(bound)
+                } else {
+                    PredKind::AtMost(bound)
                 };
                 (kind, close.span)
             }
@@ -729,6 +839,7 @@ impl<'a> Parser<'a> {
             "Positive" => (PredKind::Positive, t.span),
             "NonEmpty" => (PredKind::NonEmpty, t.span),
             "IsoDate" => (PredKind::IsoDate, t.span),
+            "Cron" => (PredKind::Cron, t.span),
             other => {
                 return Err(CompileError::new(
                     "bynk.parse.unknown_predicate",
@@ -736,16 +847,103 @@ impl<'a> Parser<'a> {
                     format!("unknown refinement predicate `{other}`"),
                 )
                 .with_note(
-                    "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                     NonNegative, Positive, NonEmpty, IsoDate",
+                    "valid predicates: Matches, InRange, AtLeast, AtMost, MinLength, MaxLength, \
+                     Length, NonNegative, Positive, NonEmpty, IsoDate, Cron",
                 ));
             }
         };
         Ok(RefinementPred {
             kind,
             arg_text,
+            pending: None,
+            from_const: Vec::new(),
             span: start.merge(end_span),
         })
+    }
+
+    /// #3951: whether the argument list opening at the next token names a
+    /// constant: an identifier that is not the unit of a `60.seconds` bound.
+    fn pred_args_name_a_const(&self) -> bool {
+        let mut i = self.pos + 1;
+        while let Some(t) = self.tokens.get(i) {
+            match t.kind {
+                TokenKind::RParen => return false,
+                TokenKind::Ident if self.tokens[i - 1].kind != TokenKind::Dot => return true,
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    /// #3951: a predicate with a constant in an argument (`InRange(1, MaxQty)`).
+    /// The constant stays a name here: a later pass swaps in the literal it is
+    /// bound to, which the parser, with no constant table, cannot do. A predicate
+    /// whose arguments are all literals returns `None` and takes the ordinary
+    /// path, so existing programs parse exactly as before.
+    fn try_parse_pending_pred(
+        &mut self,
+        name: &str,
+        start: Span,
+    ) -> Result<Option<RefinementPred>, CompileError> {
+        let takes_args = matches!(
+            name,
+            "Matches" | "InRange" | "AtLeast" | "AtMost" | "MinLength" | "MaxLength" | "Length"
+        );
+        if !takes_args
+            || self.peek_kind() != Some(TokenKind::LParen)
+            || !self.pred_args_name_a_const()
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let mut args = Vec::new();
+        loop {
+            let ctx = format!("as an argument to `{name}`");
+            let arg = match self.peek() {
+                Some(t) if t.kind == TokenKind::Ident => {
+                    self.bump();
+                    PendingArg::Const(Ident {
+                        name: self.slice(t.span).to_string(),
+                        span: t.span,
+                    })
+                }
+                Some(t) if t.kind == TokenKind::StrLit => {
+                    self.bump();
+                    PendingArg::Str(parse_string_literal(self.slice(t.span), t.span)?)
+                }
+                _ => PendingArg::Num(self.parse_signed_num_literal(&ctx)?.into_pred_bound()),
+            };
+            args.push(arg);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        let close = self.expect(TokenKind::RParen, &format!("after the `{name}` arguments"))?;
+        let want = if matches!(name, "InRange") { 2 } else { 1 };
+        if args.len() != want {
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                start.merge(close.span),
+                format!(
+                    "`{name}` takes {want} argument{}, found {}",
+                    if want == 1 { "" } else { "s" },
+                    args.len()
+                ),
+            ));
+        }
+        Ok(Some(RefinementPred {
+            // A placeholder the resolution pass replaces; nothing reads it while
+            // `pending` is set.
+            kind: PredKind::NonEmpty,
+            arg_text: None,
+            pending: Some(Box::new(PendingPred {
+                name: name.to_string(),
+                args,
+                unresolved: Vec::new(),
+            })),
+            from_const: Vec::new(),
+            span: start.merge(close.span),
+        }))
     }
 
     /// The value and the literal as written (`-1_000`, from its tokens), so the
@@ -768,6 +966,46 @@ impl<'a> Parser<'a> {
             })?;
         let text = format!("{}{slice}", if neg { "-" } else { "" });
         Ok((if neg { -n } else { n }, text))
+    }
+
+    /// #3948: after an integer literal in bound position, `.unit` makes it a
+    /// `Duration` bound (`60.seconds`), with the literal rules of an
+    /// expression (unit agreement, overflow).
+    fn try_duration_bound(
+        &mut self,
+        n: i64,
+        neg: bool,
+        start: Span,
+    ) -> Result<Option<DurationBound>, CompileError> {
+        if self.tokens.get(self.pos).map(|t| t.kind) != Some(TokenKind::Dot)
+            || self.tokens.get(self.pos + 1).map(|t| t.kind) != Some(TokenKind::Ident)
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let unit_tok = self.tokens[self.pos];
+        self.bump();
+        let word = self.slice(unit_tok.span).to_string();
+        let unit = duration::resolve_duration_unit(n, &word, unit_tok.span)?;
+        let span = start.merge(unit_tok.span);
+        let millis = n
+            .checked_mul(unit.millis())
+            .map(|m| if neg { -m } else { m })
+            .ok_or_else(|| {
+                CompileError::new(
+                    "bynk.duration.literal_overflow",
+                    span,
+                    format!(
+                        "the duration `{n}.{}` overflows the millisecond range",
+                        unit.name_for(n)
+                    ),
+                )
+            })?;
+        Ok(Some(DurationBound {
+            millis,
+            lexeme: format!("{}{n}.{}", if neg { "-" } else { "" }, unit.name_for(n)),
+            span,
+        }))
     }
 
     /// A signed numeric literal in refinement-bound position (v0.21):
@@ -798,6 +1036,9 @@ impl<'a> Parser<'a> {
                             ),
                         )
                     })?;
+                if let Some(bound) = self.try_duration_bound(n, neg, span_of(t.span))? {
+                    return Ok(SignedNumLit::Duration(bound));
+                }
                 Ok(SignedNumLit::Int(IntBound {
                     value: if neg { -n } else { n },
                     lexeme: format!("{}{slice}", if neg { "-" } else { "" }),
@@ -863,6 +1104,36 @@ impl<'a> Parser<'a> {
                 format!("expected a numeric literal {ctx}, found end of file"),
             )),
         }
+    }
+
+    /// `HttpResult[T]` or `HttpResult[T, E]` (v0.9; #4394): the optional second argument is the element a
+    /// `Streaming` body carries. `head` is the span of the `HttpResult` word, already consumed.
+    fn parse_http_result_type(&mut self, head: Span) -> Result<TypeRef, CompileError> {
+        if self.peek_kind() != Some(TokenKind::LBracket) {
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                head,
+                "the built-in `HttpResult` type requires one type argument: `HttpResult[T]`",
+            ));
+        }
+        self.bump();
+        let arg = self.parse_type_ref("as the `HttpResult` type argument")?;
+        let element = if self.eat(TokenKind::Comma).is_some() {
+            Some(Box::new(self.parse_type_ref(
+                "as the `HttpResult` streaming element type",
+            )?))
+        } else {
+            None
+        };
+        let close = self.expect(
+            TokenKind::RBracket,
+            "to close the `HttpResult` type arguments",
+        )?;
+        Ok(TypeRef::HttpResult(
+            Box::new(arg),
+            element,
+            head.merge(close.span),
+        ))
     }
 
     /// v0.20a: a type reference — an atom, a parenthesised group, or a
@@ -1060,8 +1331,7 @@ impl<'a> Parser<'a> {
                     Ok(TypeRef::Effect(Box::new(arg), t.span.merge(close.span)))
                 }
                 TokenKind::Ident => {
-                    self.bump();
-                    let name = self.slice(t.span).to_string();
+                    let (name, t) = self.bump_type_name(t);
                     // Built-in type-name dispatch. Each arm below uses the exact
                     // `name == "<Name>"` idiom: the drift guard
                     // `builtin_type_names_match_parser_dispatch`
@@ -1073,20 +1343,7 @@ impl<'a> Parser<'a> {
                     //
                     // v0.9: `HttpResult` is a predeclared built-in generic.
                     if name == "HttpResult" {
-                        if self.peek_kind() != Some(TokenKind::LBracket) {
-                            return Err(CompileError::new(
-                                "bynk.parse.expected_token",
-                                t.span,
-                                "the built-in `HttpResult` type requires one type argument: `HttpResult[T]`",
-                            ));
-                        }
-                        self.bump();
-                        let arg = self.parse_type_ref("as the `HttpResult` type argument")?;
-                        let close = self.expect(
-                            TokenKind::RBracket,
-                            "to close the `HttpResult` type argument",
-                        )?;
-                        return Ok(TypeRef::HttpResult(Box::new(arg), t.span.merge(close.span)));
+                        return self.parse_http_result_type(t.span);
                     }
                     // v0.44: `QueueResult` is a predeclared non-generic built-in.
                     if name == "QueueResult" {

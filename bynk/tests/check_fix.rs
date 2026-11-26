@@ -195,7 +195,7 @@ provides Alpha = AlphaImpl {
 }
 
 service one {
-  on call(x: Int) -> Effect[Int] given Alpha {
+  on call(x: Int) -> Effect[Int] by Caller given Alpha {
     42
   }
 }
@@ -215,7 +215,7 @@ provides Alpha = AlphaImpl {
 }
 
 service one {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     42
   }
 }
@@ -671,4 +671,105 @@ fn a_named_code_at_a_workspace_root_applies_to_every_member() {
         );
     }
     assert!(!err.contains("inverted_range ×"), "{err}");
+}
+
+/// #3972: on an `Int`, a refined pattern (`InRange`, `Positive`, `NonNegative`) warns
+/// and its range rewrite is a quick fix that `--fix` does not apply, because the
+/// rewrite can make a later arm unreachable. A match that is exhaustive by ranges
+/// needs no `_` arm.
+#[test]
+fn a_refined_pattern_on_an_int_warns_and_fix_leaves_it() {
+    let root = scratch("refined-pattern");
+    write(
+        &root.join("net.bynk"),
+        "\
+commons net
+
+fn class(status: Int) -> String {
+  match status {
+    _ where InRange(200, 299) => \"success\"
+    _ where Positive && InRange(-5, 10) => \"small\"
+    _ where NonNegative => \"zero\"
+    _ => \"other\"
+  }
+}
+
+fn long(s: String) -> String {
+  match s {
+    _ where MinLength(3) => \"long\"
+    _ => \"short\"
+  }
+}
+",
+    );
+    let before = read(&root.join("net.bynk"));
+    let (code, err) = run(&bynk(), &root, &["check", "--fix", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    // The rewrite is a quick fix, not a `--fix` edit: a range arm counts for
+    // reachability and a refined arm does not, so applying it mechanically can
+    // make a later arm unreachable (`_ where NonNegative` then `_ where Positive`).
+    assert_eq!(read(&root.join("net.bynk")), before, "--fix leaves it");
+    assert!(
+        err.contains("bynk.match.refined_pattern_is_range"),
+        "the warning stays: {err}"
+    );
+    // The shapes where applying the rewrite would leave a later arm unreachable
+    // (refined arms never cover, range arms do) are left alone by `--fix` too.
+    let shapes = "commons net\n\nfn sign(n: Int) -> String {\n  match n {\n    _ where Positive => \"pos\"\n    _ where Positive => \"again\"\n    _ where NonNegative => \"zero\"\n    _ => \"neg\"\n  }\n}\n";
+    write(&root.join("net.bynk"), shapes);
+    let (code, err) = run(&bynk(), &root, &["check", "--fix", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(read(&root.join("net.bynk")), shapes, "--fix leaves it");
+    assert!(!err.contains("unreachable_arm"), "{err}");
+    // Ranges count towards exhaustiveness: no `_` arm is needed once they cover.
+    write(
+        &root.join("net.bynk"),
+        "commons net\n\nfn class(n: Int) -> String {\n  match n {\n    ..199 => \"low\"\n    200..299 => \"success\"\n    300.. => \"high\"\n  }\n}\n",
+    );
+    let (code, err) = run(&bynk(), &root, &["check", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    assert!(!err.contains("refined_pattern_is_range"), "{err}");
+}
+
+/// #3888: an email handler with no `by` is fixed by inserting `by Sender` after the return type,
+/// before a `given` clause.
+#[test]
+fn an_email_handler_without_by_gets_by_sender_before_its_given() {
+    let root = scratch("email-by");
+    let source = "\
+context app.mail
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+capability Audit {
+  fn note() -> Effect[Int]
+}
+
+provides Audit = AuditImpl {
+  fn note() -> Effect[Int] {
+    1
+  }
+}
+
+service support from email(\"support@shop.example\") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] given Audit {
+    Accept
+  }
+}
+";
+    write(&root.join("src/app/mail.bynk"), source);
+    let (code, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.actor.missing_by_on_email"],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        read(&root.join("src/app/mail.bynk")),
+        source.replace(
+            "Effect[EmailVerdict] given Audit",
+            "Effect[EmailVerdict] by Sender given Audit"
+        )
+    );
 }

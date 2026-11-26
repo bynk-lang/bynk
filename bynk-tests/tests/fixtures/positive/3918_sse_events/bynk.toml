@@ -1,0 +1,6 @@
+[project]
+name = "3918-sse-events"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

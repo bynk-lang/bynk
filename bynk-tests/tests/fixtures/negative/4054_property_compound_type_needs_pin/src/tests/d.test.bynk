@@ -1,0 +1,11 @@
+suite demo.d {
+  // 1B.5e (#4054, Decision G): a compound type with no generator is refused — the property
+  // draw has an arm per generable type. The checker refuses the binding, so the draw's remaining
+  // arms are internal errors rather than a silent `undefined`. This fixture pins that refusal.
+  // (#4120: a `List`, `Set`, `Map` and `Option` are generable now; a `Result` is not.)
+  property "a result cannot be generated" {
+    for all r: Result[Count, Count] {
+      expect r == r
+    }
+  }
+}

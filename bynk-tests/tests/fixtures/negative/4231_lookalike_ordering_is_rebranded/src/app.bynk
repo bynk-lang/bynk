@@ -1,0 +1,7 @@
+context app
+
+uses shared.order
+
+fn make() -> Ordering {
+  Ordering.Less
+}

@@ -61,6 +61,35 @@ commons demo {
 If `Reps.of(n)` is `Err(e)`, `doubled` returns `Err(e)` immediately; otherwise
 `r` is the unwrapped value.
 
+`?` also works on an `Option`, inside a function that returns an `Option` (or an
+`Effect` of one). A `Some` is unwrapped, and a `None` is returned as it is:
+
+```bynk
+commons demo {
+	type Addr = {
+		city: Option[String],
+		country: String,
+	}
+
+	type Order = {
+		address: Option[Addr],
+	}
+
+	fn shipTo(o: Order) -> Option[String] {
+		let addr = o.address?
+		let city = addr.city?
+		Some("\(city), \(addr.country)")
+	}
+}
+```
+
+A lambda follows its own return type, so a `?` in a lambda returning an `Option`
+leaves the lambda, not the function around it. An `Option` and a `Result` never
+convert into each other: in a function returning a `Result`, `?` on an `Option` is
+refused (`bynk.types.question_option_outside_http`), and `.okOr(err)` turns it into a
+`Result` first. In an HTTP handler returning `HttpResult`, the `None` of a `?` answers
+`404 NotFound` instead; see [HTTP](/reference/http/).
+
 ## Sequence fallible steps with `let … else` {#let-else}
 
 `?` hands an `Err` straight back to the caller. When a failure needs handling
@@ -140,9 +169,9 @@ For the small cases a `match` is too much for, both types carry methods:
 | `Result[T, E]` | |
 | --- | --- |
 | `map(f)`, `andThen(f)`, `mapErr(f)` | transform the value or the error, or chain a fallible step |
-| `getOrElse(x)` | a default value |
+| `getOrElse(x)`, `orElse(f)` | a default value, or a fallback `Result` (`f: E -> Result[T, F]`, run only on `Err`, so it can see what failed and change the error type) |
 | `isOk()`, `isErr()` | test the outcome |
-| `ok()` | keep the value, dropping the error (`Option[T]`) |
+| `ok()`, `err()` | keep the value, or the error, dropping the other (`Option[T]`, `Option[E]`) |
 
 There is one name per operation: chaining a step is `andThen` (not `flatMap`)
 on `Option` and `Result`.

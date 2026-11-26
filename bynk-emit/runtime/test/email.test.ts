@@ -8,6 +8,7 @@ import {
   EMAIL_MAX_RAW_BYTES,
   buildReply,
   dmarcVerdict,
+  dmarcVerdictOf,
   encodeHeaderText,
   handleEmail,
   parseInbound,
@@ -16,6 +17,7 @@ import {
   rejectReason,
   replyMime,
   replySubject,
+  subaddressTag,
 } from "../src/email.ts";
 import type { EmailReply, EmailRoute, EmailVerdict, InboundEmail, InboundMessage } from "../src/email.ts";
 import { None, Some } from "../src/result.ts";
@@ -103,6 +105,43 @@ test("pickRoute: a catch-all claims only its own domain, and nothing is claimed 
   assert.equal(pickRoute([catchAll], '"x@shop.example"@other.example'), undefined);
 });
 
+test("pickRoute: a plus-addressed recipient reaches its base address's claim (#3884)", () => {
+  const support = route("support@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([support], "support+1234@shop.example"), support);
+  // case is ignored, in the tag's neighbourhood as everywhere
+  assert.equal(pickRoute([support], "SUPPORT+X@shop.example"), support);
+});
+
+test("pickRoute: an exact claim on a tagged address wins over the base address (#3884)", () => {
+  const base = route("support@shop.example", { tag: "Accept" });
+  const vip = route("support+vip@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([base, vip], "support+vip@shop.example"), vip);
+  assert.equal(pickRoute([vip, base], "support+vip@shop.example"), vip);
+  // another tag still falls to the base address
+  assert.equal(pickRoute([base, vip], "support+other@shop.example"), base);
+});
+
+test("pickRoute: a tagged recipient with no base claim falls to the catch-all, or is not claimed (#3884)", () => {
+  const catchAll = route("*@shop.example", { tag: "Accept" });
+  const sales = route("sales@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([catchAll, sales], "support+1@shop.example"), catchAll);
+  assert.equal(pickRoute([sales], "support+1@shop.example"), undefined);
+  // the base is taken at the first `+`, and only at the recipient's own domain
+  assert.equal(pickRoute([route("a@shop.example", { tag: "Accept" })], "a+b+c@other.example"), undefined);
+  const a = route("a@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([a], "a+b+c@shop.example"), a);
+  // a local part that starts with `+` has no base
+  assert.equal(pickRoute([route("@shop.example", { tag: "Accept" })], "+x@shop.example"), undefined);
+});
+
+test("subaddressTag: the text after the first `+`, the sender's case kept (#3884)", () => {
+  assert.equal(subaddressTag("support+1234@shop.example"), "1234");
+  assert.equal(subaddressTag("Support+VIP+x@shop.example"), "VIP+x");
+  assert.equal(subaddressTag("support+@shop.example"), "");
+  assert.equal(subaddressTag("support@shop.example"), undefined);
+  assert.equal(subaddressTag("+x@shop.example"), undefined);
+});
+
 test("an unclaimed recipient is rejected with the fixed reason, before the message is read", async () => {
   const { message, calls } = fake(mime(), { to: "nobody@elsewhere.example" });
   let read = false;
@@ -168,6 +207,40 @@ test("handleEmail reads the verdict through the parser: Cloudflare's header on t
   const { message: m2 } = fake(mime({ headers: "Authentication-Results: mx.cloudflare.net; dmarc=pass\r\n" }));
   await handleEmail(m2, [route("support@shop.example", { tag: "Accept" }, seen2)], factory, () => {});
   assert.deepEqual((seen2.sender as { dmarc: unknown }).dmarc, { tag: "DmarcPass" });
+});
+
+test("a route that lists admitted verdicts refuses other mail before the handler runs (#3888)", async () => {
+  const admitting = (admits: readonly ("DmarcPass" | "DmarcFail" | "DmarcNone")[], seen: { mail?: InboundEmail }): EmailRoute => ({
+    ...route("support@shop.example", { tag: "Accept" }, seen),
+    admits,
+  });
+  const failing = `${CF.replace("dmarc=pass", "dmarc=fail")}`;
+  for (const [headers, admitted] of [
+    [CF, true],
+    [failing, false],
+    ["X-Other: 1\r\n", false],
+  ] as const) {
+    const seen: { mail?: InboundEmail } = {};
+    const { message, calls } = fake(mime({ headers }));
+    await handleEmail(message, [admitting(["DmarcPass"], seen)], factory, (l) => calls.logs.push(l));
+    assert.equal(seen.mail !== undefined, admitted);
+    assert.deepEqual(calls.rejects, admitted ? [] : ["sender not authenticated"]);
+  }
+});
+
+test("dmarcVerdictOf reads a case's header map by the Worker's own rule (#3888)", () => {
+  const read = (value: string) => dmarcVerdictOf(new Map([["authentication-results", value]]));
+  const read2 = (key: string, value: string) => dmarcVerdictOf(new Map([[key, value]]));
+  assert.deepEqual(read("mx.cloudflare.net; dmarc=pass header.from=x"), { tag: "DmarcPass" });
+  assert.deepEqual(read("mx.cloudflare.net; dmarc=fail"), { tag: "DmarcFail" });
+  assert.deepEqual(read("evil.example; dmarc=pass"), { tag: "DmarcNone" });
+  assert.deepEqual(dmarcVerdictOf(new Map()), { tag: "DmarcNone" });
+  // Header names are case-insensitive, as at the Worker, where the parser lower-cases them.
+  assert.deepEqual(read2("Authentication-Results", "mx.cloudflare.net; dmarc=pass"), { tag: "DmarcPass" });
+  assert.deepEqual(
+    dmarcVerdictOf(new Map([["Authentication-Results", "mx.cloudflare.net; dmarc=fail"], ["authentication-results", "mx.cloudflare.net; dmarc=pass"]])),
+    { tag: "DmarcFail" },
+  );
 });
 
 test("a lone topmost mx.cloudflare.net header is read as written", async () => {
@@ -286,6 +359,24 @@ test("limits: oversized headers are a parse failure", async () => {
   const r = await parseInbound({ from: "a@b.example", to: "c@d.example" }, enc.encode(body));
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.code, "EMAXHEADERSIZE");
+});
+
+test("parseInbound reads the tag of a plus-addressed recipient; the handler sees it as `subaddress` (#3884)", async () => {
+  const body = `${CF}Subject: hi\r\n\r\nx`;
+  const tagged = await parseInbound({ from: "a@b.example", to: "Support+1234@shop.example" }, enc.encode(body));
+  assert.equal(tagged.ok, true);
+  if (tagged.ok) {
+    assert.deepEqual(tagged.mail.subaddress, Some("1234"));
+    assert.equal(tagged.mail.to, "Support+1234@shop.example");
+  }
+  const plain = await parseInbound({ from: "a@b.example", to: "support@shop.example" }, enc.encode(body));
+  assert.equal(plain.ok, true);
+  if (plain.ok) assert.deepEqual(plain.mail.subaddress, None);
+  // through the dispatcher: the service claiming the base address is handed the tag
+  const seen: { mail?: InboundEmail } = {};
+  const { message } = fake(mime(), { to: "support+1234@shop.example" });
+  await handleEmail(message, [route("support@shop.example", { tag: "Accept" }, seen)], factory, () => {});
+  assert.deepEqual(seen.mail?.subaddress, Some("1234"));
 });
 
 // ------------------------------------------------------------------ verdicts
@@ -528,11 +619,18 @@ test("replyMime: an explicit subject is used as written", () => {
     to: "support@shop.example",
     subject: "hello",
     messageId: "<m@x>",
+    inReplyTo: None,
+    references: [],
+    replyTo: [],
+    cc: [],
+    date: None,
     headers: new Map(),
+    headerList: [],
     text: None,
     html: None,
     attachments: [],
     size: 0,
+    subaddress: None,
   };
   const out = replyMime(mail, replyOf("t", undefined, "Custom"), "support@shop.example");
   assert.match(out, /^Subject: Custom$/m);
@@ -694,4 +792,256 @@ test("a failure building the routes is a fixed reject, not a throw", async () =>
   );
   assert.deepEqual(f.calls.rejects, ["message could not be processed"]);
   assert.ok(!f.calls.logs.join("").includes("SECRET"));
+});
+
+// -------------------------------------------------------- threading and headers (#3886)
+
+async function parsed(headers: string) {
+  const r = await parseInbound({ from: "a@example.org", to: "support@shop.example" }, enc.encode(mime({ headers: `${CF}${headers}` })));
+  assert.ok(r.ok);
+  return r.mail;
+}
+
+test("parseInbound: the threading ids are the message ids, in the message's order", async () => {
+  const m = await parsed("In-Reply-To: <p@x>\r\nReferences: <a@x> <b@x>\r\n <c@x>\r\n");
+  assert.deepEqual(m.inReplyTo, Some("<p@x>"));
+  assert.deepEqual(m.references, ["<a@x>", "<b@x>", "<c@x>"]);
+});
+
+test("parseInbound: a message with none of the new headers has the defaults", async () => {
+  const m = await parsed("");
+  assert.deepEqual([m.inReplyTo, m.references, m.replyTo, m.cc, m.date], [None, [], [], [], None]);
+});
+
+test("parseInbound: Reply-To and Cc are bare addresses, names dropped, groups unwrapped, lists joined", async () => {
+  const m = await parsed('Reply-To: "Help Desk" <help@shop.example>\r\nCc: Ann <ann@x.example>, Team: bob@x.example, cy@x.example;\r\nCc: dee@x.example\r\n');
+  assert.deepEqual(m.replyTo, ["help@shop.example"]);
+  assert.deepEqual(m.cc, ["ann@x.example", "bob@x.example", "cy@x.example", "dee@x.example"]);
+});
+
+test("parseInbound: Date is epoch milliseconds, and None when it is missing or cannot be read", async () => {
+  const ok = await parsed("Date: Thu, 01 Jan 2026 00:00:00 +0000\r\n");
+  assert.deepEqual(ok.date, Some(Date.UTC(2026, 0, 1)));
+  for (const bad of ["Date: not a date\r\n", "Date: \r\n", ""]) {
+    assert.deepEqual((await parsed(bad)).date, None, bad);
+  }
+});
+
+test("parseInbound: headerList holds every occurrence in order, headers the first", async () => {
+  const m = await parsed("Received: from a\r\nReceived: from b\r\nX-Tag: one\r\nX-Tag: two\r\n");
+  const names = m.headerList.map((h) => h.name);
+  assert.deepEqual(m.headerList.filter((h) => h.name === "received").map((h) => h.value), ["from a", "from b"]);
+  assert.deepEqual(m.headerList.filter((h) => h.name === "x-tag").map((h) => h.value), ["one", "two"]);
+  assert.ok(names.indexOf("received") < names.indexOf("x-tag"), "in the order they appear");
+  assert.equal(m.headers.get("x-tag"), "one");
+});
+
+test("replyMime: a reply to a threaded message carries the chain from `references`", async () => {
+  const m = await parsed("References: <a@x> <b@x>\r\n");
+  const out = replyMime({ ...m, messageId: "<m@x>" }, replyOf("t"), "support@shop.example");
+  assert.match(out, /^In-Reply-To: <m@x>$/m);
+  assert.match(out, /^References: <a@x> <b@x> <m@x>$/m);
+});
+
+test("dmarcVerdictOf: the first occurrence across headers and then headerList decides, as the Worker reads a case's message", () => {
+  const pass = { name: "Authentication-Results", value: "mx.cloudflare.net; dmarc=pass header.from=x" };
+  assert.deepEqual(dmarcVerdictOf(new Map(), [pass]), { tag: "DmarcPass" });
+  const fail = new Map([["authentication-results", "mx.cloudflare.net; dmarc=fail"]]);
+  assert.deepEqual(dmarcVerdictOf(fail, [pass]), { tag: "DmarcFail" });
+  assert.deepEqual(dmarcVerdictOf(new Map(), []), { tag: "DmarcNone" });
+});
+
+// ------------------------------------------------------------------ fallback (#3885)
+
+// A fallback forwards what the service could not process, labelled with the outcome only, and
+// rejects as it always did when there is none or the forward itself is refused.
+function withFallback(r: EmailRoute, fallback = "ops@ops.example"): EmailRoute {
+  return { ...r, fallback };
+}
+
+function recording(raw: string | Uint8Array, over: Partial<InboundMessage> = {}) {
+  const forwards: { to: string; headers: Record<string, string> }[] = [];
+  const f = fake(raw, {
+    forward: async (to, headers) => void forwards.push({ to, headers: Object.fromEntries(headers?.entries() ?? []) }),
+    ...over,
+  });
+  return { ...f, forwards };
+}
+
+function routeOf(actions: { forward?: string[]; reply?: boolean; tag?: Record<string, string> }): EmailVerdict {
+  return {
+    tag: "Route",
+    actions: {
+      forward: actions.forward ?? [],
+      reply: actions.reply === true ? Some(replyOf("thanks")) : None,
+      tag: new Map(Object.entries(actions.tag ?? {})),
+    },
+  };
+}
+
+test("Route: a reply and two forwards all succeed, the reply first, tags on the forwards", async () => {
+  const order: string[] = [];
+  const { message, calls, forwards } = recording(mime(), {
+    reply: async () => void order.push("reply"),
+    forward: async (to, headers) => void order.push(`forward ${to} ${headers?.get("X-Ticket")}`),
+  });
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example", "b@x.example"], reply: true, tag: { "X-Ticket": "T-1" } }))], factory, () => {});
+  assert.deepEqual(order, ["reply", "forward a@x.example T-1", "forward b@x.example T-1"]);
+  assert.deepEqual(calls.rejects, []);
+  void forwards;
+});
+
+test("Route: duplicates are forwarded once, without regard to case", async () => {
+  const { message, forwards } = recording(mime());
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["A@x.example", "a@X.example", "b@x.example"] }))], factory, () => {});
+  assert.deepEqual(forwards.map((f) => f.to), ["A@x.example", "b@x.example"]);
+});
+
+test("Route: one forward refused is logged and the rest still run, and the message is handled", async () => {
+  const { message, calls, forwards } = recording(mime(), {
+    forward: async (to) => {
+      if (to === "bad@x.example") throw Object.assign(new Error("not verified: bad@x.example"), { name: "ForwardError" });
+    },
+  });
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["bad@x.example", "ok@x.example"] }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(calls.rejects, []);
+  assert.match(calls.logs.join("\n"), /forward refused \(ForwardError\)/);
+  assert.ok(calls.logs.every((l) => !l.includes("bad@x.example")), "the address is not logged");
+  void forwards;
+});
+
+test("Route: when every action is refused the message is rejected with the first refusal's reason", async () => {
+  const refuse = async (): Promise<never> => {
+    throw new Error("no");
+  };
+  const { message, calls } = recording(mime(), { reply: refuse, forward: refuse });
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], reply: true }))], factory, () => {});
+  assert.deepEqual(calls.rejects, ["reply refused"]);
+  const only = recording(mime(), { forward: refuse });
+  await handleEmail(only.message, [route("support@shop.example", routeOf({ forward: ["a@x.example", "b@x.example"] }))], factory, () => {});
+  assert.deepEqual(only.calls.rejects, ["forward refused"]);
+});
+
+test("Route: a reply that fails does not stop the forwards, which handle the message", async () => {
+  const { message, calls, forwards } = recording(mime(), { reply: async () => { throw new Error("no"); } });
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], reply: true }))], factory, () => {});
+  assert.deepEqual([calls.rejects, forwards.map((f) => f.to)], [[], ["a@x.example"]]);
+});
+
+test("Route: an empty route is Accept", async () => {
+  const { message, calls, forwards } = recording(mime());
+  await handleEmail(message, [route("support@shop.example", routeOf({}))], factory, () => {});
+  assert.deepEqual([calls.rejects, forwards, calls.replies], [[], [], []]);
+});
+
+test("Route: 21 destinations is a handler fault, and 20 is not", async () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => `d${i}@x.example`);
+  const over = recording(mime());
+  await handleEmail(over.message, [route("support@shop.example", routeOf({ forward: many(21) }))], factory, () => {});
+  assert.deepEqual([over.calls.rejects, over.forwards.length], [["message could not be processed"], 0]);
+  const at = recording(mime());
+  await handleEmail(at.message, [route("support@shop.example", routeOf({ forward: many(20) }))], factory, () => {});
+  assert.equal(at.forwards.length, 20);
+  // Duplicates count once: 21 spellings of 20 destinations are within the cap.
+  const dup = recording(mime());
+  await handleEmail(dup.message, [route("support@shop.example", routeOf({ forward: [...many(20), "D0@X.example"] }))], factory, () => {});
+  assert.equal(dup.forwards.length, 20);
+});
+
+test("Route: a bad tag is dropped and logged by name only, a good one is written", async () => {
+  const { message, calls, forwards } = recording(mime());
+  const tag = { "X-Good": "yes", "Subject": "hijack", "X-Bad Name": "v", "X-Split": "a\r\nBcc: e@x.example", "X-Ok-2": "fine" };
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], tag }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards[0]!.headers, { "x-good": "yes", "x-ok-2": "fine" });
+  const log = calls.logs.join("\n");
+  assert.match(log, /tag dropped \(Subject\)/);
+  assert.match(log, /tag dropped \(X-Bad Name\)/);
+  assert.match(log, /tag dropped \(X-Split\)/);
+  assert.ok(!log.includes("hijack") && !log.includes("Bcc"), "values are never logged");
+});
+
+test("Route: a tag value `Headers` refuses is dropped like any bad tag, and the rest of the route still runs", async () => {
+  const { message, calls, forwards } = recording(mime());
+  const tag = { "X-Nul": "a\0b", "X-Wide": "caf\u00e9 \u4f60\u597d", "x-lower": "kept", "X-Fine": "yes" };
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], tag }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(calls.rejects, []);
+  assert.deepEqual(forwards.map((f) => f.to), ["a@x.example"]);
+  assert.deepEqual(forwards[0]!.headers, { "x-lower": "kept", "x-fine": "yes" });
+  const log = calls.logs.join("\n");
+  assert.match(log, /tag dropped \(X-Nul\)/);
+  assert.match(log, /tag dropped \(X-Wide\)/);
+});
+
+test("Route: a forward with no tags is made as the plain forward is", async () => {
+  const seen: unknown[][] = [];
+  const { message } = recording(mime(), { forward: async (...args: unknown[]) => void seen.push(args) } as Partial<InboundMessage>);
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"] }))], factory, () => {});
+  assert.deepEqual(seen, [["a@x.example"]]);
+});
+
+test("fallback: a handler fault is forwarded with the outcome header, not rejected", async () => {
+  const { message, calls, forwards } = recording(mime());
+  const faulting = withFallback(route("support@shop.example", async () => { throw new Error("SECRET-BODY-TEXT"); }));
+  await handleEmail(message, [faulting], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards, [{ to: "ops@ops.example", headers: { "x-bynk-fallback": "handler-fault" } }]);
+  assert.deepEqual(calls.rejects, []);
+  assert.ok(calls.logs.every((l) => !l.includes("SECRET-BODY-TEXT")), "nothing from the message is logged");
+  assert.match(calls.logs.join("\n"), /forwarded to the fallback/);
+});
+
+test("fallback: a return that is not a verdict is a handler fault too", async () => {
+  const { message, forwards } = recording(mime());
+  const bad = withFallback(route("support@shop.example", (async () => "oops") as unknown as () => Promise<EmailVerdict>));
+  await handleEmail(message, [bad], factory, () => {});
+  assert.deepEqual(forwards.map((f) => f.headers["x-bynk-fallback"]), ["handler-fault"]);
+});
+
+test("fallback: an unparseable message is forwarded as unreadable, and the handler never sees it", async () => {
+  let body = `${CF}Content-Type: multipart/mixed; boundary="b"\r\n\r\n`;
+  for (let i = 0; i <= EMAIL_MAX_PARTS; i++) body += `--b\r\nContent-Type: text/plain\r\n\r\nx\r\n`;
+  body += "--b--\r\n";
+  const { message, calls, forwards } = recording(body);
+  const seen: { mail?: InboundEmail } = {};
+  await handleEmail(message, [withFallback(route("support@shop.example", { tag: "Accept" }, seen))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards, [{ to: "ops@ops.example", headers: { "x-bynk-fallback": "unreadable" } }]);
+  assert.deepEqual(calls.rejects, []);
+  assert.equal(seen.mail, undefined);
+});
+
+test("fallback: a stream that errors is forwarded as unreadable", async () => {
+  const broken = new ReadableStream<Uint8Array>({ pull() { throw new Error("SECRET"); } });
+  const { message, calls, forwards } = recording(mime(), { raw: broken });
+  await handleEmail(message, [withFallback(route("support@shop.example", { tag: "Accept" }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards.map((f) => f.headers["x-bynk-fallback"]), ["unreadable"]);
+  assert.deepEqual(calls.rejects, []);
+});
+
+test("fallback: an oversized message, a refused reply and a refused forward are rejected as without one", async () => {
+  const big = recording(mime(), { rawSize: EMAIL_MAX_RAW_BYTES + 1 });
+  await handleEmail(big.message, [withFallback(route("support@shop.example", { tag: "Accept" }))], factory, () => {});
+  assert.deepEqual([big.calls.rejects, big.forwards], [["message too large"], []]);
+
+  const reply = recording(mime(), { reply: async () => { throw new Error("refused"); } });
+  const replying = withFallback(route("support@shop.example", { tag: "Reply", message: { body: "hi" } as unknown as EmailReply }));
+  await handleEmail(reply.message, [replying], factory, () => {});
+  assert.deepEqual([reply.calls.rejects, reply.forwards], [["reply refused"], []]);
+
+  const refusing = recording(mime(), { forward: async () => { throw new Error("not verified"); } });
+  await handleEmail(refusing.message, [withFallback(route("support@shop.example", { tag: "Forward", to: "x@y.example" }))], factory, () => {});
+  assert.deepEqual(refusing.calls.rejects, ["forward refused"]);
+});
+
+test("fallback: if the fallback forward is itself refused, the rejection is today's", async () => {
+  const { message, calls } = fake(mime(), { forward: async () => { throw Object.assign(new Error("not verified: ops@ops.example"), { name: "ForwardError" }); } });
+  const faulting = withFallback(route("support@shop.example", async () => { throw new Error("boom"); }));
+  await handleEmail(message, [faulting], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(calls.rejects, ["message could not be processed"]);
+  assert.match(calls.logs.join("\n"), /fallback forward refused \(ForwardError\)/);
+  assert.ok(calls.logs.every((l) => !l.includes("ops@ops.example")), "the address is not logged");
+});
+
+test("fallback: with none declared the behaviour is today's", async () => {
+  const { message, calls, forwards } = recording(mime());
+  await handleEmail(message, [route("support@shop.example", async () => { throw new Error("boom"); })], factory, () => {});
+  assert.deepEqual([calls.rejects, forwards], [["message could not be processed"], []]);
 });

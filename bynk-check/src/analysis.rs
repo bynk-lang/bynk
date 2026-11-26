@@ -229,6 +229,11 @@ pub struct ProjectAnalysis {
     /// Only contexts/adapters have an entry; empty when the pipeline bails
     /// before the checker.
     pub boundary_info: HashMap<String, ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, for the editor's hover on a written field's column and the completion
+    /// of a typed read's fields. Empty when no unit writes a typed point.
+    pub analytics:
+        std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets, in that order. Empty when the pipeline bails before the
@@ -317,6 +322,7 @@ fn bailed(
         sequence_info: HashMap::new(),
         architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
+        analytics: Default::default(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
     }
@@ -566,6 +572,38 @@ fn per_unit_infos(
     (sequence_info, boundary_info)
 }
 
+/// The lock's registry as read, and as the round reconciled it so far; neither is written anywhere.
+type LockRegistries = (
+    bynk_project::schema_registry::SchemaRegistry,
+    bynk_project::schema_registry::SchemaRegistry,
+);
+
+/// #4502: the Analytics column mappings the checked units write, for the editor, and the lock's
+/// check of them (which needs the checked units, so it runs after them and not with the
+/// declaration-only passes). The registry is the scratch copy the round already reconciled; the
+/// lock is never written.
+fn analytics_round(
+    lock_state: Option<LockRegistries>,
+    unit_callees: &project_model::UnitCallees,
+    parsed: &[ParsedFile],
+    errors: &mut ErrorSink,
+) -> std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry> {
+    if let Some((existing, mut scratch)) = lock_state {
+        let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+        crate::analytics_lock::reconcile_analytics(
+            &existing,
+            &mut scratch,
+            unit_callees,
+            &mut analytics_errors,
+        );
+        errors.extend_attributed_by_span(parsed, analytics_errors);
+    }
+    crate::analytics_lock::live_mappings(unit_callees)
+        .into_iter()
+        .map(|(key, live)| (key, live.entry))
+        .collect()
+}
+
 /// The callees of a unit's checked files that later passes read (events emits, cross-context
 /// service calls and agent calls), merged into the project-wide accumulator.
 fn retain_unit_callees(
@@ -579,9 +617,12 @@ fn retain_unit_callees(
             .flat_map(|t| &t.callees)
             .filter(|(_, c)| {
                 project_model::is_events_emit(c)
+                    || crate::queue_producers::is_queue_send(c)
                     || matches!(
                         c,
-                        crate::checker::Callee::Cross { .. } | crate::checker::Callee::Agent { .. }
+                        crate::checker::Callee::Cross { .. }
+                            | crate::checker::Callee::Agent { .. }
+                            | crate::checker::Callee::AnalyticsWrite { .. }
                     )
             })
             .map(|(id, c)| (*id, c.clone())),
@@ -656,6 +697,8 @@ fn analyse_project_inner(
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);
+    // #3941: `env(NAME)` constants take the default environment's values.
+    project_model::resolve_env_consts(&mut parsed, roots.project_root(), overlay, &mut errors);
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution below does not re-register every file for every unit.
     errors.register_parsed(&parsed);
@@ -784,14 +827,11 @@ fn analyse_project_inner(
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
-    // -- 6. `uses` name-conflict detection. --
-    project_model::phase_uses_name_conflicts(
-        &unit_uses,
-        &unit_tables,
-        &parsed,
-        &groups,
-        &mut errors,
-    );
+    // -- 6. `uses` views: selection, renames, aliases, qualified names, and the
+    //       names two used commons share (#4045). --
+    let mut unit_tables = unit_tables;
+    crate::uses_view::phase_use_views(&unit_uses, &parsed, &groups, &mut unit_tables, &mut errors);
+    let unit_tables = unit_tables;
     // -- 6.1. #2618: a public signature naming a private type. --
     project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
@@ -908,6 +948,7 @@ fn analyse_project_inner(
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
     let mut contract_diff = ContractDiff::default();
+    let mut lock_state: Option<LockRegistries> = None; // for `analytics_round` (#4502)
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
@@ -936,6 +977,16 @@ fn analyse_project_inner(
                     &mut agent_errors,
                 );
                 errors.extend_attributed_by_span(&parsed, agent_errors);
+                // #3956: the order of each `derives Ord` type.
+                let mut order_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+                crate::ord_order::reconcile_orders(
+                    &existing_reg,
+                    &mut updated,
+                    &parsed,
+                    &mut order_errors,
+                );
+                errors.extend_attributed_by_span(&parsed, order_errors);
+                lock_state = Some((existing_reg, updated));
             }
             Err(err) => {
                 contract_diff.lock = LockState::Unreadable;
@@ -1144,7 +1195,7 @@ fn analyse_project_inner(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_flattened,
-        &unit_callees,
+        (&unit_callees, &unit_uses, tys),
         &mut errors,
     );
 
@@ -1156,6 +1207,7 @@ fn analyse_project_inner(
         &unit_uses,
         &unit_consumes,
         &unit_type_aliases,
+        &unit_tables,
         std::mem::take(&mut refs),
     );
 
@@ -1201,6 +1253,7 @@ fn analyse_project_inner(
         doc_scope.insert(name.clone(), scope);
     }
 
+    let analytics = analytics_round(lock_state, &unit_callees, &parsed, &mut errors);
     crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
@@ -1216,6 +1269,7 @@ fn analyse_project_inner(
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     }
@@ -1232,7 +1286,7 @@ fn phase_clean_program_checks(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
-    unit_callees: &project_model::UnitCallees,
+    facts: project_model::CallFacts<'_>,
     errors: &mut ErrorSink,
 ) {
     // On the bundle target, a context's required capability with no provider
@@ -1248,7 +1302,7 @@ fn phase_clean_program_checks(
         unit_consumes,
         unit_consumes_aliases,
         unit_tables,
-        unit_callees,
+        facts,
         unit_flattened,
         errors,
     );
@@ -1298,12 +1352,12 @@ mod tests {
     const PAYMENT: &str = "context demo.payment\n\n\
 exports transparent { Receipt }\n\n\
 type Receipt = { id: String }\n\n\
-service authorise {\n  on call(id: String) -> Effect[Result[Receipt, Int]] {\n    Ok(Receipt { id: id })\n  }\n}\n";
+service authorise {\n  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {\n    Ok(Receipt { id: id })\n  }\n}\n";
 
     const CHECKOUT: &str = "context demo.checkout\n\n\
 uses demo.money\n\nconsumes demo.payment\n\n\
 fn price() -> Cents { 100 }\n\n\
-service pay {\n  on call(id: String) -> Effect[Result[Receipt, Int]] {\n    demo.payment.authorise(id)\n  }\n}\n";
+service pay {\n  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {\n    demo.payment.authorise(id)\n  }\n}\n";
 
     #[test]
     fn a_consuming_context_checks_clean_against_its_uses_and_consumes() {

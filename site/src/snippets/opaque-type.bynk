@@ -18,7 +18,7 @@ fn parse(raw: String) -> Result[OrderId, ValidationError] {
 Run calls `service playground`, which parses a raw string into an `OrderId`.
 ---
 service playground {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     match parse("order-42") {
       Ok(_) => "parsed an OrderId"
       Err(e) => e.message

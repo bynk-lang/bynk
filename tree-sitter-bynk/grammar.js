@@ -56,6 +56,13 @@ module.exports = grammar({
   word: ($) => $.identifier,
 
   conflicts: ($) => [
+    // #3932: after `capability X = K`, an `@…` is the derived capability's own
+    // annotation or the first of an `agent`'s; the next token (`agent` or not) decides.
+    [$.capability_decl],
+    // #3975: `@…` before a `type` or an `agent` in a context body; the next token decides.
+    [$.type_decl, $.agent_decl],
+    [$.opaque_type],
+    [$.refined_type],
     // #2654: `let (T { … })` is a parenthesised pattern either way; only the
     // end of the statement (an `else` or none) says whether the record
     // pattern stood alone.
@@ -66,6 +73,15 @@ module.exports = grammar({
     // content (match arms / block statements vs field inits) decides which one
     // survives at parse time.
     [$.record_construction, $.record_spread, $._primary],
+    // #4403: the same ambiguity one segment on — after `a.b`, a `{` opens a match/if
+    // body (the expression `a.b`) or a record construction/spread `a.b { … }`.
+    [$.qualified_type_ref, $._primary],
+    // An `expect` also admits an observation over a capability seam, whose subject
+    // `Cap.op` overlaps a `field_access` (the start of an ordinary predicate) and,
+    // since #4403, a qualified record head `a.b { … }`. All parses survive until
+    // the token after the op reveals whether a matcher (`called`/`never`/`before`),
+    // a record body, or an ordinary continuation (`(`, an operator, …) follows.
+    [$.qualified_type_ref, $.observation_expr, $._primary],
     // v0.20a: `(x …` is ambiguous between a lambda parameter list and a
     // parenthesised expression (and `()` the unit literal) until the
     // closing `)` is followed — or not — by `=>`.
@@ -85,11 +101,6 @@ module.exports = grammar({
     // following `<n> times` count from the end of the observation — GLR keeps
     // both parses alive until the next token decides.
     [$.observation_expr],
-    // The subject `Cap.op` overlaps a `field_access` (start of an ordinary
-    // predicate); both parses survive until the token after the op reveals
-    // whether a matcher (`called`/`never`/`before`) or an ordinary continuation
-    // (`(`, an operator, …) follows.
-    [$.observation_expr, $._primary],
     // `trace` is contextual: `trace (` opens either the `trace(Cap.op)`
     // builtin or an ordinary call to a function named `trace` (the compiler
     // picks the builtin only on the exact `trace ( Ident . Ident )` shape). GLR
@@ -161,6 +172,8 @@ module.exports = grammar({
       seq(
         "commons",
         field("name", $.qualified_name),
+        // #3984: `commons x.y for tests`, a commons only suites may `uses`.
+        optional(seq("for", field("marker", alias("tests", $.test_only_marker)))),
         choice(
           seq("{", repeat($._commons_body_item), "}"),
           // Fragment form: header followed by items to EOF (or the next
@@ -217,6 +230,9 @@ module.exports = grammar({
     _commons_body_item: ($) =>
       choice(
         $.uses_decl,
+        // #4044: a commons may `consumes` types (braced, type-only); the
+        // checker refuses every other form (`bynk.commons.consumes_not_types`).
+        $.consumes_decl,
         $.type_decl,
         $.fn_decl,
         $.messages_decl,
@@ -297,7 +313,20 @@ module.exports = grammar({
 
     // -- Headers / clauses --
 
-    uses_decl: ($) => seq("uses", field("target", $.qualified_name)),
+    uses_decl: ($) =>
+      seq(
+        "uses",
+        field("target", $.qualified_name),
+        optional(
+          choice(
+            // #4045: `uses lib.y as Y` — the commons' names are read as `Y.Status`.
+            seq("as", field("alias", $.identifier)),
+            // #4045: `uses lib.y { Status as YStatus, describe }` — selected
+            // names, any of them renamed with `as`.
+            seq("{", optional(sep1($.consumes_item, ",")), optional(","), "}"),
+          ),
+        ),
+      ),
     consumes_decl: ($) =>
       seq(
         "consumes",
@@ -399,6 +428,8 @@ module.exports = grammar({
 
     type_decl: ($) =>
       seq(
+        // #3975: `@discriminator("…")` before a sum's `type`.
+        repeat(field("annotation", $.store_annotation)),
         optional(field("visibility", $.visibility_modifier)),
         "type",
         field("name", $.identifier),
@@ -459,6 +490,8 @@ module.exports = grammar({
         optional(seq("where", field("refinement", $.refinement))),
         // #2686: `@example(…)` after the refinement.
         repeat(field("annotation", $.store_annotation)),
+        // #3793: `name: T replaces old`, the field's previous name. `replaces` is contextual.
+        optional(seq("replaces", field("replaces", $.identifier))),
         // v0.11: an optional initial-value expression. Meaningful on agent
         // `store` fields; the checker restricts where it applies.
         optional(seq("=", field("init", $._expression))),
@@ -563,6 +596,8 @@ module.exports = grammar({
     sum_variant: ($) =>
       seq(
         "|",
+        // #3975: `| @name("charge.succeeded") ChargeSucceeded`.
+        repeat(field("annotation", alias($._variant_annotation, $.store_annotation))),
         field("name", $.constant_name),
         optional(
           seq(
@@ -575,6 +610,8 @@ module.exports = grammar({
       ),
     variant_payload_field: ($) =>
       seq(
+        // #3975: `@name("pull_request") pr: PullRequest`.
+        repeat(field("annotation", $.store_annotation)),
         field("name", $.identifier),
         ":",
         field("type", $._type_ref),
@@ -584,7 +621,16 @@ module.exports = grammar({
       seq(
         "enum",
         "{",
-        optional(sep1(field("variant", $.constant_name), ",")),
+        // #3975: a tag may carry its `@name("…")`.
+        optional(
+          sep1(
+            seq(
+              repeat(field("annotation", alias($._variant_annotation, $.store_annotation))),
+              field("variant", $.constant_name),
+            ),
+            ",",
+          ),
+        ),
         optional(","),
         "}",
       ),
@@ -605,6 +651,8 @@ module.exports = grammar({
       choice(
         "Matches",
         "InRange",
+        "AtLeast",
+        "AtMost",
         "MinLength",
         "MaxLength",
         "Length",
@@ -612,6 +660,7 @@ module.exports = grammar({
         "Positive",
         "NonEmpty",
         "IsoDate",
+        "Cron",
       ),
     // v0.21/v0.142 (ADR 0166): a refinement-bound number may be negated —
     // `InRange(-1_000, 1_000_000)` — mirroring `parse_signed_num_literal`'s
@@ -622,7 +671,11 @@ module.exports = grammar({
         seq(optional("-"), $.number_literal),
         seq(optional("-"), $.float_literal),
         seq(optional("-"), $.decimal_literal),
+        // #3948: a `Duration` bound — `AtLeast(60.seconds)`, `InRange(1.second, 1.day)`.
+        seq(optional("-"), $.number_literal, ".", $.identifier),
         $.string_literal,
+        // #3951: a constant standing for the literal it is bound to.
+        $.identifier,
       ),
 
     _base_type: ($) => $.base_type,
@@ -646,18 +699,40 @@ module.exports = grammar({
         $.validation_error_type,
         $.generic_type_ref,
         $.applied_type_ref,
+        $.qualified_type_ref,
         $.identifier,
+      ),
+
+    // #4045: a type named through a `uses` clause, `Y.Status` by an alias or
+    // `lib.y.Status` by the commons' full name.
+    qualified_type_ref: ($) =>
+      seq(
+        field("qualifier", $.identifier),
+        repeat1(seq(".", field("name", $.identifier))),
       ),
 
     // v0.157 (ADR 0183): `Name[Arg, …]` — an application of a user-declared
     // generic type. Distinct from `generic_type_ref` (the fixed built-in
     // generics); the head is a user identifier.
+    //
+    // #4403: the head may be a name read through a `uses` clause — `Y.Box[Int]`
+    // by an alias, `lib.y.Box[Int]` by the commons' full name — as it is a plain
+    // type name in `qualified_type_ref`.
     applied_type_ref: ($) =>
-      seq(
-        field("name", $.identifier),
-        "[",
-        sep1(field("arg", $._type_ref), ","),
-        "]",
+      choice(
+        seq(
+          field("name", $.identifier),
+          "[",
+          sep1(field("arg", $._type_ref), ","),
+          "]",
+        ),
+        seq(
+          field("qualifier", $.identifier),
+          repeat1(seq(".", field("name", $.identifier))),
+          "[",
+          sep1(field("arg", $._type_ref), ","),
+          "]",
+        ),
       ),
 
     // v0.20a: a function type — `A -> B`, `(A, B) -> C`, `() -> B`,
@@ -700,8 +775,6 @@ module.exports = grammar({
             choice(
               alias("Option", $.builtin_type),
               alias("Effect", $.builtin_type),
-              // v0.9: HTTP result type.
-              alias("HttpResult", $.builtin_type),
               // v0.20b: the built-in list collection.
               alias("List", $.builtin_type),
               // K6a (#2596): the built-in set collection.
@@ -717,6 +790,15 @@ module.exports = grammar({
           ),
           "[",
           field("arg", $._type_ref),
+          "]",
+        ),
+        // v0.9: the HTTP result type, `HttpResult[T]`. #4394: with an optional second argument naming
+        // what a `Streaming` body carries, `HttpResult[T, E]`.
+        seq(
+          field("name", alias("HttpResult", $.builtin_type)),
+          "[",
+          field("arg", $._type_ref),
+          optional(seq(",", field("arg", $._type_ref))),
           "]",
         ),
         // Binary built-ins — `Name[K, V]`.
@@ -900,6 +982,15 @@ module.exports = grammar({
         // #2858: the optional `json { }` policy, likewise a header-position
         // `from http` concern restricted by the checker.
         optional(field("json", $.json_policy)),
+        // #3916: the optional `errors { }` policy, likewise a header-position
+        // `from http` concern restricted by the checker.
+        optional(field("errors", $.errors_policy)),
+        // #3877: the optional `delivery { }` policy, a header-position
+        // `from queue` concern restricted by the checker.
+        optional(field("delivery", $.delivery_policy)),
+        // #3885: the optional `fallback { }` policy, a header-position
+        // `from email` concern restricted by the checker.
+        optional(field("fallback", $.fallback_policy)),
         // v0.140 (ADR 0163): a handler may carry one or more `@name(args)`
         // annotations (`@cache(maxAge: 5.minutes)`, `@limit(maxBody: …)`) —
         // the same shape `store_annotation` already gives store fields.
@@ -954,6 +1045,41 @@ module.exports = grammar({
       ),
     json_field: ($) =>
       seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3916: `errors { <name>: <value>, … }`. `errors` is a contextual keyword (like
+    // `json`); the one field name, `format`, is an ordinary identifier matched by
+    // the checker.
+    errors_policy: ($) =>
+      seq(
+        "errors",
+        "{",
+        repeat(seq($.errors_field, optional(","))),
+        "}",
+      ),
+    errors_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3877: `delivery { <name>: <value>, … }`. `delivery` is a contextual
+    // keyword (like `json`); keys are ordinary identifiers matched against the
+    // closed set by the checker.
+    delivery_policy: ($) =>
+      seq(
+        "delivery",
+        "{",
+        repeat(seq($.delivery_field, optional(","))),
+        "}",
+      ),
+    delivery_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3885: `fallback { forward: <address> }`. `fallback` is a contextual keyword (like
+    // `delivery`); the key is an ordinary identifier matched against the closed set by the checker.
+    fallback_policy: ($) =>
+      seq(
+        "fallback",
+        "{",
+        repeat(seq($.fallback_field, optional(","))),
+        "}",
+      ),
+    fallback_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
     // v0.44: `from <protocol>` on the service header.
     // v0.103: `from websocket(in: I, out: O)` binds the inbound/outbound frame
     // types. `websocket`, `in`, and `out` are contextual (resolved by `word`).
@@ -974,7 +1100,13 @@ module.exports = grammar({
           seq("queue", "(", field("name", $.string_literal), ")"),
           // #3328: `from email("support@shop.example")` — inbound email.
           // `email` is contextual, like `websocket`.
-          seq("email", "(", field("address", $.string_literal), ")"),
+          // #3889: a string literal, or the name of a constant that is one.
+          seq(
+            "email",
+            "(",
+            field("address", choice($.string_literal, $.identifier)),
+            ")",
+          ),
           seq(
             "websocket",
             "(",
@@ -1058,6 +1190,8 @@ module.exports = grammar({
 
     agent_decl: ($) =>
       seq(
+        // #3932: `@busyAfter(5.seconds)` before `agent`.
+        repeat($.store_annotation),
         "agent",
         field("name", $.identifier),
         // State-migrations S3 (#2248): `agent New replaces Old` — a class
@@ -1135,6 +1269,8 @@ module.exports = grammar({
         ":",
         field("kind", $.store_kind),
         repeat(field("annotation", $.store_annotation)),
+        // #3793: `store name: Kind[T] replaces old`.
+        optional(seq("replaces", field("replaces", $.identifier))),
         optional(seq("=", field("init", $._expression))),
       ),
     store_kind: ($) =>
@@ -1148,6 +1284,17 @@ module.exports = grammar({
     // matches the closed registry). An argument is an optional `label:` then a
     // value expression — `by: orderId`, `5.minutes`.
     store_annotation: ($) =>
+      seq(
+        "@",
+        field("name", $.identifier),
+        optional(
+          seq("(", optional(sep1($.annotation_arg, ",")), optional(","), ")"),
+        ),
+      ),
+    // #3975: the annotation before a variant or an enum tag. A rule of its own, so the parser
+    // state after it is not shared with the places an identifier follows an annotation (a field
+    // name), and a capitalised variant name is read as one. Shown as a `store_annotation`.
+    _variant_annotation: ($) =>
       seq(
         "@",
         field("name", $.identifier),
@@ -1258,7 +1405,8 @@ module.exports = grammar({
         "on",
         "schedule",
         "(",
-        field("schedule", $.string_literal),
+        // #3875: a string literal, or the name of a constant that is one.
+        field("schedule", choice($.string_literal, $.identifier)),
         ")",
         "(",
         optional(sep1($.param, ",")),
@@ -1390,6 +1538,8 @@ module.exports = grammar({
             // (`sameSite = Lax`).
             $.scheme_duration,
             $.identifier,
+            // #3938: a flag (`sessions = true`).
+            $.boolean_literal,
           ),
         ),
       ),
@@ -1414,8 +1564,9 @@ module.exports = grammar({
     // operation — `stub Cap.op(<arg pattern>, …) <rhs>`. Only admitted inside a
     // suite/case body. An arg pattern is `_` (any) or a value expression; the
     // right-hand side is `returns <expr> [after <expr>]`, `returns each [ <outcome>, … ]`
-    // (a scripted sequence, where an outcome is `fails` or an expr), `fails`, or
-    // `never`.
+    // (a scripted sequence, where an outcome is `fails` or an expr), `fails`,
+    // `never`, or (#3894, a consumed service's) `rejected <Refusal>`, `faulted`
+    // or `unreachable`.
     // `returns`/`each`/`fails` are contextual words. Keyword `stub` since the
     // keyword-hygiene batch (#548); formerly a pun on `provides`.
     stub_clause: ($) =>
@@ -1423,7 +1574,13 @@ module.exports = grammar({
         "stub",
         field("cap", $.identifier),
         ".",
+        // #3892: a consumed service is named by its context's qualified path
+        // (`stub shop.pay.authorise(_) …`), so more dotted segments may precede
+        // the operation.
+        repeat(seq(field("path", $.identifier), ".")),
         field("op", $.identifier),
+        // #3945: a generic operation's type arguments, `stub Cap.op[T](…)`.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         "(",
         optional(
           seq(
@@ -1455,6 +1612,11 @@ module.exports = grammar({
           ),
           "fails",
           "never",
+          // #3894: a consumed service's call that was refused, whose handler
+          // faulted, or whose outcome is unknown. Contextual words.
+          seq("rejected", field("refusal", $.identifier)),
+          "faulted",
+          "unreachable",
         ),
       ),
     // #2134: a suite- or case-scoped `env { NAME = "value" … }` clause — the
@@ -1726,8 +1888,15 @@ module.exports = grammar({
       seq(
         field("call", $._expression),
         optional(field("principal", $.call_site_actor)),
-        "faults",
+        choice("faults", seq("violates", field("name", $.violates_name))),
       ),
+
+    // #4035: `expect <call> violates <name>` holds when the named invariant,
+    // transition or `@unique` constraint refused the call's commit. `violates`
+    // is contextual, as `faults` is. The name is a dotted path: `name`,
+    // `Agent.name` or `field.index`.
+    violates_name: ($) =>
+      prec.right(seq($.identifier, repeat(seq(".", $.identifier)))),
 
     // #2842: a snapshot claim — `expect <value> matches snapshot "<name>"`
     // compares the value's canonical JSON with a stored snapshot. `matches` and
@@ -1750,6 +1919,8 @@ module.exports = grammar({
         field("cap", $.identifier),
         ".",
         field("op", $.identifier),
+        // #3945: `Cap.op[T] called …` observes one type argument of a generic operation.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         choice(
           seq(
             "called",
@@ -2166,9 +2337,11 @@ module.exports = grammar({
         "]",
       ),
 
+    // #4403: the type may be read through a `uses` clause — `Y.Point { … }` by an
+    // alias, `lib.y.Point { … }` by the commons' full name.
     record_construction: ($) =>
       seq(
-        field("type", $.identifier),
+        field("type", choice($.identifier, $.qualified_type_ref)),
         "{",
         optional(sep1($.field_init, ",")),
         optional(","),
@@ -2183,7 +2356,7 @@ module.exports = grammar({
     record_spread: ($) =>
       choice(
         seq(
-          field("type", $.identifier),
+          field("type", choice($.identifier, $.qualified_type_ref)),
           "{",
           "...",
           field("base", $._expression),

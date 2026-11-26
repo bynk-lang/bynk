@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Twenty-seven are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Thirty-four are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `import_prediction_fns`, `deploy_kind_accessors`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -82,6 +82,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::module_lines::{BACK_HALF_CRATES, gated_stems, is_test_only_file};
+
 /// One probe's result. `gated` probes are diffed against the committed table by
 /// [`crate::greenfield_status::gated_disagreements`]; the rest are reported only.
 pub struct Probe {
@@ -117,7 +119,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 27] = [
+pub const GATED_PROBES: [&str; 34] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -138,7 +140,14 @@ pub const GATED_PROBES: [&str; 27] = [
     "emit_silent_fallbacks",
     "emit_print_calls",
     "import_prediction_fns",
+    "node_builder_defs",
     "deploy_kind_accessors",
+    "env_protocol_literals",
+    "tool_spawn_sites",
+    "deploy_ledger_writes",
+    "binding_kind_homes",
+    "wrangler_key_literals",
+    "cloudflare_client_sites",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -149,12 +158,12 @@ pub const GATED_PROBES: [&str; 27] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `import_prediction_fns` (1A.36a), `deploy_kind_accessors` (1D.1a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b), `wrangler_key_literals` (1C.2), `cloudflare_client_sites` (1D.3a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 13] = [
+pub const GROWTH_PROBES: [&str; 20] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -167,10 +176,17 @@ pub const GROWTH_PROBES: [&str; 13] = [
     "emit_silent_fallbacks",
     "emit_print_calls",
     "import_prediction_fns",
+    "node_builder_defs",
     "deploy_kind_accessors",
+    "env_protocol_literals",
+    "tool_spawn_sites",
+    "deploy_ledger_writes",
+    "binding_kind_homes",
+    "wrangler_key_literals",
+    "cloudflare_client_sites",
 ];
 
-/// The twenty-seven gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The thirty-four gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -193,7 +209,14 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         emit_silent_fallbacks(root),
         emit_print_calls(root),
         import_prediction_fns(root),
+        node_builder_defs(root),
         deploy_kind_accessors(root),
+        env_protocol_literals(root),
+        tool_spawn_sites(root),
+        deploy_ledger_writes(root),
+        binding_kind_homes(root),
+        wrangler_key_literals(root),
+        cloudflare_client_sites(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -1156,6 +1179,18 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
         .find_map(|c| files.iter().position(|(p, _)| p == c))
 }
 
+/// `t` without a leading `pub`, `pub(crate)`, `pub(super)`, `pub(in path)` visibility.
+pub(crate) fn strip_visibility(t: &str) -> &str {
+    match t.strip_prefix("pub") {
+        Some(rest) if rest.starts_with(char::is_whitespace) => rest.trim_start(),
+        Some(rest) => match rest.strip_prefix('(') {
+            Some(r) => r.split_once(')').map_or(t, |(_, after)| after.trim_start()),
+            None => t,
+        },
+        None => t,
+    }
+}
+
 /// Every `#[cfg(test)] mod <ident> { ... }` block in `lines`, as inclusive
 /// `(start_line, end_line)` line-index ranges — every occurrence, not just a single
 /// trailing block. A file in this codebase can carry several test modules scattered
@@ -1175,8 +1210,10 @@ fn child_module_file(m: usize, seg: &str, files: &[(PathBuf, String)]) -> Option
 /// hundreds of lines. `brace_delta` skips characters inside Rust string/char literals
 /// and comments, so embedded fixture text can't be mistaken for real Rust braces.
 ///
-/// Only matches a brace-opening `mod` line — `#[cfg(test)] mod foo;` (an external-file
-/// declaration, not an inline scope) does not open a range.
+/// Only matches a brace-opening `mod` line, with an optional `pub`/`pub(…)` visibility
+/// (`#[cfg(test)] pub(crate) mod tests {`) — `#[cfg(test)] mod foo;` (an external-file
+/// declaration, not an inline scope) does not open a range. `#[cfg(all(test, …))]` is not
+/// recognised (one 840-line front-half module, `bynk-check/src/d1_sql.rs`).
 pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut i = 0;
@@ -1185,7 +1222,7 @@ pub(crate) fn test_mod_ranges(lines: &[&str]) -> Vec<(usize, usize)> {
             && let Some(off) = lines[i + 1..].iter().position(|l| !l.trim().is_empty())
         {
             let mod_line = i + 1 + off;
-            let t = lines[mod_line].trim();
+            let t = strip_visibility(lines[mod_line].trim());
             if t.starts_with("mod ") && t.ends_with('{') {
                 let mut depth = 0i32;
                 let mut state = BraceScanState::Normal;
@@ -1342,10 +1379,11 @@ pub(crate) fn brace_delta(line: &str, mut state: BraceScanState) -> (i32, BraceS
 
 // --- Gated probe 3: options_sources --------------------------------------
 
-/// R2.3. `CompileOptions` (in `bynk-driver/src/project.rs`; it was `bynk-emit/src/project.rs`
+/// R2.3. `CompileOptions` (in `bynk-driver/src/project/options.rs`; it was `bynk-emit/src/project.rs`
 /// until crate-hygiene D1, #2982) has a `sources` field.
 fn options_sources(root: &Path) -> Probe {
-    let src = std::fs::read_to_string(root.join("bynk-driver/src/project.rs")).unwrap_or_default();
+    let src = std::fs::read_to_string(root.join("bynk-driver/src/project/options.rs"))
+        .unwrap_or_default();
     let present = struct_body(&src, "CompileOptions").is_some_and(|body| body.contains("sources"));
     Probe {
         name: "options_sources",
@@ -1461,10 +1499,7 @@ pub(crate) fn top_level_crate_dirs(root: &Path) -> Vec<PathBuf> {
 /// Decision A: this cross-reference is what makes the exclusion correct by
 /// construction rather than a second hand-maintained list).
 fn emit_diagnostics(root: &Path) -> Probe {
-    let registry: BTreeSet<&str> = bynk_syntax::diagnostics::REGISTRY
-        .iter()
-        .map(|d| d.code)
-        .collect();
+    let registry = registry_codes(root);
     let mut parts = Vec::new();
     for (label, dir) in [
         ("bynk-emit", "bynk-emit/src"),
@@ -1635,10 +1670,18 @@ fn ide_emit_edge(root: &Path) -> Probe {
 /// files were never counted.
 const AST_IMPORTER_EXCEPTIONS: &[&str] = &["emitter/serialisation.rs"];
 
-/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`]?
+/// Is `rel_path` (relative to `bynk-emit/src`) one of [`AST_IMPORTER_EXCEPTIONS`], or a file
+/// split out of one (an [`AST_IMPORTER_ORIGINS`] child whose origin is an exception)? P6.33's
+/// grounds cover the codec renderer however it is filed, so `serialisation/expr.rs` is excluded
+/// because `serialisation.rs` is, and a new file in the directory that is not in the origin table
+/// is still counted (named, not prefixed).
 fn is_named_ast_importer(rel_path: &Path) -> bool {
     let rel = rel_path.to_string_lossy().replace('\\', "/");
-    AST_IMPORTER_EXCEPTIONS.contains(&rel.as_str())
+    let origin = AST_IMPORTER_ORIGINS
+        .iter()
+        .find(|(child, _)| *child == rel)
+        .map_or(rel.as_str(), |(_, origin)| *origin);
+    AST_IMPORTER_EXCEPTIONS.contains(&origin)
 }
 
 /// Is `contents` a module (not a nested block) that glob-imports its parent —
@@ -1689,6 +1732,8 @@ fn ast_importer_files(root: &Path) -> Vec<PathBuf> {
                         .unwrap_or(false))
         })
         .filter(|(path, _)| !is_named_ast_importer(path.strip_prefix(&dir).unwrap_or(path)))
+        // 1B.2a (Decision D of #4028): the harness is not production emission.
+        .filter(|(path, _)| !is_testgen_path(path.strip_prefix(&dir).unwrap_or(path)))
         .map(|(path, _)| path)
         .collect()
 }
@@ -1702,11 +1747,124 @@ fn ast_importer_files(root: &Path) -> Vec<PathBuf> {
 /// not clear. Gated at phase 6's retired floor of 5 when it was set; the live reading is
 /// the committed one in `design/greenfield-status.md`.
 fn ast_importers(root: &Path) -> Probe {
+    let dir = root.join("bynk-emit/src");
+    let rels: Vec<String> = ast_importer_files(root)
+        .iter()
+        .map(|p| {
+            p.strip_prefix(&dir)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .replace('\\', "/")
+        })
+        .collect();
     Probe {
         name: "ast_importers",
         gated: true,
-        reads: ast_importer_files(root).len().to_string(),
+        reads: distinct_ast_importer_origins(&rels, AST_IMPORTER_ORIGINS).to_string(),
     }
+}
+
+/// Phase 2 of the back-half paydown track (#4085): the split-out files of a pure move, each
+/// mapped to the file it came from, as `(file, origin)` with both paths relative to
+/// `bynk-emit/src` and `/`-separated. [`ast_importers`] counts each *origin* once, so a split
+/// that carries `bynk_syntax::ast` imports into several children leaves the reading where it
+/// was: the probe measures how much of the crate reads the AST, not how many files it is
+/// written across. Rows are added by the splits (`emit.rs` first, in 2.1a). **Each Phase 2
+/// split of a `bynk-emit` file that imports the AST adds one `(child, origin)` row per new file
+/// that does too, in the same PR** (an origin that is itself a split child maps to its own
+/// origin, not to the intermediate file). A row whose child is not an importer is inert, so a
+/// row never needs deleting while the track runs.
+const AST_IMPORTER_ORIGINS: &[(&str, &str)] = &[
+    // emitter/workers_entry.rs (2.4, #4089)
+    ("emitter/workers_entry/call.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/events.rs",
+        "emitter/workers_entry.rs",
+    ),
+    ("emitter/workers_entry/queue.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/websocket.rs",
+        "emitter/workers_entry.rs",
+    ),
+    ("emitter/workers_entry/wire.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/field_specs.rs",
+        "emitter/workers_entry.rs",
+    ),
+    ("emitter/workers_entry/http.rs", "emitter/workers_entry.rs"),
+    (
+        "emitter/workers_entry/http_policy.rs",
+        "emitter/workers_entry.rs",
+    ),
+    // emitter.rs (2.5, #4090)
+    ("emitter/boundary.rs", "emitter.rs"),
+    ("emitter/consumed.rs", "emitter.rs"),
+    ("emitter/imports.rs", "emitter.rs"),
+    ("emitter/project.rs", "emitter.rs"),
+    // 2.2a (#4087): `lower.rs` split.
+    ("emitter/lower/pattern.rs", "emitter/lower.rs"),
+    ("emitter/lower/is.rs", "emitter/lower.rs"),
+    // 2.2b (#4087).
+    ("emitter/lower/mock.rs", "emitter/lower.rs"),
+    ("emitter/lower/expect.rs", "emitter/lower.rs"),
+    ("emitter/lower/claims.rs", "emitter/lower.rs"),
+    ("emitter/lower/control.rs", "emitter/lower.rs"),
+    ("emitter/lower/operator.rs", "emitter/lower.rs"),
+    ("emitter/lower/literal.rs", "emitter/lower.rs"),
+    ("emitter/lower/ident.rs", "emitter/lower.rs"),
+    ("emitter/lower/calls.rs", "emitter/lower.rs"),
+    // emitter/emit.rs (2.1, #4086), in path order.
+    ("emitter/emit/agent.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_dispatch.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_history.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_migrate.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_state.rs", "emitter/emit.rs"),
+    ("emitter/emit/agent_store.rs", "emitter/emit.rs"),
+    ("emitter/emit/capability.rs", "emitter/emit.rs"),
+    ("emitter/emit/functions.rs", "emitter/emit.rs"),
+    ("emitter/emit/handlers.rs", "emitter/emit.rs"),
+    ("emitter/emit/messages.rs", "emitter/emit.rs"),
+    ("emitter/emit/service.rs", "emitter/emit.rs"),
+    ("emitter/emit/suite.rs", "emitter/emit.rs"),
+    ("emitter/emit/types.rs", "emitter/emit.rs"),
+    ("emitter/emit/websocket.rs", "emitter/emit.rs"),
+    // emitter/serialisation.rs (an AST_IMPORTER_EXCEPTIONS entry: its children are excluded too)
+    ("emitter/serialisation/expr.rs", "emitter/serialisation.rs"),
+    (
+        "emitter/serialisation/factory.rs",
+        "emitter/serialisation.rs",
+    ),
+    ("emitter/serialisation/field.rs", "emitter/serialisation.rs"),
+    (
+        "emitter/serialisation/generics.rs",
+        "emitter/serialisation.rs",
+    ),
+    (
+        "emitter/serialisation/record_sum.rs",
+        "emitter/serialisation.rs",
+    ),
+    (
+        "emitter/serialisation/refined.rs",
+        "emitter/serialisation.rs",
+    ),
+    (
+        "emitter/serialisation/support.rs",
+        "emitter/serialisation.rs",
+    ),
+];
+
+/// How many distinct origins the importing files `rels` come from: a file named as a child in
+/// `origins` counts as its origin, any other file as itself.
+fn distinct_ast_importer_origins(rels: &[String], origins: &[(&str, &str)]) -> usize {
+    rels.iter()
+        .map(|rel| {
+            origins
+                .iter()
+                .find(|(child, _)| child == rel)
+                .map_or(rel.as_str(), |(_, origin)| origin)
+        })
+        .collect::<BTreeSet<&str>>()
+        .len()
 }
 
 // --- Gated probe 9: emit_abi_shapes ---------------------------------------
@@ -1828,8 +1986,9 @@ fn emit_abi_shapes(root: &Path) -> Probe {
 /// argued individually the same way [`AST_IMPORTER_EXCEPTIONS`] is, not assumed from a
 /// path prefix: `emitter/wrangler.rs` writes `wrangler.toml`; `emitter/secrets.rs`
 /// writes `bynk-secrets.json`; `emitter/contracts.rs` writes `bynk-contracts.json`;
-/// `testkit.rs` builds a `.bynk` source fixture — a compiler *input* for tests, not
-/// output. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
+/// `testkit.rs` built a `.bynk` source fixture — a compiler *input* for tests, not
+/// output — until 1B.2b (#4028) moved that helper to `bynk-tests` and the file stopped
+/// having a `format!` to exclude. P7.3 (#1303): `emitter/toml_doc.rs` writes `wrangler.toml` text too —
 /// `emitter/wrangler.rs`'s own writes moved here when it stopped building the TOML text
 /// directly and started building a typed `TomlDocument` for this module to print — same
 /// rationale, same exclusion.
@@ -1846,7 +2005,6 @@ const TS_WRITES_EXCLUDED_FILES: &[&str] = &[
     "emitter/toml_doc.rs",
     "emitter/secrets.rs",
     "emitter/contracts.rs",
-    "testkit.rs",
 ];
 
 /// Is `rel_path` (relative to `bynk-emit/src`) one of [`TS_WRITES_EXCLUDED_FILES`]?
@@ -1879,20 +2037,48 @@ fn is_moved_project_file(rel: &Path) -> bool {
 }
 
 /// The code-generation family's source files, relative to the crate `src/` each lives
-/// in: all of `bynk-emit/src`, plus the orchestration that used to be `bynk-emit`'s
+/// in: all of `bynk-emit/src` (the test-harness generation, `testgen`, included since 1B.2a moved
+/// it there from the driver; [`is_testgen_path`] still tells the two apart), plus the orchestration that used to be `bynk-emit`'s
 /// `project` module and now lives at `bynk-driver/src/project{.rs,/}` (crate-hygiene D1,
 /// #2982). The probes that read "the emitter's source" ([`ts_writes`], [`ts_any`],
 /// [`verbatim_origins`], [`verbatim_sites`]) are re-pointed here so moving `project` to
 /// the driver does not drop emission code out of their universe. The exclusion rules in
 /// them name `project.rs` / `project/…` relative to the old root, which still resolves.
 fn codegen_family_files(root: &Path) -> Vec<(PathBuf, String)> {
-    let mut files = rust_files_relative(&root.join("bynk-emit/src"));
-    files.extend(
-        rust_files_relative(&root.join("bynk-driver/src"))
-            .into_iter()
-            .filter(|(p, _)| is_moved_project_file(p)),
-    );
-    files
+    let driver = rust_files_relative(&root.join("bynk-driver/src"))
+        .into_iter()
+        .filter(|(p, _)| is_moved_project_file(p))
+        .collect();
+    codegen_family_from(rust_files_relative(&root.join("bynk-emit/src")), driver)
+}
+
+/// [`codegen_family_files`]' selection over the two halves' files, without the file walk,
+/// so a test can exercise it: both halves, less every whole test file
+/// ([`is_family_test_file`]).
+fn codegen_family_from(
+    mut emit: Vec<(PathBuf, String)>,
+    driver: Vec<(PathBuf, String)>,
+) -> Vec<(PathBuf, String)> {
+    // Each half's declarations are read against its own paths (`bynk-emit/src`, `bynk-driver/src`).
+    let emit_gated = gated_stems(&emit);
+    let driver_gated = gated_stems(&driver);
+    emit.retain(|(p, _)| !is_family_test_file(p, &emit_gated));
+    let mut driver = driver;
+    driver.retain(|(p, _)| !is_family_test_file(p, &driver_gated));
+    emit.extend(driver);
+    emit
+}
+
+/// Is `rel` a whole test file (`tests.rs`, `*_tests.rs`, or anything under a `tests/`
+/// directory)? Such a file is test code throughout, so the probes that read the emitter's
+/// production source skip it, as `module_lines` does. Without this, moving a module's
+/// tests out to `foo/tests.rs` would raise `ts_writes` with no production line changed.
+/// Applied to both halves, by file name alone: a production helper named `tests.rs`,
+/// `*_tests.rs` or under a `tests/` directory would drop out of these probes, so that
+/// naming convention is load-bearing for them. Counting `bynk-emit`'s whole test files as production read
+/// `ts_writes` 464 and `ts_any` 24 where the production lines are 462 and 21.
+fn is_family_test_file(rel: &Path, gated: &std::collections::BTreeSet<String>) -> bool {
+    is_test_only_file(&rel.to_string_lossy().replace('\\', "/"), gated)
 }
 
 /// Relativises every path in [`rust_files`]'s output against `dir`, so [`ts_writes`]
@@ -2287,14 +2473,18 @@ fn ts_raw_sites_testgen(root: &Path) -> Probe {
 
 /// Whether `rel` (relative to the `src/` of the crate it lives in, as
 /// [`codegen_family_files`] gives it) generates the *test harness* rather than
-/// production emission: the driver's `project/tests_emit/**` today, and a
-/// `testgen` module or directory in `bynk-emit` once 1B.2 moves it there.
+/// production emission: `bynk-emit::testgen` (`testgen.rs`, `testgen/**`), which 1B.2a moved
+/// there from the driver's `project/tests_emit/**`.
+///
+/// Two probes read it since 1B.5e (Decision H of #4054): `ts_raw_sites_emit` and
+/// `ts_raw_sites_testgen`, because §8 has a row for each, and [`ast_importers`], because the
+/// harness reads the AST by design. Every other probe over `bynk-emit/src` reads the whole
+/// crate, the harness included.
 fn is_testgen_path(rel: &Path) -> bool {
-    rel.starts_with("project/tests_emit")
-        || rel.starts_with("project/tests_emit.rs")
-        || rel
-            .components()
-            .any(|c| c.as_os_str().to_string_lossy().starts_with("testgen"))
+    rel.components().any(|c| {
+        let c = c.as_os_str().to_string_lossy();
+        c == "testgen" || c == "testgen.rs"
+    })
 }
 
 /// [`ts_raw_sites_emit`]'s and [`ts_raw_sites_testgen`]'s counting logic over an
@@ -2456,7 +2646,7 @@ fn cfg_is_test_only(attr: &str) -> bool {
 }
 
 /// #3681: `TsExpr::Ident(format!(…))` sites — arbitrary expression text wrapped in
-/// a node documented as holding an identifier (`bynk-ts/src/program.rs`). Retired
+/// a node documented as holding an identifier (`bynk-ts/src/program/expr.rs`). Retired
 /// by using the right expression node. A growth probe ([`GROWTH_PROBES`]).
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in
@@ -2486,10 +2676,13 @@ fn ts_text_idents_violations(files: &[(PathBuf, String)]) -> usize {
 /// baseline lists them. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
 /// file `raises:` it with a reason, so a round trip cannot creep back in.
 ///
-/// **End state (1A.39a):** the probe reads 1. The one line is `extend_printed_at` in `emitter.rs`,
-/// the driver's test-harness entry: it prints the statements the driver asks for, at a depth. It
-/// stays until 1B.2 moves `tests_emit` into `bynk-emit`, and the probe then reads 0. The final
-/// program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
+/// **End state (1B.2b):** the probe reads 0. The one line it read after 1A.39a was
+/// `extend_printed_at`, the test harness's entry that prints the statements it is given, at a
+/// depth. 1B.2a moved the harness into `bynk-emit::testgen` and the probe skips that module
+/// ([`emit_files_by_origin`]), as [`ts_raw_sites_emit`] does; 1B.2b moved `extend_printed_at`
+/// there too (`testgen/case_body.rs`), and [`testgen_print_calls`] reads it with the harness's own
+/// 43, so it reads 44.
+/// The final program print (`bynk_ts::print`) and `lower_block_to_async_body` count no line.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules in `bynk-emit/src` that contain
 /// `print_expr(`, `print_stmt(` or `print_type(` (a call), or the same name as a path
@@ -2551,13 +2744,19 @@ fn import_prediction_fns(root: &Path) -> Probe {
 /// (`unit_table_uses_emit`, `unit_table_uses_idempotency`, `call_handler_needs_exec`), whether a
 /// context's `deps` interface carries `__eventsDispatch` (`commons_uses_emit`), or are structural
 /// type walks (`mentions_decimal`, `mentions_factory_param`). None of them decides an import.
-const IMPORT_PREDICTION_ALLOWLIST: [&str; 6] = [
+///
+/// 1B.5e (Decision H of #4054) adds `double_uses`, which the widened scan reaches. It is the
+/// opposite of a prediction: it lists the runtime and sibling names an authored test double's
+/// fixed body *spells*, which `TsStmt::raw_using` declares so the derived header imports them
+/// (Decision A). A guard test in `testgen/stubs.rs` holds the list against the body's words.
+const IMPORT_PREDICTION_ALLOWLIST: [&str; 7] = [
     "unit_table_uses_emit",
     "unit_table_uses_idempotency",
     "call_handler_needs_exec",
     "commons_uses_emit",
     "mentions_decimal",
     "mentions_factory_param",
+    "double_uses",
 ];
 
 /// The name of the function a line declares (`fn name(`, after any `pub`, `pub(crate)`, `const`,
@@ -2584,6 +2783,243 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
     })
 }
 
+/// 1B.4a (#4051, Decision E): the production helpers in `bynk-emit` that are one `bynk_ts`
+/// constructor over their parameters, each a local spelling of a shape `ts_build` defines once
+/// (`ident`, `str_lit`, `member`, `call`, `const_`, ...), plus each `as` rename in a
+/// `use crate::ts_build::{..}` clause. Before 1B.4a every file defined its own, in up to five
+/// spellings; 1B.4a left only the renames, and 1B.4b (Phase 2) took the probe to 0, where it stays as
+/// a guard against a new local wrapper or an `as` rename in a split. A growth probe ([`GROWTH_PROBES`]): a new local wrapper in a
+/// later slice needs a `raises:` line.
+///
+/// A *definition* counts when it lies outside `ts_build.rs` and outside `#[cfg(test)]` modules, is
+/// a `fn` returning `TsExpr` or `TsStmt`, and has a body of at most eight lines that applies
+/// exactly one constructor: a `Ts*` variant or associated function, or two for one shape
+/// (`TsExpr::Lit(TsLit::Str(..))`), with any `Box::new`, `Some`, `vec![..]` around its arguments,
+/// or one call to a helper that is itself a builder (`id` over `ident_node`, `ne` over `binary`).
+/// The body has no string literal, `self`, `let`, `match`, `if`, loop, iterator or `format!`, and
+/// no `.clone()`, so it is a function of its parameters alone; a path value must be a `Ts*` one
+/// (`TsBinaryOp::StrictEq`, not `VerbatimOrigin::FormFieldSpecs`). A helper with no parameters is a
+/// constant (`empty_deps`, `plain_json_test`, `deserialise_path_param`), not a builder. A helper
+/// that composes two constructors (`if_then`, `applied`, `tag_const`) says something about a
+/// construct, not about TypeScript, and does not count. Text-level gaps, as for the other line
+/// scanners: a signature split over more than twelve lines is missed, the helpers a body calls are
+/// known by name only, a wrapper with a `where` clause or one returning `TsStmt` through a type
+/// alias is missed, and a rename inside a nested `use` tree (`use crate::{ts_build::{ident as id},
+/// ..}`) is not matched by the alias scan; closures (`let ident = |n| ..`) are not scanned.
+fn node_builder_defs(root: &Path) -> Probe {
+    Probe {
+        name: "node_builder_defs",
+        gated: true,
+        reads: node_builder_defs_count(&codegen_family_files(root)).to_string(),
+    }
+}
+
+/// [`node_builder_defs`]'s counting logic over an explicit file list.
+fn node_builder_defs_count(files: &[(PathBuf, String)]) -> usize {
+    let (defs, aliases) = node_builder_defs_found(files);
+    defs.len() + aliases
+}
+
+/// The `(file, line, name)` of each counted definition, and the number of `as` renames in
+/// `use ..::ts_build::{..}` clauses. [`node_builder_defs_count`] sums them; a test reads the
+/// names.
+fn node_builder_defs_found(files: &[(PathBuf, String)]) -> (Vec<(PathBuf, usize, String)>, usize) {
+    use std::collections::BTreeSet;
+    struct Candidate {
+        file: PathBuf,
+        line: usize,
+        name: String,
+        helper_calls: Vec<String>,
+        constructs: bool,
+    }
+    let call = regex::Regex::new(r"((?:\w+::)*\w+)\s*[({]").expect("call pattern");
+    let path_value = regex::Regex::new(r"(?:\w+::)+\w+").expect("path pattern");
+    let forbidden = regex::Regex::new(
+        r#""|\bself\b|\blet\b|\bmatch\b|\bif\b|\bfor\b|\bloop\b|\bwhile\b|format!|\.iter|\.map\(|\.collect|\.clone\(\)"#,
+    )
+    .expect("forbidden pattern");
+    let ret = regex::Regex::new(r"->\s*(?:bynk_ts::)?Ts(?:Expr|Stmt)\s*$").expect("return pattern");
+    let fn_name = regex::Regex::new(r"\bfn\s+(\w+)").expect("fn pattern");
+    let ts_alias =
+        regex::Regex::new(r"use\s+(?:crate|super|self)(?:::\w+)*::ts_build::(\{[^;]*\}|[^;]*)\s*;")
+            .expect("use pattern");
+    let rename = regex::Regex::new(r"\w+\s+as\s+\w+").expect("rename pattern");
+
+    let mut known: BTreeSet<String> = BTreeSet::new();
+    let mut candidates: Vec<Candidate> = Vec::new();
+    let mut aliases = 0usize;
+    for (path, contents) in files {
+        let is_ts_build = path.file_name().is_some_and(|n| n == "ts_build.rs");
+        let lines: Vec<&str> = contents.lines().collect();
+        let ranges = test_mod_ranges(&lines);
+        let production: Vec<&str> = lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                if in_test_range(i, &ranges) || is_line_comment(l) {
+                    ""
+                } else {
+                    *l
+                }
+            })
+            .collect();
+        if is_ts_build {
+            for l in &production {
+                if let Some(c) = fn_name.captures(l) {
+                    known.insert(c[1].to_string());
+                }
+            }
+            continue;
+        }
+        let text = production.join("\n");
+        for m in ts_alias.captures_iter(&text) {
+            aliases += rename.find_iter(&m[1]).count();
+        }
+        let mut i = 0;
+        while i < production.len() {
+            let Some(name) = fn_name.captures(production[i]).map(|c| c[1].to_string()) else {
+                i += 1;
+                continue;
+            };
+            // The signature runs to the first `{`; the body to its matching `}`.
+            let mut head = String::new();
+            let mut end = i;
+            let mut opened = None;
+            while end < production.len() && end < i + 12 {
+                if let Some(at) = production[end].find('{') {
+                    head.push_str(&production[end][..at]);
+                    opened = Some((end, at));
+                    break;
+                }
+                head.push_str(production[end]);
+                head.push(' ');
+                end += 1;
+            }
+            let Some((open_line, open_at)) = opened else {
+                i += 1;
+                continue;
+            };
+            // A helper with no parameters is a constant (`empty_deps`, `undefined`), not a builder:
+            // the proposal leaves the constant helpers alone.
+            let after_name = fn_name.find(&head).map_or("", |m| &head[m.end()..]);
+            let no_params = after_name
+                .split_once('(')
+                .and_then(|(_, rest)| rest.split_once(')'))
+                .is_some_and(|(params, _)| params.trim().is_empty());
+            if !ret.is_match(head.trim_end()) || no_params {
+                i += 1;
+                continue;
+            }
+            let mut depth = 0i32;
+            let mut body = String::new();
+            let mut closed = false;
+            let mut body_lines = 0usize;
+            'scan: for (offset, line) in production[open_line..].iter().enumerate() {
+                body_lines += 1;
+                if body_lines > 9 {
+                    break;
+                }
+                let from = if offset == 0 { open_at } else { 0 };
+                for ch in line[from..].chars() {
+                    match ch {
+                        '{' => {
+                            depth += 1;
+                            if depth == 1 {
+                                continue;
+                            }
+                        }
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                closed = true;
+                                break 'scan;
+                            }
+                        }
+                        _ => {}
+                    }
+                    body.push(ch);
+                }
+                body.push('\n');
+            }
+            if !closed || body_lines > 9 || forbidden.is_match(&body) {
+                i += 1;
+                continue;
+            }
+            // A path value (not a call) must be a `Ts*` one.
+            let bad_path = path_value.find_iter(&body).any(|m| {
+                let rest = body[m.end()..].trim_start();
+                let is_call = rest.starts_with('(') || rest.starts_with('{');
+                !is_call && !m.as_str().trim_start_matches("bynk_ts::").starts_with("Ts")
+            });
+            if bad_path {
+                i += 1;
+                continue;
+            }
+            let mut helper_calls = Vec::new();
+            let mut constructs = false;
+            let mut ctor_tokens = 0usize;
+            for c in call.captures_iter(&body) {
+                let at = c.get(1).map_or(0, |m| m.start());
+                // A method call (`s.into()`) is neither a constructor nor a helper.
+                if body[..at].ends_with('.') {
+                    continue;
+                }
+                let callee = &c[1];
+                let local = callee.trim_start_matches("bynk_ts::");
+                if local.starts_with("Ts") {
+                    constructs = true;
+                    ctor_tokens += 1;
+                } else if !matches!(callee, "Box::new" | "Some" | "Ok" | "Vec::new" | "Box") {
+                    helper_calls.push(callee.to_string());
+                }
+            }
+            // `TsExpr::Lit(TsLit::Str(..))` and `TsStmt::const_stmt(TsBindingName::Ident(..), ..)` are
+            // one shape; three or more nested constructors build a structure of their own.
+            if ctor_tokens > 2 {
+                i += 1;
+                continue;
+            }
+            candidates.push(Candidate {
+                file: path.clone(),
+                line: i + 1,
+                name,
+                helper_calls,
+                constructs,
+            });
+            i += 1;
+        }
+    }
+    // A candidate whose one call is a helper counts when that helper is itself a builder: a
+    // fixed point over the names `ts_build` defines and the one-constructor candidates.
+    for c in &candidates {
+        if c.helper_calls.is_empty() && c.constructs {
+            known.insert(c.name.clone());
+        }
+    }
+    loop {
+        let before = known.len();
+        for c in &candidates {
+            if !c.constructs && c.helper_calls.len() == 1 && known.contains(&c.helper_calls[0]) {
+                known.insert(c.name.clone());
+            }
+        }
+        if known.len() == before {
+            break;
+        }
+    }
+    let defs = candidates
+        .into_iter()
+        .filter(|c| {
+            (c.helper_calls.is_empty() && c.constructs)
+                || (!c.constructs
+                    && c.helper_calls.len() == 1
+                    && known.contains(&c.helper_calls[0]))
+        })
+        .map(|c| (c.file, c.line, c.name))
+        .collect();
+    (defs, aliases)
+}
+
 /// 1D.1 (#3929, the ruling on Decision A): the production sites in `bynk/src/deploy/**` that
 /// call or define a per-kind ledger accessor (`recorded_kv`, `record_r2`, `forget_vectorize`,
 /// `allocate_ratelimit`, …), each of which a `ResourceKind` replaces with its `LedgerTable`. It
@@ -2593,7 +3029,7 @@ fn import_prediction_fns_violations(files: &[(PathBuf, String)]) -> usize {
 /// cannot grow one.
 ///
 /// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
-/// ([`is_whole_test_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
+/// ([`is_test_only_file`]) in `bynk/src/deploy` that match [`DEPLOY_KIND_ACCESSOR`]. Text-level
 /// gaps, as for the other line scanners: two sites on one line count once, and a definition with
 /// generics (`fn recorded_r2<'a>(`) is not matched, which is how #3929's pattern read 68. Its
 /// callers are, so a kind is converted only once they are gone.
@@ -2618,9 +3054,10 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
     // Deploy's test modules are `pub(crate) mod tests`, so other modules' tests can share their
     // helpers; [`test_mod_ranges`] reads a test module by its `mod ` line, so the visibility is
     // dropped here rather than there, where it would move the probes that already read it.
+    let gated = gated_stems(files);
     let production: Vec<(PathBuf, String)> = files
         .iter()
-        .filter(|(path, _)| !is_whole_test_file(&path.to_string_lossy().replace('\\', "/")))
+        .filter(|(path, _)| !is_test_only_file(&path.to_string_lossy().replace('\\', "/"), &gated))
         .map(|(path, contents)| {
             let contents: Vec<&str> = contents
                 .lines()
@@ -2633,6 +3070,458 @@ fn deploy_kind_accessors_violations(files: &[(PathBuf, String)]) -> usize {
         })
         .collect();
     production_lines_matching(&production, |line| accessor.is_match(line))
+}
+
+/// 1D.2 (#4001, the ruling on 1D.2a): the production sites in `bynk/src/deploy/**` that write
+/// `bynk.deploy.lock` or ask a kind's context to: a call of `write_lock`, or of `cx.record`,
+/// `cx.change` or `cx.commit`, the 1D.1 context's writes. It read 25 on `main` before 1D.2a (the
+/// 23 kind sites, `ApplyCx::commit`'s own write and `run`'s post-push write) and 1 after it, the
+/// apply's one `LedgerWriter`. `revert.rs` is left out by path: its write, per rolled-back Worker,
+/// is `bynk revert`'s, not the apply's. A growth probe ([`GROWTH_PROBES`]): a second write site
+/// needs a pending file that `raises:` it with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules and wholly-test files
+/// ([`is_test_only_file`]) in `bynk/src/deploy` that match [`DEPLOY_LEDGER_WRITE`], less the line
+/// that defines `write_lock`.
+fn deploy_ledger_writes(root: &Path) -> Probe {
+    Probe {
+        name: "deploy_ledger_writes",
+        gated: true,
+        reads: deploy_ledger_writes_violations(&rust_files_relative(&root.join("bynk/src/deploy")))
+            .to_string(),
+    }
+}
+
+/// A ledger write, or a 1D.1 context's: #4001's "Probes and guards" pattern.
+const DEPLOY_LEDGER_WRITE: &str = r"\bwrite_lock\(|\bcx\.(record|change|commit)\(";
+
+/// [`deploy_ledger_writes`]'s counting logic over an explicit file list, paths relative to
+/// `bynk/src/deploy`.
+fn deploy_ledger_writes_violations(files: &[(PathBuf, String)]) -> usize {
+    let write = regex::Regex::new(DEPLOY_LEDGER_WRITE).expect("the write pattern compiles");
+    let definition = regex::Regex::new(r"\bfn write_lock\(").expect("the definition compiles");
+    // As for [`deploy_kind_accessors_violations`]: deploy's test modules are `pub(crate) mod tests`.
+    let gated = gated_stems(files);
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let path = path.to_string_lossy().replace('\\', "/");
+            !is_test_only_file(&path, &gated) && path != "revert.rs"
+        })
+        .map(|(path, contents)| {
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        write.is_match(line) && !definition.is_match(line)
+    })
+}
+
+// --- Gated probe: cloudflare_client_sites (1D.3a) -------------------------------------------
+
+/// 1D.3 (#4043, Decision L): the production sites in `bynk/src` that reach Cloudflare without
+/// going through the `cloudflare` module: a wrangler spawn built at the call site
+/// (`wrangler_command(` or `tools::wrangler::command(`), or a REST client constructed there
+/// (`Rest {`). It read 34 on `main` before 1D.3a (24 wrangler call sites and 10 REST
+/// constructions), falls as 1D.3a and 1D.3b move the wrangler calls behind `CloudflareApi`, and
+/// reaches 0 when 1D.3c builds the one REST client per run. A growth probe ([`GROWTH_PROBES`]): a
+/// new site needs a pending file that `raises:` it with a reason.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules, wholly-test files
+/// ([`is_test_only_file`]) and `bynk/src/cloudflare/`, less the lines that define
+/// `wrangler_command` or declare the `Rest` type (`struct Rest {`, `impl … Rest {`). A REST
+/// construction spans several lines (its credentials, its agent); only its `Rest {` line counts.
+fn cloudflare_client_sites(root: &Path) -> Probe {
+    Probe {
+        name: "cloudflare_client_sites",
+        gated: true,
+        reads: cloudflare_client_sites_violations(&rust_files_relative(&root.join("bynk/src")))
+            .to_string(),
+    }
+}
+
+/// A wrangler spawn built at the call site, or a REST client constructed there.
+const CLOUDFLARE_CLIENT_SITE: &str = r"\bwrangler_command\(|\btools::wrangler::command\(|\bRest \{";
+
+/// [`cloudflare_client_sites`]'s counting logic over an explicit file list, paths relative to
+/// `bynk/src`.
+fn cloudflare_client_sites_violations(files: &[(PathBuf, String)]) -> usize {
+    let site = regex::Regex::new(CLOUDFLARE_CLIENT_SITE).expect("the site pattern compiles");
+    let declaration =
+        regex::Regex::new(r"\bfn wrangler_command\(|\bstruct Rest \{|\bimpl\b.*\bRest \{")
+            .expect("the declaration pattern compiles");
+    // As for [`deploy_kind_accessors_violations`]: the crate's test modules may be `pub(crate)`.
+    let gated = gated_stems(files);
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let path = path.to_string_lossy().replace('\\', "/");
+            !is_test_only_file(&path, &gated)
+                && !path.starts_with("cloudflare/")
+                && path != "test_support.rs"
+        })
+        .map(|(path, contents)| {
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        site.is_match(line) && !declaration.is_match(line)
+    })
+}
+
+// --- Gated probe: env_protocol_literals (1D.5a) ---------------------------------------------
+
+/// Back-half paydown 1D.5a (#4003, Decision H): production Rust lines that spell a name of the
+/// cross-language `BYNK_*` protocol themselves, instead of using
+/// `bynk_project::env_protocol`'s constant. The pattern is the table: a `BYNK_` or `__BYNK_`
+/// token counts when [`bynk_project::env_protocol::entry_of`] places it (an entry's name, or a
+/// member of a prefix family), so a name added to the table is measured at once and the probe
+/// cannot drift from it.
+///
+/// It read 36 on `main` before 1D.5a. After it, the residual is named: the three literals in
+/// `bynk-emit/src/testgen/test_main.rs`, which 1B.2a moved there from the driver untouched
+/// (a follow-up replaces them there), and `bynk/src/deploy/config.rs`'s
+/// `BYNK_DATASET_`, inside `synthesise_environment_block`, which 1C.2 deletes. A growth probe
+/// ([`GROWTH_PROBES`]): it may only fall unless a pending file `raises:` it with a reason, so a
+/// new bare protocol literal fails the gate.
+///
+/// Counts non-comment lines outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests`
+/// included) and wholly-test files ([`is_test_only_file`]) in every workspace crate's `src/`,
+/// except `xtask` (repo automation, not shipped), the test-only crates `bynk-tests` and
+/// `bynk-testkit`, the table itself, and `bynk-syntax/src/diagnostics.rs`, whose explanations
+/// name the edge-key families as prose, not as uses. Text-level gaps, as for the other line
+/// scanners: two names on one line count once, and a name in a block comment counts.
+fn env_protocol_literals(root: &Path) -> Probe {
+    let files: Vec<(PathBuf, String)> = workspace_crate_src_files(root)
+        .into_iter()
+        .filter(|(krate, _, _)| !matches!(krate.as_str(), "xtask" | "bynk-tests" | "bynk-testkit"))
+        .map(|(krate, path, contents)| (Path::new(&krate).join("src").join(path), contents))
+        .collect();
+    Probe {
+        name: "env_protocol_literals",
+        gated: true,
+        reads: env_protocol_literals_violations(&files).to_string(),
+    }
+}
+
+/// The files [`env_protocol_literals`] never counts, from the repo root.
+const ENV_PROTOCOL_LITERALS_EXEMPT: [&str; 2] = [
+    "bynk-project/src/env_protocol.rs",
+    "bynk-syntax/src/diagnostics.rs",
+];
+
+/// [`env_protocol_literals`]'s counting logic over an explicit file list, paths from the repo
+/// root.
+fn env_protocol_literals_violations(files: &[(PathBuf, String)]) -> usize {
+    let token = regex::Regex::new(r"\b(__)?BYNK_[A-Z0-9_]+").expect("the token pattern compiles");
+    let gated = gated_stems(files);
+    let production: Vec<(PathBuf, String)> = files
+        .iter()
+        .filter(|(path, _)| {
+            let rel = path.to_string_lossy().replace('\\', "/");
+            !is_test_only_file(&rel, &gated)
+                && !ENV_PROTOCOL_LITERALS_EXEMPT.contains(&rel.as_str())
+        })
+        .map(|(path, contents)| {
+            // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test
+            // module, which [`test_mod_ranges`] reads only by its `mod ` line.
+            let contents: Vec<&str> = contents
+                .lines()
+                .map(|line| {
+                    line.strip_prefix("pub(crate) mod ")
+                        .map_or(line, |_| &line[11..])
+                })
+                .collect();
+            (path.clone(), contents.join("\n"))
+        })
+        .collect();
+    production_lines_matching(&production, |line| {
+        token
+            .find_iter(line)
+            .any(|m| bynk_project::env_protocol::entry_of(m.as_str()).is_some())
+    })
+}
+
+// --- Gated probe: binding_kind_homes (1C.1b) -------------------------------------------------
+
+/// Back-half paydown 1C.1b (#4031, Decision G): the places a binding kind is defined, the Phase 1
+/// exit row "Places a binding kind is defined" (§8 of the track). The number of production `.rs`
+/// files in `bynk-check`, `bynk-emit`, `bynk-driver` and `bynk`, other than the vocabulary file
+/// `bynk-check/src/worker_bindings.rs` (the one enum, [`BINDING_KIND_VOCABULARY`]), that contain
+/// either
+///
+/// - a construction of a `BindingSource` value: a line matching `source: (\w+::)*BindingSource::`
+///   or `=> (\w+::)*BindingSource::\w+( {|,|$)`; or
+/// - a `#[derive(..Deserialize..)]` struct whose name ends in `Binding`, `Stanza` or
+///   `ManifestEntry`: a parallel definition of a binding kind that a serialised file is read into.
+///
+/// Rendering per kind (TOML, TypeScript types, test doubles) is not counted: a renderer has to
+/// match on the kind, and it matches on the one enum.
+///
+/// It read 3 on `main` before 1C.1 (the driver's `worker_bindings.rs`, `wrangler.rs` and the
+/// CLI's `deploy/config.rs`), reads 2 after 1C.1b (`bindings.rs` and `config.rs`) and reads 1 after
+/// 1C.3b, which replaces the CLI's stanza structs with the model: the §8 target of 1
+/// (`WorkerBindings`). A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending file
+/// `raises:` it with a reason.
+///
+/// Counts files, not lines, so the many construction lines of the one model count once. Skips
+/// `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included), wholly-test files
+/// ([`is_test_only_file`]) and comment lines. Text-level gaps, as for the other line scanners.
+fn binding_kind_homes(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in ["bynk-check", "bynk-emit", "bynk-driver", "bynk"] {
+        for (path, contents) in rust_files_relative(&root.join(krate).join("src")) {
+            files.push((Path::new(krate).join("src").join(path), contents));
+        }
+    }
+    Probe {
+        name: "binding_kind_homes",
+        gated: true,
+        reads: binding_kind_homes_files(&files).len().to_string(),
+    }
+}
+
+/// The one file that may define a binding kind: the vocabulary, from the repo root.
+const BINDING_KIND_VOCABULARY: &str = "bynk-check/src/worker_bindings.rs";
+
+/// [`binding_kind_homes`]' counting logic over an explicit file list, paths from the repo root:
+/// the files that define a binding kind outside the vocabulary.
+fn binding_kind_homes_files(files: &[(PathBuf, String)]) -> Vec<String> {
+    let construction = regex::Regex::new(
+        r"source:\s*(\w+::)*BindingSource::|=>\s*(\w+::)*BindingSource::\w+(\s*\{|,|$)",
+    )
+    .expect("the construction pattern compiles");
+    let stanza = regex::Regex::new(r"\bstruct\s+\w+(Binding|Stanza|ManifestEntry)\b")
+        .expect("the stanza pattern compiles");
+    let gated = gated_stems(files);
+    let mut homes = Vec::new();
+    for (path, contents) in files {
+        let rel = path.to_string_lossy().replace('\\', "/");
+        if rel == BINDING_KIND_VOCABULARY || is_test_only_file(&rel, &gated) {
+            continue;
+        }
+        // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module,
+        // which [`test_mod_ranges`] reads only by its `mod ` line.
+        let owned: Vec<String> = contents
+            .lines()
+            .map(|line| match line.strip_prefix("pub(crate) mod ") {
+                Some(rest) => format!("mod {rest}"),
+                None => line.to_string(),
+            })
+            .collect();
+        let lines: Vec<&str> = owned.iter().map(String::as_str).collect();
+        let ranges = test_mod_ranges(&lines);
+        let defines = lines.iter().enumerate().any(|(i, line)| {
+            if in_test_range(i, &ranges) || is_line_comment(line) {
+                return false;
+            }
+            // A stanza is a `Deserialize` struct: the derive is on one of the attribute lines
+            // just above it.
+            let derived = || {
+                lines[..i]
+                    .iter()
+                    .rev()
+                    .take_while(|l| {
+                        let l = l.trim_start();
+                        l.starts_with("#[") || l.starts_with("//")
+                    })
+                    .any(|l| l.contains("Deserialize"))
+            };
+            construction.is_match(line) || (stanza.is_match(line) && derived())
+        });
+        if defines {
+            homes.push(rel);
+        }
+    }
+    homes.sort();
+    homes
+}
+
+// --- Gated probe: wrangler_key_literals (1C.2) -----------------------------------------------
+
+/// Back-half paydown 1C.2 (#4039, Decision F): the places a top-level `wrangler.toml` key is
+/// spelled as a string literal outside the vocabulary, `bynk-project/src/wrangler_keys.rs`
+/// (`WranglerKey`). Production code in `bynk-emit`, `bynk-driver` and `bynk` names a key through
+/// `WranglerKey`, so the key has one spelling and its environment rule is one `match`: a table the
+/// emitter writes cannot be left out of the `[env.<name>]` block by omission (#3577, #3586).
+///
+/// Counts a literal equal to a [`WranglerKey::ALL`] header or top key (`name` excluded, as too
+/// generic) in a TOML position: a `TomlBlock` header, a `.get(`, `.get_mut(`, `.entry(`,
+/// `.remove(` or `.insert(` argument, an index, or a `for .. in [..]` list. A literal in a
+/// different position (a wrangler subcommand, a runtime module name) is not a key. The pattern
+/// is the vocabulary, so a key added to it is measured at once.
+///
+/// It read 91 on `main` before 1C.2 by this pattern (the proposal's 97 counted by hand) and reads 0 after it. A growth probe ([`GROWTH_PROBES`]):
+/// it may only fall unless a pending file `raises:` it with a reason, so a new table written as a
+/// raw literal in a patcher fails the gate.
+///
+/// Counts matches in the non-comment production text (outside `#[cfg(test)]` modules, deploy's
+/// `pub(crate) mod tests` included, and wholly-test files, [`is_test_only_file`]). Text-level
+/// gaps, as for the other scanners.
+fn wrangler_key_literals(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in ["bynk-emit", "bynk-driver", "bynk"] {
+        for (path, contents) in rust_files_relative(&root.join(krate).join("src")) {
+            files.push((Path::new(krate).join("src").join(path), contents));
+        }
+    }
+    Probe {
+        name: "wrangler_key_literals",
+        gated: true,
+        reads: wrangler_key_literals_count(&files).to_string(),
+    }
+}
+
+/// [`wrangler_key_literals`]' counting logic over an explicit file list, paths from the repo root.
+fn wrangler_key_literals_count(files: &[(PathBuf, String)]) -> usize {
+    use bynk_project::wrangler_keys::WranglerKey;
+    let mut keys: Vec<&str> = WranglerKey::ALL
+        .iter()
+        .flat_map(|k| [k.header(), k.top_key()])
+        .filter(|k| *k != "name")
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let key = keys
+        .iter()
+        .map(|k| regex::escape(k))
+        .collect::<Vec<_>>()
+        .join("|");
+    let positions = regex::Regex::new(&format!(
+        r#"TomlBlock::(?:table|array_table|keyed_table)\(\s*"(?:{key})"|\.(?:get|get_mut|entry|remove|insert)\(\s*"(?:{key})"|\[\s*"(?:{key})"\s*\]|\bin\s*\[[^\]]*"(?:{key})""#
+    ))
+    .expect("the key pattern compiles");
+    let gated = gated_stems(files);
+    let mut count = 0;
+    for (path, contents) in files {
+        let rel = path.to_string_lossy().replace('\\', "/");
+        if is_test_only_file(&rel, &gated) {
+            continue;
+        }
+        // As in [`binding_kind_homes_files`]: a `pub(crate) mod tests` is a test module.
+        let owned: Vec<String> = contents
+            .lines()
+            .map(|line| match line.strip_prefix("pub(crate) mod ") {
+                Some(rest) => format!("mod {rest}"),
+                None => line.to_string(),
+            })
+            .collect();
+        let lines: Vec<&str> = owned.iter().map(String::as_str).collect();
+        let ranges = test_mod_ranges(&lines);
+        let production: Vec<&str> = lines
+            .iter()
+            .enumerate()
+            .filter(|(i, line)| !in_test_range(*i, &ranges) && !is_line_comment(line))
+            .map(|(_, line)| *line)
+            .collect();
+        count += positions.find_iter(&production.join("\n")).count();
+    }
+    count
+}
+
+// --- Gated probe: tool_spawn_sites (1D.5b) ---------------------------------------------------
+
+/// Back-half paydown 1D.5b (#4003, Decision H): production process spawns in `bynk` and
+/// `bynk-driver` that do not go through `bynk-driver/src/tools/` (npm, pnpm, bun, yarn, `tsc`,
+/// `tsx`, `node`, `git`) or the detection layer, `bynk-driver/src/probe.rs`.
+///
+/// It read 20 on `main` before 1D.5b, 12 after it, and 10 after 1D.3a moved the wrangler spawn
+/// into `bynk-driver/src/tools/wrangler.rs` (#4043). The residual is listed by reason in the
+/// reading ([`spawn_reason`]): process control (`kill`, `ps`, `lsof`, `taskkill` and the Windows
+/// junction's `cmd`) and self re-execution (`dev_run.rs`). Any other spawn reads as `other`. A growth probe ([`GROWTH_PROBES`]): it may only fall unless a pending
+/// file `raises:` it with a reason, so a new tool spawn goes through `tools`.
+///
+/// Counts non-comment lines matching `Command::new(` or `ProcCommand::new(` (a word boundary
+/// before) outside `#[cfg(test)]` modules (deploy's `pub(crate) mod tests` included),
+/// wholly-test files ([`is_test_only_file`]) and the test-only `test_support.rs`. Text-level gaps, as for the other line scanners:
+/// two spawns on one line count once, and a `Command` imported under another name is missed.
+fn tool_spawn_sites(root: &Path) -> Probe {
+    let mut files = Vec::new();
+    for krate in ["bynk", "bynk-driver"] {
+        for (path, contents) in rust_files_relative(&root.join(krate).join("src")) {
+            files.push((Path::new(krate).join("src").join(path), contents));
+        }
+    }
+    Probe {
+        name: "tool_spawn_sites",
+        gated: true,
+        reads: tool_spawn_sites_reading(&files),
+    }
+}
+
+/// What a spawn outside `tools` is for, from its file and line.
+fn spawn_reason(rel: &str, line: &str) -> &'static str {
+    const PROCESS_CONTROL: [&str; 5] =
+        ["\"kill\"", "\"ps\"", "\"lsof\"", "\"taskkill\"", "\"cmd\""];
+    if PROCESS_CONTROL
+        .iter()
+        .any(|p| line.contains(&format!("::new({p}")))
+    {
+        "process control"
+    } else if rel == "bynk-driver/src/dev_run.rs" {
+        "self re-execution"
+    } else {
+        "other"
+    }
+}
+
+/// [`tool_spawn_sites`]'s reading over an explicit file list, paths from the repo root:
+/// the count, then the count per [`spawn_reason`].
+fn tool_spawn_sites_reading(files: &[(PathBuf, String)]) -> String {
+    let spawn =
+        regex::Regex::new(r"\b(Command|ProcCommand)::new\(").expect("the spawn pattern compiles");
+    let mut by_reason: std::collections::BTreeMap<&'static str, usize> =
+        ["process control", "self re-execution", "other"]
+            .into_iter()
+            .map(|r| (r, 0))
+            .collect();
+    let gated = gated_stems(files);
+    let mut total = 0usize;
+    for (path, contents) in files {
+        let rel = path.to_string_lossy().replace('\\', "/");
+        // `bynk/src/test_support.rs` is declared `#[cfg(test)] mod test_support;`.
+        if is_test_only_file(&rel, &gated)
+            || rel.ends_with("/test_support.rs")
+            || rel.starts_with("bynk-driver/src/tools/")
+            || rel == "bynk-driver/src/probe.rs"
+        {
+            continue;
+        }
+        // As in [`deploy_kind_accessors_violations`]: a `pub(crate) mod tests` is a test module.
+        let lines: Vec<&str> = contents
+            .lines()
+            .map(|line| {
+                line.strip_prefix("pub(crate) mod ")
+                    .map_or(line, |_| &line[11..])
+            })
+            .collect();
+        let ranges = test_mod_ranges(&lines);
+        for (i, line) in lines.iter().enumerate() {
+            if in_test_range(i, &ranges) || is_line_comment(line) || !spawn.is_match(line) {
+                continue;
+            }
+            total += 1;
+            *by_reason.entry(spawn_reason(&rel, line)).or_default() += 1;
+        }
+    }
+    format!(
+        "{total} (process control {}, self re-execution {}, other {})",
+        by_reason["process control"], by_reason["self re-execution"], by_reason["other"]
+    )
 }
 
 /// Named identifiers imported from the compiler-generated firstparty/runtime relative
@@ -3120,18 +4009,44 @@ pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>
 /// launder a rise). Compares `live`'s growth probes with `base_table`'s rows and
 /// requires a pending file under `root` to `raises:` each rise.
 pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(), String> {
+    // No base revision means no consumed `raises:`, so no ledger row can excuse a rise here.
+    check_growth_against(live, base_table, ("", &BTreeSet::new()), root)
+}
+
+/// [`check_growth`] for a PR against a base revision, `(base_ledger, consumed)`: the text of
+/// `design/greenfield-status-raises.md` at the base (empty when it had none), and the probes
+/// the base's pending files raised that this tree no longer has (`crate::consumed_raised_probes`).
+/// A rise is also excused by a row the working-tree ledger gained since the base for that
+/// probe with exactly this `from` and `to`, but only when the PR consumed a `raises:` of that
+/// probe: the stamp records a consumed `raises:` in the ledger and deletes the pending file, so
+/// a stamp PR carries its justification there and not in `design/pending` (#4415). A row
+/// already in the base ledger never excuses a rise, and nor does a hand-added row in a PR
+/// that consumed no such `raises:`.
+pub fn check_growth_against(
+    live: &[Probe],
+    base_table: &str,
+    (base_ledger, consumed): (&str, &BTreeSet<String>),
+    root: &Path,
+) -> Result<(), String> {
     let rises = growth_rises(live, base_table)
         .map_err(|errs| format!("growth probe reading unusable:\n{}", errs.join("\n")))?;
     if rises.is_empty() {
         return Ok(());
     }
-    let raised = crate::raised_probes_checked(root).map_err(|errs| {
+    let mut raised = crate::raised_probes_checked(root).map_err(|errs| {
         format!(
             "growth probe(s) rose, and the pending files are invalid, so no `raises:` could be \
              read. Fix them first (run `cargo xtask check-pending`):\n{}",
             errs.join("\n")
         )
     })?;
+    let ledger =
+        std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
+    for r in &rises {
+        if consumed.contains(r.probe) && ledger_records_rise(&ledger, base_ledger, r) {
+            raised.insert(r.probe.to_string());
+        }
+    }
     let left = unraised(rises, &raised);
     if left.is_empty() {
         return Ok(());
@@ -3147,6 +4062,20 @@ pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(),
             .collect::<Vec<_>>()
             .join("\n")
     ))
+}
+
+/// Whether `ledger` (the raise ledger's text) holds a row for `rise`'s probe with exactly its
+/// `from` and `to` that `base_ledger` does not: the stamp's record of this very rise.
+fn ledger_records_rise(ledger: &str, base_ledger: &str, rise: &GrowthRise) -> bool {
+    let base: BTreeSet<&str> = base_ledger.lines().collect();
+    ledger.lines().filter(|l| !base.contains(*l)).any(|line| {
+        let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+        // `| probe | from | to | version | PR | reason |`: an empty cell before the first bar.
+        cells.len() > 3
+            && cells[1] == rise.probe
+            && cells[2].parse::<usize>() == Ok(rise.from)
+            && cells[3].parse::<usize>() == Ok(rise.to)
+    })
 }
 
 /// The `rises` no pending file `raised` — the ones that must fail the gate.
@@ -3486,57 +4415,37 @@ fn test_density(root: &Path) -> Probe {
 /// A source file at least this many production lines long counts as large.
 const MODULE_LINES_THRESHOLDS: [usize; 3] = [2000, 3000, 5000];
 
-/// The crates of the "back half" whose largest files the probe names (track §8).
-const BACK_HALF_CRATES: [&str; 6] = [
-    "bynk-model",
-    "bynk-emit",
-    "bynk-ts",
-    "bynk-driver",
-    "bynk-strip",
-    "bynk",
-];
-
-/// True for a file under a crate's `src/` that is wholly tests: `tests.rs`,
-/// `*_tests.rs`, or anything beneath a `tests/` directory. `rel` is the path
-/// relative to `src/`, with `/` separators.
-fn is_whole_test_file(rel: &str) -> bool {
-    let mut parts: Vec<&str> = rel.split('/').collect();
-    let file = parts.pop().unwrap_or("");
-    file == "tests.rs" || file.ends_with("_tests.rs") || parts.contains(&"tests")
-}
-
-/// Lines of `source` outside its `#[cfg(test)]` module ranges. Comments and blank
-/// lines count; only each test module's own range is removed, wherever it sits.
-fn production_lines(source: &str) -> usize {
-    let lines: Vec<&str> = source.lines().collect();
-    let ranges = test_mod_ranges(&lines);
-    (0..lines.len())
-        .filter(|&i| !in_test_range(i, &ranges))
-        .count()
-}
-
 /// The probe's one-line reading from `(path from the repo root, production lines)`
-/// pairs: how many files reach each threshold, the largest file anywhere, and the
-/// three largest back-half files. Ties break on path so the reading is stable.
-fn module_lines_reading(files: &[(String, usize)]) -> String {
+/// pairs: how many files reach each threshold, the largest file anywhere, the three
+/// largest back-half files, the back-half files at or over the track's exit cap
+/// ([`crate::module_lines::EXIT_CAP`], §8's "Back-half files ≥ 3,000 lines (production)"),
+/// and how many ceilings `xtask/module-line-ceilings.txt` holds. Ties break on path so the
+/// reading is stable.
+fn module_lines_reading(files: &[(String, usize)], ceilings: usize) -> String {
     let at_least = |n: usize| files.iter().filter(|(_, l)| *l >= n).count();
     let mut sorted: Vec<&(String, usize)> = files.iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     let named = |f: &&(String, usize)| format!("{} {}", f.0, f.1);
     let largest = sorted.first().map(named).unwrap_or_else(|| "none".into());
+    let is_back_half = |p: &str| {
+        p.split('/')
+            .next()
+            .is_some_and(|c| BACK_HALF_CRATES.contains(&c))
+    };
     let back_half: Vec<String> = sorted
         .iter()
-        .filter(|(p, _)| {
-            p.split('/')
-                .next()
-                .is_some_and(|c| BACK_HALF_CRATES.contains(&c))
-        })
+        .filter(|(p, _)| is_back_half(p))
         .take(3)
         .map(named)
         .collect();
+    let exit_cap = crate::module_lines::EXIT_CAP;
+    let back_half_over_cap = files
+        .iter()
+        .filter(|(p, l)| is_back_half(p) && *l >= exit_cap)
+        .count();
     let [a, b, c] = MODULE_LINES_THRESHOLDS;
     format!(
-        "≥{a}: {} (≥{b}: {}, ≥{c}: {}); largest: {largest}; back half: {}",
+        "≥{a}: {} (≥{b}: {}, ≥{c}: {}); largest: {largest}; back half: {}; back half ≥{b}: {back_half_over_cap}; ceilings: {ceilings}",
         at_least(a),
         at_least(b),
         at_least(c),
@@ -3544,118 +4453,21 @@ fn module_lines_reading(files: &[(String, usize)]) -> String {
     )
 }
 
-/// Names declared by `#[cfg(test)] [vis] mod name;` — an external-file module
-/// *declaration* gated by its attribute, whose file is therefore wholly test code
-/// (`bynk-check/src/testkit.rs`). The attribute must be the line directly above
-/// (blank lines allowed), as [`test_mod_ranges`] reads it.
-fn cfg_test_declared_mods(source: &str) -> Vec<String> {
-    let lines: Vec<&str> = source.lines().collect();
-    let mut out = Vec::new();
-    for (i, line) in lines.iter().enumerate() {
-        if line.trim() != "#[cfg(test)]" {
-            continue;
-        }
-        let Some(next) = lines[i + 1..].iter().find(|l| !l.trim().is_empty()) else {
-            continue;
-        };
-        let t = next.trim();
-        // Drop a `pub`, `pub(crate)`, `pub(super)` ... visibility prefix.
-        let t = match t.strip_prefix("pub") {
-            Some(rest) => match rest.trim_start().strip_prefix('(') {
-                Some(r) => r.split_once(')').map_or("", |(_, after)| after),
-                None => rest,
-            },
-            None => t,
-        };
-        if let Some(name) = t
-            .trim_start()
-            .strip_prefix("mod ")
-            .and_then(|r| r.strip_suffix(';'))
-        {
-            out.push(name.trim().to_string());
-        }
-    }
-    out
-}
-
-/// The `src/`-relative stems (`testkit`, `emitter/testkit`) of files and
-/// directories declared away as test-only by a `#[cfg(test)] mod name;` in some
-/// other file. A module file `a/b.rs` owns directory `a/b/`, except `lib.rs`,
-/// `main.rs` and `mod.rs`, which own their own directory.
-fn declaration_gated_stems(files: &[(String, String)]) -> BTreeSet<String> {
-    let mut stems = BTreeSet::new();
-    for (rel, contents) in files {
-        let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
-        let stem = file.strip_suffix(".rs").unwrap_or(file);
-        let owned = match stem {
-            "lib" | "main" | "mod" => dir.to_string(),
-            _ if dir.is_empty() => stem.to_string(),
-            _ => format!("{dir}/{stem}"),
-        };
-        for name in cfg_test_declared_mods(contents) {
-            stems.insert(if owned.is_empty() {
-                name
-            } else {
-                format!("{owned}/{name}")
-            });
-        }
-    }
-    stems
-}
-
-/// True when `rel` is one of the declaration-gated stems' files (`stem.rs`,
-/// `stem/mod.rs`) or lies beneath such a module's directory.
-fn is_declaration_gated(rel: &str, stems: &BTreeSet<String>) -> bool {
-    let without_ext = rel.strip_suffix(".rs").unwrap_or(rel);
-    stems
-        .iter()
-        .any(|s| without_ext == s || rel.starts_with(&format!("{s}/")))
-}
-
-/// `(path from the repo root, production lines)` for one crate's `src/**/*.rs`
-/// files, given as `(src-relative path, contents)`. Whole-test files and files
-/// whose `mod` declaration is `#[cfg(test)]` are skipped; paths read
-/// `{crate}/src/{rel}`.
-fn module_lines_for_crate(crate_name: &str, files: &[(String, String)]) -> Vec<(String, usize)> {
-    let gated = declaration_gated_stems(files);
-    files
-        .iter()
-        .filter(|(rel, _)| !is_whole_test_file(rel) && !is_declaration_gated(rel, &gated))
-        .map(|(rel, contents)| {
-            (
-                format!("{crate_name}/src/{rel}"),
-                production_lines(contents),
-            )
-        })
-        .collect()
-}
-
-/// Phase 2 of the back-half paydown track (#3683). Production lines per
-/// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]`
-/// modules, whole-test files and files declared by `#[cfg(test)] mod name;`.
-/// A trend, not a gate: the threshold is still open.
+/// Phase 2 of the back-half paydown track (#3683, ratcheted by #4085). Production lines per
+/// `src/**/*.rs` file across every top-level crate, excluding `#[cfg(test)]` modules (with
+/// an optional `pub`/`pub(…)` visibility; `#[cfg(all(test, …))]` is a known gap, one 840-line
+/// front-half module), whole-test files and files declared by `#[cfg(test)] mod name;`. The
+/// reading is a trend, because naming the largest files would change the row on almost every
+/// Rust PR; the gate is `xtask/module-line-ceilings.txt`, checked by
+/// `xtask/tests/module_lines_ratchet.rs` over the back-half crates. Both read
+/// [`crate::module_lines`], so there is one definition.
 fn module_lines(root: &Path) -> Probe {
-    let mut files = Vec::new();
-    for krate in top_level_crate_dirs(root) {
-        let crate_name = krate.file_name().unwrap().to_string_lossy().to_string();
-        let src = krate.join("src");
-        let rels: Vec<(String, String)> = rust_files(&src)
-            .into_iter()
-            .map(|(path, contents)| {
-                let rel = path
-                    .strip_prefix(&src)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                (rel, contents)
-            })
-            .collect();
-        files.extend(module_lines_for_crate(&crate_name, &rels));
-    }
+    let files = crate::module_lines::measure_workspace(root);
+    let ceilings = crate::module_lines::read_ceilings(root).len();
     Probe {
         name: "module_lines",
         gated: false,
-        reads: module_lines_reading(&files),
+        reads: module_lines_reading(&files, ceilings),
     }
 }
 
@@ -3694,11 +4506,8 @@ fn module_lines(root: &Path) -> Probe {
 ///   which fails only on an emitter bug.
 ///
 /// `cargo xtask greenfield-status --list-unasserted` prints the codes.
-pub fn unasserted_codes(root: &Path) -> Vec<&'static str> {
-    let registry: BTreeSet<&'static str> = bynk_syntax::diagnostics::REGISTRY
-        .iter()
-        .map(|d| d.code)
-        .collect();
+pub fn unasserted_codes(root: &Path) -> Vec<String> {
+    let registry = registry_codes(root);
     let mut asserted: BTreeSet<String> = BTreeSet::new();
     let mut note = |text: &str| {
         for code in registry_tokens(text) {
@@ -3737,7 +4546,7 @@ pub fn unasserted_codes(root: &Path) -> Vec<&'static str> {
     }
     registry
         .into_iter()
-        .filter(|c| !asserted.contains(*c))
+        .filter(|c| !asserted.contains(c))
         .collect()
 }
 
@@ -3809,7 +4618,7 @@ fn text_files(dir: &Path) -> Vec<(PathBuf, String)> {
 }
 
 fn diagnostic_coverage(root: &Path) -> Probe {
-    let total = bynk_syntax::diagnostics::REGISTRY.len();
+    let total = registry_codes(root).len();
     let unasserted = unasserted_codes(root).len();
     Probe {
         name: "diagnostic_coverage",
@@ -3819,6 +4628,135 @@ fn diagnostic_coverage(root: &Path) -> Probe {
             total - unasserted
         ),
     }
+}
+
+// --- The diagnostics registry, read from a tree --------------------------------
+
+/// Where a tree keeps the registry and the curated explanations.
+const DIAGNOSTICS_SOURCE: &str = "bynk-syntax/src/diagnostics.rs";
+
+/// The source of `decl` (`pub const REGISTRY`, `pub const EXPLANATIONS`) up to its closing
+/// `];`, with `//` comments removed so a code named in prose is not counted.
+fn const_span(src: &str, decl: &str) -> Option<String> {
+    let start = src.find(decl)?;
+    let rest = &src[start..];
+    let end = rest.find("\n];")?;
+    Some(strip_line_comments(&rest[..end]))
+}
+
+/// The `"bynk.…"` string literal at the start of `text`, if it begins with one.
+fn leading_code(text: &str) -> Option<&str> {
+    let body = text.trim_start().strip_prefix('"')?;
+    let end = body.find('"')?;
+    body[..end].starts_with("bynk.").then(|| &body[..end])
+}
+
+/// The codes of `REGISTRY` in the tree at `root`: the code literal each `d(` / `dg(` entry
+/// opens with (`warn(d(…))` is an entry through its inner `d(`).
+///
+/// This reads `root`'s own source, not the registry compiled into this binary. The
+/// per-PR attribution (#4428) measures the base revision and the PR's tree with the same
+/// binary, so a reading taken from compiled-in data is the same on both and a PR that adds
+/// a code never appears to have moved it (#4476). Only a tree with no such file at all (a
+/// synthetic root in a test) reads the compiled-in registry instead. A tree that has the file
+/// but not a `REGISTRY` the scan can read (the const renamed, the file split) is a failure
+/// naming it, never a silent fallback: that would bring the blindness back unseen.
+pub fn registry_codes(root: &Path) -> BTreeSet<String> {
+    match registry_codes_from_source(root) {
+        SourceRead::Read(codes) => codes,
+        SourceRead::NoFile => bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect(),
+        SourceRead::Unreadable => panic!(
+            "{DIAGNOSTICS_SOURCE} exists but `pub const REGISTRY` cannot be read from it: \
+             teach `registry_codes` the new layout (the per-PR attribution depends on it)"
+        ),
+    }
+}
+
+/// How many `EXPLANATIONS` entries the tree at `root` carries: the `code: "bynk.…"` field of
+/// each `Explain`. Read from source, and failing loudly, for the reason [`registry_codes`] does.
+pub fn explained_code_count(root: &Path) -> usize {
+    match explained_count_from_source(root) {
+        SourceRead::Read(n) => n,
+        SourceRead::NoFile => bynk_syntax::diagnostics::EXPLANATIONS.len(),
+        SourceRead::Unreadable => panic!(
+            "{DIAGNOSTICS_SOURCE} exists but `pub const EXPLANATIONS` cannot be read from it: \
+             teach `explained_code_count` the new layout (the per-PR attribution depends on it)"
+        ),
+    }
+}
+
+/// What reading the diagnostics source of a tree gave. There is no fallback here: the
+/// public readers above decide what each outcome means, and the pinning test insists on `Read`.
+#[derive(Debug, PartialEq, Eq)]
+enum SourceRead<T> {
+    Read(T),
+    /// The tree has no `bynk-syntax/src/diagnostics.rs`.
+    NoFile,
+    /// The file is there but the const is not where the scan looks for it.
+    Unreadable,
+}
+
+fn registry_codes_from_source(root: &Path) -> SourceRead<BTreeSet<String>> {
+    let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
+        return SourceRead::NoFile;
+    };
+    let Some(span) = const_span(&src, "pub const REGISTRY") else {
+        return SourceRead::Unreadable;
+    };
+    let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut codes = BTreeSet::new();
+    for (i, _) in span.match_indices('(') {
+        // The whole identifier before the `(`, so `odd(` is not `d(`.
+        let head = &span[..i];
+        let name_len = head.bytes().rev().take_while(|&b| ident(b)).count();
+        let name = &head[head.len() - name_len..];
+        if (name == "d" || name == "dg")
+            && let Some(code) = leading_code(&span[i + 1..])
+        {
+            codes.insert(code.to_string());
+        }
+    }
+    // A registry with no entry is a scan that matched nothing, not an empty registry.
+    if codes.is_empty() {
+        return SourceRead::Unreadable;
+    }
+    SourceRead::Read(codes)
+}
+
+fn explained_count_from_source(root: &Path) -> SourceRead<usize> {
+    let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
+        return SourceRead::NoFile;
+    };
+    let Some(span) = const_span(&src, "pub const EXPLANATIONS") else {
+        return SourceRead::Unreadable;
+    };
+    let n = span
+        .lines()
+        .filter(|l| {
+            l.trim_start()
+                .strip_prefix("code: ")
+                .and_then(leading_code)
+                .is_some()
+        })
+        .count();
+    if n == 0 {
+        return SourceRead::Unreadable;
+    }
+    SourceRead::Read(n)
+}
+
+/// The gated probes whose reading comes from the diagnostics registry (#4476), taken of the tree
+/// at `root` and nothing else of it. `run_gated` reads these among all the rest; the attribution
+/// tests read only these, from a synthetic tree that holds a registry and no workspace.
+pub fn diagnostics_probes(root: &Path) -> Vec<Probe> {
+    vec![
+        emit_diagnostics(root),
+        diagnostic_coverage(root),
+        explained_codes(root),
+    ]
 }
 
 // --- explained_codes ------------------------------------------------------
@@ -3831,9 +4769,9 @@ fn diagnostic_coverage(root: &Path) -> Probe {
 /// `explained_codes_never_fall` refuses a fall even when a pending file
 /// acknowledges the probe. A new error code should ship with an explanation
 /// (`design/proposals/README.md`, "Documentation is part of done").
-fn explained_codes(_root: &Path) -> Probe {
-    let total = bynk_syntax::diagnostics::REGISTRY.len();
-    let explained = bynk_syntax::diagnostics::EXPLANATIONS.len();
+fn explained_codes(root: &Path) -> Probe {
+    let total = registry_codes(root).len();
+    let explained = explained_code_count(root);
     Probe {
         name: "explained_codes",
         gated: true,
@@ -4219,7 +5157,10 @@ pub fn render_table(report: &Report) -> String {
          `ts_raw_sites` split into `ts_raw_sites_emit`/`ts_raw_sites_testgen` and `emit_thread_locals` \
          added by 1A.19; `emit_silent_fallbacks` added by 1A.34; `emit_print_calls` added by 1A.35b \
          (`lowering_text_bridge` and `stmt_text_lines`, added by #3694 and #3711, were retired at 0 by 1A.35b); \
-         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a. Twenty-seven \
+         `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
+         `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
+         `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; `node_builder_defs` added by 1B.4a; \
+         `binding_kind_homes` added by 1C.1b; `wrangler_key_literals` added by 1C.2; `cloudflare_client_sites` added by 1D.3a. Thirty-five \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -4604,8 +5545,16 @@ mod tests {
         | `emit_thread_locals` | yes | 2 |\n\
         | `emit_silent_fallbacks` | yes | 15 |\n\
         | `emit_print_calls` | yes | 30 |\n\
+        | `testgen_print_calls` | yes | 43 |\n\
         | `import_prediction_fns` | yes | 8 |\n\
-        | `deploy_kind_accessors` | yes | 68 |\n";
+        | `deploy_kind_accessors` | yes | 68 |\n\
+        | `env_protocol_literals` | yes | 36 |\n\
+        | `tool_spawn_sites` | yes | 20 |\n\
+        | `node_builder_defs` | yes | 195 |\n\
+        | `deploy_ledger_writes` | yes | 25 |\n\
+        | `binding_kind_homes` | yes | 2 |\n\
+        | `wrangler_key_literals` | yes | 0 |\n\
+        | `cloudflare_client_sites` | yes | 34 |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -4620,8 +5569,16 @@ mod tests {
             gated("emit_thread_locals", "2"),
             gated("emit_silent_fallbacks", "15"),
             gated("emit_print_calls", "30"),
+            gated("testgen_print_calls", "43"),
             gated("import_prediction_fns", "8"),
+            gated("node_builder_defs", "195"),
             gated("deploy_kind_accessors", "68"),
+            gated("env_protocol_literals", "36"),
+            gated("tool_spawn_sites", "20"),
+            gated("deploy_ledger_writes", "25"),
+            gated("binding_kind_homes", "2"),
+            gated("wrangler_key_literals", "0"),
+            gated("cloudflare_client_sites", "34"),
         ]
     }
 
@@ -4679,6 +5636,43 @@ mod tests {
         )
         .unwrap();
         assert!(check_growth(&live, GROWTH_TABLE, &root).is_ok());
+    }
+
+    #[test]
+    fn a_stamp_prs_ledger_row_excuses_the_rise_it_records_and_only_that() {
+        let root = std::env::temp_dir().join("xtask-check-growth-ledger");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("design/pending")).unwrap();
+        let live = growth_live("101", "4");
+        let row = "| ts_writes | 100 | 101 | v1.2.3 | #1 | why |";
+        let header = "# Growth-probe raises\n\n| Probe | From | To | Version | PR | Reason |\n|---|---|---|---|---|---|\n";
+        let write = |rows: &str| {
+            std::fs::write(
+                root.join(crate::stamp::RAISE_LEDGER_PATH),
+                format!("{header}{rows}"),
+            )
+            .unwrap();
+        };
+        let consumed: BTreeSet<String> = ["ts_writes".to_string()].into();
+        let none = BTreeSet::new();
+        // No ledger row, no pending file: refused, as before.
+        assert!(check_growth_against(&live, GROWTH_TABLE, ("", &consumed), &root).is_err());
+        // A row the base ledger lacks, for exactly this rise, and a consumed `raises:` of the
+        // probe: the stamp recorded it.
+        write(&format!("{row}\n"));
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_ok());
+        // The same row, hand-added in a PR that consumed no `raises:` of this probe, excuses nothing.
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &none), &root).is_err());
+        let other: BTreeSet<String> = ["ts_any".to_string()].into();
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &other), &root).is_err());
+        // A row already in the base ledger excuses nothing (an old rise cannot launder this one).
+        let base = format!("{header}{row}\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, (&base, &consumed), &root).is_err());
+        // A new row for a different rise, or a different probe, does not excuse it.
+        write("| ts_writes | 100 | 102 | v1.2.3 | #1 | why |\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_err());
+        write("| ts_any | 100 | 101 | v1.2.3 | #1 | why |\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_err());
     }
 
     #[test]
@@ -4846,6 +5840,360 @@ mod tests {
     }
 
     #[test]
+    fn env_protocol_literals_counts_protocol_names_outside_tests_comments_and_the_table() {
+        let count = |src: &str| {
+            env_protocol_literals_violations(&files_of(&[("bynk-driver/src/run.rs", src)]))
+        };
+        // A name, a prefix spelt into a `format!`, a family member and a binding name.
+        let src = "cmd.env(\"BYNK_TEST_SEED\", hex);\n\
+                   format!(\"BYNK_DATASET_{binding}\")\n\
+                   let k = \"BYNK_CALL_FROM_SHOP__ORDERS\";\n\
+                   name: \"__BYNK_INSPECT_REGISTRY\".to_string(),\n";
+        assert_eq!(count(src), 4);
+        // Not protocol names: Rust-only configuration, a longer name than an exact entry,
+        // a runtime constant, a misspelling and a constant path.
+        let src = "env::var(\"BYNK_HOME\")\nenv::var(\"BYNK_DEV_COMMAND\")\n\
+                   \"__BYNK_TIMED_OUT\"\n\"BYNK_TEST_SEDE\"\ncmd.env(env_protocol::TEST_SEED, h);\n";
+        assert_eq!(count(src), 0);
+        // Comments and test modules (deploy's are `pub(crate)`) do not count.
+        let src =
+            "// BYNK_TEST_SEED\n#[cfg(test)]\nmod tests {\n    const S: &str = \"BYNK_DEV\";\n}\n";
+        assert_eq!(count(src), 0);
+        let src = "#[cfg(test)]\npub(crate) mod tests {\n    const S: &str = \"BYNK_DEV\";\n}\n";
+        assert_eq!(count(src), 0);
+        // The table, the diagnostics' prose and a wholly-test file are exempt.
+        assert_eq!(
+            env_protocol_literals_violations(&files_of(&[
+                (
+                    "bynk-project/src/env_protocol.rs",
+                    "pub const DEV: &str = \"BYNK_DEV\";\n"
+                ),
+                (
+                    "bynk-syntax/src/diagnostics.rs",
+                    "blurb: \"`BYNK_CALL_TO_<CONTEXT>`\",\n"
+                ),
+                ("bynk/src/deploy/tests.rs", "\"BYNK_DEV\"\n"),
+                ("bynk/src/dev.rs", "\"BYNK_DEV\"\n"),
+            ])),
+            1
+        );
+    }
+
+    #[test]
+    fn tool_spawn_sites_counts_spawns_outside_tools_probe_and_tests_by_reason() {
+        let reading = |files: &[(&str, &str)]| tool_spawn_sites_reading(&files_of(files));
+        let src = "let mut cmd = Command::new(p);\n\
+                   let mut cmd = std::process::Command::new(\"git\");\n\
+                   let _ = ProcCommand::new(\"taskkill\")\n";
+        assert_eq!(
+            reading(&[("bynk/src/workers.rs", src)]),
+            "3 (process control 1, self re-execution 0, other 2)"
+        );
+        assert_eq!(
+            reading(&[
+                (
+                    "bynk-driver/src/dev_run.rs",
+                    "Command::new(me)\nCommand::new(\"kill\")\n"
+                ),
+                (
+                    "bynk-driver/src/mutate.rs",
+                    "std::process::Command::new(\"git\")\n"
+                ),
+            ]),
+            "3 (process control 1, self re-execution 1, other 1)"
+        );
+        // The tools module, detection, comments, test modules (deploy's are `pub(crate)`),
+        // wholly-test files and a longer name do not count.
+        let none = "0 (process control 0, self re-execution 0, other 0)";
+        assert_eq!(
+            reading(&[
+                ("bynk-driver/src/tools/mod.rs", "Command::new(\"git\")\n"),
+                (
+                    "bynk-driver/src/tools/ladder.rs",
+                    "Command::new(&self.path)\n"
+                ),
+                ("bynk-driver/src/probe.rs", "Command::new(path)\n"),
+                ("bynk/src/a.rs", "// Command::new(\"git\")\n"),
+                (
+                    "bynk/src/b.rs",
+                    "#[cfg(test)]\nmod tests {\n    fn t() { Command::new(\"sh\"); }\n}\n",
+                ),
+                (
+                    "bynk/src/c.rs",
+                    "#[cfg(test)]\npub(crate) mod tests {\n    fn t() { Command::new(\"sh\"); }\n}\n",
+                ),
+                ("bynk/src/deploy/tests.rs", "Command::new(\"sh\")\n"),
+                ("bynk/src/test_support.rs", "Command::new(\"sh\")\n"),
+                ("bynk/src/d.rs", "MyCommand::new(x)\n"),
+            ]),
+            none
+        );
+    }
+
+    #[test]
+    fn cloudflare_client_sites_counts_call_sites_outside_tests_comments_and_the_module() {
+        let count =
+            |src: &str| cloudflare_client_sites_violations(&files_of(&[("deploy/kv.rs", src)]));
+        // A wrangler spawn built at the call site, the delegate's, and a REST construction.
+        let src = "let Some(c) = workers::wrangler_command(p, \"kv\") else {\n\
+                   bynk_driver::tools::wrangler::command(provenance, subcommand)\n\
+                   let rest = Rest {\n\
+                   Ok(RestListings(Rest {\n";
+        assert_eq!(count(src), 4);
+        // A definition, the type's own declarations, a longer name and a mention are not sites.
+        assert_eq!(
+            count(
+                "pub fn wrangler_command(p: &Provenance, s: &str) -> Option<Command> {\n\
+                 pub(crate) struct Rest {\nimpl Rest {\nimpl Cloudflare for Rest {\n\
+                 my_wrangler_command(p);\nlet r = RestError {\n"
+            ),
+            0
+        );
+        // A comment, a test module and a wholly-test file do not count, nor does the module.
+        let src = "// wrangler_command(\n#[cfg(test)]\npub(crate) mod tests {\n    fn t() { Rest { a }; }\n}\n";
+        assert_eq!(count(src), 0);
+        assert_eq!(
+            cloudflare_client_sites_violations(&files_of(&[
+                ("deploy/apply_tests.rs", "wrangler_command(p, \"kv\");\n"),
+                ("cloudflare/process.rs", "tools::wrangler::command(p, s)\n"),
+                ("test_support.rs", "wrangler_command(p, \"kv\");\n"),
+                ("tail.rs", "wrangler_command(&probe.provenance, \"tail\")\n"),
+            ])),
+            1
+        );
+    }
+
+    #[test]
+    fn binding_kind_homes_counts_files_that_construct_a_kind_or_deserialise_one() {
+        let homes = |files: &[(&str, &str)]| binding_kind_homes_files(&files_of(files)).len();
+        // A construction in a field, and in a match arm, each count their file once.
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        let arm = "match d {\n    (a, b) => BindingSource::KvInstance { capability },\n}\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", field)]), 1);
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", arm)]), 1);
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", &format!("{field}{field}{arm}"))]),
+            1
+        );
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", field), ("bynk-driver/src/b.rs", arm)]),
+            2
+        );
+        // A path-qualified construction counts too.
+        let qualified = "source: crate::worker_bindings::BindingSource::Kv,\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", qualified)]), 1);
+        // A `Deserialize` struct named for a binding counts; one that does not derive
+        // it, or is named otherwise, does not.
+        let stanza = "#[derive(Debug, Deserialize)]\nstruct KvNamespaceBinding {\n}\n";
+        let plain = "#[derive(Debug)]\nstruct KvNamespaceBinding {\n}\n";
+        let other = "#[derive(Deserialize)]\nstruct Resources {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", stanza)]), 1);
+        assert_eq!(homes(&[("bynk/src/c.rs", plain)]), 0);
+        assert_eq!(homes(&[("bynk/src/c.rs", other)]), 0);
+        let stacked = "#[derive(Deserialize)]\n/// A doc line.\n#[serde(rename_all = \"camelCase\")]\n#[serde(deny_unknown_fields)]\n#[allow(dead_code)]\n#[cfg_attr(test, derive(Debug))]\nstruct HyperdriveStanza {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", stacked)]), 1);
+        // The derive of the struct above does not carry over a blank line or an item.
+        let apart =
+            "#[derive(Deserialize)]\nstruct Resources {\n}\n\nstruct KvNamespaceBinding {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", apart)]), 0);
+        let manifest = "#[derive(Deserialize)]\n#[serde(rename_all = \"camelCase\")]\nstruct VectorizeManifestEntry {\n}\n";
+        assert_eq!(homes(&[("bynk/src/c.rs", manifest)]), 1);
+    }
+
+    #[test]
+    fn binding_kind_homes_skips_the_vocabulary_tests_and_comments() {
+        let homes = |files: &[(&str, &str)]| binding_kind_homes_files(&files_of(files)).len();
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        // The vocabulary is the one file that may define a kind.
+        assert_eq!(homes(&[("bynk-check/src/worker_bindings.rs", field)]), 0);
+        // A test module, a wholly-test file and a comment do not count.
+        let in_tests = format!("fn real() {{}}\n#[cfg(test)]\nmod tests {{\n    {field}}}\n");
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", &in_tests)]), 0);
+        let deploy_tests = format!("#[cfg(test)]\npub(crate) mod tests {{\n    {field}}}\n");
+        assert_eq!(homes(&[("bynk/src/deploy/a.rs", &deploy_tests)]), 0);
+        assert_eq!(homes(&[("bynk-emit/src/tests.rs", field)]), 0);
+        assert_eq!(
+            homes(&[("bynk-emit/src/a.rs", "// source: BindingSource::Kv\n")]),
+            0
+        );
+        // A pattern, not a construction, is rendering and does not count.
+        let pattern =
+            "match s {\n    BindingSource::Kv => 1,\n    BindingSource::Agent { .. } => 2,\n}\n";
+        assert_eq!(homes(&[("bynk-emit/src/a.rs", pattern)]), 0);
+    }
+
+    #[test]
+    fn wrangler_key_literals_counts_a_key_in_a_toml_position_only() {
+        let count =
+            |src: &str| wrangler_key_literals_count(&files_of(&[("bynk-emit/src/a.rs", src)]));
+        // A header, a lookup, an index and a list each count; a multi-line header too.
+        assert_eq!(count("TomlBlock::array_table(\"services\", e)\n"), 1);
+        assert_eq!(
+            count("TomlBlock::array_table(\n    \"queues.producers\",\n"),
+            1
+        );
+        assert_eq!(count("doc.get(\"vectorize\")\n"), 1);
+        assert_eq!(count("doc.get_mut(\"d1_databases\").x\n"), 1);
+        assert_eq!(count("doc.entry(\"vars\")\n"), 1);
+        assert_eq!(count("doc.remove( \"hyperdrive\" );\n"), 1);
+        assert_eq!(count("let x = parsed[\"env\"][\"kv_namespaces\"];\n"), 1);
+        assert_eq!(
+            count("for key in [\"durable_objects\", \"exports\"] {}\n"),
+            1
+        );
+        // Through the vocabulary, or in another position: not a key spelled.
+        assert_eq!(count("doc.get(WranglerKey::Vectorize.top_key())\n"), 0);
+        assert_eq!(
+            count("Command::new(\"wrangler\").args([\"vectorize\", \"list\"])\n"),
+            0
+        );
+        assert_eq!(count("let label = \"queues\";\n"), 0);
+        // `name` is too generic, and a singleton's table is the registry's.
+        assert_eq!(count("doc.get(\"name\")\n"), 0);
+        assert_eq!(count("doc.get(\"images\")\n"), 0);
+    }
+
+    #[test]
+    fn wrangler_key_literals_skips_tests_comments_and_test_files() {
+        let count = |path: &str, src: &str| wrangler_key_literals_count(&files_of(&[(path, src)]));
+        let key = "doc.get(\"services\")";
+        assert_eq!(count("bynk/src/a.rs", &format!("// {key}\n")), 0);
+        assert_eq!(
+            count(
+                "bynk/src/a.rs",
+                &format!("#[cfg(test)]\nmod tests {{\n    {key}\n}}\n")
+            ),
+            0
+        );
+        assert_eq!(
+            count(
+                "bynk/src/a.rs",
+                &format!("#[cfg(test)]\npub(crate) mod tests {{\n    {key}\n}}\n")
+            ),
+            0
+        );
+        assert_eq!(count("bynk/src/tests.rs", key), 0);
+        assert_eq!(
+            count(
+                "bynk/src/a.rs",
+                &format!("fn f() {{\n    {key};\n}}\n{key}\n")
+            ),
+            2
+        );
+    }
+
+    #[test]
+    fn deploy_ledger_writes_counts_write_sites_outside_tests_comments_and_revert() {
+        let count = |src: &str| deploy_ledger_writes_violations(&files_of(&[("ledger.rs", src)]));
+        // A write, and each of the 1D.1 context's writes.
+        let src = "write_lock(self.path, self.lock)\n\
+                   cx.record(binding, record, &done)?;\n\
+                   cx.change(|env| f(env), &done)\n\
+                   cx.commit(&failure)?;\n";
+        assert_eq!(count(src), 4);
+        // The definition, a longer name, another receiver and a mention are not writes.
+        assert_eq!(
+            count(
+                "pub(crate) fn write_lock(path: &Path, lock: &DeployLock) {}\n\
+                 my_write_lock(p);\nwriter.commit(e, c)?;\ncx.recording(b, r, d);\nlet w = write_lock;\n"
+            ),
+            0
+        );
+        // A comment, a test module (deploy's are `pub(crate)`) and a wholly-test file do not count.
+        let src = "// write_lock(\n#[cfg(test)]\npub(crate) mod tests {\n    fn t() { write_lock(p, l).unwrap(); }\n}\n";
+        assert_eq!(count(src), 0);
+        assert_eq!(
+            deploy_ledger_writes_violations(&files_of(&[
+                ("apply_tests.rs", "write_lock(p, l);\n"),
+                ("revert.rs", "write_lock(lock_path, lock)\n"),
+                ("apply.rs", "write_lock(self.path, self.lock)\n"),
+            ])),
+            1,
+            "`bynk revert`'s write is not the apply's"
+        );
+    }
+
+    #[test]
+    fn node_builder_defs_counts_one_constructor_wrappers_and_ts_build_renames() {
+        let count = |src: &str| node_builder_defs_count(&files_of(&[("emitter/a.rs", src)]));
+        // A wrapper over one constructor, in the spellings the emitter had: a variant, a
+        // struct variant, an associated function, a `bynk_ts::`-qualified one, and a body on
+        // one line.
+        let wrappers = "fn ident(s: impl Into<String>) -> TsExpr {\n    TsExpr::Ident(s.into())\n}\n\
+                        fn member(object: TsExpr, property: &str) -> TsExpr {\n    \
+                        TsExpr::Member {\n        object: Box::new(object),\n        \
+                        property: property.to_string(),\n    }\n}\n\
+                        pub(super) fn block(stmts: Vec<TsStmt>) -> TsStmt { TsStmt::block(stmts, None) }\n\
+                        fn hist_id(name: &str) -> bynk_ts::TsExpr {\n    \
+                        bynk_ts::TsExpr::Ident(name.to_string())\n}\n\
+                        fn strict_eq(a: TsExpr, b: TsExpr) -> TsExpr {\n    \
+                        TsExpr::Binary { op: TsBinaryOp::StrictEq, left: Box::new(a), right: Box::new(b) }\n}\n";
+        assert_eq!(count(wrappers), 5);
+        // A delegation to a builder counts (`id` over `ident_node`, `ne` over `binary`), once
+        // the helper is one; a delegation to something unknown does not.
+        let delegations = "fn ident_node(n: &str) -> TsExpr {\n    TsExpr::Ident(n.to_string())\n}\n\
+                           fn id(n: &str) -> TsExpr {\n    ident_node(n)\n}\n\
+                           fn ne(a: TsExpr, b: TsExpr) -> TsExpr {\n    \
+                           binary(TsBinaryOp::StrictNotEq, a, b)\n}\n\
+                           fn other(a: TsExpr) -> TsExpr {\n    somewhere_else(a)\n}\n";
+        assert_eq!(count(delegations), 2);
+        // Composed helpers (two constructors) are not wrappers.
+        let composed = "fn applied(f: TsExpr, x: TsExpr) -> TsExpr {\n    call(paren(f), vec![x])\n}\n\
+                        fn if_then(c: TsExpr, body: Vec<TsStmt>) -> TsStmt {\n    \
+                        TsStmt::if_stmt(c, block(body), None)\n}\n";
+        assert_eq!(count(composed), 0);
+        // A string constant, a constant origin, a clone, a branch and another return type are
+        // not functions of their parameters alone.
+        let others = "fn undefined() -> TsExpr {\n    TsExpr::Ident(\"undefined\".to_string())\n}\n\
+                      fn specs(s: String) -> TsExpr {\n    \
+                      TsExpr::VerbatimExpr(s, VerbatimOrigin::FormFieldSpecs)\n}\n\
+                      fn field(e: &TsExpr) -> TsExpr {\n    TsExpr::Paren(Box::new(e.clone()))\n}\n\
+                      fn pick(c: bool, e: TsExpr) -> TsExpr {\n    if c { TsExpr::Paren(Box::new(e)) } else { e }\n}\n\
+                      fn any_ty() -> TsType {\n    TsType::named(x)\n}\n";
+        assert_eq!(count(others), 0);
+        // A helper with no parameters is a constant, not a builder.
+        let constant = "fn empty_deps() -> TsExpr {\n    TsExpr::object_entries(Vec::new())\n}\n";
+        assert_eq!(count(constant), 0);
+        // A `#[cfg(test)]` copy and a comment do not count; nor does `ts_build.rs` itself.
+        let in_tests = "#[cfg(test)]\nmod tests {\n    fn ident(s: &str) -> TsExpr {\n        \
+                        TsExpr::Ident(s.to_string())\n    }\n}\n// fn id(n: &str) -> TsExpr { TsExpr::Ident(n) }\n";
+        assert_eq!(count(in_tests), 0);
+        let builders = files_of(&[(
+            "ts_build.rs",
+            "pub(crate) fn ident(s: impl Into<String>) -> TsExpr {\n    TsExpr::Ident(s.into())\n}\n",
+        )]);
+        assert_eq!(node_builder_defs_count(&builders), 0);
+        // A helper over a `ts_build` builder counts, because `ts_build` names it one.
+        let mixed = files_of(&[
+            (
+                "ts_build.rs",
+                "pub(crate) fn binary(op: TsBinaryOp, l: TsExpr, r: TsExpr) -> TsExpr {\n    \
+                 TsExpr::Binary { op, left: Box::new(l), right: Box::new(r) }\n}\n",
+            ),
+            (
+                "a.rs",
+                "fn ne(a: TsExpr, b: TsExpr) -> TsExpr {\n    binary(TsBinaryOp::StrictNotEq, a, b)\n}\n",
+            ),
+        ]);
+        assert_eq!(node_builder_defs_count(&mixed), 1);
+        // Each `as` rename in a `ts_build` import counts, in a clause or on its own line; a plain
+        // import and a rename from another module do not.
+        let uses = "use crate::ts_build::{ident as id, str_lit as lit_str, member};\n\
+                    use crate::ts_build::{\n    call as call_built,\n    paren,\n};\n\
+                    use super::ts_build::block as stmts;\n\
+                    use crate::ts_build::{call, index};\n\
+                    use crate::other::{thing as that};\n";
+        assert_eq!(count(uses), 4);
+        let in_test_use = "#[cfg(test)]\nmod tests {\n    use crate::ts_build::ident as id;\n}\n";
+        assert_eq!(count(in_test_use), 0);
+        // The same wrapper in two files is two definitions.
+        assert_eq!(
+            node_builder_defs_count(&files_of(&[("a.rs", wrappers), ("b.rs", wrappers)])),
+            10
+        );
+    }
+
+    #[test]
     fn import_prediction_fns_counts_prediction_names_outside_tests_comments_and_the_allowlist() {
         let count = |src: &str| import_prediction_fns_violations(&files_of(&[("a.rs", src)]));
         // Each of the three segments, with the visibility and qualifier forms a declaration takes.
@@ -4893,22 +6241,105 @@ mod tests {
         let files = files_of(&[
             ("emitter/emit.rs", src),
             ("emitter/http_client.rs", src),
-            ("project/tests_emit/test_module.rs", src),
-            ("project/tests_emit.rs", src),
-            ("project/tests_emit/harness.rs", src),
+            ("testgen/test_module.rs", src),
+            ("testgen/test_runtime/x.rs", src),
+            ("testgen/harness.rs", src),
             ("emitter/testgen/stubs.rs", src),
             ("testgen.rs", src),
+            ("emitter/commons_barrel.rs", src),
             ("project.rs", src),
         ]);
-        // A driver `tests_emit` file and a `testgen` module or file are the harness.
+        // A `testgen` module or file is the harness (1B.2a moved it from the driver's
+        // `project/tests_emit/**`, which is no longer a harness path).
         assert_eq!(ts_raw_sites_violations(&files, true), 5);
-        // Everything else, the driver's `project.rs` orchestration included, is emission.
-        assert_eq!(ts_raw_sites_violations(&files, false), 3);
+        // Everything else, the commons barrel and the driver's `project.rs` orchestration
+        // included, is emission.
+        assert_eq!(ts_raw_sites_violations(&files, false), 4);
         // Together they are the old combined probe: a reclassification, not a fall.
         assert_eq!(
             ts_raw_sites_violations(&files, true) + ts_raw_sites_violations(&files, false),
             files.len()
         );
+    }
+
+    /// 1B.2b (#4028), from the 1B.2a review: removes its directory when dropped, so a failing
+    /// assertion does not leave a temp tree behind for the next run's process id to meet.
+    struct TempTree(PathBuf);
+
+    impl TempTree {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            TempTree(dir)
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// 1B.2a (Decision D of #4028): the four production probes that read `bynk-emit/src` skip
+    /// 1B.5e (Decision H): `emit_print_calls` reads the whole crate, the harness included.
+    #[test]
+    fn the_print_probe_reads_the_harness_too() {
+        let tree = TempTree::new("bynk-testgen-split");
+        let dir = tree.0.clone();
+        let src = dir.join("bynk-emit/src");
+        for (rel, text) in [
+            ("emitter/emit.rs", "fn f() { print_stmt(&s); }\n"),
+            (
+                "testgen.rs",
+                "fn g() {\n print_expr(&e);\n print_type(&t);\n}\n",
+            ),
+            ("testgen/harness.rs", "fn h() { print_stmt(&s); }\n"),
+        ] {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        assert_eq!(emit_print_calls(&dir).reads, "4");
+    }
+
+    /// 1B.5e (Decision H): the harness's prediction functions and silent fallbacks are read
+    /// with production emission's, because the harness predicts no import and draws no silent
+    /// `undefined` any more. Only `ast_importers` still skips it: it reads the AST by design.
+    #[test]
+    fn the_prediction_and_fallback_probes_read_the_harness_too() {
+        let tree = TempTree::new("bynk-testgen-skip");
+        let dir = tree.0.clone();
+        let src = dir.join("bynk-emit/src");
+        let body = "use bynk_syntax::ast::Expr;\nfn block_uses_run_id() {}\n\
+                    fn f() { x.unwrap_or_else(|| ident(\"undefined\")); }\n";
+        for rel in ["emitter/emit.rs", "testgen/stubs.rs", "testgen.rs"] {
+            let path = src.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        }
+        assert_eq!(import_prediction_fns(&dir).reads, "3");
+        assert_eq!(emit_silent_fallbacks(&dir).reads, "3");
+        assert_eq!(ast_importer_files(&dir).len(), 1);
+    }
+
+    #[test]
+    fn is_testgen_path_names_the_module_not_the_old_driver_directory() {
+        assert!(is_testgen_path(Path::new("testgen.rs")));
+        assert!(is_testgen_path(Path::new("testgen/system_support.rs")));
+        assert!(is_testgen_path(Path::new("testgen/test_runtime/x.rs")));
+        assert!(!is_testgen_path(Path::new("emitter/commons_barrel.rs")));
+        assert!(!is_testgen_path(Path::new("project/tests_emit/harness.rs")));
+        assert!(!is_testgen_path(Path::new("project/tests_emit.rs")));
+    }
+
+    /// 1B.2b (#4028), from the 1B.2a review: a component that merely *starts with* `testgen`
+    /// is not the module, so a production helper named that way is still production emission.
+    #[test]
+    fn is_testgen_path_matches_the_component_not_a_prefix() {
+        assert!(!is_testgen_path(Path::new("emitter/testgen_helpers.rs")));
+        assert!(!is_testgen_path(Path::new("testgen_helpers/x.rs")));
+        assert!(!is_testgen_path(Path::new("emitter/testgenerator.rs")));
+        assert!(is_testgen_path(Path::new("testgen/test_runtime/x.rs")));
     }
 
     #[test]
@@ -5167,6 +6598,48 @@ mod tests {
         assert!(!registry.contains("bynk.locale"));
     }
 
+    /// #4476: the source-reading scan must equal the registry compiled into this binary on the
+    /// live tree. If someone adds a constructor shape the scan does not know, this goes red and
+    /// the per-PR attribution is not silently blind to those codes.
+    #[test]
+    fn registry_source_matches_the_compiled_in_one() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let compiled: BTreeSet<String> = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect();
+        // The source-only readers: no fallback, so a moved file or a renamed const fails here
+        // instead of comparing the compiled-in registry with itself.
+        assert_eq!(
+            registry_codes_from_source(&root),
+            SourceRead::Read(compiled),
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with REGISTRY (or cannot find it): teach `registry_codes_from_source` the new layout or entry shape"
+        );
+        assert_eq!(
+            explained_count_from_source(&root),
+            SourceRead::Read(bynk_syntax::diagnostics::EXPLANATIONS.len()),
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with EXPLANATIONS (or cannot find it): teach `explained_count_from_source` the new layout or shape"
+        );
+    }
+
+    /// The reader tells a tree with no registry file (a synthetic root) from one whose file it
+    /// cannot read, and the second is never read as the first.
+    #[test]
+    fn an_unreadable_registry_is_not_a_missing_one() {
+        let dir = std::env::temp_dir().join(format!("xtask-unreadable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(registry_codes_from_source(&dir), SourceRead::NoFile);
+        std::fs::create_dir_all(dir.join("bynk-syntax/src")).unwrap();
+        std::fs::write(
+            dir.join(DIAGNOSTICS_SOURCE),
+            "pub const RENAMED: &[DiagnosticInfo] = &[\n];\n",
+        )
+        .unwrap();
+        assert_eq!(registry_codes_from_source(&dir), SourceRead::Unreadable);
+        assert_eq!(explained_count_from_source(&dir), SourceRead::Unreadable);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // --- ast_importers (#1176) ------------------------------------------------
 
     /// The exclusion is named, not prefixed: `project/tests_emit.rs` is the
@@ -5190,6 +6663,17 @@ mod tests {
         // `project/tests_emit.rs` left `bynk-emit/src` with `project` (D1, #2982).
         assert!(!is_named_ast_importer(Path::new("project/tests_emit.rs")));
         assert!(is_named_ast_importer(Path::new("emitter/serialisation.rs")));
+        // A file split out of it is excluded through the origin table; a file that is not in
+        // the table is not, whatever directory it sits in.
+        assert!(is_named_ast_importer(Path::new(
+            "emitter/serialisation/expr.rs"
+        )));
+        assert!(is_named_ast_importer(Path::new(
+            "emitter/serialisation/field.rs"
+        )));
+        assert!(!is_named_ast_importer(Path::new(
+            "emitter/serialisation/other.rs"
+        )));
         assert!(!is_named_ast_importer(Path::new("project.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter.rs")));
         assert!(!is_named_ast_importer(Path::new("emitter/lower.rs")));
@@ -5264,6 +6748,8 @@ mod tests {
         );
         assert!(!counted.contains("project/tests_emit.rs"));
         assert!(!counted.contains("emitter/serialisation.rs"));
+        assert!(!counted.contains("emitter/serialisation/expr.rs"));
+        assert!(!counted.contains("emitter/serialisation/field.rs"));
         assert!(!counted.contains("project.rs"));
         assert!(!counted.contains("project/diagnostics.rs"));
         assert!(counted.contains("emitter.rs"));
@@ -5815,99 +7301,73 @@ mod idempotency_scoping_tests {
         );
     }
 
+    #[test]
+    fn ast_importer_origins_count_each_origin_once() {
+        let rels: Vec<String> = [
+            "emitter/a.rs",
+            "emitter/a/x.rs",
+            "emitter/a/y.rs",
+            "emitter/b.rs",
+        ]
+        .map(String::from)
+        .to_vec();
+        // No table: every file counts.
+        assert_eq!(distinct_ast_importer_origins(&rels, &[]), 4);
+        // Two children of `emitter/a.rs` fold into it.
+        let table = [
+            ("emitter/a/x.rs", "emitter/a.rs"),
+            ("emitter/a/y.rs", "emitter/a.rs"),
+        ];
+        assert_eq!(distinct_ast_importer_origins(&rels, &table), 2);
+        // A row for a file that is not an importer is inert.
+        assert_eq!(
+            distinct_ast_importer_origins(&rels[..1], &[("emitter/z.rs", "emitter/a.rs")]),
+            1
+        );
+    }
+
+    /// Every row of the origin table names `bynk-emit/src`
+    /// files that exist, so a row cannot rot silently.
+    #[test]
+    fn ast_importer_origin_rows_name_existing_files() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        for (child, origin) in AST_IMPORTER_ORIGINS {
+            assert!(root.join("bynk-emit/src").join(child).is_file(), "{child}");
+            assert!(
+                root.join("bynk-emit/src").join(origin).is_file(),
+                "{origin}"
+            );
+        }
+    }
+
     // --- module_lines -----------------------------------------------------
 
-    fn lines_of(n: usize) -> String {
-        "x\n".repeat(n)
-    }
-
-    #[test]
-    fn module_lines_excludes_a_trailing_test_module() {
-        let src = format!(
-            "{}#[cfg(test)]\nmod tests {{\n{}}}\n",
-            lines_of(5),
-            lines_of(100)
-        );
-        // 5 production lines plus the attribute line, which sits outside the range.
-        assert_eq!(production_lines(&src), 6);
-    }
-
-    #[test]
-    fn module_lines_excludes_a_mid_file_test_module_but_keeps_what_follows() {
-        let src = format!(
-            "{}#[cfg(test)]\nmod tests {{\n{}}}\n{}",
-            lines_of(3),
-            lines_of(50),
-            lines_of(4)
-        );
-        assert_eq!(production_lines(&src), 3 + 1 + 4);
-    }
-
-    #[test]
-    fn module_lines_counts_comments_and_blank_lines() {
-        assert_eq!(production_lines("// c\n\nfn a() {}\n"), 3);
-    }
-
-    #[test]
-    fn module_lines_skips_whole_test_files() {
-        assert!(is_whole_test_file("tests.rs"));
-        assert!(is_whole_test_file("emitter/tests.rs"));
-        assert!(is_whole_test_file("parser_tests.rs"));
-        assert!(is_whole_test_file("tests/fixtures/a.rs"));
-        assert!(!is_whole_test_file("emitter/emit.rs"));
-        assert!(!is_whole_test_file("attests.rs"));
-    }
-
-    #[test]
-    fn module_lines_paths_read_crate_src_rel() {
-        let files = vec![("emitter/a.rs".to_string(), lines_of(7))];
-        assert_eq!(
-            module_lines_for_crate("bynk-emit", &files),
-            vec![("bynk-emit/src/emitter/a.rs".to_string(), 7)]
-        );
-    }
-
-    #[test]
-    fn module_lines_skips_files_declared_by_cfg_test_mod() {
-        let lib =
-            "#[cfg(test)]\npub(crate) mod testkit;\n\n#[cfg(test)]\nmod fixtures;\npub mod real;\n";
-        let files = vec![
-            ("lib.rs".to_string(), lib.to_string()),
-            ("testkit.rs".to_string(), lines_of(500)),
-            ("fixtures/mod.rs".to_string(), lines_of(50)),
-            ("fixtures/inner.rs".to_string(), lines_of(50)),
-            ("real.rs".to_string(), lines_of(9)),
-        ];
-        let got = module_lines_for_crate("c", &files);
-        let names: Vec<&str> = got.iter().map(|(p, _)| p.as_str()).collect();
-        assert_eq!(names, vec!["c/src/lib.rs", "c/src/real.rs"]);
-    }
-
-    #[test]
-    fn module_lines_declaration_gate_is_scoped_to_the_declaring_directory() {
-        // `emitter.rs` declares `emitter/testkit.rs`; a top-level `testkit.rs`
-        // that no `#[cfg(test)]` declaration gates stays production code.
-        let files = vec![
-            (
-                "emitter.rs".to_string(),
-                "#[cfg(test)]\nmod testkit;\n".to_string(),
-            ),
-            ("emitter/testkit.rs".to_string(), lines_of(30)),
-            ("testkit.rs".to_string(), lines_of(40)),
-            ("lib.rs".to_string(), "mod testkit;\n".to_string()),
-        ];
-        let got = module_lines_for_crate("c", &files);
-        assert!(got.iter().any(|(p, n)| p == "c/src/testkit.rs" && *n == 40));
-        assert!(!got.iter().any(|(p, _)| p.contains("emitter/testkit")));
+    fn module_lines_reading_t(files: &[(String, usize)]) -> String {
+        module_lines_reading(files, 0)
     }
 
     #[test]
     fn module_lines_threshold_counts_exactly_2000() {
         let at = |n| vec![("bynk-emit/src/a.rs".to_string(), n)];
-        assert!(module_lines_reading(&at(2000)).starts_with("≥2000: 1 (≥3000: 0, ≥5000: 0)"));
-        assert!(module_lines_reading(&at(1999)).starts_with("≥2000: 0 "));
-        assert!(module_lines_reading(&at(3000)).contains("≥3000: 1"));
-        assert!(module_lines_reading(&at(5000)).contains("≥5000: 1"));
+        assert!(module_lines_reading_t(&at(2000)).starts_with("≥2000: 1 (≥3000: 0, ≥5000: 0)"));
+        assert!(module_lines_reading_t(&at(1999)).starts_with("≥2000: 0 "));
+        assert!(module_lines_reading_t(&at(3000)).contains("≥3000: 1"));
+        assert!(module_lines_reading_t(&at(5000)).contains("≥5000: 1"));
+    }
+
+    #[test]
+    fn module_lines_reading_counts_back_half_files_at_the_exit_cap_and_the_ceilings() {
+        let f = |p: &str, l| (p.to_string(), l);
+        let files = vec![
+            f("bynk-emit/src/a.rs", 3000),
+            f("bynk-emit/src/b.rs", 2999),
+            f("bynk-check/src/front.rs", 9000),
+        ];
+        let reading = module_lines_reading(&files, 7);
+        assert!(
+            reading.ends_with("back half ≥3000: 1; ceilings: 7"),
+            "{reading}"
+        );
     }
 
     #[test]
@@ -5920,10 +7380,10 @@ mod idempotency_scoping_tests {
             f("bynk-driver/src/c.rs", 200),
             f("bynk-model/src/d.rs", 400),
         ];
-        let reading = module_lines_reading(&files);
+        let reading = module_lines_reading(&files, 0);
         assert!(
-            reading.ends_with(
-                "back half: bynk-emit/src/a.rs 500, bynk-model/src/d.rs 400, bynk-ts/src/b.rs 300"
+            reading.contains(
+                "back half: bynk-emit/src/a.rs 500, bynk-model/src/d.rs 400, bynk-ts/src/b.rs 300;"
             ),
             "{reading}"
         );
@@ -5936,15 +7396,40 @@ mod idempotency_scoping_tests {
             f("bynk-check/src/big.rs", 900),
             f("bynk-emit/src/a.rs", 100),
         ];
-        let reading = module_lines_reading(&files);
+        let reading = module_lines_reading(&files, 0);
         assert!(
             reading.contains("largest: bynk-check/src/big.rs 900;"),
             "{reading}"
         );
         assert!(
-            reading.ends_with("back half: bynk-emit/src/a.rs 100"),
+            reading.contains("back half: bynk-emit/src/a.rs 100;"),
             "{reading}"
         );
+    }
+
+    /// A visibility prefix on the test module does not hide it (`pub(crate) mod tests {`),
+    /// but a `#[cfg(test)]` item that is not a module still opens no range.
+    #[test]
+    fn test_mod_ranges_accepts_a_visibility_prefix() {
+        let src = "\
+#[cfg(test)]
+pub(crate) mod tests {
+    fn x() {}
+}
+#[cfg(test)]
+pub mod y {
+}
+#[cfg(test)]
+pub(crate) fn helper() {
+}
+#[cfg(test)]
+pub(in crate::a) mod z {
+}
+#[cfg(test)]
+pub mod w;
+";
+        let lines: Vec<&str> = src.lines().collect();
+        assert_eq!(test_mod_ranges(&lines), vec![(1, 3), (5, 6), (11, 12)]);
     }
 
     /// The same fixture's `test_mod_ranges` shape, checked directly: two disjoint
@@ -6698,6 +8183,78 @@ commons app.demo {
         assert_eq!(t, out);
     }
 
+    /// A whole test file is test code, so the family probes skip it: a module's tests
+    /// moving out to `foo/tests.rs` must not raise `ts_writes`. Run through
+    /// [`codegen_family_from`], so deleting its filter fails this test.
+    #[test]
+    fn family_probes_skip_whole_test_files() {
+        let write = "fn f() { let _ = format!(\"x\"); }\n".to_string();
+        let file = |rel: &str| (PathBuf::from(rel), write.clone());
+        let family = codegen_family_from(
+            vec![
+                file("emitter/lower.rs"),
+                file("emitter/tests.rs"),
+                file("emitter/tests/golden.rs"),
+            ],
+            vec![
+                file("project/entry.rs"),
+                file("project/tests.rs"),
+                file("project/entry_scope_tests.rs"),
+            ],
+        );
+        let kept: Vec<_> = family.iter().map(|(p, _)| p.to_string_lossy()).collect();
+        assert_eq!(kept, ["emitter/lower.rs", "project/entry.rs"]);
+        assert_eq!(ts_writes_violations(&family), 2);
+    }
+
+    /// A module declared `#[cfg(test)] mod x;` is test code wherever it lives, as `module_lines`
+    /// reads it: every probe that skips whole test files skips it too, and a file that is not
+    /// declared that way still counts.
+    #[test]
+    fn a_declaration_gated_module_is_test_code_for_every_probe() {
+        use crate::module_lines::{gated_stems, is_test_only_file};
+        let files = files_of(&[
+            (
+                "bynk/src/dev.rs",
+                "#[cfg(test)]\nmod test_support;\nmod run;\n",
+            ),
+            ("bynk/src/dev/test_support.rs", ""),
+            ("bynk/src/dev/run.rs", ""),
+            ("bynk/src/dev/tests.rs", ""),
+        ]);
+        let gated = gated_stems(&files);
+        assert!(is_test_only_file("bynk/src/dev/test_support.rs", &gated));
+        assert!(is_test_only_file("bynk/src/dev/tests.rs", &gated));
+        assert!(!is_test_only_file("bynk/src/dev/run.rs", &gated));
+        assert!(!is_test_only_file("bynk/src/dev.rs", &gated));
+        // The binding probe: a construction in the gated file is not a home; in `run.rs` it is.
+        let field = "WorkerBinding { name, source: BindingSource::Kv }\n";
+        let parent = "#[cfg(test)]\nmod test_support;\nmod run;\n";
+        let homes = |support: &str, run: &str| {
+            binding_kind_homes_files(&files_of(&[
+                ("bynk/src/dev.rs", parent),
+                ("bynk/src/dev/test_support.rs", support),
+                ("bynk/src/dev/run.rs", run),
+            ]))
+            .len()
+        };
+        assert_eq!(homes(field, ""), 0);
+        assert_eq!(homes("", field), 1);
+        // The family probes: the same rule, read against each half's own paths.
+        let write = "fn f() { let _ = format!(\"x\"); }\n".to_string();
+        let file = |rel: &str, body: &str| (PathBuf::from(rel), body.to_string());
+        let family = codegen_family_from(
+            vec![
+                file("emitter.rs", "#[cfg(test)]\nmod fixtures;\n"),
+                file("emitter/fixtures.rs", &write),
+                file("emitter/lower.rs", &write),
+            ],
+            vec![],
+        );
+        let kept: Vec<_> = family.iter().map(|(p, _)| p.to_string_lossy()).collect();
+        assert_eq!(kept, ["emitter.rs", "emitter/lower.rs"]);
+    }
+
     // --- ts_writes / ts_any (P7.0, #1296; testability + widening, review of #1297) --
 
     /// Run [`ts_writes_violations`] over an in-memory file list — mirrors
@@ -6744,7 +8301,8 @@ commons app.demo {
         assert!(is_ts_writes_excluded_file(Path::new(
             "emitter/contracts.rs"
         )));
-        assert!(is_ts_writes_excluded_file(Path::new("testkit.rs")));
+        // `testkit.rs` left the list in 1B.2b: it holds no `format!` any more.
+        assert!(!is_ts_writes_excluded_file(Path::new("testkit.rs")));
         // Name proximity to a file that used to be excluded must not false-positive:
         // `emitter/lower.rs` (the emitter's own lowering pass) is genuinely
         // TS-producing and must stay counted — unlike `ir/lower.rs` (the checker→IR

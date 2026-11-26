@@ -16,7 +16,7 @@
 //! worker_bindings`, the list `wrangler.toml` is written from); this module
 //! owns the check over them and the diagnostic.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use bynk_project::ParsedFile;
@@ -53,7 +53,7 @@ pub fn instance_binding_name(prefix: &str, capability: &str) -> String {
 /// `bynk.context.duplicate_binding` diagnostic names.
 ///
 /// Each variant's doc also says whether a handler's `deps.env` type exposes
-/// it on Workers (#1950, `bynk_emit::emitter::wrangler::handler_bindings`).
+/// it on Workers (#1950, `bynk_emit::emitter::bindings::handler_bindings`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BindingSource {
     /// A `[[services]]` Service Binding to another context's Worker: a
@@ -98,7 +98,19 @@ pub enum BindingSource {
     /// sending to `queue` as written (`bynk deploy` environment-qualifies it).
     /// Never seen by handlers: they reach it through the instance's
     /// `WorkersQueue`.
-    QueueProducer { capability: String, queue: String },
+    QueueProducer {
+        capability: String,
+        queue: String,
+        /// #3899: the context of the signed consumer this producer's messages go to, when the
+        /// consumer admits Bynk producers: the producer signs under the edge key to that context,
+        /// which `bynk deploy` sets, so the Worker pair holds a key.
+        signs_to: Option<String>,
+    },
+    /// #3878: the `[[queues.producers]]` binding through which a queue consumer sends a message
+    /// it cannot decode to its dead-letter queue `queue`, as written (`bynk deploy`
+    /// environment-qualifies it). The consumer's own, named after its queue, and never seen by
+    /// handlers: only the generated `queue` entry reads it.
+    QueueDeadLetter { queue: String },
     /// Standard-library P3b (#2582): the `[[analytics_engine_datasets]]`
     /// binding of an `Analytics` instance (`capability Signups = Analytics`),
     /// one dataset per instance under a derived name. Never seen by handlers:
@@ -108,7 +120,11 @@ pub enum BindingSource {
     /// instance (`capability Orders = D1`), one database per instance under a
     /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
     /// they reach it through the instance's `WorkersD1`.
-    D1Database { capability: String },
+    D1Database {
+        capability: String,
+        /// #3820: the jurisdiction the database is pinned to at creation, if any.
+        jurisdiction: Option<String>,
+    },
     /// #3301: the `[[secrets_store_secrets]]` binding of a `StoredSecret`
     /// instance (`capability StripeKey = StoredSecret @store("payments")
     /// @secret("stripe-live")`), reading `secret` of the Secrets Store named
@@ -206,7 +222,12 @@ pub enum BindingSource {
     Singleton { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
-    Agent { class_name: String },
+    /// `jurisdiction` is the agent's `@jurisdiction` (#3819): not in the wrangler config, since
+    /// it is a property of the id, but what `deploy` records per class and compares.
+    Agent {
+        class_name: String,
+        jurisdiction: Option<String>,
+    },
     /// The `[[durable_objects.bindings]]` entry for the events fan-out class
     /// of a context whose handlers emit. Never seen by handlers: they reach it
     /// through `deps.__eventsDispatch`.
@@ -227,6 +248,7 @@ pub fn idempotency_binding() -> WorkerBinding {
         name: crate::d1_migrations::IDEMPOTENCY_BINDING.to_string(),
         source: BindingSource::D1Database {
             capability: IMPLICIT_IDEMPOTENCY_CAPABILITY.to_string(),
+            jurisdiction: None,
         },
     }
 }
@@ -252,17 +274,24 @@ impl BindingSource {
             Self::RateLimitInstance { capability, .. } => {
                 format!("the rate limiting binding of derived capability `{capability}`")
             }
-            Self::QueueProducer { capability, queue } => format!(
+            Self::QueueProducer {
+                capability, queue, ..
+            } => format!(
                 "the queue producer binding of derived capability `{capability}` (to queue `{queue}`)"
             ),
+            Self::QueueDeadLetter { queue } => {
+                format!("the dead-letter producer binding of a queue consumer (to queue `{queue}`)")
+            }
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
             }
-            Self::D1Database { capability } if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY => {
+            Self::D1Database { capability, .. }
+                if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY =>
+            {
                 "the implicit idempotency database of a Worker that calls `Idempotency.claim`"
                     .to_string()
             }
-            Self::D1Database { capability } => {
+            Self::D1Database { capability, .. } => {
                 format!("the D1 database binding of derived capability `{capability}`")
             }
             Self::StoredSecret {
@@ -300,7 +329,7 @@ impl BindingSource {
                 "the `{capability}` binding of `{}`",
                 firstparty::CLOUDFLARE_UNIT
             ),
-            Self::Agent { class_name } => {
+            Self::Agent { class_name, .. } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
             Self::EventsFanout { .. } => {
@@ -393,26 +422,6 @@ pub fn phase_duplicate_bindings(
 /// that declares it, so two members' agents of one name are two classes.
 fn shareable(source: &BindingSource) -> bool {
     !matches!(source, BindingSource::Agent { .. })
-}
-
-/// The bindings of one Worker from its members' (#3562): each name once, at its
-/// first declaration. Two members declaring one name is one binding when the
-/// declarations are identical; when they differ it is the error
-/// [`phase_group_binding_collisions`] reports, so a build that reaches the emit
-/// has none.
-pub fn merge_group_bindings<'a>(
-    members: impl IntoIterator<Item = &'a [WorkerBinding]>,
-) -> Vec<WorkerBinding> {
-    let mut seen: HashSet<&str> = HashSet::new();
-    let mut merged: Vec<WorkerBinding> = Vec::new();
-    for bindings in members {
-        for binding in bindings {
-            if seen.insert(binding.name.as_str()) {
-                merged.push(binding.clone());
-            }
-        }
-    }
-    merged
 }
 
 /// `bynk.deploy.binding_collision` (#3562): the members of a Worker group share
@@ -793,7 +802,7 @@ fn declared_at(
                 .map(|d| d.span)
         };
         let span = match &binding.source {
-            BindingSource::Agent { class_name } => c.items.iter().find_map(|item| {
+            BindingSource::Agent { class_name, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Agent(a) = item else {
                     return None;
                 };
@@ -817,13 +826,13 @@ fn declared_at(
             | BindingSource::ContainerInstance { capability, .. }
             | BindingSource::AiSearchInstance { capability, .. }
             | BindingSource::MtlsCertificate { capability, .. }
-            | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
+            | BindingSource::D1Database { capability, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };
                 (d.name.name == *capability && d.derived.is_some()).then_some(d.span)
             }),
-            BindingSource::EventsFanout { .. } => None,
+            BindingSource::EventsFanout { .. } | BindingSource::QueueDeadLetter { .. } => None,
         }?;
         Some((parsed[i].identity_path(), span))
     })
@@ -988,6 +997,7 @@ mod tests {
             name: format!("AGENT_{}", name.to_uppercase()),
             source: BindingSource::Agent {
                 class_name: name.to_string(),
+                jurisdiction: None,
             },
         }
     }

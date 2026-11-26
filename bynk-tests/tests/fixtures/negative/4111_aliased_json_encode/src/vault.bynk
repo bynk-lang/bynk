@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret as Token }
+
+fn dump(t: Token) -> String {
+    Json.encode(t)
+}

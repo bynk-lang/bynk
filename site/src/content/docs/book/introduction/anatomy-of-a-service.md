@@ -62,20 +62,20 @@ read and deploy to Cloudflare Workers.
 
 - **`context analytics`** — a *bounded context*: the unit Bynk deploys. On the
   `workers` target it becomes one Worker; the agent inside it becomes a Durable
-  Object. See [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+  Object. See [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).
 - **`type Page = String where …`** — a *refined type*. The predicate is checked
   once, at the boundary, so every `Page` that exists downstream is already valid
   and `bump` never re-validates. This is the "make illegal states
   unrepresentable" idea in one line. See
-  [the type-system philosophy](/book/guides/type-system/philosophy/).
+  [the type-system philosophy](/book/concepts/type-system/philosophy/).
 - **`capability Clock` + `provides … = SystemClock`** — an *effect* made
   explicit. A handler cannot read the clock unless it is granted `Clock`; the
   provider is the implementation that actually does. See
-  [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/).
+  [Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/).
 - **`agent Counter`** — a *keyed, stateful entity*. Each `Page` is its own
   counter with its own persisted `store` fields; `:=` writes the next value, and
   the writes commit atomically when the handler returns. See
-  [The agent model](/book/guides/agents-and-state/the-agent-model/).
+  [The agent model](/book/concepts/agents-and-state/the-agent-model/).
 - **`service api from http`** — the *entry point*. It declares its needs
   with `given Clock`, addresses the agent by key (`Counter(page)`), and sequences
   effects with `let x <- …`. The `Effect[HttpResult[Int]]` return type makes both
@@ -91,5 +91,5 @@ domain types, an explicit effect, persistent state, and a typed HTTP boundary �
 each named in the language, not left to convention.
 
 Ready to build one yourself? Start at
-[Tutorial 1](/book/tutorials/01-first-program/); the stateful-agent and HTTP
-pieces arrive in [Tutorial 5](/book/tutorials/05-stateful-agent/).
+[Compile your first program](/book/tutorials/first-program/); the stateful-agent and HTTP
+pieces arrive in [Add a stateful agent](/book/tutorials/stateful-agent/).

@@ -9,15 +9,15 @@ type Entry = {
 }
 
 service scan {
-  on call(prefix: String) -> Effect[Result[List[String], ()]] given Kv {
+  on call(prefix: String) -> Effect[Result[List[String], ()]] by Caller given Kv {
     let keys <- Kv.list(Some(prefix))
     Ok(keys)
   }
 }
 
 service cache {
-  on call(key: String, e: Entry) -> Effect[Option[Entry]] given Kv {
-    let _ <- Kv.putTtl(key, Json.encode(e), 60)
+  on call(key: String, e: Entry) -> Effect[Option[Entry]] by Caller given Kv {
+    let _ <- Kv.putTtl(key, Json.encode(e), 1.minute)
     let stored <- Kv.get(key)
     match stored {
       Some(s) => match Json.decode[Entry](s) {
@@ -30,7 +30,7 @@ service cache {
 }
 
 service allKeys {
-  on call(unused: Int) -> Effect[Result[List[String], ()]] given Kv {
+  on call(unused: Int) -> Effect[Result[List[String], ()]] by Caller given Kv {
     let keys <- Kv.list(None)
     Ok(keys)
   }

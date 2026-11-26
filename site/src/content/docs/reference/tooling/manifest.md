@@ -1,0 +1,1010 @@
+---
+title: "`bynk.toml` manifest"
+---
+A `bynk.toml` at a project's root marks a directory as a Bynk project and
+configures its layout and tooling. A multi-file project uses one; a lone `.bynk`
+file needs none (see [Legacy mode](#legacy-mode)).
+
+Every section and every key is optional. An omitted section falls back to its
+defaults, and a manifest that lists only `[project]` behaves identically to one
+that omits it. `[paths]` is parsed by the compiler; `[fmt]` by the formatter
+(`bynk-fmt`), which both the CLI and the language server read it through;
+`[lsp]` by the language server; `[build]` and `[profile.*]` by `bynk build`; `[workers]` by the compiler, for a Workers
+build; `[deploy]` by `bynk deploy` and `[dev]` by `bynk dev`, for the connection strings of `Postgres` instances; `[check]` by the compiler, for checks that read more than the source; `[test]` by the test runner, for a run against a deployment.
+
+A project is an **application** (`[project]`) or a shareable **package**
+(`[package]`), never both. A directory whose `bynk.toml` holds `[workspace]`
+isn't a project at all: it is a [workspace root](#workspace) that groups
+projects. `[package]`, `[dependencies]`, `[dev-dependencies]` and
+`[registries]` are the first part of [packaging](/project/versioning-and-roadmap/):
+they are checked today and do more as packaging lands, as each section below
+says.
+
+## Example
+
+A fully-populated manifest, with every key set to its default:
+
+```toml
+[project]
+name = "my-project"     # display only; no default
+version = "0.1.0"       # display only; no default
+
+[paths]
+include = ["src", "tests"]  # trees to compile; default: the conventional
+                            # roots that exist, else the project root
+exclude = []                # subtrees to skip during discovery
+
+[fmt]
+indent = "tab"
+indent_width = 2        # only consulted when indent = "spaces"
+max_line_width = 100
+trailing_comma = true
+
+[lsp]
+diagnostics_mode = "live"
+diagnostics_debounce_ms = 300
+
+[build]
+out = "out"                 # where `bynk build` writes, relative to the project root
+target = "bundle"           # "bundle" or "workers"
+platform = "cloudflare"     # "cloudflare", "node" or "browser"
+emit = "ts"                 # "ts" or "js"
+package_manager = "pnpm"    # installs the generated build's npm packages; detected when unset
+
+[build.client]
+out = "../web/src/lib/api.ts"  # where `bynk build` writes the typed TypeScript client (optional)
+
+[profile.dev]
+contracts = true            # the function-contract call-site guard; `dev` default
+
+[profile.release]
+contracts = false           # `release` default
+
+[workers]
+compatibility_flags = []    # extra Cloudflare flags, after the default
+workers_dev = true          # false takes each Worker off workers.dev; left out unless set
+
+cpu_ms = 50                 # each Worker's CPU limit in ms, 1 to 300000; left out unless set
+placement = "smart"         # "smart" turns on Smart Placement; "off" (the default) leaves it out
+
+[workers.observability]
+enabled = true              # Workers Logs on, so Logger.log's fields are queryable; the default
+head_sampling_rate = 1      # the fraction of invocations whose logs are kept, 0 to 1; the default
+
+[check]
+d1_sql = true               # false stops literal D1 SQL being checked: prepared against the migrations' schema, and its parameter count
+
+[unstable]
+allow = []                  # experimental standard-library items to use
+
+[deploy.hyperdrive.Main]    # no default: a `Postgres` instance's Hyperdrive config
+connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the connection string from
+
+[deploy.vectorize.Docs]     # no default: a `Vectorize` instance's existing index
+index = { production = "docs-prod" }   # adopted for that environment, never created or deleted
+
+[deploy.email."support@shop.example"]   # no default: a named environment's inbound-email address
+address = { staging = "support@staging.shop.example" }   # claimed for that environment instead
+
+[deploy.containers.Renderer]   # no default: a `Container` instance's prebuilt image
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }   # run for that environment, never built
+
+[deploy.workers.core]       # no default: contexts that share one Worker
+contexts = ["shop.orders", "shop.pricing"]   # qualified names, each context in one group only
+
+[dev]
+ai = "allow"                # no default: silences `bynk dev`'s Workers AI cost warning
+vectorize = "allow"         # no default: silences `bynk dev`'s Vectorize cost warning
+ai-search = "allow"         # no default: silences `bynk dev`'s AI Search cost warning
+mtls = "allow"              # no default: silences `bynk dev`'s mTLS certificate notice
+analytics-sql = "allow"      # no default: silences `bynk dev`'s Analytics SQL notice
+
+[dev.vectorize-index]       # no default: the index of your own `bynk dev` binds, per capability
+Docs = "docs-dev"
+
+[dev.hyperdrive.Main]       # no default: its local database under `bynk dev`
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+
+[test.targets.preview]      # no default: a deployment `bynk test --against` may use
+url.shop-orders = "https://shop-orders-preview.example.workers.dev"
+
+[test.mutate]
+exclude = []                # paths and `unit.decl` names `bynk test --mutate` leaves alone
+
+[test]
+postgres = "stub"           # "pglite" runs a `Postgres` instance on a real in-memory Postgres in tests
+```
+
+Delete any line you are happy to leave at its default — the file above is
+equivalent to an empty `bynk.toml`, which is equivalent to `[project]` alone.
+
+A package names itself with `[package]` in place of `[project]`, and may
+declare what it depends on. Dependencies are checked but not resolved yet, so
+a manifest that declares any is refused until resolution ships:
+
+```toml
+[package]
+name = "acme/money"         # organisation/package; required
+version = "1.4.0"           # semver; no default
+description = "Money and currency commons"
+license = "MIT"
+repository = "https://github.com/acme/money"
+exports = ["currency", "money"]   # default: every commons and adapter
+
+[dependencies]
+local = { package = "acme/local", path = "../local" }        # resolved
+ledger_kit = { package = "acme/ledger_kit", git = "https://git.acme.internal/ledger-kit", rev = "v0.3.0" }  # resolved
+fx = { package = "globex/money", version = "^2" }            # resolved, from a registry
+
+[dev-dependencies]          # suites only
+fixtures = { package = "acme/fixtures", path = "../fixtures" }
+```
+
+A workspace root holds only `[workspace]` and, optionally, `[registries]`:
+
+```toml
+[workspace]
+members = ["packages/*", "apps/shop"]
+exclude = ["packages/scratch"]
+
+[registries.acme-internal]
+index = "https://bynk.acme.internal/index"
+organisations = ["acme"]
+key = "ed25519:…"           # optional: the registry's pinned signing key
+
+[registries.corp-mirror]
+index = "https://mirror.example.internal/bynk"
+mirror-of = "bynk"          # fetch first-party packages through here
+```
+
+## Unknown tables and keys
+
+`bynk.toml` holds the tables below, and nothing else. An unknown table, a
+key outside any table (including a table's own name given a plain value, such
+as `paths = "src"`), or an unknown key in any table but `[fmt]` is an error.
+In `[dependencies]`, `[dev-dependencies]` and `[registries]` the keys are
+names you choose, and each entry's own keys are checked the same way. `bynk` reports it, with the nearest name
+when there is one, and build nothing. An unknown `[fmt]` key is reported by the
+formatter (`bynk fmt`), which owns that table, not by `check` or
+`compile`:
+
+```text
+bynk: error: `bynk.toml` has no table named `[pahts]` — did you mean `[paths]`?
+bynk: error: `[project]` has no key named `nmae` — did you mean `name`?
+bynk: error: `[dependencies]` `fx` has no key named `verison` — did you mean `version`?
+```
+
+The language server doesn't refuse
+a manifest: it reads the `[paths]`, `[fmt]` and `[lsp]` it needs and ignores
+the rest, so run `bynk check` to see what is wrong with one.
+
+## Editor support
+
+A JSON Schema for `bynk.toml` is published at
+[`https://bynk-lang.org/schemas/bynk.toml.json`](https://bynk-lang.org/schemas/bynk.toml.json).
+It describes every table and key on this page, with each key's type, default
+and allowed values, and it flags an unknown table or key the way `bynk check`
+does. The toolchain generates it from the same types that read the manifest
+(`cargo xtask manifest-schema`), and CI fails when the committed copy falls
+behind them, so it can't drift from what the compiler accepts.
+
+A TOML language server that reads JSON Schemas uses it for completion of
+tables, keys and values, hover documentation, and validation:
+
+- **VS Code:** the Bynk extension associates the schema with every
+  `bynk.toml`. Install a TOML extension that honours the association, such as
+  [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml);
+  the Bynk extension suggests it the first time you open a `bynk.toml` without
+  one. It is a recommendation, not a requirement.
+- **Other editors** (taplo, in Zed, Helix and others): name the schema in a
+  comment on the manifest's first line:
+
+```toml
+#:schema https://bynk-lang.org/schemas/bynk.toml.json
+[project]
+name = "my-project"
+```
+
+The schema checks a manifest's shape: names, types and allowed values. What
+needs the project, such as whether an `[unstable] allow` entry names a real
+standard-library item, is still reported by `check` and the language server.
+The language server doesn't analyse `bynk.toml` itself yet.
+
+## `[project]`
+
+Project metadata. Neither key affects compilation; both are display only and
+have no default (unset stays unset).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `name` | string | — | Display name for the project. |
+| `version` | string | — | Version string for the project. |
+
+## `[package]`
+
+A shareable project's identity, in place of `[project]`. A manifest with both
+is refused, so a project never has two names. Nothing is published or fetched
+yet: the name and version are checked now, and `exports` is checked by
+`bynk check`.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `name` | string | required | `organisation/package`, like `acme/money`. The organisation matches `[a-z][a-z0-9-]*`. The package matches `[a-z][a-z0-9_]*` and isn't a Bynk keyword, because a consumer writes it in source as the start of `<alias>.<unit>`; a hyphenated name is refused with the underscore spelling suggested. Each is at most 64 characters. The organisation `bynk` is reserved for first-party packages. |
+| `version` | string | — | Strict semver 2.0, like `1.4.0`. Publishing will require it. |
+| `description` | string | — | A one-line description. |
+| `license` | string | — | The licence, as an SPDX expression. |
+| `repository` | string | — | The source repository's URL. |
+| `exports` | array of strings | every commons and adapter | The units the package shares. |
+
+**What a package shares.** A package shares **commons** and **adapters**, and
+never a **context**: a context is a deployment unit, and its Worker, secrets
+and deploy state belong to the project that deploys it. A package may still
+hold contexts, for examples or its own tests; they are never exported.
+`bynk check` refuses an `exports` entry that names a context
+(`bynk.project.export_context`) or a unit the project doesn't declare
+(`bynk.project.export_unknown`).
+
+## `[dependencies]`
+
+The packages this project uses, keyed by **alias**: the name source reaches a
+dependency's units by, as `<alias>.<unit>`.
+
+```toml
+[dependencies]
+money = { package = "acme/money", path = "../packages/money" }
+```
+
+```bynk,fragment
+commons pricing
+
+uses money.currency
+```
+
+Each entry is a table (there is no bare-version shorthand) with `package` and
+exactly one source:
+
+| Key | Type | Notes |
+|---|---|---|
+| `package` | string | Required. The package, as `organisation/package`. It must be the `[package] name` the source holds. |
+| `path` | string | A directory holding the package's `bynk.toml`, relative to this project. **Resolved now.** |
+| `git` | string | A git repository URL (`https://`, `ssh://` or `user@host:path`; `file://` in your own manifests). Needs `rev`. **Resolved now**, through [`bynk.lock`](#bynklock). |
+| `rev` | string | The tag, branch or commit of `git` to use. Only with `git`. A branch is locked to the commit it named when first fetched, until [`bynk update`](/reference/tooling/bynk-cli/#bynk-update). |
+| `version` | string | A registry version range, Cargo-style: `^1.4`, `~1.4.2`, `=1.4.2`, `>=1.2, <2`; a bare `1.4` means `^1.4`. It must be pinned: `*`, `latest` and an empty range are refused. **Resolved now**, from the registry the package's organisation routes to ([`[registries]`](#registries)). |
+
+An alias matches `[a-z][a-z0-9_]*`, isn't a Bynk keyword, and isn't `bynk`,
+which the standard library keeps. It can't also be the first segment of one of
+this project's own units (`bynk.package.alias_shadows_unit`).
+
+**What a dependency shares.** A consumer reaches only the commons and adapters
+in the dependency's [`[package] exports`](#package), or all of them when it
+lists none (`bynk.package.unit_not_exported`). A dependency's units can use
+each other freely, and only the units a consumer actually reaches are
+compiled, so adding a dependency you don't use changes nothing that's emitted.
+A dependency's contexts and suites are never compiled: a context belongs to
+the project that deploys it. Its units are emitted under
+`out/deps/<organisation>/<package>/`.
+
+**One copy of each package.** The same package reached through two aliases,
+from this project and from another dependency, is one package with one set of
+types. The same package reached from two different directories is refused
+(`bynk.package.duplicate_source`), and so is a cycle
+(`bynk.package.dependency_cycle`).
+
+**A dependency's own path dependencies** are honoured only between members of
+one [workspace](#workspace): one that resolves outside the workspace, or any
+when there is no workspace, is refused (`bynk.dependency.path_outside_root`).
+This project's own `path` entries are honoured wherever they point.
+
+From a dependency's `bynk.toml`, only `[package]`, `[paths]` and
+`[dependencies]` are read. Its `[unstable]`, `[workers]`, `[check]`, `[test]` and `[fmt]`
+are its own, and this project's settings govern the whole build.
+
+A fetched (git) package's own path dependencies, and its local `file://` git
+dependencies, are never honoured (`bynk.dependency.path_outside_root`).
+
+**npm dependencies of a dependency.** A dependency's adapter may declare
+`binding … requires { … }`. When your project reaches that adapter, its
+npm packages are installed with your own, in the generated `package.json`,
+under the same rules: ranges must be pinned, and two adapters (in any
+packages) requiring one npm package at different ranges is
+`bynk.requires.conflicting_range`, naming both as `org/package:adapter`.
+
+**Not yet.** A dependency can't declare an `asset`
+(`bynk.package.unsupported_in_dependency`).
+
+## `[dev-dependencies]`
+
+The packages only this project's suites use, written and resolved exactly as in
+[`[dependencies]`](#dependencies), and locked with them. A suite may reach a
+dev-dependency's units (`suite fx.sample` targets one directly); a commons,
+context or adapter may not (`bynk.package.dev_dependency_in_source`). A
+deployable build compiles no suites, so it never includes a dev-dependency.
+Only this project's own `[dev-dependencies]` are read: a dependency's are its
+own business.
+
+## `bynk.lock`
+
+`bynk` writes `bynk.lock` beside `bynk.toml` (or, in a workspace, at the
+workspace root, one lock for every member) whenever the dependencies change.
+**Commit it**: it is what makes a build reproducible.
+
+```toml
+# bynk.lock — written by `bynk`; commit it. Do not edit by hand.
+version = 1
+
+[[package]]
+name = "acme/ledger"
+version = "0.3.0"
+source = "git+https://git.acme.internal/ledger?rev=v0.3.0#9f1c2e0d…"
+checksum = "sha256-Ld8x…"
+dependencies = ["acme/money"]
+
+[[package]]
+name = "acme/money"
+source = "path+packages/money"
+dependencies = []
+```
+
+A git package's `source` records the `rev` you asked for and the commit it
+resolved to; its `checksum` is the sha256 of its files at that commit. A path
+package is recorded without a checksum: it is your own working copy. A registry package's `source` is `registry+<name>`, with the `version` chosen
+— the highest that satisfies every range reaching it, kept until `bynk update`
+— and the checksum its registry signed. Each `[[registry]]` row records the
+registry's `id` and the fingerprint of the key bynk trusts for it:
+
+```toml
+[[registry]]
+name = "acme-internal"
+id = "acme"
+key = "ed25519-fp:H5GTj0LM…"
+```
+
+Each `[[npm]]` row is an npm package a dependency's adapters **may** bring into
+your build, at one range, with the adapters that require it:
+
+```toml
+[[npm]]
+package = "jose"
+range = "^5.2.0"
+required-by = ["acme/ledger:auth"]
+approved = true
+```
+
+`approved = true` records that the project approved this package at this range
+entering its build (`bynk approve`). A row a **git or registry** dependency's
+adapter requires must be approved before a build that reaches the adapter
+compiles (`bynk.requires.unapproved`); an absent `approved` means not yet. A
+row only path dependencies require needs no approval and carries none, and an
+approval is kept while the package and range stay the same — a changed range
+is a new row, approved afresh. See
+[Approve a dependency's npm packages](/book/guides/projects-build-and-deployment/share-code-between-projects/#approve-a-dependencys-npm-packages).
+
+The lock lists every dependency adapter's requirements, whether or not your
+project reaches that adapter; the generated `package.json` installs only the
+reached ones. So a dependency that starts requiring a new npm package changes
+the lock, and `--locked` refuses the build until you commit it — the point to
+review what it brings in. Your own adapters' `requires` aren't listed: you wrote
+them. A path dependency or another workspace member counts as a dependency here
+too: adding or changing a `requires` in one of its adapters rewrites the lock,
+so commit the lock with that change or `--locked` builds will refuse it. See
+[Dependencies, `--locked` and `--offline`](/reference/tooling/bynk-cli/#dependencies-bynklock---locked-and---offline)
+for how the lock is used.
+
+## `[registries]`
+
+The package registries this project or workspace routes organisations to, one
+table per registry under `[registries.<name>]` (the protocol is in
+[Registry protocol](/reference/tooling/registry-protocol/)). A `version` dependency resolves
+on the registry its organisation is listed under — there is no per-dependency
+override, so an organisation always resolves in one place. An organisation no
+entry lists routes to the first-party registry, which **isn't live yet**:
+resolving one is `bynk.registry.unavailable`. In a workspace, only the root
+declares them: a member's own `[registries]` is refused.
+
+| Key | Type | Notes |
+|---|---|---|
+| `index` | string | Required. The index URL: `https://`, `http://` to `localhost` only, or `file:///…` for a registry in a local directory. |
+| `organisations` | array of strings | The organisations whose packages resolve here. An organisation is listed under one registry at most, and `bynk` never. |
+| `mirror-of` | string | The registry this one mirrors: `bynk` (the first-party registry), or another registry declared here that isn't itself a mirror. Not with `organisations`. |
+| `key` | string | The registry's pinned signing key, `ed25519:<base64>`. |
+
+A registry name matches `[a-z][a-z0-9-]*`, and `bynk` is refused: it already
+means the first-party registry. **Credentials never go in `bynk.toml`**, and a
+`token` key is refused. A registry's token is read from
+`BYNK_REGISTRY_<NAME>_TOKEN`, its name uppercased with `-` as `_`
+(`acme-internal` reads `BYNK_REGISTRY_ACME_INTERNAL_TOKEN`), or from the user
+credentials file, `~/.config/bynk/credentials.toml`:
+
+```toml
+[registries.acme-internal]
+token = "…"
+```
+
+**Trust.** With `key`, bynk accepts only lines signed by that key or a key its
+rotation chain reaches. Without it, bynk trusts the registry's key on first
+use, says so, and records its fingerprint in `bynk.lock`, so a fresh clone
+trusts the same key. A key that doesn't lead from the trusted one is
+`bynk.registry.key_mismatch`. If an organisation's routing changes while
+`bynk.lock` records it on another registry, the build stops
+(`bynk.registry.source_mismatch`) rather than resolve a same-named package
+somewhere else.
+
+## `[workspace]`
+
+Makes this directory a **workspace root**: a group of projects, its
+**members**, that `bynk check`, `bynk fmt` and `bynk test` run across. A
+workspace root is not a project. Its `bynk.toml` holds only `[workspace]` and
+`[registries]`, and it holds no sources of its own.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `members` | array of strings | required | The member directories, relative to the root. A path component may use `*` and `?`; each `*` matches within one directory level (`packages/*`), and `**` isn't supported. |
+| `exclude` | array of strings | `[]` | Directories `members` matches that aren't members, as patterns. |
+
+Each member holds its own `bynk.toml` and can't itself be a workspace. A
+workspace whose patterns match no member is an error. See
+[Workspaces](/book/guides/projects-build-and-deployment/layout/#workspaces)
+for which commands run where.
+
+## `[paths]`
+
+The project's source tree. Test-ness is structural — a `suite` is a test
+wherever it lives (since v0.113) — so the layout is a flat `include`/`exclude`,
+not a source/test role split. Each path is resolved relative to the project root
+(the directory containing `bynk.toml`).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `include` | array of strings | conventional roots | Trees to compile. Defaults to the conventional roots that exist (`src`, and `tests` when present), or the project root itself when neither does. |
+| `exclude` | array of strings | `[]` | Subtrees to skip during discovery (monorepo, vendored, or generated `.bynk`). The tool's own `out`/`node_modules` caches and dot-directories are always skipped. |
+
+A conventional `src/`(+`tests/`) project and a flat project (`.bynk` at the root)
+both need no `[paths]` at all. Any other key is an error, including the legacy
+`src`/`tests` keys and `out`. The output directory is [`[build] out`](#build),
+or the command line (`bynk compile -o`), not `[paths]`.
+
+### Path consistency
+
+Each **source** unit's file path must align with its qualified name. A
+`context commerce.orders` must live at `commerce/orders.bynk` under an `include`
+root (or be split across `commerce/orders/*.bynk`). A **`suite`** has no
+path-identity requirement — it names its target and is legal in any file.
+
+Misalignment of a source unit is rejected at load time:
+
+- `bynk.project.inconsistent_commons_name` — a source unit's declared name does
+  not match its location.
+
+This code is described in the [diagnostic index](/reference/diagnostics/).
+
+## `[fmt]`
+
+Formatter settings. Read by **both** format-on-save in the editor and the
+`bynk fmt` CLI, through one shared reader, so a section they can
+both read is interpreted identically.
+
+They part company on a section that does **not** read: the CLI reports the
+error and formats nothing, while the language server falls back to the
+canonical style and keeps serving (it cannot refuse to run). So a manifest with
+a typo formats one way in the editor and fails on the command line — run
+`bynk fmt` to see what is wrong with it.
+
+The CLI resolves options in three layers, each overriding the one before: the
+canonical defaults below, then this section, then the flags a run passes
+(`--indent`, `--indent-width`, `--max-line-width`,
+`--trailing-comma`/`--no-trailing-comma`). A flag overrides only the field it
+names. `--no-config` skips this section altogether, for a script that wants the
+canonical style whatever project it is pointed at.
+
+The manifest is resolved **per file**: the nearest `bynk.toml` at or above the
+file being formatted. So `bynk fmt ../other-project/src/x.bynk` obeys the other
+project's style, and one command may format files from two projects correctly.
+
+A key this section does not recognise is an error, not a silent no-op — a
+`max_line_length = 120` sitting in a manifest while the formatter quietly used
+100 is exactly the failure a config layer must not have. See the
+[`bynk-fmt` reference](/reference/tooling/bynk-fmt/) and the
+[Format your code](/reference/tooling/editor-and-tooling/format/) how-to.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `indent` | string | `"tab"` | Indentation style: `"tab"` (one tab per nesting level) or `"spaces"`. |
+| `indent_width` | integer | — (falls back to `2`) | Spaces per nesting level. Only consulted when `indent = "spaces"`; defaults to `2` in that case. |
+| `max_line_width` | integer | `100` | Soft target line width. A construct wider than this wraps across lines where the grammar allows. |
+| `trailing_comma` | boolean | `true` | Emit trailing commas in multi-line records, sums, list literals and `exports` clauses. |
+
+## `[lsp]`
+
+Language-server settings, consumed by `bynk-lsp`. See the
+[`bynk-lsp` reference](/reference/tooling/bynk-lsp/).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `diagnostics_mode` | string | `"live"` | When diagnostics are computed: `"live"` or `"on_save"`. Any value other than `"on_save"` is treated as `"live"`. |
+| `diagnostics_debounce_ms` | integer | `300` | Debounce interval, in milliseconds, for live diagnostics. |
+
+## `[build]`
+
+The defaults `bynk build` takes, so a project builds with no flags. A flag
+overrides its key, and a key you leave out takes the default below.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `out` | string | `"out"` | The output directory, relative to the project root. It must stay inside the project (symlinks resolved), and `bynk build` refuses one that is the root, equals, contains or sits inside a `[paths]` source root, or already holds `.bynk` files, because a build deletes `.ts`, `.js`, `.json` and similar files in its output directory that it did not write. |
+| `target` | `"bundle"` or `"workers"` | `"bundle"` | `bundle` builds one deployment unit; `workers` builds one Worker per context. |
+| `platform` | `"cloudflare"`, `"node"` or `"browser"` | `"cloudflare"` | The surface binding (`browser` is `bundle` only). |
+| `emit` | `"ts"` or `"js"` | `"ts"` | `js` writes the same modules with types stripped. |
+| `package_manager` | `"npm"`, `"pnpm"`, `"bun"` or `"yarn"` | detected | The package manager `bynk test`, `bynk dev` and `bynk deploy` install a build's npm packages with. Unset, bynk detects yours; see [Installing npm packages](/reference/tooling/bynk-cli/#installing-npm-packages). `BYNK_PACKAGE_MANAGER` overrides it. |
+
+Apart from `package_manager`, only `bynk build` reads this table. `bynk compile` takes every setting from its
+flags, and `bynk dev`, `bynk deploy` and `bynk test` fix their own topology and
+output directory (and read `package_manager` alone), so editing `[build]` never changes what is deployed or what
+the editor's *Show Compiled Output* view shows. The table describes the
+artefact; how contexts map to deployment units belongs to
+[`[deploy.workers]`](#worker-groups).
+
+### `[build.client]`
+
+Where `bynk build` writes the [typed TypeScript client](/reference/http-client/)
+for the project's `from http` services (experimental). Absent, `bynk build` writes
+none, so a project that does not set it builds exactly as before. `bynk client`
+reads the same table for the flags it is not given, so `bynk client --check` needs
+no arguments in CI.
+
+Because `out` may leave the project, the command never overwrites a file it did not
+write: one whose first line is not the `// @generated by `bynk client`` header is
+refused, and nothing is written. With the table set, `bynk build` also fails when the
+project has no `from http` service left, since the table asks for a client; remove
+the table with the last service. A directory layout that replaces an earlier one may
+leave its `.ts` files behind; `bynk client` names them, and `--check` does not count
+them as drift.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `out` | string | required | Where to write it, relative to the project root: a `.ts` file with `layout = "file"`, a directory with `layout = "dir"`. Unlike `[build] out` it may leave the project, since a front end often lives beside the Bynk project (`"../web/src/lib/api.ts"`). |
+| `layout` | `"file"` or `"dir"` | `"file"` | `file` writes one module; `dir` writes `index.ts`, `types.ts`, `codecs.ts` and `runtime.ts`. |
+| `service` | list of strings | every service | The `from http` services to include, as `Name` or `unit.Name`. |
+
+## `[profile.<name>]`
+
+Two named profiles, `dev` and `release`. `bynk build --profile <name>` chooses
+between them (`release` when the flag is omitted); `bynk test` always builds
+`dev`, and `bynk deploy` always builds `release`. The only setting a profile
+carries today is whether the build keeps the function-contract call-site guard.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `contracts` | bool | `true` in `dev`, `false` in `release` | Whether the build carries the `requires`/`ensures` call-site guard. |
+
+A setting resolves as the command-line flag, else `[profile.<name>]`, else
+`[build]`, else the built-in default; `contracts` has no flag and no `[build]`
+key, so it is the profile's table, else the profile's default. The `release`
+default is the deployable and equals what `bynk compile` writes.
+
+| Command | Profile | Reads |
+|---|---|---|
+| `bynk build` | `--profile`, else `release` | `[profile.<name>]` |
+| `bynk test`, and `bynk test --against dev` | `dev` | `[profile.dev]` |
+| `bynk deploy` | `release` | refuses `[profile.release] contracts = true` |
+| `bynk compile`, `bynk tail` | none | neither table |
+
+So `[profile.dev] contracts = false` turns the guard off for a test run. A
+deployment never carries contract checks, so `bynk deploy` stops with an error
+naming `[profile.release]` when it sets `contracts = true`; that setting still
+applies to `bynk build --profile release`. The `bynk dev` server builds without
+contracts and does not read the profiles.
+
+## `[workers]`
+
+Settings for the Cloudflare Workers a Workers build emits (`bynk compile
+--target workers`, `bynk dev`, `bynk deploy`). A bundle build emits no
+`wrangler.toml`, so the flags have no effect there, but the table is still
+checked, and the duplicate warning below still appears.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `compatibility_flags` | array of strings | `[]` | Extra [compatibility flags](https://developers.cloudflare.com/workers/configuration/compatibility-flags/) for every Worker's `wrangler.toml`, after the default set. |
+| `workers_dev` | boolean | unset | Whether every Worker is served on its `*.workers.dev` URL. Set `false` to turn that off; unset leaves the key out of `wrangler.toml`, so Cloudflare's default (on) applies. |
+| `observability` | table | on, keeping every invocation | Workers Logs; see [Workers Logs](#workers-logs) below. |
+| `cpu_ms` | integer, 1 to 300000 | unset | The CPU time each Worker may use per request, written as `[limits] cpu_ms`. Raise it for CPU-heavy work, such as password hashing. Unset leaves Cloudflare's default. A limit above what the account's plan allows is Cloudflare's error at deploy; Bynk checks only the platform's absolute maximum. |
+| `placement` | `"smart"` or `"off"` | `"off"` | `"smart"` turns on [Smart Placement](https://developers.cloudflare.com/workers/configuration/placement/), written as `[placement] mode = "smart"`: a Worker that mostly talks to one `D1` database or one Hyperdrive-fronted Postgres runs near it rather than near the user. It changes latency characteristics, so it is opt-in. |
+
+Every Worker gets `nodejs_als` as well, whatever this list says, unless the list
+holds `nodejs_compat`, which provides the same thing. It gives the Worker
+`AsyncLocalStorage`, where a request's
+[trace](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/)
+is held; without it a request is served and its logs carry no trace.
+
+Every Worker gets `global_fetch_strictly_public` whatever this list says. In
+Bynk, a `Fetch` to a URL goes over the public internet, and the flag makes
+that true even when the URL is another Worker on the same Cloudflare account.
+Without it Cloudflare refuses that fetch (error 1042), so one Bynk service
+couldn't `Fetch` another's `workers.dev` URL. Contexts in the same project
+reach each other through Service Bindings (`consumes`), which the flag doesn't
+change.
+
+The flags you list follow the default, in order:
+
+```toml
+[workers]
+compatibility_flags = ["nodejs_compat"]
+```
+
+```toml
+# workers/<context>/wrangler.toml (generated)
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_compat"]
+# (no "nodejs_als": nodejs_compat provides it)
+```
+
+Flag names aren't checked, so a flag newer than the compiler works, and a
+misspelt one is left for Wrangler and the Workers runtime to reject. A flag
+listed twice, or one that is already on by default, is dropped with a
+`bynk.project.duplicate_compatibility_flag` warning, which `check`, `compile`,
+`dev` and `deploy` all report, once per build. Anything but a list of strings
+is an error.
+
+`workers_dev = false` is written as `workers_dev = false` at the top of every
+generated `wrangler.toml`. It must be `true` or `false`; anything else is an
+error. A deployment environment inherits it, so `bynk deploy --env` doesn't
+repeat it.
+
+`cpu_ms` and `placement` are inherited by a deployment environment, and a
+[worker group](#worker-groups) overrides either for its own Worker.
+
+### Workers Logs
+
+`Logger.log` promises that Workers Logs indexes the keys of its structured
+fields, so `fields.orderId` is queryable (see [Log levels and structured
+fields](/reference/bynk-capabilities/#log-levels-and-structured-fields)). Cloudflare collects a Worker's logs
+only while its configuration enables observability, so Bynk writes the setting
+itself. A project that says nothing gets it on. (Cloudflare turns Workers Logs on
+for a new Worker by default, so writing it explicitly pins the behaviour the
+`Logger.log` promise rests on rather than changing it.)
+
+```toml
+# workers/<context>/wrangler.toml (generated)
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+```
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `true` | `false` turns Workers Logs off for every Worker. |
+| `head_sampling_rate` | number, 0 to 1 | `1` | The fraction of invocations whose logs are kept. Lower it for a noisy Worker, to bound log volume and cost. A rate outside 0 to 1 is an error. |
+
+A [worker group](#worker-groups) overrides either key for its own Worker under
+`[deploy.workers.<key>.observability]`, key by key: a group that sets only
+`head_sampling_rate` keeps the project's `enabled`. A deployment environment
+inherits the setting, so `bynk deploy --env` doesn't repeat it.
+
+## `[vars]` and `[env.<name>.vars]`
+
+Build-time values for the project's [`env(NAME)` constants](/reference/constants/#values-that-differ-per-environment).
+A variable's name is capital letters, digits and `_`, starting with a capital
+letter, and its value is a string, a whole number, `true` or `false`, or an array
+of strings.
+
+```toml
+[vars]                                   # every environment, `default` included
+APP_ORIGIN = "https://app.shop.example"
+
+[env.staging.vars]                       # this environment, over `[vars]`
+APP_ORIGIN = "https://staging.app.shop.example"
+BILLING_WORKER = "legacy-billing-staging"
+```
+
+The value a build uses is its environment's own `[env.<name>.vars]`, then
+`[vars]`, then the constant's default. These are not Wrangler's run-time `[vars]`:
+they are read when the project is built, from this committed file only. A
+variable no `env(…)` constant reads is an error (`bynk.env.unknown_variable`).
+`[env.<name>]` holds `vars` and nothing else.
+
+## `[deploy]` and `[dev]`
+
+Where a `Postgres` instance (`capability Main = Postgres`), or a `MySql` one
+(`capability Legacy = MySql`, with a `mysql://` URL), gets its connection
+string. A connection string is a secret and `bynk.toml` is committed, so neither
+table holds one: each names an **environment variable** to read it from, and a
+string written in place of a name is refused (without being printed). `Main` is the
+capability's name.
+
+```toml
+[deploy.hyperdrive.Main]
+connection_env = "MAIN_DATABASE_URL"
+config_id = { production = "0123456789abcdef0123456789abcdef" }
+
+[dev.hyperdrive.Main]
+connection_env = "MAIN_LOCAL_DATABASE_URL"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `connection_env` | `[deploy.hyperdrive.<Capability>]` | string | The environment variable `bynk deploy` reads the connection string from, to make or update the Hyperdrive config. Required for an environment with no `config_id`. |
+| `config_id` | `[deploy.hyperdrive.<Capability>]` | table of strings | The id of a config that already exists, by deployment environment (`default`, or an `--env` name). That environment adopts it and needs no connection string. |
+| `connection_env` | `[dev.hyperdrive.<Capability>]` | string | The environment variable `bynk dev` reads the local connection string from, and sets as `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<BINDING>` on that Worker's `wrangler dev`. |
+
+An entry needs a `connection_env`, a `config_id`, or both. See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive)
+and [Run locally](/book/guides/projects-build-and-deployment/run-locally/#a-local-postgres-database).
+
+### Adopting an existing Vectorize index
+
+A `Vectorize` instance's index is created by the deploy. A team that already has
+one (made by hand, or shared with another system) names it instead, per
+deployment environment:
+
+```toml
+[deploy.vectorize.Docs]
+index = { production = "docs-prod" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `index` | `[deploy.vectorize.<Capability>]` | table of strings | The name of an index that already exists, by deployment environment (`default`, or an `--env` name). That environment adopts it; any other creates the index as usual. A name is 1 to 64 lowercase letters, digits or `-`. |
+
+An adopted index must exist, since the deploy never creates it, and must match the
+declaration's `@dimensions` and `@metric`, since it never changes one; a mismatch
+fails the deploy. It is never deleted, even by `--prune`, and its name is used as
+written (no environment suffix). Capabilities and environments may adopt the same
+index. An entry that names no `Vectorize` capability in the project is an error,
+since the deploy would otherwise create a new, empty index beside the one you meant;
+an environment the entry does not name still creates its own, and the deploy says so.
+See [Deploy to
+Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
+
+### Mapping inbound-email addresses per environment
+
+Wrangler's `addresses` is top-level only, so a named environment cannot reuse the
+addresses a `from email` service names: they are production's. A named environment
+therefore claims none unless it is mapped one:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `address` | `[deploy.email."<address>"]` | table of strings | The address each deployment environment (an `--env` name; `default` cannot be mapped) claims in place of `<address>`. The Worker accepts mail to it and delivers it to the service that names `<address>`. An environment not listed claims no address and leaves `addresses` out of its configuration. |
+
+The table's key must be an address a `from email` service in the project names (an
+unknown key is an error, with a suggestion), each mapped address must be one Email
+Routing can match (`bynk.email.invalid_address`'s rule), and no address may be claimed
+by two environments or by both the source and an environment. See
+[Receiving mail](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#receiving-mail-email-routing).
+
+### Containers
+
+A `Container` instance's image is built from its Dockerfile by `wrangler deploy`,
+which needs Docker. A team that builds elsewhere, or deploys from a machine
+without Docker, names a prebuilt image instead, per deployment environment:
+
+```toml
+[deploy.containers.Renderer]
+image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `image` | `[deploy.containers.<Capability>]` | table of strings | The digest-pinned image to run, by deployment environment (`default`, or an `--env` name), in Cloudflare's registry: `registry.cloudflare.com/<ACCOUNT_ID>/<REPOSITORY>@sha256:<64 hex digits>`. That environment runs it and builds nothing, so the deploy needs no Docker; any other environment builds from `@build`. Other registries and tags are not supported for this kind of container. |
+
+An entry that names no `Container` capability in the project is an error. The
+adopted reference is recorded in `bynk.deploy.lock`.
+
+### Worker groups
+
+Under the `workers` target a context is one Worker. A **group** puts several
+contexts in one Worker, so a handful that belong together need not each cost a
+Worker and a network hop. A context named in no group stays its own Worker
+under its dashed name, so a project with no `[deploy.workers]` table is
+unchanged.
+
+```toml
+[deploy.workers.core]
+contexts = ["shop.orders", "shop.catalogue", "shop.pricing"]
+
+[deploy.workers.payments]
+contexts = ["shop.payment"]
+name = "acme-payments"
+routes = ["pay.example.com/*"]
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `contexts` | `[deploy.workers.<key>]` | array of strings | Required. The members, as qualified context names. Each context is in one group only, and there are no globs, so adding a context to a group is a visible change here. |
+| `name` | `[deploy.workers.<key>]` | string | The Worker's script name on Cloudflare: 1 to 63 lowercase letters, digits or `-`. Default: the key. |
+| `routes` | `[deploy.workers.<key>]` | array of strings | Route patterns the Worker is attached to, like `pay.example.com/*`: a host (a leading `*.` is allowed), then `/` and a path, with no scheme. |
+| `custom_domains` | `[deploy.workers.<key>]` | array of strings | Custom domains the Worker is attached to, like `pay.example.com`. No scheme, path or wildcard. |
+| `observability` | `[deploy.workers.<key>]` | table | This Worker's [Workers Logs](#workers-logs) settings, laid over the project's `[workers.observability]` key by key (`enabled`, `head_sampling_rate`). |
+| `cpu_ms` | `[deploy.workers.<key>]` | integer | This Worker's CPU limit, over `[workers] cpu_ms`: `cpu_ms = 2000` for a Worker that hashes passwords. |
+| `placement` | `[deploy.workers.<key>]` | `"smart"` or `"off"` | This Worker's placement, over `[workers] placement`. |
+
+The **key** is the group's identity: its entry in `bynk.deploy.lock`, its
+`--worker` selector and its `workers/<key>/` directory. `name` only changes
+the script's name on Cloudflare. A key is 1 to 63 lowercase letters, digits or
+`-`. A group of one context carries `name`, `routes` and `custom_domains` for
+that context's Worker, as a group of several does.
+
+The manifest refuses a group that is empty, a context in two groups, two
+groups whose Workers would share a script name, and a route or custom domain
+that appears twice (the same host with different paths is two routes). Checked
+against the project, it also refuses a context the project does not declare
+(`bynk.deploy.unknown_context`), a unit that is not a `context`
+(`bynk.deploy.not_a_context`: a `commons` or an adapter is not deployed), and
+a key or name that is the Worker of a context in no group
+(`bynk.deploy.group_name_conflict`).
+
+A member's cron run that fails is reported to the platform as in a single-context
+Worker, but Cloudflare's Past Events records only the first failed run of an
+invocation, so the logs are the place to see every failing member.
+
+`bynk build` emits one Worker per group, and `bynk deploy` provisions and
+deploys it as a unit, in dependency order with the other Workers (`--worker
+<key>` deploys one Worker by its key). A call between two members of a group is
+a Service Binding from the Worker to itself, which is no edge in the deploy
+order. `bynk revert --worker <key>` rolls the group back as one script, every member
+together. `bynk dev` serves a group as one Worker on one port; `--context` naming a
+member serves the whole group that holds it.
+
+A context that hosts agents keeps its agents' state with its Worker's script, so
+moving it into or out of a group, between groups, or renaming or re-keying its group
+is refused by `bynk deploy` (`bynk.deploy.agent_move_refused`); `--accept-fresh-agent
+<context>` starts it fresh and leaves the old state in the old script.
+
+### Acknowledging a remote-only binding
+
+Some bindings have no local simulation: under `bynk dev`, a call to Workers AI
+(`Ai`), to AI Search (`AiSearch`, which goes to your deployed instance) or to a Vectorize index runs on
+your Cloudflare account and may incur charges. `bynk dev` never
+blocks such a call. The first one in a session prints a one-time warning that
+links to Cloudflare's own pricing page, and the call goes ahead. A project that
+has read it acknowledges it in `[dev]`, which silences the warning:
+
+```toml
+[dev]
+ai = "allow"
+vectorize = "allow"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `ai` | `[dev]` | `"allow"` | Acknowledges that `Ai` calls run remotely under `bynk dev`. The only value; any other is a manifest error. There is no command-line flag. |
+| `vectorize` | `[dev]` | `"allow"` | The same for `Vectorize` calls. |
+| `ai-search` | `[dev]` | `"allow"` | Acknowledges that `AiSearch` calls go to your deployed AI Search instance under `bynk dev`, which has no local simulation. Separate from `ai`. The only value; any other is a manifest error. |
+| `mtls` | `[dev]` | `"allow"` | Acknowledges that an `MtlsCertificate` call runs on Cloudflare under `bynk dev`, presenting your account's certificate to the origin, because an mTLS binding has no local simulation. It needs a certificate `bynk deploy` has linked for the environment. The only value; any other is a manifest error. |
+| `analytics-sql` | `[dev]` | `"allow"` | Acknowledges that an `AnalyticsSql` query runs on Cloudflare under `bynk dev`, reading your deployed Analytics Engine datasets, because Analytics SQL has no local implementation. The only value; any other is a manifest error. |
+
+The key is per binding kind, so a later remote-only binding takes its own key
+and the same warning. `bynk dev` marks each Worker it serves with a `BYNK_DEV`
+variable and sets an acknowledged kind's variable (`BYNK_DEV_ACK_AI`, `BYNK_DEV_ACK_VECTORIZE`, `BYNK_DEV_ACK_AI_SEARCH`), which the
+provider reads; a deployed Worker has neither, so the warning and the
+acknowledgement never apply to production. `bynk test` never reaches Workers AI:
+every `Ai` operation faults until it is stubbed. The warning is per Worker
+process, so a rebuild that restarts the Worker can show it again. `bynk dev`
+reads `[dev]` once, when it starts, so an acknowledgement added to a running
+session takes effect the next time `bynk dev` starts.
+
+### Binding a Vectorize index under `bynk dev`
+
+A `Vectorize` instance has no local simulation, so under `bynk dev` a Worker can
+only reach a real index. Which one is yours to say, per capability, and never the
+deploy's derived name, so a development session cannot write to a deployed index
+by accident:
+
+```toml
+[dev.vectorize-index]
+Docs = "docs-dev"
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `<Capability>` | `[dev.vectorize-index]` | string | The name of an index of your own that `bynk dev` binds (remotely) for that capability. A name is 1 to 64 lowercase letters, digits or `-`. |
+
+The index must already exist with the declaration's `@dimensions` and `@metric`:
+`bynk dev` never creates one (`bynk deploy --env dev`, or `wrangler vectorize
+create`, does). The first call checks the index against the declaration and fails,
+saying so, on a mismatch or an index it cannot reach. A capability with no entry is
+unbound: a call to it fails, naming the entry to add. An entry that names no
+`Vectorize` capability of the project is an error. `bynk dev -- --remote` keeps the
+account's deployed names instead. Calls reach your Cloudflare account, so the
+warning of the previous section applies; `[dev] vectorize = "allow"` silences it.
+
+## `[unstable]`
+
+Opts in to **experimental** standard-library items. Every first-party item is
+stable or experimental. A stable one is under the 1.0 compatibility promise; an
+experimental one carries no promise, may change or disappear in any release,
+and can't be used until it is listed here.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `allow` | array of strings | `[]` | Item paths to allow: a unit (`bynk.cloudflare`), an item it exports (`bynk.cloudflare.Kv`), or a capability operation (`bynk.cloudflare.Kv.list`). An entry covers its path and everything under it. |
+
+```toml
+[unstable]
+allow = ["bynk.cloudflare.R2"]
+```
+
+Using an experimental item that no entry covers is a
+`bynk.stability.experimental` error at the use: a `consumes` selection, a
+`uses`, an imported function called or passed as a value, or a call to a capability
+operation.
+Its note names the entry to add.
+
+An entry that names no standard-library item is a
+`bynk.project.unstable_unknown_item` error. An entry that reaches nothing
+experimental is a `bynk.project.unstable_not_experimental` **warning**: the item
+has become stable, so the entry can go. Stabilising an item never breaks a
+build. `check`, `compile`, `dev`, `deploy` and the language server all read this
+table the same way and report the same diagnostics. Anything but a list of
+strings is an error.
+
+The experimental items today, such as `bynk.cloudflare.RateLimit` and
+`bynk.cloudflare.EdgeCache`, are listed on the
+[first-party capabilities](/reference/bynk-capabilities/#stability) page.
+
+## `[test]`
+
+Deployments that [`bynk test --against <name>`](/reference/tooling/bynk-cli/#bynk-test) may
+run the `system` suites against. Each is a table under `[test.targets]`, named
+by its key. `--against` accepts only `dev` or one of these names: a bare URL is
+refused, so a run can't be pointed at a deployment by accident.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `url.<worker>` | string | required | Each Worker's base URL, keyed by its worker-directory name (`shop.orders` is `shop-orders`). At least one is required. |
+| `secrets` | array of strings | `[]` | The names of the secrets the deployed Workers verify with. The runner reads each from the **environment** and signs with it; a name that isn't set refuses the run. Never put a secret's value in `bynk.toml`. |
+| `vars` | table of strings | `{}` | The non-secret values the target was deployed with (`vars = { PAYMENTS_PROCESSOR = "fake" }`). A case runs against the target only if its `env` agrees with them on every name either one mentions. A name beginning `BYNK_DATASET_` is reserved (it carries an `Analytics` dataset's name to its Worker) and is a manifest error. |
+| `production` | boolean | `false` | Marks a production deployment, which `--against` refuses. |
+
+```toml
+[test.targets.preview]
+url.shop-orders = "https://shop-orders-preview.example.workers.dev"
+url.shop-payments = "https://shop-payments-preview.example.workers.dev"
+secrets = ["AUTH_JWT_SECRET"]
+
+[test.targets.live]
+url.shop-orders = "https://shop-orders.example.com"
+production = true
+```
+
+`dev` is reserved for the local `bynk dev` the runner starts itself, and isn't
+a target name.
+
+### `[test] postgres`
+
+What a test's `Postgres` instance is.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `postgres` | `"stub"` or `"pglite"` | `"stub"` | `"stub"`: a test never reaches a database, so each operation faults until the case stubs it. `"pglite"`: each instance runs its statements on [PGlite](https://pglite.dev/), Postgres compiled to WebAssembly, on a database that starts each case from the project's `schema.sql`. See [Postgres under test](/reference/testing/#postgres-under-test). |
+
+```toml
+[test]
+postgres = "pglite"
+```
+
+### `[test.mutate]`
+
+What [`bynk test --mutate`](/reference/tooling/bynk-cli/#mutation-testing) leaves unmutated.
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `exclude` | array of strings | `[]` | Path globs (`src/generated/**`; `*` stays within a segment, `**` crosses them) and unit or declaration names (`orders`, `orders.legacy_refund`). A mutation site in a matching file or declaration is skipped. |
+
+```toml
+[test.mutate]
+exclude = ["src/generated/**", "orders.legacy_refund"]
+```
+
+## Legacy mode
+
+Without a `bynk.toml`, a single `.bynk` file compiles as a standalone unit (the
+[first-program](/book/tutorials/first-program/) flow). This is the simplest
+way to start.
+
+Project features expect the manifest-driven layout above. In particular
+`bynk test`, and the project-aware [`bynk` driver CLI](/reference/tooling/bynk-cli/)
+commands — `bynk doctor`, `bynk new`, `bynk dev`, and `bynk deploy` — require a project (a
+`bynk.toml`, or a `src/` directory).

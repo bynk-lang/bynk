@@ -5,10 +5,10 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 `given`, providers supply implementations, and adapters wrap the host boundary.
 
 **Understand**
-- [Understand the capability model](/book/guides/effects-and-capabilities/understand-the-capability-model/)
-- [Synchronous and asynchronous sends](/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/)
-- [What a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/)
-- [What a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/)
+- [Understand the capability model](/book/concepts/effects-and-capabilities/understand-the-capability-model/)
+- [Synchronous and asynchronous sends](/book/concepts/effects-and-capabilities/synchronous-and-asynchronous-sends/)
+- [What a join guarantees on failure](/book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/)
+- [What a timeout stops](/book/concepts/effects-and-capabilities/what-a-timeout-stops/)
 
 **Do**
 - [Run independent calls at the same time](/book/guides/effects-and-capabilities/run-independent-calls-at-the-same-time/)
@@ -33,6 +33,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
 - [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
+- [Store a password](/book/guides/effects-and-capabilities/store-a-password/)
 
-**See also:** [Reference — Capabilities & providers](/book/reference/capabilities/),
-[Adapters](/book/reference/adapters/).
+**See also:** [Reference — Capabilities & providers](/reference/capabilities/),
+[Adapters](/reference/adapters/).

@@ -19,6 +19,59 @@ export function __bynkInstantToIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+// #3977: the text of a `Duration`, which erases to a number of milliseconds. Both forms break
+// the span into whole days (24-hour spans, as `1.day` is), hours, minutes, seconds and
+// milliseconds with integer arithmetic only, so a large span is exact. A negative span takes a
+// leading `-`, and the parts are those of its magnitude.
+function durationParts(ms: number): { neg: boolean; d: number; h: number; m: number; s: number; ms: number } {
+  if (!Number.isFinite(ms) || !Number.isInteger(ms)) {
+    throw new Error(`Duration text: ${ms} is not a whole number of milliseconds`);
+  }
+  const neg = ms < 0;
+  let rest = Math.abs(ms);
+  const part = (unit: number): number => {
+    const n = Math.floor(rest / unit);
+    rest -= n * unit;
+    return n;
+  };
+  const d = part(86_400_000);
+  const h = part(3_600_000);
+  const m = part(60_000);
+  const s = part(1000);
+  return { neg, d, h, m, s, ms: rest };
+}
+
+// `1d2h`, `1h30m`, `5m`, `250ms`, `-5s`, `0s`: units largest first, a zero part left out, and
+// `0s` for a zero span. The units are the ones a `Duration` literal is written in.
+export function __bynkDurationToString(ms: number): string {
+  const p = durationParts(ms);
+  const text =
+    (p.d ? `${p.d}d` : "") +
+    (p.h ? `${p.h}h` : "") +
+    (p.m ? `${p.m}m` : "") +
+    (p.s ? `${p.s}s` : "") +
+    (p.ms ? `${p.ms}ms` : "");
+  if (text === "") {
+    return "0s";
+  }
+  return p.neg ? `-${text}` : text;
+}
+
+// ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are the largest unit (months and
+// years are not fixed spans), the seconds carry the millisecond fraction without trailing zeros,
+// and a negative span takes a leading `-`, a widely accepted extension.
+export function __bynkDurationToIso(ms: number): string {
+  const p = durationParts(ms);
+  const fraction = p.ms ? `.${String(p.ms).padStart(3, "0").replace(/0+$/, "")}` : "";
+  const seconds = p.s || p.ms ? `${p.s}${fraction}S` : "";
+  const time = (p.h ? `${p.h}H` : "") + (p.m ? `${p.m}M` : "") + seconds;
+  const date = p.d ? `${p.d}D` : "";
+  if (date === "" && time === "") {
+    return "PT0S";
+  }
+  return `${p.neg ? "-" : ""}P${date}${time === "" ? "" : `T${time}`}`;
+}
+
 // The RFC 3339 date-time profile: `T` or `t`, a fraction of any length, and
 // `Z`, `z` or a `±HH:mm` offset. Nothing else.
 const ISO =
@@ -45,6 +98,94 @@ const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 export function __bynkIsIsoDate(s: string): boolean {
   const m = ISO_DATE.exec(s);
   return m !== null && isRealDate(Number(m[1]), Number(m[2]), Number(m[3]));
+}
+
+// The `Cron` refinement (#3873): exactly Cloudflare's cron-trigger syntax. The
+// TypeScript twin of `bynk_syntax::cron::is_cron_expression`; the two agree over
+// generated strings (`test/time.test.ts`). Five fields separated by exactly one
+// space. Where Cloudflare's documentation does not settle a form it is refused.
+const CRON_FIELDS: { lo: number; hi: number; names: string[] }[] = [
+  { lo: 0, hi: 59, names: [] },
+  { lo: 0, hi: 23, names: [] },
+  { lo: 1, hi: 31, names: [] },
+  { lo: 1, hi: 12, names: ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] },
+  { lo: 1, hi: 7, names: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] },
+];
+
+function cronValue(f: number, text: string): number | null {
+  const { lo, hi, names } = CRON_FIELDS[f];
+  const i = names.indexOf(text.toUpperCase());
+  if (i >= 0) {
+    return lo + i;
+  }
+  if (!/^[0-9]+$/.test(text)) {
+    return null;
+  }
+  const n = Number(text);
+  return n >= lo && n <= hi ? n : null;
+}
+
+function cronItem(f: number, item: string): boolean {
+  if (item === "" || item.includes("?")) {
+    return false;
+  }
+  const hi = CRON_FIELDS[f].hi;
+  const slash = item.indexOf("/");
+  const body = slash < 0 ? item : item.slice(0, slash);
+  const step = slash < 0 ? null : item.slice(slash + 1);
+  if (step !== null) {
+    if (!/^[0-9]+$/.test(step)) {
+      return false;
+    }
+    const n = Number(step);
+    if (n < 1 || n > hi) {
+      return false;
+    }
+  }
+  if (body === "*") {
+    return true;
+  }
+  const dash = body.indexOf("-");
+  if (dash >= 0) {
+    const a = cronValue(f, body.slice(0, dash));
+    const b = cronValue(f, body.slice(dash + 1));
+    return a !== null && b !== null && a <= b;
+  }
+  if (step !== null) {
+    return false;
+  }
+  if (f === 2) {
+    if (body === "L" || body === "LW") {
+      return true;
+    }
+    if (body.endsWith("W")) {
+      const n = body.slice(0, -1);
+      return /^[0-9]+$/.test(n) && Number(n) >= 1 && Number(n) <= 31;
+    }
+  }
+  if (f === 4) {
+    const hash = body.indexOf("#");
+    if (hash >= 0) {
+      const nth = body.slice(hash + 1);
+      return cronValue(f, body.slice(0, hash)) !== null && /^[0-9]+$/.test(nth) && Number(nth) >= 1 && Number(nth) <= 5;
+    }
+    if (body.endsWith("L") || body.endsWith("l")) {
+      const d = body.slice(0, -1);
+      return d !== "" && cronValue(f, d) !== null;
+    }
+  }
+  return cronValue(f, body) !== null;
+}
+
+export function __bynkIsCron(s: string): boolean {
+  if (s === "" || s.startsWith(" ") || s.endsWith(" ") || s.includes("  ") || /[\t\n\r]/.test(s) || s.startsWith("@")) {
+    return false;
+  }
+  const fields = s.split(" ");
+  if (fields.length !== 5) {
+    return false;
+  }
+  return fields.every((field, f) => field !== "" && field.split(",").every((item) => cronItem(f, item)));
 }
 
 // Partial: `None` for anything outside the profile or the calendar. A leap
@@ -77,6 +218,19 @@ export function __bynkInstantFromIso(s: string): Option<number> {
   const date = new Date(Date.UTC(2000, month - 1, day, hour, minute, second, millis));
   date.setUTCFullYear(year);
   return Some(date.getTime() - offsetMinutes * 60_000);
+}
+
+// #3974: the wire decoder for an `Instant`. Epoch milliseconds (the tagged
+// form) pass through untouched, so they are tried first; a string that reads as
+// an RFC 3339 timestamp with an explicit offset becomes its epoch milliseconds;
+// anything else is returned as it came, for the caller's `typeof` guard to
+// refuse without echoing it.
+export function __bynkInstantFromWire(v: unknown): unknown {
+  if (typeof v !== "string") {
+    return v;
+  }
+  const parsed = __bynkInstantFromIso(v);
+  return parsed.tag === "Some" ? parsed.value : v;
 }
 
 // Hyperdrive H3 (#3320, ADR 0799 F): the `Instant` a Postgres `timestamptz`

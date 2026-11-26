@@ -9,9 +9,9 @@ import type {
   Response as FetchResponse,
   StreamResponse,
 } from "./bynk.js";
-import { Claim, FetchError, Uuid } from "./bynk.js";
+import { Claim, FetchError, Secret, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
-import { Err, None, Ok, Some, type Option, type Result, byteStreamBody, claimStream } from "./runtime.js";
+import { Err, None, Ok, Some, type Option, type Result, byteStreamBody, claimStream, withTraceField } from "./runtime.js";
 
 export class ClockProvider implements Clock {
   async now(): Promise<number> {
@@ -55,7 +55,7 @@ export class LoggerProvider implements Logger {
   }
   // K5a (#2586): one JSON line, for a log collector to parse.
   async log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): Promise<void> {
-    const record = { message: msg, level: level.tag.toLowerCase(), fields: Object.fromEntries(fields) };
+    const record = { message: msg, level: level.tag.toLowerCase(), fields: withTraceField(Object.fromEntries(fields)) };
     LOG_WRITERS[level.tag](JSON.stringify(record));
   }
 }
@@ -270,7 +270,7 @@ export class FetchProvider implements Fetch {
         headers.set("content-type", req.contentType.value);
       }
       if (req.authorization.tag === "Some") {
-        headers.set("authorization", req.authorization.value);
+        headers.set("authorization", req.authorization.value.reveal());
       }
       const seen = new Set<string>();
       for (const [name, value] of req.headers) {
@@ -385,14 +385,14 @@ export class SecretsProvider implements Secrets {
   constructor(env?: unknown) {
     this.env = env;
   }
-  async get(name: string): Promise<Option<string>> {
+  async get(name: string): Promise<Option<Secret>> {
     const fromEnv = (this.env as Record<string, unknown> | undefined)?.[name];
     if (typeof fromEnv === "string") {
-      return Some(fromEnv);
+      return Some(Secret.unsafe(fromEnv));
     }
     const v = (globalThis as { process?: { env?: Record<string, string | undefined> } })
       .process?.env?.[name];
-    return typeof v === "string" ? Some(v) : None;
+    return typeof v === "string" ? Some(Secret.unsafe(v)) : None;
   }
 }
 

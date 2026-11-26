@@ -1,0 +1,12 @@
+{
+  "blurb": "`advance Clock by <amount>` moves the harness clock forward by a `Duration`. A bare number does not say what unit it counts, so it is refused. Write a duration literal such as `5.minutes`. See `bynk.test.advance_not_clock` for naming a capability other than `Clock`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.advance_not_duration",
+  "constructs": [
+    "advance_stmt"
+  ],
+  "example": "// demo/clock.bynk\nconsumes bynk { Clock }\n\n// tests/clock.test.bynk\nadvance Clock by 5           // ✗ a number, not a Duration\nadvance Clock by 5.minutes   // ✓",
+  "severity": "error",
+  "summary": "An `advance Clock by` statement's amount is not a `Duration`."
+}

@@ -12,7 +12,7 @@
 // in batches, and a `Log` window is a key range. A scan (`keys`, `values`, `entries`) lists the
 // collection in pages. Order is the entry's insertion sequence `i`, as `entries.ts` writes it.
 
-import { EntryOverlay, setLazyContext, decodeKeyPart, expiredRange, expiryKey, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseExpiryKey, parseLogKey, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
+import { EntryOverlay, setLazyContext, decodeKeyPart, expiredRange, expiryKey, logKey, logPrefix, logRange, mapKey, mapPrefix, metaKey, parseExpiryKey, parseLogKey, indexSignature, postingFieldPrefix, postingKey, postingPrefix, sameStored, setKey, setPrefix } from "./entries.ts";
 import type { DurableObjectListOptions, DurableObjectStorage } from "./storage.ts";
 import type { StoreMap } from "./store.ts";
 import type { CacheEntry, Indexer, LogEntry, StoreCacheHandle, StoreLogHandle, StoreMapHandle, StoreSetHandle } from "./store.ts";
@@ -34,14 +34,20 @@ interface Meta {
    * drops it, may hold clamped entries. An unknown skew is never trusted to bound a window.
    */
   skew: number | undefined;
+  /**
+   * A `Map`'s index set as of its last write (#4038): each index and the key scheme its postings
+   * use. Absent means none. A handle whose declared set differs rebuilds the postings before it
+   * writes, so an annotation added to a map that already holds entries finds them.
+   */
+  ix: string | undefined;
 }
 
-// Every key of a range, in key order, in pages (a list returns everything it matches).
-async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptions): Promise<Array<[string, T]>> {
-  const out: Array<[string, T]> = [];
+// The pages of a range, in key order, one storage read each. A scan that can stop early takes a
+// page at a time; `listAll` takes them all (a list returns everything it matches).
+async function* pagesOf<T>(overlay: EntryOverlay, options: DurableObjectListOptions): AsyncGenerator<Array<[string, T]>> {
   if (options.reverse === true) {
-    const all = await overlay.list<T>(options);
-    return [...all];
+    yield [...(await overlay.list<T>(options))];
+    return;
   }
   // Storage rejects `start` with `startAfter` (#3747): the first page keeps the range's own lower
   // bound, and each later page replaces it with the cursor, which already lies beyond it.
@@ -49,11 +55,18 @@ async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptio
   let after: string | undefined;
   for (;;) {
     const bound = after === undefined ? (start === undefined ? {} : { start }) : { startAfter: after };
-    const page = await overlay.list<T>({ ...rest, ...bound, limit: SCAN_PAGE });
-    for (const [k, v] of page) out.push([k, v]);
-    if (page.size < SCAN_PAGE) return out;
-    after = out[out.length - 1]![0];
+    const page = [...(await overlay.list<T>({ ...rest, ...bound, limit: SCAN_PAGE }))];
+    yield page;
+    if (page.length < SCAN_PAGE) return;
+    after = page[page.length - 1]![0];
   }
+}
+
+// Every key of a range, in key order, in pages (a list returns everything it matches).
+async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptions): Promise<Array<[string, T]>> {
+  const out: Array<[string, T]> = [];
+  for await (const page of pagesOf<T>(overlay, options)) out.push(...page);
+  return out;
 }
 
 // Runs the steps of one key one after another. A step reads what it is about to change, so two on the
@@ -77,7 +90,7 @@ class KeyChains {
 }
 
 class MetaCell {
-  private value: Meta = { size: 0, seq: 0, skew: undefined };
+  private value: Meta = { size: 0, seq: 0, skew: undefined, ix: undefined };
   private loading: Promise<Meta> | undefined;
   private existed = false;
   private changed = false;
@@ -95,7 +108,7 @@ class MetaCell {
       const stored = await this.overlay.get<Partial<Meta>>(this.key);
       this.existed = stored !== undefined;
       // A collection with no metadata at all is empty: it has nothing clamped, so its skew is known to be 0.
-      this.value = { size: stored?.size ?? 0, seq: stored?.seq ?? 0, skew: stored === undefined ? 0 : typeof stored.skew === "number" ? stored.skew : undefined };
+      this.value = { size: stored?.size ?? 0, seq: stored?.seq ?? 0, skew: stored === undefined ? 0 : typeof stored.skew === "number" ? stored.skew : undefined, ix: typeof stored?.ix === "string" ? stored.ix : undefined };
       return this.value;
     })();
     return this.loading;
@@ -110,7 +123,7 @@ class MetaCell {
     if (!this.changed) return;
     const m = this.value;
     if (m.size > 0 || this.existed) {
-      this.overlay.put(this.key, { size: m.size, seq: m.seq, ...(m.skew !== undefined ? { skew: m.skew } : {}) });
+      this.overlay.put(this.key, { size: m.size, seq: m.seq, ...(m.skew !== undefined ? { skew: m.skew } : {}), ...(m.ix !== undefined ? { ix: m.ix } : {}) });
     }
     this.changed = false;
   }
@@ -136,6 +149,8 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   private readonly chains = new KeyChains();
   private readonly envelope: MapEnvelope<V>;
   private readonly indexers: readonly Indexer<V>[];
+  /** The values staged under each `@unique` index this handler, to check at commit (#4038). */
+  private readonly touched = new Map<string, Set<string>>();
   private readonly keyCheck: ((key: string) => void) | undefined;
 
   constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: ReadonlyArray<Indexer<V>> = [], keyCheck?: (key: string) => void) {
@@ -149,6 +164,46 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
 
   private env(raw: unknown): V {
     return this.envelope.read(raw as never);
+  }
+
+  /** The index set this handle declares, as the metadata records it (#4038). */
+  private signature(): string {
+    return indexSignature(this.indexers);
+  }
+
+  private reconciled: Promise<Meta> | undefined;
+
+  /**
+   * The metadata, once the stored postings match the declared indexes (#4038). A map written before
+   * an index was declared (or under another key scheme: `@unique` keys an `Option` by its payload,
+   * `@indexed` by the whole option) has no postings, or the wrong ones, so the first handler to
+   * touch it drops the field's postings and rebuilds them from its entries, in its own commit.
+   */
+  private ready(): Promise<Meta> {
+    this.reconciled ??= (async () => {
+      const meta = await this.meta.load();
+      const want = this.signature();
+      if ((meta.ix ?? "") === want) return meta;
+      if (meta.size > 0) {
+        for await (const page of pagesOf<unknown>(this.overlay, { prefix: postingFieldPrefix(this.field) })) {
+          for (const [k] of page) this.overlay.delete(k);
+        }
+        const prefix = mapPrefix(this.field);
+        for await (const page of pagesOf<Envelope>(this.overlay, { prefix })) {
+          for (const [k, e] of page) {
+            const value = this.env(e);
+            for (const ix of this.indexers) {
+              const by = ix.of(value);
+              if (by !== undefined) this.overlay.put(postingKey(this.field, ix.index, by, decodeKeyPart(k.slice(prefix.length))), 1);
+            }
+          }
+        }
+      }
+      meta.ix = want === "" ? undefined : want;
+      this.meta.touch();
+      return meta;
+    })();
+    return this.reconciled;
   }
 
   private expiry(raw: unknown): number | undefined {
@@ -179,8 +234,8 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   // `read` is the entry as the caller already read it, so a read-modify-write reads it once.
   private async putNow(key: string, value: V, read?: { old: Envelope | undefined }): Promise<void> {
     const mk = mapKey(this.field, key);
+    const meta = await this.ready();
     const old = read === undefined ? await this.overlay.get<Envelope>(mk) : read.old;
-    const meta = await this.meta.load();
     let i: number;
     const written = (n: number): unknown => this.envelope.write(value, n);
     if (old === undefined) {
@@ -189,7 +244,7 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
       meta.seq += 1;
       meta.size += 1;
       this.meta.touch();
-      for (const ix of this.indexers) this.overlay.put(postingKey(this.field, ix.index, ix.of(value), key), 1);
+      for (const ix of this.indexers) this.addPosting(ix, ix.of(value), key);
       const exp = this.expiry(written(i));
       if (exp !== undefined) this.overlay.put(expiryKey(this.field, exp, key), 1);
       this.overlay.put(mk, written(i));
@@ -203,8 +258,8 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
         const from = ix.of(before);
         const to = ix.of(value);
         if (from === to) continue;
-        this.overlay.delete(postingKey(this.field, ix.index, from, key));
-        this.overlay.put(postingKey(this.field, ix.index, to, key), 1);
+        if (from !== undefined) this.overlay.delete(postingKey(this.field, ix.index, from, key));
+        this.addPosting(ix, to, key);
       }
     }
     const was = this.expiry(old);
@@ -222,15 +277,18 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
 
   private async removeNow(key: string): Promise<boolean> {
     const mk = mapKey(this.field, key);
+    const meta = await this.ready();
     const old = await this.overlay.get<Envelope>(mk);
     if (old === undefined) return false;
-    const meta = await this.meta.load();
     meta.size -= 1;
     this.meta.touch();
     this.overlay.delete(mk);
     if (this.indexers.length > 0) {
       const before = this.env(old);
-      for (const ix of this.indexers) this.overlay.delete(postingKey(this.field, ix.index, ix.of(before), key));
+      for (const ix of this.indexers) {
+        const by = ix.of(before);
+        if (by !== undefined) this.overlay.delete(postingKey(this.field, ix.index, by, key));
+      }
     }
     const exp = this.expiry(old);
     if (exp !== undefined) this.overlay.delete(expiryKey(this.field, exp, key));
@@ -258,18 +316,100 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     return (await this.scan()).map(([, e]) => this.env(e));
   }
 
+  /**
+   * The values a page of storage at a time, in **key** order (not insertion order: that exists only once
+   * every page is read), for a scan whose answer does not depend on the order (#4036).
+   */
+  async *lazyValues(): AsyncGenerator<V> {
+    const prefix = mapPrefix(this.field);
+    for await (const page of pagesOf<Envelope>(this.overlay, { prefix })) {
+      for (const [k, e] of page) {
+        if (this.keyCheck !== undefined) this.keyCheck(decodeKeyPart(k.slice(prefix.length)));
+        yield this.env(e);
+      }
+    }
+  }
+
   async entries(): Promise<ReadonlyArray<readonly [string, V]>> {
     return (await this.scan()).map(([k, e]) => [k, this.env(e)] as const);
   }
 
+  /** Stage a posting; a `@unique` index also notes the value, to be checked for a second holder at commit. */
+  private addPosting(ix: Indexer<V>, by: string | undefined, key: string): void {
+    if (by === undefined) return;
+    this.overlay.put(postingKey(this.field, ix.index, by, key), 1);
+    if (ix.unique === true) {
+      const seen = this.touched.get(ix.index) ?? new Set<string>();
+      seen.add(by);
+      this.touched.set(ix.index, seen);
+    }
+  }
+
+  /**
+   * Whether any index value this handler staged under the `@unique` index `index` is now held by
+   * more than one entry (#4038). The postings are read through the overlay, so a committed holder
+   * and a staged one meet; a value that moved from one entry to another leaves one holder.
+   */
+  async hasDuplicate(index: string): Promise<boolean> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    await this.ready();
+    for (const by of this.touched.get(index) ?? []) {
+      const holders = await this.overlay.list<unknown>({ prefix: postingPrefix(this.field, index, by), limit: 2 });
+      if (holders.size > 1) return true;
+    }
+    return false;
+  }
+
+  /** The postings of one index sort by value, so the holders of a value are one run of keys; only the run lengths are kept (#4390). */
+  async duplicateHolders(index: string): Promise<number[]> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    await this.ready();
+    const prefix = postingPrefix(this.field, index);
+    const holders: number[] = [];
+    let current: string | undefined;
+    let run = 0;
+    for await (const page of pagesOf<unknown>(this.overlay, { prefix })) {
+      for (const [k] of page) {
+        const by = k.slice(prefix.length, k.indexOf("/", prefix.length));
+        if (by === current) {
+          run += 1;
+        } else {
+          if (run > 1) holders.push(run);
+          current = by;
+          run = 1;
+        }
+      }
+    }
+    if (run > 1) holders.push(run);
+    return holders;
+  }
+
   async byIndex(index: string, by: string): Promise<readonly V[]> {
     if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    await this.ready();
     const prefix = postingPrefix(this.field, index, by);
     const postings = await listAll<unknown>(this.overlay, { prefix });
     const pks = postings.map(([k]) => decodeKeyPart(k.slice(prefix.length)));
     if (this.keyCheck !== undefined) for (const pk of pks) this.keyCheck(pk);
     const found = await this.overlay.getMany<Envelope>(pks.map((pk) => mapKey(this.field, pk)));
     return [...found.values()].sort((a, b) => a.i - b.i).map((e) => this.env(e));
+  }
+
+  /**
+   * The values whose `index` value is `by`, a page of postings at a time, in **primary-key** order
+   * (insertion order exists only once every posting is read), for a scan whose answer does not depend
+   * on the order (#4300).
+   */
+  async *lazyByIndex(index: string, by: string): AsyncGenerator<V> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    await this.ready();
+    const prefix = postingPrefix(this.field, index, by);
+    for await (const page of pagesOf<unknown>(this.overlay, { prefix })) {
+      const pks = page.map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+      if (this.keyCheck !== undefined) for (const pk of pks) this.keyCheck(pk);
+      const found = await this.overlay.getMany<Envelope>(pks.map((pk) => mapKey(this.field, pk)));
+      for (const e of found.values()) yield this.env(e);
+    }
   }
 
   /** Stage this handler's metadata. The commit calls it once, before the flush. */
@@ -485,6 +625,13 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
 
   async values(): Promise<readonly V[]> {
     return (await this.entries()).map((e) => e.v);
+  }
+
+  /** The values oldest first, a page of storage at a time: the keys are append times (#4036). */
+  async *lazyValues(): AsyncGenerator<V> {
+    for await (const page of pagesOf<StoredLogEntry>(this.overlay, this.range(undefined, undefined))) {
+      for (const [, e] of page) yield this.entry(e).v;
+    }
   }
 
   async since(t: number): Promise<readonly V[]> {

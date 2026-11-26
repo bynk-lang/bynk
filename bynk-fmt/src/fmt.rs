@@ -898,7 +898,7 @@ impl<'a> Formatter<'a> {
         for u in &a.uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -1008,7 +1008,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
             }
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             first = false;
         }
@@ -1198,14 +1198,18 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
         }
-        let header = format!("commons {}", c.name.joined());
+        let header = format!(
+            "commons {}{}",
+            c.name.joined(),
+            if c.test_only { " for tests" } else { "" }
+        );
         match c.form {
             CommonsForm::Brace => {
                 self.push(&header);
                 self.push(" {");
                 self.newline();
                 self.indented(|f| {
-                    f.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                    f.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
                 });
                 self.push("}");
                 self.newline();
@@ -1214,7 +1218,7 @@ impl<'a> Formatter<'a> {
                 self.push(&header);
                 self.newline();
                 self.newline();
-                self.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                self.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
             }
         }
     }
@@ -1222,6 +1226,7 @@ impl<'a> Formatter<'a> {
     fn format_commons_body(
         &mut self,
         uses: &[UsesDecl],
+        consumes: &[ConsumesDecl],
         items: &[CommonsItem],
         trailing_comments: &[Comment],
     ) {
@@ -1229,8 +1234,13 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_uses, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
+            any_uses = true;
+        }
+        // #4044: a commons' type-only `consumes` lines follow its `uses`.
+        for c in consumes {
+            self.format_consumes(c, any_uses);
             any_uses = true;
         }
         if any_uses && !items.is_empty() {
@@ -1339,7 +1349,7 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -1617,6 +1627,11 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &t.documentation {
             self.emit_doc(doc);
         }
+        // #3975: annotations before the `type` keyword, one per line.
+        for ann in &t.annotations {
+            self.push(&annotation_to_string(ann));
+            self.newline();
+        }
         // #2618: the unit-private modifier.
         if t.private.is_some() {
             self.push("private ");
@@ -1689,6 +1704,10 @@ impl<'a> Formatter<'a> {
     }
 
     fn format_pred(&mut self, p: &RefinementPred) {
+        if let Some(text) = bynk_syntax::print::pending_pred_to_string(p) {
+            self.push(&text);
+            return;
+        }
         let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
         match &p.kind {
             PredKind::Matches(re) => self.push(&format!(
@@ -1698,6 +1717,11 @@ impl<'a> Formatter<'a> {
             PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeF(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeD(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
+            PredKind::InRangeDur(a, b) => {
+                self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme))
+            }
+            PredKind::AtLeast(b) => self.push(&format!("AtLeast({})", b.lexeme())),
+            PredKind::AtMost(b) => self.push(&format!("AtMost({})", b.lexeme())),
             PredKind::MinLength(n) => self.push(&format!("MinLength({})", arg(*n))),
             PredKind::MaxLength(n) => self.push(&format!("MaxLength({})", arg(*n))),
             PredKind::Length(n) => self.push(&format!("Length({})", arg(*n))),
@@ -1705,6 +1729,7 @@ impl<'a> Formatter<'a> {
             PredKind::Positive => self.push("Positive"),
             PredKind::NonEmpty => self.push("NonEmpty"),
             PredKind::IsoDate => self.push("IsoDate"),
+            PredKind::Cron => self.push("Cron"),
         }
     }
 
@@ -1751,6 +1776,10 @@ impl<'a> Formatter<'a> {
             self.push(" where ");
             self.format_refinement(r);
         }
+        // #3793: `name: T replaces old`.
+        if let Some(old) = &field.replaces {
+            self.push(&format!(" replaces {}", old.name));
+        }
         if let Some(init) = &field.init {
             self.push(" = ");
             self.format_expr(init);
@@ -1772,7 +1801,7 @@ impl<'a> Formatter<'a> {
                         || v.documentation.is_some()
                 });
             if !has_comments {
-                let names: Vec<&str> = s.variants.iter().map(|v| v.name.name.as_str()).collect();
+                let names: Vec<String> = s.variants.iter().map(variant_head).collect();
                 let oneline = format!("enum {{ {} }}", names.join(", "));
                 if self.fits(&oneline, 0) {
                     self.push(&oneline);
@@ -1787,7 +1816,7 @@ impl<'a> Formatter<'a> {
                     if let Some(doc) = &v.documentation {
                         f.emit_doc(doc);
                     }
-                    f.push(&v.name.name);
+                    f.push(&variant_head(v));
                     if i + 1 < s.variants.len() || f.opts.trailing_comma {
                         f.push(",");
                     }
@@ -1814,7 +1843,7 @@ impl<'a> Formatter<'a> {
                     f.emit_doc(doc);
                 }
                 f.push("| ");
-                f.push(&v.name.name);
+                f.push(&variant_head(v));
                 if v.payload.iter().any(|p| p.documentation.is_some()) {
                     // #1888: a documented payload field puts each field on its
                     // own line, under its doc, as in a record body.
@@ -1826,11 +1855,7 @@ impl<'a> Formatter<'a> {
                             if let Some(doc) = &p.documentation {
                                 f.emit_doc(doc);
                             }
-                            f.push(&format!(
-                                "{}: {}",
-                                p.name.name,
-                                type_ref_to_string(&p.type_ref)
-                            ));
+                            f.push(&payload_field_text(p));
                             if j < last || f.opts.trailing_comma {
                                 f.push(",");
                             }
@@ -1840,11 +1865,7 @@ impl<'a> Formatter<'a> {
                     f.push(")");
                 } else if !v.payload.is_empty() {
                     f.push("(");
-                    let parts: Vec<String> = v
-                        .payload
-                        .iter()
-                        .map(|p| format!("{}: {}", p.name.name, type_ref_to_string(&p.type_ref)))
-                        .collect();
+                    let parts: Vec<String> = v.payload.iter().map(payload_field_text).collect();
                     f.push(&parts.join(", "));
                     f.push(")");
                 }
@@ -2125,7 +2146,13 @@ impl<'a> Formatter<'a> {
             ServiceProtocol::Queue { name } => {
                 format!(" from queue(\"{}\")", escape_string(name))
             }
-            ServiceProtocol::Email { address } => {
+            // #3889: a constant names the address; print the name, not the literal the
+            // resolution pass filled in.
+            ServiceProtocol::Email {
+                address_const: Some(c),
+                ..
+            } => format!(" from email({})", c.name.name),
+            ServiceProtocol::Email { address, .. } => {
                 format!(" from email(\"{}\")", escape_string(address))
             }
             ServiceProtocol::WebSocket { in_type, out_type } => {
@@ -2177,6 +2204,9 @@ impl<'a> Formatter<'a> {
                 if s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
                     || !s.handlers.is_empty()
                 {
                     f.newline();
@@ -2184,18 +2214,51 @@ impl<'a> Formatter<'a> {
             }
             if let Some(security) = &s.security {
                 f.format_security_policy(security);
-                if s.limits.is_some() || s.json.is_some() || !s.handlers.is_empty() {
+                if s.limits.is_some()
+                    || s.json.is_some()
+                    || s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(limits) = &s.limits {
                 f.format_limits_policy(limits);
-                if s.json.is_some() || !s.handlers.is_empty() {
+                if s.json.is_some()
+                    || s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(json) = &s.json {
                 f.format_json_policy(json);
+                if s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
+                    || !s.handlers.is_empty()
+                {
+                    f.newline();
+                }
+            }
+            if let Some(errors) = &s.errors {
+                f.format_errors_policy(errors);
+                if s.delivery.is_some() || s.fallback.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(delivery) = &s.delivery {
+                f.format_delivery_policy(delivery);
+                if s.fallback.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(fallback) = &s.fallback {
+                f.format_fallback_policy(fallback);
                 if !s.handlers.is_empty() {
                     f.newline();
                 }
@@ -2213,6 +2276,9 @@ impl<'a> Formatter<'a> {
                     || s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
                 {
                     f.newline();
                 }
@@ -2271,6 +2337,46 @@ impl<'a> Formatter<'a> {
         self.format_policy("json", &json.trivia, &fields, &json.trailing_comments);
     }
 
+    /// Format an `errors { }` policy section (#3916), as `format_cors_policy`.
+    fn format_errors_policy(&mut self, errors: &ErrorsPolicy) {
+        let fields: Vec<_> = errors
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy("errors", &errors.trivia, &fields, &errors.trailing_comments);
+    }
+
+    /// Format a `delivery { }` policy section (#3877), as `format_cors_policy`.
+    fn format_delivery_policy(&mut self, delivery: &DeliveryPolicy) {
+        let fields: Vec<_> = delivery
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy(
+            "delivery",
+            &delivery.trivia,
+            &fields,
+            &delivery.trailing_comments,
+        );
+    }
+
+    /// Format a `fallback { }` policy section (#3885), as `format_delivery_policy`.
+    fn format_fallback_policy(&mut self, fallback: &FallbackPolicy) {
+        let fields: Vec<_> = fallback
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy(
+            "fallback",
+            &fallback.trivia,
+            &fields,
+            &fallback.trailing_comments,
+        );
+    }
+
     /// A `cors`/`security`/`limits` policy: `keyword {`, one `name: value,` field
     /// per line, `}`. #1786: each field's comments, the comments before `}`, and
     /// the comment after it are printed in place.
@@ -2302,6 +2408,10 @@ impl<'a> Formatter<'a> {
         self.emit_leading_comments(&a.trivia.leading);
         if let Some(doc) = &a.documentation {
             self.emit_doc(doc);
+        }
+        for ann in &a.annotations {
+            self.push(&annotation_to_string(ann));
+            self.newline();
         }
         match &a.replaces {
             Some(old) => self.push(&format!("agent {} replaces {} {{", a.name.name, old.name)),
@@ -2370,6 +2480,10 @@ impl<'a> Formatter<'a> {
         // v0.85 (ADR 0111): annotations follow the kind, one space-separated each.
         for ann in &sf.annotations {
             self.push(&format!(" {}", annotation_to_string(ann)));
+        }
+        // #3793: `store name: Kind[T] replaces old`.
+        if let Some(old) = &sf.replaces {
+            self.push(&format!(" replaces {}", old.name));
         }
         if let Some(init) = &sf.init {
             self.push(" = ");
@@ -2488,7 +2602,7 @@ impl<'a> Formatter<'a> {
                         format!("{} = {n}", arg.key.name)
                     }
                     bynk_syntax::ast::SchemeArgValue::Duration { value, unit, .. } => {
-                        format!("{} = {value}.{}", arg.key.name, unit.name())
+                        format!("{} = {value}.{}", arg.key.name, unit.name_for(*value))
                     }
                     bynk_syntax::ast::SchemeArgValue::Ident(id) => {
                         format!("{} = {id}", arg.key.name)
@@ -2591,9 +2705,12 @@ impl<'a> Formatter<'a> {
                     escape_string(path)
                 ));
             }
-            HandlerKind::Cron { expr } => {
-                self.push(&format!("on schedule(\"{}\") ", escape_string(expr)));
-            }
+            HandlerKind::Cron { expr } => match &h.schedule_const {
+                // #3875: a constant names the schedule; print the name, not the
+                // literal the resolution pass filled in.
+                Some(sc) => self.push(&format!("on schedule({}) ", sc.name.name)),
+                None => self.push(&format!("on schedule(\"{}\") ", escape_string(expr))),
+            },
             HandlerKind::Message => {
                 self.push("on message");
             }
@@ -3508,6 +3625,32 @@ fn store_kind_to_string(k: &StoreKind) -> String {
     }
 }
 
+/// #3975: a sum variant's source head, its annotations then its name (`@name("opened") Opened`).
+fn variant_head(v: &Variant) -> String {
+    let mut out = String::new();
+    for ann in &v.annotations {
+        out.push_str(&annotation_to_string(ann));
+        out.push(' ');
+    }
+    out.push_str(&v.name.name);
+    out
+}
+
+/// #3975: a variant's payload field, `@name("k") field: Type`.
+fn payload_field_text(p: &VariantField) -> String {
+    let mut out = String::new();
+    for ann in &p.annotations {
+        out.push_str(&annotation_to_string(ann));
+        out.push(' ');
+    }
+    out.push_str(&format!(
+        "{}: {}",
+        p.name.name,
+        type_ref_to_string(&p.type_ref)
+    ));
+    out
+}
+
 /// Render a storage annotation (v0.85; ADR 0111): `@name`, or `@name(arg, …)`
 /// where each argument is an optional `label: ` then the value expression.
 /// Render a storage annotation as a single source-syntax token: `@indexed(by:
@@ -3549,6 +3692,9 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         },
         StubRhs::Fails(_) => "fails".to_string(),
         StubRhs::Never(_) => "never".to_string(),
+        StubRhs::Rejected(refusal, _) => format!("rejected {}", refusal.name),
+        StubRhs::Faulted(_) => "faulted".to_string(),
+        StubRhs::Unreachable(_) => "unreachable".to_string(),
         StubRhs::ReturnsEach(outcomes, _) => {
             let items = outcomes
                 .iter()
@@ -3562,8 +3708,12 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         }
     };
     format!(
-        "stub {}.{}({}) {}",
-        pv.capability.name, pv.method.name, args, rhs
+        "stub {}.{}{}({}) {}",
+        pv.capability.name,
+        pv.method.name,
+        bynk_syntax::print::type_args_src(&pv.type_args),
+        args,
+        rhs
     )
 }
 
@@ -3645,6 +3795,28 @@ fn holds_comments(e: &Expr) -> bool {
         .any(holds_comments)
 }
 
+/// #4045: the text of a `uses` clause in any of its three forms: the whole
+/// commons, `uses lib.y as Y`, or the braced `uses lib.y { Status as YStatus, f }`.
+fn uses_text(u: &UsesDecl) -> String {
+    match (&u.alias, &u.selected) {
+        (Some(alias), _) => format!("uses {} as {}", u.target.joined(), alias.name),
+        (None, Some(selected)) if selected.is_empty() => {
+            format!("uses {} {{ }}", u.target.joined())
+        }
+        (None, Some(selected)) => {
+            let names: Vec<String> = selected
+                .iter()
+                .map(|i| match &i.alias {
+                    Some(a) => format!("{} as {}", i.name.name, a.name),
+                    None => i.name.name.clone(),
+                })
+                .collect();
+            format!("uses {} {{ {} }}", u.target.joined(), names.join(", "))
+        }
+        (None, None) => format!("uses {}", u.target.joined()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3656,6 +3828,20 @@ mod tests {
         let src = "commons m\n\ntype Pair[T: Eq] = {\n\tleft: T,\n}\n\nfn same[T: Eq + Ord, U](a: T, b: T, u: U) -> Bool {\n\ta == b\n}\n\nfn Pair.has(self, x: T) -> Bool where T: Eq, T: Ord {\n\tself.left == x\n}\n\nfn Pair.has2(self, x: T) -> Bool where T: Eq\n\trequires p: true\n{\n\tself.left == x\n}\n";
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(out, src);
+    }
+
+    /// #3975: wire-name annotations print where they were written, and the output is a fixed point.
+    #[test]
+    fn wire_name_annotations_round_trip() {
+        let src = "commons m\n\ntype Charge = {\n\tid: String,\n\t@name(\"amount_captured\") captured: Int,\n}\n\n--- An event.\n@discriminator(\"type\")\ntype Hook =\n\t| @name(\"charge.succeeded\") ChargeSucceeded(@name(\"d\") data: Charge)\n\t| Ping\n\ntype Action = enum { @name(\"opened\") Opened, Closed }\n\n@discriminator(\"t\")\nprivate type Other = enum { A, B }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+        // An enum with a multi-line body keeps the annotation before its tag.
+        let long = "commons m\n\ntype Action = enum {\n\t@name(\"opened\") Opened,\n\t// closed again\n\tClosed,\n}\n";
+        assert_eq!(
+            format_source(long, &FormatOptions::default()).unwrap(),
+            long
+        );
     }
 
     /// #2640: a `par` block prints one binding per line, indented, and the
@@ -3979,6 +4165,22 @@ mod tests {
         assert_eq!(fmt(&out), out);
     }
 
+    /// #4045: the three `uses` forms and a name qualified by one are written as
+    /// they were, and formatting is idempotent.
+    #[test]
+    fn uses_forms_and_qualified_names_round_trip() {
+        let src = "commons app.z\n\nuses lib.x\nuses lib.y as Y\nuses lib.money { Money, format as formatMoney }\n\nfn f(t: Y.Status, m: Money) -> String {\n\tY.describe(t)\n}\n\nfn g(s: lib.x.Status) -> String {\n\tlib.x.describe(s)\n}\n";
+        let out = fmt(src);
+        assert_eq!(out, src);
+        assert_eq!(fmt(&out), out);
+        // A braced list is laid out on one line, with its entries spaced.
+        let squeezed = fmt("commons app.z\n\nuses lib.money {Money,format as formatMoney}\n");
+        assert!(
+            squeezed.contains("uses lib.money { Money, format as formatMoney }"),
+            "{squeezed}"
+        );
+    }
+
     #[test]
     fn formats_minimal_commons() {
         let src = "commons fitness.units {}";
@@ -4286,6 +4488,23 @@ mod tests {
             "cell write not formatted: {out}"
         );
         assert_eq!(out, fmt(&out), "formatter not idempotent: {out}");
+    }
+
+    /// #3793: `replaces old` after a field's type, refinement and annotations, before a default.
+    #[test]
+    fn formats_a_field_replaces_clause() {
+        let src = "context shop {\ntype User = { displayName: String replaces name, age: Int where Positive replaces years = 18 }\nagent Counter {\nkey id: String\nstore count: Cell[Int] replaces total = 0\non call get() -> Effect[Int] {\ncount\n}\n}\n}";
+        let out = fmt(src);
+        assert!(out.contains("displayName: String replaces name"), "{out}");
+        assert!(
+            out.contains("age: Int where Positive replaces years = 18"),
+            "{out}"
+        );
+        assert!(
+            out.contains("store count: Cell[Int] replaces total = 0"),
+            "{out}"
+        );
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
 
     #[test]

@@ -1,7 +1,9 @@
 context svc
 
 service worker from queue("jobs") {
-  on message(message: String) -> Effect[Result[Int, String]] {
+
+  delivery { deadLetter: None }
+  on message(message: String) -> Effect[Result[Int, String]] by Producer {
     Ok(5)
   }
 }

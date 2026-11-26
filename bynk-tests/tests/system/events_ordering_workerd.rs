@@ -63,7 +63,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -169,18 +169,6 @@ service traceApi from http {
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves
-/// (Rust's CreateProcess refuses batch scripts directly — BatBadBut).
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 /// Is this run required to actually reach workerd?
@@ -448,20 +436,16 @@ fn per_publisher_fifo_on_workerd() {
         "expected workers/fifo-subscriber — context dasherisation changed?"
     );
 
-    // Two ports, offset from `workers_runtime_smoke.rs`'s single-port band
-    // (20000 + pid%10000) so the two tests cannot collide when run together.
-    // Two MORE ports for the V8 inspector: `wrangler dev` binds one whether
-    // or not `--inspector-port` is passed (default 9229), so two instances
+    // Two ports for the Workers, and two MORE for the V8 inspector:
+    // `wrangler dev` binds one whether or not `--inspector-port` is passed
+    // (default 9229), so two instances
     // spawned by this test collide with each other on every run unless both
     // are given distinct explicit ports — `bynk/src/dev.rs`'s multi-context
     // `serve_args` does exactly this for the same reason. Confirmed the hard
     // way: an un-pinned run hit `kj::Exception: …bind… Address already in
     // use; …127.0.0.1:9229` and stalled past the boot deadline.
-    let base = 30_000 + 4 * (std::process::id() % 4_000) as u16;
-    let pub_port = base;
-    let sub_port = base + 1;
-    let pub_inspector_port = base + 2;
-    let sub_inspector_port = base + 3;
+    let [pub_port, sub_port, pub_inspector_port, sub_inspector_port] =
+        wrangler::ports::free_ports();
 
     // Log to a file, not a pipe: a piped stdout/stderr nobody drains fills
     // its OS buffer and blocks the child's next write once enough of the
@@ -480,8 +464,8 @@ fn per_publisher_fifo_on_workerd() {
         let out_log = fs::File::create(log_path)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 // I2 (#1971): the publisher signs each delivery under the key
                 // for its edge to the subscriber, as under `bynk dev`.
                 .args(wrangler::local_edge_vars(&[(

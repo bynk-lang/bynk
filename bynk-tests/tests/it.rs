@@ -45,6 +45,8 @@ mod integration {
     mod agent_state_corpus;
     #[path = "agents_nodes.rs"]
     mod agents_nodes;
+    #[path = "binding_model_corpus.rs"]
+    mod binding_model_corpus;
     #[path = "by_on_agent.rs"]
     mod by_on_agent;
     #[path = "call_hierarchy_index.rs"]
@@ -63,10 +65,16 @@ mod integration {
     mod consumes_per_file;
     #[path = "contract_hash.rs"]
     mod contract_hash;
+    #[path = "contracts_lock.rs"]
+    mod contracts_lock;
+    #[path = "cors_origin_shapes.rs"]
+    mod cors_origin_shapes;
     #[path = "cross_context_nodes.rs"]
     mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
     mod debug_metadata;
+    #[path = "declaration_pipeline.rs"]
+    mod declaration_pipeline;
     #[path = "diagnose_project.rs"]
     mod diagnose_project;
     #[path = "diagnostic_hints.rs"]
@@ -79,6 +87,10 @@ mod integration {
     mod duration;
     #[path = "e2e.rs"]
     mod e2e;
+    #[path = "emit_pipeline_helpers.rs"]
+    mod emit_pipeline_helpers;
+    #[path = "emit_readme_example.rs"]
+    mod emit_readme_example;
     #[path = "eq_bound_migration.rs"]
     mod eq_bound_migration;
     #[path = "events_schema_registry_behaviour.rs"]
@@ -99,6 +111,10 @@ mod integration {
     mod fuzz_smoke;
     #[path = "host_globals_qualified.rs"]
     mod host_globals_qualified;
+    #[path = "ident_audit.rs"]
+    mod ident_audit;
+    #[path = "identity_verify_guard.rs"]
+    mod identity_verify_guard;
     #[path = "implementation_index.rs"]
     mod implementation_index;
     #[path = "import_closure.rs"]
@@ -121,6 +137,8 @@ mod integration {
     mod kernel_scalar_nodes;
     #[path = "key_bound_fixes.rs"]
     mod key_bound_fixes;
+    #[path = "lenient_option_decode.rs"]
+    mod lenient_option_decode;
     #[path = "locals_capture.rs"]
     mod locals_capture;
     #[path = "method_index.rs"]
@@ -131,10 +149,14 @@ mod integration {
     mod ord_bound_fixes;
     #[path = "platform_nodes.rs"]
     mod platform_nodes;
+    #[path = "platform_pipeline.rs"]
+    mod platform_pipeline;
     #[path = "provider_agent_cross_context_target.rs"]
     mod provider_agent_cross_context_target;
     #[path = "query_kernel_registry.rs"]
     mod query_kernel_registry;
+    #[path = "query_pipeline.rs"]
+    mod query_pipeline;
     #[path = "record_default_nodes.rs"]
     mod record_default_nodes;
     #[path = "recursive_codec_depth_agreement.rs"]
@@ -151,6 +173,8 @@ mod integration {
     mod reserved_builtin_type_name;
     #[path = "reserved_route_syntax.rs"]
     mod reserved_route_syntax;
+    #[path = "runtime_import_pipeline.rs"]
+    mod runtime_import_pipeline;
     #[path = "semantic_tokens_index.rs"]
     mod semantic_tokens_index;
     #[path = "snippets.rs"]
@@ -171,6 +195,8 @@ mod integration {
     mod suggestions;
     #[path = "suite_diagnostics_attributed.rs"]
     mod suite_diagnostics_attributed;
+    #[path = "suite_lowering_pipeline.rs"]
+    mod suite_lowering_pipeline;
     #[path = "test_calls_nodes.rs"]
     mod test_calls_nodes;
     #[path = "test_domain_nodes.rs"]
@@ -183,6 +209,10 @@ mod integration {
     mod unit_context_facts;
     #[path = "wire_shape_drift.rs"]
     mod wire_shape_drift;
+    #[path = "workers_compose.rs"]
+    mod workers_compose;
+    #[path = "workers_entry_pipeline.rs"]
+    mod workers_entry_pipeline;
     #[path = "write_output_reconciliation_behaviour.rs"]
     mod write_output_reconciliation_behaviour;
     #[path = "ws_open_key_target.rs"]
@@ -289,6 +319,10 @@ mod system {
     mod agent_state_schema_lock;
     #[path = "alias_service_workerd.rs"]
     mod alias_service_workerd;
+    #[path = "analyse_mode_corpus.rs"]
+    mod analyse_mode_corpus;
+    #[path = "analytics_mapping_lock.rs"]
+    mod analytics_mapping_lock;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
@@ -301,6 +335,8 @@ mod system {
     mod binding_scaffold;
     #[path = "binding_workerd.rs"]
     mod binding_workerd;
+    #[path = "body_cap_hint.rs"]
+    mod body_cap_hint;
     #[path = "callee_faulted_workerd.rs"]
     mod callee_faulted_workerd;
     #[path = "case_filter.rs"]
@@ -313,6 +349,8 @@ mod system {
     mod check_warning_reporting_behaviour;
     #[path = "cli_rooting.rs"]
     mod cli_rooting;
+    #[path = "collection_rename_workerd.rs"]
+    mod collection_rename_workerd;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
     #[path = "compatibility_flags_cli.rs"]
@@ -323,12 +361,16 @@ mod system {
     mod compile_sources_stdin;
     #[path = "compile_strips_suites.rs"]
     mod compile_strips_suites;
+    #[path = "consumed_construction_workers.rs"]
+    mod consumed_construction_workers;
     #[path = "container_workerd.rs"]
     mod container_workerd;
     #[path = "contract_behaviour.rs"]
     mod contract_behaviour;
     #[path = "coverage_behaviour.rs"]
     mod coverage_behaviour;
+    #[path = "cron_failed_workerd.rs"]
+    mod cron_failed_workerd;
     #[path = "cross_context_caller.rs"]
     mod cross_context_caller;
     #[path = "cross_context_conformance.rs"]
@@ -337,6 +379,8 @@ mod system {
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]
     mod debug_inspect;
+    #[path = "deploy_email_environment.rs"]
+    mod deploy_email_environment;
     #[path = "deploy_worker_groups.rs"]
     mod deploy_worker_groups;
     #[path = "detach_workerd.rs"]
@@ -373,22 +417,34 @@ mod system {
     mod examples;
     #[path = "expect_is_narrowing_behaviour.rs"]
     mod expect_is_narrowing_behaviour;
+    #[path = "expect_was_behaviour.rs"]
+    mod expect_was_behaviour;
     #[path = "failure_explanation_behaviour.rs"]
     mod failure_explanation_behaviour;
     #[path = "fetch_headers.rs"]
     mod fetch_headers;
+    #[path = "field_rename_behaviour.rs"]
+    mod field_rename_behaviour;
+    #[path = "field_rename_lock.rs"]
+    mod field_rename_lock;
+    #[path = "field_rename_workerd.rs"]
+    mod field_rename_workerd;
     #[path = "float_codec_behaviour.rs"]
     mod float_codec_behaviour;
     #[path = "header_question_lint.rs"]
     mod header_question_lint;
     #[path = "history_behaviour.rs"]
     mod history_behaviour;
+    #[path = "http_authenticated_cache.rs"]
+    mod http_authenticated_cache;
     #[path = "http_caching_behaviour.rs"]
     mod http_caching_behaviour;
     #[path = "http_client.rs"]
     mod http_client;
     #[path = "http_edge_cache_behaviour.rs"]
     mod http_edge_cache_behaviour;
+    #[path = "http_html_security.rs"]
+    mod http_html_security;
     #[path = "http_limits_behaviour.rs"]
     mod http_limits_behaviour;
     #[path = "http_method_behaviour.rs"]
@@ -397,12 +453,16 @@ mod system {
     mod http_option_body_behaviour;
     #[path = "http_plain_json_behaviour.rs"]
     mod http_plain_json_behaviour;
+    #[path = "http_problem_details.rs"]
+    mod http_problem_details;
     #[path = "http_raw_body_behaviour.rs"]
     mod http_raw_body_behaviour;
     #[path = "http_raw_caching_behaviour.rs"]
     mod http_raw_caching_behaviour;
     #[path = "http_recursive_body_behaviour.rs"]
     mod http_recursive_body_behaviour;
+    #[path = "http_response_headers.rs"]
+    mod http_response_headers;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
@@ -433,6 +493,8 @@ mod system {
     mod observation_behaviour;
     #[path = "oidc_auth.rs"]
     mod oidc_auth;
+    #[path = "ord_order_lock.rs"]
+    mod ord_order_lock;
     #[path = "package_dependencies.rs"]
     mod package_dependencies;
     #[path = "package_exports.rs"]
@@ -447,6 +509,10 @@ mod system {
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]
     mod question_in_case_behaviour;
+    #[path = "queue_delivery_workerd.rs"]
+    mod queue_delivery_workerd;
+    #[path = "queue_undecodable_workerd.rs"]
+    mod queue_undecodable_workerd;
     #[path = "recovery_never_emits.rs"]
     mod recovery_never_emits;
     #[path = "recursive_boundary_behaviour.rs"]
@@ -473,6 +539,8 @@ mod system {
     mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
+    #[path = "sse_browser.rs"]
+    mod sse_browser;
     #[path = "stale_workers_output_behaviour.rs"]
     mod stale_workers_output_behaviour;
     #[path = "store_behaviour.rs"]
@@ -491,6 +559,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "trace_propagation_workerd.rs"]
+    mod trace_propagation_workerd;
     #[path = "trace_requests_workerd.rs"]
     mod trace_requests_workerd;
     #[path = "tsc_failure_diagnostic.rs"]
@@ -517,6 +587,8 @@ mod system {
     mod workers_runtime_smoke;
     #[path = "wrangler_prewarm.rs"]
     mod wrangler_prewarm;
+    #[path = "ws_bearer_handshake.rs"]
+    mod ws_bearer_handshake;
     #[path = "ws_behaviour.rs"]
     mod ws_behaviour;
 }

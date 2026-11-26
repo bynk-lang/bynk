@@ -147,6 +147,7 @@ fn hover_at(
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((text, offset)),
         path: uri.to_file_path().ok().as_deref(),
@@ -265,14 +266,18 @@ fn a_consumes_target_hovers_its_module_doc() {
     assert!(hover.contains("The shop: carts and payments."), "{hover}");
 }
 
-/// A unit with no module doc still hovers as its kind and name.
+/// A unit with no module doc still hovers as its kind and name, and (#4183) the
+/// file it is declared in.
 #[test]
 fn an_undocumented_unit_hovers_as_its_kind_and_name() {
     let (r, root) = analysed("undocumented");
     let (_, text) = file(&r, "orders.bynk");
     let offset = at(text, "context orders", "orders");
     let hover = hover_at(&r, &root, "orders.bynk", offset, true).expect("hover on orders");
-    assert_eq!(hover, "```bynk\ncontext orders\n```\n");
+    assert_eq!(
+        hover,
+        "```bynk\ncontext orders\n```\n\nDeclared in `orders.bynk`.\n"
+    );
 }
 
 /// The documentation page for either file of `context shop` is the whole

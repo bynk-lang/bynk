@@ -12,7 +12,7 @@ agent Ledger {
     match cached {
       Some(v) => v,
       None => {
-        let _ <- Idempotency.remember[String]("same-key", "ledger-value", 1.hours)
+        let _ <- Idempotency.remember[String]("same-key", "ledger-value", 1.hour)
         "ledger-value"
       }
     }
@@ -20,12 +20,12 @@ agent Ledger {
 }
 
 service alpha {
-  on call() -> Effect[String] given Idempotency {
+  on call() -> Effect[String] by Caller given Idempotency {
     let cached <- Idempotency.dedup[String]("same-key")
     match cached {
       Some(v) => v,
       None => {
-        let _ <- Idempotency.remember[String]("same-key", "alpha-value", 1.hours)
+        let _ <- Idempotency.remember[String]("same-key", "alpha-value", 1.hour)
         "alpha-value"
       }
     }
@@ -33,12 +33,12 @@ service alpha {
 }
 
 service beta {
-  on call() -> Effect[String] given Idempotency {
+  on call() -> Effect[String] by Caller given Idempotency {
     let cached <- Idempotency.dedup[String]("same-key")
     match cached {
       Some(v) => v,
       None => {
-        let _ <- Idempotency.remember[String]("same-key", "beta-value", 1.hours)
+        let _ <- Idempotency.remember[String]("same-key", "beta-value", 1.hour)
         "beta-value"
       }
     }

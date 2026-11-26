@@ -1,0 +1,14 @@
+context shop.cart
+
+consumes bynk.cloudflare { Analytics }
+
+capability Signups = Analytics
+
+type Signup = { @index plan: String, country: String, channel: String }
+
+service api from http {
+    on POST("/signup") () -> Effect[HttpResult[String]] by Visitor given Signups {
+        let _ <- Signups.writeValue(Signup { plan: "a", country: "GB", channel: "web" })
+        Created("counted")
+    }
+}

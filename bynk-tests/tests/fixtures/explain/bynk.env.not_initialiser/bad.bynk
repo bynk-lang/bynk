@@ -1,0 +1,6 @@
+context shop.config
+
+const Origin: String = env(APP_ORIGIN, "https://app.example")
+const Origins: List[String] = [env(APP_ORIGIN, "https://app.example")]
+
+fn origin() -> String { env(APP_ORIGIN) }

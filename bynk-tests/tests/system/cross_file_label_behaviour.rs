@@ -18,7 +18,8 @@ impl Drop for Scratch {
     }
 }
 
-const SERVICE: &str = "service api {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n";
+const SERVICE: &str =
+    "service api {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n";
 
 fn duplicate_service_project(tag: &str) -> Scratch {
     let dir = std::env::temp_dir().join(format!(
@@ -122,11 +123,11 @@ fn compile_renders_a_sibling_files_label_in_that_file() {
 }
 
 /// #1956: a label into a first-party unit renders in a snippet of that unit's
-/// own source. `headers` is declared on `Request` in `bynk-std`'s `bynk.bynk`;
+/// own source. `url` is declared on `Request` in `bynk-std`'s `bynk.bynk`;
 /// its span carried no file identity, so it counted as the error's own file and
 /// was drawn at the same byte offsets in the user's — underlining unrelated
 /// code whenever the file was long enough to contain them.
-fn missing_headers_project(tag: &str) -> Scratch {
+fn missing_url_project(tag: &str) -> Scratch {
     let dir = std::env::temp_dir().join(format!(
         "bynk_firstparty_label_{tag}_{}",
         std::process::id()
@@ -138,17 +139,15 @@ fn missing_headers_project(tag: &str) -> Scratch {
         "[project]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    let padding: String = (1..=150)
+    let padding: String = (1..=300)
         .map(|i| format!("// padding line {i}\n"))
         .collect();
     let web = format!(
-        "context app\n\nuses app.util\nconsumes bynk {{ Fetch }}\n\n{padding}\
+        "context app\n\nuses app.util\nconsumes bynk {{ Fetch, Request, Method }}\n\n{padding}\
 service api from http {{
   on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
     let res <- Fetch.send(Request {{
-      method: Get, url: \"https://example.com\",
-      contentType: None, authorization: None,
-      body: None,
+      method: Get,
     }})
     Ok(greeting())
   }}
@@ -157,7 +156,7 @@ service api from http {{
     );
     // The issue's shape: the declaration's offset in `bynk.bynk` lies inside
     // this file, so drawing it here would underline real (unrelated) text.
-    let decl = STDLIB.find("headers: Map").unwrap();
+    let decl = STDLIB.find("\n\t\turl: String,").unwrap() + 3;
     assert!(
         decl < web.len(),
         "web.bynk must be long enough to contain the stray offset"
@@ -174,7 +173,7 @@ service api from http {{
 const STDLIB: &str = include_str!("../../../bynk-std/lib/core/bynk.bynk");
 
 fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
-    let project = missing_headers_project(subcommand);
+    let project = missing_url_project(subcommand);
     let stderr = run(subcommand, &project);
     let report = stderr
         .split("[bynk.resolve.missing_field]")
@@ -186,7 +185,7 @@ fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
     let (primary, primary_body) = parts[0];
     let (stdlib, stdlib_body) = parts[1];
     assert!(
-        primary.ends_with("src/app/web.bynk:158:27"),
+        primary.ends_with("src/app/web.bynk:308:27"),
         "got:\n{report}"
     );
     assert!(
@@ -195,15 +194,15 @@ fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
     );
     // Line and column of the declaration in `bynk.bynk`, counted in chars: the
     // header must agree with the snippet even after the file's non-ASCII text.
-    let decl = STDLIB.find("headers: Map").unwrap();
+    let decl = STDLIB.find("\n\t\turl: String,").unwrap() + 3;
     let line = STDLIB[..decl].matches('\n').count() + 1;
     let col = STDLIB[..decl].rsplit('\n').next().unwrap().chars().count() + 1;
     assert_eq!(stdlib, format!("bynk.bynk:{line}:{col}"), "got:\n{report}");
     assert!(
         stdlib_body.contains(&format!(" {line} │ "))
-            && stdlib_body.contains("headers: Map[String, String],")
+            && stdlib_body.contains("url: String,")
             && stdlib_body.contains("field declared here"),
-        "the label must be drawn on bynk.bynk's `headers` line, got:\n{report}"
+        "the label must be drawn on bynk.bynk's `url` line, got:\n{report}"
     );
 }
 

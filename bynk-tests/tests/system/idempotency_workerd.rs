@@ -36,7 +36,7 @@ consumes bynk { Idempotency, Claim }
 
 service api from http {
 \ton GET(\"/claim/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-\t\tlet Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+\t\tlet Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok(\"duplicate\") }
 \t\tOk(\"processed\")
 \t}
 
@@ -45,7 +45,7 @@ service api from http {
 \t\tmatch seen {
 \t\t\tSome(v) => Ok(v),
 \t\t\tNone => {
-\t\t\t\tlet _ <- Idempotency.remember[String](id, \"remembered\", 1.hours)
+\t\t\t\tlet _ <- Idempotency.remember[String](id, \"remembered\", 1.hour)
 \t\t\t\tOk(\"fresh\")
 \t\t\t},
 \t\t}
@@ -96,8 +96,7 @@ fn get(port: u16, path: &str) -> Result<(u16, String), String> {
 /// `wrangler <args>` from `dir`, with stdin closed; its combined output, or `Err`
 /// when it failed.
 fn wrangler_run(dir: &Path, args: &[&str]) -> Result<String, String> {
-    let out = tools::base_command("npx")
-        .args(["-y", wrangler::SPEC])
+    let out = wrangler::npx()
         .args(args)
         .current_dir(dir)
         .stdin(Stdio::null())
@@ -123,10 +122,8 @@ fn serve(dir: &Path, tmp: &Path, log: &str) -> Option<(wrangler::Wrangler, u16)>
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
+        wrangler::npx()
             .args([
-                "-y",
-                wrangler::SPEC,
                 "dev",
                 "--port",
                 &port.to_string(),

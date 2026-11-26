@@ -6,10 +6,11 @@
 //! imports removed) and compares it with the names the module actually imports. It changes no
 //! output.
 //!
-//! * **Tree == imported**, for every module the emitter or the driver builds bar the driver's
-//!   `tests/*.test.ts` modules (predicted until 1B.2) and the runtime's own files. A name the
+//! * **Tree == imported**, for every module the emitter or the driver builds (the generated test
+//!   modules `tests/*.test.ts` since 1B.5e) bar the runtime's own files. A name the
 //!   tree uses and the module does not import is an under-import ([`KNOWN_UNDER_IMPORTS`], empty
-//!   since #3807); a name imported and not used is an over-import ([`NOT_EQUAL_OK`], empty).
+//!   since #3807); a name imported and not used is an over-import ([`NOT_EQUAL_OK`], and
+//!   [`is_kept_participant_namespace`] for a test module's participant namespaces).
 //!   Each over-import is classed by whether it still appears as a whole word in the printed
 //!   body: a name that does is used by text the tree cannot see (a `Verbatim` or `Raw`
 //!   statement without `raw_using`).
@@ -37,7 +38,7 @@ mod par;
 const KNOWN_UNDER_IMPORTS: &[(&str, &str, &str, &str)] = &[];
 
 /// `(module file, name, reason)`: a name an emitter-built module imports though its tree does not
-/// use it. Empty: the tree is the import set everywhere outside the driver's test modules.
+/// use it. Empty: the tree is the import set everywhere.
 const NOT_EQUAL_OK: &[(&str, &str, &str)] = &[];
 
 /// `(name, reason)`: a runtime export a derived module may spell as code without importing it,
@@ -50,6 +51,10 @@ const UNIMPORTED_RUNTIME_OK: &[(&str, &str)] = &[
     (
         "signature",
         "a parameter name in a binding module's signature, not the runtime's `signature`",
+    ),
+    (
+        "then",
+        "a method key on `Ordering`'s companion (`bynk.ordering`), not the runtime's `then`",
     ),
 ];
 
@@ -371,15 +376,13 @@ fn the_tree_derived_imports_are_the_imported_ones() {
         known_gone.join("\n"),
     );
 
-    // 1A.36b-2: for every module the emitter builds, the tree set is the imported set. Nothing
-    // is predicted outside the driver's `tests/*.test.ts` modules (1B.2) and the runtime's own
-    // files, so no such module imports a name its tree does not use, runtime or not. A module
-    // that does is listed in [`NOT_EQUAL_OK`] with its reason; none is known.
+    // 1A.36b-2, 1B.5e: for every module the emitter builds, the tree set is the imported set.
+    // Nothing is predicted outside the runtime's own files, so no such module imports a name its
+    // tree does not use, runtime or not. A module that does is listed in [`NOT_EQUAL_OK`] with
+    // its reason (a test module's participant namespace, [`is_kept_participant_namespace`]).
     let over_imported: Vec<String> = found
         .iter()
-        .filter(|((_, _, m), _)| {
-            !predicts_its_runtime_imports(m) && !m.starts_with("__bynk_runtime/")
-        })
+        .filter(|((_, _, m), _)| !m.starts_with("__bynk_runtime/"))
         .flat_map(|((s, t, m), sh)| {
             sh.plainly_unused
                 .iter()
@@ -388,6 +391,7 @@ fn the_tree_derived_imports_are_the_imported_ones() {
                     !NOT_EQUAL_OK
                         .iter()
                         .any(|(module, name, _)| *module == m.as_str() && *name == n.as_str())
+                        && !is_kept_participant_namespace(m, n)
                 })
                 .map(move |n| format!("  {s} [{t}] {m}: {n}"))
         })
@@ -401,12 +405,11 @@ fn the_tree_derived_imports_are_the_imported_ones() {
     // 1A.36b-2: the under-import net for derived modules. The tree derives the header, so a
     // runtime name that only text spells (`Verbatim`, a `Raw` without `raw_using`) would go
     // unimported and nothing else reports it: no emitter-built module (every module bar the
-    // driver's test modules and the runtime's own files) spells a runtime export it does not
-    // import. It runs over the Worker `index.ts` and `compose.ts` too, before and after their
+    // runtime's own files) spells a runtime export it does not import. It runs over the Worker `index.ts` and `compose.ts` too, before and after their
     // headers are derived.
     let unimported: Vec<String> = found
         .iter()
-        .filter(|((_, _, m), _)| !is_driver_test_module(m) && !m.starts_with("__bynk_runtime/"))
+        .filter(|((_, _, m), _)| !m.starts_with("__bynk_runtime/"))
         .flat_map(|((s, t, m), sh)| {
             sh.unimported_runtime
                 .iter()
@@ -428,17 +431,12 @@ fn the_tree_derived_imports_are_the_imported_ones() {
     }
 }
 
-/// A module the driver generates for `test` and `integration test` units
-/// (`tests/<unit>.test.ts`): opaque test text, whose imports stay predicted until 1B.2.
-fn is_driver_test_module(module: &str) -> bool {
-    module.starts_with("tests/") && module.ends_with(".test.ts")
-}
-
-/// Whether a module's runtime import is still predicted rather than derived: the driver's test
-/// modules only (1B.2). Every module the emitter builds, the Worker `index.ts` and `compose.ts`
-/// included since 1A.36b-2, takes its runtime import from its tree.
-fn predicts_its_runtime_imports(module: &str) -> bool {
-    is_driver_test_module(module)
+/// A participant namespace a generated test module (`tests/<unit>.test.ts`) imports though its
+/// tree does not use it (1B.5e, #4054 Decision E, ruled 22 November 2026): the import is kept
+/// until it is shown that dropping it cannot change evaluation order, because a participant
+/// module may run a side effect when it loads. 88 such imports occur in the corpus.
+fn is_kept_participant_namespace(module: &str, name: &str) -> bool {
+    module.starts_with("tests/") && module.ends_with(".test.ts") && name.starts_with("__ns_")
 }
 
 /// The over-import findings, grouped by name.
@@ -449,16 +447,12 @@ fn report(modules: usize, found: &BTreeMap<Key, Shadow>) -> String {
         .collect();
     let mut plain: BTreeMap<&str, usize> = BTreeMap::new();
     let mut text: BTreeMap<&str, usize> = BTreeMap::new();
-    let mut text_outside_tests: BTreeMap<&str, usize> = BTreeMap::new();
-    for ((_, _, module), s) in &over {
+    for (_, s) in &over {
         for n in &s.plainly_unused {
             *plain.entry(n).or_default() += 1;
         }
         for n in &s.in_text {
             *text.entry(n).or_default() += 1;
-            if !is_driver_test_module(module) {
-                *text_outside_tests.entry(n).or_default() += 1;
-            }
         }
     }
     let mut out = String::new();
@@ -479,14 +473,6 @@ fn report(modules: usize, found: &BTreeMap<Key, Shadow>) -> String {
         "imported, unused by the tree, spelled in the body (modules):"
     );
     for (n, c) in &text {
-        let _ = writeln!(out, "  {n}: {c}");
-    }
-    let _ = writeln!(
-        out,
-        "of which outside the driver's tests/*.test.ts modules ({} occurrences):",
-        text_outside_tests.values().sum::<usize>(),
-    );
-    for (n, c) in &text_outside_tests {
         let _ = writeln!(out, "  {n}: {c}");
     }
     let _ = writeln!(out, "per module:");

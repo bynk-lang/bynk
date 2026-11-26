@@ -1,5 +1,5 @@
 adapter bynk.cloudflare {
-	consumes bynk { Fetch }
+	consumes bynk { Fetch, Secret }
 	exports capability {
 		Kv,
 		Service,
@@ -23,6 +23,8 @@ adapter bynk.cloudflare {
 		AnalyticsSql,
 	}
 	exports transparent {
+		KvTtl,
+		KvCacheTtl,
 		KvExpiration,
 		KvPut,
 		KvGet,
@@ -34,10 +36,17 @@ adapter bynk.cloudflare {
 		R2Put,
 		R2Condition,
 		R2Listing,
+		R2List,
+		R2Range,
+		R2GetIf,
+		R2Partial,
+		R2Read,
 		R2Body,
 		R2Upload,
 		R2UploadOptions,
 		R2Part,
+		QueueDelivery,
+		QueueDelay,
 		QueueSend,
 		RequestCf,
 		DataPoint,
@@ -60,6 +69,7 @@ adapter bynk.cloudflare {
 		AnalyticsSqlStatistics,
 		AnalyticsSqlResult,
 		AnalyticsSqlError,
+		AnalyticsReadError,
 		ChatRole,
 		ChatMessage,
 		GenerateRequest,
@@ -69,8 +79,10 @@ adapter bynk.cloudflare {
 		EmailMessage,
 		EmailError,
 		InboundAttachment,
+		EmailHeader,
 		InboundEmail,
 		EmailReply,
+		EmailActions,
 		EmailVerdict,
 		DmarcVerdict,
 		SenderIdentity,
@@ -104,14 +116,31 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A KV expiry span: a `Duration` of at least 60 seconds, the shortest the
+	platform accepts. A literal or constant such as `30.days` is checked when
+	the program compiles (`30.seconds` is a compile error); a computed span goes
+	through `KvTtl.of(d)`, which gives a `ValidationError` when it is too short.
+	Whole seconds are taken, rounding towards zero, as `Duration.toSeconds` does.
+	---
+	type KvTtl = Duration where AtLeast(60.seconds)
+
+	---
+	How long a `Kv.getWith` read may be served from the edge cache: a `Duration`
+	of at least 30 seconds, the shortest the platform accepts. Checked as
+	`KvTtl` is.
+	---
+	type KvCacheTtl = Duration where AtLeast(30.seconds)
+
+	---
 	When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
-	duration (a part second rounds up), or `At` an instant. Either must be at
-	least 60 seconds away. KV has further expiry forms, so a `match` over this
-	type needs a wildcard.
+	`KvTtl` (whole seconds, rounding towards zero), or `At` an instant. An
+	`At` must be at least 60 seconds away, which is checked when the write is
+	made. KV has further expiry forms, so a `match` over this type needs a
+	wildcard.
 	---
 	type KvExpiration =
 		| Never
-		| After(ttl: Duration)
+		| After(ttl: KvTtl)
 		| At(instant: Instant)
 
 	---
@@ -127,11 +156,11 @@ adapter bynk.cloudflare {
 
 	---
 	The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
-	served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
-	platform's default of 60, and is the default.
+	served from Cloudflare's edge cache (a `KvCacheTtl`, at least 30 seconds);
+	`None` keeps the platform's default of 60, and is the default.
 	---
 	type KvGet = {
-		cacheTtl: Option[Duration] = None,
+		cacheTtl: Option[KvCacheTtl] = None,
 	}
 
 	---
@@ -183,20 +212,28 @@ adapter bynk.cloudflare {
 	  `cacheTtl`; `putWith` writes one with an expiry and metadata.
 	- `getBytes` and `putBytes` read and write binary values.
 	- `listPage` reads one page of keys, with each key's expiry and metadata.
+	- `getValue[T]` and `putValue[T]` read and write any `Codable` value, encoding
+	  and decoding at the call site: `putValue(key, value, options)` stores
+	  `Json.encode(value)`, so `Json.decode` of a `get` result reads it, and
+	  `getValue[T](key)` is `None` for a missing key. A stored value that does
+	  not decode as `T` faults, naming the capability, the operation, `T` and
+	  the path, never the value. Change `T` additively, or version the key
+	  prefix, while values are stored under the old shape.
 
 	Text and binary values share the namespace, as on the platform: `getBytes`
 	of a text value gives its UTF-8 bytes, and reading a binary value as text
 	decodes it as UTF-8, replacing what is not. Keep each key to one kind.
 
-	A key over 512 bytes, metadata over 1024 bytes, an expiry under 60 seconds
-	away, a `cacheTtl` under 30 seconds, or a `limit` outside 1 to 1000 faults
-	the new operations before the platform is called; a value over 25 MiB
-	faults with the platform's error.
+	A key over 512 bytes, metadata over 1024 bytes, a `KvExpiration.At` under 60
+	seconds away, or a `limit` outside 1 to 1000 faults the new operations
+	before the platform is called; a value over 25 MiB (the encoded text, for
+	`putValue`) faults with the platform's error. A TTL under 60 seconds, or a `cacheTtl` under 30, is
+	never reached: `KvTtl` and `KvCacheTtl` refuse it first.
 	---
 	capability Kv {
 		fn get(key: String) -> Effect[Option[String]]
 		fn put(key: String, value: String) -> Effect[()]
-		fn putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]
+		fn putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String]) -> Effect[List[String]]
 		fn getWith(key: String, options: KvGet) -> Effect[Option[KvEntry]]
@@ -204,6 +241,8 @@ adapter bynk.cloudflare {
 		fn getBytes(key: String) -> Effect[Option[Bytes]]
 		fn putBytes(key: String, value: Bytes, options: KvPut) -> Effect[()]
 		fn listPage(options: KvList) -> Effect[KvListing]
+		fn getValue[T: Codable](key: String) -> Effect[Option[T]]
+		fn putValue[T: Codable](key: String, value: T, options: KvPut) -> Effect[()]
 	}
 
 	---
@@ -275,13 +314,79 @@ adapter bynk.cloudflare {
 	}
 
 	---
-	One page of an `R2.list`: the objects it holds, and the cursor of the next
-	page, `None` on the last.
+	One page of an `R2.list` or `R2.listWith`: the objects it holds, and the
+	cursor of the next page, `None` on the last. `prefixes` are the "folders"
+	of a delimited listing (see `R2List`): empty unless a delimiter was given.
 	---
 	type R2Listing = {
 		keys: List[R2Object],
 		cursor: Option[String],
+		prefixes: List[String],
 	}
+
+	---
+	The options of an `R2.listWith` page: the `prefix` to list under, the
+	`cursor` of the previous page, and a `delimiter`. With a delimiter, a key
+	that holds it after the prefix is not listed: the key up to and including
+	the delimiter appears once in the listing's `prefixes` instead, so
+	listing under `photos/` with delimiter `/` gives the immediate children
+	of that path. `R2.list(prefix, cursor)` is the short form with no
+	delimiter. Leave a field out for `None`.
+	---
+	type R2List = {
+		prefix: Option[String] = None,
+		cursor: Option[String] = None,
+		delimiter: Option[String] = None,
+	}
+
+	---
+	The part of an object an `R2.getRange` reads. `Span(offset, length)` is
+	`length` bytes from `offset` (to the end of the object when `length` is
+	`None`); `Suffix(length)` is the last `length` bytes. A range R2 cannot
+	satisfy (one that starts at or past the end of the object) is not clamped:
+	R2 refuses it, and the read faults.
+	---
+	type R2Range =
+		| Span(offset: Int, length: Option[Int])
+		| Suffix(length: Int)
+
+	---
+	The condition of an `R2.getStreamIf` read, the read-side counterpart of
+	`R2Condition`. `Unconditional` always reads; `IfEtagMatches(etag)` reads only
+	when the object's etag is `etag`; `IfEtagDiffers(etag)` reads only when it
+	is not (revalidating a cached copy). R2 has further conditions, so a
+	`match` over this type needs a wildcard.
+	---
+	type R2GetIf =
+		| Unconditional
+		| IfEtagMatches(etag: String)
+		| IfEtagDiffers(etag: String)
+
+	---
+	A byte range of an object, as `R2.getRange` reads it: the object's
+	metadata (its whole `size` included), the `offset` and `length` of the bytes
+	the body holds, and the body as a stream, read once as `R2Body`'s is. An
+	HTTP `206` response's `Content-Range` is
+	`bytes <offset>-<offset + length - 1>/<object.size>`.
+	---
+	type R2Partial = {
+		object: R2Object,
+		offset: Int,
+		length: Int,
+		body: Stream[Bytes],
+	}
+
+	---
+	The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
+	when the key holds none, and `NotModified` with the object's metadata when
+	the condition did not hold. For `IfEtagDiffers` that is a cache hit
+	(HTTP `304`); a failed `IfEtagMatches` is HTTP `412 Precondition Failed`,
+	which the name fits less well.
+	---
+	type R2Read =
+		| Present(body: R2Body)
+		| Missing
+		| NotModified(object: R2Object)
 
 	---
 	An object read by `R2.getStream`: its metadata, and its body as a stream
@@ -324,12 +429,38 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	What Cloudflare knows about the delivery of a message to a queue consumer,
+	as an `on message` handler's optional second parameter. `attempts` counts
+	the times the consumer has been given the message, starting at 1, so a
+	handler can back off or notice a message that keeps failing. `sentAt` is
+	when the message was sent, so a message that was sent with a delay waited
+	at least that long. Neither is a deduplication key: delivery is at least
+	once, and only a key the producer writes into the message deduplicates.
+	---
+	type QueueDelivery = {
+		attempts: Int,
+		sentAt: Instant,
+	}
+
+	---
+	How long a `Queue` send may hold a message back: a `Duration` from 0
+	seconds to 24 hours, the platform's `delaySeconds` range. A literal or
+	constant such as `30.seconds` is checked when the program compiles
+	(`2.days` is a compile error); a computed span goes through
+	`QueueDelay.of(d)`, which gives a `ValidationError` when it is out of
+	range. Whole seconds are sent, and a part second rounds up, so a message
+	is never delivered early.
+	---
+	type QueueDelay = Duration where InRange(0.seconds, 24.hours)
+
+	---
 	The options of a `Queue.sendWith`. `delay` holds the message back before
-	it can be delivered: whole seconds (a part second rounds up), at most 12
-	hours; `None`, the default, delivers as soon as the queue can.
+	it can be delivered, by a `QueueDelay` (whole seconds, a part second
+	rounding up, at most 24 hours); `None`, the default, delivers as soon as the
+	queue can.
 	---
 	type QueueSend = {
-		delay: Option[Duration] = None,
+		delay: Option[QueueDelay] = None,
 	}
 
 	---
@@ -496,25 +627,54 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	One header occurrence of an `InboundEmail`: its lower-case `name` and its
+	decoded `value`.
+	---
+	type EmailHeader = {
+		name: String,
+		value: String,
+	}
+
+	---
 	One email delivered to a `from email(...)` service's `on message` handler.
 	`from` is the **envelope** sender, a claim: anyone can write any address, so
 	trust it only when the `Sender` actor's `dmarc` is `DmarcPass`. `to` is the
 	envelope recipient the service was routed by. `headers` holds the message's
-	headers by lower-case name. `text`, `html` and `attachments` come from the
-	parsed MIME body (`None` or empty when the message has no such part); a test
-	builds them directly. `size` is the raw message in bytes. Every field after
-	`to` has a default, so a test writes only what it cares about.
+	headers by lower-case name, the first occurrence of each; `headerList` holds
+	every occurrence, in the order they appear. `inReplyTo` and `references` are
+	the message ids the sender says this message answers, as `messageId` is
+	written (`<id@host>`), `references` in the message's order; `replyTo` and `cc`
+	are bare addresses, display names dropped; and `date` is the sender's own
+	`Date` header, `None` when it is missing or cannot be read (a date has whole
+	seconds, so a `system` case gets its `date` back to the second). All of these are
+	the sender's claims, as `from` is: `date` is not when the message arrived.
+	`text`, `html` and `attachments` come from the parsed MIME body (`None` or
+	empty when the message has no such part); a test builds them directly. `size`
+	is the raw message in bytes. `subaddress` is the
+	text after the first `+` of the envelope recipient's local part (RFC 5233, as
+	Email Routing defines it), so mail to `support+1234@shop.example` reaches the
+	service claiming `support@shop.example` with `subaddress = Some("1234")`; it
+	is `None` without a `+`. `to` keeps the full recipient. A case at the `system`
+	tier posts `to` through the Worker's entry, which reads the tag from it. Every
+	field after `to` has a default, so a test writes only what it cares about.
 	---
 	type InboundEmail = {
 		from: String,
 		to: String,
 		subject: String = "",
 		messageId: String = "",
+		inReplyTo: Option[String] = None,
+		references: List[String] = [],
+		replyTo: List[String] = [],
+		cc: List[String] = [],
+		date: Option[Instant] = None,
 		headers: Map[String, String] = Map.empty(),
+		headerList: List[EmailHeader] = [],
 		text: Option[String] = None,
 		html: Option[String] = None,
 		attachments: List[InboundAttachment] = [],
 		size: Int = 0,
+		subaddress: Option[String] = None,
 	}
 
 	---
@@ -531,18 +691,42 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	Everything a `Route` verdict does with one message. `reply` answers the
+	sender, and is applied first. Each `forward` destination, which must be a
+	verified destination address in the account, then gets the message, de-duplicated
+	without regard to case; at most 20 are allowed, and more is a handler fault.
+	`tag` is added to each forward as headers: a name starts with `X-` and holds only
+	letters, digits and `-`, and a value has no line break (a literal map that breaks
+	this is `bynk.email.bad_tag`, and a bad entry built at run time is dropped, with
+	its name logged and never written). Tags apply to forwards only, since a reply's
+	headers are the runtime's.
+	---
+	type EmailActions = {
+		forward: List[String] = [],
+		reply: Option[EmailReply] = None,
+		tag: Map[String, String] = Map.empty(),
+	}
+
+	---
 	What a `from email` handler decides about a message, returned as
 	`Effect[EmailVerdict]` (the agency rule of ADR 0078, as `QueueResult` is).
 	`Accept` handles it and nothing else happens; `Reject(reason)` refuses it
 	permanently with an SMTP rejection carrying `reason`; `Forward(to)` passes it
 	to one destination, which must be a verified destination address in the
-	account; `Reply(message)` answers the sender. One decision per message.
+	account; `Reply(message)` answers the sender. `Route(actions)` does any
+	combination of these, `Forward(to)` and `Reply(m)` being shorthands for a
+	`Route` with only that action; a `Route` with nothing to do behaves as `Accept`.
+	A `Route` is applied reply first, then each forward; a refusal is logged and
+	the rest still run, the message is rejected (with the reason of the first
+	refusal) only when every action was refused, and handled when any succeeded,
+	because a forward cannot be taken back.
 	---
 	type EmailVerdict =
 		| Accept
 		| Reject(reason: String)
 		| Forward(to: String)
 		| Reply(message: EmailReply)
+		| Route(actions: EmailActions)
 
 	---
 	Whether the platform authenticated the sender's domain with DMARC, read from
@@ -729,7 +913,7 @@ adapter bynk.cloudflare {
 	metadata, conditional writes and multipart uploads. Used only through a named instance,
 	`capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
 	`given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
-	`"fedramp"`) pins the bucket's jurisdiction at creation.
+	`"fedramp"` or `"us"`) pins the bucket's jurisdiction at creation.
 
 	`get`, `put` and `putWith` buffer the object in the Worker's memory, so
 	each should stay well under its 128 MB limit. `get` and `head` give `None`
@@ -740,7 +924,11 @@ adapter bynk.cloudflare {
 	optionally under a prefix; pass the previous page's `cursor` for the next.
 
 	Larger objects stream. `getStream` gives the object's metadata and its
-	body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+	body as a `Stream[Bytes]` (serve it with `RawStreamed`). `getRange` reads
+	a byte range of an object as a stream (video, audio, resumed downloads and
+	HTTP `Range` requests), `getStreamIf` reads only when an etag condition
+	holds and answers `NotModified` otherwise, and `listWith` lists with a
+	`delimiter`, giving the immediate children of a path as `prefixes`. `putStream` and
 	`putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
 	know up front: a stream that holds more or fewer faults the write, and
 	nothing is stored.
@@ -762,6 +950,9 @@ adapter bynk.cloudflare {
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
 		fn getStream(key: String) -> Effect[Option[R2Body]]
+		fn getRange(key: String, range: R2Range) -> Effect[Option[R2Partial]]
+		fn getStreamIf(key: String, onlyIf: R2GetIf) -> Effect[R2Read]
+		fn listWith(options: R2List) -> Effect[R2Listing]
 		fn putStream(key: String, body: Stream[Bytes], size: Int) -> Effect[R2Object]
 		fn putStreamWith(
 			key: String,
@@ -862,6 +1053,15 @@ adapter bynk.cloudflare {
 		| SqlRejected(message: String)
 
 	---
+	Why a typed Analytics read (`AnalyticsSql.select[T]`) failed: `AnalyticsQuery` is the
+	query's own failure, `AnalyticsDecode` a row that did not fit `T`. The names carry the
+	`Analytics` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+	---
+	type AnalyticsReadError =
+		| AnalyticsQuery(error: AnalyticsSqlError)
+		| AnalyticsDecode(error: DecodeError)
+
+	---
 	A Workers Analytics Engine dataset to write events to. Used only through a
 	named instance, `capability Signups = Analytics`, which binds as
 	`ANALYTICS_SIGNUPS`; a bare `given Analytics` is refused. The dataset's
@@ -890,13 +1090,20 @@ adapter bynk.cloudflare {
 	declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
 	other analytics datasets, as `events.analyticsEngine.<DATASET>`.
 
-	`query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+	`query(dataset, sql, params)` runs one `SELECT`. `dataset` is the name of an
+	`Analytics` instance in the handler's `given` (`AnalyticsSql.query(Signups, …)`),
+	and `sql` is a string literal, a `"""` block or a `String` constant bound to one, as
+	for `D1`, so no request data can reach the text and read another dataset or drop the
+	time bound. A `{dataset}` in the SQL is replaced with that instance's table,
+	`events.analyticsEngine.shop_cart_signups`, or `..._staging` under `--env staging`,
+	for the environment the Worker runs in; it may appear any number of times, or not at
+	all. Put values in `params`, a `List[SqlValue]`
 	bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
 	`Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
 	`SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
 	before anything is sent. Named
 	`$name` parameters are not taken yet. A dataset's name is an identifier, which a
-	parameter cannot be, so it is the one value written into `sql`.
+	parameter cannot be, so `{dataset}` is the one value written into `sql`.
 
 	Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
 	lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
@@ -908,13 +1115,24 @@ adapter bynk.cloudflare {
 	A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
 	may succeed, `SqlRejected` when it does not. The call never retries by itself.
 
+	`select[T](instance, tail, params)` is the typed read, over `query`: `T` is a record, and
+	the compiler writes the `SELECT` list from it, so the columns are never counted by hand. A
+	field of `T` named after a field of the record `instance` is written with
+	(`Signups.writeValue(…)`) reads that field's column (`blob1 AS "plan"`); a field that is not
+	written is one the `tail` computes, named by an `AS` alias in a select list the tail
+	continues with a comma (`", sum(_sample_interval) AS n FROM {dataset} … GROUP BY country"`). The `tail`
+	is a literal, as for `query`, and starts at `FROM` or at that comma. A field that is neither
+	written nor an alias, or whose type does not read its column (text for a blob, a number for
+	a double), is a compile error naming it. The call gives `Result[List[T], AnalyticsReadError]`.
+
 	There is no local implementation of the binding: under `bynk dev` a query runs on
 	Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
-	until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+	until the call is stubbed (`stub AnalyticsSql.query(_, _, _) returns …`), so a test never
 	reaches Cloudflare.
 	---
 	capability AnalyticsSql {
 		fn query(
+			dataset: String,
 			sql: String,
 			params: List[SqlValue]
 		) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]
@@ -1321,15 +1539,16 @@ adapter bynk.cloudflare {
 	the store and the secret, when either is missing (create the secret with
 	`wrangler secrets-store secret create`). The deploy needs
 	`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
-	"Secrets Store: Read". `get` returns the value as a `String`, not an
+	"Secrets Store: Read". `get` returns the value as a `Secret`, not an
 	`Option`: the binding exists only if the deploy found the secret, so an
 	absence at run time is a platform fault, not something a handler can act
-	on. The value is not logged by Bynk; do not log it either. Under `bynk dev`
+	on. A `Secret` has no text to log: read it with `reveal()` where the value
+	has to leave, or compare it with `matches`. Under `bynk dev`
 	the secret is read from the local store, and a test faults until
 	`stub StripeKey.get() returns …` gives it a value.
 	---
 	capability StoredSecret {
-		fn get() -> Effect[String]
+		fn get() -> Effect[Secret]
 	}
 
 	---

@@ -43,8 +43,7 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A fresh scratch copy of the fixture. The runner derives its `out-js` tree as
-/// a sibling of `--output`, so each project gets its own parent.
+/// A fresh scratch copy of the fixture, in its own scratch directory.
 fn project(name: &str) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("snapshots-{name}"));
     let _ = fs::remove_dir_all(&root);

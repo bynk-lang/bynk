@@ -65,6 +65,58 @@ fn cost(i: Item) -> Int {
 }
 ```
 
+## Choose what a unit imports
+
+A library that exports a common name (`Status`, `Id`, `Error`) is no trouble to a unit that
+`uses` it, however many other libraries do the same, because `uses` has three forms:
+
+```bynk,ignore
+commons app
+
+uses lib.x                                       // everything lib.x exports, bare
+uses lib.y as Y                                  // everything, as Y.Status and Y.describe(…)
+uses lib.money { Money, format as formatMoney }  // only these, any under another name
+
+fn f(s: Status, t: Y.Status, m: Money) -> String {
+  formatMoney(m)
+}
+```
+
+Two used commons that declare one name are fine until the file writes it bare; then
+`bynk.uses.ambiguous_name` names the spellings that would resolve it. Selecting the name
+(`uses lib.y { Status }`) settles it too: a selected name outranks the same name from a whole
+`uses`, though only the names you list stay in scope from that commons. A declaration may be written by any
+of its spellings, in one unit or across it: `Status`, `Y.Status` and `lib.y.Status` are one type, so
+a value of one is a value of the others. A name the commons does not export publicly cannot be
+listed (`bynk.uses.unknown_name`).
+
+A qualified name reads the same wherever it is written: in a record's field types, in a
+generic's arguments, in `Val[lib.y.Status]` in a test, and across a Workers boundary, where the
+record's wire codec uses the type's own. A `suite` writes the qualifier through its own `uses`.
+
+## Name an adapter's types in a commons
+
+A commons can `consumes` the types an adapter exports, in braces, and nothing
+else, so a shared helper can take or return one:
+
+```bynk,ignore
+commons app.errors
+
+consumes bynk { TimedOut }
+
+fn describe(t: TimedOut) -> String {
+  "timed out after \(t.after)"
+}
+```
+
+A unit that `uses` `app.errors` can call `describe`, and a public signature that
+mentions `TimedOut` is fine. That unit does not get `TimedOut` in scope through the
+commons: it names the type only with its own `consumes bynk { TimedOut }`. A
+whole-unit or aliased `consumes`, a capability, and a context are refused in a
+commons (`bynk.commons.consumes_not_types`). `bynk`'s own data types are reached
+without the clause, see
+[Naming `bynk`'s types in a commons](/reference/bynk-capabilities/#naming-bynks-types-in-a-commons).
+
 ## Keep private types out of public signatures
 
 A public function, method, record field, variant payload or constant's type
@@ -135,6 +187,6 @@ named `private` mean what they always did.
 
 ## Related
 
-- [Spec §5.1c — Unit-private declarations](/book/spec/static-semantics/#private-declarations)
-- [Grammar reference — `visibility_modifier`](/book/reference/grammar/#rule-visibility_modifier)
-- [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/)
+- [Spec §5.1c — Unit-private declarations](/reference/spec/static-semantics/#private-declarations)
+- [Grammar reference — `visibility_modifier`](/reference/grammar/#rule-visibility_modifier)
+- [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/)

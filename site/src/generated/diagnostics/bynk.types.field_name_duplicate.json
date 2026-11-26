@@ -1,0 +1,12 @@
+{
+  "blurb": "A wire name is the key a reader looks a field up by (or, for a sum variant, the value the discriminator takes), so two fields of one record, two payload fields of one variant, or two variants of one sum cannot share one: both would read the same value. A wire name is the `@name`, or the Bynk name when there is none. A field or variant may also carry only one `@name`. Give each its own name. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_name_duplicate",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
+  "severity": "error",
+  "summary": "A field, variant or payload field has more than one `@name`, or two fields of a record, two variants of a sum or two payload fields of a variant have the same wire name."
+}

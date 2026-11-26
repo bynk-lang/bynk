@@ -17,6 +17,7 @@ use bynk_project::schema_registry::SchemaRegistry;
 use bynk_project::worker_layout::WorkerLayout;
 use serde::Serialize;
 
+pub(crate) mod duplicates;
 pub(crate) mod live;
 pub(crate) mod sweep;
 
@@ -263,6 +264,10 @@ pub fn sweep(root: &Path, opts: &SweepOptions) -> ExitCode {
     }
 }
 
+/// The token a sweep needs, in the words its missing-credentials message uses (a revert's
+/// message names the same token).
+pub(crate) const SWEEP_TOKEN_NEEDS: &str = "an API token with \"Workers Scripts: Edit\" (the listings need read access, and `wrangler` uses the same token to set and delete the sweep's key)";
+
 /// The sweep, end to end: `Ok(true)` when every selected instance woke.
 fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
     let mut urls = BTreeMap::new();
@@ -294,13 +299,8 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
     if selection.targets.is_empty() {
         return Err("nothing to sweep".to_string());
     }
-    let credentials = live::Credentials::from_env()?;
-    let agent = live::agent()?;
-    let rest = live::Rest {
-        agent: agent.clone(),
-        credentials,
-        base: live::API.to_string(),
-    };
+    let rest = crate::cloudflare::rest::for_purpose("sweep", SWEEP_TOKEN_NEEDS)?;
+    let agent = rest.agent().clone();
     // #2276: the listing's age is measured from when it is taken.
     let listed_at = std::time::SystemTime::now();
     let plans = sweep::prepare(&selection, &rest, &urls)?;
@@ -336,9 +336,11 @@ fn sweep_run(root: &Path, opts: &SweepOptions) -> Result<bool, String> {
             manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
+    let scratch = std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id()));
+    let api = crate::cloudflare::Wrangler::new(&probe.provenance, &scratch);
     let secrets = live::WranglerSecrets {
-        provenance: probe.provenance,
-        scratch: std::env::temp_dir().join(format!("bynk-migrate-{}", std::process::id())),
+        api: &api,
+        scratch: scratch.clone(),
     };
     let results = {
         // A Ctrl-C stops the waking, never the key's deletion.
@@ -467,6 +469,7 @@ mod tests {
                 version: 4,
                 oldest_readable: 4,
                 steps: vec![step(3, 3)],
+                renames: Vec::new(),
             },
         )]);
         let deployed = BTreeMap::from([(

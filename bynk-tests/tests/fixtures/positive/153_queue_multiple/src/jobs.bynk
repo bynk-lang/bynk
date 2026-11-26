@@ -5,13 +5,13 @@ type Job = {
 }
 
 service highWorker from queue("high-priority") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
 
 service lowWorker from queue("low-priority") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

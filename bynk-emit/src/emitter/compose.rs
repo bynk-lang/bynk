@@ -1,0 +1,31 @@
+//! What an application composes, rendered per target (back-half paydown 1B).
+//!
+//! The two composition roots live side by side here: the Bundle target's
+//! single `compose.ts` ([`bundle`]) and each Cloudflare Worker's own
+//! `compose.ts` ([`workers`]). Both read what is composed from one
+//! [`ComposePlan`] ([`plan`]): the units, their dependency edges and keys, and
+//! the facts that decide which of them need `__exec` or the caller. The plan
+//! says *what*; each renderer owns its own *spelling and order* (Decision C of
+//! #3928), so the seven target divergences stay renderer choices, each named
+//! where it is made.
+
+use bynk_ts::TsExpr;
+
+pub(crate) mod bundle;
+pub(crate) mod closure;
+pub(crate) mod events;
+pub(crate) mod plan;
+pub(crate) mod workers;
+
+pub use events::{EventPlan, EventSubscription};
+pub use plan::{
+    ComposeFacts, ComposePlan, ComposeUnit, ComposeUnitFacts, ConsumedSurface, ExecNeeds,
+};
+
+/// The `deps` object of a unit that has no entries: an empty object, which prints `{}`. (It was
+/// `{  }`, the residue of a deleted `format!("{{ {} }}", entries.join(", "))` template, until
+/// 1A.40b; the goldens changed by that whitespace alone.) One helper, so the two copies cannot
+/// drift.
+pub(crate) fn empty_deps() -> TsExpr {
+    TsExpr::object_entries(vec![])
+}

@@ -1,0 +1,9 @@
+[project]
+name = "3899-queue-sum-producers"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.Queue"]

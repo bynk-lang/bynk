@@ -16,7 +16,7 @@ export type Day = string & { readonly __brand: "Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkIsIsoDate(value))) {
-      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value });
+      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value });
     }
     return Ok(value as Day);
   },
@@ -35,12 +35,12 @@ export function decodeEvent(json: string): Result<Event, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Event(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Event);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(json);
 }
 
@@ -72,7 +72,7 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
   }
   const __on = obj["on"];
   if (!(__bynkIsIsoDate(__on))) {
-    return Err({ kind: "RefinementViolation", path: `${path}.on`, violation: { field: "on", message: "must be a calendar date (YYYY-MM-DD)", value: __on } });
+    return Err({ kind: "RefinementViolation", path: `${path}.on`, violation: { field: "on", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value: __on } });
   }
   return Ok({ on: __on } as Event);
 }

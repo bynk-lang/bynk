@@ -1,0 +1,10 @@
+{
+  "blurb": "Bynk prepares each literal SQL statement of a `D1` capability against the schema your migrations build, applied to an empty in-memory SQLite, so a syntax error or an unknown table or column is a compile error, not a failure on the first request. Nothing runs. Correct the statement, or add the migration that creates what it names. A project whose schema is made elsewhere can turn the check off with `[check] d1_sql = false`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.sql_invalid",
+  "constructs": [],
+  "example": "let _ <- Orders.all(\"SELECT id, totl FROM orders\", [])     // ✗ no such column: totl\n\nlet _ <- Orders.all(\"SELECT id, total FROM orders\", [])    // ✓",
+  "severity": "error",
+  "summary": "A literal D1 statement does not prepare against the schema the binding's migrations build: a syntax error, or an unknown table or column."
+}

@@ -11,7 +11,17 @@
 #[derive(Debug, Clone, Copy)]
 pub struct KernelMethod {
     pub name: &'static str,
+    /// The first (or only) form's display signature.
     pub signature: &'static str,
+    /// #4262: every form, one entry per arity (`signature` is the first).
+    pub signatures: &'static [&'static str],
+}
+
+impl KernelMethod {
+    /// The completion `detail`: every form on one line, joined with ", or ".
+    pub fn detail(&self) -> String {
+        self.signatures.join(", or ")
+    }
 }
 
 /// Declare the per-receiver operation enums. Each operation names its source
@@ -21,7 +31,7 @@ macro_rules! kernel_ops {
     ($(
         $(#[$meta:meta])*
         $Enum:ident {
-            $( $(#[$vmeta:meta])* $Var:ident = $name:literal, $sig:literal; )*
+            $( $(#[$vmeta:meta])* $Var:ident = $name:literal, $sig:literal $(, $more:literal)*; )*
             $( @hidden $( $(#[$hmeta:meta])* $HVar:ident = $hname:literal; )* )?
         }
     )*) => {
@@ -40,7 +50,7 @@ macro_rules! kernel_ops {
                 ];
                 /// The completion table for this receiver kind (no hidden operations).
                 pub const TABLE: &'static [KernelMethod] =
-                    &[ $( KernelMethod { name: $name, signature: $sig }, )* ];
+                    &[ $( KernelMethod { name: $name, signature: $sig, signatures: &[$sig $(, $more)*] }, )* ];
 
                 /// The operation spelt `name` on this receiver kind, if any.
                 pub fn from_name(name: &str) -> Option<Self> {
@@ -77,7 +87,9 @@ kernel_ops! {
         // v0.146 (ADR 0170): run an effectful step for each element, in order.
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
         // v0.147 (ADR 0171): run an effectful step for every element concurrently.
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        // #3967: named `parForEach`, so `parTraverse` can return the values.
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
+        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[U]) -> Effect[List[U]]";
         // v0.148 (ADR 0172): collect every outcome (no short-circuit), sequential
         // and concurrent.
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
@@ -85,6 +97,12 @@ kernel_ops! {
         // v0.150 (ADR 0174): short-circuit collect — stop at the first `Err`.
         TraverseTry = "traverseTry", "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
         ParTraverseTry = "parTraverseTry", "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
+        // #3968: the concurrent forms with a bound on the steps in flight, taking a
+        // `bynk` `ParOptions { limit }`; the plain forms are unchanged.
+        ParForEachWith = "parForEachWith", "parForEachWith(f: T -> Effect[()], options: ParOptions) -> Effect[()]";
+        ParTraverseWith = "parTraverseWith", "parTraverseWith(f: T -> Effect[U], options: ParOptions) -> Effect[List[U]]";
+        ParTraverseAllWith = "parTraverseAllWith", "parTraverseAllWith(f: T -> Effect[Result[U, E]], options: ParOptions) -> Effect[List[Result[U, E]]]";
+        ParTraverseTryWith = "parTraverseTryWith", "parTraverseTryWith(f: T -> Effect[Result[U, E]], options: ParOptions) -> Effect[Result[List[U], E]]";
         // #2806: pure `Result` accumulation over a `List[Result[T, E]]` receiver.
         SequenceAll = "sequenceAll", "sequenceAll() -> Result[List[T], List[E]]";
         SequenceTry = "sequenceTry", "sequenceTry() -> Result[List[T], E]";
@@ -94,24 +112,40 @@ kernel_ops! {
         FlatMap = "flatMap", "flatMap(f: T -> List[U]) -> List[U]";
         SortBy = "sortBy", "sortBy(key: T -> K) -> List[T]";
         SortByDescending = "sortByDescending", "sortByDescending(key: T -> K) -> List[T]";
+        SortWith = "sortWith", "sortWith(compare: (T, T) -> Ordering) -> List[T]";
         Take = "take", "take(n: Int) -> List[T]";
         Skip = "skip", "skip(n: Int) -> List[T]";
         Distinct = "distinct", "distinct() -> List[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> List[T]";
-        Count = "count", "count() -> Int";
+        Count = "count", "count() -> Int", "count(p: T -> Bool) -> Int";
         Any = "any", "any(p: T -> Bool) -> Bool";
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> T";
+        // #3962 (with #3828): the rest of `bynk.list`'s vocabulary, and the three
+        // everyday methods that existed nowhere.
+        Reverse = "reverse", "reverse() -> List[T]";
+        Find = "find", "find(p: T -> Bool) -> Option[T]";
+        Contains = "contains", "contains(item: T) -> Bool";
+        Last = "last", "last() -> Option[T]";
+        LastOrElse = "lastOrElse", "lastOrElse(default: T) -> T";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Sort = "sort", "sort() -> List[T]";
+        Traverse = "traverse", "traverse(f: T -> Effect[U]) -> Effect[List[U]]";
         Sum = "sum", "sum(key: T -> K) -> K";
-        Min = "min", "min(key: T -> K) -> Option[K]";
-        Max = "max", "max(key: T -> K) -> Option[K]";
+        Min = "min", "min(key: T -> K) -> Option[K]", "min() -> Option[T] for an Ord element";
+        Max = "max", "max(key: T -> K) -> Option[K]", "max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
+        // #3963: the combinators a language without tuples needs most.
+        FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> List[U]";
+        ZipWith = "zipWith", "zipWith(other: List[U], f: (T, U) -> V) -> List[V]";
+        TakeWhile = "takeWhile", "takeWhile(p: T -> Bool) -> List[T]";
+        SkipWhile = "skipWhile", "skipWhile(p: T -> Bool) -> List[T]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
         JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";
         LeftJoin = "leftJoin", "leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> List[V]";
-        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]";
+        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]", "join(sep: String) -> String for a List[String]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]";
         @hidden
         // v0.119 (ADR 0155): `run.upTo(step)` on a synthesised history `Step`
@@ -126,6 +160,15 @@ kernel_ops! {
         Insert = "insert", "insert(item: T) -> Set[T]";
         Remove = "remove", "remove(item: T) -> Set[T]";
         ToList = "toList", "toList() -> List[T]";
+        // #3961: the set algebra and the `List`-shaped vocabulary, as methods.
+        Union = "union", "union(other: Set[T]) -> Set[T]";
+        Intersect = "intersect", "intersect(other: Set[T]) -> Set[T]";
+        Difference = "difference", "difference(other: Set[T]) -> Set[T]";
+        IsSubsetOf = "isSubsetOf", "isSubsetOf(other: Set[T]) -> Bool";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Filter = "filter", "filter(p: T -> Bool) -> Set[T]";
+        Map = "map", "map(f: T -> U) -> Set[U]";
+        Fold = "fold", "fold(init: U, step: (U, T) -> U) -> U";
     }
 /// `Map[K, V]` (v0.20b).
     MapOp {
@@ -134,6 +177,15 @@ kernel_ops! {
         Values = "values", "values() -> List[V]";
         Get = "get", "get(key: K) -> Option[V]";
         Insert = "insert", "insert(key: K, value: V) -> Map[K, V]";
+        // #3961: removal, membership, entry access and the `List`-shaped vocabulary.
+        Remove = "remove", "remove(key: K) -> Map[K, V]";
+        Contains = "contains", "contains(key: K) -> Bool";
+        GetOrElse = "getOrElse", "getOrElse(key: K, default: V) -> V";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Entries = "entries", "entries() -> List[MapEntry[K, V]]";
+        Filter = "filter", "filter(p: (K, V) -> Bool) -> Map[K, V]";
+        MapValues = "mapValues", "mapValues(f: V -> U) -> Map[K, U]";
+        Fold = "fold", "fold(init: U, step: (U, K, V) -> U) -> U";
     }
 /// `Query[T]` (v0.91, ADR 0115; joins/grouping v0.94, ADR 0116/0120) — the lazy
 /// storage-query vocabulary a `store` collection lifts into (a `store Map`'s
@@ -151,6 +203,11 @@ kernel_ops! {
         SortByDescending = "sortByDescending", "sortByDescending(key: T -> K) -> Query[T]";
         Take = "take", "take(n: Int) -> Query[T]";
         Skip = "skip", "skip(n: Int) -> Query[T]";
+        // #4246: the #3963 List combinators on a query. `takeWhile` and `skipWhile` stop on
+        // order, so they need a query that has one (`bynk.query.while_needs_order`).
+        FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> Query[U]";
+        TakeWhile = "takeWhile", "takeWhile(p: T -> Bool) -> Query[T]";
+        SkipWhile = "skipWhile", "skipWhile(p: T -> Bool) -> Query[T]";
         Distinct = "distinct", "distinct() -> Query[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> Query[T]";
         JoinOn = "joinOn", "joinOn(other: Query[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> Query[V]";
@@ -160,7 +217,7 @@ kernel_ops! {
         Collect = "collect", "collect() -> Effect[List[T]]";
         First = "first", "first() -> Effect[Option[T]]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> Effect[T]";
-        Count = "count", "count() -> Effect[Int]";
+        Count = "count", "count() -> Effect[Int]", "count(p: T -> Bool) -> Effect[Int]";
         Fold = "fold", "fold(init: U, step: (U, T) -> U) -> Effect[U]";
         Any = "any", "any(p: T -> Bool) -> Effect[Bool]";
         All = "all", "all(p: T -> Bool) -> Effect[Bool]";
@@ -169,11 +226,15 @@ kernel_ops! {
         Max = "max", "max(key: T -> K) -> Effect[Option[K]]";
         Average = "average", "average(key: T -> K) -> Effect[Option[Float]]";
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
         ParTraverseAll = "parTraverseAll", "parTraverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
         TraverseTry = "traverseTry", "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
         ParTraverseTry = "parTraverseTry", "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
+        @hidden
+        // #4177: the old spelling of `parForEach` on a query. It is dispatched so the checker
+        // can report the rename with a fix; it is not offered and never reaches lowering.
+        ParTraverse = "parTraverse";
     }
 /// `Option[T]` combinators (v0.22a).
     OptionOp {
@@ -195,6 +256,8 @@ kernel_ops! {
         IsOk = "isOk", "isOk() -> Bool";
         IsErr = "isErr", "isErr() -> Bool";
         Ok = "ok", "ok() -> Option[T]";
+        OrElse = "orElse", "orElse(f: E -> Result[T, F]) -> Result[T, F]";
+        Err = "err", "err() -> Option[E]";
     }
 /// The `String` kernel (v0.22a; UTF-16 code units, except `chars`).
     StringOp {
@@ -214,11 +277,24 @@ kernel_ops! {
         // K2 (#2594): RFC 3986 percent-encoding over the UTF-8 bytes.
         PercentEncode = "percentEncode", "percentEncode() -> String";
         PercentDecode = "percentDecode", "percentDecode() -> Option[String]";
+        // #3978: the everyday methods the kernel lacked. Widths and counts are in
+        // code points (padding) or code units (`lastIndexOf`, like `indexOf`).
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        TrimStart = "trimStart", "trimStart() -> String";
+        TrimEnd = "trimEnd", "trimEnd() -> String";
+        PadStart = "padStart", "padStart(width: Int, fill: String) -> String";
+        PadEnd = "padEnd", "padEnd(width: Int, fill: String) -> String";
+        Repeat = "repeat", "repeat(n: Int) -> String";
+        Lines = "lines", "lines() -> List[String]";
+        LastIndexOf = "lastIndexOf", "lastIndexOf(sub: String) -> Option[Int]";
+        ReplaceFirst = "replaceFirst", "replaceFirst(from: String, to: String) -> String";
         // K6c (#2600): regex methods over a string-literal pattern.
         MatchesRegex = "matchesRegex", "matchesRegex(pattern: String) -> Bool";
         ContainsRegex = "containsRegex", "containsRegex(pattern: String) -> Bool";
         FindRegex = "findRegex", "findRegex(pattern: String) -> Option[List[Option[String]]]";
         FindAllRegex = "findAllRegex", "findAllRegex(pattern: String) -> List[List[Option[String]]]";
+        // #3979: the named capture groups of the first match, keyed by name.
+        FindRegexNamed = "findRegexNamed", "findRegexNamed(pattern: String) -> Option[Map[String, Option[String]]]";
         ReplaceRegex = "replaceRegex", "replaceRegex(pattern: String, with: String) -> String";
         SplitRegex = "splitRegex", "splitRegex(pattern: String) -> List[String]";
     }
@@ -276,7 +352,14 @@ kernel_ops! {
 /// (D3/D4); the kernel is the explicit escape to raw milliseconds (D5).
     DurationOp {
         ToMillis = "toMillis", "toMillis() -> Int";
+        // #3948: the whole-unit conversions round towards zero.
+        ToSeconds = "toSeconds", "toSeconds() -> Int (whole seconds, rounding towards zero)";
+        ToMinutes = "toMinutes", "toMinutes() -> Int (whole minutes, rounding towards zero)";
+        ToHours = "toHours", "toHours() -> Int (whole hours, rounding towards zero)";
+        ToDays = "toDays", "toDays() -> Int (whole days, rounding towards zero)";
+        // #3977: `toString` is units largest first (`1h30m`); `toIso` is ISO 8601 (`PT1H30M`).
         ToString = "toString", "toString() -> String";
+        ToIso = "toIso", "toIso() -> String";
     }
 /// The `Instant` kernel (v0.90, ADR 0114). Comparison/arithmetic are operators
 /// (D3); the kernel is the explicit escape to raw epoch milliseconds (D6).
@@ -286,6 +369,11 @@ kernel_ops! {
         // K3 (#2592): RFC 3339 in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.
         ToIso = "toIso", "toIso() -> String";
     }
+/// #3955: the universal order, on every `Ord` receiver: `a.compare(b)` answers an
+/// `Ordering`. It is not a per-type kernel, so it has its own receiver kind.
+    OrdOp {
+        Compare = "compare", "compare(other: T) -> Ordering";
+    }
 /// The `Bytes` kernel (v0.110, ADR 0142). Equality is an operator (D4, content
 /// compare); the kernel is length plus the String-interop bridge (D3). #2016
 /// (standard-library K1) adds `concat`, `slice`, `compare` (a method: `Bytes`
@@ -294,7 +382,6 @@ kernel_ops! {
         Length = "length", "length() -> Int";
         Concat = "concat", "concat(other: Bytes) -> Bytes";
         Slice = "slice", "slice(start: Int, end: Int) -> Bytes";
-        Compare = "compare", "compare(other: Bytes) -> Int";
         ToHex = "toHex", "toHex() -> String";
         ToBase64 = "toBase64", "toBase64() -> String";
         ToBase64Url = "toBase64Url", "toBase64Url() -> String";
@@ -326,6 +413,14 @@ kernel_ops! {
         WithCookie = "withCookie", "withCookie(c: Cookie) -> HttpResult[T]";
         ClearCookie = "clearCookie", "clearCookie(c: Cookie) -> HttpResult[T]";
         Cookies = "cookies", "cookies() -> List[Cookie]";
+        WithHeader = "withHeader", "withHeader(name: String, value: String) -> HttpResult[T]";
+        RetryAfter = "retryAfter", "retryAfter(delay: Duration) -> HttpResult[T]";
+        At = "at", "at(url: String) -> HttpResult[T]";
+        Download = "download", "download(filename: String) -> HttpResult[T]";
+        Heartbeat = "heartbeat", "heartbeat(every: Duration) -> HttpResult[T]";
+        Etag = "etag", "etag(tag: String) -> HttpResult[T]";
+        LastModified = "lastModified", "lastModified(at: Instant) -> HttpResult[T]";
+        Headers = "headers", "headers() -> Map[String, List[String]]";
     }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
 /// query string.
@@ -346,11 +441,23 @@ kernel_ops! {
         Get = "get", "get(name: String) -> Option[String]";
         Has = "has", "has(name: String) -> Bool";
     }
+/// `Secret` (#4111): the two ways a secret is used. Nothing else reads it: it has no `==`, no
+/// interpolation and no codec.
+    SecretOp {
+        Reveal = "reveal", "reveal() -> String";
+        Matches = "matches", "matches(candidate: String) -> Bool";
+        // #4111: `token.bearer()` and `password.basic(user)` build the value of a request's
+        // `authorization`, without the secret ever being text in the program.
+        Bearer = "bearer", "bearer() -> Authorization";
+        Basic = "basic", "basic(user: String) -> Authorization";
+    }
 /// `TestConnection[F]` (#3051): a case's recording handle for a `from
 /// websocket` connection; a test body only.
     TestConnectionOp {
         Sent = "sent", "sent() -> List[F]";
         Closed = "closed", "closed() -> Bool";
+        CloseCode = "closeCode", "closeCode() -> Option[Int]";
+        CloseReason = "closeReason", "closeReason() -> Option[String]";
         Connection = "connection", "connection() -> Connection[F]";
     }
 
@@ -365,9 +472,9 @@ kernel_ops! {
 /// completion registry.
     ConnectionOp {
         Send = "send", "send(frame: F) -> Effect[()]";
-        Close = "close", "close() -> Effect[()]";
+        Close = "close", "close(code?: Int, reason?: String) -> Effect[()]";
     }
-/// `Effect[T]` (#2683, #2711, #3437): `within`, `race` and `detach`, on every `Effect`.
+/// `Effect[T]` (#2683, #2711, #3437, #3965): `within`, `race`, `detach`, `map` and `andThen`, on every `Effect`.
     EffectOp {
         // #2683: `e.within(d)` races `e` against a deadline and hands the
         // abandoned effect to the execution context's `waitUntil`; it is never
@@ -381,6 +488,11 @@ kernel_ops! {
         // has been handed to the runtime, not once it has finished. A fault or
         // an `Err` in it is reported by the runtime, never lost.
         Detach = "detach", "detach() -> Effect[()]";
+        // #3965: `e.map(f)` and `e.andThen(f)` build an effect rather than run one, so they
+        // are legal in a pure helper; an effect is an eager promise, so neither changes
+        // when `e` starts. On an `Effect[Result]` they act on the whole `Result`.
+        Map = "map", "map(f: T -> U) -> Effect[U]";
+        AndThen = "andThen", "andThen(f: T -> Effect[U]) -> Effect[U]";
     }
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176; design doc §2.8.3),
 /// beyond [`EffectOp`]: the compiler-synthesised methods on the universal
@@ -412,7 +524,11 @@ pub enum KernelOp {
     RequestQuery(RequestQueryOp),
     RequestCookies(RequestCookiesOp),
     TokenClaims(TokenClaimsOp),
+    /// #4111: `reveal` and `matches` on a `Secret`.
+    Secret(SecretOp),
     Bytes(BytesOp),
+    /// #3955: `compare` on any `Ord` value.
+    Ord(OrdOp),
     Decimal(DecimalOp),
     String(StringOp),
     Option(OptionOp),
@@ -443,7 +559,9 @@ impl KernelOp {
             KernelOp::RequestQuery(o) => o.name(),
             KernelOp::RequestCookies(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
+            KernelOp::Secret(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
+            KernelOp::Ord(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),
             KernelOp::String(o) => o.name(),
             KernelOp::Option(o) => o.name(),
@@ -485,6 +603,7 @@ kernel_ops! {
 /// `Map.empty()`.
     MapStatic {
         Empty = "empty", "Map.empty() -> Map[K, V]";
+        Of = "of", "Map.of(entries: List[MapEntry[K, V]]) -> Map[K, V]";
     }
 /// `Set.empty()` / `Set.of(xs)` (K6a, #2596).
     SetStatic {
@@ -898,7 +1017,9 @@ mod tests {
             RequestQueryOp,
             RequestCookiesOp,
             TokenClaimsOp,
+            SecretOp,
             BytesOp,
+            OrdOp,
             DecimalOp,
             StringOp,
             OptionOp,

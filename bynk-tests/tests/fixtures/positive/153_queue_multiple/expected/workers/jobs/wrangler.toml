@@ -2,7 +2,7 @@
 name = "jobs"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[queues.consumers]]
 queue = "high-priority"
@@ -11,4 +11,8 @@ max_batch_size = 10
 [[queues.consumers]]
 queue = "low-priority"
 max_batch_size = 10
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

@@ -283,8 +283,8 @@ fn detect_runner(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
     // type-checks; `tsx` only runs the emitted code.
     let remedy = format!(
         "{} (or `{}`, which runs tests without type-checking)",
-        manager.global_install(&format!("typescript@{tested}")),
-        manager.global_install("tsx")
+        manager.global_install(&bynk_driver::tools::pins::typescript_spec()),
+        manager.global_install(bynk_driver::tools::pins::TSX_SPEC)
     );
     match best {
         // #1672, #3420: a `tsc` below the supported major is unsupported, a real defect
@@ -363,9 +363,12 @@ pub fn wrangler_below_min(probe: &Probe) -> bool {
 pub fn wrangler_upgrade_remedy(probe: &Probe, manager: PackageManager) -> String {
     match probe.provenance {
         Provenance::ProjectLocal(_) => {
-            format!("{} (in the project)", manager.dev_install("wrangler@4"))
+            format!(
+                "{} (in the project)",
+                manager.dev_install(bynk_driver::tools::pins::WRANGLER_SPEC)
+            )
         }
-        _ => manager.global_install("wrangler@4"),
+        _ => manager.global_install(bynk_driver::tools::pins::WRANGLER_SPEC),
     }
 }
 
@@ -401,7 +404,7 @@ fn detect_wrangler(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> Row {
     // from: a project's own wrangler is upgraded in the project, and only an npx
     // one can be a stale cache.
     let manager = tool_manager(tb, root);
-    let install = manager.global_install("wrangler@4");
+    let install = manager.global_install(bynk_driver::tools::pins::WRANGLER_SPEC);
     let probe = probe::detect(
         tb,
         "wrangler",

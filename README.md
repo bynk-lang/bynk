@@ -1,6 +1,6 @@
 # Bynk
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#licence)
 [![Rust 2024 (MSRV 1.95)](https://img.shields.io/badge/rust-2024%20edition%20%C2%B7%20MSRV%201.95-orange.svg)](rust-toolchain.toml)
 
 **Bynk** is a statically typed, *architecture-first* programming language for
@@ -96,7 +96,7 @@ discipline](design/bynk-release-discipline.md)).
 To let an AI agent ask the toolchain about Bynk (diagnostics, symbols,
 documentation, architecture, wire contracts), point its MCP client at
 `bynk mcp`, for example `claude mcp add bynk -- bynk mcp`. Set-up for other
-clients is in the [`bynk mcp` page](https://bynk-lang.org/docs/tooling/bynk-mcp/).
+clients is in the [`bynk mcp` page](https://bynk-lang.org/reference/tooling/bynk-mcp/).
 
 ## Quick start
 
@@ -115,7 +115,7 @@ wrote unmodified. Prefer a worked example? The bundled
 `bynk check src`, `bynk test .`, and deploy.
 
 See [Start a new project](https://bynk-lang.org/book/guides/projects-build-and-deployment/start-a-project/)
-or [Compile your first program](https://bynk-lang.org/book/tutorials/01-first-program/).
+or [Compile your first program](https://bynk-lang.org/book/tutorials/first-program/).
 
 ## Repository layout
 
@@ -174,11 +174,11 @@ The **[Bynk Book](https://bynk-lang.org/book/)** is the canonical guide and
 reference. It follows [Diátaxis](https://diataxis.fr/), grouped concern-first so
 each topic keeps its explanation, recipes, and reference together:
 
-- **[Tutorials](https://bynk-lang.org/book/tutorials/01-first-program/)** — learn Bynk by building.
+- **[Tutorials](https://bynk-lang.org/book/tutorials/first-program/)** — learn Bynk by building.
 - **[Guides](https://bynk-lang.org/book/guides/)** — task-focused recipes, each section
   opening with the *why* before the *how*.
-- **[Reference](https://bynk-lang.org/book/reference/)** — exact behaviour, including the
-  [normative spec](https://bynk-lang.org/book/spec/) and [CLI reference](https://bynk-lang.org/docs/bynk-cli/).
+- **[Reference](https://bynk-lang.org/reference/)** — exact behaviour, including the
+  [normative spec](https://bynk-lang.org/reference/spec/) and [CLI reference](https://bynk-lang.org/reference/tooling/bynk-cli/).
 
 The online Book's source lives in [`site/`](site/). Build it locally with
 [Astro](https://astro.build/): `cd site && npm install && npm run dev`.
@@ -197,14 +197,28 @@ Bynk is pre-1.0. Some designed features (events, sagas, storage kinds) are
 **deferred, not missing**, and land in later increments. See the
 [status and roadmap](design/bynk-status-and-roadmap.md).
 
-## License
+## Licence
 
-Licensed under either of
+Bynk is licensed under either of
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- MIT licence ([LICENSE-MIT](LICENSE-MIT))
 
-at your option. Unless you explicitly state otherwise, any contribution
-intentionally submitted for inclusion in the work by you, as defined in the
-Apache-2.0 license, shall be dual licensed as above, without any additional
-terms or conditions.
+at your option, so it can be used wherever one of the two would be
+incompatible. That covers everything in this repository except the
+documentation's own words and snippets:
+
+- **The documentation's prose** (the pages in `site/src/content/`) is licensed
+  under [CC BY 4.0](LICENSE-CC-BY-4.0.md): reuse it with attribution.
+- **Code snippets in the documentation** (the code blocks in those pages, and
+  `site/src/snippets/`) are licensed under the [MIT licence](LICENSE-MIT), so
+  you can copy one into your own work.
+
+These match the [blog](https://github.com/bynk-lang/blog)'s: its posts are
+CC BY 4.0 and its snippets MIT.
+
+Unless you explicitly state otherwise, any contribution intentionally
+submitted for inclusion in the work by you, as defined in the Apache-2.0
+licence, shall be licensed as above, without any additional terms or
+conditions: documentation prose under CC BY 4.0, documentation snippets under
+MIT, and everything else under MIT or Apache-2.0, at your option.

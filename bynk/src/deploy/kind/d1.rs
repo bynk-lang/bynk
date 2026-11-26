@@ -8,6 +8,7 @@
 //! migrations are applied before the push (P4b, #2608), and `bynk revert` checks the bound id.
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// The D1 kind.
 pub(crate) struct D1;
@@ -17,10 +18,11 @@ pub(crate) struct D1Table;
 
 impl D1Record {
     /// The record of database `name` with id `id`, with nothing superseded yet.
-    pub(crate) fn of(name: &str, id: &str) -> Self {
+    pub(crate) fn of(name: &str, id: &str, jurisdiction: Option<&str>) -> Self {
         D1Record {
             name: name.to_string(),
             id: id.to_string(),
+            jurisdiction: jurisdiction.map(str::to_string),
             superseded: Vec::new(),
         }
     }
@@ -89,9 +91,11 @@ impl ResourceKind for D1 {
     type Table = D1Table;
     type Line<'r> = PlanD1<'r>;
     type Orphan = OrphanD1;
-    type Live = ();
+    type Live<'a> = ();
     /// The database's account-facing name and its id, which the config binds it by.
     type Bound = (String, String);
+    type Change = TableChange<D1Table>;
+    type Step<'r> = D1Step<'r>;
 
     fn declared(r: &Resources) -> Vec<&D1Decl> {
         r.d1_databases.iter().collect()
@@ -109,28 +113,46 @@ impl ResourceKind for D1 {
         &mut context.d1
     }
 
-    fn plan_line<'r>(cx: &PlanCx<'_>, db: Self::Decl<'r>) -> PlanD1<'r> {
-        let database = d1_database_name(cx.ledger.environment, &db.name);
-        let recorded = cx.ledger.recorded::<D1>(cx.worker, &db.binding);
+    fn live_in<'a>(_lives: Lives<'a>) -> Self::Live<'a> {}
+
+    fn plan_line<'r>(cx: &PlanCx<'_>, db: Self::Decl<'r>, _live: ()) -> PlanD1<'r> {
+        let step = d1_step(cx, db);
         PlanD1 {
             binding: &db.binding,
-            action: if recorded.is_some_and(|r| r.name == database) {
-                "reuse"
-            } else {
-                "create"
-            },
-            database,
+            action: step.action(),
+            database: step.database,
             migrations: &db.migrations,
+            jurisdiction: db.jurisdiction.as_deref(),
         }
+    }
+
+    fn steps<'r>(cx: &PlanCx<'_>, declared: &'r Resources, _live: ()) -> Vec<D1Step<'r>> {
+        declared
+            .d1_databases
+            .iter()
+            .map(|db| d1_step(cx, db))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [D1Step<'r>] {
+        &steps.d1
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<D1Step<'r>> {
+        &mut steps.d1
     }
 
     /// The database's line, then (P4b, #2608) its migrations, applied after the database is
     /// bound and before the push.
     fn short_line(d1: &PlanD1<'_>, out: &mut String) {
         out.push_str(&format!(
-            "d1 {} {} ({})\n",
+            "d1 {} {} ({})",
             d1.action, d1.database, d1.binding
         ));
+        if let Some(jurisdiction) = d1.jurisdiction {
+            out.push_str(&format!(" in jurisdiction {jurisdiction}"));
+        }
+        out.push('\n');
         if !d1.migrations.is_empty() {
             let n = d1.migrations.len();
             out.push_str(&format!(
@@ -150,9 +172,22 @@ impl ResourceKind for D1 {
         d1: &mut PlanD1<'_>,
         _shown_worker: &str,
         on: &on_account::OnAccount,
-        _notes: &mut Vec<String>,
+        notes: &mut Vec<String>,
     ) {
-        d1.action = held_verb(d1.action, on.holds(Self::ID, None, &d1.database));
+        let held = on.holds(Self::ID, None, &d1.database);
+        // #3820: a database already on the account that the ledger does not hold would be
+        // adopted, and it was not created in the jurisdiction the source names: say so, and do
+        // not call it `reuse`.
+        if let (Some(jurisdiction), Some(true), "create" | "create or reuse") =
+            (d1.jurisdiction, held, d1.action)
+        {
+            notes.push(format!(
+                "d1 {} already exists on the account and the ledger does not hold it; its jurisdiction cannot be confirmed, so the deploy will refuse to adopt it as `{jurisdiction}`",
+                d1.database
+            ));
+            return;
+        }
+        d1.action = held_verb(d1.action, held);
     }
 
     fn name_problem(cx: &ProjectCx<'_>) -> Option<String> {
@@ -163,8 +198,8 @@ impl ResourceKind for D1 {
         &orphans.d1
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanD1> {
-        &mut orphans.d1
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanD1>) {
+        orphans.d1 = found;
     }
 
     /// Each recorded database its Worker no longer declares (or whose Worker is gone), then each
@@ -222,34 +257,32 @@ impl ResourceKind for D1 {
     /// derived from this project's, so it is this project's. A database the
     /// ledger already holds under this environment's name is not asked of
     /// the account again.
-    fn provision(
-        cx: &mut ApplyCx<'_, D1>,
-        db: &D1Decl,
-    ) -> Result<Provisioned<(String, String)>, DeployFailure> {
-        let (worker, environment) = (cx.worker, cx.environment);
-        let physical = d1_database_name(environment, &db.name);
-        let recorded = cx
-            .ledger()
-            .recorded::<D1>(worker, &db.binding)
-            .filter(|recorded| recorded.name == physical)
-            .map(|recorded| recorded.id.clone());
-        if let Some(id) = recorded {
-            return Ok(Provisioned {
-                bound: Some((db.binding.clone(), (physical, id))),
-                recorded: None,
-            });
+    fn apply(cx: &StepCx<'_, '_, D1>, step: &D1Step<'_>) -> Result<Applied<D1>, DeployFailure> {
+        let (worker, db, physical) = (cx.worker, step.db, step.database.clone());
+        if let Some(id) = &step.recorded {
+            return Ok(Applied::bound(&db.binding, (physical, id.clone())));
         }
-        let id = create_d1(cx.tools.provenance, &physical, cx.tools.project_root).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+        let (id, adopted) = create_d1(cx.tools.api, &physical, db.jurisdiction.as_deref())
+            .map_err(|e| {
+                DeployFailure::driver(format!(
+                    "could not create the D1 database `{physical}` for `{worker}`'s `{}`: {e}",
+                    db.binding
+                ))
+            })?;
+        // #3820: a database that was already there was not created in the jurisdiction, and
+        // Cloudflare does not say which it has, so the ledger is never told it is pinned.
+        if let (true, Some(jurisdiction)) = (adopted, db.jurisdiction.as_deref()) {
+            return Err(DeployFailure::driver(format!(
+                "the D1 database `{physical}` for `{worker}`'s `{}` already exists on the account, so it was not created with `--jurisdiction {jurisdiction}`, and Bynk cannot read the jurisdiction of an existing database back; it will not record one it did not apply. Check the database in the Cloudflare dashboard, then either remove `@jurisdiction` to adopt it as it is, or delete it so the next deploy creates it in `{jurisdiction}`",
                 db.binding
-            ))
-        })?;
-        cx.record(&db.binding, D1Record::of(&physical, &id));
-        Ok(Provisioned {
-            recorded: Some(format!("the D1 database `{physical}`")),
-            bound: Some((db.binding.clone(), (physical, id))),
-        })
+            )));
+        }
+        let record = cx.recording(
+            &db.binding,
+            D1Record::of(&physical, &id, db.jurisdiction.as_deref()),
+            &format!("created the D1 database `{physical}`"),
+        );
+        Ok(Applied::bound(&db.binding, (physical, id)).with(record))
     }
 
     fn materialise(
@@ -290,6 +323,9 @@ pub(crate) struct PlanD1<'a> {
     pub(crate) action: &'static str,
     /// The database's account-facing name, [`d1_database_name`]d.
     pub(crate) database: String,
+    /// #3820: the jurisdiction the database is created in, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<&'a str>,
     /// P4b (#2608): its migration files. `bynk deploy` applies the ones the
     /// database hasn't recorded before the push; the plan does not read the
     /// databases, so it can't say which those are.
@@ -313,6 +349,23 @@ pub(crate) fn d1_database_problem(
     for (worker, declared) in resources {
         for db in &declared.d1_databases {
             let name = d1_database_name(environment, &db.name);
+            // #3820: a database's jurisdiction is fixed when it is made. A source that now names
+            // another is refused, never recreated: the database holds data.
+            let provisioned = ledger
+                .recorded::<D1>(worker, &db.binding)
+                .filter(|recorded| recorded.name == name);
+            if let Some(recorded) = provisioned.filter(|r| r.jurisdiction != db.jurisdiction) {
+                let shown = |j: &Option<String>| match j {
+                    Some(j) => format!("jurisdiction `{j}`"),
+                    None => "no jurisdiction".to_string(),
+                };
+                return Some(format!(
+                    "`{}` of `{worker}` is the D1 database `{name}`, which was created with {}; the source now asks for {}. A database's jurisdiction is fixed when it is created, and `bynk deploy` will not recreate a database that holds data. Restore the `@jurisdiction` the database was created with, or create a new `D1` capability, move the data across, and remove this one",
+                    db.binding,
+                    shown(&recorded.jurisdiction),
+                    shown(&db.jurisdiction)
+                ));
+            }
             if let Some((other_worker, other_binding)) =
                 seen.insert(name.clone(), (worker, &db.binding))
             {
@@ -352,80 +405,40 @@ pub(crate) fn d1_database_problem(
 /// fallback instead of asking: the deploy's own confirmation already covered
 /// this.
 pub(crate) fn apply_d1_migrations(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     binding: &str,
     environment: &str,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    command
-        .args(["migrations", "apply", binding, "--remote"])
-        .current_dir(worker_dir)
-        .stdin(std::process::Stdio::null());
-    if environment != "default" {
-        command.args(["--env", environment]);
-    }
-    let output = command.output().map_err(|e| e.to_string())?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(wrangler_said(&output))
-    }
+) -> Result<(), CloudflareError> {
+    api.d1_migrations_apply(worker_dir, binding, environment)
+        .map_err(CloudflareError::from)
 }
 
-/// Create the D1 database `name` and return its `database_id`, or adopt the
-/// one already there under that name (P4a, #2602). Run from the project root,
-/// as KV and buckets are.
-fn create_d1(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
+/// Create the D1 database `name` and return its `database_id` and whether it was adopted (not
+/// created), the one already there under that name (P4a, #2602). Run from the project root, as KV
+/// and buckets are.
+pub(crate) fn create_d1(
+    api: &dyn CloudflareApi,
+    name: &str,
+    jurisdiction: Option<&str>,
+) -> Result<(String, bool), CloudflareError> {
+    let e = match api.d1_create(name, jurisdiction) {
+        Ok(id) => return Ok((id, false)),
+        Err(e) => e,
     };
-    let output = command
-        .arg("create")
-        .arg(name)
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return parse_d1_id(&stdout).ok_or_else(|| {
-            format!("`wrangler d1 create` succeeded but printed no `database_id`:\n{stdout}")
-        });
+    if !e.already_exists() {
+        return Err(e.into());
     }
-    let said = wrangler_said(&output);
-    if !d1_database_already_exists(&said) {
-        return Err(said);
-    }
-    let Some(mut list) = workers::wrangler_command(provenance, "d1") else {
-        return Err("wrangler not found".into());
-    };
-    let listed = list
-        .args(["list", "--json"])
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !listed.status.success() {
-        return Err(format!(
-            "it already exists, and listing the account's databases failed: {}",
-            wrangler_said(&listed)
-        ));
-    }
-    parse_d1_listed_id(&String::from_utf8_lossy(&listed.stdout), name)
-        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".to_string())
-}
-
-/// The `database_id` in `wrangler d1 create`'s output: the config snippet it
-/// prints, as TOML (`database_id = "…"`) or JSON (`"database_id": "…"`).
-fn parse_d1_id(output: &str) -> Option<String> {
-    let at = output.find("database_id")?;
-    let rest = &output[at + "database_id".len()..];
-    let rest = rest.trim_start_matches('"').trim_start();
-    let rest = rest.strip_prefix(['=', ':'])?.trim_start();
-    let id = rest.strip_prefix('"')?.split('"').next()?;
-    (!id.is_empty() && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-        .then(|| id.to_string())
+    let listed = api.d1_list().map_err(|e| -> CloudflareError {
+        if e.ran_and_failed() {
+            format!("it already exists, and listing the account's databases failed: {e}").into()
+        } else {
+            e.into()
+        }
+    })?;
+    parse_d1_listed_id(&listed, name)
+        .map(|id| (id, true))
+        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".into())
 }
 
 /// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
@@ -445,12 +458,40 @@ fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Does this `wrangler d1 create` failure just mean a database of that name
-/// is already on the account? Wrangler says "A database with that name
-/// already exists".
-fn d1_database_already_exists(said: &str) -> bool {
-    said.to_ascii_lowercase()
-        .contains("database with that name already exists")
+/// One D1 database's step (1D.2b): the declaration, its name in this environment, and the id the
+/// ledger records for it under that name, if it does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct D1Step<'r> {
+    pub(crate) db: &'r D1Decl,
+    pub(crate) database: String,
+    /// Reused when `Some`; created (or adopted, by name) and recorded when `None`.
+    pub(crate) recorded: Option<String>,
+}
+
+impl D1Step<'_> {
+    /// The plan's word for the step.
+    pub(crate) fn action(&self) -> &'static str {
+        if self.recorded.is_some() {
+            "reuse"
+        } else {
+            "create"
+        }
+    }
+}
+
+/// `worker`'s step for `db`, from the ledger.
+fn d1_step<'r>(cx: &PlanCx<'_>, db: &'r D1Decl) -> D1Step<'r> {
+    let database = d1_database_name(cx.ledger.environment, &db.name);
+    let recorded = cx
+        .ledger
+        .recorded::<D1>(cx.worker, &db.binding)
+        .filter(|recorded| recorded.name == database)
+        .map(|recorded| recorded.id.clone());
+    D1Step {
+        db,
+        database,
+        recorded,
+    }
 }
 
 #[cfg(test)]
@@ -459,23 +500,19 @@ mod tests {
 
     #[test]
     fn the_d1_id_is_read_from_either_snippet_format() {
-        let toml = "✅ Successfully created DB 'shop-orders' in region WEUR\nCreated your new D1 database.\n\n[[d1_databases]]\nbinding = \"shop_orders\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n";
-        assert_eq!(
-            parse_d1_id(toml).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        let json = "{\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-orders\",\n      \"database_id\": \"9b3c2a1e-0000-4000-8000-0123456789ab\"\n    }\n  ]\n}";
-        assert_eq!(
-            parse_d1_id(json).as_deref(),
-            Some("9b3c2a1e-0000-4000-8000-0123456789ab")
-        );
-        assert_eq!(parse_d1_id("Created your new D1 database."), None);
-        assert!(d1_database_already_exists(
-            "✘ [ERROR] A database with that name already exists"
-        ));
-        assert!(!d1_database_already_exists(
-            "✘ [ERROR] Authentication error"
-        ));
+        let exists = |stderr: &str| {
+            crate::cloudflare::fake::failed(
+                &crate::cloudflare::Op::D1Create {
+                    name: "d",
+                    jurisdiction: None,
+                },
+                "",
+                stderr,
+            )
+            .already_exists()
+        };
+        assert!(exists("✘ [ERROR] A database with that name already exists"));
+        assert!(!exists("✘ [ERROR] Authentication error"));
         assert_eq!(
             parse_d1_listed_id(
                 "[{\"uuid\": \"u-1\", \"name\": \"a\"}, {\"uuid\": \"u-2\", \"name\": \"b\"}]",
@@ -507,20 +544,20 @@ mod tests {
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         D1Table::insert(
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         assert!(env.d1_instances["shop"]["D1_ORDERS"].superseded.is_empty());
         D1Table::insert(
             &mut env,
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-2"),
+            D1Record::of("shop-orders-v2", "id-2", None),
         );
         let record = D1Table::get(&env, "shop", "D1_ORDERS").expect("recorded");
         assert_eq!(
@@ -545,7 +582,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         let mut declared = Resources::default()
             .d1_databases(&[("D1_NEW", "shop-new"), ("D1_ORDERS", "shop-orders")]);
@@ -556,7 +593,7 @@ mod tests {
         };
         let lines: Vec<_> = D1::declared(&declared)
             .into_iter()
-            .map(|decl| D1::plan_line(&cx, decl))
+            .map(|decl| D1::plan_line(&cx, decl, ()))
             .collect();
         let mut out = String::new();
         for line in &lines {
@@ -576,7 +613,7 @@ mod tests {
             worker: "shop",
         };
         assert_eq!(
-            D1::plan_line(&staging, &declared.d1_databases[1]).action,
+            D1::plan_line(&staging, &declared.d1_databases[1], ()).action,
             "create"
         );
     }
@@ -585,7 +622,11 @@ mod tests {
     fn a_database_on_the_account_is_reused_and_one_not_read_is_left_alone() {
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop-new".to_string()]))
             }
         }
@@ -594,6 +635,7 @@ mod tests {
             binding: "D1_NEW",
             action: "create",
             database: "shop-new".to_string(),
+            jurisdiction: None,
             migrations: &[],
         };
         D1::checked_against(&mut line, "shop", &on, &mut Vec::new());
@@ -614,19 +656,19 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-2"),
+            D1Record::of("shop-orders-v2", "id-2", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_OLD",
-            D1Record::of("shop-old", "id-3"),
+            D1Record::of("shop-old", "id-3", None),
         );
         let declared = || Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders-v2")]);
         let resources = project(vec![("shop", declared())]);
@@ -664,7 +706,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
@@ -672,31 +714,187 @@ mod tests {
             binding: "D1_ORDERS".to_string(),
             name: "shop-orders".to_string(),
             migrations: Vec::new(),
+            jurisdiction: None,
         };
-        let done = D1::provision(
-            &mut ApplyCx {
+        let step = d1_step(
+            &PlanCx {
+                ledger: LedgerView::of(&lock, "default"),
+                worker: "shop",
+            },
+            &db,
+        );
+        assert_eq!(step.action(), "reuse");
+        let done = D1::apply(
+            &StepCx {
                 environment: "default",
                 worker: "shop",
                 project: &project,
-                environments: &mut lock.environments,
-                live: &(),
+                lock: &lock,
+                live: (),
                 tools: Tools {
-                    provenance: &provenance,
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     project_root: Path::new("/nonexistent"),
                 },
             },
-            &db,
+            &step,
         )
         .expect("nothing to create");
         assert_eq!(
-            done,
-            Provisioned {
-                bound: Some((
-                    "D1_ORDERS".to_string(),
-                    ("shop-orders".to_string(), "id-1".to_string())
+            done.bound,
+            [(
+                "D1_ORDERS".to_string(),
+                ("shop-orders".to_string(), "id-1".to_string())
+            )]
+        );
+        assert!(done.commits.is_empty(), "nothing to record");
+    }
+
+    #[test]
+    fn a_database_is_created_in_its_jurisdiction_and_the_plan_says_so() {
+        // #3820: the `--jurisdiction` argument is what pins it; whether Cloudflare honours it
+        // needs a live account, so this covers the argument, the record and the plan line.
+        let api = crate::cloudflare::fake::Recording::new(|_| Ok("id-9".to_string()));
+        assert_eq!(
+            create_d1(&api, "shop-orders", Some("eu")).unwrap(),
+            ("id-9".to_string(), false)
+        );
+        assert_eq!(
+            create_d1(&api, "shop-audit", None).unwrap(),
+            ("id-9".to_string(), false)
+        );
+        assert_eq!(
+            api.calls(),
+            [
+                "d1 create shop-orders --jurisdiction eu",
+                "d1 create shop-audit"
+            ]
+        );
+        let record = D1Record::of("shop-orders", "id-9", Some("eu"));
+        assert_eq!(record.jurisdiction.as_deref(), Some("eu"));
+        let toml = toml::to_string(&record).unwrap();
+        assert!(toml.contains("jurisdiction = \"eu\""), "{toml}");
+        assert!(
+            !toml::to_string(&D1Record::of("shop-audit", "id-9", None))
+                .unwrap()
+                .contains("jurisdiction")
+        );
+        let mut out = String::new();
+        D1::short_line(
+            &PlanD1 {
+                binding: "D1_ORDERS",
+                action: "create",
+                database: "shop-orders".to_string(),
+                jurisdiction: Some("eu"),
+                migrations: &[],
+            },
+            &mut out,
+        );
+        assert_eq!(
+            out,
+            "d1 create shop-orders (D1_ORDERS) in jurisdiction eu\n"
+        );
+    }
+
+    #[test]
+    fn an_adopted_database_is_never_recorded_as_pinned() {
+        // #3820: `d1 create` says it already exists, so nothing was created in the jurisdiction.
+        let adopting = || {
+            crate::cloudflare::fake::Recording::new(|op| match op {
+                crate::cloudflare::Op::D1Create { .. } => Err(crate::cloudflare::fake::failed(
+                    op,
+                    "",
+                    "A database with that name already exists",
                 )),
-                recorded: None
+                _ => Ok("[{\"uuid\": \"u-1\", \"name\": \"shop-orders\"}]".to_string()),
+            })
+        };
+        assert_eq!(
+            create_d1(&adopting(), "shop-orders", Some("eu")).unwrap(),
+            ("u-1".to_string(), true)
+        );
+        let lock = DeployLock::default();
+        let project = BTreeMap::new();
+        let api = adopting();
+        let cx = StepCx {
+            environment: "default",
+            worker: "shop",
+            project: &project,
+            lock: &lock,
+            live: (),
+            tools: Tools {
+                api: &api,
+                project_root: Path::new("/nonexistent"),
+            },
+        };
+        let pinned = D1Decl {
+            binding: "D1_ORDERS".to_string(),
+            name: "shop-orders".to_string(),
+            migrations: Vec::new(),
+            jurisdiction: Some("eu".to_string()),
+        };
+        let unpinned = D1Decl {
+            jurisdiction: None,
+            ..pinned.clone()
+        };
+        let step = |db: &'static D1Decl| D1Step {
+            db,
+            database: "shop-orders".to_string(),
+            recorded: None,
+        };
+        let (pinned, unpinned): (&'static D1Decl, &'static D1Decl) =
+            (Box::leak(Box::new(pinned)), Box::leak(Box::new(unpinned)));
+        let refused = match D1::apply(&cx, &step(pinned)) {
+            Ok(_) => panic!("an adopted database must not be recorded as pinned"),
+            Err(e) => e.message,
+        };
+        assert!(
+            refused.contains("cannot read the jurisdiction"),
+            "{refused}"
+        );
+        // Without a jurisdiction it is adopted as before, and recorded with none.
+        let done = D1::apply(&cx, &step(unpinned)).expect("adopted");
+        assert!(done.commits.len() == 1);
+        // The plan says the same, and does not call it `reuse`.
+        struct Holds;
+        impl on_account::Listings for Holds {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
+                Ok(BTreeSet::from(["shop-orders".to_string()]))
             }
+        }
+        let on = on_account::OnAccount::read(&BTreeSet::from([(KindId::D1, None)]), &Holds);
+        let mut line = PlanD1 {
+            binding: "D1_ORDERS",
+            action: "create",
+            database: "shop-orders".to_string(),
+            jurisdiction: Some("eu"),
+            migrations: &[],
+        };
+        let mut notes = Vec::new();
+        D1::checked_against(&mut line, "shop", &on, &mut notes);
+        assert_eq!(line.action, "create");
+        assert!(notes[0].contains("cannot be confirmed"), "{notes:?}");
+    }
+
+    #[test]
+    fn materialising_into_a_missing_configuration_fails_with_its_worker() {
+        let e = D1::materialise(
+            Path::new("/nonexistent/wrangler.toml"),
+            "shop",
+            &BTreeMap::from([(
+                "D1_ORDERS".to_string(),
+                ("shop-orders".to_string(), "id-1".to_string()),
+            )]),
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("could not materialise the D1 database ids into `shop`'s"),
+            "{}",
+            e.message
         );
     }
 }

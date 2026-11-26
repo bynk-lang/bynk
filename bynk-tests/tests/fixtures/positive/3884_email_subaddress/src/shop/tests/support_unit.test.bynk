@@ -1,0 +1,10 @@
+suite shop.support {
+  consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+  case "a case sets the tag directly, or leaves it to default" {
+    let tagged <- support.message(InboundEmail { from: "a@b.example", to: "support+7@shop.example", subaddress: Some("7") })
+    expect tagged is Forward("tickets@shop.example")
+    let plain <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
+    expect plain is Accept
+  }
+}

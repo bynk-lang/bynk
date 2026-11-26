@@ -1,4 +1,12 @@
-name: Stamp increments
+name: Stamp increments (emergency push)
+
+# NOT THE ROUTINE STAMP. Since November 2026 `stamp-batch.yml` stamps every
+# three hours and lands the result as a PR through the merge queue, so nothing
+# reaches `main` outside the queue. This workflow is now dispatch-only: the
+# emergency path that pushes a stamp straight to `main` through the ruleset
+# bypass, for when a batch cannot land. The notes below describe how that push
+# works; those about a run per merge describe the old `push` trigger.
+#
 
 # Assign the version and ADR number(s) for a merged increment, on `main`, per the
 # increment-allocation track (ADR 0206, amended by the "stamp pushes as a GitHub
@@ -37,14 +45,10 @@ name: Stamp increments
 # did (2026-10-22, #2295/#2297) it cancelled the one real run and stranded two
 # pending files. Now that run checks out the tip and stamps whatever is there.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "design/pending/**"
-      # The format doc is not an increment — editing it must not fire a (no-op)
-      # stamp run.
-      - "!design/pending/README.md"
-  # Manual recovery: stamp whatever is pending on the tip of `main`.
+  # Manual recovery only: stamp whatever is pending on the tip of `main` and
+  # push it straight there. The routine stamp is `stamp-batch.yml` (see the
+  # top). Reverting the PR that removed the `push` trigger here is the
+  # rollback to per-merge stamping.
   workflow_dispatch:
 
 # Serialise stamps so two close merges never race the version counter; never
@@ -57,6 +61,8 @@ concurrency:
 # The App token does the writing; GITHUB_TOKEN needs nothing beyond read.
 permissions:
   contents: read
+  # To list open `stamp/*` PRs (see "Refuse while a batch is open").
+  pull-requests: read
 
 jobs:
   stamp:
@@ -95,6 +101,23 @@ jobs:
             echo "Pending on main@$(git rev-parse --short HEAD):"
             echo "$files"
             echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A batch PR from stamp-batch.yml already assigned versions to the
+      # pending files. Stamping them again here would push `main` to other
+      # versions, leaving that PR conflicting, or handing the versions out
+      # twice if someone resolved it. Close the batch PR first.
+      - name: Refuse while a batch is open
+        if: steps.pending.outputs.any == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          open="$(gh pr list --repo "$REPO" --state open --base main --limit 100 \
+            --json number,headRefName --jq '[.[] | select(.headRefName | startswith("stamp/")) | "#\(.number)"] | join(", ")')"
+          if [ -n "$open" ]; then
+            echo "::error::stamp batch PR $open is open and has already stamped the pending files. Close it first, then re-run this."
+            exit 1
           fi
 
       - if: steps.pending.outputs.any == 'true'
@@ -140,7 +163,7 @@ jobs:
       - name: Mint stamp-app token
         if: steps.pending.outputs.any == 'true'
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           app-id: ${{ secrets.STAMP_APP_ID }}
           private-key: ${{ secrets.STAMP_APP_KEY }}

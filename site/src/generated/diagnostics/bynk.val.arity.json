@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val[T]` takes at most one argument, the pin: `Val[Age]` lets the compiler choose a value, `Val[Age](20)` fixes it. `Val` makes one value of one type, so a second argument has no meaning. Pass one pin or none.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.arity",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/ages.bynk\ntype Age = Int where InRange(0, 150)\n\n// tests/ages.test.bynk\nlet a = Val[Age](20, 30)   // ✗ two pins\nlet a = Val[Age](20)       // ✓ one",
+  "severity": "error",
+  "summary": "`Val[T]` was given the wrong number of pin arguments."
+}

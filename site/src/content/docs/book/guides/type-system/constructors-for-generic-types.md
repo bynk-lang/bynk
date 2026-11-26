@@ -12,14 +12,12 @@ the type holds inside it:
 ```bynk,fragment
 commons guide.sorted
 
-uses bynk.list
-
 type Sorted[T: Ord] = {
 	items: List[T],
 }
 
 fn Sorted.fromList(xs: List[T]) -> Sorted[T] {
-	Sorted { items: sort(xs) }
+	Sorted { items: xs.sort() }
 }
 
 fn Sorted.empty() -> Sorted[T] {
@@ -61,6 +59,15 @@ fn named() -> Int {
 
 `Sorted.empty[String]()` lists the type's parameters, then the method's own. Without
 either, the call is `bynk.generics.uninferable_type_arg`.
+
+## A bounded type needs its bound
+
+A type that declares a bound (`type Sorted[T: Ord]`) holds it for every value, so a
+function that builds or passes one over its own type parameter declares the same bound:
+`fn mk[U: Ord](xs: List[U]) -> Sorted[U]`. Leaving it off is `bynk.generics.missing_ord_bound`
+(and `missing_eq_bound`, `missing_key_bound`, `missing_codable_bound`), and `bynk check --fix`
+adds it. The bound is checked wherever the type is applied, including `Sorted[List[U]]`
+and a literal whose element type is inferred.
 
 ## Why not a free function
 

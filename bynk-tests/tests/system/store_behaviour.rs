@@ -553,7 +553,7 @@ provides Clock = SystemClock {\n\
 \n\
 agent Sessions {\n\
 \x20 key id: String\n\
-\x20 store live: Cache[String, Int] @ttl(1.minutes)\n\
+\x20 store live: Cache[String, Int] @ttl(1.minute)\n\
 \n\
 \x20 on call put(k: String, n: Int) -> Effect[()] given Clock {\n\
 \x20   let _ <- live.put(k, n)\n\
@@ -641,7 +641,7 @@ provides Clock = SystemClock {\n\
 agent Sessions {\n\
 \x20 key id: String\n\
 \x20 store hits: Cell[Int]\n\
-\x20 store live: Cache[String, Int] @ttl(1.minutes)\n\
+\x20 store live: Cache[String, Int] @ttl(1.minute)\n\
 \n\
 \x20 on call put(k: String, n: Int) -> Effect[()] given Clock {\n\
 \x20   let _ <- live.put(k, n)\n\
@@ -928,7 +928,7 @@ provides Clock = SystemClock {\n\
 \n\
 agent Audit {\n\
 \x20 key id: String\n\
-\x20 store events: Log[Int] @retain(1.minutes)\n\
+\x20 store events: Log[Int] @retain(1.minute)\n\
 \n\
 \x20 on call write(n: Int) -> Effect[()] given Clock {\n\
 \x20   let _ <- events.append(n)\n\
@@ -1236,7 +1236,7 @@ agent Room {\n\
 \x20   }\n\
 \x20 }\n\
 \x20 on call broadcast(text: String) -> Effect[()] {\n\
-\x20   conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))\n\
+\x20   conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))\n\
 \x20 }\n\
 }\n";
 
@@ -1847,7 +1847,7 @@ type Entry = { id: String, tag: String }\n\
 agent Keys {\n\
 \x20 key id: String\n\
 \x20 store items: Map[String, Int]\n\
-\x20 store live: Cache[String, Int] @ttl(1.minutes)\n\
+\x20 store live: Cache[String, Int] @ttl(1.minute)\n\
 \x20 store entries: Map[String, Entry] @indexed(by: tag)\n\
 \n\
 \x20 on call bumpItem(k: String) -> Effect[()] {\n\

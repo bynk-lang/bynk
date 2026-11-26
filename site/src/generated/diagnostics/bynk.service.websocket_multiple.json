@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket upgrade reaches the context by its `Upgrade: websocket` header alone, with no path to tell two endpoints apart, so a context can host only one `from websocket` service. The compiler reports every one but the first by name. Keep one, or move the other into a context of its own.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.websocket_multiple",
+  "constructs": [],
+  "example": "service lobby from websocket(in: Frame, out: Frame) { … }\nservice rooms from websocket(in: Frame, out: Frame) { … }   // ✗ a second WebSocket service in this context\n\nservice lobby from websocket(in: Frame, out: Frame) { … }   // ✓ one per context",
+  "severity": "error",
+  "summary": "A context holds more than one `from websocket` service — at v1 the Workers upgrade routes by the `Upgrade: websocket` header alone, so one WebSocket service per context (real-time track slice 3b)."
+}

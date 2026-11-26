@@ -1,0 +1,13 @@
+suite app.z {
+  uses lib.x
+
+  case "a qualified type generates a value" {
+    let s = Val[lib.x.Status]
+    expect s == s
+  }
+
+  case "a record of qualified types generates a value" {
+    let h = Val[Holder]
+    expect h == h
+  }
+}

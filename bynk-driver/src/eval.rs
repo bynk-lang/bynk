@@ -41,9 +41,8 @@ use serde_json::Value;
 
 use crate::test_runner::{TestArgs, TestFormat, run_test};
 
-/// The name of the synthetic case. `bynk-driver` lowers a case of this name
-/// with its tail reported, and the run selects it by this name.
-pub const EVAL_CASE: &str = "bynk eval";
+// 1B.2a (#4028): defined beside the test-harness generation that lowers it.
+pub use bynk_emit::testgen::EVAL_CASE;
 
 /// How long an evaluation may run before it is killed, when the caller sets no
 /// limit of its own.
@@ -675,7 +674,7 @@ fn spin(n: Int) -> Int {
 }
 
 service relay {
-  on call(url: String) -> Effect[Int] given Fetch {
+  on call(url: String) -> Effect[Int] by Caller given Fetch {
     let res <- Fetch.send(Request {
       method: Get,
       url: url,

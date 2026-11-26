@@ -31,7 +31,7 @@ one command. In order, it:
    include`/`exclude` layout, so you can run it from any subdirectory.
 2. **Pre-flights** — checks that Node and `wrangler` are usable, with
    the same report (and fix-it lines) as [`bynk
-   doctor`](/docs/editor-and-tooling/doctor/). A missing tool fails here, before
+   doctor`](/reference/tooling/editor-and-tooling/doctor/). A missing tool fails here, before
    anything is built.
 3. **Compiles** — the same project shape as `bynk compile <project-root>
    --target workers`, into a managed build directory (see [The build
@@ -125,7 +125,7 @@ don't need real Cloudflare secrets to develop.
 > elsewhere) for a clean slate.
 
 A `D1` database runs locally too. Before a Worker serves, `bynk dev` applies
-its [migrations](/book/reference/bynk-capabilities/#schema-migrations) with
+its [migrations](/reference/bynk-capabilities/#schema-migrations) with
 `wrangler d1 migrations apply --local`, into the same place the server keeps
 its state, including a `--persist-to` you pass. A migration file you add while
 it serves is applied when you save it. One that fails is reported, and the
@@ -137,7 +137,7 @@ session; after a restart it can't tell. With `-- --remote` nothing is applied.
 ## A local Postgres database
 
 `wrangler dev` does not reach Hyperdrive: a [`Postgres`
-instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
+instance](/reference/bynk-capabilities/#postgres-databases-postgres)
 (`capability Main = Postgres`) connects to a database of your own. Name the
 environment variable that holds its connection string in `bynk.toml`, per
 capability:
@@ -209,7 +209,7 @@ bynk dev --trace-events
 ```
 
 ```json
-{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"start_ms":1.0,"ms":3.1,"outcome":"ok","request":"9a41…"}],"truncated":false,"fault":null}
 ```
 
 A call to another context is one step, and the callee's own request is its own
@@ -217,7 +217,7 @@ event with the caller's id as its `parent`, so you can follow a request across
 the Workers. It implies `--format json`, so stdout carries events only. The steps hold no
 argument values, so nothing you passed to a call reaches the output. Traces are
 for `bynk dev` only: a deployed Worker records nothing. See [Request
-traces](/docs/bynk-cli/#request-traces) for every field.
+traces](/reference/tooling/bynk-cli/#request-traces) for every field.
 
 ## Inspecting your agents
 
@@ -241,11 +241,11 @@ record or write to storage.
 
 This is for the local session only. A build for [`bynk deploy`](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 carries none of it, and the Worker has no inspection route there. The JSON
-shapes are in the [`bynk dev inspect` reference](/docs/bynk-cli/#inspecting-agents).
+shapes are in the [`bynk dev inspect` reference](/reference/tooling/bynk-cli/#inspecting-agents).
 
 ## From VS Code
 
-The [VS Code extension](/docs/tooling/vscode-bynk/) runs `bynk dev` for you.
+The [VS Code extension](/reference/tooling/vscode-bynk/) runs `bynk dev` for you.
 **Bynk: Start Dev Server** serves the project in a terminal, and asks which
 context to serve when there are several. A status-bar item then shows each
 context's URL; click it to open one in the browser or to stop the server. The
@@ -254,14 +254,14 @@ its `preLaunchTask`. **Bynk: Show Worker Logs** shows what the workers print, an
 an error thrown in a handler appears with its stack frames at the `.bynk` lines
 (a `Ctrl`/`Cmd`-click opens them): `bynk dev` rewrites them from the compiler's
 source maps, so the terminal gets them too (see
-[Worker logs](/docs/bynk-cli/#worker-logs)).
+[Worker logs](/reference/tooling/bynk-cli/#worker-logs)).
 
 A script or another tool can follow the same session with `bynk dev --format
-json`, which writes one [lifecycle event](/docs/bynk-cli/#lifecycle-events) per
+json`, which writes one [lifecycle event](/reference/tooling/bynk-cli/#lifecycle-events) per
 line: the ports each context got, and each rebuild's outcome. To wait until
 every context answers before sending requests, pass `--ready-json FILE`: the file
 appears, listing each context's URL, once they all do (see
-[Readiness](/docs/bynk-cli/#readiness)).
+[Readiness](/reference/tooling/bynk-cli/#readiness)).
 
 ## When `wrangler` isn't installed
 
@@ -269,7 +269,7 @@ appears, listing each context's URL, once they all do (see
 `node_modules/.bin/wrangler` wins, then a global install, then your package manager's runner (`npx`, `pnpm dlx` or
 `bunx`, by the package manager bynk detects). If it can only be reached through a
 runner, `bynk dev` says which — a runner *downloads* wrangler on first use, so it's a one-time pause, not a missing tool. Run [`bynk doctor
---only deploy`](/docs/editor-and-tooling/doctor/) to see exactly what you have.
+--only deploy`](/reference/tooling/editor-and-tooling/doctor/) to see exactly what you have.
 
 ## Deploying
 
@@ -287,6 +287,6 @@ default environment, same as before.
 
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/) — the two emission targets
   and the manual recipe `bynk dev` runs for you.
-- [Check your environment with `bynk doctor`](/docs/editor-and-tooling/doctor/) —
+- [Check your environment with `bynk doctor`](/reference/tooling/editor-and-tooling/doctor/) —
   the same capability check `bynk dev` pre-flights.
-- Reference: [the `bynk` driver CLI](/docs/bynk-cli/).
+- Reference: [the `bynk` driver CLI](/reference/tooling/bynk-cli/).

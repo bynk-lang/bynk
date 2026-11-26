@@ -85,7 +85,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#build"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#build"
         }
       }
     },
@@ -102,7 +102,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#check"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#check"
         }
       }
     },
@@ -144,7 +144,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dependencies"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dependencies"
         }
       }
     },
@@ -171,6 +171,27 @@
             "type": "object"
           },
           "description": "Container settings, keyed by the `Container` capability's name\n(`capability Renderer = Container …` is `Renderer`).",
+          "type": "object"
+        },
+        "email": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "description": "One `from email` address, as a named environment claims it.",
+            "properties": {
+              "address": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "The address each deployment environment claims in place of this one,\nby `--env` name (`default` is never mapped: it claims the address as\nthe source writes it). Wrangler applies `addresses` to a Worker at its\ntop level only, so an environment with no entry here claims nothing\nand leaves production's routing rules alone. The Worker for a mapped\nenvironment accepts mail to the mapped address, and the domain needs\nEmail Routing enabled.",
+                "type": "object"
+              }
+            },
+            "required": [
+              "address"
+            ],
+            "type": "object"
+          },
+          "description": "Inbound-email addresses per environment, keyed by an address a\n`from email` service names (`from email(\"support@shop.example\")` is\n`support@shop.example`). A named environment claims no address unless\nit is mapped here.",
           "type": "object"
         },
         "hyperdrive": {
@@ -228,6 +249,13 @@
                 },
                 "type": "array"
               },
+              "cpu_ms": {
+                "description": "This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.",
+                "format": "uint32",
+                "maximum": 300000,
+                "minimum": 1,
+                "type": "integer"
+              },
               "custom_domains": {
                 "description": "Custom domains the Worker is attached to, like `pay.example.com`.",
                 "items": {
@@ -237,6 +265,34 @@
               },
               "name": {
                 "description": "The Worker's script name on Cloudflare: 1 to 63 lowercase letters,\ndigits or `-`. Default: the group's key. The key stays the group's\nidentity (its ledger entry, `--worker` selector and `workers/<key>/`\ndirectory); changing the key or the name makes a different Worker.",
+                "type": "string"
+              },
+              "observability": {
+                "additionalProperties": false,
+                "description": "This Worker's Workers Logs settings, laid over `[workers.observability]`\nkey by key: `head_sampling_rate = 0.01` for a noisy Worker.",
+                "properties": {
+                  "enabled": {
+                    "default": true,
+                    "description": "Whether Workers Logs collects the Worker's logs. Default: `true`.",
+                    "type": "boolean"
+                  },
+                  "head_sampling_rate": {
+                    "default": 1,
+                    "description": "The fraction of invocations whose logs are kept, from `0` to `1`: lower\nit for a noisy Worker. Default: `1`.",
+                    "format": "double",
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              "placement": {
+                "description": "This Worker's placement, `\"smart\"` or `\"off\"`, over `[workers] placement`.",
+                "enum": [
+                  "smart",
+                  "off"
+                ],
                 "type": "string"
               },
               "routes": {
@@ -259,7 +315,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#deploy"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#deploy"
         }
       }
     },
@@ -346,7 +402,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dev"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dev"
         }
       }
     },
@@ -388,7 +444,51 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#dev-dependencies"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#dev-dependencies"
+        }
+      }
+    },
+    "env": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One environment's settings.",
+        "properties": {
+          "vars": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ],
+              "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+            },
+            "description": "This environment's build-time variables, over `[vars]`.",
+            "propertyNames": {
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "description": "Per-environment settings, keyed by the environment's name (the `--env`\nvalue).",
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#env"
         }
       }
     },
@@ -429,7 +529,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#fmt"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#fmt"
         }
       }
     },
@@ -457,7 +557,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#lsp"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#lsp"
         }
       }
     },
@@ -500,7 +600,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#package"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#package"
         }
       }
     },
@@ -541,7 +641,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#paths"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#paths"
         }
       }
     },
@@ -575,7 +675,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#profile"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#profile"
         }
       }
     },
@@ -595,7 +695,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#project"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#project"
         }
       }
     },
@@ -636,7 +736,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#registries"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#registries"
         }
       }
     },
@@ -714,7 +814,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#test"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#test"
         }
       }
     },
@@ -734,7 +834,40 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#unstable"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#unstable"
+        }
+      }
+    },
+    "vars": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "format": "int64",
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ],
+        "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+      },
+      "description": "Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's\n`const X: T = env(NAME[, default])` constants take, in every environment\n(`default` included). They are resolved when the project is built, from this\ncommitted file only, and are not Wrangler's run-time `[vars]`. A name no\n`env(…)` constant reads is an error, so a typo cannot leave a default in\nforce.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#vars"
         }
       }
     },
@@ -750,6 +883,42 @@
           },
           "type": "array"
         },
+        "cpu_ms": {
+          "description": "The CPU time each Worker may use per request, in milliseconds, written as\n`[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.\nFrom `1` to `300000`; a limit above the account's plan is Cloudflare's\nerror at deploy. Unset leaves Cloudflare's default. A worker group\noverrides it.",
+          "format": "uint32",
+          "maximum": 300000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "observability": {
+          "additionalProperties": false,
+          "description": "Workers Logs, so `Logger.log`'s structured fields are queryable on\nCloudflare. On by default; written as `[observability]` into every\n`wrangler.toml`, which each environment inherits. A worker group\noverrides it key by key under `[deploy.workers.<key>.observability]`.",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Whether Workers Logs collects the Worker's logs. Default: `true`.",
+              "type": "boolean"
+            },
+            "head_sampling_rate": {
+              "default": 1,
+              "description": "The fraction of invocations whose logs are kept, from `0` to `1`: lower\nit for a noisy Worker. Default: `1`.",
+              "format": "double",
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
+        },
+        "placement": {
+          "default": "off",
+          "description": "`\"smart\"` turns on Smart Placement for every Worker (written as\n`[placement] mode = \"smart\"`): the Worker runs near the back end it\ntalks to, such as a `D1` database, rather than near the user. `\"off\"`\n(the default) leaves Cloudflare's default placement. A worker group\noverrides it.",
+          "enum": [
+            "smart",
+            "off"
+          ],
+          "type": "string"
+        },
         "workers_dev": {
           "description": "Whether every Worker is served on its `*.workers.dev` URL: written as\n`workers_dev` in each `wrangler.toml`. Set `false` to take the Workers\noff `workers.dev`. Unset leaves the key out, so Cloudflare's default\n(on) applies.",
           "type": "boolean"
@@ -758,7 +927,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#workers"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#workers"
         }
       }
     },
@@ -788,7 +957,7 @@
       "type": "object",
       "x-taplo": {
         "links": {
-          "key": "https://bynk-lang.org/docs/manifest/#workspace"
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#workspace"
         }
       }
     }
@@ -797,7 +966,7 @@
   "type": "object",
   "x-taplo": {
     "links": {
-      "key": "https://bynk-lang.org/docs/manifest/"
+      "key": "https://bynk-lang.org/reference/tooling/manifest/"
     }
   }
 }

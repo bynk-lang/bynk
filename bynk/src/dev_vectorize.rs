@@ -59,8 +59,9 @@ pub(crate) fn bind_for_dev(
     workers_dir: &Path,
     all: &[String],
     serving: &[String],
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<Bound, String> {
-    let resources = crate::deploy::project_resources(workers_dir, all)?;
+    let resources = crate::deploy::project_resources(workers_dir, all, model)?;
     let settings =
         bynk_project::vectorize::try_read_vectorize_dev(project_root).map_err(|e| e.to_string())?;
     // An entry for a capability the project no longer has is still an error: a
@@ -229,12 +230,39 @@ mod tests {
             "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_NOTES\"\nindex_name = \"shop-notes\"\n",
         )
         .unwrap();
-        std::fs::write(
-            dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST),
-            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [] }, { \"binding\": \"VECTORIZE_NOTES\", \"dimensions\": 32, \"metric\": \"euclidean\", \"indexed\": [] }] }",
-        )
-        .unwrap();
         (root, workers)
+    }
+
+    /// The build's model for that project: `shop` declares the `Docs` and
+    /// `Notes` indexes.
+    fn model(declared: &[(&str, &str, i64, &str)]) -> bynk_emit::emit_model::WorkersBuild {
+        use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+        let bindings = declared
+            .iter()
+            .map(|(binding, capability, dimensions, metric)| WorkerBinding {
+                name: binding.to_string(),
+                source: BindingSource::VectorizeIndex {
+                    capability: capability.to_string(),
+                    dimensions: *dimensions,
+                    metric: metric.to_string(),
+                    indexed: Vec::new(),
+                },
+            })
+            .collect();
+        bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([(
+                "shop".to_string(),
+                bindings,
+            )])),
+            layout: bynk_project::worker_layout::WorkerLayout::identity(),
+        }
+    }
+
+    fn shop_model() -> bynk_emit::emit_model::WorkersBuild {
+        model(&[
+            ("VECTORIZE_DOCS", "Docs", 768, "cosine"),
+            ("VECTORIZE_NOTES", "Notes", 32, "euclidean"),
+        ])
     }
 
     #[test]
@@ -243,7 +271,7 @@ mod tests {
             "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDocs = \"docs-dev\"\n",
         );
         let all = vec!["shop".to_string()];
-        let bound = bind_for_dev(&root, &workers, &all, &all).unwrap();
+        let bound = bind_for_dev(&root, &workers, &all, &all, &shop_model()).unwrap();
         assert_eq!(bound.bound, [("Docs".to_string(), "docs-dev".to_string())]);
         assert_eq!(bound.unbound, ["Notes".to_string()]);
         let config = std::fs::read_to_string(workers.join("shop").join("wrangler.toml")).unwrap();
@@ -278,7 +306,7 @@ mod tests {
         )
         .unwrap();
         let all = vec!["shop".to_string()];
-        let err = bind_for_dev(&root, &workers, &all, &all).unwrap_err();
+        let err = bind_for_dev(&root, &workers, &all, &all, &model(&[])).unwrap_err();
         assert!(err.contains("names no `Vectorize` capability"), "{err}");
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -301,7 +329,7 @@ mod tests {
             "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[dev.vectorize-index]\nDoc = \"docs-dev\"\n",
         );
         let all = vec!["shop".to_string()];
-        let err = bind_for_dev(&root, &workers, &all, &all).unwrap_err();
+        let err = bind_for_dev(&root, &workers, &all, &all, &shop_model()).unwrap_err();
         assert!(
             err.contains("`[dev.vectorize-index] Doc` names no `Vectorize` capability")
                 && err.contains("did you mean `Docs`?"),

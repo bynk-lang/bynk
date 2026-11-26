@@ -15,13 +15,13 @@ type Slug = String where Matches("[a-z]+") && MaxLength(8)
 type Reply = String where MaxLength(4)
 
 service describe {
-  on call(label: Label, qty: Qty, ratio: Ratio, price: Price, slug: Slug) -> Effect[Result[Int, Int]] {
+  on call(label: Label, qty: Qty, ratio: Ratio, price: Price, slug: Slug) -> Effect[Result[Int, Int]] by Caller {
     Effect.pure(Ok(0))
   }
 }
 
 service reply {
-  on call(n: Int) -> Effect[Result[Reply, Int]] {
+  on call(n: Int) -> Effect[Result[Reply, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }

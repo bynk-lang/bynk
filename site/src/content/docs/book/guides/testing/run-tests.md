@@ -15,7 +15,7 @@ included), then runs the aggregated runner under Node — type-checking as it go
 so a type error stops you with the usual diagnostics. It also checks every event
 against the committed `bynk.schema.lock`, without writing it, so a breaking event
 change fails the run with `bynk.event.non_additive_schema_change` (see
-[the schema registry](/book/guides/events/understand-events/#checking-against-the-lock-without-writing-it)),
+[the schema registry](/book/concepts/events/understand-events/#checking-against-the-lock-without-writing-it)),
 and a breaking change to an agent's stored state fails it with
 `bynk.agent.non_additive_state_change` (see
 [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)).
@@ -24,8 +24,8 @@ It exits non-zero if any case fails. A project with no tests prints
 cannot pass a project that never wrote a test. To run only some tests, repeat `--case "<name>"` for
 each case or pass `--suite <name>` for a suite; a name that matches nothing fails the run
 instead of passing with nothing run (see
-[Selecting tests](/docs/bynk-cli/#selecting-tests)). You need `node` and `tsc` (or `tsx`) on your `PATH`; check with
-[`bynk doctor --only test`](/docs/editor-and-tooling/doctor/).
+[Selecting tests](/reference/tooling/bynk-cli/#selecting-tests)). You need `node` and `tsc` (or `tsx`) on your `PATH`; check with
+[`bynk doctor --only test`](/reference/tooling/editor-and-tooling/doctor/).
 
 ```text
 commerce.money:
@@ -45,7 +45,7 @@ failed, for both unit and integration tests.
 
 ## Generative failures: seeds, shrinking, and `--seed`
 
-A [`property`](/book/reference/testing/) runs its `for all` body over many
+A [`property`](/reference/testing/) runs its `for all` body over many
 generated inputs. When one fails, the report tells you how many cases ran, the
 run's root **seed**, and a **shrunk** counterexample — the smallest inputs that
 still fail — with a copy-paste line to reproduce it:
@@ -128,7 +128,7 @@ never reported as success.
 For a consumer that wants results while the run is going, `--format ndjson` writes the
 same information as one JSON event per line, each case when it finishes and with how
 long it took (see
-[Streaming results](/docs/bynk-cli/#streaming-results)). The VS Code Test Explorer
+[Streaming results](/reference/tooling/bynk-cli/#streaming-results)). The VS Code Test Explorer
 uses it, so a long project fills in case by case, and the Testing view shows each
 case's duration.
 
@@ -146,14 +146,14 @@ mutation: 3 mutants, 1 killed, 1 survived, 1 not covered by any suite, 0 invalid
 
 That survivor means nothing in the suites tries `within(5, 5)`: add a case at the
 boundary and the mutant is killed. Some survivors change nothing a test could see;
-exclude those in [`[test.mutate]`](/docs/manifest/#testmutate). Your files are never
+exclude those in [`[test.mutate]`](/reference/tooling/manifest/#testmutate). Your files are never
 touched, and the unmutated suites must pass first.
 
 On a large project, keep a CI run proportional to the diff and spread it over the
 machine's cores: `bynk test --mutate --changed origin/main --mutate-jobs 4` mutates
 only the declarations in files that differ from `origin/main`, four at a time. The
 report is the same whatever the job count. See
-[Mutation testing](/docs/bynk-cli/#mutation-testing) for the flags, the exit code and
+[Mutation testing](/reference/tooling/bynk-cli/#mutation-testing) for the flags, the exit code and
 the JSON shape.
 
 ## Coverage: `--coverage`
@@ -221,7 +221,7 @@ every executable line. (`covered` is the count.)
 
 ## In the editor: the Test Explorer
 
-The [VS Code extension](/docs/editor-and-tooling/editor-support/) consumes that
+The [VS Code extension](/reference/tooling/editor-and-tooling/editor-support/) consumes that
 JSON surface directly. Open the **Testing** view (the beaker icon): the tree
 populates by **discovery** — `bynk test --no-run --format json` lists your
 suites and cases without running them, so each test links to its `.bynk` line
@@ -229,11 +229,11 @@ before you run anything (use the Refresh control to re-discover after edits).
 Run from the tree, or invoke **Bynk: Run Tests** from the command palette;
 results then show inline, a failing expectation links to its `.bynk` line, and a
 compile failure lands in the Problems panel exactly as
-[`bynk check`](/docs/bynk-cli/) does. The extension resolves `bynk` the
+[`bynk check`](/reference/tooling/bynk-cli/) does. The extension resolves `bynk` the
 same way the other tasks do — the `bynk.bynkPath` setting, else `bynk` on
 `PATH`.
 
-A [doc example](/book/reference/testing/#doc-examples-run) marked `bynk test` is a
+A [doc example](/reference/testing/#doc-examples-run) marked `bynk test` is a
 case named `doc example <file>:<line>`, in the suite of the unit it documents. It
 links to its fence in the `.bynk` source, and carries a `doc-example` tag, so the
 Testing view's filter (**Filter by tag**) shows the doc examples together, or
@@ -257,4 +257,4 @@ The Run profile's **Watch** toggle reruns the watched tests when a `.bynk` file 
 
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/) — the `suite` block, `expect`, and `stub`.
 - [Test tiers](/book/guides/testing/integration/) — the `as <tier>` dial and a `system` flow over the real wire.
-- Reference: [CLI (`bynk`)](/docs/bynk-cli/) — every `bynk test` flag and exit code.
+- Reference: [CLI (`bynk`)](/reference/tooling/bynk-cli/) — every `bynk test` flag and exit code.

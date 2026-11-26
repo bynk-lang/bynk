@@ -188,8 +188,9 @@ const TSCONFIG_JSON: &str = r#"{
 }
 "#;
 
-#[test]
-fn http_limits_contract_runs_on_workers_entry() {
+/// Compiles `fixture` (a `positive/` directory) for Workers, then type-checks and runs
+/// `driver` against its entry under Node.
+pub(super) fn run_driver(fixture_dir: &str, driver: &str) {
     let runner = match discover_tsc() {
         Some(r) => r,
         None => {
@@ -211,8 +212,8 @@ fn http_limits_contract_runs_on_workers_entry() {
     }
 
     // Compile the limits fixture (workers) in-process.
-    let fixture: PathBuf =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/300_http_limits/src");
+    let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/fixtures/positive/{fixture_dir}/src"));
     let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(fixture)
             .target(bynk_driver::project::BuildTarget::Workers),
@@ -220,8 +221,10 @@ fn http_limits_contract_runs_on_workers_entry() {
     .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the limits fixture must compile");
 
-    let tmp =
-        std::env::temp_dir().join(format!("bynk-http-limits-behaviour-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!(
+        "bynk-http-limits-{fixture_dir}-{}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
     for (path, doc) in &out.artefacts.docs {
@@ -234,7 +237,7 @@ fn http_limits_contract_runs_on_workers_entry() {
         }
         fs::write(&target_path, doc.text()).unwrap();
     }
-    fs::write(tmp.join("driver.ts"), DRIVER_TS).unwrap();
+    fs::write(tmp.join("driver.ts"), driver).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
 
     // Type-check + compile the whole tree, then run the driver under Node.
@@ -247,4 +250,104 @@ fn http_limits_contract_runs_on_workers_entry() {
     );
 
     let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn http_limits_contract_runs_on_workers_entry() {
+    run_driver("300_http_limits", DRIVER_TS);
+}
+
+/// #3921: no `limits { }` and no `@limit` still means a 1 MiB cap.
+const DEFAULT_CAP_DRIVER_TS: &str = r#"
+import worker from "./workers/api/index.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const env = {} as never;
+const MIB = 1_048_576;
+
+// A JSON string body of exactly `total` bytes: the two quotes plus the text.
+const json = (total: number): string => JSON.stringify("a".repeat(total - 2));
+const form = (total: number): string => "text=" + "a".repeat(total - 5);
+
+// A request that declares its length, as a client does.
+function declared(path: string, body: string, type: string): Request {
+  return new Request(`https://x.test${path}`, {
+    method: "POST",
+    body,
+    headers: { "content-type": type, "content-length": String(body.length) },
+  });
+}
+
+// A request with no `Content-Length`: the body arrives in chunks.
+function chunked(path: string, body: string, type: string): Request {
+  const bytes = new TextEncoder().encode(body);
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      for (let i = 0; i < bytes.length; i += 65536) c.enqueue(bytes.slice(i, i + 65536));
+      c.close();
+    },
+  });
+  return new Request(`https://x.test${path}`, {
+    method: "POST",
+    body: stream,
+    headers: { "content-type": type },
+    duplex: "half",
+  } as RequestInit);
+}
+
+async function main(): Promise<void> {
+  const JSON_T = "application/json";
+  const FORM_T = "application/x-www-form-urlencoded";
+
+  // JSON: exactly 1 MiB is accepted; one byte more is 413, declared or chunked.
+  let r = await worker.fetch(declared("/notes", json(MIB), JSON_T), env);
+  assert(r.status === 201, `1 MiB JSON is accepted (got ${r.status})`);
+  r = await worker.fetch(declared("/notes", json(MIB + 1), JSON_T), env);
+  assert(r.status === 413, `1 MiB + 1 JSON, declared, is 413 (got ${r.status})`);
+  const payload = (await r.json()) as { kind?: string; details?: string };
+  assert(payload.kind === "PayloadTooLarge", "the 413 names its kind");
+  assert(
+    (payload.details ?? "").includes(`${MIB} bytes`) && (payload.details ?? "").includes("@limit(maxBody"),
+    `the 413 names the cap and how to raise it (got ${payload.details})`,
+  );
+  r = await worker.fetch(chunked("/notes", json(MIB), JSON_T), env);
+  assert(r.status === 201, `1 MiB JSON, chunked, is accepted (got ${r.status})`);
+  r = await worker.fetch(chunked("/notes", json(MIB + 1), JSON_T), env);
+  assert(r.status === 413, `1 MiB + 1 JSON, chunked, is 413 (got ${r.status})`);
+
+  // @form behaves the same.
+  r = await worker.fetch(declared("/signup", form(MIB), FORM_T), env);
+  assert(r.status === 201, `1 MiB form is accepted (got ${r.status})`);
+  r = await worker.fetch(declared("/signup", form(MIB + 1), FORM_T), env);
+  assert(r.status === 413, `1 MiB + 1 form, declared, is 413 (got ${r.status})`);
+  r = await worker.fetch(chunked("/signup", form(MIB + 1), FORM_T), env);
+  assert(r.status === 413, `1 MiB + 1 form, chunked, is 413 (got ${r.status})`);
+
+  // @limit raises the cap for its own route.
+  r = await worker.fetch(declared("/imports", json(2 * MIB), JSON_T), env);
+  assert(r.status === 201, `/imports takes 2 MiB under its @limit (got ${r.status})`);
+  r = await worker.fetch(declared("/imports", json(4 * MIB + 1), JSON_T), env);
+  assert(r.status === 413, `/imports refuses past its own cap (got ${r.status})`);
+
+  // A GET has no body and no cap.
+  r = await worker.fetch(new Request("https://x.test/status"), env);
+  assert(r.status === 200, `GET /status is 200 (got ${r.status})`);
+
+  console.log("ALL OK");
+}
+
+main().catch((e: unknown) => {
+  console.error(e);
+  throw e;
+});
+"#;
+
+#[test]
+fn http_default_body_cap_runs_on_workers_entry() {
+    run_driver("3921_http_default_body_cap", DEFAULT_CAP_DRIVER_TS);
 }

@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async authorise(qty: number) {
       return handlers.authorise.call(qty, deps);

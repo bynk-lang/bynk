@@ -1,0 +1,9 @@
+# 0959 — A D1 row admits Decimal, read from a TEXT column
+
+- **Status:** Accepted (v0.696.1)
+
+**Context.** ADR 0698's Consequences say a `Decimal` in a `Json.decodeSql` row is not admitted, and the `bynk.types.sql_row_shape` note listed only `Int`, `Float`, `String`, `Bool` and `Bytes`. The checker admitted `Decimal` anyway, because `is_column_base` ended in a `_ => true` arm, and the documentation (#4050) lists it, with the caveat that a SQLite `DECIMAL`, `NUMERIC` or `REAL` column has numeric affinity, so it arrives as a JSON number and fails the decode.
+
+**Decision.** This ADR replaces that one consequence of 0698 (the rest stands). A `Decimal`, or a refined or opaque type over one, is admitted in a SQLite row, read from a `TEXT` column, which keeps it exact. `is_column_base` lists the admitted bases explicitly (`Int`, `String`, `Bool`, `Float`, `Bytes`, `Decimal`; `Instant` for Postgres; `Duration` never), with no wildcard, so a new base type is not admitted by accident. The `bynk.types.sql_row_shape` note names `Decimal`. A new warning, `bynk.d1.decimal_numeric_affinity`, fires where a `select[T]` or a linked `Json.decodeSql[T]` reads a `Decimal` field from a result column whose declared type has numeric affinity by SQLite's rules (anything without `CHAR`, `CLOB`, `TEXT` or `BLOB` in its name), reported at the decode or the read. It is a warning because only a column read straight from a table has a declared type, so the check is a hint, not a proof. A warning from the SQL check no longer marks the file failed, so its unit is still emitted.
+
+**Consequences.** Nothing breaks: the checker already admitted `Decimal`. The only new diagnostic is a warning. The numeric-affinity trap is now flagged at build time instead of at the first decode. The workspace's `rusqlite` gains its `column_decltype` feature.

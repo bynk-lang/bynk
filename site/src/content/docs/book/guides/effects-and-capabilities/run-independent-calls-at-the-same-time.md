@@ -33,7 +33,7 @@ provides Orders = FixedOrders {
 }
 
 service summary {
-	on call(id: Int) -> Effect[String] given Users, Orders {
+	on call(id: Int) -> Effect[String] by Caller given Users, Orders {
 		par {
 			let user <- Users.get(id)
 			let orders <- Orders.forUser(id)
@@ -58,7 +58,7 @@ par {
 
 The calls in a block run together, so none can use another's result. A binding that
 mentions a name another binding of the block binds is refused
-([`bynk.par.sibling_name`](/book/reference/diagnostics/)), even if an earlier `let` of
+([`bynk.par.sibling_name`](/reference/diagnostics/)), even if an earlier `let` of
 the same name is in scope. Without that rule the call would silently read the earlier,
 stale value. If one call needs another's result, put it after the block:
 
@@ -73,9 +73,9 @@ let recent <- Orders.latest(orders)   // uses `orders`, so it comes after
 A block holds only `let x <- e` and `do e`. Writes to an agent's `store` stay
 sequential, so do them before or after the block, and a `?` is matched after the block
 rather than inside it. The
-[reference](/book/reference/capabilities/#par) lists everything that is refused.
+[reference](/reference/capabilities/#par) lists everything that is refused.
 
-The same holds for the closure you give to `parTraverse`, `parTraverseAll` or
+The same holds for the closure you give to `parForEach`, `parTraverse`, `parTraverseAll` or
 `parTraverseTry`: it runs for every element at once, so it may not write a `store`
 (`bynk.par.store_write_in_closure`). A `get` followed by a `put` in it would lose
 updates, because the branches interleave between the two calls. Run that loop with
@@ -87,11 +87,49 @@ write afterwards:
 
 ```bynk,fragment
 // refused: the closure writes `counts`
-let _ <- xs.parTraverse((x: Int) => counts.update("k", (v) => v + 1))
+let _ <- xs.parForEach((x: Int) => counts.update("k", (v) => v + 1))
 
 // accepted: sequential, and `update` is atomic per key
 let _ <- xs.forEach((x: Int) => counts.update("k", (v) => v + 1))
 ```
+
+## Fan out over a list
+
+To run one call per element at the same time, use `parForEach` when you only need the
+calls to happen, and `parTraverse` when you want what they return. The results come back in
+the order of the list, whatever order the calls finish in:
+
+```bynk,fragment
+fn quotes(skus: List[Sku]) -> Effect[List[Quote]] given Pricing {
+	skus.parTraverse((s) => Pricing.quote(s))
+}
+
+fn warmAll(keys: List[String]) -> Effect[()] given Cache {
+	keys.parForEach((k) => Cache.warm(k))
+}
+```
+
+If a call faults, the others still finish, then the first fault in list order is raised, as for a
+`par` block. `traverseAll` and `traverseTry` have concurrent forms (`parTraverseAll`, `parTraverseTry`) for
+steps that return a `Result`.
+
+## Bound how many run at once
+
+`parForEach`, `parTraverse`, `parTraverseAll` and `parTraverseTry` start every element at once. Over a long list that can exhaust connection or subrequest limits. The `…With` forms take a `ParOptions` (`consumes bynk { ParOptions }`) and keep at most `limit` calls in flight, starting the next as soon as one finishes:
+
+```bynk,fragment
+context demo.fan
+
+consumes bynk { ParOptions }
+
+service warm {
+	on call(ids: List[Int]) -> Effect[()] by Caller {
+		ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 8 })
+	}
+}
+```
+
+`limit` must be a whole number from 1 to 1000 (a literal outside that is an error, and `1` is a warning because nothing then overlaps; `forEach` is the sequential form, though it also stops at the first failed step where the pool still starts the rest). Results still come back in input order, and a failure still waits for the started calls to settle before raising the first one in input order. `parTraverseTryWith` also stops starting new calls once one returns `Err`.
 
 ## Test it
 
@@ -109,5 +147,5 @@ finished first.
 
 ## See also
 
-- [What a join guarantees on failure](/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/)
-- [Reference: joining independent effects](/book/reference/capabilities/#par)
+- [What a join guarantees on failure](/book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/)
+- [Reference: joining independent effects](/reference/capabilities/#par)

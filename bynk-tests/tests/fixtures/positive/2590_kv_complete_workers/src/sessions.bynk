@@ -5,12 +5,12 @@ context sessions
 // binary values, and `listPage` a page at a time.
 
 consumes bynk { Clock }
-consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvGet, KvList, KvListing }
+consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvGet, KvList, KvListing, KvTtl }
 
 capability Blobs = Kv
 
 service store {
-	on call(id: String, who: String) -> Effect[String] given Kv {
+	on call(id: String, who: String) -> Effect[String] by Caller given Kv {
 		let _ <- Kv.putWith(id, "body", KvPut { expiration: After(30.minutes), metadata: Map.empty().insert("user", who) })
 		let found <- Kv.getWith(id, KvGet { cacheTtl: Some(45.seconds) })
 		match found {
@@ -21,28 +21,34 @@ service store {
 }
 
 service expireSoon {
-	on call(id: String) -> Effect[()] given Kv {
-		Kv.putWith(id, "body", KvPut { expiration: After(10.seconds), metadata: Map.empty() })
+	on call(id: String, seconds: Int) -> Effect[Bool] by Caller given Kv {
+		match KvTtl.of(Duration.millis(seconds * 1000)) {
+			Ok(ttl) => {
+				let _ <- Kv.putWith(id, "body", KvPut { expiration: After(ttl), metadata: Map.empty() })
+				Effect.pure(true)
+			}
+			Err(_) => Effect.pure(false)
+		}
 	}
 }
 
 service expireAt {
-	on call(id: String, inSeconds: Int) -> Effect[()] given Kv, Clock {
+	on call(id: String, inSeconds: Int) -> Effect[()] by Caller given Kv, Clock {
 		let now <- Clock.now()
 		Kv.putWith(id, "body", KvPut { expiration: At(now + Duration.millis(inSeconds * 1000)), metadata: Map.empty() })
 	}
 }
 
 service ttlListed {
-	on call() -> Effect[Bool] given Kv {
-		let _ <- Kv.putTtl("t:1", "v", 120)
+	on call() -> Effect[Bool] by Caller given Kv {
+		let _ <- Kv.putTtl("t:1", "v", 2.minutes)
 		let page <- Kv.listPage(KvList { prefix: Some("t:"), cursor: None, limit: None })
 		Effect.pure(page.keys.length() == 1 && page.keys.all((k) => k.expiration.isSome()))
 	}
 }
 
 service blob {
-	on call(id: String, bytes: Bytes) -> Effect[Int] given Blobs {
+	on call(id: String, bytes: Bytes) -> Effect[Int] by Caller given Blobs {
 		let _ <- Blobs.putBytes(id, bytes, KvPut { expiration: Never, metadata: Map.empty() })
 		let back <- Blobs.getBytes(id)
 		match back {
@@ -53,7 +59,7 @@ service blob {
 }
 
 service pages {
-	on call(cursor: Option[String]) -> Effect[KvListing] given Kv {
+	on call(cursor: Option[String]) -> Effect[KvListing] by Caller given Kv {
 		let _ <- Kv.put("s:1", "a")
 		let _ <- Kv.put("s:2", "b")
 		let _ <- Kv.put("s:3", "c")

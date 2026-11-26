@@ -17,11 +17,11 @@ suite frames {
   case "compare is unsigned lexicographic" {
     let lo = Bytes.fromUtf8("a")
     let hi = Bytes.fromUtf8("b")
-    expect lo.compare(hi) == -1
-    expect hi.compare(lo) == 1
-    expect lo.compare(Bytes.fromUtf8("a")) == 0
-    expect lo.compare(Bytes.fromUtf8("aa")) == -1
-    expect unsignedOrder() == 1
+    expect lo.compare(hi) == Less
+    expect hi.compare(lo) == Greater
+    expect lo.compare(Bytes.fromUtf8("a")) == Equal
+    expect lo.compare(Bytes.fromUtf8("aa")) == Less
+    expect unsignedOrder() == Greater
   }
 
   case "hex is lowercase out and either case in" {

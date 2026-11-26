@@ -1,0 +1,162 @@
+---
+title: Cron
+---
+Cron handlers run on a schedule. Like HTTP handlers, they are declared in a
+`service` inside a `context`; the protocol sits on the service header
+(`from cron`), and each handler is an `on schedule("…")`.
+
+## Handler form
+
+```bynk,ignore
+service <Name> from cron {
+  on schedule("<schedule>") (at: Instant) -> Effect[Result[(), E]] {
+    …
+  }
+}
+```
+
+- **Schedule:** a cron expression as a string literal in `schedule("…")`, in
+  exactly Cloudflare's syntax (see [Schedule syntax](#schedule-syntax)). An
+  invalid one is `bynk.cron.invalid_schedule`, and the message names the failing
+  field. Schedules run in **UTC**.
+- **Parameters:** *optional*, at most two, told apart by type and in either
+  order: an `Instant` (the scheduled fire time) and exactly `CronSchedule` (the
+  schedule expression that fired this run, `event.cron`; nameable in a context that
+  `consumes bynk { CronSchedule }`). A second parameter of the same type, a third,
+  or any other type is `bynk.cron.bad_params`, as is a `CronSchedule` that the
+  context declares itself rather than takes from `bynk`. `schedule` is the expression
+  that fired this run, not "the next run"; it equals the expression as written,
+  since a schedule is single-spaced. For the `Instant`, an `Int` parameter (the
+  spelling before v0.90's `Instant` reached cron) is that error too: write
+  `at: Instant`, and `at.toEpochMillis()` where the body needs the number. For
+  "now", use `Clock.now()`; the parameter is the exact,
+  schedule-aligned instant, which stays the same when a run starts late (useful
+  for bucketing and idempotency). It works directly with `Duration` arithmetic
+  (`at - 1.hour`) and `Instant` comparison.
+- **Return type:** must be `Effect[Result[(), E]]` for some error type `E`
+  (`bynk.cron.return_not_effect_result`).
+- **Placement:** only inside a `service`, never an `agent`
+  (`bynk.parse.handler_in_agent`).
+
+No two cron handlers in a context may declare the same schedule
+(`bynk.cron.duplicate_schedule`).
+
+## Schedule syntax
+
+Five fields, separated by **exactly one space**, with no leading or trailing
+space. The string is then exactly what Cloudflare hands the Worker as
+`event.cron`, which it matches character for character, so nothing is
+normalised.
+
+| Field | Values | Also |
+|---|---|---|
+| minute | `0-59` | |
+| hour | `0-23` | |
+| day of month | `1-31` | `L` (last day), `W` (weekday nearest: `15W`, `LW`) |
+| month | `1-12` or `JAN`-`DEC` | |
+| day of week | `1-7`, with **`1` = Sunday**, or `SUN`-`SAT` | `6L` or `FRIL` (the last such weekday of the month), `6#2` (the second) |
+
+Names are case-insensitive, and `*`, `,`, `-` and `/` are valid in every field
+(`*/5`, `0-30/5`, `MON-FRI`, `1,15`). A range runs low to high, and a step is at
+least 1. There are no seconds, no year, no `?` and no `@daily`-style macros.
+Examples: `0 18 * * 6L`, `0 18 * * friL`, `59 23 LW * *`. Schedules run in
+**UTC**. `*/45 * * * *` fires at minute 0 and 45 of each hour.
+
+Where Cloudflare's documentation does not settle a form (a bare `L` in the day of
+week, a step on a single value), it is refused; a refusal can be relaxed later.
+
+Two warnings help with the platform's habits, and either is silenced by writing
+a name or an explicit list: `bynk.cron.numeric_weekday` (`5` is Thursday here,
+not standard cron's Friday; write `FRI`) and `bynk.cron.uneven_step` (a `*/n` in
+the minute or hour field where `n` doesn't divide 60 or 24, so the last gap is
+shorter).
+
+## Naming a schedule with a constant
+
+A schedule written once can be shared by a handler and a test, or by two
+contexts through a commons: `schedule(…)` takes a string literal, or the name of
+a constant.
+
+```bynk,ignore
+commons ops.schedules
+
+const Nightly: CronSchedule = "0 2 * * *"
+```
+
+```bynk,ignore
+context ops.reaper
+uses ops.schedules
+
+service sweeper from cron {
+  on schedule(Nightly) () -> Effect[Result[(), String]] { … }
+}
+```
+
+The name resolves to its literal at compile time, so the `wrangler.toml` trigger
+table and the dispatch key are still the literal text. A constant is accepted
+when it is declared exactly `String`, or exactly `CronSchedule` (the prelude type:
+a context names it with `consumes bynk { CronSchedule }`, and a commons with no
+clause, see [Naming `bynk`'s types in a commons](/reference/bynk-capabilities/#naming-bynks-types-in-a-commons)), and is bound to a
+literal or to another such constant, in the same file, a sibling file or a used
+commons. The resolved literal is then checked against `Cron` as a literal
+schedule is, so `const Bad: String = "61 * * * *"` is
+`bynk.cron.invalid_schedule` where it is used.
+
+A constant of any other type, such as `String where MaxLength(20)` or your own
+`type Nightly = String where Cron`, is refused with `bynk.cron.invalid_schedule`
+and a note naming the constant and its declared type. A private constant of a used
+commons is `bynk.visibility.private_item`. Duplicate detection sees through
+constants: `schedule(Nightly)` and `schedule("0 2 * * *")` in one context are
+`bynk.cron.duplicate_schedule`.
+
+A test names the schedule the same way: `sweeper.schedule(Nightly)` is matched to
+the handler by the resolved literal, so it follows a change to the constant.
+
+Constants are fixed at compile time, so a constant does not vary by environment.
+
+The same rule is the [`Cron` refinement predicate](/reference/refined-types/), and
+`CronSchedule` (`String where Cron`, from the `bynk` adapter) is the type of a
+valid schedule: `let s: CronSchedule = "0 2 * * MON-FRI"` is checked at compile
+time.
+
+## Failure
+
+A cron run has no retry channel. Returning `Ok(())` completes the run silently.
+Returning `Err(e)` marks the run **failed** in the Cron Trigger's Past Events and
+writes one structured log record naming the schedule, the service, the error's
+type and, for a sum error, its variant. The record never holds the payload, as
+for a detached effect's `Err`; a handler that wants the
+payload logs it with `Logger`. A handler that throws is logged with its stack,
+reported the same way, and rethrown. The run is still not retried by Bynk.
+
+Map a domain failure to `Err` the same way an HTTP handler maps it to an
+`HttpResult` error variant — the mapping stays visible in the handler body.
+
+An expression Cloudflare fires that no handler declares (a trigger edited outside
+`wrangler.toml`) is named in one warning, not dropped silently.
+
+In a [Worker group](/reference/tooling/manifest/#worker-groups) every member
+whose schedule matches runs, and the logs name each failing member, but Past
+Events records only the first failure.
+
+## Example
+
+```bynk
+context reaper
+
+service sweeper from cron {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}
+```
+
+## Emission
+
+cron handlers compile to the Worker's `scheduled` entry point on the
+`--target workers` target (dispatching on `event.cron`, passing
+`event.scheduledTime` and `event.cron` to handlers that declare those parameters, in
+the order they declare them), and every
+schedule is aggregated into the `[triggers]` table of the generated
+`wrangler.toml`. See [emission](/reference/tooling/emission/) and
+[Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/).

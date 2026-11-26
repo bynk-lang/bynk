@@ -1,0 +1,46 @@
+================================================================================
+Delivery policy on a from-queue service
+================================================================================
+
+context mail
+
+service outbox from queue("outbound-email") {
+  delivery {
+    retries: 5,
+    deadLetter: "outbound-email-dlq",
+  }
+
+  on message(job: String) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol
+        (string_literal))
+      (delivery_policy
+        (delivery_field
+          (identifier)
+          (number_literal))
+        (delivery_field
+          (identifier)
+          (string_literal)))
+      (handler
+        (queue_handler
+          (param
+            (identifier)
+            (base_type))
+          (generic_type_ref
+            (builtin_type)
+            (identifier))
+          (by_clause
+            (identifier))
+          (block
+            (identifier)))))))

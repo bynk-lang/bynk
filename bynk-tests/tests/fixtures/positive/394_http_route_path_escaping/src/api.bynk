@@ -13,7 +13,7 @@ service api from http {
   cors {
     origins: ["https://app.example.com"],
     credentials: false,
-    maxAge: 1.hours,
+    maxAge: 1.hour,
   }
 
   // Non-param path with an internal AND a trailing backslash. The trailing `\`

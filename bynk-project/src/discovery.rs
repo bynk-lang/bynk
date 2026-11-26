@@ -299,6 +299,101 @@ impl ParsedFile {
             .any(|it| matches!(it, CommonsItem::Messages(_)))
     }
 
+    /// 1B.2a (#4028): does this file declare an `agent`? The commons barrel's merged helpers
+    /// read this and [`declares_services`](Self::declares_services), as the `messages`
+    /// emitter reads [`declares_messages`](Self::declares_messages), so that the production
+    /// barrel need not name the AST.
+    pub fn declares_agents(&self) -> bool {
+        self.items()
+            .iter()
+            .any(|it| matches!(it, CommonsItem::Agent(_)))
+    }
+
+    /// 1B.2a (#4028): does this file declare a `service`? See
+    /// [`declares_agents`](Self::declares_agents).
+    pub fn declares_services(&self) -> bool {
+        self.items()
+            .iter()
+            .any(|it| matches!(it, CommonsItem::Service(_)))
+    }
+
+    /// #3955: add `uses <target>` that the source did not write, for a unit
+    /// reached implicitly (`bynk.ordering`, by any unit that mentions
+    /// `compare`, `sortWith` or `Ordering`). A no-op when the unit already
+    /// uses it. The declaration carries no source span, so nothing reports it.
+    pub fn add_implicit_uses(&mut self, target: &str) {
+        use bynk_syntax::ast::{Ident, QualifiedName, Trivia, UsesDecl};
+        use bynk_syntax::span::Span;
+        let uses = match &mut self.unit {
+            SourceUnit::Commons(c) => &mut c.uses,
+            SourceUnit::Context(c) => &mut c.uses,
+            SourceUnit::Adapter(a) => &mut a.uses,
+            SourceUnit::Suite(t) => &mut t.uses,
+        };
+        if uses.iter().any(|u| u.target.joined() == target) {
+            return;
+        }
+        let span = Span::default();
+        uses.push(UsesDecl {
+            alias: None,
+            selected: None,
+            qualified_refs: Vec::new(),
+            target: QualifiedName {
+                parts: target
+                    .split('.')
+                    .map(|name| Ident {
+                        name: name.to_string(),
+                        span,
+                    })
+                    .collect(),
+                span,
+            },
+            span,
+            trivia: Trivia::default(),
+            blank_before: false,
+        });
+    }
+
+    /// #4181: add `consumes <target> { names }`, a clause the source did not
+    /// write, to a commons that names the `bynk` adapter's transparent types.
+    /// The clause is type-only, so the unit gains no capability and stays pure.
+    /// A no-op for any other unit kind. The declaration carries no source span,
+    /// so nothing reports it.
+    pub fn add_implicit_consumes(&mut self, target: &str, names: &[String]) {
+        use bynk_syntax::ast::{ConsumesItem, Ident, QualifiedName, Trivia};
+        use bynk_syntax::span::Span;
+        let SourceUnit::Commons(c) = &mut self.unit else {
+            return;
+        };
+        if names.is_empty() || c.consumes.iter().any(|d| d.target.joined() == target) {
+            return;
+        }
+        let span = Span::default();
+        let ident = |name: &str| Ident {
+            name: name.to_string(),
+            span,
+        };
+        c.consumes.push(ConsumesDecl {
+            target: QualifiedName {
+                parts: target.split('.').map(ident).collect(),
+                span,
+            },
+            alias: None,
+            selected: Some(
+                names
+                    .iter()
+                    .map(|n| ConsumesItem {
+                        name: ident(n),
+                        alias: None,
+                    })
+                    .collect(),
+            ),
+            span,
+            trivia: Trivia::default(),
+            blank_before: false,
+        });
+    }
+
     pub fn uses(&self) -> &Vec<UsesDecl> {
         match &self.unit {
             SourceUnit::Commons(c) => &c.uses,
@@ -310,7 +405,7 @@ impl ParsedFile {
 
     pub fn consumes(&self) -> &[ConsumesDecl] {
         match &self.unit {
-            SourceUnit::Commons(_) => &[],
+            SourceUnit::Commons(c) => &c.consumes,
             SourceUnit::Context(c) => &c.consumes,
             // v0.18: adapter-to-adapter capability dependencies (spec §4.5).
             SourceUnit::Adapter(a) => &a.consumes,
@@ -408,9 +503,12 @@ impl ParsedFile {
             ),
         };
         Commons {
+            // #3984: a test-only commons' synthetic commons stays test-only.
+            test_only: matches!(&self.unit, SourceUnit::Commons(c) if c.test_only),
             name,
             items,
             uses,
+            consumes: Vec::new(),
             documentation,
             form,
             span,
@@ -459,6 +557,14 @@ pub fn parse_sources(
     // the warnings ride out to the caller's severity-aware sink.
     let (_file_id, result) = crate::parse_cache::cached_parse(cache_key, &source);
     let (units, warnings) = result.map_err(|errors| (*errors).clone())?;
+    // #3938: a `sessions = true` actor's generated agent is appended to the source and the file
+    // parsed again, so the agent's spans point into the text the files carry.
+    if let Some(source) = crate::session_agents::with_session_agents(&source, &units) {
+        let (_id, result) = crate::parse_cache::cached_parse(cache_key, &source);
+        let (units, warnings) = result.map_err(|errors| (*errors).clone())?;
+        let files = parsed_files(root, prefix, path, abs_path, &source, units.iter().cloned());
+        return Ok((files, (*warnings).clone()));
+    }
     let files = parsed_files(root, prefix, path, abs_path, &source, units.iter().cloned());
     Ok((files, (*warnings).clone()))
 }

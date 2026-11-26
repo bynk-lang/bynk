@@ -87,7 +87,7 @@ pub struct Clause {
 /// holding exactly when the emitter's `check` for it does. Serialised with its
 /// variant in `kind` (`{ "kind": "range", "min": 1, "max": 100 }`).
 ///
-/// Lengths are JavaScript `.length`, in UTF-16 code units. A `matches` holds
+/// Lengths are counted in code points (#3949), as `Array.from(value).length` does. A `matches` holds
 /// when `new RegExp("^(?:" + pattern + ")$")` (no flags) tests true on the
 /// value: `pattern` is as written, neither escaped nor anchored.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -99,6 +99,10 @@ pub enum Predicate {
     Positive,
     /// `min <= value <= max`, for an `Int` or a `Float` alike.
     Range { min: Bound, max: Bound },
+    /// `value >= min` (#3948).
+    AtLeast { min: Bound },
+    /// `value <= max` (#3948).
+    AtMost { max: Bound },
     /// The value's length is at least 1.
     NonEmpty,
     /// The value's length is at least `length`.
@@ -111,6 +115,8 @@ pub enum Predicate {
     Matches { pattern: String },
     /// A calendar date that exists, exactly `YYYY-MM-DD` (#2867).
     IsoDate,
+    /// A valid Cloudflare cron schedule (#3873).
+    Cron,
 }
 
 /// A `range` bound: a JSON integer for an `Int` type, a number for a `Float`.
@@ -121,6 +127,21 @@ pub enum Predicate {
 pub enum Bound {
     Int(i64),
     Float(f64),
+}
+
+/// A one-sided bound as a [`Bound`]. A `Decimal` or `Duration` has no
+/// refined-request panel; they read as a number (a `Duration` in
+/// milliseconds) only to keep the match total.
+fn bound_of(b: &bynk_syntax::ast::PredBound) -> Bound {
+    use bynk_syntax::ast::PredBound;
+    match b {
+        PredBound::Int(a) => Bound::Int(a.value),
+        PredBound::Float(a) => Bound::Float(a.value),
+        PredBound::Decimal(a) => {
+            Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0))
+        }
+        PredBound::Duration(a) => Bound::Int(a.millis),
+    }
 }
 
 impl Predicate {
@@ -142,12 +163,19 @@ impl Predicate {
                 min: Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
                 max: Bound::Float(b.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
             },
+            PredKind::InRangeDur(a, b) => Predicate::Range {
+                min: Bound::Int(a.millis),
+                max: Bound::Int(b.millis),
+            },
+            PredKind::AtLeast(b) => Predicate::AtLeast { min: bound_of(b) },
+            PredKind::AtMost(b) => Predicate::AtMost { max: bound_of(b) },
             PredKind::NonEmpty => Predicate::NonEmpty,
             PredKind::MinLength(n) => Predicate::MinLength { length: *n },
             PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
             PredKind::Length(n) => Predicate::Length { length: *n },
             PredKind::Matches(p) => Predicate::Matches { pattern: p.clone() },
             PredKind::IsoDate => Predicate::IsoDate,
+            PredKind::Cron => Predicate::Cron,
         }
     }
 }
@@ -249,18 +277,26 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::InRange(a, b) => format!("{} ≤ value ≤ {}", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("value ≥ {}", b.lexeme()),
+        PredKind::AtMost(b) => format!("value ≤ {}", b.lexeme()),
         PredKind::NonEmpty => "length ≥ 1".to_string(),
         PredKind::MinLength(n) => format!("length ≥ {n}"),
         PredKind::MaxLength(n) => format!("length ≤ {n}"),
         PredKind::Length(n) => format!("length = {n}"),
         PredKind::Matches(re) => format!("the whole string matches /{re}/"),
         PredKind::IsoDate => "a calendar date, YYYY-MM-DD".to_string(),
+        PredKind::Cron => {
+            "a cron schedule: five fields, minute hour day-of-month month day-of-week".to_string()
+        }
     };
     Clause {
         source: bynk_fmt::refinement_to_string(&Refinement {
             predicates: vec![bynk_syntax::ast::RefinementPred {
                 kind: kind.clone(),
                 arg_text: None,
+                pending: None,
+                from_const: Vec::new(),
                 span: bynk_syntax::span::Span::default(),
             }],
             annotations: Vec::new(),
@@ -268,7 +304,12 @@ fn clause(kind: &PredKind) -> Clause {
         }),
         description,
         predicate: Predicate::of(kind),
-        check: bynk_ts::print_expr(&cond),
+        // The emitted check calls the runtime's `__bynkCodePointLength`; the
+        // client has no runtime, so spell the same code-point count inline (#3949).
+        // Likewise `__bynkRegExp(source, flags)`, the runtime's shared `RegExp` (#3950).
+        check: bynk_ts::print_expr(&cond)
+            .replace("__bynkCodePointLength(value)", "Array.from(value).length")
+            .replace("__bynkRegExp(", "new globalThis.RegExp("),
         message,
     }
 }
@@ -366,6 +407,8 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     PredKind::Positive => (Some(1), None),
                     PredKind::NonNegative => (Some(0), None),
                     PredKind::InRange(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Int(a)) => (Some(a.value), None),
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Int(b)) => (None, Some(b.value)),
                     _ => continue,
                 };
                 lower = lower.max(l);
@@ -403,6 +446,12 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     }
                     PredKind::NonNegative => (Some(0.0), None),
                     PredKind::InRangeF(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Float(a)) => {
+                        (Some(a.value), None)
+                    }
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Float(b)) => {
+                        (None, Some(b.value))
+                    }
                     _ => continue,
                 };
                 lower = match (lower, l) {
@@ -449,7 +498,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                         PredKind::Matches(p) => Some(p),
                         _ => None,
                     })
-                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
                 for d in ["2026-11-03", "2028-02-29", "2000-02-29"] {
                     if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
                         push(d.to_string(), &mut out);
@@ -457,6 +509,28 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                 }
                 let note = out.is_empty().then(|| {
                     "No sample date satisfies every clause; type a candidate below.".to_string()
+                });
+                return (out, note);
+            }
+            // #3873: random strings are never schedules; offer real ones.
+            if preds.clone().any(|k| matches!(k, PredKind::Cron)) {
+                let re = preds
+                    .clone()
+                    .find_map(|k| match k {
+                        PredKind::Matches(p) => Some(p),
+                        _ => None,
+                    })
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
+                for d in ["0 2 * * MON-FRI", "*/15 * * * *", "0 0 1 JAN *"] {
+                    if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
+                        push(d.to_string(), &mut out);
+                    }
+                }
+                let note = out.is_empty().then(|| {
+                    "No sample schedule satisfies every clause; type a candidate below.".to_string()
                 });
                 return (out, note);
             }
@@ -485,7 +559,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     )),
                 );
             }
-            let re = pattern.and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+            let re = pattern.and_then(|p| {
+                let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+            });
             let ok = |s: &str| re.as_ref().is_none_or(|re| re.find(s).is_some());
             let mut try_push = |len: i64, out: &mut Vec<String>, rng: &mut Rng| {
                 let s = rng.string(len as usize);
@@ -636,21 +713,21 @@ mod tests {
     fn every_string_predicate_form() {
         let src = "commons demo\n\ntype E = String where NonEmpty\ntype Lo = String where MinLength(3)\ntype Hi = String where MaxLength(2)\ntype Ex = String where Length(4)\ntype Both = String where MinLength(3) && MaxLength(5)\n";
         let e = model(src, "E");
-        assert_eq!(checks(&e), ["value.length > 0"]);
+        assert_eq!(checks(&e), ["Array.from(value).length > 0"]);
         assert_eq!(e.clauses[0].description, "length ≥ 1");
         assert!(e.examples.iter().all(|s| !s.is_empty()));
         let lo = model(src, "Lo");
-        assert_eq!(checks(&lo), ["value.length >= 3"]);
+        assert_eq!(checks(&lo), ["Array.from(value).length >= 3"]);
         assert!(lo.examples.iter().all(|s| s.len() >= 3));
         let hi = model(src, "Hi");
-        assert_eq!(checks(&hi), ["value.length <= 2"]);
+        assert_eq!(checks(&hi), ["Array.from(value).length <= 2"]);
         assert!(hi.examples.iter().all(|s| s.len() <= 2));
         assert!(
             hi.examples.contains(&String::new()),
             "the empty string is in MaxLength's domain"
         );
         let ex = model(src, "Ex");
-        assert_eq!(checks(&ex), ["value.length === 4"]);
+        assert_eq!(checks(&ex), ["Array.from(value).length === 4"]);
         assert_eq!(ex.clauses[0].message, "length must be exactly 4");
         assert!(ex.examples.iter().all(|s| s.len() == 4));
         let both = model(src, "Both");

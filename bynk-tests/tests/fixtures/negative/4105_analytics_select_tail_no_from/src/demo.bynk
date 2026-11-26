@@ -1,0 +1,20 @@
+context demo
+
+consumes bynk.cloudflare { Analytics, AnalyticsReadError, AnalyticsSql }
+
+type Signup = { plan: String, seats: Float, at: Instant }
+type R = { plan: String, n: Int }
+
+capability Signups = Analytics
+
+service s from http {
+	on POST("/w") () -> Effect[HttpResult[Int]] by Visitor given Signups {
+		let _ <- Signups.writeValue(Signup { plan: "a", seats: 1.5, at: Instant.fromEpochMillis(0) })
+		Ok(1)
+	}
+
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let _ <- AnalyticsSql.select[R](Signups, ", count() AS n", [])
+		Ok(1)
+	}
+}

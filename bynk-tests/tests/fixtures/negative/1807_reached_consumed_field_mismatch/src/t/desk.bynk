@@ -3,7 +3,7 @@ context t.desk
 consumes t.vault as Vault
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let t <- Vault.fetch()
     Effect.pure(t.repo)
   }

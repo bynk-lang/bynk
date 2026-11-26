@@ -25,7 +25,7 @@ fn describe(s: Status) -> String {
 Run calls `service playground`, which describes one value of each variant.
 ---
 service playground {
-  on call() -> Effect[List[String]] {
+  on call() -> Effect[List[String]] by Caller {
     let all: List[Status] = [Pending, Shipped("1Z999"), Cancelled("out of stock")]
     all.map((s) => describe(s))
   }

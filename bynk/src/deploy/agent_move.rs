@@ -14,7 +14,12 @@ use std::collections::BTreeMap;
 
 use super::config::Resources;
 use super::ledger::DeployLock;
-use super::plan::{DeployOptions, GroupNames};
+use super::plan::{DeployOptions, Entry, GroupNames};
+
+/// The refusal of an agent move (#3562) and the codes the JSON plan gives its siblings (#3797).
+pub(crate) const AGENT_MOVE_REFUSED: &str = "bynk.deploy.agent_move_refused";
+const AGENT_STARTS_FRESH: &str = "bynk.deploy.agent_starts_fresh";
+const ACCEPT_FRESH_AGENT_UNUSED: &str = "bynk.deploy.accept_fresh_agent_unused";
 
 /// One context with agent state that the plan would put on another script.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,40 +75,66 @@ pub(crate) fn agent_moves(
     moves
 }
 
+/// Whether `--accept-fresh-agent` names this move's context (a `-` stands for a `.`).
+fn is_named(context: &str, accepted: &[String]) -> bool {
+    accepted
+        .iter()
+        .any(|a| a == context || a.replace('-', ".") == context)
+}
+
 /// Why a move is refused: it is not named in `accepted`, or it is but cannot be accepted.
-pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<String> {
-    let named = |m: &AgentMove| {
-        accepted
-            .iter()
-            .any(|a| a == &m.context || a.replace('-', ".") == m.context)
-    };
+///
+/// #3797: each as an entry of the JSON plan's `refusals` (`reason` says which way it is refused;
+/// only a move not yet named carries the flag that would let it through).
+pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<Entry> {
+    let named = |m: &AgentMove| is_named(&m.context, accepted);
     moves
         .iter()
         .filter_map(|m| {
             let what = format!(
-                "bynk.deploy.agent_move_refused: context `{}` hosts {} and would move from Worker script `{}` to `{}`; an agent's state belongs to its script, so it would start empty there and the old data would stay behind",
+                "context `{}` hosts {} and would move from Worker script `{}` to `{}`; an agent's state belongs to its script, so it would start empty there and the old data would stay behind",
                 m.context,
                 classes_phrase(&m.classes),
                 m.from_script,
                 m.to_script
             );
-            if !named(m) {
-                Some(format!(
-                    "{what}.\n  Keep `{}` on `{}`, or, if its state may be discarded, start it fresh with `--accept-fresh-agent {}`.",
-                    m.context, m.from_script, m.context
-                ))
+            let (reason, message) = if !named(m) {
+                (
+                    "not_accepted",
+                    format!(
+                        "{what}.\n  Keep `{}` on `{}`, or, if its state may be discarded, start it fresh with `--accept-fresh-agent {}`.",
+                        m.context, m.from_script, m.context
+                    ),
+                )
             } else if m.renamed_in_place {
-                Some(format!(
-                    "{what}, and the Worker is renamed in place: its old script would keep the data with nothing in the ledger to say so, so renaming a group that hosts agents is not supported (not even with `--accept-fresh-agent`); change its key as well, or keep its `name`."
-                ))
+                (
+                    "renamed_in_place",
+                    format!(
+                        "{what}, and the Worker is renamed in place: its old script would keep the data with nothing in the ledger to say so, so renaming a group that hosts agents is not supported (not even with `--accept-fresh-agent`); change its key as well, or keep its `name`."
+                    ),
+                )
             } else if m.old_script_built {
-                Some(format!(
-                    "{what}, and `{}` keeps running without it: Cloudflare cannot drop a class from a Worker that stays, so this move is not supported (not even with `--accept-fresh-agent`).",
-                    m.from_script
-                ))
+                (
+                    "old_script_stays",
+                    format!(
+                        "{what}, and `{}` keeps running without it: Cloudflare cannot drop a class from a Worker that stays, so this move is not supported (not even with `--accept-fresh-agent`).",
+                        m.from_script
+                    ),
+                )
             } else {
-                None
-            }
+                return None;
+            };
+            let entry = Entry::new(AGENT_MOVE_REFUSED, message)
+                .with("reason", reason)
+                .with("context", m.context.as_str())
+                .with("agents", m.classes.clone())
+                .with("from", m.from_script.as_str())
+                .with("to", m.to_script.as_str());
+            Some(if reason == "not_accepted" {
+                entry.overridden_by(format!("--accept-fresh-agent {}", m.context))
+            } else {
+                entry
+            })
         })
         .collect()
 }
@@ -116,21 +147,28 @@ pub(crate) fn unused_accepts(moves: &[AgentMove], accepted: &[String]) -> Vec<St
         .filter(|a| {
             !moves
                 .iter()
-                .any(|m| *a == &m.context || a.replace('-', ".") == m.context)
+                .any(|m| is_named(&m.context, std::slice::from_ref(*a)))
         })
         .cloned()
         .collect()
 }
 
 /// The warning for an accepted move: the class and the old script that keeps the data.
-pub(crate) fn fresh_warning(m: &AgentMove) -> String {
-    format!(
-        "bynk: warning: `{}` starts with fresh {} on `{}`; the old state stays in script `{}`, which is no longer a Worker of this project: do not delete it if the data matters.\n",
-        m.context,
-        classes_phrase(&m.classes),
-        m.to_script,
-        m.from_script
+pub(crate) fn fresh_warning(m: &AgentMove) -> Entry {
+    Entry::new(
+        AGENT_STARTS_FRESH,
+        format!(
+            "`{}` starts with fresh {} on `{}`; the old state stays in script `{}`, which is no longer a Worker of this project: do not delete it if the data matters.",
+            m.context,
+            classes_phrase(&m.classes),
+            m.to_script,
+            m.from_script
+        ),
     )
+    .with("context", m.context.as_str())
+    .with("agents", m.classes.clone())
+    .with("from", m.from_script.as_str())
+    .with("to", m.to_script.as_str())
 }
 
 /// The orphan report's line for a script that holds agent state (context → classes).
@@ -167,48 +205,84 @@ pub(crate) fn record_fresh_moves(
     moves: &[AgentMove],
 ) {
     let accepted = &opts.accept_fresh_agent;
-    for m in moves.iter().filter(|m| {
-        m.to_worker == worker
-            && accepted
-                .iter()
-                .any(|a| a == &m.context || a.replace('-', ".") == m.context)
-    }) {
+    for m in moves
+        .iter()
+        .filter(|m| m.to_worker == worker && is_named(&m.context, accepted))
+    {
         lock.record_fresh_agents(&opts.environment, &m.from_worker, &m.context, &m.classes);
     }
 }
 
-/// The moves of this run, if it may go on: [`gate`] over [`agent_moves`], printing what it must.
+/// What the agent-move check of a run found (#3562, #3797): the moves, and the refusals and
+/// warnings it has to say.
+#[derive(Debug)]
+pub(crate) struct AgentGate {
+    pub(crate) moves: Vec<AgentMove>,
+    pub(crate) refusals: Vec<Entry>,
+    pub(crate) warnings: Vec<Entry>,
+}
+
+impl AgentGate {
+    /// Every refusal and every `--accept-fresh-agent` name that matches no move stops the run;
+    /// an accepted move warns.
+    pub(crate) fn may_go_on(&self) -> bool {
+        self.refusals.is_empty()
+    }
+
+    /// The stderr lines, as a run has always printed them: each refusal, and the warnings only
+    /// when the run goes on.
+    pub(crate) fn eprint(&self) {
+        for refusal in &self.refusals {
+            emsg!("bynk: error: {}", refusal.line());
+        }
+        if self.may_go_on() {
+            for warning in &self.warnings {
+                colour::eprint(&format!("bynk: warning: {}\n", warning.message));
+            }
+        }
+    }
+}
+
+/// The moves of this run, and what they need said: [`gate`] over [`agent_moves`].
 pub(crate) fn checked_agent_moves(
     lock: &DeployLock,
     opts: &DeployOptions,
     resources: &BTreeMap<String, Resources>,
     order: &[String],
     groups: &GroupNames,
-) -> Option<Vec<AgentMove>> {
+) -> AgentGate {
     let moves = agent_moves(lock, &opts.environment, resources, order, groups);
-    gate(&moves, &opts.accept_fresh_agent).then_some(moves)
+    let (refusals, warnings) = gate(&moves, &opts.accept_fresh_agent);
+    AgentGate {
+        moves,
+        refusals,
+        warnings,
+    }
 }
 
-/// Print what the moves of this run need said, and whether the run may go on: every refusal and
-/// every `--accept-fresh-agent` name that matches no move stops it; an accepted move warns.
-pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> bool {
-    let refused = refusals(moves, accepted);
-    let unused = unused_accepts(moves, accepted);
-    for why in &refused {
-        emsg!("bynk: error: {why}");
-    }
-    for name in &unused {
-        emsg!(
-            "bynk: error: `--accept-fresh-agent {name}` names no context that would move with agent state in this run"
+/// What the moves of this run need said: every refusal, and every `--accept-fresh-agent` name that
+/// matches no move (an error, as the flag is never a blanket), and a warning for each accepted move.
+pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> (Vec<Entry>, Vec<Entry>) {
+    let mut refusals = refusals(moves, accepted);
+    for name in unused_accepts(moves, accepted) {
+        refusals.push(
+            Entry::new(
+                ACCEPT_FRESH_AGENT_UNUSED,
+                format!(
+                    "`--accept-fresh-agent {name}` names no context that would move with agent state in this run"
+                ),
+            )
+            .with("name", name),
         );
     }
-    if !refused.is_empty() || !unused.is_empty() {
-        return false;
+    // Warnings say what a run goes ahead with, so a refused run has none: its refusals are the
+    // whole story, as on stderr. (A move that is refused is said by its refusal, not as though it
+    // were happening.)
+    if !refusals.is_empty() {
+        return (refusals, Vec::new());
     }
-    for m in moves {
-        colour::eprint(&fresh_warning(m));
-    }
-    true
+    let warnings = moves.iter().map(fresh_warning).collect();
+    (refusals, warnings)
 }
 
 #[cfg(test)]
@@ -302,11 +376,12 @@ mod tests {
         assert!(!m[0].old_script_built);
         let why = refusals(&m, &[]);
         assert!(
-            why[0].contains("bynk.deploy.agent_move_refused") && why[0].contains("`Cart`"),
+            why[0].line().contains("bynk.deploy.agent_move_refused")
+                && why[0].line().contains("`Cart`"),
             "{why:?}"
         );
         assert!(
-            why[0].contains("--accept-fresh-agent shop.orders"),
+            why[0].line().contains("--accept-fresh-agent shop.orders"),
             "{why:?}"
         );
     }
@@ -329,7 +404,7 @@ mod tests {
         assert!(m[0].old_script_built);
         let accepted = vec!["shop.orders".to_string()];
         let why = refusals(&m, &accepted);
-        assert!(why[0].contains("not supported"), "{why:?}");
+        assert!(why[0].line().contains("not supported"), "{why:?}");
     }
 
     #[test]
@@ -420,7 +495,7 @@ mod tests {
             unused_accepts(&m, &["shop.nope".to_string()]),
             ["shop.nope"]
         );
-        assert!(fresh_warning(&m[0]).contains("`shop-orders`"));
+        assert!(fresh_warning(&m[0]).message.contains("`shop-orders`"));
         deployed(&mut l, "core", &["shop.orders", "shop.pay"], None);
         record_fresh_moves(
             &mut l,
@@ -514,7 +589,7 @@ mod tests {
         assert!(m[0].renamed_in_place);
         let why = refusals(&m, &["shop.orders".to_string()]);
         assert!(
-            why[0].contains("renamed in place") && why[0].contains("not supported"),
+            why[0].line().contains("renamed in place") && why[0].line().contains("not supported"),
             "{why:?}"
         );
     }

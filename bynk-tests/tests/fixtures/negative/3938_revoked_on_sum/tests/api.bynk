@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "a revoked session on a sum route" {
+		let r <- api.GET("/orders") by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+}

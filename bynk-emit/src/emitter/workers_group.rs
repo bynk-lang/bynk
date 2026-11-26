@@ -23,10 +23,14 @@
 //! runtime's `verifyCall` gives. Answering `404` for an unknown service while a
 //! known one answers `401` would let an unsigned caller list a group's services.
 
+use crate::ts_build::{
+    arrow_of, binary, block, call, const_typed, expr_stmt, ident, if_, index, member, method_call,
+    new, num_lit, paren, ret, str_lit,
+};
 use bynk_check::wire_format as wf;
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam,
-    TsProgram, TsStmt, TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
+    TsArrowBody, TsBinaryOp, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
+    TsSwitchCase, TsType, TsTypeMember, TsUnaryOp,
 };
 
 /// What the group's entry needs to know of one member.
@@ -69,47 +73,9 @@ pub struct GroupEntry<'a> {
 // The node builders of this file. Each is a one-line wrapper over a `bynk_ts`
 // constructor, so the entry below reads as the TypeScript it emits.
 
-fn id(name: &str) -> TsExpr {
-    TsExpr::Ident(name.to_string())
-}
-
-fn lit(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-fn num(n: u32) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.to_string()))
-}
-
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
-    member(id("globalThis"), name)
-}
-
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// `object.method(args)`.
-fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-fn new_(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(callee),
-        args,
-    }
+    member(ident("globalThis"), name)
 }
 
 fn as_never(expr: TsExpr) -> TsExpr {
@@ -119,38 +85,9 @@ fn as_never(expr: TsExpr) -> TsExpr {
     }
 }
 
-fn binary(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn paren(expr: TsExpr) -> TsExpr {
-    TsExpr::Paren(Box::new(expr))
-}
-
-fn index(object: TsExpr, idx: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(idx),
-    }
-}
-
-fn arrow(params: Vec<TsParam>, is_async: bool, body: TsArrowBody) -> TsExpr {
-    TsExpr::Arrow {
-        params,
-        is_async,
-        generics: Vec::new(),
-        return_type: None,
-        body: Box::new(body),
-    }
-}
-
 /// `(p) => body`, an expression-bodied arrow over untyped parameters.
 fn lambda(params: &[&str], body: TsExpr) -> TsExpr {
-    arrow(
+    arrow_of(
         params.iter().map(|p| TsParam::new(*p, None)).collect(),
         false,
         TsArrowBody::Expr(Box::new(body)),
@@ -170,22 +107,6 @@ fn response_ty() -> TsType {
     ty("globalThis.Response")
 }
 
-fn param(name: &str, ty: TsType) -> TsParam {
-    TsParam::new(name, Some(ty))
-}
-
-fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
-}
-
-fn ret(expr: TsExpr) -> TsStmt {
-    TsStmt::return_stmt(Some(expr), None)
-}
-
-fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
 /// `stmt`, with no blank line before it: this entry keeps its re-exports, its handler
 /// types and its member constants in tight runs, as it always wrote them.
 fn tight(mut stmt: TsStmt) -> TsStmt {
@@ -196,21 +117,17 @@ fn tight(mut stmt: TsStmt) -> TsStmt {
 /// `if (cond) { body }` on one line: the braced form of the one-line guards
 /// this entry used to write without braces.
 fn guard(cond: TsExpr, body: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, TsStmt::inline_block(vec![body], None), None)
-}
-
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
+    if_(cond, TsStmt::inline_block(vec![body], None))
 }
 
 /// `new globalThis.Response(body, init)`.
 fn new_response(body: TsExpr, init: TsExpr) -> TsExpr {
-    new_(global("Response"), vec![body, init])
+    new(global("Response"), vec![body, init])
 }
 
 /// `{ status: <n> }`.
 fn status(n: u32) -> TsExpr {
-    TsExpr::object(vec![("status".to_string(), num(n))])
+    TsExpr::object(vec![("status".to_string(), num_lit(n))])
 }
 
 fn function(
@@ -236,29 +153,29 @@ fn function(
 
 /// `["a", "b"]`, as a TypeScript array literal of strings.
 fn array(items: &[String]) -> TsExpr {
-    TsExpr::array(items.iter().map(|i| lit(i)).collect())
+    TsExpr::array(items.iter().map(str_lit).collect())
 }
 
 /// `await __verifyCall(request, env, "")`.
 fn verify_call() -> TsExpr {
     TsExpr::Await(Box::new(call(
-        id("__verifyCall"),
-        vec![id("request"), id("env"), lit("")],
+        ident("__verifyCall"),
+        vec![ident("request"), ident("env"), str_lit("")],
     )))
 }
 
 /// `if (request.method !== <method>) return new Response(<body>, { status: <n>,
 /// <headers> });`, the method gate every internal prefix starts with.
 fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsExpr>) -> TsStmt {
-    let mut init = vec![("status".to_string(), num(status_code))];
+    let mut init = vec![("status".to_string(), num_lit(status_code))];
     if let Some(headers) = headers {
         init.push(("headers".to_string(), headers));
     }
     guard(
         binary(
             TsBinaryOp::StrictNotEq,
-            member(id("request"), "method"),
-            lit(method),
+            member(ident("request"), "method"),
+            str_lit(method),
         ),
         ret(new_response(body, TsExpr::object(init))),
     )
@@ -266,9 +183,9 @@ fn method_gate(method: &str, body: TsExpr, status_code: u32, headers: Option<TsE
 
 /// `if (path.startsWith(<prefix>)) { <body> }`.
 fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
-    body.push(ret(call(id("__refused"), vec![verify_call()])));
+    body.push(ret(call(ident("__refused"), vec![verify_call()])));
     TsStmt::if_stmt(
-        method_call(id("path"), "startsWith", vec![lit(prefix)]),
+        method_call(ident("path"), "startsWith", vec![str_lit(prefix)]),
         block(body),
         None,
     )
@@ -277,12 +194,12 @@ fn prefix_branch(prefix: &str, mut body: Vec<TsStmt>) -> TsStmt {
 /// The unclaimed-request fallback: what a standalone Worker answers to an
 /// unauthenticated request for an internal prefix (see the module doc).
 fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
-    let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), lit(method))]);
-    let mut body = vec![const_(
+    let allow = |method: &str| TsExpr::object(vec![("allow".to_string(), str_lit(method))]);
+    let mut body = vec![const_typed(
         "path",
         None,
         member(
-            new_(global("URL"), vec![member(id("request"), "url")]),
+            new(global("URL"), vec![member(ident("request"), "url")]),
             "pathname",
         ),
     )];
@@ -298,8 +215,8 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
     ));
     if entry.has_events {
         body.push(guard(
-            method_call(id("path"), "startsWith", vec![lit("/_bynk/event/")]),
-            ret(call(id("__refused"), vec![verify_call()])),
+            method_call(ident("path"), "startsWith", vec![str_lit("/_bynk/event/")]),
+            ret(call(ident("__refused"), vec![verify_call()])),
         ));
     }
     let caller_gate = |caller: &str, body: &str| {
@@ -307,13 +224,13 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
             binary(
                 TsBinaryOp::StrictNotEq,
                 method_call(
-                    member(id("request"), "headers"),
+                    member(ident("request"), "headers"),
                     "get",
-                    vec![lit(wf::CALLER_HEADER)],
+                    vec![str_lit(wf::CALLER_HEADER)],
                 ),
-                lit(caller),
+                str_lit(caller),
             ),
-            ret(new_response(lit(body), status(401))),
+            ret(new_response(str_lit(body), status(401))),
         )
     };
     if entry.has_migrate {
@@ -324,7 +241,7 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
                 expr: Box::new(index(
                     paren(TsExpr::As {
                         expr: Box::new(TsExpr::As {
-                            expr: Box::new(id("env")),
+                            expr: Box::new(ident("env")),
                             ty: ty("unknown"),
                         }),
                         ty: TsType::named_with_args(
@@ -332,17 +249,17 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
                             vec![ty("string"), ty("unknown")],
                         ),
                     }),
-                    lit(wf::MIGRATE_KEY),
+                    str_lit(wf::MIGRATE_KEY),
                 )),
             },
-            lit("string"),
+            str_lit("string"),
         );
         body.push(prefix_branch(
             wf::MIGRATE_PATH_PREFIX,
             vec![
                 guard(
                     key_missing,
-                    ret(new_response(lit("Not found"), status(404))),
+                    ret(new_response(str_lit("Not found"), status(404))),
                 ),
                 method_gate(
                     wf::CALL_METHOD,
@@ -358,18 +275,18 @@ fn unclaimed(entry: &GroupEntry<'_>) -> TsStmt {
         body.push(prefix_branch(
             super::workers_entry::INSPECT_PREFIX,
             vec![
-                method_gate("POST", lit("Method Not Allowed"), 405, None),
+                method_gate("POST", str_lit("Method Not Allowed"), 405, None),
                 caller_gate("bynk.dev", "Unauthorized"),
             ],
         ));
     }
-    body.push(ret(new_response(lit("Not Found"), status(404))));
+    body.push(ret(new_response(str_lit("Not Found"), status(404))));
     function(
         "__unclaimed",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
         ],
         promise(response_ty()),
         body,
@@ -384,17 +301,17 @@ fn fetch_method() -> TsObjectEntry {
         "fetch",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(response_ty())),
         vec![ret(call(
-            id("__fetch"),
+            ident("__fetch"),
             vec![
-                id("request"),
-                call(id("__loopback"), vec![id("env"), id("ctx")]),
-                id("ctx"),
+                ident("request"),
+                call(ident("__loopback"), vec![ident("env"), ident("ctx")]),
+                ident("ctx"),
             ],
         ))],
     )
@@ -404,34 +321,42 @@ fn fetch_method() -> TsObjectEntry {
 /// router's own miss wins. `env` already answers a call to a member in process
 /// ([`loopback`]).
 fn dispatch() -> TsStmt {
-    let held_empty = binary(TsBinaryOp::StrictEq, member(id("held"), "length"), num(0));
+    let held_empty = binary(
+        TsBinaryOp::StrictEq,
+        member(ident("held"), "length"),
+        num_lit(0),
+    );
     let each_member = TsStmt::for_of(
         "member",
-        id("__members"),
+        ident("__members"),
         block(vec![
-            const_(
+            const_typed(
                 "response",
                 None,
                 TsExpr::Await(Box::new(method_call(
-                    member(id("member"), "entry"),
+                    member(ident("member"), "entry"),
                     "fetch",
-                    vec![id("request"), as_never(id("env")), id("ctx")],
+                    vec![ident("request"), as_never(ident("env")), ident("ctx")],
                 ))),
             ),
             guard(
                 TsExpr::Unary {
                     op: TsUnaryOp::Not,
-                    expr: Box::new(method_call(id("member"), "isMiss", vec![id("response")])),
+                    expr: Box::new(method_call(
+                        ident("member"),
+                        "isMiss",
+                        vec![ident("response")],
+                    )),
                 },
-                ret(id("response")),
+                ret(ident("response")),
             ),
             guard(
                 binary(
                     TsBinaryOp::StrictNotEq,
-                    member(id("response"), "status"),
-                    num(404),
+                    member(ident("response"), "status"),
+                    num_lit(404),
                 ),
-                expr_stmt(method_call(id("held"), "push", vec![id("response")])),
+                expr_stmt(method_call(ident("held"), "push", vec![ident("response")])),
             ),
         ]),
         None,
@@ -440,13 +365,13 @@ fn dispatch() -> TsStmt {
         "__fetch",
         true,
         vec![
-            param("request", ty("globalThis.Request")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("request", Some(ty("globalThis.Request"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         promise(response_ty()),
         vec![
-            const_(
+            const_typed(
                 "held",
                 Some(TsType::array(response_ty())),
                 TsExpr::array(vec![]),
@@ -455,10 +380,10 @@ fn dispatch() -> TsStmt {
             ret(TsExpr::Conditional {
                 test: Box::new(held_empty),
                 consequent: Box::new(TsExpr::Await(Box::new(call(
-                    id("__unclaimed"),
-                    vec![id("request"), id("env")],
+                    ident("__unclaimed"),
+                    vec![ident("request"), ident("env")],
                 )))),
-                alternate: Box::new(call(id("__withAllowed"), vec![id("held")])),
+                alternate: Box::new(call(ident("__withAllowed"), vec![ident("held")])),
             }),
         ],
     )
@@ -479,35 +404,38 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         return vec![function(
             "__loopback",
             false,
-            vec![param("env", ty("unknown")), param("_ctx", ty("__Ctx"))],
+            vec![
+                TsParam::new("env", Some(ty("unknown"))),
+                TsParam::new("_ctx", Some(ty("__Ctx"))),
+            ],
             ty("unknown"),
-            vec![ret(id("env"))],
+            vec![ret(ident("env"))],
         )];
     }
     let names: Vec<String> = entry
         .members
         .iter()
-        .map(|m| crate::emitter::wrangler::service_binding(&m.context).name)
+        .map(|m| crate::emitter::bindings::service_binding(&m.context).name)
         .collect();
     let record = || TsType::named_with_args("globalThis.Record", vec![ty("string"), ty("unknown")]);
-    let answers_in_process = arrow(
-        vec![param("request", ty("globalThis.Request"))],
+    let answers_in_process = arrow_of(
+        vec![TsParam::new("request", Some(ty("globalThis.Request")))],
         true,
         TsArrowBody::Multiline(vec![TsStmt::try_catch(
             block(vec![ret(TsExpr::Await(Box::new(call(
-                id("__fetch"),
-                vec![id("request"), id("inner"), id("ctx")],
+                ident("__fetch"),
+                vec![ident("request"), ident("inner"), ident("ctx")],
             ))))]),
             None::<String>,
             block(vec![ret(new_response(
-                lit("Internal Server Error"),
+                str_lit("Internal Server Error"),
                 status(500),
             ))]),
             None,
         )]),
     );
     vec![
-        const_(
+        const_typed(
             "__memberBindings",
             Some(TsType::readonly_array(ty("string"))),
             array(&names),
@@ -515,28 +443,31 @@ fn loopback(entry: &GroupEntry<'_>) -> Vec<TsStmt> {
         function(
             "__loopback",
             false,
-            vec![param("env", ty("unknown")), param("ctx", ty("__Ctx"))],
+            vec![
+                TsParam::new("env", Some(ty("unknown"))),
+                TsParam::new("ctx", Some(ty("__Ctx"))),
+            ],
             ty("unknown"),
             vec![
-                const_(
+                const_typed(
                     "inner",
                     Some(record()),
                     TsExpr::object_entries(vec![TsObjectEntry::Spread(paren(TsExpr::As {
-                        expr: Box::new(id("env")),
+                        expr: Box::new(ident("env")),
                         ty: record(),
                     }))]),
                 ),
                 TsStmt::for_of(
                     "name",
-                    id("__memberBindings"),
+                    ident("__memberBindings"),
                     block(vec![TsStmt::assign(
-                        index(id("inner"), id("name")),
+                        index(ident("inner"), ident("name")),
                         TsExpr::object(vec![("fetch".to_string(), answers_in_process)]),
                         None,
                     )]),
                     None,
                 ),
-                ret(id("inner")),
+                ret(ident("inner")),
             ],
         ),
     ]
@@ -547,9 +478,9 @@ fn refused() -> TsStmt {
     function(
         "__refused",
         false,
-        vec![param(
+        vec![TsParam::new(
             "verified",
-            TsType::union(vec![ty("string"), response_ty()]),
+            Some(TsType::union(vec![ty("string"), response_ty()])),
         )],
         response_ty(),
         vec![ret(TsExpr::Conditional {
@@ -557,12 +488,12 @@ fn refused() -> TsStmt {
                 TsBinaryOp::StrictEq,
                 TsExpr::Unary {
                     op: TsUnaryOp::Typeof,
-                    expr: Box::new(id("verified")),
+                    expr: Box::new(ident("verified")),
                 },
-                lit("string"),
+                str_lit("string"),
             )),
-            consequent: Box::new(new_response(lit("Unauthorized"), status(401))),
-            alternate: Box::new(id("verified")),
+            consequent: Box::new(new_response(str_lit("Unauthorized"), status(401))),
+            alternate: Box::new(ident("verified")),
         })],
     )
 }
@@ -574,17 +505,17 @@ fn with_allowed() -> TsStmt {
         method_call(
             paren(binary(
                 TsBinaryOp::NullishCoalescing,
-                method_call(member(id("r"), "headers"), "get", vec![lit("allow")]),
-                lit(""),
+                method_call(member(ident("r"), "headers"), "get", vec![str_lit("allow")]),
+                str_lit(""),
             )),
             "split",
-            vec![lit(",")],
+            vec![str_lit(",")],
         ),
         "map",
-        vec![lambda(&["m"], method_call(id("m"), "trim", vec![]))],
+        vec![lambda(&["m"], method_call(ident("m"), "trim", vec![]))],
     );
     let methods = method_call(
-        id("held"),
+        ident("held"),
         "flatMap",
         vec![lambda(
             &["r"],
@@ -593,46 +524,53 @@ fn with_allowed() -> TsStmt {
                 "filter",
                 vec![lambda(
                     &["m"],
-                    binary(TsBinaryOp::StrictNotEq, id("m"), lit("")),
+                    binary(TsBinaryOp::StrictNotEq, ident("m"), str_lit("")),
                 )],
             ),
         )],
     );
     let unique_sorted = method_call(
         method_call(
-            TsExpr::array(vec![TsExpr::Spread(Box::new(new_(
+            TsExpr::array(vec![TsExpr::Spread(Box::new(new(
                 global("Set"),
-                vec![id("methods")],
+                vec![ident("methods")],
             )))]),
             "sort",
             vec![],
         ),
         "join",
-        vec![lit(", ")],
+        vec![str_lit(", ")],
     );
     function(
         "__withAllowed",
         false,
-        vec![param("held", TsType::readonly_array(response_ty()))],
+        vec![TsParam::new(
+            "held",
+            Some(TsType::readonly_array(response_ty())),
+        )],
         response_ty(),
         vec![
-            const_("first", None, index(id("held"), num(0))),
+            const_typed("first", None, index(ident("held"), num_lit(0))),
             guard(
-                binary(TsBinaryOp::StrictEq, member(id("held"), "length"), num(1)),
-                ret(id("first")),
+                binary(
+                    TsBinaryOp::StrictEq,
+                    member(ident("held"), "length"),
+                    num_lit(1),
+                ),
+                ret(ident("first")),
             ),
-            const_("methods", None, methods),
-            const_(
+            const_typed("methods", None, methods),
+            const_typed(
                 "merged",
                 None,
-                new_response(member(id("first"), "body"), id("first")),
+                new_response(member(ident("first"), "body"), ident("first")),
             ),
             expr_stmt(method_call(
-                member(id("merged"), "headers"),
+                member(ident("merged"), "headers"),
                 "set",
-                vec![lit("allow"), unique_sorted],
+                vec![str_lit("allow"), unique_sorted],
             )),
-            ret(id("merged")),
+            ret(ident("merged")),
         ],
     )
 }
@@ -646,12 +584,12 @@ fn readonly_string(name: &str) -> TsType {
 /// handler, run on the loopback env.
 fn run_member(member_index: usize, handler: &str, arg: &str) -> TsExpr {
     method_call(
-        id(&format!("__m{member_index}")),
+        ident(format!("__m{member_index}")),
         handler,
         vec![
-            as_never(id(arg)),
-            as_never(call(id("__loopback"), vec![id("env"), id("ctx")])),
-            id("ctx"),
+            as_never(ident(arg)),
+            as_never(call(ident("__loopback"), vec![ident("env"), ident("ctx")])),
+            ident("ctx"),
         ],
     )
 }
@@ -666,7 +604,7 @@ fn scheduled(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
                 test: Box::new(method_call(
                     array(&m.crons),
                     "includes",
-                    vec![member(id("event"), "cron")],
+                    vec![member(ident("event"), "cron")],
                 )),
                 consequent: Box::new(TsExpr::array(vec![run_member(*i, "scheduled", "event")])),
                 alternate: Box::new(TsExpr::array(vec![])),
@@ -677,9 +615,9 @@ fn scheduled(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         "scheduled",
         true,
         vec![
-            param("event", readonly_string("cron")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("event", Some(readonly_string("cron"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![expr_stmt(TsExpr::Await(Box::new(method_call(
@@ -696,7 +634,7 @@ fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .iter()
         .filter(|(_, m)| !m.queues.is_empty())
         .map(|(i, m)| TsSwitchCase {
-            labels: m.queues.iter().map(|q| lit(q)).collect(),
+            labels: m.queues.iter().map(str_lit).collect(),
             body: vec![ret(run_member(*i, "queue", "batch"))],
             default_braced: false,
             case_braced: false,
@@ -714,13 +652,13 @@ fn queue(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         "queue",
         true,
         vec![
-            param("batch", readonly_string("queue")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("batch", Some(readonly_string("queue"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![TsStmt::switch_stmt(
-            member(id("batch"), "queue"),
+            member(ident("batch"), "queue"),
             cases,
             None,
         )],
@@ -738,8 +676,8 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
         .flat_map(|(i, m)| {
             m.addresses.iter().map(move |a| {
                 TsExpr::object(vec![
-                    ("address".to_string(), lit(&a.to_lowercase())),
-                    ("member".to_string(), id(&format!("__m{i}"))),
+                    ("address".to_string(), str_lit(a.to_lowercase())),
+                    ("member".to_string(), ident(format!("__m{i}"))),
                 ])
             })
         })
@@ -754,67 +692,67 @@ fn email(members: &[(usize, &GroupMember)]) -> TsObjectEntry {
     ]));
     let by_address = |address: TsExpr| {
         method_call(
-            id("routes"),
+            ident("routes"),
             "find",
             vec![lambda(
                 &["r"],
-                binary(TsBinaryOp::StrictEq, member(id("r"), "address"), address),
+                binary(TsBinaryOp::StrictEq, member(ident("r"), "address"), address),
             )],
         )
     };
     let claimant = binary(
         TsBinaryOp::NullishCoalescing,
-        by_address(id("to")),
+        by_address(ident("to")),
         by_address(TsExpr::template_lit(
             vec!["*@".to_string(), String::new()],
-            vec![id("domain")],
+            vec![ident("domain")],
         )),
     );
     let claiming = paren(binary(
         TsBinaryOp::NullishCoalescing,
         TsExpr::OptionalMember {
-            object: Box::new(id("claimant")),
+            object: Box::new(ident("claimant")),
             property: "member".to_string(),
         },
-        id(&format!("__m{first}")),
+        ident(format!("__m{first}")),
     ));
     TsObjectEntry::method(
         "email",
         true,
         vec![
-            param("message", readonly_string("to")),
-            param("env", ty("unknown")),
-            param("ctx", ty("__Ctx")),
+            TsParam::new("message", Some(readonly_string("to"))),
+            TsParam::new("env", Some(ty("unknown"))),
+            TsParam::new("ctx", Some(ty("__Ctx"))),
         ],
         Some(promise(ty("void"))),
         vec![
-            const_(
+            const_typed(
                 "to",
                 None,
-                method_call(member(id("message"), "to"), "toLowerCase", vec![]),
+                method_call(member(ident("message"), "to"), "toLowerCase", vec![]),
             ),
-            const_(
+            const_typed(
                 "domain",
                 None,
                 method_call(
-                    id("to"),
+                    ident("to"),
                     "slice",
                     vec![binary(
                         TsBinaryOp::Add,
-                        method_call(id("to"), "lastIndexOf", vec![lit("@")]),
-                        num(1),
+                        method_call(ident("to"), "lastIndexOf", vec![str_lit("@")]),
+                        num_lit(1),
                     )],
                 ),
             ),
-            const_("routes", Some(routes_ty), TsExpr::multiline_array(routes)),
-            const_("claimant", None, claimant),
+            const_typed("routes", Some(routes_ty), TsExpr::multiline_array(routes)),
+            const_typed("claimant", None, claimant),
             expr_stmt(TsExpr::Await(Box::new(method_call(
                 claiming,
                 "email",
                 vec![
-                    as_never(id("message")),
-                    as_never(call(id("__loopback"), vec![id("env"), id("ctx")])),
-                    id("ctx"),
+                    as_never(ident("message")),
+                    as_never(call(ident("__loopback"), vec![ident("env"), ident("ctx")])),
+                    ident("ctx"),
                 ],
             )))),
         ],
@@ -831,9 +769,9 @@ fn handler_type(name: &str, method: &str, arg: &str, ret_ty: TsType) -> TsStmt {
             ty: TsType::Object(vec![TsTypeMember::method(
                 method,
                 vec![
-                    param(arg, ty("never")),
-                    param("env", ty("never")),
-                    param("ctx", ty("__Ctx")),
+                    TsParam::new(arg, Some(ty("never"))),
+                    TsParam::new("env", Some(ty("never"))),
+                    TsParam::new("ctx", Some(ty("__Ctx"))),
                 ],
                 promise(ret_ty),
             )]),
@@ -894,9 +832,12 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
                 type_params: Vec::new(),
                 ty: TsType::Object(vec![TsTypeMember::method(
                     "waitUntil",
-                    vec![param(
+                    vec![TsParam::new(
                         "promise",
-                        TsType::named_with_args("globalThis.Promise", vec![ty("unknown")]),
+                        Some(TsType::named_with_args(
+                            "globalThis.Promise",
+                            vec![ty("unknown")],
+                        )),
                     )],
                     ty("void"),
                 )]),
@@ -910,9 +851,9 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
                 ty: TsType::Object(vec![TsTypeMember::method(
                     "fetch",
                     vec![
-                        param("request", ty("globalThis.Request")),
-                        param("env", ty("never")),
-                        param("ctx", ty("__Ctx")),
+                        TsParam::new("request", Some(ty("globalThis.Request"))),
+                        TsParam::new("env", Some(ty("never"))),
+                        TsParam::new("ctx", Some(ty("__Ctx"))),
                     ],
                     promise(response_ty()),
                 )]),
@@ -945,10 +886,10 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         if !m.addresses.is_empty() {
             handlers.push(ty("__Email"));
         }
-        stmts.push(tight(const_(
-            &format!("__m{i}"),
+        stmts.push(tight(const_typed(
+            format!("__m{i}"),
             Some(TsType::intersection(handlers)),
-            id(&format!("__entry{i}")),
+            ident(format!("__entry{i}")),
         )));
     }
     let row_ty = TsType::readonly_array(TsType::Object(vec![
@@ -956,6 +897,7 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         TsTypeMember::readonly_prop(
             "isMiss",
             TsType::Fn {
+                rest: false,
                 params: vec![response_ty()],
                 names: vec!["response".to_string()],
                 ret: Box::new(ty("boolean")),
@@ -966,12 +908,12 @@ fn member_table(members: &[(usize, &GroupMember)]) -> Vec<TsStmt> {
         .iter()
         .map(|(i, _)| {
             TsExpr::object(vec![
-                ("entry".to_string(), id(&format!("__m{i}"))),
-                ("isMiss".to_string(), id(&format!("__miss{i}"))),
+                ("entry".to_string(), ident(format!("__m{i}"))),
+                ("isMiss".to_string(), ident(format!("__miss{i}"))),
             ])
         })
         .collect();
-    stmts.push(const_(
+    stmts.push(const_typed(
         "__members",
         Some(row_ty),
         TsExpr::multiline_array(rows),
@@ -1006,7 +948,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
     // finds it, as it does a member entry's.
     for stmt in crate::emitter::runtime_files::runtime_import_stmts(
         false,
-        &["__verifyCall".to_string()],
+        &["__verifyCall".to_string(), "__enterTrace".to_string()],
         "../../runtime.js",
     ) {
         program.push(stmt);
@@ -1035,7 +977,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
         handlers.push(email(&members));
     }
     program.push(TsStmt::decl(
-        TsDecl::ExportDefault(TsExpr::multiline_object_entries(handlers)),
+        TsDecl::ExportDefault(super::workers_entry::trace_scope::export_default(handlers)),
         None,
     ));
     program
@@ -1147,7 +1089,7 @@ mod tests {
         let text = printed(&entry_of(&members));
         assert!(
             text.contains(
-                "      case \"jobs\":\n      case \"mail\":\n        return __m0.queue(batch as never, __loopback(env, ctx) as never, ctx);\n      default:\n        return;"
+                "        case \"jobs\":\n        case \"mail\":\n          return __m0.queue(batch as never, __loopback(env, ctx) as never, ctx);\n        default:\n          return;"
             ),
             "{text}"
         );

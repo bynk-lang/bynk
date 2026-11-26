@@ -1,0 +1,10 @@
+{
+  "blurb": "Each `SignedCookie` key takes one kind of value: `secret`, `previous` and `cookie` are strings, `ttl` is a duration, and `sameSite` is `Lax`, `Strict` or `Unrestricted`. Fix the value or remove the key.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_bad_arg",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = 5, ttl = 12.hours), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` config value has the wrong kind."
+}

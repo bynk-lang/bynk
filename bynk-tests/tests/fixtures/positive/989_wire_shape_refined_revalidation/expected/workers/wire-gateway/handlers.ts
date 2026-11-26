@@ -2,6 +2,7 @@
 // context wire.gateway
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
 import type * as wire_auth from "../wire-auth/handlers.js";
@@ -51,6 +52,14 @@ export function __serialise_GatewayError(value: GatewayError): __JsonValue {
 }
 
 export function __deserialise_GatewayError(json: __JsonValue, path: string = "$"): Result<GatewayError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Rejected":
+        return Ok({ tag: "Rejected" } as GatewayError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -106,11 +115,11 @@ export function __deserialise_ClientId(json: __JsonValue, path: string = "$"): R
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length > 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "must be non-empty", value: json } });
+  if (!(__bynkCodePointLength(json) > 0)) {
+    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value: json } });
   }
-  if (!(json.length <= 20)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "length must be at most 20", value: json } });
+  if (!(__bynkCodePointLength(json) <= 20)) {
+    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value: json } });
   }
   return Ok(json as unknown as wire_auth.ClientId);
 }
@@ -123,6 +132,14 @@ export function __serialise_LoginError(value: wire_auth.LoginError): __JsonValue
 }
 
 export function __deserialise_LoginError(json: __JsonValue, path: string = "$"): Result<wire_auth.LoginError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Invalid":
+        return Ok({ tag: "Invalid" } as wire_auth.LoginError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

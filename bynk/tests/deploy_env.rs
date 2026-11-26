@@ -17,7 +17,7 @@ exports transparent { Receipt }
 type Receipt = { id: String }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id })
   }
 }
@@ -30,7 +30,7 @@ consumes shop.payment
 type Job = { id: String }
 
 service place {
-  on call(id: String) -> Effect[Result[String, Int]] {
+  on call(id: String) -> Effect[Result[String, Int]] by Caller {
     let receipt <- shop.payment.authorise(id)
     match receipt {
       Ok(r) => Ok(r.id)
@@ -40,7 +40,7 @@ service place {
 }
 
 service intake from queue("job-intake") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

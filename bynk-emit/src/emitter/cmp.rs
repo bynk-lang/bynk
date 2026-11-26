@@ -29,6 +29,7 @@ use bynk_syntax::ast::{BaseType, TypeBody, TypeDecl, TypeRef};
 use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsObjectEntry, TsParam};
 
 use super::runtime_use::RuntimeUse;
+use crate::ts_build::{call, ident};
 
 /// The hidden witness parameter's name for type parameter `param`.
 pub(crate) fn witness_ident(param: &str) -> String {
@@ -90,7 +91,7 @@ impl<'a> CmpGen<'a> {
 
     fn wrap(&self, helper: &'static str, inner: TsExpr) -> TsExpr {
         self.runtime_use.note_cmp(helper);
-        call(helper, vec![inner])
+        call(ident(helper), vec![inner])
     }
 
     fn ty(&self, ty: TyId, stack: &mut Vec<Frame>) -> TsExpr {
@@ -131,7 +132,7 @@ impl<'a> CmpGen<'a> {
             | other @ Ty::Never
             | other @ Ty::Result(..)
             | other @ Ty::Effect(_)
-            | other @ Ty::HttpResult(_)
+            | other @ Ty::HttpResult(_, _)
             | other @ Ty::QueueResult
             | other @ Ty::HttpOutcome(_)
             | other @ Ty::BoundaryRejection
@@ -206,7 +207,10 @@ impl<'a> CmpGen<'a> {
                     .map(|f| (f.name.name.clone(), &f.type_ref))
                     .collect();
                 self.runtime_use.note_cmp("__bynkCmpRecord");
-                call("__bynkCmpRecord", vec![self.fields(&fields, &env, stack)])
+                call(
+                    ident("__bynkCmpRecord"),
+                    vec![self.fields(&fields, &env, stack)],
+                )
             }
             TypeBody::Sum(s) => {
                 let order: Vec<TsExpr> = s
@@ -232,7 +236,7 @@ impl<'a> CmpGen<'a> {
                 }
                 self.runtime_use.note_cmp("__bynkCmpSum");
                 call(
-                    "__bynkCmpSum",
+                    ident("__bynkCmpSum"),
                     vec![TsExpr::array(order), TsExpr::object_entries(payloads)],
                 )
             }
@@ -244,7 +248,7 @@ impl<'a> CmpGen<'a> {
         if frame.used {
             self.runtime_use.note_cmp("__bynkCmpFix");
             call(
-                "__bynkCmpFix",
+                ident("__bynkCmpFix"),
                 vec![TsExpr::Arrow {
                     params: vec![TsParam::new(self_ident, None)],
                     is_async: false,
@@ -324,14 +328,6 @@ impl<'a> CmpGen<'a> {
             | other @ TypeRef::Unit(_)
             | other @ TypeRef::Fn(..) => unreachable!("bynk internal error: {other:?} is not Ord"),
         }
-    }
-}
-
-/// `helper(args…)`.
-fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(TsExpr::Ident(helper.to_string())),
-        args,
     }
 }
 

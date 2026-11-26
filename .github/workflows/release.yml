@@ -111,7 +111,7 @@ jobs:
         run: |
           ver="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
           # Release pages use dashes (v0-639-1.md): Astro drops dots from URLs.
-          page="site/src/content/docs/book/reference/releases/v${ver//./-}.md"
+          page="site/src/content/docs/reference/releases/v${ver//./-}.md"
           if [ -f "$page" ]; then
             echo "::notice::$page is present"
           else
@@ -181,7 +181,10 @@ jobs:
     name: Test suite (${{ matrix.os }})
     needs: [verify, plan]
     if: needs.plan.outputs.matrix != '[]'
-    runs-on: ${{ matrix.os }}
+    # The leg keeps the name `Test suite (macos-latest)`, which is how `plan` matches ci.yml's
+    # result, but runs on the Intel runner: an arm64 macOS runner shortage must not hold the
+    # gate that every publish waits on (#4263).
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-15-intel' || matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -273,8 +276,9 @@ jobs:
             exit 1
           fi
 
-  # Build native binaries on each host (no cross-compilation). fail-fast off so
-  # one platform's failure doesn't abandon the others' artifacts.
+  # Build native binaries on each host, except `aarch64-apple-darwin`, which is
+  # cross-compiled on the Intel macOS runner (#4263). fail-fast off so one
+  # platform's failure doesn't abandon the others' artifacts.
   binaries:
     name: Build ${{ matrix.target }}
     needs: [verify, tests-passed]
@@ -291,9 +295,16 @@ jobs:
           # repos — re-enabled at the public flip (June 2026).
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+          # Both Apple targets build on the Intel runner (#4263). GitHub's arm64 macOS
+          # runners went unallocated for two attempts at v0.661.1 and held the whole
+          # release back, and this job only builds, packages and uploads: it never runs
+          # the binary, so `aarch64-apple-darwin` is cross-compiled here (the macOS SDK
+          # is on the Intel runner, and the target comes from the toolchain step's
+          # `targets:`). Linking Security.framework needs that SDK, so this is not a
+          # Linux cross-build. The "Verify the Mach-O architecture" step checks it.
           - os: macos-15-intel
             target: x86_64-apple-darwin
-          - os: macos-latest
+          - os: macos-15-intel
             target: aarch64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -310,11 +321,33 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+      # The diagnostic index is assembled from the per-code files, not committed
+      # (#4286); the bundle inlines it.
+      - name: Assemble the diagnostic index
+        run: node site/scripts/build-diagnostics-index.mjs
       - name: Generate the Book bundle `bynk book` embeds
         run: node site/scripts/build-llms-full.mjs
       - name: Build bynk + bynk-lsp
         run: cargo build --release --locked --target ${{ matrix.target }} -p bynk -p bynk-lsp
 
+      # A cross-compiled binary that came out for the wrong architecture would
+      # install and then fail to run: assert each Mach-O's slice, and leave the
+      # `lipo -info` lines in the job log as the evidence.
+      - name: Verify the Mach-O architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) want=arm64 ;;
+            x86_64-apple-darwin) want=x86_64 ;;
+            *) echo "::error::no expected architecture for ${{ matrix.target }}"; exit 1 ;;
+          esac
+          for b in bynk bynk-lsp; do
+            f="target/${{ matrix.target }}/release/$b"
+            lipo -info "$f"
+            file "$f"
+            [ "$(lipo -archs "$f")" = "$want" ] || { echo "::error::$f is not a $want Mach-O"; exit 1; }
+          done
       - name: Package (unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -585,7 +618,7 @@ jobs:
       - name: Mint canary-dispatch token
         if: steps.secrets.outputs.configured == 'true'
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ secrets.CANARY_DISPATCH_APP_ID }}
           private-key: ${{ secrets.CANARY_DISPATCH_APP_KEY }}

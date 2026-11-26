@@ -51,7 +51,7 @@
                 "type": "string"
               },
               "violation": {
-                "type": "object"
+                "$ref": "#/components/schemas/ValidationViolation"
               }
             },
             "required": [
@@ -88,6 +88,271 @@
           "allowed",
           "remaining",
           "resetAt"
+        ],
+        "type": "object"
+      },
+      "ValidationBound": {
+        "description": "A numeric argument of a rule, of the refined type's own base. A `Decimal` is its canonical text and a `Duration` its milliseconds.",
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "IntBound"
+              },
+              "value": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "FloatBound"
+              },
+              "value": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "DecimalBound"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "DurationBound"
+              },
+              "value": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ValidationRule": {
+        "description": "The predicate a refinement enforces, with its argument. `WellFormed` is a value that is not a valid member of its base type at all.",
+        "oneOf": [
+          {
+            "properties": {
+              "kind": {
+                "const": "NonNegative"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "Positive"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "hi": {
+                "$ref": "#/components/schemas/ValidationBound"
+              },
+              "kind": {
+                "const": "InRange"
+              },
+              "lo": {
+                "$ref": "#/components/schemas/ValidationBound"
+              }
+            },
+            "required": [
+              "kind",
+              "lo",
+              "hi"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "bound": {
+                "$ref": "#/components/schemas/ValidationBound"
+              },
+              "kind": {
+                "const": "AtLeast"
+              }
+            },
+            "required": [
+              "kind",
+              "bound"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "bound": {
+                "$ref": "#/components/schemas/ValidationBound"
+              },
+              "kind": {
+                "const": "AtMost"
+              }
+            },
+            "required": [
+              "kind",
+              "bound"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "NonEmpty"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "MinLength"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "MaxLength"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "Length"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "Matches"
+              },
+              "pattern": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "pattern"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "IsoDate"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "Cron"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "WellFormed"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ValidationViolation": {
+        "description": "The refinement a value broke. The offending value is never echoed.",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/ValidationRule"
+          }
+        },
+        "required": [
+          "field",
+          "message",
+          "rule"
         ],
         "type": "object"
       }

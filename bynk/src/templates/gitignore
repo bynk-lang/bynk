@@ -1,2 +1,7 @@
+# Generated output: the compiled TypeScript `bynk check`, `bynk test` and `bynk build` write.
+/out
 # Build output `bynk dev` writes (compiled workers + local wrangler state).
 /.bynk
+# Local state and dependencies of the Cloudflare tooling.
+.wrangler/
+node_modules/

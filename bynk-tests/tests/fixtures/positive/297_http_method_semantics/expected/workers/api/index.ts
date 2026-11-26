@@ -2,8 +2,10 @@
 // Worker entry point for context `api`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -15,115 +17,177 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    const __security_routes: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "api");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
-        }
-      }
-
-      {
-        if ((method === "GET" || method === "HEAD") && path === "/chunks") {
-          __route = "GET /chunks";
-          const result = await surface.http_GET_chunks();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
-          return method === "HEAD" ? __headResponse(__response) : __response;
-        }
-      }
-      {
-        if ((method === "GET" || method === "HEAD") && path === "/logo") {
-          __route = "GET /logo";
-          const result = await surface.http_GET_logo();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
-          return method === "HEAD" ? __headResponse(__response) : __response;
-        }
-      }
-      {
-        if ((method === "GET" || method === "HEAD") && path === "/notes") {
-          __route = "GET /notes";
-          const result = await surface.http_GET_notes();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
-          return method === "HEAD" ? __headResponse(__response) : __response;
-        }
-      }
-      {
-        if ((method === "GET" || method === "HEAD") && path === "/ticks") {
-          __route = "GET /ticks";
-          const result = await surface.http_GET_ticks();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
-          return method === "HEAD" ? __headResponse(__response) : __response;
-        }
-      }
-      {
-        if (method === "POST" && path === "/notes") {
-          __route = "POST /notes";
-          let __body_json: __JsonValue;
-          try {
-            __body_json = (await request.json()) as __JsonValue;
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      const __security_routes: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "api");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
           }
-          const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
-          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
-          const body = __r_body.value;
-          const result = await surface.http_POST_notes(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_routes);
         }
-      }
-      {
-        const __m = __matchPath("/notes/:id", path);
-        if ((method === "GET" || method === "HEAD") && __m) {
-          __route = "GET /notes/:id";
-          const __raw_id = __m.params["id"];
-          const id = __raw_id;
-          const result = await surface.http_GET_notes_Param_id(id);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
-          return method === "HEAD" ? __headResponse(__response) : __response;
+
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/bad-event", path) !== null) {
+            __route = "GET /bad-event";
+            const result = await surface.http_GET_bad_event();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
         }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/beat", path) !== null) {
+            __route = "GET /beat";
+            const result = await surface.http_GET_beat();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/chunks", path) !== null) {
+            __route = "GET /chunks";
+            const result = await surface.http_GET_chunks();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/events", path) !== null) {
+            __route = "GET /events";
+            const result = await surface.http_GET_events();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/logo", path) !== null) {
+            __route = "GET /logo";
+            const result = await surface.http_GET_logo();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/notes", path) !== null) {
+            __route = "GET /notes";
+            const result = await surface.http_GET_notes();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/ticks", path) !== null) {
+            __route = "GET /ticks";
+            const result = await surface.http_GET_ticks();
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if (method === "POST" && __matchPath("/notes", path) !== null) {
+            __route = "POST /notes";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 1048576);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            let __body_json: __JsonValue;
+            try {
+              __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
+            const body = __r_body.value;
+            const result = await surface.http_POST_notes(body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /notes" }), request, ["Bynk realm=\"api\""]), __security_routes);
+          }
+        }
+        {
+          const __m = __matchPath("/notes/:id", path);
+          if ((method === "GET" || method === "HEAD") && __m) {
+            __route = "GET /notes/:id";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
+            }
+            const __raw_id = __m.params["id"];
+            const id = __raw_id;
+            const result = await surface.http_GET_notes_Param_id(id);
+            const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        if (__matchPath("/bad-event", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/beat", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/chunks", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/events", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/logo", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/notes", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/notes/:id", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        if (__matchPath("/ticks", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_routes);
+        }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`api ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("api", __route);
       }
-      if (path === "/chunks") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
-        return __applySecurityHeaders(__res, __security_routes);
-      }
-      if (path === "/logo") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
-        return __applySecurityHeaders(__res, __security_routes);
-      }
-      if (path === "/notes") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_routes);
-      }
-      if (__matchPath("/notes/:id", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
-        return __applySecurityHeaders(__res, __security_routes);
-      }
-      if (path === "/ticks") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
-        return __applySecurityHeaders(__res, __security_routes);
-      }
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      globalThis.console.error(`api ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("api", __route);
-    }
+    });
   },
 };

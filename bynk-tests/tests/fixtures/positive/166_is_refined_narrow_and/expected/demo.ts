@@ -2,14 +2,15 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Code = string & { readonly __brand: "Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(value.length >= 3)) {
-      return Err({ field: "Code", message: "length must be at least 3", value });
+    if (!(__bynkCodePointLength(value) >= 3)) {
+      return Err({ field: "Code", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     return Ok(value as Code);
   },
@@ -21,5 +22,5 @@ export function firstChar(c: Code): boolean {
 
 export function check(s: string): boolean {
   const __r0 = s;
-  return (__r0.length >= 3) && ((() => { const s = __r0 as Code; return firstChar(s); })());
+  return (__bynkCodePointLength(__r0) >= 3) && ((() => { const s = __r0 as Code; return firstChar(s); })());
 }

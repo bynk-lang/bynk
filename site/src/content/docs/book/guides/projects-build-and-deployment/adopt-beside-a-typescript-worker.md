@@ -41,7 +41,7 @@ the build also writes a typed client for it,
 `workers/shop-ledger/bynk-client.ts`. Copy it into the TypeScript Worker's
 repository, and add the runtime package it imports, `@bynk/wire-client`, to that
 Worker's dependencies (see
-[the runtime package](/book/reference/typescript-client/#the-runtime-package)).
+[the runtime package](/reference/typescript-client/#the-runtime-package)).
 
 The client is generated code: when the context's services change, regenerate it
 rather than editing it.
@@ -90,7 +90,7 @@ export default {
 ```
 
 Every argument and result is typed, and a service `Billing` may not call isn't
-on the client at all. The [reference](/book/reference/typescript-client/) lists
+on the client at all. The [reference](/reference/typescript-client/) lists
 what the client exports and how a failed call surfaces.
 
 ### 5. Pin the client

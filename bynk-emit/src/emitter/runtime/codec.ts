@@ -100,7 +100,13 @@ export function __bynkCodecSet<T>(c: __BynkCodec<T>): __BynkCodec<ReadonlySet<T>
   };
 }
 
-export function __bynkCodecMap<K, V>(ck: __BynkCodec<K>, cv: __BynkCodec<V>): __BynkCodec<ReadonlyMap<K, V>> {
+// `stringKey` (#3974): the key is a `String`, or a refined or opaque `String`, so a JSON object is
+// also read, as its `[key, value]` pairs in `Object.entries` order, as the monomorphised helper does.
+export function __bynkCodecMap<K, V>(
+  ck: __BynkCodec<K>,
+  cv: __BynkCodec<V>,
+  stringKey: boolean = false,
+): __BynkCodec<ReadonlyMap<K, V>> {
   return {
     encode: (m) => {
       const entries: JsonValue[] = [];
@@ -108,6 +114,9 @@ export function __bynkCodecMap<K, V>(ck: __BynkCodec<K>, cv: __BynkCodec<V>): __
       return entries;
     },
     decode: (json, path) => {
+      if (stringKey && typeof json === "object" && json !== null && !Array.isArray(json)) {
+        json = Object.entries(json as { [k: string]: JsonValue }) as JsonValue;
+      }
       if (!Array.isArray(json)) return mismatch(path, "array", typeof json);
       let out: Map<K, V> | undefined;
       for (let i = 0; i < json.length; i++) {
@@ -195,7 +204,12 @@ export async function __bynkCapabilityReply<T>(
 ): Promise<T> {
   const decoded = codec.decode((await reply) as JsonValue, "$");
   if (decoded.tag === "Ok") return decoded.value;
-  const message = `${site.capability}.${site.operation} returned a value that does not decode as ${site.type}: ${replyFailure(decoded.error)}`;
+  // #4048: a fault over an `Option` payload names the value read, not the `Option` wrapper its
+  // reply travels in: `Session` at `$.user`, not `Option[Session]` at `$.value.user`.
+  const unwrapped = policy === "fault" && site.type.startsWith("Option[") && site.type.endsWith("]");
+  const type = unwrapped ? site.type.slice("Option[".length, -1) : site.type;
+  const failure = replyFailure(decoded.error);
+  const message = `${site.capability}.${site.operation} returned a value that does not decode as ${type}: ${unwrapped ? failure.replace(/^at \$\.value/, "at $") : failure}`;
   if (policy === "miss") {
     globalThis.console.warn(`bynk: warning: ${message}; read as a miss`);
     return None as unknown as T;

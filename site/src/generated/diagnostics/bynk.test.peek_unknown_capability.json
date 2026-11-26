@@ -1,0 +1,12 @@
+{
+  "blurb": "`D1.peek` names a capability as `<participant>.<Capability>`, where the participant is one of the suite's and declares the capability. The participant or the capability is not one.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.peek_unknown_capability",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/orders.test.bynk\nsuite shop.orders as system {\n  case \"peeks\" {\n    let db = D1.peek(shop.orders.Missing)   // ✗ `shop.orders` declares no `Missing`\n    let ok = D1.peek(shop.orders.Orders)    // ✓\n    expect true\n  }\n}",
+  "severity": "error",
+  "summary": "`D1.peek` names a participant or a capability that the suite does not have."
+}

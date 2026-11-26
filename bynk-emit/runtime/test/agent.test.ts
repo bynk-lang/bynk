@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  agentNamespace,
   serialiseAgentKey,
   StateRegistry,
   makeAgent,
-  makeIntegrationDoNamespace,
   makeWorkersAgent,
   sweepAgentInstances,
   wakeForMigration,
@@ -18,7 +18,9 @@ import {
 } from "../src/agent.ts";
 import { checkStoredLayout, type BoundaryError, type JsonValue } from "../src/boundary.ts";
 import { Ok, Err } from "../src/result.ts";
-import { makeIntegrationKv, type DurableObjectState } from "../src/storage.ts";
+import { type DurableObjectState } from "../src/storage.ts";
+import { makeIntegrationDoNamespace, makeIntegrationKv } from "../src/testing/bindings.ts";
+import { StoreMap } from "../src/store.ts";
 
 test("serialiseAgentKey: strings are identity, primitives are JSON", () => {
   assert.equal(serialiseAgentKey("abc"), "abc");
@@ -329,6 +331,32 @@ test("wakeForMigration: reports the layout a record was in and the one this buil
   assert.equal(((await odd.json()) as { layoutBefore: unknown }).layoutBefore, null);
 });
 
+test("wakeForMigration: reports the values a @unique index already has more than one holder of, never a value (#4390)", async () => {
+  const people = StoreMap.from<{ email: string }>(
+    [["a", { email: "x@e" }], ["b", { email: "x@e" }], ["c", { email: "y@e" }], ["d", { email: "z@e" }], ["e", { email: "z@e" }], ["f", { email: "z@e" }], ["g", { email: "z@e" }], ["h", { email: "w@e" }], ["i", { email: "w@e" }]],
+    [{ index: "email", of: (v) => v.email, unique: true }],
+  );
+  const r = await wakeForMigration({ __v: 3 }, 3, async () => ({ people }), async () => {}, undefined, [["people", "email"]]);
+  const body = (await r.json()) as { unique?: unknown };
+  assert.deepEqual(body.unique, [{ map: "people", by: "email", holders: [2, 2, 4] }]);
+  assert.equal(JSON.stringify(body).includes("@e"), false, "no stored value is named");
+  // No duplicate, no report.
+  const clean = StoreMap.from<{ email: string }>([["a", { email: "x@e" }]], [{ index: "email", of: (v) => v.email, unique: true }]);
+  const quiet = await wakeForMigration({ __v: 3 }, 3, async () => ({ people: clean }), async () => {}, undefined, [["people", "email"]]);
+  assert.equal("unique" in ((await quiet.json()) as object), false);
+});
+
+test("wakeForMigration: a duplicate report that throws drops the report, not the migration (#4390)", async () => {
+  const broken = { duplicateHolders: () => { throw new Error("storage read failed"); } };
+  let committed = false;
+  const r = await wakeForMigration({ __v: 2 }, 3, async () => ({ people: broken }), async () => { committed = true; }, undefined, [["people", "email"]]);
+  const body = (await r.json()) as { fault?: unknown; after?: unknown; unique?: unknown };
+  assert.equal(committed, true);
+  assert.equal(body.fault, undefined, "the instance is not a fault");
+  assert.equal(body.after, 3);
+  assert.equal(body.unique, undefined);
+});
+
 test("wakeForMigration: a layout this build does not know is reported as a NewerLayout fault with its layout", async () => {
   const quiet = globalThis.console.error;
   globalThis.console.error = () => {};
@@ -423,4 +451,89 @@ test("#3132 workers proxy: the keyed-agent branch strips env too", async () => {
   assert.equal(body.key, "k", "the key still rides along");
   assert.equal("env" in body.deps, false);
   assert.equal(rawBody.includes(SECRET), false);
+});
+
+// #3819: `@jurisdiction("eu")` mints an agent's ids through `namespace.jurisdiction("eu")`.
+function recordingNamespace(seen: string[]): DurableObjectNamespace {
+  const make = (prefix: string): DurableObjectNamespace => ({
+    idFromName: (n) => `${prefix}${n}`,
+    get: (id) => ({
+      fetch: async () => {
+        seen.push(String(id));
+        return new Response(JSON.stringify(null), { headers: { "content-type": "application/json" } });
+      },
+    }),
+    jurisdiction: (j) => make(`${j}/`),
+  });
+  return make("");
+}
+
+test("makeWorkersAgent: a jurisdiction reaches the Durable Object through the restricted namespace", async () => {
+  const seen: string[] = [];
+  const ns = recordingNamespace(seen);
+  interface A {
+    ping(deps: unknown): Promise<unknown>;
+  }
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "eu").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "fedramp").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "us").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }).ping({});
+  assert.deepEqual(seen, ["eu/k", "fedramp/k", "us/k", "k"]);
+});
+
+test("agentNamespace: no jurisdiction is the namespace itself", () => {
+  const ns = recordingNamespace([]);
+  assert.equal(agentNamespace(ns), ns);
+});
+
+test("agentNamespace: workerd's 'not implemented' falls back to the unscoped namespace and warns once", () => {
+  const ns: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("Jurisdiction restrictions are not implemented in workerd");
+    },
+  };
+  const warnings: string[] = [];
+  const original = globalThis.console.warn;
+  globalThis.console.warn = (...a: unknown[]) => void warnings.push(a.join(" "));
+  try {
+    assert.equal(agentNamespace(ns, "eu"), ns);
+    assert.equal(agentNamespace(ns, "eu"), ns);
+  } finally {
+    globalThis.console.warn = original;
+  }
+  assert.equal(warnings.length, 1, "one warning per isolate");
+  assert.match(warnings[0]!, /does not implement Durable Object jurisdictions/);
+});
+
+test("agentNamespace: any other failure throws, so a deployed Worker never loses the restriction", () => {
+  const broken: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("the namespace is unavailable");
+    },
+  };
+  assert.throws(() => agentNamespace(broken, "eu"), /the namespace is unavailable/);
+  // A message that merely mentions the words is not workerd's: it must throw too.
+  const similar: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("the jurisdiction is not implemented for this account");
+    },
+  };
+  assert.throws(() => agentNamespace(similar, "eu"), /not implemented for this account/);
+  const none: DurableObjectNamespace = { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("null") }) };
+  assert.throws(() => agentNamespace(none, "eu"), /has no jurisdiction\(\)/);
+});
+
+test("integration namespace: a jurisdiction view mints its own ids", () => {
+  const ns = makeIntegrationDoNamespace(class {
+    async fetch(): Promise<Response> {
+      return new Response("null");
+    }
+  });
+  assert.notEqual(ns.jurisdiction!("eu").idFromName("k"), ns.idFromName("k"));
 });

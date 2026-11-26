@@ -1,0 +1,16 @@
+context jobs.runner
+
+// A context that `uses` the commons does not get its consumed types in scope
+// through it: this one writes its own `consumes` to name `TimedOut`.
+uses app.errors
+consumes bynk { TimedOut }
+
+fn describe(t: TimedOut) -> AppError {
+	fromTimeout(passThrough(t))
+}
+
+service sweeper from cron {
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}

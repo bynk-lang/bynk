@@ -30,21 +30,21 @@ consumes bynk { Random }
 consumes bynk.crypto { Crypto }
 
 service issue {
-	on call() -> Effect[String] given Random {
+	on call() -> Effect[String] by Caller given Random {
 		let raw <- Random.bytes(32)
 		Effect.pure(raw.toBase64Url())
 	}
 }
 
 service digestOf {
-	on call(token: String) -> Effect[String] given Crypto {
+	on call(token: String) -> Effect[String] by Caller given Crypto {
 		let digest <- Crypto.digest(Sha256, Bytes.fromUtf8(token))
 		Effect.pure(digest.toHex())
 	}
 }
 
 service check {
-	on call(presented: String, storedHex: String) -> Effect[Bool] given Crypto {
+	on call(presented: String, storedHex: String) -> Effect[Bool] by Caller given Crypto {
 		match Bytes.fromHex(storedHex) {
 			None => Effect.pure(false),
 			Some(stored) => {
@@ -71,7 +71,7 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service verify {
-	on call(body: String, signatureHex: String) -> Effect[Bool] given Crypto, Secrets {
+	on call(body: String, signatureHex: String) -> Effect[Bool] by Caller given Crypto, Secrets {
 		let secret <- Secrets.get("WEBHOOK_SECRET")
 		match secret {
 			None => Effect.pure(false),
@@ -79,7 +79,7 @@ service verify {
 				None => Effect.pure(false),
 				Some(mac) => Crypto.verifyHmac(
 					Sha256,
-					Bytes.fromUtf8(key),
+					Bytes.fromUtf8(key.reveal()),
 					Bytes.fromUtf8(body),
 					mac
 				),
@@ -91,8 +91,8 @@ service verify {
 
 ## Sign a payload with a key from `Secrets`
 
-Keep the private key in `Secrets` as base64 PKCS#8, import it where you sign, and
-let it go out of scope. A `SigningKey` is an opaque handle to a non-extractable
+Keep the private key in `Secrets` as base64 PKCS#8, import it where you sign with
+`importSigningKeyFromSecret` (the secret never becomes a `String`), and let it go out of scope. A `SigningKey` is an opaque handle to a non-extractable
 platform key: it cannot be read back, stored, logged or sent. Using one in a
 `store`, a record or event field, a handler parameter or result, or a wire type
 is `bynk.types.key_at_boundary`.
@@ -104,22 +104,21 @@ consumes bynk { Secrets }
 consumes bynk.crypto { Crypto }
 
 service signLine {
-	on call(payload: String) -> Effect[Result[String, CryptoError]] given Crypto, Secrets {
+	on call(
+		payload: String
+	) -> Effect[Result[String, CryptoError]] by Caller given Crypto, Secrets {
 		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
 		match stored {
 			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),
-			Some(b64) => match Bytes.fromBase64(b64) {
-				None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't base64"))),
-				Some(pkcs8) => {
-					let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
-					match imported {
-						Err(e) => Effect.pure(Err(e)),
-						Ok(key) => {
-							let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
-							Effect.pure(Ok(signature.toBase64()))
-						},
-					}
-				},
+			Some(secret) => {
+				let imported <- Crypto.importSigningKeyFromSecret(Ed25519, secret)
+				match imported {
+					Err(e) => Effect.pure(Err(e)),
+					Ok(key) => {
+						let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
+						Effect.pure(Ok(signature.toBase64()))
+					},
+				}
 			},
 		}
 	}
@@ -152,5 +151,5 @@ verifiers are unchanged. In a browser, Web Crypto exists only in a secure contex
 (HTTPS or `localhost`); elsewhere an operation fails loudly rather than falling
 back to something weaker.
 
-**See also:** [`bynk.crypto` reference](/book/reference/bynk-capabilities/#cryptography--bynkcrypto),
+**See also:** [`bynk.crypto` reference](/reference/bynk-capabilities/#cryptography--bynkcrypto),
 [Verify webhooks](/book/guides/actors/verify-webhooks/).

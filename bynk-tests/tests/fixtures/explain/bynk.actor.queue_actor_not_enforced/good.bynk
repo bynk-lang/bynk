@@ -1,0 +1,11 @@
+context shop
+
+type Order = { id: String }
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Legacy {   // ✓ only messages signed under its secret
+    Ack
+  }
+}

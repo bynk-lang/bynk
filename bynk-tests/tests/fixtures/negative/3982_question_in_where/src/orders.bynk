@@ -1,0 +1,3 @@
+commons orders
+
+fn first_line(lines: List[Int]) -> Option[Int] { lines.first() }

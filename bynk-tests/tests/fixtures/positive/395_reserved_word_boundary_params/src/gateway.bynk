@@ -20,7 +20,7 @@ actor Oauth { auth = Oidc(issuer = "https://issuer.example.com", audience = "api
 
 // Single-param on-call dispatch: const __id_void = __r_void.value.
 service echo {
-  on call(void: String) -> Effect[Result[String, ()]] {
+  on call(void: String) -> Effect[Result[String, ()]] by Caller {
     Ok(void)
   }
 }
@@ -28,7 +28,7 @@ service echo {
 // Multi-param on-call dispatch: the argsObj["class"] key stays verbatim, but the
 // binding is const __id_class.
 service registry {
-  on call(class: String, static: String) -> Effect[Result[String, ()]] {
+  on call(class: String, static: String) -> Effect[Result[String, ()]] by Caller {
     Ok(class)
   }
 }
@@ -65,14 +65,14 @@ service api from http {
 
 // Cron wrapper: the scheduled-time param binds as const __id_delete.
 service sweeper from cron {
-  on schedule("*/5 * * * *") (delete: Int) -> Effect[Result[(), ()]] {
+  on schedule("*/5 * * * *") (delete: Instant) -> Effect[Result[(), ()]] {
     Ok(())
   }
 }
 
 // Queue wrapper: the message param binds as const __id_class.
 service outbox from queue("jobs") {
-  on message(class: String) -> Effect[QueueResult] {
+  on message(class: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -82,6 +82,10 @@ service outbox from queue("jobs") {
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   on open (export: RoomId) -> Effect[()] by user: Member {
     let _ <- Room(export).join(user.identity, connection)
+    ()
+  }
+
+  on close (export: RoomId) -> Effect[()] by user: Member {
     ()
   }
 }

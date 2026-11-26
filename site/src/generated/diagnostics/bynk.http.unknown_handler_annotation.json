@@ -1,0 +1,10 @@
+{
+  "blurb": "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.unknown_handler_annotation",
+  "constructs": [],
+  "example": "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
+  "severity": "error",
+  "summary": "A handler carries an annotation outside the closed set (`@cache`/`@limit`)."
+}

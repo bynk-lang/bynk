@@ -5,15 +5,14 @@
 //! kernels stay in `lower.rs`.
 
 use bynk_check::checker::{Callee, Ty, TyId};
-use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
+use bynk_check::kernel_op::{
+    EffectOp, EffectResultOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
+};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
-use super::super::lower::{Pre, expect_location, str_node};
+use super::super::lower::{Pre, expect_location};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    any_ty, arrow, binary, call, const_, fn_type, id, lower_list_kernel, member, param, paren,
-    promise, ret, spread, take,
-};
+use super::super::lower_list::{any_ty, fn_type, lower_list_kernel, promise, take};
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::*;
 use super::kernel_container::{
@@ -24,9 +23,13 @@ use super::kernel_scalar::{
     lower_instant_kernel, lower_int_kernel, lower_string_kernel,
 };
 use super::query::{
-    QueryShape, QuerySource, lower_query_method, lower_stream_method, note_par_fan_out,
-    query_key_cmp, query_keyed, query_other_elem,
+    QueryShape, QuerySource, lower_query_method, lower_stream_method, query_key_cmp, query_keyed,
+    query_other_elem,
 };
+use crate::ts_build::{
+    arrow, binary, call, const_typed, ident, member, paren, ret, spread, str_lit,
+};
+use bynk_ts::TsParam;
 
 /// `within`, `race` and `detach` on an `Effect[T]` (#2683, #2711, #3437). `None`
 /// when the call's shape is not one the kernel method lowers (the caller falls
@@ -46,19 +49,17 @@ fn lower_effect_kernel_call(
         // and hands the abandoned effect to the handler's execution
         // context.
         EffectOp::Within if args.len() == 1 => {
-            cx.note_within();
             let recv = pre.lower_node(receiver, cx);
             let after = pre.lower_node(&args[0], cx);
             let exec = cx.exec_node();
             return Some({
                 let n = vec![recv, after, exec];
-                call(id("__bynkWithin"), n)
+                call(ident("__bynkWithin"), n)
             });
         }
         // #2711: `a.race(b)` takes the first side to succeed and
         // hands the rest to the same execution context, uncancelled.
         EffectOp::Race if args.len() == 1 => {
-            cx.note_race();
             // A chain `a.race(b).race(c)` lowers to one
             // `__bynkRace([a, b, c], …)`: nesting would let `c` beat
             // `a` in a same-instant tie, as the inner race settles a
@@ -96,7 +97,7 @@ fn lower_effect_kernel_call(
             return Some({
                 let mut n = children;
                 let exec = n.pop().expect("the execution context is the last child");
-                call(id("__bynkRace"), vec![TsExpr::array(n), exec])
+                call(ident("__bynkRace"), vec![TsExpr::array(n), exec])
             });
         }
         // #3437: `e.detach()` hands the already-running effect to
@@ -111,9 +112,9 @@ fn lower_effect_kernel_call(
             // the offset. `expect_location` has already escaped the assertion location once;
             // the literal node's own escape is the second.
             let site = if cx.assert_loc().is_some() {
-                str_node(expect_location(cx, e.span.start))
+                str_lit(expect_location(cx, e.span.start))
             } else {
-                str_node(
+                str_lit(
                     cx.fault_location(e.span.start)
                         .unwrap_or_else(|| format!("offset {}", e.span.start)),
                 )
@@ -124,14 +125,25 @@ fn lower_effect_kernel_call(
                 .map(|(_, err)| err.display(tys.types()).to_string());
             let mut children = vec![recv, cx.exec_node(), site];
             if let Some(raw) = &err_raw {
-                children.push(str_node(raw.as_str()));
+                children.push(str_lit(raw.as_str()));
             }
             return Some({
                 let n = children;
-                call(id("__bynkDetach"), n)
+                call(ident("__bynkDetach"), n)
             });
         }
-        EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
+        // #3965: an effect is a promise, so `e.map(f)` and `e.andThen(f)` are `e.then(f)`
+        // (a promise returned by `f` is followed, which is exactly `andThen`).
+        EffectOp::Map | EffectOp::AndThen if args.len() == 1 => {
+            let recv = pre.lower_node(receiver, cx);
+            let f = pre.lower_node(&args[0], cx);
+            return Some(call(member(paren(recv), "then"), vec![f]));
+        }
+        EffectOp::Within
+        | EffectOp::Race
+        | EffectOp::Detach
+        | EffectOp::Map
+        | EffectOp::AndThen => {}
     }
     None
 }
@@ -193,7 +205,6 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                 let recv = pre.lower_node(receiver, cx);
                 let a: Vec<bynk_ts::TsExpr> = args.iter().map(|x| pre.lower_node(x, cx)).collect();
                 let result_ty = cx.commons().expr_types.get(&e.id).map(|te| te.ty);
-                note_par_fan_out(cx, method);
                 let other_elem = query_other_elem(args, cx);
                 if let Some(built) = lower_query_method(
                     QuerySource::Thunk(recv),
@@ -297,7 +308,10 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            KernelOp::RequestHeaders(_)
+            // #4111: a `Secret` is a runtime `BynkSecret` whose `reveal` and
+            // constant-time `matches` are its only readers.
+            KernelOp::Secret(_)
+            | KernelOp::RequestHeaders(_)
             | KernelOp::RequestQuery(_)
             | KernelOp::RequestCookies(_)
             | KernelOp::TokenClaims(_) => {
@@ -310,6 +324,14 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                 if let Some(built) = pre.absorb_built(lower_bytes_kernel(receiver, op, args, cx)) {
                     return Some(built);
                 }
+            }
+            // #3955: `compare` on any `Ord` value, as the type's own comparator
+            // read as an `Ordering`.
+            KernelOp::Ord(OrdOp::Compare) => {
+                if let [other] = args {
+                    return Some(lower_ord_compare(kernel_recv, receiver, other, cx, pre));
+                }
+                return mismatch(kop);
             }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
@@ -370,6 +392,28 @@ pub(in crate::emitter) fn lower_kernel_method_call(
         }
     }
     None
+}
+
+/// #3955: `a.compare(b)`: the receiver type's comparator applied to both
+/// operands, its sign read as an `Ordering`.
+fn lower_ord_compare(
+    recv_ty: TyId,
+    receiver: &Expr,
+    other: &Expr,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> bynk_ts::TsExpr {
+    // The comparator is built before the operands lower: `note_cmp` fires first.
+    let cmp = cx.comparator(recv_ty);
+    cx.runtime_use().note_cmp("__bynkOrdering");
+    let a = pre.lower_node(receiver, cx);
+    let b = pre.lower_node(other, cx);
+    let cmp = if matches!(cmp, bynk_ts::TsExpr::Ident(_)) {
+        cmp
+    } else {
+        paren(cmp)
+    };
+    call(ident("__bynkOrdering"), vec![call(cmp, vec![a, b])])
 }
 
 /// §2.8.3: lower an `Effect[Result[T, E]]` combinator. `Effect[T]` is
@@ -449,25 +493,25 @@ fn lower_effect_result_kernel(
     let recv = pre.lower_node(receiver, cx);
     let f = pre.lower_node(f, cx);
     let params = vec![
-        param("__e", Some(effect_of(&t, &et))),
-        param("__f", Some(cb_ty)),
+        TsParam::new("__e", Some(effect_of(&t, &et))),
+        TsParam::new("__f", Some(cb_ty)),
     ];
-    let applied = call(id("__f"), vec![member(id("__r"), field)]);
+    let applied = call(ident("__f"), vec![member(ident("__r"), field)]);
     let hit = match (awaited, wrap) {
         (true, _) => TsExpr::Await(Box::new(applied)),
-        (false, Some(ctor)) => call(id(ctor), vec![applied]),
+        (false, Some(ctor)) => call(ident(ctor), vec![applied]),
         (false, None) => applied,
     };
     let body = vec![
-        const_("__r", None, TsExpr::Await(Box::new(id("__e")))),
+        const_typed("__r", None, TsExpr::Await(Box::new(ident("__e")))),
         ret(TsExpr::Conditional {
             test: Box::new(binary(
                 TsBinaryOp::StrictEq,
-                member(id("__r"), "tag"),
+                member(ident("__r"), "tag"),
                 TsExpr::Lit(TsLit::Str(tag.to_string())),
             )),
             consequent: Box::new(hit),
-            alternate: Box::new(id("__r")),
+            alternate: Box::new(ident("__r")),
         }),
     ];
     let async_arrow = TsExpr::Arrow {
@@ -523,6 +567,8 @@ fn lower_test_connection(op: TestConnectionOp, recv: bynk_ts::TsExpr) -> bynk_ts
     match op {
         TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
         TestConnectionOp::Closed => member(recv, "closed"),
+        TestConnectionOp::CloseCode => call(member(recv, "closeCodeOption"), vec![]),
+        TestConnectionOp::CloseReason => call(member(recv, "closeReasonOption"), vec![]),
         TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
     }
 }
@@ -554,6 +600,9 @@ fn lower_http_result(
             ))
         };
     }
+    if let Some(helper) = response_header_helper(op) {
+        return lower_response_header(helper, recv, lowered);
+    }
     // The cookie argument; absent only for a program that failed checking.
     let arg = lowered.into_iter().next().unwrap_or_else(|| {
         cx.missing_fact(receiver.span, "cookie argument of an `HttpResult` call")
@@ -565,42 +614,78 @@ fn lower_http_result(
         // `[...(__r.cookies ?? []), <added>]`
         let held = spread(paren(binary(
             TsBinaryOp::NullishCoalescing,
-            member(id("__r"), "cookies"),
+            member(ident("__r"), "cookies"),
             TsExpr::array(vec![]),
         )));
         let added = if clear {
             TsExpr::object_entries(vec![
                 TsObjectEntry::Spread(paren(arg)),
-                TsObjectEntry::prop("value".to_string(), str_node("")),
+                TsObjectEntry::prop("value".to_string(), str_lit("")),
                 TsObjectEntry::prop(
                     "maxAge".to_string(),
-                    call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    call(
+                        ident("Some"),
+                        vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+                    ),
                 ),
                 TsObjectEntry::prop(
                     "expires".to_string(),
-                    call(id("Some"), vec![TsExpr::Lit(TsLit::Num("0".to_string()))]),
+                    call(
+                        ident("Some"),
+                        vec![TsExpr::Lit(TsLit::Num("0".to_string()))],
+                    ),
                 ),
             ])
         } else {
             paren(arg)
         };
         let record = TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(id("__r")),
+            TsObjectEntry::Spread(ident("__r")),
             TsObjectEntry::prop("cookies".to_string(), TsExpr::array(vec![held, added])),
         ]);
         call(
-            paren(arrow(vec![param("__r", Some(any_ty()))], paren(record))),
+            paren(arrow(
+                vec![TsParam::new("__r", Some(any_ty()))],
+                paren(record),
+            )),
             vec![recv],
         )
     }
 }
 
+/// The runtime helper (#3915) a response-header method lowers to.
+fn response_header_helper(op: HttpResultOp) -> Option<&'static str> {
+    match op {
+        HttpResultOp::WithHeader => Some("__withResponseHeader"),
+        HttpResultOp::RetryAfter => Some("__withRetryAfter"),
+        HttpResultOp::At => Some("__withLocation"),
+        HttpResultOp::Download => Some("__withDownload"),
+        HttpResultOp::Heartbeat => Some("__withHeartbeat"),
+        HttpResultOp::Etag => Some("__withETag"),
+        HttpResultOp::LastModified => Some("__withLastModified"),
+        HttpResultOp::Headers => Some("__resultHeaders"),
+        HttpResultOp::WithCookie | HttpResultOp::ClearCookie | HttpResultOp::Cookies => None,
+    }
+}
+
+/// `__helper(recv, args…)`; `Duration` erases to milliseconds, which `__withRetryAfter` rounds up
+/// to whole seconds.
+fn lower_response_header(
+    helper: &str,
+    recv: bynk_ts::TsExpr,
+    args: Vec<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let mut all = vec![recv];
+    all.extend(args);
+    call(ident(helper), all)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::super::lower::ident_node;
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
+    use crate::ts_build::ident;
     use bynk_check::checker::{ExprId, TypedCommons, TypedExpr};
     use bynk_syntax::span::Span;
 
@@ -609,34 +694,34 @@ mod tests {
     }
 
     fn node(s: &str) -> bynk_ts::TsExpr {
-        ident_node(s)
+        ident(s)
     }
 
     /// A receiver is bracketed only where precedence needs it: a plain identifier or call is not, a
     /// binary, a conditional, an `await`, a unary operator or a number literal is.
     #[test]
     fn a_receiver_is_bracketed_only_where_precedence_needs_it() {
-        let a = || ident_node("a");
-        let b = || ident_node("b");
+        let a = || ident("a");
+        let b = || ident("b");
         let sum = TsExpr::Binary {
             op: TsBinaryOp::Add,
             left: Box::new(a()),
             right: Box::new(b()),
         };
-        let awaited = TsExpr::Await(Box::new(call(id("f"), vec![])));
+        let awaited = TsExpr::Await(Box::new(call(ident("f"), vec![])));
         let cond = TsExpr::Conditional {
-            test: Box::new(id("c")),
-            consequent: Box::new(id("x")),
-            alternate: Box::new(id("y")),
+            test: Box::new(ident("c")),
+            consequent: Box::new(ident("x")),
+            alternate: Box::new(ident("y")),
         };
         let not = TsExpr::Unary {
             op: bynk_ts::TsUnaryOp::Not,
-            expr: Box::new(id("z")),
+            expr: Box::new(ident("z")),
         };
         let on = |recv: TsExpr| printed(call(member(receiver_object(recv), "op"), vec![]));
         assert_eq!(on(a()), "a.op()");
-        assert_eq!(on(call(id("f"), vec![])), "f().op()");
-        assert_eq!(on(member(id("deps"), "claims")), "deps.claims.op()");
+        assert_eq!(on(call(ident("f"), vec![])), "f().op()");
+        assert_eq!(on(member(ident("deps"), "claims")), "deps.claims.op()");
         assert_eq!(on(sum), "(a + b).op()");
         assert_eq!(on(awaited), "(await f()).op()");
         assert_eq!(on(cond), "(c ? x : y).op()");
@@ -650,6 +735,8 @@ mod tests {
         for (op, want) in [
             (TestConnectionOp::Sent, "[...c.sent]"),
             (TestConnectionOp::Closed, "c.closed"),
+            (TestConnectionOp::CloseCode, "c.closeCodeOption()"),
+            (TestConnectionOp::CloseReason, "c.closeReasonOption()"),
             (TestConnectionOp::Connection, "c.mint()"),
         ] {
             assert_eq!(printed(lower_test_connection(op, node("c"))), want);
@@ -657,8 +744,8 @@ mod tests {
         // A receiver that needs brackets keeps them as a node.
         let sum = TsExpr::Binary {
             op: TsBinaryOp::Add,
-            left: Box::new(id("a")),
-            right: Box::new(id("b")),
+            left: Box::new(ident("a")),
+            right: Box::new(ident("b")),
         };
         assert_eq!(
             printed(lower_test_connection(TestConnectionOp::Closed, sum)),
@@ -684,9 +771,9 @@ mod tests {
             "line\u{2028}sep.bynk:1:1",
         ] {
             let once = escape_ts_string(raw);
-            assert_eq!(printed(str_node(raw)), format!("\"{once}\""));
+            assert_eq!(printed(str_lit(raw)), format!("\"{once}\""));
             let twice = escape_ts_string(&once);
-            assert_eq!(printed(str_node(once)), format!("\"{twice}\""), "{raw}");
+            assert_eq!(printed(str_lit(once)), format!("\"{twice}\""), "{raw}");
         }
     }
 

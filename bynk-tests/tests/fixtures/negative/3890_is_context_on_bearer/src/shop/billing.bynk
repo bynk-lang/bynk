@@ -1,0 +1,12 @@
+context shop.billing
+
+type UserId = opaque String
+
+actor User { auth = Bearer(secret = "USER_SECRET"), identity = UserId }
+actor Admin = User where IsContext(shop.billing)
+
+service refunds from http {
+  on GET("/refunds") () -> Effect[HttpResult[String]] by Admin {
+    Ok("ok")
+  }
+}

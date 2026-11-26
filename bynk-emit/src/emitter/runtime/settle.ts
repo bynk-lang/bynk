@@ -1,5 +1,6 @@
 import { Ok, Err } from "./result.ts";
 import type { Result } from "./result.ts";
+import { withTraceField } from "./traceparent.ts";
 
 // Concurrent effects, slice 0 (#2640): the join behind a `par { … }` block.
 //
@@ -53,6 +54,81 @@ export async function __bynkSettleAll<const T extends readonly (() => unknown)[]
   return settled.map((r) => (r as { value: unknown }).value) as {
     -readonly [P in keyof T]: Awaited<ReturnType<T[P]>>;
   };
+}
+
+// #3968: the bounded join behind `parForEachWith`, `parTraverseWith`,
+// `parTraverseAllWith` and `parTraverseTryWith`.
+//
+// A sliding pool: at most `limit` thunks are in flight, and the next one starts
+// the moment any in-flight one settles (not in batches), so one slow element does
+// not stall the rest. Thunks start in input order. Everything else is
+// `__bynkSettleAll`'s contract: results in input order, and when any step
+// faults the call still waits for every step it started to settle, then raises
+// the FIRST fault in input order (not the first in time), the rest riding along
+// as `suppressed`. A synchronous throw is a rejected entry like any other.
+//
+// `stopOnErr` is `parTraverseTry`'s early stop: once a step settles to an `Err`
+// result, no further step is started; the ones in flight finish. The result then
+// holds `undefined` for steps that never ran (always a suffix, after an `Err`).
+//
+// `limit` must be a whole number from 1 to 1000. A literal or constant outside
+// that is a compile error, so this only faults a computed one.
+//
+// Not part of ADR 0310's published ABI: it is codegen.
+export const __poolMax = 1000;
+export async function __bynkSettlePool<T>(
+  thunks: readonly (() => T)[],
+  limit: number,
+  stopOnErr: boolean = false,
+): Promise<Awaited<T>[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > __poolMax) {
+    throw new Error(
+      `a concurrency \`limit\` is a whole number from 1 to ${__poolMax}, but got ${limit}`,
+    );
+  }
+  type Settled =
+    | { status: "fulfilled"; value: Awaited<T> }
+    | { status: "rejected"; reason: unknown };
+  const results: Settled[] = new Array(thunks.length);
+  let next = 0;
+  let stopped = false;
+  const worker = async (): Promise<void> => {
+    while (!stopped && next < thunks.length) {
+      const i = next++;
+      try {
+        const value = await thunks[i]();
+        results[i] = { status: "fulfilled", value };
+        if (stopOnErr && (value as { readonly tag?: string } | null)?.tag === "Err") {
+          stopped = true;
+        }
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, thunks.length) }, worker));
+  const failures: unknown[] = [];
+  for (const r of results) {
+    if (r !== undefined && r.status === "rejected") failures.push(r.reason);
+  }
+  if (failures.length > 0) {
+    const [first, ...others] = failures;
+    // The same reason raised twice must not become its own `suppressed`.
+    const rest = others.filter((f) => f !== first);
+    if (rest.length > 0 && typeof first === "object" && first !== null) {
+      try {
+        Object.defineProperty(first, "suppressed", {
+          value: rest,
+          configurable: true,
+          writable: true,
+        });
+      } catch {
+        // A frozen reason cannot carry them; the first rejection still stands.
+      }
+    }
+    throw first;
+  }
+  return results.map((r) => (r === undefined ? undefined : (r as { value: Awaited<T> }).value)) as Awaited<T>[];
 }
 
 // Concurrent effects, slice 3 (#2683): `e.within(d)`.
@@ -232,7 +308,7 @@ export function __bynkDetach(
       console.error({
         message: "a detached effect returned Err",
         level: "error",
-        fields: { site, type: errType, variant: variant ?? "" },
+        fields: withTraceField({ site, type: errType, variant: variant ?? "" }),
       });
     },
     (reason: unknown) => {
@@ -273,10 +349,10 @@ export function __bynkProcessExec(): __BynkDetachExec {
         console.error({
           message: "a detached effect faulted",
           level: "error",
-          fields: {
+          fields: withTraceField({
             site: typeof site === "string" ? site : "",
             error: String(reason),
-          },
+          }),
         });
       });
     },

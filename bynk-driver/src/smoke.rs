@@ -372,7 +372,7 @@ impl Smoke {
 /// of an answer (`responseToHttpResult`): a smoke case fails on a status the
 /// runtime does not know, or a JSON body that does not decode as the route's
 /// declared type, where an author's own case gets the raw value to judge.
-pub const STRICT_WIRE_ENV: &str = "BYNK_TEST_STRICT_WIRE";
+pub use bynk_project::env_protocol::TEST_STRICT_WIRE as STRICT_WIRE_ENV;
 
 /// #2685: the environment variable `bynk test --smoke` sets for `bynk`, the path of a
 /// file holding a JSON object from each route's key (`<context> <service> <METHOD> <path>`) to the
@@ -381,7 +381,7 @@ pub const STRICT_WIRE_ENV: &str = "BYNK_TEST_STRICT_WIRE";
 /// runtime warns (`bynk.test.smoke_undeclared_status`) when a smoke case gets a
 /// non-5xx answer outside its route's set. Without it, as in a direct `bynk
 /// test --smoke`, a smoke run compares nothing.
-pub const DECLARED_ENV: &str = "BYNK_SMOKE_DECLARED_FILE";
+pub use bynk_project::env_protocol::SMOKE_DECLARED_FILE as DECLARED_ENV;
 
 /// #2685: the code of the warning a smoke case carries for an answer its route
 /// does not declare.
@@ -422,7 +422,13 @@ pub fn prepare(
     };
     let mut smoke = Smoke::collect(&sources, methods);
     let check = |overlay: HashMap<PathBuf, String>| {
-        crate::project::check_project(&options.clone().sources(overlay)).errors
+        // Only errors settle the synthesis: a warning or a hint (#3921's
+        // `body_cap_defaulted`) is not a failure.
+        let mut errors = crate::project::check_project(&options.clone().sources(overlay)).errors;
+        errors.retain(|ae| {
+            bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Error
+        });
+        errors
     };
     let overlay = match smoke.settle(&sources, check) {
         Ok(overlay) => overlay,

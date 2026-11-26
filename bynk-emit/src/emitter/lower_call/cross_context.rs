@@ -13,8 +13,8 @@ use bynk_ts::{TsExpr, TsType};
 use super::super::emit::{flatten_emit_ident_chain, test_scaffold_ns};
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{call, id, member, paren};
 use super::super::{TypeBody, TypeDecl, *};
+use crate::ts_build::{call, ident, member, paren};
 
 /// v0.6 cross-context service call: receiver is an alias or the dotted name
 /// of a consumed context. In bundle mode, lower to
@@ -24,10 +24,15 @@ use super::super::{TypeBody, TypeDecl, *};
 /// Returns `None` when the receiver is not a consumed-context prefix.
 ///
 /// 1A.25 (#3726): a node.
+///
+/// #3894: `outcome` lowers `<context>.<service>.outcome(args)`: the same call, whose failure is a
+/// `CallOutcome` value rather than a thrown fault (`__callServiceOutcome` on Workers, and
+/// `__callOutcome` around the in-process call on `bundle`).
 pub(in crate::emitter) fn lower_cross_context_service_call(
     receiver: &Expr,
     method: &Ident,
     args: &[Expr],
+    outcome: bool,
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
@@ -56,11 +61,11 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                     )
                 })
                 .collect();
-            let surface = member(member(id("deps"), "surface"), &key);
+            let surface = member(member(ident("deps"), "surface"), &key);
             let service = call(member(surface, &method.name), args_lowered);
             // #2825: the result takes the caller's declaration of a
             // same-named refined or opaque type, whose brand differs.
-            return_cast(
+            let cast = return_cast(
                 &consumed,
                 cx.cross_context(),
                 &cx.commons().types,
@@ -68,11 +73,22 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 method,
                 service,
                 cx.in_test_scaffold(),
-            )
+            );
+            if outcome {
+                call(ident("__callOutcome"), vec![cast])
+            } else {
+                cast
+            }
         }
-        BuildTarget::Workers => {
-            lower_workers_cross_context_call(&consumed, method, args, receiver.span.start, cx, pre)
-        }
+        BuildTarget::Workers => lower_workers_cross_context_call(
+            &consumed,
+            method,
+            args,
+            outcome,
+            receiver.span.start,
+            cx,
+            pre,
+        ),
     })
 }
 
@@ -159,6 +175,8 @@ pub(crate) fn lower_workers_cross_context_call(
     consumed: &str,
     method: &Ident,
     args: &[Expr],
+    // #3894: a `.outcome(…)` call, reported as a `CallOutcome` rather than thrown.
+    outcome: bool,
     // #3580: where the call starts in the source, for a traced build's span.
     call_start: usize,
     cx: &mut LowerCtx<'_>,
@@ -167,7 +185,7 @@ pub(crate) fn lower_workers_cross_context_call(
     use crate::emitter::serialisation::{deserialise_ref_via, serialise_expr_via};
 
     let info = cx.cross_context();
-    let binding = crate::emitter::wrangler::service_binding(consumed).name;
+    let binding = crate::emitter::bindings::service_binding(consumed).name;
 
     // Look up the service signature on the consumed context.
     //
@@ -375,7 +393,14 @@ pub(crate) fn lower_workers_cross_context_call(
     };
 
     let call_expr = bynk_ts::TsExpr::Call {
-        callee: Box::new(bynk_ts::TsExpr::Ident("__callService".to_string())),
+        callee: Box::new(bynk_ts::TsExpr::Ident(
+            if outcome {
+                "__callServiceOutcome"
+            } else {
+                "__callService"
+            }
+            .to_string(),
+        )),
         args: vec![
             cx.trace_binding(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Member {
@@ -822,6 +847,7 @@ mod tests {
             "shop.pay",
             &ident("charge"),
             args,
+            false,
             0,
             &mut cx,
             &mut pre,
@@ -876,7 +902,10 @@ mod tests {
     /// The cast builds `Paren(As(As(..)))`, which prints as one bracketed double cast.
     #[test]
     fn the_cast_is_one_bracketed_double_cast() {
-        let cast = cast_through_unknown(id("total"), TsType::named("shop_pay.Money"));
+        let cast = cast_through_unknown(
+            crate::ts_build::ident("total"),
+            TsType::named("shop_pay.Money"),
+        );
         assert_eq!(
             bynk_ts::print_expr(&cast),
             "(total as unknown as shop_pay.Money)"

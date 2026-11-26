@@ -2,6 +2,7 @@
 // context demo.counter
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
@@ -18,8 +19,8 @@ export type CounterId = string & { readonly __brand: "demo.counter.CounterId" };
 
 export const CounterId = {
   of(value: string): Result<CounterId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{1,16}" + ")$").test(value))) {
-      return Err({ field: "CounterId", message: "must match /[a-z0-9]{1,16}/", value });
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
+      return Err({ field: "CounterId", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value });
     }
     return Ok(value as CounterId);
   },
@@ -140,6 +141,14 @@ export function __serialise_CounterError(value: CounterError): __JsonValue {
 }
 
 export function __deserialise_CounterError(json: __JsonValue, path: string = "$"): Result<CounterError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Overflow":
+        return Ok({ tag: "Overflow" } as CounterError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

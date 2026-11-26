@@ -19,13 +19,13 @@ use super::ctx::TailSlot;
 use super::lower::{
     Lowered, PatPath, Pre, and_join, build_value_bin_op, call_site_principal,
     claim_scope_declaration, emit_pattern_bindings, expect_location_raw, expect_source_text_raw,
-    hoist_if_slot, literal_label_node, member_node, num_lit, pattern_tests, str_node,
-    ternary_built,
+    hoist_if_slot, literal_label_node, member_node, pattern_tests, ternary_built,
 };
 use super::lower_call::codec_statics::json_encode;
 use super::lower_ctx::LowerCtx;
 use super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::*;
+use crate::ts_build::{binary, ident, num_lit, str_lit};
 
 /// The statement emitter builds a [`Body`] — a list of [`Item`]s — instead of
 /// appending text to a caller's buffer; [`render`] is the one adapter that
@@ -73,6 +73,19 @@ impl Body {
     /// replaces the earlier, as `SourceMapBuilder::record` does; the printer records the span
     /// where that statement starts.
     pub(super) fn into_stmts(self) -> Vec<bynk_ts::TsStmt> {
+        let (stmts, pending) = self.into_stmts_pending();
+        // A mark with no statement after it would be dropped silently. Every
+        // producer pushes its content after its mark; this makes that explicit.
+        debug_assert!(
+            pending.is_none(),
+            "into_stmts: a trailing Item::Mark has no statement to carry its span"
+        );
+        stmts
+    }
+
+    /// [`Body::into_stmts`], handing back a trailing [`Item::Mark`] that no statement follows, for
+    /// a caller that attaches it to the statement it adds next (a runner's `return`).
+    fn into_stmts_pending(self) -> (Vec<bynk_ts::TsStmt>, Option<Span>) {
         let mut stmts = Vec::with_capacity(self.0.len());
         let mut pending: Option<Span> = None;
         for item in self.0 {
@@ -85,22 +98,51 @@ impl Body {
                 }
             }
         }
-        // A mark with no statement after it would be dropped silently. Every
-        // producer pushes its content after its mark; this makes that explicit.
-        debug_assert!(
-            pending.is_none(),
-            "into_stmts: a trailing Item::Mark has no statement to carry its span"
-        );
-        stmts
+        (stmts, pending)
+    }
+}
+
+/// A case body built as statements, for the harness (1B.5b): the statements the lowering emits,
+/// with the source-map marks they carry, and the tail's hoisted statements after them. The
+/// statements print the text the case runner used to splice, with the same checkpoints.
+pub(crate) struct StatementSink(Body);
+
+impl StatementSink {
+    pub(crate) fn new() -> Self {
+        StatementSink(Body::new())
+    }
+
+    /// Lower `stmt` into the sink.
+    pub(crate) fn statement(&mut self, stmt: &Statement, cx: &mut LowerCtx) {
+        statement(&mut self.0, stmt, cx);
+    }
+
+    /// A source-map checkpoint for the statement added next.
+    pub(crate) fn mark(&mut self, span: Span) {
+        self.0.push(Item::Mark(span));
+    }
+
+    /// Statements already built, added as they are.
+    pub(crate) fn nodes(&mut self, stmts: Vec<bynk_ts::TsStmt>) {
+        for stmt in stmts {
+            self.0.push(Item::Node(Box::new(stmt)));
+        }
+    }
+
+    /// The statements, and a trailing mark no statement follows (to go on the next one).
+    pub(crate) fn finish(self) -> (Vec<bynk_ts::TsStmt>, Option<Span>) {
+        self.0.into_stmts_pending()
     }
 }
 
 /// Render `body` into `out` at `indent`, recording each [`Item::Mark`] with
 /// `cx.record_span` at the offset where it is reached.
+#[cfg(test)]
 pub(super) fn render(body: &Body, out: &mut String, indent: usize, cx: &LowerCtx) {
     render_with(body, out, indent, Some(cx));
 }
 
+#[cfg(test)]
 fn render_with(body: &Body, out: &mut String, indent: usize, cx: Option<&LowerCtx>) {
     for item in &body.0 {
         match item {
@@ -157,23 +199,6 @@ pub(super) fn block_body_into(body: &mut Body, block: &Block, cx: &mut LowerCtx,
     emit_block_inner(body, block, cx, async_tail);
 }
 
-/// As [`emit_block_as_function_body`], but records the enclosing return type on
-/// the `LowerCtx` for the duration of the body so the `?` lowering can apply a
-/// declared error embedding (v0.154, ADR 0178). The return type is set and then
-/// restored, so a *sibling* body (a lambda, a mock) does not inherit the wrong
-/// one; nested control-flow blocks reached via the shim above keep it.
-pub(crate) fn emit_block_as_function_body_with_return(
-    out: &mut String,
-    block: &Block,
-    cx: &mut LowerCtx,
-    indent: usize,
-    async_tail: bool,
-    return_type: Option<&TypeRef>,
-) {
-    let body = block_body_with_return(block, cx, async_tail, return_type);
-    render(&body, out, indent, cx);
-}
-
 /// [`emit_block_as_function_body_with_return`], as the statements of a typed
 /// function or method body rather than text (1A.15, Decision A of #3716).
 /// `indent` is the indentation the printer will give them.
@@ -224,7 +249,6 @@ pub(super) fn block_body_with_return(
 /// the text wrapper did.
 pub(super) fn claim_scoped(body: Body) -> Body {
     use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
-    let ident = |name: &str| TsExpr::Ident(name.to_string());
     let settle = |result: TsExpr, threw: bool| {
         TsStmt::expr_stmt(
             TsExpr::Await(Box::new(TsExpr::Call {
@@ -732,19 +756,22 @@ fn lower_effect_let_value(
         let kind = call_site_principal(cx, principal);
         if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
-        } else if let CallSitePrincipal::BadCredential(bad) = kind {
+        } else if let Some(driver) = crate::emitter::lower_call::test_calls::BadDriver::of(
+            &kind,
+            bynk_check::actors::bad_principal_arm(principal),
+        ) {
             // #2135: `by Forged` / `by Stale` name no identity either.
-            cx.call_site_bad_signature = Some(bad.driver());
+            cx.call_site_bad_signature = Some(driver);
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower_node(id, cx));
-            // #3052: a `system` call mints its `Oidc` token's claims from the
+            // #3052, #3937: a `system` call mints its `Oidc` or `Bearer` token's claims from the
             // lines of a literal `TokenClaims.of(lines)` (the checker admits
             // no other form there, `bynk.test.system_claims_need_literal`),
             // and never builds the in-process `TokenClaims` value, so the
             // lines are lowered once and in place of it.
             let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
                 Some(ExprKind::MethodCall { args, .. })
-                    if cx.is_system_oidc_body()
+                    if cx.is_system_claims_body()
                         && args.len() == 1
                         && matches!(
                             principal
@@ -843,7 +870,6 @@ fn emit_par(body: &mut Body, p: &bynk_syntax::ast::ParStmt, cx: &mut LowerCtx) {
     while pattern.last().is_some_and(String::is_empty) {
         pattern.pop();
     }
-    cx.note_settle_all();
     // T2.2 (R6.4): see the matching note at `EffectLet`.
     cx.emitted_await = true;
     let hoisted = parts.iter().any(|part| !part.pre.is_empty());
@@ -908,12 +934,6 @@ fn par_node(parts: Vec<ParPart>, pattern: &[String], hoisted: bool) -> bynk_ts::
     }
 }
 
-pub(super) fn emit_statement(out: &mut String, stmt: &Statement, cx: &mut LowerCtx, indent: usize) {
-    let mut body = Body::new();
-    statement(&mut body, stmt, cx);
-    render(&body, out, indent, cx);
-}
-
 fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
     // Slice 1 (ADR 0103 D2): every generated line this statement emits — including
     // the multi-line `?` expansion (temp / Err-guard / unwrap) — anchors to the
@@ -961,7 +981,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 // The snapshot's name is a string-literal node, spelled as the printer
                 // spells every string.
                 Some(json) => body.push(stmt_item(snapshot_check(
-                    str_node(&clause.name),
+                    str_lit(&clause.name),
                     json,
                     &location,
                     (span_start, span_end),
@@ -975,7 +995,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                         clause.name
                     );
                     body.push(stmt_item(bynk_ts::TsStmt::throw_stmt(
-                        expect_failure_call(&location, span_start, span_end, str_node(message)),
+                        expect_failure_call(&location, span_start, span_end, str_lit(message)),
                         None,
                     )));
                 }
@@ -990,6 +1010,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let location = expect_location_raw(cx, span_start);
             let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
+            let mut was = None;
             // Structural expected-vs-actual for a top-level comparison. Each
             // operand is lowered once and both the condition and the failure
             // detail read it. When an operand hoists statements (a `?` guard),
@@ -1037,6 +1058,13 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                         "expect {src}\n  the call returned without faulting"
                     )),
                 )
+            } else if let Some(r) = super::lower::expect_was::subject_report(&a.value, cx) {
+                // #3980: a failed `is` reports the subject's value.
+                let head = ["expect ", src.as_str()].concat();
+                let text = r.detail(&head);
+                let c = pre.lower_node(&a.value, cx);
+                was = Some((r, head));
+                (c, ExpectDetail::Message(text))
             } else {
                 (
                     pre.lower_node(&a.value, cx),
@@ -1044,16 +1072,35 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 )
             };
             body.extend(pre.items());
-            body.push(expect_item(
-                cond,
-                detail,
-                &location,
-                &src,
-                (span_start, span_end),
-            ));
+            match was {
+                Some((r, head)) if !r.runtime_args().is_empty() => {
+                    body.push(stmt_item(super::lower::expect_was::guard(
+                        cond,
+                        &location,
+                        (span_start, span_end),
+                        &head,
+                        &r,
+                    )));
+                }
+                _ => body.push(expect_item(
+                    cond,
+                    detail,
+                    &location,
+                    &src,
+                    (span_start, span_end),
+                )),
+            }
+            // #3981: the names a statement-form `is` binds stay in scope to the end of the block.
+            if cx.expect_is_bindings {
+                body.extend(
+                    super::lower::expect_bindings::declarations(&a.value, cx)
+                        .into_iter()
+                        .map(stmt_item),
+                );
+            }
         }
         Statement::Advance(a) => {
-            // #2137: move the case's harness clock (`project/test_runtime/clock.ts`),
+            // #2137: move the case's harness clock (`testgen/test_runtime/clock.ts`),
             // which every participant's `Clock` reads at `system` and the
             // `Clock` double reads below it. A negative amount faults there.
             let mut pre = Pre::new();
@@ -1110,7 +1157,7 @@ fn expect_failure_call(
     bynk_ts::TsExpr::Call {
         callee: Box::new(bynk_ts::TsExpr::Ident("__bynkExpectFailure".to_string())),
         args: vec![
-            str_node(location),
+            str_lit(location),
             num_lit(start.to_string()),
             num_lit(end.to_string()),
             detail,
@@ -1153,20 +1200,17 @@ fn expect_item(
                 callee: Box::new(TsExpr::Ident(show.to_string())),
                 args: vec![TsExpr::Paren(Box::new(v))],
             };
-            let add = |l: TsExpr, r: TsExpr| TsExpr::Binary {
-                op: TsBinaryOp::Add,
-                left: Box::new(l),
-                right: Box::new(r),
-            };
-            add(
-                add(
-                    add(str_node(compare_head), shown(lv)),
-                    str_node(format!(" {sym} ")),
+            binary(
+                TsBinaryOp::Add,
+                binary(
+                    TsBinaryOp::Add,
+                    binary(TsBinaryOp::Add, str_lit(compare_head), shown(lv)),
+                    str_lit(format!(" {sym} ")),
                 ),
                 shown(rv),
             )
         }
-        ExpectDetail::Message(m) => str_node(m),
+        ExpectDetail::Message(m) => str_lit(m),
     };
     expect_if(cond, location, start, end, detail)
 }
@@ -1182,10 +1226,9 @@ fn snapshot_check(
     snapshot: &str,
 ) -> bynk_ts::TsStmt {
     use bynk_ts::{TsBinaryOp, TsBindingName, TsExpr, TsStmt};
-    let ident = |n: &str| TsExpr::Ident(n.to_string());
     let message = TsExpr::Binary {
         op: TsBinaryOp::Add,
-        left: Box::new(str_node(format!(
+        left: Box::new(str_lit(format!(
             "expect {src} matches snapshot \"{snapshot}\"\n  "
         ))),
         right: Box::new(ident("__d")),
@@ -1261,6 +1304,7 @@ fn comparison_op_symbol(op: BinOp) -> Option<&'static str> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn write_line(out: &mut String, indent: usize, line: &str) {
     for _ in 0..indent {
         out.push(' ');
@@ -1426,7 +1470,15 @@ pub(super) fn match_tail(
     } else {
         PatPath::from_lowered(disc)
     };
+    // #3980: an `expect false` arm names its arm and the value matched.
+    let framed = {
+        let frame = super::lower::expect_was::scrutinee_frame(discriminant, path.node(), arms, cx);
+        cx.push_scrutinee(frame)
+    };
     match_dispatch(body, &path, &disc_ty, arms, cx, async_tail);
+    if framed {
+        cx.pop_scrutinee();
+    }
 }
 
 /// The `switch` or `if` chain over `arms`, then the non-exhaustive `throw`:
@@ -1831,6 +1883,7 @@ fn mentions_decimal(ty: TyId, cx: &LowerCtx) -> bool {
 mod body_tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx};
+    use crate::ts_build::ident;
     use bynk_check::checker::TypedCommons;
     use bynk_ts::SourceMapBuilder;
     use std::cell::RefCell;
@@ -2028,10 +2081,6 @@ mod body_tests {
                 assert_eq!(map.to_v3(&out, "t.js"), shifted.to_v3(&out, "t.js"));
             }
         }
-    }
-
-    fn ident(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
     }
 
     fn node(stmt: bynk_ts::TsStmt) -> Item {
@@ -2686,6 +2735,7 @@ mod par_node_tests {
 #[cfg(test)]
 mod expect_item_tests {
     use super::*;
+    use crate::ts_build::ident;
 
     /// The item as the one line it prints to.
     fn line(item: Item) -> String {
@@ -2695,12 +2745,8 @@ mod expect_item_tests {
         }
     }
 
-    fn node_expr(name: &str) -> bynk_ts::TsExpr {
-        bynk_ts::TsExpr::Ident(name.to_string())
-    }
-
     fn node(name: &str) -> bynk_ts::TsExpr {
-        node_expr(name)
+        ident(name)
     }
 
     fn compare(lv: bynk_ts::TsExpr, rv: bynk_ts::TsExpr) -> ExpectDetail {
@@ -2793,14 +2839,7 @@ mod expect_item_tests {
     #[test]
     fn a_snapshot_name_is_spelled_as_the_printer_spells_a_string() {
         let name = "bell\u{7} \"q\"";
-        let check = snapshot_check(
-            str_node(name),
-            node_expr("json"),
-            "t:1:1",
-            (0, 2),
-            "v",
-            name,
-        );
+        let check = snapshot_check(str_lit(name), ident("json"), "t:1:1", (0, 2), "v", name);
         let printed = bynk_ts::print_stmt(&check, 0);
         assert!(
             printed.contains("__bynkSnapshotCheck(\"bell\\u{7} \\\"q\\\"\", json)"),
@@ -2808,7 +2847,7 @@ mod expect_item_tests {
         );
         assert_ne!(
             bynk_project::json_string(name),
-            bynk_ts::print_expr(&str_node(name)),
+            bynk_ts::print_expr(&str_lit(name)),
             "the two spellings differ, which is why the name used to take a text arm"
         );
     }
@@ -2829,7 +2868,7 @@ mod expect_item_tests {
     fn the_snapshot_check_node_prints_the_text_it_replaced() {
         let (location, src, shown) = ("tests/a.bynk:3:5", "r.body", "body \"x\"");
         let node = snapshot_check(
-            str_node("snap"),
+            str_lit("snap"),
             bynk_ts::TsExpr::Ident("__json".to_string()),
             location,
             (10, 20),

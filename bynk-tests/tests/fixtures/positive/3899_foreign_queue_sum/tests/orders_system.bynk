@@ -1,0 +1,17 @@
+suite shop.orders as system {
+  case "a message signed by either foreign producer reaches the handler as that producer" {
+    let a <- fulfil.message(Order { id: "o1", claims: "Legacy" }) by Legacy
+    let b <- fulfil.message(Order { id: "o2", claims: "Partner" }) by Partner
+    expect a is Retry("signed as Legacy, the body claims Legacy")
+    expect b is Retry("signed as Partner, the body claims Partner")
+  }
+
+  // The actor is the signer. A message signed as Legacy whose body says it is the Partner's is still
+  // Legacy's, and one signed as the Partner that says Legacy is still the Partner's.
+  case "the actor comes from the verified signature, not from the body" {
+    let a <- fulfil.message(Order { id: "o3", claims: "Partner" }) by Legacy
+    let b <- fulfil.message(Order { id: "o4", claims: "Legacy" }) by Partner
+    expect a is Retry("signed as Legacy, the body claims Partner")
+    expect b is Retry("signed as Partner, the body claims Legacy")
+  }
+}

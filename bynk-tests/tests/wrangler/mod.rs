@@ -16,16 +16,51 @@
 //! The fix is a CI step that provisions the spec once, serially, before the
 //! suite runs — after which every test finds a complete cache and installs
 //! nothing. That only works while the step names the spec the tests actually
-//! run, which is what `wrangler_prewarm.rs` guards: a bump to `wrangler@5` here
-//! that forgets the workflows would silently restore the race, visible only as
-//! an intermittent red.
+//! run, which is what `wrangler_prewarm.rs` guards: a bump to the pin that
+//! forgets the workflows would silently restore the race, visible only as an
+//! intermittent red.
+//!
+//! Off CI, or on a job without that step, [`npx`] does the same once per
+//! machine: it provisions the spec under a cross-process lock before it builds
+//! the command (`support/wrangler_warm.rs`, 1D.3d). Every smoke spawns its
+//! wrangler through it.
 
 /// Free localhost ports that are never handed out twice in a process (#3526).
 #[path = "../support/ports.rs"]
 pub mod ports;
 
-/// The `npx` package spec every workerd smoke provisions.
-pub const SPEC: &str = "wrangler@4";
+/// The one cold-cache provisioning per machine (1D.3d).
+#[path = "../support/wrangler_warm.rs"]
+pub mod warm;
+
+/// The `npx` package spec every workerd smoke provisions: the toolchain's pin.
+pub const SPEC: &str = warm::SPEC;
+
+/// `npx -y <SPEC>`, ready for its subcommand, once the spec is provisioned
+/// for this machine ([`warm::warm`]). Routed through `cmd /C` on Windows so
+/// npm's `npx.cmd` shim resolves: Rust refuses to run a batch script directly
+/// there (the BatBadBut hardening).
+#[allow(dead_code)]
+pub fn npx() -> std::process::Command {
+    warm::warm();
+    npx_command()
+}
+
+/// [`npx`] without the provisioning: the command itself. #4456: it carries
+/// `WRANGLER_SEND_METRICS=false`, so no Wrangler a test starts sends telemetry.
+#[allow(dead_code)]
+pub fn npx_command() -> std::process::Command {
+    let mut c = if cfg!(windows) {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "npx"]);
+        c
+    } else {
+        std::process::Command::new("npx")
+    };
+    c.args(["-y", SPEC])
+        .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1);
+    c
+}
 
 /// I2 (#1971): the `--var`s a workerd smoke passes `wrangler dev` so its
 /// Worker holds the local key `bynk dev` gives it for each `(caller, callee)`
@@ -176,16 +211,26 @@ impl Wrangler {
         cmd: &mut std::process::Command,
         registry: &std::path::Path,
     ) -> std::io::Result<Self> {
-        #[cfg(unix)]
-        std::os::unix::process::CommandExt::process_group(cmd, 0);
         Ok(Wrangler {
-            child: cmd
-                .env("WRANGLER_REGISTRY_PATH", registry)
-                .stdin(std::process::Stdio::null())
-                .spawn()?,
+            child: Self::prepare(cmd, registry).spawn()?,
             terminated: None,
             stopped: false,
         })
+    }
+
+    /// What [`Wrangler::spawn`] sets on `cmd` before starting it: its own process group (Unix),
+    /// the registry, a closed stdin and (#4456) no telemetry. The command may be `bynk dev`,
+    /// which starts the Wranglers, so the variable is set here as well as on [`npx`]: the
+    /// child inherits it either way.
+    pub fn prepare<'a>(
+        cmd: &'a mut std::process::Command,
+        registry: &std::path::Path,
+    ) -> &'a mut std::process::Command {
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(cmd, 0);
+        cmd.env("WRANGLER_REGISTRY_PATH", registry)
+            .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1)
+            .stdin(std::process::Stdio::null())
     }
 
     /// The spawned child, for reading its piped output. Read a pipe only

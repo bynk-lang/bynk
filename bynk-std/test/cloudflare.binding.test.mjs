@@ -31,7 +31,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
-import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/storage.js";
+import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/testing/bindings.js";
+import { verifyQueueMessage } from "./__bynk_runtime/queue_signing.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -107,11 +108,15 @@ t("WorkersKv.put: stores the value with no expiry option", async () => {
   assert.equal(kv.puts[1].options, undefined);
 });
 
-t("WorkersKv.putTtl: passes the TTL through as expirationTtl seconds", async () => {
+t("WorkersKv.putTtl: passes the TTL, a Duration, as expirationTtl whole seconds rounding towards zero", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
-  await store.putTtl("k", "v", 120);
-  assert.deepEqual(kv.puts, [{ key: "k", value: "v", options: { expirationTtl: 120 } }]);
+  await store.putTtl("k", "v", 120_000);
+  await store.putTtl("k2", "v", 120_900);
+  assert.deepEqual(kv.puts, [
+    { key: "k", value: "v", options: { expirationTtl: 120 } },
+    { key: "k2", value: "v", options: { expirationTtl: 120 } },
+  ]);
   assert.deepEqual(await store.get("k"), Some("v"));
 });
 
@@ -394,7 +399,7 @@ const failing = (message, retryable) => () => {
 
 t("WorkersAnalyticsSql.query: sends the query and positional params, and reads the documented reply", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
     { tag: "Text", value: "uk" },
   ]);
   assert.deepEqual(b.calls, [
@@ -408,7 +413,7 @@ t("WorkersAnalyticsSql.query: sends the query and positional params, and reads t
 
 t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean parameters", async () => {
   const b = fakeAnalyticsSql();
-  await sqlOf(b).query("SELECT 1", [
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT 1", [
     { tag: "Null" },
     { tag: "Integer", value: 7 },
     { tag: "Real", value: 1.5 },
@@ -420,7 +425,7 @@ t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean paramet
 
 t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and nothing is sent", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /parameter \$2 is a Blob/);
@@ -429,24 +434,24 @@ t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and no
 
 t("WorkersAnalyticsSql.query: an unsafe Integer or non-finite Real is SqlRejected", async () => {
   const b = fakeAnalyticsSql();
-  const big = await sqlOf(b).query("SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
+  const big = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
   assert.equal(big.error.tag, "SqlRejected");
-  const nan = await sqlOf(b).query("SELECT $1", [{ tag: "Real", value: Number.NaN }]);
+  const nan = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Real", value: Number.NaN }]);
   assert.equal(nan.error.tag, "SqlRejected");
   assert.equal(b.calls.length, 0);
 });
 
 t("WorkersAnalyticsSql.query: a retryable failure is SqlRetryable, any other is SqlRejected", async () => {
-  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("SELECT 1", []);
+  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.deepEqual(retry, { tag: "Err", error: { tag: "SqlRetryable", message: "busy" } });
-  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("SELECT", []);
+  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.deepEqual(bad, { tag: "Err", error: { tag: "SqlRejected", message: "syntax error" } });
-  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("SELECT", []);
+  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.equal(bare.error.tag, "SqlRejected");
 });
 
 t("WorkersAnalyticsSql.query: a reply of another shape is SqlRejected", async () => {
-  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("SELECT 1", []);
+  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /not the shape Analytics SQL documents/);
@@ -458,14 +463,14 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
   console.warn = (m) => warned.push(m);
   try {
     const dev = sqlEnv(fakeAnalyticsSql(), { BYNK_DEV: "1" });
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 1, "once");
     assert.match(warned[0], /Analytics SQL has no local implementation/);
     assert.match(warned[0], /analytics-sql = "allow" under \[dev\]/);
     assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
     warned.length = 0;
-    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("SELECT 1", []);
+    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 0, "silenced");
   } finally {
     console.warn = warn;
@@ -473,7 +478,29 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
 });
 
 t("WorkersAnalyticsSql.query: a missing binding names it", async () => {
-  await assert.rejects(new WorkersAnalyticsSql({}).query("SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+  await assert.rejects(new WorkersAnalyticsSql({}).query("events.analyticsEngine.signups", "SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+});
+
+t("WorkersAnalyticsSql.query: {dataset} is the instance's table, once, several times or never", async () => {
+  const b = fakeAnalyticsSql();
+  const table = "events.analyticsEngine.shop_signups_signups_staging";
+  await sqlOf(b).query(table, "SELECT count() FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", []);
+  await sqlOf(b).query(table, "SELECT (SELECT count() FROM {dataset}) AS a, count() AS n FROM {dataset}", []);
+  await sqlOf(b).query(table, "SELECT 1", []);
+  assert.deepEqual(
+    b.calls.map((c) => c.query),
+    [
+      `SELECT count() FROM ${table} WHERE timestamp > NOW() - INTERVAL '1' DAY`,
+      `SELECT (SELECT count() FROM ${table}) AS a, count() AS n FROM ${table}`,
+      "SELECT 1",
+    ],
+  );
+});
+
+t("WorkersAnalyticsSql.query: a parameter that looks like the placeholder is never substituted", async () => {
+  const b = fakeAnalyticsSql();
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1 FROM {dataset}", [{ tag: "Text", value: "{dataset}" }]);
+  assert.deepEqual(b.calls[0], { query: "SELECT $1 FROM events.analyticsEngine.signups", params: ["{dataset}"] });
 });
 
 // P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
@@ -491,6 +518,7 @@ function fakeR2(pageSize = 2) {
   const completions = [];
   const puts = [];
   const lists = [];
+  const reads = [];
   let version = 0;
   const meta = (o, include = []) => ({
     key: o.key,
@@ -504,23 +532,49 @@ function fakeR2(pageSize = 2) {
     objects,
     puts,
     lists,
-    async get(key) {
+    reads,
+    async get(key, options) {
       const o = objects.get(key);
       if (!o) return null;
+      // #4049: the options a read was given, and R2's answers to them: a condition that does not hold
+      // resolves the object with no body, a range is clamped to the object, and one that starts at
+      // or past its end is refused (10039).
+      reads.push({ key, options });
+      const { etagMatches, etagDoesNotMatch } = options?.onlyIf ?? {};
+      if ((etagMatches !== undefined && o.etag !== etagMatches) || (etagDoesNotMatch !== undefined && o.etag === etagDoesNotMatch)) {
+        return meta(o, ["httpMetadata", "customMetadata"]);
+      }
+      let served;
+      const r = options?.range;
+      if (r !== undefined) {
+        if ("suffix" in r) {
+          const length = Math.min(r.suffix, o.body.length);
+          served = { offset: o.body.length - length, length };
+        } else {
+          if (r.offset >= o.body.length) throw new Error("get: The requested range is not satisfiable (10039)");
+          served = { offset: r.offset, length: Math.min(r.length ?? o.body.length - r.offset, o.body.length - r.offset) };
+        }
+      }
+      const bytes = served === undefined ? o.body : o.body.slice(served.offset, served.offset + served.length);
       // P5b: the body streams two bytes a chunk, so chunking is exercised;
       // `cancelled` records a reader that stopped early.
       let at = 0;
       const body = new ReadableStream({
         pull(controller) {
-          if (at >= o.body.length) return controller.close();
-          controller.enqueue(o.body.slice(at, at + 2));
+          if (at >= bytes.length) return controller.close();
+          controller.enqueue(bytes.slice(at, at + 2));
           at += 2;
         },
         cancel() {
           o.cancelled = true;
         },
       });
-      return { ...meta(o, ["httpMetadata", "customMetadata"]), body, arrayBuffer: async () => o.body.slice().buffer };
+      return {
+        ...meta(o, ["httpMetadata", "customMetadata"]),
+        body,
+        ...(served === undefined ? {} : { range: served }),
+        arrayBuffer: async () => bytes.slice().buffer,
+      };
     },
     async head(key) {
       const o = objects.get(key);
@@ -552,16 +606,26 @@ function fakeR2(pageSize = 2) {
     async delete(key) {
       objects.delete(key);
     },
-    async list({ prefix, cursor, limit, include } = {}) {
-      lists.push({ prefix, cursor, include });
-      const keys = [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
+    async list({ prefix, cursor, limit, include, delimiter } = {}) {
+      lists.push({ prefix, cursor, include, delimiter });
+      // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including
+      // the delimiter, listed once, in `delimitedPrefixes`; a page counts both.
+      const entries = [];
+      for (const k of [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort()) {
+        const at = delimiter ? k.indexOf(delimiter, (prefix ?? "").length) : -1;
+        const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + delimiter.length), folded: true };
+        if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+        entries.push(entry);
+      }
       const start = cursor === undefined ? 0 : Number(cursor);
       const size = Math.min(limit ?? 1000, pageSize);
-      const page = keys.slice(start, start + size).map((k) => meta(objects.get(k), include));
+      const slice = entries.slice(start, start + size);
+      const page = slice.filter((e) => !e.folded).map((e) => meta(objects.get(e.key), include));
+      const delimitedPrefixes = slice.filter((e) => e.folded).map((e) => e.key);
       const next = start + size;
-      return next < keys.length
-        ? { objects: page, truncated: true, cursor: String(next) }
-        : { objects: page, truncated: false };
+      return next < entries.length
+        ? { objects: page, delimitedPrefixes, truncated: true, cursor: String(next) }
+        : { objects: page, delimitedPrefixes, truncated: false };
     },
     // P5b: multipart, as R2 documents it. `resumeMultipartUpload` checks
     // nothing; an unknown upload fails at its first operation. `complete`
@@ -790,6 +854,103 @@ t("WorkersR2.getStream: the body is unclaimed until read, and stopping early can
   assert.equal(r2.objects.get("k").cancelled, true);
 });
 
+// #4049: a read's body, drained.
+async function drain(body) {
+  const out = [];
+  for await (const c of body) out.push(...c);
+  return out;
+}
+
+t("WorkersR2.getRange: a range as R2 serves it, with the offset and length of the body, and None when absent", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), { httpMetadata: { contentType: "video/mp4" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.getRange("absent", { tag: "Span", offset: 0, length: None }), None);
+  const mid = await store.getRange("k", { tag: "Span", offset: 2, length: Some(4) });
+  assert.equal(mid.tag, "Some");
+  assert.deepEqual([mid.value.offset, mid.value.length, mid.value.object.size], [2, 4, 10]);
+  assert.deepEqual(await drain(mid.value.body), [2, 3, 4, 5]);
+  assert.deepEqual(mid.value.object.contentType, Some("video/mp4"));
+  assert.deepEqual(r2.reads.at(-1).options, { range: { offset: 2, length: 4 } });
+  const rest = await store.getRange("k", { tag: "Span", offset: 7, length: None });
+  assert.deepEqual([rest.value.offset, rest.value.length], [7, 3]);
+  assert.deepEqual(r2.reads.at(-1).options, { range: { offset: 7 } });
+  // A length past the end is clamped by R2, and the body says how much it holds.
+  const clamped = await store.getRange("k", { tag: "Span", offset: 8, length: Some(50) });
+  assert.deepEqual([clamped.value.offset, clamped.value.length], [8, 2]);
+  const last = await store.getRange("k", { tag: "Suffix", length: 3 });
+  assert.deepEqual([last.value.offset, last.value.length], [7, 3]);
+  assert.deepEqual(await drain(last.value.body), [7, 8, 9]);
+  assert.deepEqual(r2.reads.at(-1).options, { range: { suffix: 3 } });
+  const whole = await store.getRange("k", { tag: "Suffix", length: 50 });
+  assert.deepEqual([whole.value.offset, whole.value.length], [0, 10]);
+});
+
+t("WorkersR2.getRange: a range that starts at or past the end is R2's own refusal, not clamped", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(0, 1, 2));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  await assert.rejects(store.getRange("k", { tag: "Span", offset: 3, length: None }), /not satisfiable/);
+  await assert.rejects(store.getRange("k", { tag: "Span", offset: 99, length: Some(1) }), /not satisfiable/);
+});
+
+t("WorkersR2.getStreamIf: reads when the condition holds, NotModified with the metadata when it does not, Missing when absent", async () => {
+  const r2 = fakeR2();
+  const o = await r2.put("k", bytes(1, 2, 3), { httpMetadata: { contentType: "text/plain" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.getStreamIf("absent", { tag: "Unconditional" }), { tag: "Missing" });
+  assert.deepEqual(await store.getStreamIf("absent", { tag: "IfEtagMatches", etag: "x" }), { tag: "Missing" });
+  const always = await store.getStreamIf("k", { tag: "Unconditional" });
+  assert.equal(always.tag, "Present");
+  assert.deepEqual(await drain(always.body.body), [1, 2, 3]);
+  assert.deepEqual(r2.reads.at(-1).options, {});
+  const hit = await store.getStreamIf("k", { tag: "IfEtagMatches", etag: o.etag });
+  assert.equal(hit.tag, "Present");
+  assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagMatches: o.etag } });
+  const miss = await store.getStreamIf("k", { tag: "IfEtagMatches", etag: "other" });
+  assert.equal(miss.tag, "NotModified");
+  assert.equal(miss.object.size, 3);
+  assert.deepEqual(miss.object.contentType, Some("text/plain"));
+  const same = await store.getStreamIf("k", { tag: "IfEtagDiffers", etag: o.etag });
+  assert.equal(same.tag, "NotModified");
+  assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagDoesNotMatch: o.etag } });
+  const changed = await store.getStreamIf("k", { tag: "IfEtagDiffers", etag: "other" });
+  assert.equal(changed.tag, "Present");
+});
+
+t("WorkersR2.listWith: a delimiter folds keys into prefixes, and no delimiter gives none; list is the short form", async () => {
+  const r2 = fakeR2(10);
+  for (const key of ["photos/2024/a.jpg", "photos/2024/b.jpg", "photos/2025/c.jpg", "photos/cover.jpg", "notes.txt"]) await r2.put(key, bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const inside = await store.listWith({ prefix: Some("photos/"), cursor: None, delimiter: Some("/") });
+  assert.deepEqual(inside.keys.map((o) => o.key), ["photos/cover.jpg"]);
+  assert.deepEqual(inside.prefixes, ["photos/2024/", "photos/2025/"]);
+  assert.equal(r2.lists.at(-1).delimiter, "/");
+  const top = await store.listWith({ prefix: None, cursor: None, delimiter: Some("/") });
+  assert.deepEqual(top.keys.map((o) => o.key), ["notes.txt"]);
+  assert.deepEqual(top.prefixes, ["photos/"]);
+  const flat = await store.listWith({ prefix: Some("photos/"), cursor: None, delimiter: None });
+  assert.equal(flat.keys.length, 4);
+  assert.deepEqual(flat.prefixes, []);
+  assert.equal(r2.lists.at(-1).delimiter, undefined);
+  const short = await store.list(Some("photos/"), None);
+  assert.deepEqual(short.prefixes, []);
+});
+
+t("WorkersR2.listWith: a page counts objects and prefixes together, and a cursor on a prefix does not list it twice", async () => {
+  const r2 = fakeR2(2);
+  for (const key of ["a/1", "a/2", "b/1", "c.txt"]) await r2.put(key, bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const first = await store.listWith({ prefix: None, cursor: None, delimiter: Some("/") });
+  assert.deepEqual(first.prefixes, ["a/", "b/"]);
+  assert.deepEqual(first.keys, []);
+  assert.equal(first.cursor.tag, "Some");
+  const second = await store.listWith({ prefix: None, cursor: first.cursor, delimiter: Some("/") });
+  assert.deepEqual(second.keys.map((o) => o.key), ["c.txt"]);
+  assert.deepEqual(second.prefixes, []);
+  assert.deepEqual(second.cursor, None);
+});
+
 t("WorkersR2.putStream: writes a stream of the declared size, as a stream, and returns the object", async () => {
   const r2 = fakeR2();
   const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
@@ -995,6 +1156,34 @@ t("WorkersQueue.send: sends the JSON text parsed, as contentType json", async ()
   assert.deepEqual(q.sends, [{ body: { id: 7, tags: ["a"] }, options: { contentType: "json" } }]);
 });
 
+// #3899: a producer whose queue has a signed consumer sends each message in a signed envelope, under
+// the key of the edge to the consumer's context, so the consumer verifies which context sent it.
+const signedQueue = (env, q) => new WorkersQueue({ QUEUE_ORDERS: q, ...env }, "QUEUE_ORDERS", "shop.orders", "shop.fulfil", "order-events");
+const verifies = (sent) => verifyQueueMessage(sent, "order-events", (from) => (from === "shop.orders" ? ["edge-key"] : []));
+
+t("WorkersQueue (signed): every send path wraps the body in an envelope the consumer verifies", async () => {
+  const q = fakeQueue();
+  const queue = signedQueue({ BYNK_CALL_TO_SHOP__FULFIL: "edge-key" }, q);
+  await queue.send('{"id":1}');
+  await queue.sendWith('{"id":2}', { delay: None });
+  await queue.sendValue({ id: 3 });
+  await queue.sendValueWith({ id: 4 }, { delay: Some(2000) });
+  await queue.sendBatch(['{"id":5}']);
+  await queue.sendValueBatch([{ id: 6 }]);
+  const sent = [...q.sends.map((s) => s.body), ...q.batches.flat().map((m) => m.body)];
+  const verified = await Promise.all(sent.map(verifies));
+  assert.deepEqual(verified.map((v) => v.ok && v.body.id), [1, 2, 3, 4, 5, 6]);
+  assert.ok(verified.every((v) => v.ok && v.from === "shop.orders"));
+  assert.equal(new Set(verified.map((v) => v.id)).size, 6, "every message has its own id");
+  assert.deepEqual(q.sends[3].options, { contentType: "json", delaySeconds: 2 });
+});
+
+t("WorkersQueue (signed): a Worker without the edge key faults, and nothing is sent", async () => {
+  const q = fakeQueue();
+  await assert.rejects(signedQueue({}, q).send('{"id":1}'), /BYNK_CALL_TO_/);
+  assert.deepEqual([q.sends, q.batches], [[], []]);
+});
+
 t("WorkersQueue.send: text that is not JSON faults, and nothing is sent", async () => {
   const q = fakeQueue();
   await assert.rejects(
@@ -1050,12 +1239,12 @@ t("WorkersQueue.sendWith: a delay goes as whole seconds, a part second rounded u
   ]);
 });
 
-t("WorkersQueue.sendWith: a delay over 12 hours or below zero faults", async () => {
+t("WorkersQueue.sendWith: a delay over 24 hours or below zero faults", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
-  await assert.rejects(queue.sendWith("1", { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(86_401_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 24 hours/);
   assert.equal(q.sends.length, 0);
 });
 
@@ -1070,11 +1259,11 @@ t("WorkersQueue.sendValueWith: puts on the wire exactly what sendWith(Json.encod
   }
 });
 
-t("WorkersQueue.sendValueWith: a delay over 12 hours or below zero faults, and a missing binding names it", async () => {
+t("WorkersQueue.sendValueWith: a delay over 24 hours or below zero faults, and a missing binding names it", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
-  await assert.rejects(queue.sendValueWith(1, { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendValueWith(1, { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(86_401_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(-500) }), /between 0 seconds and 24 hours/);
   assert.equal(q.sends.length, 0);
   await assert.rejects(
     new WorkersQueue({}, "QUEUE_ORDERS").sendValueWith(1, { delay: None }),
@@ -1245,7 +1434,7 @@ t("WorkersAnalytics.dataset: a missing or empty var names it", async () => {
 const never = { tag: "Never" };
 const putOpts = (o = {}) => ({ expiration: never, metadata: new Map(), ...o });
 
-t("WorkersKv.putWith: passes a relative or absolute expiry in seconds, and the metadata", async () => {
+t("WorkersKv.putWith: passes a relative expiry in whole seconds rounding towards zero, an absolute one, and the metadata", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
   await store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 90_500 }, metadata: new Map([["k", "v"]]) }));
@@ -1253,16 +1442,16 @@ t("WorkersKv.putWith: passes a relative or absolute expiry in seconds, and the m
   await store.putWith("b", "2", putOpts({ expiration: { tag: "At", instant: at } }));
   await store.putWith("c", "3", putOpts());
   assert.deepEqual(kv.puts.map((p) => p.options), [
-    { expirationTtl: 91, metadata: { k: "v" } },
+    { expirationTtl: 90, metadata: { k: "v" } },
     { expiration: Math.ceil(at / 1000), metadata: {} },
     { metadata: {} },
   ]);
 });
 
-t("WorkersKv.putWith: a near expiry, oversized metadata or a long key faults, and nothing is written", async () => {
+// The 60-second floor of `After` is `KvTtl`'s, checked by the compiler (#3948); `At` is checked here.
+t("WorkersKv.putWith: a near absolute expiry, oversized metadata or a long key faults, and nothing is written", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
-  await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 59_000 } })), /at least 60 seconds/);
   await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "At", instant: Date.now() + 10_000 } })), /at least 60 seconds/);
   await assert.rejects(store.putWith("a", "1", putOpts({ metadata: new Map([["k", "x".repeat(1100)]]) })), /at most 1024 bytes as JSON/);
   await assert.rejects(store.putWith("é".repeat(257), "1", putOpts()), /at most 512 bytes, not 514/);
@@ -1291,7 +1480,9 @@ t("WorkersKv.getWith: a value with its metadata, edge-cached for cacheTtl", asyn
     { type: "text", cacheTtl: 45 },
     { type: "text" },
   ]);
-  await assert.rejects(store.getWith("a", { cacheTtl: Some(29_000) }), /at least 30 seconds/);
+  // Whole seconds round towards zero; the 30-second floor is `KvCacheTtl`'s (#3948).
+  await store.getWith("a", { cacheTtl: Some(45_900) });
+  assert.deepEqual(kv.reads.filter((r) => r.options).map((r) => r.options).at(-1), { type: "text", cacheTtl: 45 });
 });
 
 t("WorkersKv.getBytes: a binary value as bytes, and a text value as its UTF-8", async () => {
@@ -1311,6 +1502,26 @@ t("WorkersKv.putBytes: writes the bytes with the options, readable as text when 
   assert.deepEqual(kv.puts[0].options, { metadata: { kind: "blob" } });
   await store.putBytes("t", new TextEncoder().encode("hi"), putOpts());
   assert.deepEqual(await store.get("t"), Some("hi"));
+});
+
+t("WorkersKv.putValue: writes the JSON text with the options, and refuses a key over 512 bytes", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  await store.putValue("k", { user: "ada", roles: ["Admin"] }, putOpts({ metadata: new Map([["kind", "session"]]) }));
+  // The stored text is `Json.encode`'s, so a plain `get` reads it back.
+  assert.deepEqual(await store.get("k"), Some('{"user":"ada","roles":["Admin"]}'));
+  assert.deepEqual(kv.puts[0].options, { metadata: { kind: "session" } });
+  await assert.rejects(store.putValue("k".repeat(513), 1, putOpts()), /a key is at most 512 bytes/);
+});
+
+t("WorkersKv.getValue: the parsed JSON as an Option, None for a missing key, and a fault for text that is not JSON that does not name it", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  assert.deepEqual(await store.getValue("absent"), { kind: "None" });
+  await store.put("k", '{"user":"ada"}');
+  assert.deepEqual(await store.getValue("k"), { kind: "Some", value: { user: "ada" } });
+  await store.put("bad", "secret, not json");
+  await assert.rejects(store.getValue("bad"), (e) => /getValue returned a value that is not JSON/.test(e.message) && !/secret/.test(e.message));
 });
 
 t("WorkersKv.listPage: one page at a time, with each key's expiry and metadata, to a None cursor", async () => {
@@ -2039,11 +2250,14 @@ t("WorkersStoredSecret.get: reads the instance's own binding and returns the val
     },
   });
   const env = { SECRET_STRIPE_KEY: secret("sk_one"), SECRET_WEBHOOK_KEY: secret("whsec_two") };
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_WEBHOOK_KEY").get(), "whsec_two");
+  const read = async (binding) => (await new WorkersStoredSecret(env, binding).get()).reveal();
+  assert.equal(await read("SECRET_STRIPE_KEY"), "sk_one");
+  assert.equal(await read("SECRET_WEBHOOK_KEY"), "whsec_two");
+  // #4111: the value is a `Secret`, so it never shows its text.
+  assert.equal(String(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get()), "<secret>");
   // Each read goes to the platform; the provider keeps no copy.
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
-  assert.deepEqual(calls, ["sk_one", "whsec_two", "sk_one"]);
+  assert.equal(await read("SECRET_STRIPE_KEY"), "sk_one");
+  assert.deepEqual(calls, ["sk_one", "whsec_two", "sk_one", "sk_one"]);
 });
 
 t("WorkersStoredSecret.get: a missing binding names it and the stanza, and a platform refusal propagates", async () => {
@@ -3169,7 +3383,7 @@ t("WorkersAi: an unstubbed integration double faults every operation, never an E
 
 t("WorkersAnalyticsSql: an unstubbed integration double faults the query, never an Err", async () => {
   const sql = new WorkersAnalyticsSql({ CF_ANALYTICS_SQL: __makeIntegrationAnalyticsSql() });
-  await assert.rejects(sql.query("SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
+  await assert.rejects(sql.query("events.analyticsEngine.signups", "SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
 });
 
 t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {

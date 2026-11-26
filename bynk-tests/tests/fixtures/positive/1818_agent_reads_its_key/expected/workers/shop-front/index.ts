@@ -2,7 +2,9 @@
 // Worker entry point for context `shop.front`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -14,95 +16,99 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "shop.front");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          case "doubled": {
-            __route = "call doubled";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "5429627284c73916") {
-              globalThis.console.error("ContractMismatch shop.front call doubled", { service: "doubled", expected: "5429627284c73916", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "doubled", expected: "5429627284c73916", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "shop.front");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            case "doubled": {
+              __route = "call doubled";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "5429627284c73916") {
+                globalThis.console.error("ContractMismatch shop.front call doubled", { service: "doubled", expected: "5429627284c73916", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "doubled", expected: "5429627284c73916", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              const __r_n = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              if (__r_n.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_n.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const n = __r_n.value;
+              const result = await surface.doubled(n);
+              const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            case "label": {
+              __route = "call label";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "f639af6dc8c31504") {
+                globalThis.console.error("ContractMismatch shop.front call label", { service: "label", expected: "f639af6dc8c31504", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "label", expected: "f639af6dc8c31504", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
+              if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const id = __r_id.value;
+              const result = await surface.label(id);
+              const body = result as __JsonValue;
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            const __r_n = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
-            if (__r_n.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_n.error), { status: 400, headers: { "content-type": "application/json" } });
-            const n = __r_n.value;
-            const result = await surface.doubled(n);
-            const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            case "sum": {
+              __route = "call sum";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "025399e1676e2fc2") {
+                globalThis.console.error("ContractMismatch shop.front call sum", { service: "sum", expected: "025399e1676e2fc2", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "sum", expected: "025399e1676e2fc2", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+              const argsObj = args as { [k: string]: __JsonValue };
+              const __r_x = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.x", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.x", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["x"]);
+              if (__r_x.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_x.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const x = __r_x.value;
+              const __r_y = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.y", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.y", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["y"]);
+              if (__r_y.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_y.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const y = __r_y.value;
+              const result = await surface.sum(x, y);
+              const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            }
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
           }
-          case "label": {
-            __route = "call label";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "f639af6dc8c31504") {
-              globalThis.console.error("ContractMismatch shop.front call label", { service: "label", expected: "f639af6dc8c31504", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "label", expected: "f639af6dc8c31504", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
-            }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
-            }
-            const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
-            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
-            const id = __r_id.value;
-            const result = await surface.label(id);
-            const body = result as __JsonValue;
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-          }
-          case "sum": {
-            __route = "call sum";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "025399e1676e2fc2") {
-              globalThis.console.error("ContractMismatch shop.front call sum", { service: "sum", expected: "025399e1676e2fc2", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "sum", expected: "025399e1676e2fc2", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
-            }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
-            }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
-            const argsObj = args as { [k: string]: __JsonValue };
-            const __r_x = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.x", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.x", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["x"]);
-            if (__r_x.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_x.error), { status: 400, headers: { "content-type": "application/json" } });
-            const x = __r_x.value;
-            const __r_y = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.y", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.y", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["y"]);
-            if (__r_y.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_y.error), { status: 400, headers: { "content-type": "application/json" } });
-            const y = __r_y.value;
-            const result = await surface.sum(x, y);
-            const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-          }
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
         }
-      }
 
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      globalThis.console.error(`shop.front ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("shop.front", __route);
-    }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`shop.front ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("shop.front", __route);
+      }
+    });
   },
 };

@@ -2,6 +2,7 @@
 // context t.desk
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
@@ -12,8 +13,8 @@ export type Code = string & { readonly __brand: "t.desk.Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Code", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Code", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Code);
   },
@@ -131,10 +132,10 @@ export function __deserialise_t_vault__Code(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be non-negative", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be non-negative", rule: { tag: "NonNegative" }, value: json } });
   }
   return Ok(json as unknown as t_vault.Code);
 }

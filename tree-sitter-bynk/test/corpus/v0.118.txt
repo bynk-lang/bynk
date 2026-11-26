@@ -184,3 +184,112 @@ suite shop.pricing {
         (binary_expr
           (identifier)
           (string_literal))))))
+
+================================================================================
+stub call outcome — `rejected`, `faulted` and `unreachable` (#3894)
+================================================================================
+
+suite shop.orders {
+  case "a failed payment" {
+    stub Pay.authorise(_) rejected NotAdmitted
+    stub shop.stock.reserve(_) faulted
+    stub shop.ledger.book(_) unreachable
+    let r <- placeOrder.call(1)
+    expect r == "late"
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (stub_clause
+        (identifier)
+        (identifier)
+        (wildcard)
+        (identifier))
+      (stub_clause
+        (identifier)
+        (identifier)
+        (identifier)
+        (wildcard))
+      (stub_clause
+        (identifier)
+        (identifier)
+        (identifier)
+        (wildcard))
+      (effect_let_stmt
+        (identifier)
+        (method_call
+          (identifier)
+          (identifier)
+          (number_literal)))
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (string_literal))))))
+
+================================================================================
+a test-only commons carries the `for tests` marker (#3984)
+================================================================================
+
+commons demo.kit for tests
+
+const Start: Int = 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (test_only_marker)
+    (const_decl
+      (identifier)
+      (base_type)
+      (number_literal))))
+
+================================================================================
+stub and observation of a generic operation name the type argument (#3945)
+================================================================================
+
+suite demo.orders {
+  stub Idempotency.dedup[Int](_) returns None
+
+  case "reserve" {
+    let r <- reserve.call()
+    expect Idempotency.dedup[Int] called once
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (stub_clause
+      (identifier)
+      (identifier)
+      (base_type)
+      (wildcard)
+      (none_expr))
+    (case
+      (string_literal)
+      (effect_let_stmt
+        (identifier)
+        (method_call
+          (identifier)
+          (identifier)))
+      (expect_expr
+        (observation_expr
+          (identifier)
+          (identifier)
+          (base_type))))))

@@ -3,7 +3,7 @@
 _Audit taken 18 June 2026 at **v0.54.0** (head `9da282c`); individual entries
 have been updated since (the latest cite v0.220), and the deferred-surface
 statements were corrected in October 2026 (v0.309, #1669). For current status, read
-the site's [Versioning & roadmap](../site/src/content/docs/book/about/versioning-and-roadmap.md)
+the site's [Versioning & roadmap](../site/src/content/docs/project/versioning-and-roadmap.md)
 and [`archive/retired-tracks.md`](archive/retired-tracks.md); this audit is a
 dated snapshot. Scope: the whole `bynk`
 repo — compiler (`bynkc`), driver (`bynk`), formatter (`bynk-fmt`), language
@@ -23,7 +23,7 @@ against the language's own specs._
 Bynk is described by three tiers of documents; conflating them produces a
 misleading verdict, so this audit keeps them separate:
 
-1. **The normative spec** (`site/src/content/docs/book/spec/`) plus the **decision records**
+1. **The normative spec** (`site/src/content/docs/reference/spec/`) plus the **decision records**
    (`decisions/`) are the authoritative "what exists now". The ADR index runs
    from v0.9.4 (ADR 0001) to v0.54 (ADR 0092) and is the spine of this audit.
 2. **The design notes** (`bynk-design-notes.md`) and **type-system spec**

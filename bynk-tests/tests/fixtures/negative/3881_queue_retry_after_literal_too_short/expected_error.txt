@@ -1,0 +1,2 @@
+bynk.queue.retry_delay_out_of_range this retry delay is under 1 second; write a delay from 1 second to 24 hours
+# exact

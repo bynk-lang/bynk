@@ -5,7 +5,7 @@ Lay out a multi-file project, build it to TypeScript, and deploy to Cloudflare
 Workers.
 
 **Understand**
-- [Why compile to TypeScript](/book/guides/projects-build-and-deployment/why-compile-to-typescript/)
+- [Why compile to TypeScript](/book/concepts/projects-build-and-deployment/why-compile-to-typescript/)
 
 **Do**
 - [Start a new project](/book/guides/projects-build-and-deployment/start-a-project/)
@@ -15,9 +15,11 @@ Workers.
 - [Apply a breaking-change migration without an editor](/book/guides/projects-build-and-deployment/apply-a-migration-without-an-editor/)
 - [Run your project locally](/book/guides/projects-build-and-deployment/run-locally/)
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
+- [Keep a project's data in one jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/)
 - [Roll back a deployment](/book/guides/projects-build-and-deployment/roll-back-a-deployment/)
+- [Follow a request across contexts](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/)
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/)
 - [Adopt Bynk beside a TypeScript Worker](/book/guides/projects-build-and-deployment/adopt-beside-a-typescript-worker/)
 
-**See also:** [Reference — `bynk.toml` manifest](/docs/manifest/),
-[CLI (`bynk`)](/docs/bynk-cli/), [Emission](/docs/emission/).
+**See also:** [Reference — `bynk.toml` manifest](/reference/tooling/manifest/),
+[CLI (`bynk`)](/reference/tooling/bynk-cli/), [Emission](/reference/tooling/emission/).

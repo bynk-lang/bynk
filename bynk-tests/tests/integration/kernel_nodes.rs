@@ -178,7 +178,7 @@ provides Prices = P { fn get(region: String, sku: Int) -> Effect[Int] { sku } }
 fn pick(n: Int) -> Result[Int, String] { Ok(n) }
 
 service run {
-	on call(sku: Int) -> Effect[Result[Int, String]] given Prices {
+	on call(sku: Int) -> Effect[Result[Int, String]] by Caller given Prices {
 		let p <- Prices.get("a", pick(sku)?).race(Prices.get("b", pick(sku + 1)?)).race(Prices.get("c", pick(sku + 2)?))
 		let q <- Prices.get("a", sku).within(2.seconds)
 		Effect.pure(Ok(p))
@@ -219,7 +219,7 @@ provides Mail = M { fn send(n: Int) -> Effect[Result[(), MailError]] { Ok(()) } 
 provides Count = C { fn next(n: Int) -> Effect[Int] { n } }
 
 service run {
-	on call(n: Int) -> Effect[Int] given Mail, Count {
+	on call(n: Int) -> Effect[Int] by Caller given Mail, Count {
 		do Count.next(n).detach()
 		do Mail.send(n).detach()
 		Effect.pure(n)
@@ -268,7 +268,7 @@ fn inferred(id: Int) -> Effect[Result[String, String]] { fetch(id).mapOk((n) => 
 /// `Retry("x")` instead of `Ack` prints as the `QueueResult.Retry(...)` call.
 #[test]
 fn a_queue_result_variant_call_is_a_node() {
-    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tRetry(\"x\")\n\t}\n}\n";
+    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] by Producer {\n\t\tRetry(\"x\")\n\t}\n}\n";
     let text = mem(src);
     assert!(text.contains("QueueResult.Retry(\"x\")"), "{text}");
 }

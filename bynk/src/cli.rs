@@ -73,7 +73,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Run and deploy",
-        &["dev", "deploy", "revert", "tail", "migrate"],
+        &["dev", "deploy", "revert", "tail", "migrate", "lock"],
     ),
     (
         "Dependencies",
@@ -305,6 +305,11 @@ pub enum Command {
         /// `node_modules` themselves, and CI. Also set by `BYNK_NO_INSTALL=1`.
         #[arg(long)]
         no_install: bool,
+        /// Refuse a deploy to a named environment whose `env(…)` constants take
+        /// a `[vars]` or default value instead of the environment's own: the
+        /// staging Worker would use production's value (#3941).
+        #[arg(long)]
+        strict_environments: bool,
         /// Plan output format. `short` is line-oriented; `json` is for CI.
         #[arg(long, value_enum, default_value = "short")]
         format: DeployFormatArg,
@@ -340,6 +345,13 @@ pub enum Command {
         /// for this.
         #[arg(long = "confirm-delete", value_name = "CONTEXT.CLASS")]
         confirm_delete: Vec<String>,
+        /// Confirm changing this agent class's `@jurisdiction`, named as the plan
+        /// prints it (`<context>.<Class>`). Repeatable. A Durable Object id minted
+        /// under another jurisdiction is a different id for the same name, so a
+        /// change orphans every existing instance irreversibly, and `--yes` never
+        /// stands in for this.
+        #[arg(long = "confirm-jurisdiction", value_name = "CONTEXT.CLASS")]
+        confirm_jurisdiction: Vec<String>,
         /// Let this context start with fresh agent state on another Worker script
         /// than the one it was last deployed to (into or out of a
         /// `[deploy.workers.<key>]` group, or after a group is renamed or re-keyed).
@@ -382,9 +394,14 @@ pub enum Command {
     },
     /// Type-check a file or project.
     ///
-    /// Writes no output.
+    /// Writes no compiled output.
     ///
-    /// Runs the compiler pipeline in-process.
+    /// Runs the compiler pipeline in-process. A project with dependencies is
+    /// resolved first, so the first check creates `bynk.lock` (and says so on
+    /// stderr) and a later one writes it again only when the dependency
+    /// graph changed, and a git dependency missing from the store is fetched
+    /// into it; pass `--locked` to fail instead of writing the lock, or
+    /// `--offline` to fail instead of fetching.
     Check {
         /// Input `.bynk` file or project root. Defaults to the current directory.
         #[arg(default_value = ".")]
@@ -395,7 +412,11 @@ pub enum Command {
         /// for tooling (the VS Code problem-matcher, CI, scripts).
         /// In both, `path` is the file as you'd type it from the working
         /// directory (the input you passed, joined with the file's place in
-        /// it), the same path `fmt` reports.
+        /// it), the same path `fmt` reports. `json` writes one versioned JSON
+        /// document to stdout, and `ndjson` one diagnostic per line plus a
+        /// summary line; both carry each diagnostic's code, severity, range
+        /// (UTF-16 columns and a byte offset), labels, notes and fixes, hints
+        /// included. The exit status is the same in every format.
         #[arg(long, value_enum, default_value = "rich")]
         format: CheckFormatArg,
         /// Apply the machine-applicable fix suggestions to the sources, in
@@ -431,6 +452,11 @@ pub enum Command {
         /// it changes nothing; at a project, or inside one, it is an error.
         #[arg(long)]
         each: bool,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -460,6 +486,11 @@ pub enum Command {
         /// (contract checks on). `[profile.<name>]` overrides its defaults.
         #[arg(long, value_enum)]
         profile: Option<bynk_driver::CliProfile>,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -497,6 +528,11 @@ pub enum Command {
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -772,6 +808,16 @@ pub enum Command {
         #[command(subcommand)]
         command: MigrateCommand,
     },
+    /// Maintain `bynk.schema.lock` by hand.
+    ///
+    /// `accept-order` records a `derives Ord` type's new field or variant order
+    /// after a reorder that `bynk.types.ord_order_changed` refused; `accept-analytics`
+    /// records an `Analytics` instance's new column mapping after a change that
+    /// `bynk.analytics.mapping_changed` refused.
+    Lock {
+        #[command(subcommand)]
+        command: LockCommand,
+    },
     /// Add a registry dependency to `bynk.toml`.
     ///
     /// Adds (#2274) the highest version its registry offers (or one matching
@@ -966,6 +1012,59 @@ pub enum Command {
     },
 }
 
+/// `bynk lock`'s subcommands (#3956).
+#[derive(Subcommand, Debug)]
+pub enum LockCommand {
+    /// Accept the new order of a `derives Ord` type: rewrite its entry under
+    /// `[orders]` in `bynk.schema.lock` to the order now declared.
+    ///
+    /// A reorder changes how every value of the type sorts, so a build refuses
+    /// it (`bynk.types.ord_order_changed`) until it is accepted. This is the
+    /// deliberate step, and the rewritten lock belongs in the same commit as the
+    /// reorder. Name the type, qualified (`shop.tasks.Priority`) or not when it
+    /// is the only one so called, or pass `--all` to accept every changed type
+    /// (it lists what it accepts).
+    AcceptOrder {
+        /// The type to accept. Omit with `--all`.
+        #[arg(
+            value_name = "TYPE",
+            required_unless_present = "all",
+            conflicts_with = "all"
+        )]
+        type_name: Option<String>,
+        /// Accept every `derives Ord` type whose order differs from the lock.
+        #[arg(long)]
+        all: bool,
+        /// Project directory. Defaults to the current directory.
+        #[arg(long, value_name = "PATH", default_value = ".")]
+        path: PathBuf,
+    },
+    /// Accept the new column mapping of an `Analytics` instance: rewrite its entry under
+    /// `[analytics]` in `bynk.schema.lock` to the mapping its `writeValue` now writes (#4105).
+    ///
+    /// Points already written keep their old column positions, so a build refuses a reorder,
+    /// a retyped field or a removed field of the written record
+    /// (`bynk.analytics.mapping_changed`) until it is accepted. This is the deliberate step, and the
+    /// rewritten lock belongs in the same commit as the change. Name the instance, qualified
+    /// (`shop.cart.Signups`) or not when it is the only one so called, or pass `--all` to accept
+    /// every changed instance (it lists what it accepts).
+    AcceptAnalytics {
+        /// The instance to accept. Omit with `--all`.
+        #[arg(
+            value_name = "INSTANCE",
+            required_unless_present = "all",
+            conflicts_with = "all"
+        )]
+        instance: Option<String>,
+        /// Accept every instance whose mapping differs from the lock.
+        #[arg(long)]
+        all: bool,
+        /// Project directory. Defaults to the current directory.
+        #[arg(long, value_name = "PATH", default_value = ".")]
+        path: PathBuf,
+    },
+}
+
 /// `bynk migrate`'s subcommands (state-migrations S4, #2259).
 #[derive(Subcommand, Debug)]
 pub enum MigrateCommand {
@@ -1019,7 +1118,7 @@ pub enum MigrateCommand {
     },
 }
 
-/// `bynk check --format` selector (rich/short).
+/// `bynk check --format` selector (rich/short/json/ndjson).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
 pub enum CheckFormatArg {
     /// Ariadne rendering with full source context (the default).
@@ -1028,6 +1127,11 @@ pub enum CheckFormatArg {
     /// One terse `path:line:col: severity[category]: message` line per
     /// diagnostic — for the VS Code problem-matcher, CI, and scripts.
     Short,
+    /// One JSON document on stdout: every diagnostic with its code, severity,
+    /// file, range, labels, notes and fixes, and a summary (#4123).
+    Json,
+    /// The same diagnostics as JSON, one per line, then a summary line (#4123).
+    Ndjson,
 }
 
 /// `--only` selector. Mirrors [`Capability`] minus the internal distinctions.

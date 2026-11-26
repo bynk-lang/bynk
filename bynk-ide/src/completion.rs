@@ -38,7 +38,7 @@
 //! *project* symbols.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -152,6 +152,25 @@ pub fn complete_in(
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
+    let mut items = complete_base(project_root, line_prefix, doc_text, files);
+    // #3931: `self.<cursor>` in a document with an agent — `erase`, offered beside whatever else the
+    // position offers (the key's fields), not instead of it.
+    if let Some(erase) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
+        for e in erase {
+            if !items.iter().any(|i| i.label == e.label) {
+                items.push(e);
+            }
+        }
+    }
+    items
+}
+
+fn complete_base(
+    project_root: Option<&Path>,
+    line_prefix: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
     // #2223: the project's own files and its dependencies' reachable units,
     // resolved once per request and only by the branches that name units.
     let split = || split_dependency_files(files, project_root);
@@ -173,6 +192,26 @@ pub fn complete_in(
             })
             .collect();
     }
+    // 0'. #4035: after `violates` in a claim — the invariants, transitions and `@unique`
+    //     constraints the project declares.
+    if let Some(names) = crate::violates::name_candidates(line_prefix, doc_text, files) {
+        return names;
+    }
+    // 0a. #3875: inside `on schedule(<cursor>` — the in-scope `String` and
+    //     `CronSchedule` constants, which name a schedule.
+    if in_schedule_argument(line_prefix) {
+        return schedule_constant_candidates(doc_text, files);
+    }
+    // 0a''. #3889: inside `from email(<cursor>` — the in-scope constants declared exactly
+    //       `String`, which name an address.
+    if in_email_address_argument(line_prefix) {
+        return constants_of_types(doc_text, files, &["String"]);
+    }
+    // 0a'. #3951: inside a refinement predicate's argument list — the in-scope
+    //      constants of the type that argument takes.
+    if let Some(types) = predicate_argument_types(line_prefix) {
+        return constants_of_types(doc_text, files, types);
+    }
     // 0b. #2686: `@<cursor>` after a `Matches(…)` / `IsoDate` refinement — the
     //     `@example` annotation, the only one valid there.
     if in_refinement_annotation_position(line_prefix) {
@@ -192,6 +231,19 @@ pub fn complete_in(
         if names_a_brace_alias(line_prefix) {
             return Vec::new();
         }
+        // #4044: a commons lists the types an adapter exports, never a capability.
+        if current_unit_is_commons(doc_text) {
+            return exported_types_of_unit(&unit, doc_text, &split())
+                .into_iter()
+                .map(|t| {
+                    let detail = format!(
+                        "type exported by `{unit}`{}",
+                        stability_suffix(experimental(&format!("{unit}.{t}")))
+                    );
+                    Completion::item(t, CompletionKind::Type, Some(detail))
+                })
+                .collect();
+        }
         return capabilities_of_unit(&unit, doc_text, &split())
             .into_iter()
             .map(|c| {
@@ -202,6 +254,17 @@ pub fn complete_in(
                 Completion::item(c, CompletionKind::Capability, Some(detail))
             })
             .collect();
+    }
+    // 1b. #4045: inside `uses U { … <cursor>` — the public names U declares. After `X as`
+    //     the next word is the alias, a name of the user's own: nothing to suggest.
+    if let Some(unit) = uses_brace_unit(line_prefix) {
+        if names_a_brace_alias(line_prefix) {
+            return Vec::new();
+        }
+        let listed = listed_uses_names(line_prefix);
+        let mut names = public_names_of_commons(&unit, doc_text, &split());
+        names.retain(|c| !listed.contains(&c.label));
+        return names;
     }
     // 2. After `consumes <prefix>` — consumable unit names.
     if is_consumes_target(line_prefix) {
@@ -224,9 +287,21 @@ pub fn complete_in(
     if auth_scheme_position(line_prefix) {
         return auth_scheme_candidates();
     }
+    // 3b'. #3894: `<context>.<service>.<cursor>` on a consumed service — `outcome`.
+    if let Some(items) = crate::call_outcome::outcome_member_candidates(line_prefix, doc_text) {
+        return items;
+    }
+    // 3b''. #3937: `<binder>.<cursor>` on a verified actor's binder — `claims`.
+    if let Some(items) = crate::token_claims::claims_member_candidates(line_prefix, doc_text) {
+        return items;
+    }
     // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);
+    }
+    // 3d. #3947: `<int>.<cursor>` — the `Duration` units that agree with the number.
+    if let Some(units) = crate::duration_completion::duration_unit_candidates(line_prefix) {
+        return units;
     }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
@@ -292,6 +367,15 @@ pub fn complete_in(
     //      — the constraint names.
     if is_constraint_position(line_prefix) {
         return constraint_candidates();
+    }
+    // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
+    // #3899: a `Producer` refinement takes the same predicate.
+    if is_caller_refinement_where(line_prefix) || is_producer_refinement_where(line_prefix) {
+        return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
+    }
+    // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
+    if is_sender_refinement_where(line_prefix) {
+        return vec![Completion::snippet("Dmarc", "Dmarc(${1:DmarcPass})")];
     }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
@@ -366,8 +450,93 @@ fn is_snapshot_clause_position(line: &str) -> bool {
     ends_a_value
         && !matches!(
             last_word,
-            Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
+            Some(
+                "and"
+                    | "or"
+                    | "not"
+                    | "is"
+                    | "if"
+                    | "else"
+                    | "match"
+                    | "faults"
+                    | "violates"
+                    | "called"
+            )
         )
+}
+
+/// #4045: `uses U { … ` with the brace still open at the cursor → `Some(U)`.
+fn uses_brace_unit(line: &str) -> Option<String> {
+    let after = line.trim_start().strip_prefix("uses")?;
+    if !after.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let open = after.find('{')?;
+    if after[open + 1..].contains('}') {
+        return None;
+    }
+    let unit = after[..open].trim();
+    (!unit.is_empty() && is_qualified_name(unit)).then(|| unit.to_string())
+}
+
+/// #4045: the names already written in the open `uses U { … ` list, by the name
+/// the commons declares (`format` in `format as formatMoney`). Listing a name twice
+/// is refused, so completion does not offer it again. Like `consumes`, the list is
+/// read only on the line `uses` starts on.
+fn listed_uses_names(line: &str) -> HashSet<String> {
+    let Some(open) = line.find('{') else {
+        return HashSet::new();
+    };
+    line[open + 1..]
+        .split(',')
+        .filter_map(|item| item.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
+/// #4045: the names the commons `unit` declares and does not mark `private`, as
+/// completion items kinded by what they are: a type, a function, or a constant,
+/// asset or embed. Empty when `unit` is not a commons the project knows. A commons
+/// split over several files offers the names of every one of them.
+fn public_names_of_commons(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
+    let mut out: Vec<Completion> = Vec::new();
+    let mut visit = |u: &SourceUnit| {
+        let SourceUnit::Commons(c) = u else { return };
+        if c.name.joined() != unit {
+            return;
+        }
+        for item in &c.items {
+            let (name, kind, what, private) = match item {
+                CommonsItem::Type(t) => (&t.name, CompletionKind::Type, "type", t.private),
+                CommonsItem::Fn(f) if f.name.type_name().is_none() => (
+                    f.name.ident(),
+                    CompletionKind::Function,
+                    "function",
+                    f.private,
+                ),
+                CommonsItem::Const(k) => (&k.name, CompletionKind::Constant, "constant", k.private),
+                CommonsItem::Asset(a) => (&a.name, CompletionKind::Constant, "asset", a.private),
+                CommonsItem::Embed(e) => (&e.name, CompletionKind::Constant, "embed", e.private),
+                _ => continue,
+            };
+            if private.is_none() && !out.iter().any(|o| o.label == name.name) {
+                out.push(Completion::item(
+                    name.name.clone(),
+                    kind,
+                    Some(format!("{what} declared by `{unit}`")),
+                ));
+            }
+        }
+    };
+    let mut in_deps = false;
+    for (_, dep) in split.deps.iter().filter(|(label, _)| label == unit) {
+        in_deps = true;
+        visit(dep);
+    }
+    if !in_deps {
+        for_each_unit(doc_text, split.own(), visit);
+    }
+    out
 }
 
 /// `consumes U { … ` with the brace still open at the cursor → `Some(U)`.
@@ -1007,7 +1176,7 @@ fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
 
 /// v0.131: the CORS policy fields, offered at a field-name position inside a
 /// `cors { }` block. `Allow-Methods` is deliberately absent (derived from the
-/// routes), so the closed set is these four.
+/// routes), so the closed set is these five.
 pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "origins",
@@ -1016,6 +1185,10 @@ pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "headers",
         "the `Access-Control-Allow-Headers` a preflight advertises",
+    ),
+    (
+        "expose",
+        "the response headers a browser script may read, beside the ones Bynk writes for a client",
     ),
     (
         "credentials",
@@ -1028,7 +1201,7 @@ pub const CORS_FIELDS: &[(&str, &str)] = &[
 ];
 
 /// v0.141 (ADR 0164): the security-headers policy fields, offered at a field-name
-/// position inside a `security { }` block. The closed set is these two.
+/// position inside a `security { }` block. The closed set is these five.
 pub const SECURITY_FIELDS: &[(&str, &str)] = &[
     (
         "nosniff",
@@ -1038,7 +1211,28 @@ pub const SECURITY_FIELDS: &[(&str, &str)] = &[
         "hsts",
         "opt in to `Strict-Transport-Security` — the `max-age` as a `Duration`",
     ),
+    (
+        "frameAncestors",
+        "who may frame an HTML page, as `Content-Security-Policy: frame-ancestors` — exact origins or `\"self\"` (default: nobody)",
+    ),
+    (
+        "referrerPolicy",
+        "the `Referrer-Policy` of an HTML page, in camel case (default `strictOriginWhenCrossOrigin`)",
+    ),
+    (
+        "csp",
+        "a whole `Content-Security-Policy` for HTML pages, sent verbatim; `frame-ancestors` is appended if it has none",
+    ),
 ];
+
+/// #3923: the values of a `security { referrerPolicy: … }`, written in camel case, with the
+/// header each sends.
+pub fn referrer_policy_values() -> Vec<(&'static str, String)> {
+    bynk_syntax::ast::REFERRER_POLICIES
+        .iter()
+        .map(|(camel, header)| (*camel, format!("sends `Referrer-Policy: {header}`")))
+        .collect()
+}
 
 /// v0.142 (ADR 0165): the request-limits policy fields, offered at a field-name
 /// position inside a `limits { }` block. The closed set is this one.
@@ -1056,6 +1250,33 @@ pub const LIMITS_FIELDS: &[(&str, &str)] = &[
         "the maximum number of parts of a `@multipart` body (a positive `Int`; default 64)",
     ),
 ];
+
+/// #3905: a `from websocket` service's `limits { }` has the one field `maxFrame`.
+pub const WS_LIMITS_FIELDS: &[(&str, &str)] = &[(
+    "maxFrame",
+    "the largest frame in bytes the service reads or sends (a positive `Int`; default 1_048_576, at most Cloudflare's 33_554_432); a larger inbound frame is closed with `1009`",
+)];
+
+/// #3905: whether the `{` at `brace` opens a `service … from websocket` body, read from its header
+/// line.
+fn brace_opens_websocket_service(text: &str, brace: usize) -> bool {
+    let header_start = text[..brace].rfind('\n').map_or(0, |i| i + 1);
+    let header = &text[header_start..brace];
+    header.contains("service ") && header.contains("from websocket")
+}
+
+/// #3905: the cursor is in a `limits { … }` block of a `from websocket` service, or at an item start in
+/// the body of one, so `maxFrame` is the field to offer instead of the request-body fields.
+pub fn in_websocket_service_limits(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) == "limits" {
+        return innermost_open_brace(text, open)
+            .is_some_and(|service| brace_opens_websocket_service(text, service));
+    }
+    brace_opens_websocket_service(text, open)
+}
 
 /// #2858: the response-JSON policy fields, offered at a field-name position
 /// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
@@ -1077,6 +1298,198 @@ pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
     ),
 ];
 
+/// #3916: the error-body policy fields, offered at a field-name position inside
+/// an `errors { }` block (and as `@errors( … )` arguments). The closed set is
+/// this one.
+pub const ERRORS_FIELDS: &[(&str, &str)] = &[(
+    "format",
+    "the shape of error bodies: `bynk` (Bynk's own, the default) or `problem` (RFC 9457 `application/problem+json`)",
+)];
+
+/// #3916: the values of an `errors` / `@errors` `format`.
+pub const ERRORS_FORMAT_VALUES: &[(&str, &str)] = &[
+    (
+        "bynk",
+        "Bynk's own bodies: `{ \"error\": message }` from a variant, `{ \"kind\", \"details\" }` from a router rejection (the default)",
+    ),
+    (
+        "problem",
+        "RFC 9457 `application/problem+json` with `type`, `title`, `status` and `detail`",
+    ),
+];
+
+/// #3916: the cursor is at a field-*name* position inside an `errors { … }`
+/// block. Mirrors [`in_json_field_position`].
+pub fn in_errors_field_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "errors" {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #3916: the cursor is at the value of `format:` — inside `errors { … }` or
+/// `@errors( … )` — where `bynk` / `problem` are offered.
+pub fn in_errors_format_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_block = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "errors");
+    let in_annotation = innermost_open_paren(text, offset).is_some_and(|open| {
+        word_before_brace(text, open) == "errors"
+            && text[..open]
+                .trim_end()
+                .trim_end_matches("errors")
+                .trim_end()
+                .ends_with('@')
+    });
+    if !in_block && !in_annotation {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '(', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("format")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
+}
+
+/// #3916: the cursor is at an argument-*name* position inside an `@errors( … )`
+/// annotation. Mirrors [`in_json_arg_position`].
+pub fn in_errors_arg_position(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_paren(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) != "errors" {
+        return false;
+    }
+    let head = text[..open].trim_end();
+    let before = head[..head.len() - "errors".len()].trim_end();
+    if !before.ends_with('@') {
+        return false;
+    }
+    let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
+        return false;
+    };
+    let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
+    !current.contains(':')
+}
+
+/// #3875: whether the cursor is inside the parentheses of `on schedule(`, at a
+/// bare (possibly empty) name: a schedule written as a string literal has
+/// nothing to complete.
+pub fn in_schedule_argument(line_prefix: &str) -> bool {
+    let Some(at) = line_prefix.rfind("on schedule(") else {
+        return false;
+    };
+    let after = &line_prefix[at + "on schedule(".len()..];
+    after.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// #3889: whether the cursor is inside the parentheses of `from email(`, at a bare
+/// (possibly empty) name: an address written as a string literal has nothing to complete.
+pub fn in_email_address_argument(line_prefix: &str) -> bool {
+    let Some(at) = line_prefix.rfind("from email(") else {
+        return false;
+    };
+    let after = &line_prefix[at + "from email(".len()..];
+    after.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// #3875: the constants a schedule can be written as: those declared exactly
+/// `String` or `CronSchedule` (the detail line of a constant candidate reads
+/// `const Name: Type`).
+fn schedule_constant_candidates(
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    free_function_candidates(doc_text, files)
+        .into_iter()
+        .filter(|c| {
+            c.detail.as_deref().is_some_and(|d| {
+                let ty = d
+                    .strip_prefix("const ")
+                    .and_then(|r| r.split_once(": "))
+                    .map(|(_, t)| t.split(" — ").next().unwrap_or(t));
+                matches!(ty, Some("String" | "CronSchedule"))
+            })
+        })
+        .collect()
+}
+
+/// #3951: when the cursor is inside the argument list of a refinement predicate
+/// on a `where` line (`InRange(1, <cursor>`), the types a constant there may be
+/// declared: a string for `Matches`, an integer for a length, and any ordered
+/// numeric type for a range bound (the base is not known from the line).
+fn predicate_argument_types(line_prefix: &str) -> Option<&'static [&'static str]> {
+    let (_, after_where) = line_prefix.rsplit_once(" where ")?;
+    let open = after_where.rfind('(')?;
+    if after_where[open..].contains(')') {
+        return None;
+    }
+    let partial_ok = after_where[open + 1..]
+        .rsplit([',', ' '])
+        .next()
+        .is_some_and(|w| w.chars().all(|c| c.is_alphanumeric() || c == '_'));
+    if !partial_ok {
+        return None;
+    }
+    let name = after_where[..open]
+        .rsplit(|c: char| !c.is_alphanumeric())
+        .next()?;
+    match name {
+        "Matches" => Some(&["String"]),
+        "MinLength" | "MaxLength" | "Length" => Some(&["Int"]),
+        "InRange" | "AtLeast" | "AtMost" => {
+            // A `type X = <Base> where` or `field: <Base> where` line names the
+            // base, and the constant must be declared exactly it.
+            let base = line_prefix[..line_prefix.rfind(" where ")?]
+                .rsplit(|c: char| !c.is_alphanumeric())
+                .next()
+                .unwrap_or("");
+            Some(match base {
+                "Int" => &["Int"],
+                "Float" => &["Float"],
+                "Decimal" => &["Decimal"],
+                "Duration" => &["Duration"],
+                _ => &["Int", "Float", "Decimal", "Duration"],
+            })
+        }
+        _ => None,
+    }
+}
+
+/// #3951: the constants whose declared type is one of `types` (the detail line
+/// of a constant candidate reads `const Name: Type`).
+fn constants_of_types(
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+    types: &[&str],
+) -> Vec<Completion> {
+    free_function_candidates(doc_text, files)
+        .into_iter()
+        .filter(|c| {
+            c.detail.as_deref().is_some_and(|d| {
+                let ty = d
+                    .strip_prefix("const ")
+                    .and_then(|r| r.split_once(": "))
+                    .map(|(_, t)| t.split(" — ").next().unwrap_or(t));
+                ty.is_some_and(|t| types.contains(&t))
+            })
+        })
+        .collect()
+}
+
 /// #2686: whether the cursor follows `@` (and any partial name) after a
 /// `where … Matches(…)` / `IsoDate` refinement on the line: a type declaration
 /// or a record field, where `@example` may go.
@@ -1090,7 +1503,7 @@ pub fn in_refinement_annotation_position(line_prefix: &str) -> bool {
     }
     let before = &line_prefix[..at];
     before.contains(" where ")
-        && (before.contains("Matches(") || before.contains("IsoDate"))
+        && (before.contains("Matches(") || before.contains("IsoDate") || before.contains("Cron"))
         && !before.contains("@example")
 }
 
@@ -1111,6 +1524,10 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
     (
         "immutable",
         "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; purge it through `EdgeCache` if it can change; default `false`",
+    ),
+    (
+        "noStore",
+        "`true` sends `Cache-Control: no-store` and no `ETag`, for data that must never be stored; allowed on any route, and it excludes `maxAge`, `scope` and `immutable`",
     ),
 ];
 
@@ -1153,7 +1570,7 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
     (
         "headers",
         "RequestHeaders",
-        "the request's headers, read-only",
+        "the request's headers: a record `T` decoded from them and validated before the handler runs (`400` on a violation), or a raw, read-only `RequestHeaders` view",
     ),
     (
         "cookies",
@@ -1213,7 +1630,7 @@ pub fn in_http_param_name_position(text: &str, offset: usize) -> bool {
 /// The byte index of the innermost `{` still open at `offset` (a naive scan that,
 /// like [`record_construction_receiver`], does not skip braces inside strings or
 /// comments — acceptable for a completion heuristic).
-fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
+pub(crate) fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let end = offset.min(bytes.len());
     let mut depth = 0i32;
@@ -1234,7 +1651,7 @@ fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
 
 /// The bare word immediately before byte index `open` (skipping trailing
 /// whitespace), e.g. the `cors` before a `cors {`.
-fn word_before_brace(text: &str, open: usize) -> &str {
+pub(crate) fn word_before_brace(text: &str, open: usize) -> &str {
     let head = text[..open].trim_end();
     let start = head
         .char_indices()
@@ -1326,6 +1743,28 @@ pub fn in_security_field_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #3923: the cursor is at the value of `referrerPolicy:` inside a `security { … }` block,
+/// where the standard values (in camel case) are offered.
+pub fn in_security_referrer_policy_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_security = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "security");
+    if !in_security {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("referrerPolicy")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
 }
 
 /// v0.142 (ADR 0165): the cursor is at a field-*name* position inside a
@@ -1490,7 +1929,7 @@ pub fn in_service_body_item_position(text: &str, offset: usize, line_prefix: &st
 
 /// The byte index of the innermost `(` still open at `offset` — the paren analogue
 /// of [`innermost_open_brace`], for `@cache( … )` argument-position detection.
-fn innermost_open_paren(text: &str, offset: usize) -> Option<usize> {
+pub(crate) fn innermost_open_paren(text: &str, offset: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let end = offset.min(bytes.len());
     let mut depth = 0i32;
@@ -1586,7 +2025,12 @@ pub fn instance_option_values(
     let Some(open) = innermost_open_paren(text, offset) else {
         return &[];
     };
-    if !on_capability_declaration(text, open) {
+    // #3819: an agent's `@jurisdiction(` sits on its own line above `agent`, not on a
+    // `capability` line.
+    let on_agent_jurisdiction = text[text[..open].rfind('\n').map_or(0, |i| i + 1)..open]
+        .trim_start()
+        .starts_with("@jurisdiction");
+    if !on_capability_declaration(text, open) && !on_agent_jurisdiction {
         return &[];
     }
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
@@ -1601,10 +2045,22 @@ pub fn instance_option_values(
         return &[];
     }
     match word_before_brace(text, open) {
-        "period" => RATELIMIT_PERIODS,
+        "period" if !on_agent_jurisdiction => RATELIMIT_PERIODS,
+        "jurisdiction" => JURISDICTIONS,
         _ => &[],
     }
 }
+
+/// #3819: the jurisdictions `@jurisdiction(` takes on an `R2`, a `D1` and an agent, as a value
+/// completion offers them.
+pub const JURISDICTIONS: &[(&str, &str)] = &[
+    ("\"eu\"", "keeps the data in the European Union"),
+    (
+        "\"fedramp\"",
+        "keeps the data in FedRAMP-compliant data centres",
+    ),
+    ("\"us\"", "keeps the data in the United States"),
+];
 
 /// P3 (#2342): the instance completions on a `capability X = …` line, as
 /// `(label, detail, insert text)`: after the `=`, each instantiable platform
@@ -1708,6 +2164,27 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #3890: the cursor follows `where` in an `actor <Name> = Caller where …`
+/// refinement, whose predicate is `IsContext(…)` (not the type predicates).
+fn is_caller_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Caller where")
+}
+
+/// #3899: the cursor follows `where` in an `actor <Name> = Producer where …`
+/// refinement, which takes `IsContext(…)` like a `Caller` one.
+fn is_producer_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Producer where")
+}
+
+/// #3888: the cursor follows `where` in an `actor <Name> = Sender where …`
+/// refinement, whose predicate is `Dmarc(…)` over the `DmarcVerdict` variants.
+fn is_sender_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Sender where")
 }
 
 /// v0.124 (slice 3): the cursor is completing the argument to a leading clause
@@ -1948,6 +2425,15 @@ pub fn variants_for_ty(
         Ty::Named { name, .. } => sum_type_variants(name, doc_text, files),
         Ty::Result(..) => built_in_variants(&["Ok", "Err"], "Result"),
         Ty::Option(..) => built_in_variants(&["Some", "None"], "Option"),
+        // #3878: a case's view of a queue verdict also has `Undecodable`, a body that did not decode.
+        Ty::QueueResult => {
+            let mut names: Vec<&str> = bynk_syntax::ast::QUEUE_VARIANTS
+                .iter()
+                .map(|v| v.name)
+                .collect();
+            names.push(bynk_check::checker::QUEUE_UNDECODABLE);
+            built_in_variants(&names, "QueueResult")
+        }
         _ => Vec::new(),
     }
 }
@@ -1972,7 +2458,7 @@ pub fn nested_variant_completions(
             "Err" => variants_for_ty(*e, tys, doc_text, files),
             _ => Vec::new(),
         },
-        Ty::HttpResult(t) if outer_variant == "Ok" => variants_for_ty(*t, tys, doc_text, files),
+        Ty::HttpResult(t, _) if outer_variant == "Ok" => variants_for_ty(*t, tys, doc_text, files),
         Ty::Option(t) if outer_variant == "Some" => variants_for_ty(*t, tys, doc_text, files),
         Ty::Named {
             kind: NamedKind::Sum,
@@ -1984,7 +2470,7 @@ pub fn nested_variant_completions(
 }
 
 /// The built-in variant names of `Result`/`Option` as `Variant` completions.
-fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
+pub(crate) fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
     names
         .iter()
         .map(|v| {
@@ -2086,6 +2572,8 @@ fn predicate_name_candidates() -> Vec<Completion> {
     [
         "Matches",
         "InRange",
+        "AtLeast",
+        "AtMost",
         "MinLength",
         "MaxLength",
         "Length",
@@ -2093,6 +2581,7 @@ fn predicate_name_candidates() -> Vec<Completion> {
         "Positive",
         "NonEmpty",
         "IsoDate",
+        "Cron",
     ]
     .into_iter()
     .map(|k| {
@@ -2402,6 +2891,10 @@ fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
                 "sameSite",
                 "`Lax` (the default), `Strict` or `Unrestricted`",
             ),
+            (
+                "sessions",
+                "`true` keeps each session in a generated agent the seam checks on every request (costs an agent call per request); `expire()` then ends the session server-side",
+            ),
         ]
         .into_iter()
         .filter(|(key, _)| !written.contains(key))
@@ -2422,18 +2915,33 @@ pub fn is_signed_cookie_actor(a: &bynk_syntax::ast::ActorDecl) -> bool {
 }
 
 /// #3386: the members a `SignedCookie` actor has inside its context, as `(name, signature)`.
-pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str, String); 2] {
+pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> Vec<(&'static str, String)> {
+    // #3938: with `sessions = true`, `expire` also ends the session in its agent, so it is an effect.
+    let expire_signature =
+        if bynk_check::actors::signed_cookie_seam_of(a, None).is_some_and(|s| s.sessions) {
+            "expire() -> Effect[Cookie]".to_string()
+        } else {
+            "expire() -> Cookie".to_string()
+        };
     let identity = a
         .identity
         .as_ref()
         .map_or_else(|| "identity".to_string(), crate::symbols::type_ref_str);
-    [
+    let mut members = vec![
         (
             "issue",
             format!("issue(identity: {identity}) -> Effect[Cookie]"),
         ),
-        ("expire", "expire() -> Cookie".to_string()),
-    ]
+        ("expire", expire_signature),
+    ];
+    // #3938: `revokeAll` ends every session of an identity, so only a `sessions` actor has it.
+    if bynk_check::actors::signed_cookie_seam_of(a, None).is_some_and(|s| s.sessions) {
+        members.push((
+            "revokeAll",
+            format!("revokeAll(identity: {identity}) -> Effect[()]"),
+        ));
+    }
+    members
 }
 
 /// #3147: the signature of `D1.peek`, a built-in of an `integration` or
@@ -2522,11 +3030,28 @@ fn member_candidates_from(
                     }
                     bynk_syntax::ast::TypeBody::Refined { .. }
                     | bynk_syntax::ast::TypeBody::Opaque { .. } => {
+                        let of_sig = match &t.body {
+                            // #3946: a named type with no predicate cannot fail.
+                            bynk_syntax::ast::TypeBody::Refined {
+                                base, refinement, ..
+                            } if bynk_syntax::ast::of_is_total(
+                                *base,
+                                refinement.as_ref(),
+                                false,
+                            ) =>
+                            {
+                                format!("of(value) -> {receiver}")
+                            }
+                            // #4111: a `Secret`'s `of` cannot fail.
+                            bynk_syntax::ast::TypeBody::Opaque { .. }
+                                if bynk_check::context_checks::is_secret_decl(t) =>
+                            {
+                                format!("of(value) -> {receiver}")
+                            }
+                            _ => format!("of(value) -> Result[{receiver}, ValidationError]"),
+                        };
                         for (label, sig) in [
-                            (
-                                "of",
-                                format!("of(value) -> Result[{receiver}, ValidationError]"),
-                            ),
+                            ("of", of_sig),
                             ("unsafe", format!("unsafe(value) -> {receiver}")),
                         ] {
                             if seen.insert(label.to_string()) {
@@ -2608,7 +3133,7 @@ fn member_candidates_from(
         .as_deref()
         .filter(|b| crate::signature_help::TYPED_READ_BASES.contains(b))
     {
-        for member in ["select", "firstAs"] {
+        for member in ["select", "firstAs", "writeValue"] {
             if let Some(sig) = crate::signature_help::typed_read(base, member)
                 && seen.insert(member.to_string())
             {
@@ -2702,12 +3227,23 @@ pub const SNIPPETS: &[(&str, &str)] = &[
         "agent",
         "agent ${1:Name} {\n\tkey ${2:id}: ${3:String}\n\n\tstore ${4:status}: Cell[${5:Int}] = ${6:0}\n\n\tinvariant ${7:non_negative}: ${8:status >= 0}\n\n\ttransition ${9:monotonic}: ${10:new.status >= old.status}\n\n\ton call ${11:op}(${12}) -> Effect[Result[${13:()}, String]] {\n\t\tOk(${14:()})\n\t}\n}",
     ),
+    (
+        "agent jurisdiction",
+        "@jurisdiction(\"${1:eu}\")\nagent ${2:Name} {\n\tkey ${3:id}: ${4:String}\n\n\tstore ${5:status}: Cell[${6:Int}] = ${7:0}\n\n\ton call ${8:op}(${9}) -> Effect[${10:()}] {\n\t\t$0\n\t}\n}",
+    ),
+    (
+        "agent busyAfter",
+        "@busyAfter(${1:5.seconds})\nagent ${2:Name} {\n\tkey ${3:id}: ${4:String}\n\n\tstore ${5:status}: Cell[${6:Int}] = ${7:0}\n\n\ton call ${8:op}(${9}) -> Effect[${10:()}] {\n\t\t$0\n\t}\n}",
+    ),
     // -- Services & handlers --
     (
         "service",
-        "service ${1:name} {\n\ton call(${2}) -> Effect[${3:Unit}] {\n\t\t$0\n\t}\n}",
+        "service ${1:name} {\n\ton call(${2}) -> Effect[${3:Unit}] by Caller {\n\t\t$0\n\t}\n}",
     ),
-    ("on call", "on call(${1}) -> Effect[${2:Unit}] {\n\t$0\n}"),
+    (
+        "on call",
+        "on call(${1}) -> Effect[${2:Unit}] by Caller {\n\t$0\n}",
+    ),
     (
         "on http",
         "on ${1|GET,POST,PUT,DELETE,PATCH|}(\"${2:/path}\") (${3:body}: ${4:Req}) -> Effect[HttpResult[${5:Res}]] given ${6:Cap} {\n\t$0\n}",
@@ -3394,6 +3930,46 @@ fn consumable_units(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
 /// Finding #62: a first-wins guard, for the same buffer-vs-stale-disk-copy
 /// reason as [`record_field_names`] — the `BTreeSet` still dedups a single
 /// matching unit's own (possibly repeated) export clauses.
+/// #4044: whether the document is a `commons`, which may list types, not
+/// capabilities, in a braced `consumes`.
+fn current_unit_is_commons(doc_text: &str) -> bool {
+    let Ok(tokens) = lexer::tokenize(doc_text) else {
+        return false;
+    };
+    matches!(
+        parser::parse_unit_with_recovery(&tokens, doc_text).0,
+        Some(SourceUnit::Commons(_))
+    )
+}
+
+/// #4044: the types the adapter `unit` exports (`opaque` or `transparent`), what
+/// a commons may list in `consumes unit { … }`.
+fn exported_types_of_unit(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<String> {
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    let mut collect = |exports: &[bynk_syntax::ast::ExportsDecl]| {
+        for clause in exports {
+            if matches!(clause.kind, ExportKind::Type(_)) {
+                out.extend(clause.names.iter().map(|e| e.name.name.clone()));
+            }
+        }
+    };
+    if let Some((_, SourceUnit::Adapter(a))) = split.deps.iter().find(|(label, _)| label == unit) {
+        collect(&a.exports);
+        return out.into_iter().collect();
+    }
+    let mut found = false;
+    for_each_unit(doc_text, split.own(), |u| {
+        if let SourceUnit::Adapter(a) = u
+            && !found
+            && a.name.joined() == unit
+        {
+            found = true;
+            collect(&a.exports);
+        }
+    });
+    out.into_iter().collect()
+}
+
 fn capabilities_of_unit(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<String> {
     // #2223: `<alias>.<unit>` names a dependency's adapter, declared there
     // under its own name.
@@ -3521,6 +4097,41 @@ pub fn value_receiver_rewrite(text: &str, offset: usize) -> Option<(String, usiz
     Some((rewritten, dot.saturating_sub(1)))
 }
 
+/// #4312: like [`value_receiver_rewrite`], for a store field reached through
+/// `old.` or `new.` in a transition predicate (`old.lines.`): the buffer with
+/// the trailing `.partial` dropped, and the offset of the field's last
+/// character. `None` for any other dotted receiver.
+pub fn predicate_field_rewrite(text: &str, offset: usize) -> Option<(String, usize)> {
+    let prefix = text.get(..offset)?;
+    let head = prefix
+        .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+        .strip_suffix('.')?;
+    let (_, field_start) = ident_ending_at(head, head.len())?;
+    let before = head[..field_start].strip_suffix('.')?;
+    let (state, state_start) = ident_ending_at(before, before.len())?;
+    if !matches!(state, "old" | "new") || before[..state_start].ends_with('.') {
+        return None;
+    }
+    let dot = head.len();
+    let rewritten = format!("{}{}", &text[..dot], &text[offset..]);
+    Some((rewritten, dot.saturating_sub(1)))
+}
+
+/// #4312: the members of a store field read in an invariant or transition
+/// predicate — `size` for a `Map` or `Set`, nothing for a `Log` —
+/// when the receiver is a store field there; `None` for any other receiver, so
+/// the caller falls back to the general path. A predicate allows no other
+/// member of a collection, so the receiver's kernel vocabulary must not leak in.
+pub fn predicate_store_member_candidates(
+    rewritten: &str,
+    recv_offset: usize,
+    locals: &[LocalBinding],
+) -> Option<Vec<Completion>> {
+    crate::symbols::store_field_kind_at(rewritten, recv_offset + 1, locals)?;
+    crate::symbols::store_field_in_predicate_at(rewritten, recv_offset + 1)
+        .then(|| store_field_member_candidates(rewritten, recv_offset, locals))
+}
+
 /// The identifier run ending at byte `end` in `text` — `(name, start)` — the
 /// trim-back-to-a-non-identifier-boundary scan shared by every receiver/
 /// identifier extraction in the LSP: [`value_receiver_rewrite`] above,
@@ -3551,14 +4162,33 @@ pub fn value_member_candidates(
 ) -> Vec<Completion> {
     let mut out: Vec<Completion> = kernel_methods::methods_for(ty, tys)
         .iter()
-        .map(|km| {
-            Completion::item(
-                km.name,
-                CompletionKind::Member,
-                Some(km.signature.to_string()),
-            )
-        })
+        .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail())))
         .collect();
+    // #3955: `compare` on every orderable receiver. A named type is orderable
+    // when its declaration says `derives Ord`.
+    let mut ord_names: BTreeSet<String> = BTreeSet::new();
+    for_each_unit(doc_text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            _ => return,
+        };
+        for item in items {
+            if let CommonsItem::Type(t) = item
+                && t.derives.iter().any(|d| d.name == "Ord")
+            {
+                ord_names.insert(t.name.name.clone());
+            }
+        }
+    });
+    if kernel_methods::is_ord_receiver(ty, tys, &|n| ord_names.contains(n)) {
+        out.extend(
+            kernel_methods::ORD_RECEIVER_TABLE
+                .iter()
+                .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail()))),
+        );
+    }
     // An asset's one field (#1883).
     if matches!(&*tys.get(ty), Ty::Asset) {
         out.push(Completion::item(
@@ -3676,8 +4306,12 @@ pub fn store_field_member_candidates(
     else {
         return Vec::new();
     };
+    // #4034: in an invariant or transition predicate a collection can be asked
+    // its `size()` and nothing else (a `Log` not even that).
+    let in_predicate = crate::symbols::store_field_in_predicate_at(rewritten, recv_offset + 1);
     let mut out: Vec<Completion> = store_ops::ops_for(&kind_head)
         .iter()
+        .filter(|o| !in_predicate || (o.name == "size" && kind_head != "Log"))
         .map(|o| {
             Completion::item(
                 o.name,
@@ -3686,7 +4320,7 @@ pub fn store_field_member_candidates(
             )
         })
         .collect();
-    if kind_head == "Map" && !held {
+    if kind_head == "Map" && !held && !in_predicate {
         out.extend(store_ops::MAP_QUERY_ACCESSORS.iter().map(|a| {
             Completion::item(a.name, CompletionKind::Field, Some(a.signature.to_string()))
         }));
@@ -3718,6 +4352,66 @@ mod tests {
 
     use super::*;
     use bynk_check::firstparty::BYNK_LIST_SRC;
+
+    /// #3875: inside `on schedule(` the `String` and `CronSchedule` constants in
+    /// scope are offered, and no other constant.
+    #[test]
+    fn schedule_argument_offers_schedule_constants() {
+        assert!(in_schedule_argument("  on schedule("));
+        assert!(in_schedule_argument("  on schedule(Nigh"));
+        assert!(!in_schedule_argument("  on schedule(\"0 2"));
+        assert!(!in_schedule_argument("  on call("));
+        let doc = "context app.reaper\n\nconst Nightly: String = \"0 2 * * *\"\nconst Limit: Int = 3\n\nfn helper() -> Int { 1 }\n";
+        let got = complete("  on schedule(", doc, None);
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Nightly"], "{labels:?}");
+    }
+
+    /// #3889: inside `from email(` the constants declared exactly `String` are offered, and
+    /// no other (an address has no refined type).
+    #[test]
+    fn email_argument_offers_string_constants() {
+        assert!(in_email_address_argument("service s from email("));
+        assert!(in_email_address_argument("service s from email(Supp"));
+        assert!(!in_email_address_argument("service s from email(\"a@b"));
+        assert!(!in_email_address_argument("service s from http"));
+        let doc = "context app.support\n\ntype Short = String where MaxLength(9)\n\nconst Support: String = \"support@shop.example\"\nconst Limit: Int = 3\nconst Tight: Short = \"a@b.c\"\n\nfn helper() -> Int { 1 }\n";
+        let got = complete("service s from email(", doc, None);
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Support"], "{labels:?}");
+    }
+
+    /// #3951: inside a refinement predicate's argument list the constants of the
+    /// type that argument takes are offered, and no other.
+    #[test]
+    fn predicate_argument_offers_constants_of_its_type() {
+        let doc = "commons shop\n\nconst MaxQty: Int = 100\nconst Ceiling: Float = 2.5\nconst Pattern: String = \"a\"\n\nfn helper() -> Int { 1 }\n";
+        let at = |line: &str| {
+            let mut got: Vec<String> = complete(line, doc, None)
+                .into_iter()
+                .map(|c| c.label)
+                .collect();
+            got.sort();
+            got
+        };
+        assert_eq!(at("type Qty = Int where InRange(1, "), ["MaxQty"]);
+        assert_eq!(at("type R = Float where AtMost("), ["Ceiling"]);
+        assert_eq!(
+            at("type Q = Other where InRange(1, "),
+            ["Ceiling", "MaxQty"],
+            "an unnamed base keeps every numeric constant"
+        );
+        assert_eq!(at("type N = String where MaxLength("), ["MaxQty"]);
+        assert_eq!(at("type S = String where Matches("), ["Pattern"]);
+        assert_eq!(
+            predicate_argument_types("type Q = Int where Positive"),
+            None
+        );
+        assert_eq!(
+            predicate_argument_types("type Q = Int where InRange(1, 2) && AtMost("),
+            Some(&["Int"][..])
+        );
+    }
 
     /// S3 (#1963): an experimental first-party item is marked in its completion
     /// detail; nothing ships experimental, so a stable one is unmarked.
@@ -3876,6 +4570,20 @@ mod tests {
         assert!(got.contains(&"Logger".to_string()), "{got:?}");
     }
 
+    /// #4044: in a commons the braces list types, so the exported types are
+    /// offered and the capabilities are not.
+    #[test]
+    fn a_commons_consumes_brace_suggests_exported_types_not_capabilities() {
+        let got = labels(
+            "consumes bynk { ",
+            "commons a.b
+",
+        );
+        assert!(got.contains(&"TimedOut".to_string()), "{got:?}");
+        assert!(got.contains(&"Uuid".to_string()), "{got:?}");
+        assert!(!got.contains(&"Clock".to_string()), "{got:?}");
+    }
+
     /// #2868: a context function's `given` completes capability names, as a
     /// handler's does.
     #[test]
@@ -3897,11 +4605,11 @@ mod tests {
                    consumes bynk { Clock }\n\
                    capability Local { fn f() -> Effect[Int] }\n\
                    service s {\n\
-                   on call() -> Effect[Int] given Clock {\n\
+                   on call() -> Effect[Int] by Caller given Clock {\n\
                    1\n\
                    }\n\
                    }\n";
-        let got = labels("    on call() -> Effect[Int] given ", doc);
+        let got = labels("    on call() -> Effect[Int] by Caller given ", doc);
         assert!(got.contains(&"Clock".to_string()), "flattened: {got:?}");
         assert!(got.contains(&"Local".to_string()), "local: {got:?}");
     }
@@ -3950,11 +4658,18 @@ mod tests {
 
     #[test]
     fn value_receiver_and_decimal_are_not_expression_positions() {
-        // A trailing `x.`/`1.` is a member/decimal context, not an expression
-        // start — `complete()` yields nothing (the value-receiver path is
-        // handler-side; see `record_value_and_decimal_receivers_yield_nothing`).
+        // A trailing `x.` is a member context, not an expression start —
+        // `complete()` yields nothing (the value-receiver path is handler-side;
+        // see `record_value_and_decimal_receivers_yield_nothing`). A trailing
+        // `1.` offers the `Duration` units (#3947), not expressions.
         assert!(complete("  let p = q.", "context a.b\n", None).is_empty());
-        assert!(complete("  let n = 1.", "context a.b\n", None).is_empty());
+        let units = complete("  let n = 1.", "context a.b\n", None);
+        assert!(
+            units
+                .iter()
+                .all(|c| c.detail.as_deref() == Some("`Duration` unit"))
+        );
+        assert_eq!(units.len(), 5);
     }
 
     /// Free `fn` names declared in a unit source (registry-driven test helper).
@@ -4201,6 +4916,79 @@ mod tests {
         );
     }
 
+    /// #4045: a braced `uses` list completes the commons' public names, kinded, and
+    /// leaves out what it marks `private`, methods, and the name after `as`.
+    #[test]
+    fn uses_brace_suggests_the_commons_public_names() {
+        let doc = "commons lib.money {\n  type Money = Int where NonNegative\n  private type Cents = Int\n  fn format(m: Money) -> String { \"m\" }\n  fn Money.double(self) -> Money { self }\n  const Limit: Int = 1\n}\n";
+        let files = HashMap::from([(synthetic_path("money"), doc.to_string())]);
+        let got = complete("uses lib.money { ", "commons app.z\n", Some(&files));
+        assert!(
+            find(&got, "Money", CompletionKind::Type).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "format", CompletionKind::Function).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "Limit", CompletionKind::Constant).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            !labels.contains(&"Cents") && !labels.contains(&"double"),
+            "{labels:?}"
+        );
+        // After a comma it still completes; after `as` the name is the user's own.
+        assert!(!complete("uses lib.money { Money, ", "commons app.z\n", Some(&files)).is_empty());
+        assert!(
+            complete(
+                "uses lib.money { Money as ",
+                "commons app.z\n",
+                Some(&files)
+            )
+            .is_empty()
+        );
+        // The whole-commons form still completes commons names, not these.
+        assert!(!is_uses_target("uses lib.money { "));
+    }
+
+    /// #4045: a commons split over two files offers the names of both, and a name
+    /// already in the list is not offered again.
+    #[test]
+    fn uses_brace_offers_every_file_of_a_split_commons_and_skips_listed_names() {
+        let files = HashMap::from([
+            (
+                synthetic_path("money_a"),
+                "commons lib.money\n\nfn format(m: Int) -> String { \"m\" }\n".to_string(),
+            ),
+            (
+                synthetic_path("money_b"),
+                "commons lib.money\n\nconst Limit: Int = 1\n".to_string(),
+            ),
+        ]);
+        let got = complete("uses lib.money { ", "commons app.z\n", Some(&files));
+        let names: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            names.contains(&"format") && names.contains(&"Limit"),
+            "{names:?}"
+        );
+        let got = complete(
+            "uses lib.money { format as f, ",
+            "commons app.z\n",
+            Some(&files),
+        );
+        let names: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            names.contains(&"Limit") && !names.contains(&"format"),
+            "{names:?}"
+        );
+    }
+
     #[test]
     fn consumes_with_as_is_not_a_target_completion() {
         // `consumes X as ` is aliasing, not target-name completion.
@@ -4418,7 +5206,7 @@ mod tests {
 
     #[test]
     fn a_signed_cookie_actor_offers_issue_and_expire() {
-        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hour), identity = UserId }\n";
         let items = complete("    User.", doc, None);
         let issue = find(&items, "issue", CompletionKind::Member).expect("`issue` offered");
         assert_eq!(
@@ -4615,8 +5403,12 @@ fn Box.size(self) -> Int { 1 }
         assert!(complete("  Point.", doc, None).is_empty(), "record");
         // A lowercase value receiver is deferred to slice 3.
         assert!(complete("  let p = q.", doc, None).is_empty(), "value");
-        // A decimal literal is not a member access.
-        assert!(complete("  let n = 1.", doc, None).is_empty(), "decimal");
+        // An integer literal's `.` is a `Duration` unit (#3947), singular after `1`.
+        let units: Vec<_> = complete("  let n = 1.", doc, None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(units, ["millisecond", "second", "minute", "hour", "day"]);
     }
 
     #[test]
@@ -4757,6 +5549,38 @@ fn Box.size(self) -> Int { 1 }
         assert!(!is_expression_position("  tot")); // bare line start (keyword position covers it)
     }
 
+    /// #3955: `compare` is offered on every orderable receiver: a `Bytes`, and a
+    /// record that `derives Ord`; not on one that does not.
+    #[test]
+    fn value_member_candidates_offers_compare_on_orderable_receivers() {
+        use bynk_check::checker::NamedKind;
+        use bynk_syntax::ast::BaseType;
+        let bytes = TYS.intern(Ty::Base(BaseType::Bytes));
+        let items = value_member_candidates(bytes, &TYS, "context a.b\n", None);
+        let compare = find(&items, "compare", CompletionKind::Member).expect("compare on Bytes");
+        assert_eq!(
+            compare.detail.as_deref(),
+            Some("compare(other: T) -> Ordering")
+        );
+
+        let version = TYS.intern(Ty::Named {
+            name: "Version".to_string(),
+            kind: NamedKind::Record,
+            args: Vec::new(),
+        });
+        let doc = "commons m {\n  type Version = { major: Int } derives Ord\n}\n";
+        let items = value_member_candidates(version, &TYS, doc, None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_some());
+
+        let doc = "commons m {\n  type Version = { major: Int }\n}\n";
+        let items = value_member_candidates(version, &TYS, doc, None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_none());
+
+        let flag = TYS.intern(Ty::Base(BaseType::Bool));
+        let items = value_member_candidates(flag, &TYS, "context a.b\n", None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_none());
+    }
+
     #[test]
     fn value_member_candidates_lists_record_fields() {
         use bynk_check::checker::NamedKind;
@@ -4814,6 +5638,69 @@ fn Box.size(self) -> Int { 1 }
         assert!(find(&items, "entries", CompletionKind::Field).is_some());
         assert!(find(&items, "keys", CompletionKind::Field).is_some());
         assert!(find(&items, "values", CompletionKind::Field).is_some());
+    }
+
+    #[test]
+    fn store_field_member_candidates_offer_only_size_inside_a_predicate() {
+        // #4034: an invariant may ask a collection its `size()` only, a `Log` not even that.
+        let labels = |doc: &str, marker: &str| {
+            let at = doc.find(marker).unwrap() + marker.len();
+            let (rewritten, recv_offset) = value_receiver_rewrite(doc, at).expect("bare receiver");
+            store_field_member_candidates(&rewritten, recv_offset, &[])
+                .into_iter()
+                .map(|c| c.label)
+                .collect::<Vec<_>>()
+        };
+        let head = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        let lines = format!("{head}  invariant bounded: lines.\n{tail}");
+        assert_eq!(labels(&lines, "bounded: lines."), vec!["size"]);
+        let notes = format!("{head}  invariant quiet: notes.\n{tail}");
+        assert!(labels(&notes, "quiet: notes.").is_empty());
+        let handler = format!("{head}  on call g() -> Effect[()] {{\n    lines.\n  }}\n}}\n");
+        assert!(labels(&handler, "    lines.").len() > 1);
+    }
+
+    #[test]
+    fn predicate_receivers_reach_a_store_field_through_old_new_and_bare() {
+        // #4312: `old.lines.`, `new.lines.` and a bare `lines.` in a predicate
+        // each offer `size` and nothing else; a `Log` offers nothing.
+        let head = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        let labels = |pred: &str, marker: &str| -> Option<Vec<String>> {
+            let doc = format!("{head}  {pred}\n{tail}");
+            let at = doc.find(marker).unwrap() + marker.len();
+            let (rewritten, recv) =
+                value_receiver_rewrite(&doc, at).or_else(|| predicate_field_rewrite(&doc, at))?;
+            predicate_store_member_candidates(&rewritten, recv, &[])
+                .map(|v| v.into_iter().map(|c| c.label).collect())
+        };
+        assert_eq!(
+            labels("invariant bounded: lines.", "lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition grows: new.lines.", "new.lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition grows: old.lines.", "old.lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition quiet: old.notes.", "old.notes."),
+            Some(vec![]),
+            "a `Log` has no `size()`"
+        );
+        // Not a predicate receiver: a handler body, and a dotted receiver that
+        // is neither `old` nor `new`.
+        let doc = format!("{head}  on call g() -> Effect[()] {{\n    old.lines.\n  }}\n}}\n");
+        let at = doc.find("old.lines.").unwrap() + "old.lines.".len();
+        let (rewritten, recv) = predicate_field_rewrite(&doc, at).expect("dotted receiver");
+        assert!(predicate_store_member_candidates(&rewritten, recv, &[]).is_none());
+        let other = format!("{head}  invariant x: a.lines.\n{tail}");
+        let at = other.find("a.lines.").unwrap() + "a.lines.".len();
+        assert!(predicate_field_rewrite(&other, at).is_none());
     }
 
     #[test]
@@ -5066,6 +5953,20 @@ fn Box.size(self) -> Int { 1 }
     }
 
     #[test]
+    fn websocket_limits_offers_max_frame() {
+        // #3905: a `from websocket` service's `limits { }` and item start are the WebSocket forms.
+        let ws = "service Audio from websocket(in: Bytes, out: Bytes) {\n  limits {\n    ";
+        assert!(in_websocket_service_limits(ws, ws.len()));
+        let ws_item = "service Audio from websocket(in: Bytes, out: Bytes) {\n  ";
+        assert!(in_websocket_service_limits(ws_item, ws_item.len()));
+        let http = "service api from http {\n  limits {\n    ";
+        assert!(!in_websocket_service_limits(http, http.len()));
+        let http_item = "service api from http {\n  ";
+        assert!(!in_websocket_service_limits(http_item, http_item.len()));
+        assert_eq!(WS_LIMITS_FIELDS.len(), 1);
+    }
+
+    #[test]
     fn cors_field_position_inside_cors_block() {
         // Cursor at a fresh field-name line inside a `cors { }` block.
         let doc = "service api from http {\n  cors {\n    ";
@@ -5082,7 +5983,7 @@ fn Box.size(self) -> Int { 1 }
     /// `par` snippet appears only where a body is effectful.
     #[test]
     fn par_block_positions_and_candidates() {
-        let inside = "service s {\n  on call() -> Effect[Int] {\n    par {\n      ";
+        let inside = "service s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      ";
         assert!(in_par_block_position(inside, inside.len()));
         let labels: Vec<String> = par_block_candidates()
             .into_iter()
@@ -5090,8 +5991,7 @@ fn Box.size(self) -> Int { 1 }
             .collect();
         assert_eq!(labels, ["let x <-", "do"]);
         // After the closing brace the statement is an ordinary one again.
-        let after =
-            "service s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n    }\n    ";
+        let after = "service s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      let a <- f()\n    }\n    ";
         assert!(!in_par_block_position(after, after.len()));
         assert!(in_effectful_body_position(after, after.len()));
     }
@@ -5105,6 +6005,39 @@ fn Box.size(self) -> Int { 1 }
         let top = "context c\n\n";
         assert!(!in_effectful_body_position(top, top.len()));
         assert!(par_snippet().insert_text.unwrap().starts_with("par {"));
+    }
+
+    #[test]
+    fn referrer_policy_values_are_offered_after_the_field_name_only() {
+        let doc = "service api from http {\n  security {\n    referrerPolicy: ";
+        assert!(in_security_referrer_policy_value_position(doc, doc.len()));
+        let typing = "service api from http {\n  security {\n    referrerPolicy: sameO";
+        assert!(in_security_referrer_policy_value_position(
+            typing,
+            typing.len()
+        ));
+        // A name position, another field's value, and another block are not it.
+        let name = "service api from http {\n  security {\n    referrerPolicy";
+        assert!(!in_security_referrer_policy_value_position(
+            name,
+            name.len()
+        ));
+        let other = "service api from http {\n  security {\n    hsts: ";
+        assert!(!in_security_referrer_policy_value_position(
+            other,
+            other.len()
+        ));
+        let cors = "service api from http {\n  cors {\n    referrerPolicy: ";
+        assert!(!in_security_referrer_policy_value_position(
+            cors,
+            cors.len()
+        ));
+        assert!(
+            referrer_policy_values()
+                .iter()
+                .any(|(n, d)| *n == "strictOriginWhenCrossOrigin"
+                    && d.contains("strict-origin-when-cross-origin"))
+        );
     }
 
     #[test]
@@ -5177,6 +6110,7 @@ fn Box.size(self) -> Int { 1 }
             "WrongAudience",
             "WrongAlgorithm",
             "NoSubject",
+            "Revoked",
         ] {
             assert!(labels.iter().any(|l| l == name), "{name}: {labels:?}");
         }
@@ -5336,6 +6270,18 @@ fn Box.size(self) -> Int { 1 }
             .collect();
         assert_eq!(offered, ["10.seconds", "60.seconds"]);
         assert!(instance_option_values("let x = period(", 15).is_empty());
+        // #3819: `@jurisdiction(` offers the two jurisdictions, on an agent and on an `R2`.
+        for doc in [
+            "context a\n@jurisdiction(",
+            "context a\ncapability Files = R2 @jurisdiction(",
+            "context a\ncapability Orders = D1 @jurisdiction(",
+        ] {
+            let offered: Vec<&str> = instance_option_values(doc, doc.len())
+                .iter()
+                .map(|(v, _)| *v)
+                .collect();
+            assert_eq!(offered, ["\"eu\"", "\"fedramp\"", "\"us\""], "{doc}");
+        }
         let doc = "service api from http {\n  @period(";
         assert!(instance_option_values(doc, doc.len()).is_empty());
     }
@@ -5477,6 +6423,17 @@ fn Box.size(self) -> Int { 1 }
             .map(|c| c.label)
             .collect();
         assert_eq!(got, vec!["Some".to_string(), "None".to_string()]);
+    }
+
+    #[test]
+    fn a_queue_verdict_offers_undecodable_after_its_own_variants() {
+        // #3878: a `system` case's `expect r is ` on a queue address.
+        let verdict = TYS.intern(Ty::QueueResult);
+        let got: Vec<String> = variants_for_ty(verdict, &TYS, "", None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(got, ["Ack", "Retry", "RetryAfter", "Undecodable"]);
     }
 
     #[test]
@@ -5704,6 +6661,26 @@ mod snapshot_completion_tests {
             .into_iter()
             .map(|c| c.label)
             .collect()
+    }
+
+    /// #3888: a refinement over `Sender` offers `Dmarc`, and a refinement over
+    /// `Caller` still offers only `IsContext`.
+    #[test]
+    fn a_sender_refinement_offers_dmarc() {
+        assert_eq!(labels("actor A = Sender where "), vec!["Dmarc".to_string()]);
+        assert_eq!(
+            labels("actor A = Caller where "),
+            vec!["IsContext".to_string()]
+        );
+    }
+
+    /// #3899: a refinement over `Producer` offers `IsContext`, as one over `Caller` does.
+    #[test]
+    fn a_producer_refinement_offers_is_context() {
+        assert_eq!(
+            labels("actor A = Producer where "),
+            vec!["IsContext".to_string()]
+        );
     }
 
     /// #2842: `matches snapshot` is offered after the value of an `expect`, while

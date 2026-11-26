@@ -227,10 +227,47 @@ pub enum SchemaVersionIr {
 /// re-walking this unit's raw `UnitTable`. Pure syntax, zero `TyId`
 /// dependency. Produced by `bynk_model::lower_event_subscriber_shapes_ir`, sized
 /// like #1187's own `unit_callees` (#1202) accumulator.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct EventSubscriberShape {
     pub two_param_handler: bool,
     pub schema_dispatch: bool,
+}
+
+impl EventSubscriberShape {
+    /// The one envelope rule (back-half paydown 1B.1c, Decision F of #3928):
+    /// whether a delivery forwards the event's envelope to this subscriber.
+    ///
+    /// It does when the `on event` handler declared the optional second
+    /// `env: EventEnvelope` parameter (events track, slice 2), and also when
+    /// the protocol carries a `via schema(N)` clause (slice 4, #985): the
+    /// callee then inserts a synthetic `__bynkSchemaEnv` parameter in the same
+    /// position (`emit_service`, which reads `ProtocolIr::Events`'
+    /// `schema_dispatch` for that), and needs the value to line up
+    /// positionally. Every site that decides whether to pass the envelope reads
+    /// this method, so the callers and that callee cannot disagree.
+    pub fn wants_envelope(&self) -> bool {
+        self.two_param_handler || self.schema_dispatch
+    }
+}
+
+#[cfg(test)]
+mod event_subscriber_shape_tests {
+    use super::EventSubscriberShape;
+
+    fn shape(two_param_handler: bool, schema_dispatch: bool) -> EventSubscriberShape {
+        EventSubscriberShape {
+            two_param_handler,
+            schema_dispatch,
+        }
+    }
+
+    #[test]
+    fn the_envelope_is_wanted_by_a_second_parameter_or_a_schema_guard() {
+        assert!(!shape(false, false).wants_envelope());
+        assert!(shape(true, false).wants_envelope());
+        assert!(shape(false, true).wants_envelope());
+        assert!(shape(true, true).wants_envelope());
+    }
 }
 
 /// The payload of `ProtocolIr::Events`'s own `pattern` — a `from
@@ -637,6 +674,21 @@ pub fn block_uses_emit(b: &Block, callees: &HashMap<ExprId, bynk_check::checker:
                 }) if op == "emit"
             )
         {
+            found = true;
+        }
+    });
+    found
+}
+
+/// #3931: whether a handler body calls `self.erase()`, so its commit deletes the instance's stored
+/// state instead of writing.
+pub fn block_uses_erase(b: &Block, callees: &HashMap<ExprId, bynk_check::checker::Callee>) -> bool {
+    let mut found = false;
+    walk_block_exprs(b, &mut |e| {
+        if matches!(
+            callees.get(&e.id),
+            Some(bynk_check::checker::Callee::AgentErase)
+        ) {
             found = true;
         }
     });

@@ -1,0 +1,2 @@
+bynk.duration.unit_agreement
+`5.hours`

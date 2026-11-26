@@ -1,0 +1,193 @@
+---
+title: Understand ordering your own types
+---
+**Read this when** you want to sort your own records or enums, compare two of
+them with `<`, or write a generic function that needs an order.
+
+## Why ordering is opt-in
+
+A type has an order only if someone decides what it is. For `Priority`, is `High`
+above `Low`, or the reverse? For a `Task`, does `due` or `title` come first? The
+compiler will not guess, so a record, sum, enum or opaque type you declare is not
+orderable until you say so:
+
+```bynk
+commons guide.priorities
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = {
+	priority: Priority,
+	due: Instant,
+	title: String,
+} derives Ord
+
+fn moreUrgent(a: Task, b: Task) -> Bool {
+	a > b
+}
+```
+
+`derives Ord` goes after the type body. It requires every field and payload to be
+orderable already (`Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`,
+`Option` or `List` of an orderable type, another `derives Ord` type, and so on),
+and names the field if one is not (`bynk.types.derives_field_not_orderable`).
+`Bool`, `Result`, `Map`, `Set` and functions are not orderable.
+
+## Declaration order is the order
+
+The order comes straight from how you wrote the declaration:
+
+- a **record** compares its first field, and only if those are equal, its second,
+  and so on. `Task` above sorts by `priority`, then `due`, then `title`;
+- a **sum or enum** compares by variant position, so `Low < Medium < High`; two
+  values of the same variant compare by payload.
+
+That makes declaration order part of the type's meaning. Moving `due` above
+`priority`, or `High` above `Low`, changes how values sort, and nothing warns you:
+the wire contract ignores field and variant order. If a `derives Ord` type is
+sorted anywhere you care about, treat reordering its declaration as a behaviour
+change.
+
+For the same reason the compiler will not add `derives Ord` for you. When you
+compare a type that lacks it (`bynk.types.not_orderable`), the editor offers the
+fix, but **Fix all** and `bynk check --fix` leave it alone.
+
+## Sort, min and max
+
+`sort()`, `min()` and `max()` work on a list of any orderable type:
+
+```bynk,fragment
+commons guide.sorting
+
+type Priority = enum { Low, Medium, High } derives Ord
+
+type Task = {
+	priority: Priority,
+	title: String,
+} derives Ord
+
+fn ranked(ts: List[Task]) -> List[Task] {
+	ts.sort()
+}
+
+fn hottest(ts: List[Task]) -> Option[Task] {
+	ts.max()
+}
+
+fn byTitle(ts: List[Task]) -> List[Task] {
+	ts.sortBy((t) => t.title)
+}
+```
+
+`min` and `max` return an `Option`, `None` for an empty list. The `sortBy`, `min`
+and `max` methods take any orderable key too, so a key can be a whole `Task` or
+an `Option[Int]`.
+
+A store `Query` takes the same keys, so the order holds before a `skip` or `take`:
+
+```bynk,fragment
+jobs.sortBy((j) => j.priority).skip(1).take(2).collect()
+```
+
+## Reordering is a decision
+
+Because the declaration order is the order, tidying a declaration can change what
+every sort, `<`, `min` and `max` on the type returns. Bynk records the order of
+each of your `derives Ord` types in `bynk.schema.lock`, and a build that finds a
+different one stops:
+
+```text
+error[bynk.types.ord_order_changed]: the order of `Priority` has changed
+  recorded order: Low < Medium < High
+  new order:      High < Low < Medium
+  help: if this is intended, run `bynk lock accept-order Priority`; otherwise restore the order
+```
+
+If the new order is what you meant, run `bynk lock accept-order Priority` and
+commit the lock with the change. Otherwise put the declaration back (the editor
+offers "Restore the recorded order"). Adding a field or variant at the end,
+removing one, or renaming one in place is not a change. If you want a sort that
+does not depend on declaration order at all, say its order with `sortWith`
+below.
+
+## Largest first
+
+`sortByDescending` takes the same keys and puts the largest first, on a `List` and on a
+`Query`. It is the exact reverse of `sortBy`'s order, so a `Float` `NaN` comes first, but equal keys keep their
+input order (unlike `reverse(xs.sortBy(k))`, which reverses them):
+
+```bynk,fragment
+fn leaders(ts: List[Task]) -> List[Task] { ts.sortByDescending((t) => t.priority) }
+```
+
+## Your own order: `compare` and `sortWith`
+
+When a type's declaration order is not the order you want, sort with a comparator
+of your own. `a.compare(b)` answers an `Ordering` (`Less`, `Equal` or `Greater`)
+on any orderable value, `then` breaks a tie and `reverse` flips an order, and
+`sortWith` takes a function that returns one:
+
+```bynk,fragment
+commons guide.comparator
+
+type Task = {
+	priority: Int,
+	title: String,
+}
+
+fn urgentFirst(ts: List[Task]) -> List[Task] {
+	ts.sortWith((a, b) => b.priority.compare(a.priority).then(a.title.compare(b.title)))
+}
+```
+
+Here the highest priority comes first and equal priorities sort by title. The
+sort is stable, like `sortBy`. `Ordering` needs no `uses`, and it works the same in
+a context as in a commons: a unit that names it or calls `compare` or `sortWith`
+has it in scope, and a context can build `Ordering.Less` directly, with no
+rebrand. Its variants are an `Ordering` only where the context says so (a `match`
+on one, or `a.compare(b) == Less`), so a type of your own with a `Less` variant
+is unaffected; `Ordering.Less` always works. A type of your own named `Ordering`
+wins in your unit (and in any unit that `uses` it), and the built-in `compare`
+then has no `Ordering` to answer with.
+
+## Generic code: `T: Ord`
+
+A generic function that orders its parameter says so, the same way `Eq` is
+declared:
+
+```bynk,fragment
+commons guide.generic
+
+fn top[T: Ord](xs: List[T]) -> Option[T] {
+	xs.max()
+}
+
+fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
+	if x < lo { lo } else if x > hi { hi } else { x }
+}
+```
+
+`T: Ord` also allows `==`, so you do not need `T: Eq + Ord` (the compiler warns
+about it). Callers must pass an orderable type; `top` over a record without
+`derives Ord` is rejected at the call. If you forget the bound, the compiler
+points at the comparison and offers the fix: see
+[`bynk.generics.missing_ord_bound`](/reference/diagnostics/bynk.generics.missing_ord_bound/).
+
+## Three edge cases
+
+**`Float` and `NaN`.** The sort functions treat `NaN` as larger than every other
+number, equal to itself, and `-0` as equal to `0`, so a list containing `NaN`
+sorts predictably, with `NaN` last. The operators are different: `NaN < x` and
+`NaN > x` are both `false`, as in IEEE arithmetic, and `==` is unchanged.
+
+**`Bytes`.** `Bytes` is orderable: octet by octet as unsigned values, a shorter
+prefix first. It was equatable but not orderable before; code that was rejected
+for sorting on a `Bytes` key now compiles.
+
+**`String`.** Strings compare by code point, which is also UTF-8 byte order and
+so agrees with how storage and SQL order the same text. It is not locale order,
+so `"Z"` sorts before `"a"`. This differs from JavaScript's `<` (UTF-16 code
+unit) only for a character above U+FFFF compared with one in U+E000..U+FFFF.
+
+Reference: [Ordering your own types](/reference/types/#ordering-your-own-types)
+and [Generics and bounds](/reference/generics/).

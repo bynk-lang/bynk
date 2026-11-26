@@ -1,0 +1,10 @@
+{
+  "blurb": "An operator or a built-in method was given an operand of a type it does not accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on something that is not a `Bool`. Types are compared exactly, with no implicit conversion, so values of different types are never equal and never silently coerced. Make the operands the same type, or convert one explicitly. A `Float` and an `Int` mixed in arithmetic is the separate code `bynk.types.no_numeric_coercion`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.type_mismatch",
+  "constructs": [],
+  "example": "fn isAdult(age: Int) -> Bool {\n    age == \"18\"    // ✗ `Int` compared with `String`\n}\n\nfn isAdult(age: Int) -> Bool {\n    age == 18      // ✓ both `Int`\n}",
+  "severity": "error",
+  "summary": "An operator or built-in method got an operand of a type it does not accept, or two operands that had to match did not."
+}

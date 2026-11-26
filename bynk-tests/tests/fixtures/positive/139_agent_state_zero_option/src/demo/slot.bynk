@@ -31,7 +31,7 @@ agent Slot {
 }
 
 service resolve {
-	on call(id: Label) -> Effect[Result[Int, SlotError]] {
+	on call(id: Label) -> Effect[Result[Int, SlotError]] by Caller {
 		let slot = Slot(id)
 		let outcome <- slot.resolve()
 		outcome

@@ -1,0 +1,12 @@
+{
+  "blurb": "On the Workers target, each context is its own Worker with its own `env`, and a Worker builds the capabilities its handlers are given. If a context requires a capability that another context provides, it builds that provider in its own Worker. When that provider constructs agents of the context it lives in, it needs the Durable Object bindings of that context, which the consumer's `env` does not have, so the build would fail, or `bynk dev` would quietly keep the agent's state in the isolate. The compiler refuses the requirement instead. Reach the agents through a service of the providing context, which runs in its own Worker beside its own bindings, or build for `--target bundle`, where every context shares one process.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.provider_agent_cross_context",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "// registry.bynk\nprovides Yanks = AgentYanks {\n  fn set(value: Bool) -> Effect[Bool] {\n    PackageIndex(\"x\").setYanked(value)   // the provider constructs `registry`'s own agent\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] by Caller given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n    registry.Yanks.set(true)\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] by Caller {\n    registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n  }\n}",
+  "severity": "error",
+  "summary": "On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects."
+}

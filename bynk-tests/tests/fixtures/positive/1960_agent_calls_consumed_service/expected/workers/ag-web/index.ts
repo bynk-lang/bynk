@@ -2,9 +2,10 @@
 // Worker entry point for context `ag.web`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
-import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -21,85 +22,92 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "ag.web");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          case "add": {
-            __route = "call add";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "ebb9d45e16f83e66") {
-              globalThis.console.error("ContractMismatch ag.web call add", { service: "add", expected: "ebb9d45e16f83e66", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "add", expected: "ebb9d45e16f83e66", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "ag.web");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            case "add": {
+              __route = "call add";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "ebb9d45e16f83e66") {
+                globalThis.console.error("ContractMismatch ag.web call add", { service: "add", expected: "ebb9d45e16f83e66", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "add", expected: "ebb9d45e16f83e66", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              const __r_n = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
+              if (__r_n.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_n.error)), { status: 400, headers: { "content-type": "application/json" } });
+              const n = __r_n.value;
+              const result = await surface.add(n);
+              const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+            case "calls": {
+              __route = "call calls";
+              const __contract = request.headers.get("X-Bynk-Contract");
+              if (__contract !== "10cef9e38f3c2b1d") {
+                globalThis.console.error("ContractMismatch ag.web call calls", { service: "calls", expected: "10cef9e38f3c2b1d", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "calls", expected: "10cef9e38f3c2b1d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              }
+              let args: __JsonValue;
+              try {
+                args = globalThis.JSON.parse(__body) as __JsonValue;
+              } catch {
+                return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+              }
+              if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+              const argsObj = args as { [k: string]: __JsonValue };
+              const result = await surface.calls();
+              const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
+              return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
             }
-            const __r_n = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(args);
-            if (__r_n.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_n.error), { status: 400, headers: { "content-type": "application/json" } });
-            const n = __r_n.value;
-            const result = await surface.add(n);
-            const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
           }
-          case "calls": {
-            __route = "call calls";
-            const __contract = request.headers.get("X-Bynk-Contract");
-            if (__contract !== "10cef9e38f3c2b1d") {
-              globalThis.console.error("ContractMismatch ag.web call calls", { service: "calls", expected: "10cef9e38f3c2b1d", actual: globalThis.String(__contract).slice(0, 16) });
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "calls", expected: "10cef9e38f3c2b1d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
-            }
-            let args: __JsonValue;
-            try {
-              args = globalThis.JSON.parse(__body) as __JsonValue;
-            } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
-            }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
-            const argsObj = args as { [k: string]: __JsonValue };
-            const result = await surface.calls();
-            const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
-            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
-          }
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
         }
-      }
 
-      {
-        const __m = __matchPath("/add/:n", path);
-        if (method === "POST" && __m) {
-          __route = "POST /add/:n";
-          const __raw_n = __m.params["n"];
-          const n = __raw_n;
-          const result = await surface.http_POST_add_Param_n(n);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), __security_api);
+        {
+          const __m = __matchPath("/add/:n", path);
+          if (method === "POST" && __m) {
+            __route = "POST /add/:n";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            }
+            const __raw_n = __m.params["n"];
+            const n = __raw_n;
+            const result = await surface.http_POST_add_Param_n(n);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /add/:n" }), request, ["Bynk realm=\"ag.web\""]), __security_api);
+          }
         }
+        if (__matchPath("/add/:n", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`ag.web ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("ag.web", __route);
       }
-      if (__matchPath("/add/:n", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_api);
-      }
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      globalThis.console.error(`ag.web ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("ag.web", __route);
-    }
+    });
   },
 };

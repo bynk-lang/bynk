@@ -2,6 +2,7 @@
 // context payment
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -9,8 +10,8 @@ export type AuthId = string & { readonly __brand: "payment.AuthId" };
 
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "AUTH-[0-9]{8}" + ")$").test(value))) {
-      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", value });
+    if (!(__bynkRegExp("^(?:" + "AUTH-[0-9]{8}" + ")$", "u").test(value))) {
+      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", rule: { tag: "Matches", pattern: "AUTH-[0-9]{8}" }, value });
     }
     return Ok(value as AuthId);
   },
@@ -111,6 +112,16 @@ export function __serialise_PaymentError(value: PaymentError): __JsonValue {
 }
 
 export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"): Result<PaymentError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Declined":
+        return Ok({ tag: "Declined" } as PaymentError);
+      case "GatewayDown":
+        return Ok({ tag: "GatewayDown" } as PaymentError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

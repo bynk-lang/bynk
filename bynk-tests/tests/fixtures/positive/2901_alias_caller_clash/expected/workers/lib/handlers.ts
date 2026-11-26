@@ -19,10 +19,10 @@ export type Level = number & { readonly __brand: "lib.Level" };
 export const Level = {
   of(value: number): Result<Level, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Level", message: "must be a safe integer", value });
+      return Err({ field: "Level", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Level", message: "must be non-negative", value });
+      return Err({ field: "Level", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Level);
   },
@@ -58,6 +58,16 @@ export function __serialise_Code(value: Code): __JsonValue {
 }
 
 export function __deserialise_Code(json: __JsonValue, path: string = "$"): Result<Code, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Alpha":
+        return Ok({ tag: "Alpha" } as Code);
+      case "Beta":
+        return Ok({ tag: "Beta" } as Code);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

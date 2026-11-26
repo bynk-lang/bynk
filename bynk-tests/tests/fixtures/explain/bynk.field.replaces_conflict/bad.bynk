@@ -1,0 +1,6 @@
+commons shop.account
+
+type Account = {
+  name: String,
+  label: String replaces name,
+}

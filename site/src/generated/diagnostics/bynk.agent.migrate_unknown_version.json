@@ -1,0 +1,10 @@
+{
+  "blurb": "A migrate step reads an older recorded version of the agent's state and carries it to the current shape. bynk.schema.lock records the versions an agent class has had, so `from N` must name one of them below the current version, which needs no step. A step from the current version, or from one the lock never recorded, has nothing to read. The message gives the range the lock holds. A class with no history yet, and an unchanged shape, need no step at all. Change the shape first, build to record the new version, then write the step `from` the version it replaces.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_unknown_version",
+  "constructs": [],
+  "example": "agent Cart {\n  key id: String\n\n  store owner: Cell[String]\n\n  migrate from 1 (old: CartV1) {     // ✗ the lock records only version 1, the current one\n    owner := old.owner\n  }\n}\n\nagent Cart {\n  key id: String\n\n  store owner: Cell[String]          // ✓ unchanged since version 1, so no step is needed\n}",
+  "severity": "error",
+  "summary": "A `migrate` step reads a schema version the lock does not record below the agent's current version."
+}

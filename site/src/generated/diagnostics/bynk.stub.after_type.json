@@ -1,0 +1,10 @@
+{
+  "blurb": "`stub … returns <value> after <delay>` makes the stubbed call complete only once the harness clock has advanced by that delay, so the delay must be a `Duration`, such as `3.seconds`. A bare number has no unit, so it is refused rather than guessed at as milliseconds or seconds.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.after_type",
+  "constructs": [],
+  "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns 7 after 3           // ✗ no unit\nstub Meter.read() returns 7 after 3.seconds   // ✓",
+  "severity": "error",
+  "summary": "A test `stub … returns <value> after <d>` latency is not a `Duration`."
+}

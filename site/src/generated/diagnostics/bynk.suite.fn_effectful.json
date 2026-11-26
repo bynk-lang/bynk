@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite helper that returns an `Effect` must say which capabilities it uses, with `given`, so a case's dependency on it is visible where it is called: `fn seed() -> Effect[()] given Stock { … }`. Without `given` it is a pure function that builds a value for a case, so build the value in the helper and run the effect in the `case`, where each step is visible with `<-`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.fn_effectful",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "// tests/desk.test.bynk\nfn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\nfn start() -> Int { 1 }                            // ✓ build the value\nlet n <- local.call(start())                       // ✓ run it in the case",
+  "severity": "error",
+  "summary": "A suite helper `fn` returns an `Effect`; suite helpers are pure."
+}

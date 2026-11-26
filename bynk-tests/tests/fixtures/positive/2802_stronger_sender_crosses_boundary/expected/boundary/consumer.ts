@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
+import { __bynkCodePointLength, __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import * as boundary_provider from "./provider.js";
@@ -11,8 +12,8 @@ export type ShortLabel = string & { readonly __brand: "boundary.consumer.ShortLa
 
 export const ShortLabel = {
   of(value: string): Result<ShortLabel, ValidationError> {
-    if (!(value.length <= 4)) {
-      return Err({ field: "ShortLabel", message: "length must be at most 4", value });
+    if (!(__bynkCodePointLength(value) <= 4)) {
+      return Err({ field: "ShortLabel", message: "length must be at most 4", rule: { tag: "MaxLength", limit: 4 }, value });
     }
     return Ok(value as ShortLabel);
   },
@@ -23,10 +24,10 @@ export type Positive1 = number & { readonly __brand: "boundary.consumer.Positive
 export const Positive1 = {
   of(value: number): Result<Positive1, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Positive1", message: "must be a safe integer", value });
+      return Err({ field: "Positive1", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Positive1", message: "must be positive", value });
+      return Err({ field: "Positive1", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Positive1);
   },
@@ -37,10 +38,10 @@ export type Unit = number & { readonly __brand: "boundary.consumer.Unit" };
 export const Unit = {
   of(value: number): Result<Unit, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Unit", message: "must be a finite number", value });
+      return Err({ field: "Unit", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0.5 && value <= 1.5)) {
-      return Err({ field: "Unit", message: "must be in range [0.5, 1.5]", value });
+      return Err({ field: "Unit", message: "must be in range [0.5, 1.5]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.5 }, hi: { tag: "FloatBound", value: 1.5 } }, value });
     }
     return Ok(value as Unit);
   },
@@ -51,7 +52,7 @@ export type Cheap = { readonly coefficient: bigint; readonly scale: number } & {
 export const Cheap = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Cheap, ValidationError> {
     if (!((((value).coefficient * 10n ** globalThis.BigInt(1) >= (10n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(1) <= (50n) * 10n ** globalThis.BigInt((value).scale))))) {
-      return Err({ field: "Cheap", message: "must be in range [1.0, 5.0]", value: __bynkDecimalToString(value) });
+      return Err({ field: "Cheap", message: "must be in range [1.0, 5.0]", rule: { tag: "InRange", lo: { tag: "DecimalBound", value: { coefficient: 10n, scale: 1 } }, hi: { tag: "DecimalBound", value: { coefficient: 50n, scale: 1 } } }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Cheap);
   },
@@ -61,11 +62,11 @@ export type Slug = string & { readonly __brand: "boundary.consumer.Slug" };
 
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
-    if (!(value.length <= 4)) {
-      return Err({ field: "Slug", message: "length must be at most 4", value });
+    if (!(__bynkCodePointLength(value) <= 4)) {
+      return Err({ field: "Slug", message: "length must be at most 4", rule: { tag: "MaxLength", limit: 4 }, value });
     }
-    if (!(new globalThis.RegExp("^(?:" + "[a-z]+" + ")$").test(value))) {
-      return Err({ field: "Slug", message: "must match /[a-z]+/", value });
+    if (!(__bynkRegExp("^(?:" + "[a-z]+" + ")$", "u").test(value))) {
+      return Err({ field: "Slug", message: "must match /[a-z]+/", rule: { tag: "Matches", pattern: "[a-z]+" }, value });
     }
     return Ok(value as Slug);
   },
@@ -75,8 +76,8 @@ export type Reply = string & { readonly __brand: "boundary.consumer.Reply" };
 
 export const Reply = {
   of(value: string): Result<Reply, ValidationError> {
-    if (!(value.length <= 8)) {
-      return Err({ field: "Reply", message: "length must be at most 8", value });
+    if (!(__bynkCodePointLength(value) <= 8)) {
+      return Err({ field: "Reply", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Reply);
   },

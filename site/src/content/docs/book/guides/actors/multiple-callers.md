@@ -67,7 +67,85 @@ case "a user sees their own view" {
 }
 ```
 
-See [acting as an actor](/book/reference/testing/#call-site-by).
+A bad credential is tested the same way, by naming the member whose refusal the case checks. A sum can hold
+several members that refuse a forged credential, so `by Forged` names one in parentheses:
+
+```bynk,fragment
+case "a forged session cookie is refused" {
+  let r <- api.GET("/orders") by Forged(User)
+  expect r is Rejected(Unauthorized)
+}
+```
+
+A bare `by Forged` is accepted only when exactly one member can refuse it, and then it is presented to that
+member; when more than one could, the compiler reports `bynk.test.bad_principal_needs_arm` and asks you to name
+the member. `by Expired` and
+`by Stale` work the same way, and `by Revoked(User)` tests a `sessions = true` cookie. A bad credential takes no
+identity.
+
+See [acting as an actor](/reference/testing/#call-site-by).
+
+## Reading an arm's claims
+
+A `Bearer` or `Oidc` arm can also read the claims of its verified token. Bind them with a second name beside the
+identity:
+
+```bynk,fragment
+on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
+	match who {
+		User(u, c) => Ok("\(u) \(c.get("tenant").getOrElse("default"))")
+		Visitor => Ok("anonymous")
+	}
+}
+```
+
+The one-name `User(u)` still works. The claims come only from the token the seam verified, and a
+`Visitor` has none. A test passes them in the principal, `by User("ada", TokenClaims.of(["tenant: acme"]))`.
+Only a `Bearer` or `Oidc` arm has them: a second name on another arm is an error.
+
+## A browser session or an API token
+
+The most common real arrangement for an API is a web app signed in with a session cookie, plus CLI,
+mobile or partner clients sending a token, all against the same routes. Declare both and name them in one
+`by` clause:
+
+```bynk
+context shop.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+actor ApiClient {
+	auth = Oidc(
+		issuer = "https://id.example",
+		audience = "api",
+		jwks = "https://id.example/jwks"
+	),
+	identity = UserId
+}
+
+service api from http {
+	cors {
+		origins: ["https://app.example.com"],
+		credentials: true,
+	}
+
+	on POST("/orders") () -> Effect[HttpResult[String]] by who: ApiClient | User {
+		match who {
+			ApiClient(c) => Ok("token \(c)"),
+			User(u) => Ok("cookie \(u)"),
+		}
+	}
+}
+```
+
+The members are tried in the order written. The cookie's cross-site check belongs to the cookie arm: it
+runs only when a session cookie is present, so a token client never meets it, while a cross-site page that
+sends only the user's cookie is refused (`403`). A request carrying both a cookie and a token is resolved
+by the order, which is why the example lists the token first: an explicit token wins over an ambient
+cookie. A test acts as either member (`by User("ada")`, `by ApiClient("ci")`), and `by Nobody` is the
+request with no credential, which is `401`.
 
 ## Mixing a header and a body member
 
@@ -99,4 +177,4 @@ service api from http {
 ```
 
 **Next:** [add an authorisation invariant](/book/guides/actors/authorisation/) to a member, or read
-the [reference](/book/reference/actors/).
+the [reference](/reference/actors/).

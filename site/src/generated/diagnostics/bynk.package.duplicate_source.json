@@ -1,0 +1,10 @@
+{
+  "blurb": "A build holds one copy of each package, so every dependency on a package must reach it in the same directory. Two entries that name one package but point at different directories would give two copies, with two sets of types where there should be one. Point both at the same directory, or drop one. Two aliases onto one directory are fine.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.duplicate_source",
+  "constructs": [],
+  "example": "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\nutil = { package = \"acme/lib\", path = \"vendor/lib\" }   // ✗ `acme/lib` from a second directory\n\nutil = { package = \"acme/lib\", path = \"pkg/lib\" }      // ✓ the same directory",
+  "severity": "error",
+  "summary": "One package is reached from two different directories; a build holds one copy of each package."
+}

@@ -122,13 +122,13 @@ agent OrderAgent {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
   }
 }
 
 service cancelOrder {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     let _ <- OrderAgent(orderId).cancel(orderId)
     Effect.pure(())
   }

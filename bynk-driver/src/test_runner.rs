@@ -12,6 +12,7 @@
 //! found but won't start is reported as such rather than as missing.
 
 use crate::emsg;
+use bynk_project::env_protocol;
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, ExitCode, Stdio};
 
@@ -19,28 +20,7 @@ use crate::project::{BuildTarget, ImportExt, ProjectOutput};
 use clap::ValueEnum;
 
 use crate::npm_install::PackageManager;
-use crate::probe::{DetectOpts, SystemToolbox};
 use crate::test_json::{Case, Location, Suite, TestRun};
-
-/// Where `name` is installed on `PATH`, if it is. #1758: callers spawn this
-/// path, not the bare name, so a Windows npm shim (`tsc.cmd`) that detection
-/// finds is also the program that runs.
-pub(crate) fn resolve_tool(name: &str) -> Option<PathBuf> {
-    crate::probe::detect(&SystemToolbox, name, DetectOpts::default())
-        .provenance
-        .path()
-        .map(Path::to_path_buf)
-}
-
-/// #1758: a runner that was found but would not start. Recorded instead of
-/// silently skipped, so a run with no working runner reports the real cause
-/// rather than advising an install of something already installed.
-pub(crate) fn start_failure(path: &Path, e: &std::io::Error) -> String {
-    format!(
-        "`{}` was found but could not be started: {e}",
-        path.display()
-    )
-}
 
 /// `test --format` selector, used by `bynk test` (review
 /// findings #40/#72): one enum both CLIs' `Test` subcommand uses, instead of
@@ -192,6 +172,11 @@ pub struct TestArgs {
     /// `BYNK_NO_INSTALL=1`.
     #[arg(long)]
     pub no_install: bool,
+    /// The environment whose `[env.<name>.vars]` values `env(…)` constants take
+    /// (#3941): its own table, then `[vars]`, then each constant's default.
+    /// Omit it for `default`. A suite's `env { … }` is run-time and unaffected.
+    #[arg(long, default_value = "default", value_name = "NAME")]
+    pub env: String,
     /// Record snapshots instead of comparing against them: write a snapshot that
     /// is not stored yet, refresh one whose value changed, and delete the
     /// obsolete ones (those no `expect … matches snapshot` names any more).
@@ -299,6 +284,7 @@ impl TestArgs {
             print: false,
             smoke_unsafe: false,
             no_install: false,
+            env: bynk_project::vars::DEFAULT_ENVIRONMENT.to_string(),
             update_snapshots: false,
             declared_statuses: None,
             dev_command: None,
@@ -360,6 +346,14 @@ fn normalise_seed(raw: &str) -> Option<String> {
     Some(hex.to_string())
 }
 
+/// #4190: does the test module at `path` import a consumed context's wire codecs, which live in
+/// the `workers` output (a case's stubbed cross-context call crosses them at `integration`)?
+fn imports_wire_codecs(rel: &str, path: &Path) -> bool {
+    rel.starts_with("tests/")
+        && std::fs::read_to_string(path)
+            .is_ok_and(|t| t.contains(bynk_emit::testgen::WIRE_IMPORT_MARK))
+}
+
 /// In `--format json` mode the deterministic surface is the document on stdout,
 /// so a `<program> test:` line on stderr is fine but must never reach stdout.
 /// `program` prefixes stderr messages (`"bynk"`) so they read the
@@ -384,6 +378,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         print,
         smoke_unsafe,
         no_install,
+        env,
         update_snapshots,
         declared_statuses,
         dev_command,
@@ -418,6 +413,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
     // #3069: `--mutate` re-runs the suites against mutants of `src/`; the runs
     // it needs are each a plain in-process run, made below by this function.
+    // #3941: `--mutate` and `--against dev` build for `default` only, so a
+    // named environment is refused rather than silently ignored.
+    let non_default_env = env != bynk_project::vars::DEFAULT_ENVIRONMENT;
     if mutate {
         let with = [
             (inspect, "--inspect"),
@@ -428,6 +426,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             (update_snapshots, "--update-snapshots"),
             (!case.is_empty(), "--case"),
             (stream, "--format ndjson"),
+            (non_default_env, "--env"),
         ]
         .into_iter()
         .find_map(|(set, flag)| set.then_some(flag));
@@ -506,6 +505,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if inspect || coverage {
                 return refused(
                     "`--against` cannot be combined with `--inspect` or `--coverage`, which observe the in-process run".to_string(),
+                );
+            }
+            if non_default_env {
+                return refused(
+                    "`--against` cannot be combined with `--env`: the target runs its own build, so `--env` would be ignored".to_string(),
                 );
             }
             match crate::remote::resolve(
@@ -607,20 +611,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // #2078: reconcile events against the committed `bynk.schema.lock`,
         // read-only — a non-additive change fails `test` as it fails a
         // build, and `out.schema_lock` is never written back.
-        let o = match crate::try_project_options(&input)
-            .map_err(|e| e.to_string())
-            .and_then(|o| Ok(o.schema_registry(crate::schema_lock::read_only(&input)?)))
-            // #3107: the `dev` profile, so `[profile.dev] contracts = false`
-            // turns the guard off for a test run; on by default.
-            .and_then(
-                |o| Ok(o.contracts(crate::project_contracts(&input, crate::CliProfile::Dev)?)),
-            )
-            // #2842: the stored snapshots, inlined into the test modules.
-            .and_then(|o| {
-                let files = bynk_project::snapshots::read_snapshot_files(&input)
-                    .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
-                Ok(o.snapshot_files(files))
-            }) {
+        let o = match test_build_options(&input, &env) {
             Ok(o) => match with_overlays(o, &input, mutant_overlay, overlay) {
                 Ok(o) => o,
                 Err(e) => return fail_run(program, json, stream, e),
@@ -835,6 +826,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         if rel.starts_with("tests/integration_") {
             has_integration = true;
         }
+        has_integration |= imports_wire_codecs(&rel, &output_root.join(path));
     }
 
     // v0.16: integration tests stand their participants up as real Workers, so
@@ -923,23 +915,22 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             format!("could not enable source maps for coverage: {e}"),
         );
     }
-    // Preferred: `tsc -p out/tsconfig.json` → `node out-js/tests/main.js`.
+    // Preferred: `tsc -p out/tsconfig.json` → `node out/out-js/tests/main.js`.
     // tsc gives us full type-checking before execution and matches what a
     // production deployment build would do. If tsc is missing, fall back to
     // tsx, which compiles-and-runs in one step. We also try npx-mediated
     // variants so a developer with `npm` available doesn't need a global
     // install. If nothing works, emit an actionable error message.
-    let out_js_root = output_root
-        .parent()
-        .map(|p| p.join("out-js"))
-        .unwrap_or_else(|| PathBuf::from("out-js"));
+    // #4159: inside the output root, so a run's JavaScript is private to it and two
+    // runs whose `--output`s share a parent cannot clobber each other.
+    let out_js_root = output_root.join("out-js");
     let main_js = out_js_root.join("tests").join("main.js");
 
     // #2146: tsc emits ES modules (the compile writes `out/package.json`
     // declaring `"type": "module"`, which the emitted tsconfig's `module:
-    // NodeNext` follows, #2148), but `out-js` sits in no such `package.json`
-    // scope, so mark it ESM for Node to run the result as such. The `out/`
-    // tree is left as the compiler wrote it.
+    // NodeNext` follows, #2148). Since #4159 `out-js` is under `out/`, so that
+    // scope already covers it; the marker is kept so the tree still runs as ES
+    // modules if it is moved. The `out/` tree is left as the compiler wrote it.
     let prepared = write_esm_marker(&out_js_root).map_err(|e| {
         let marker = out_js_root.join("package.json");
         format!("could not write {}: {e}", marker.display())
@@ -956,18 +947,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     // toolchain/internal problem, surfaced as a `runtime` error.
     // #1672: the `npx` fallback provisions the TypeScript major the output is
     // verified against and users get, not an older pin.
-    let typescript_pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
     let manager = crate::npm_install::system_tool_manager(&input);
     let mut start_failures: Vec<String> = Vec::new();
-    let tsc_runners = crate::npm_install::system_tool_ladder("tsc", &typescript_pkg, manager);
-    for (prog, prefix) in &tsc_runners {
-        let Some(path) = resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = ProcCommand::new(&path);
-        for p in prefix {
-            cmd.arg(p);
-        }
+    let tsc_runners = crate::tools::Ladder::tsc(manager);
+    for rung in tsc_runners.rungs() {
+        let mut cmd = rung.command();
         // `--pretty false`: the plain `file(line,col): error TSn:` records
         // `tsc_report` parses, whatever the terminal.
         cmd.arg("-p").arg(&tsconfig).args(["--pretty", "false"]);
@@ -1015,12 +999,12 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
                 return ExitCode::FAILURE;
             }
             Err(e) => {
-                start_failures.push(start_failure(&path, &e));
+                start_failures.push(rung.start_failure(&e));
                 continue;
             }
         };
         if tsc_ok {
-            let mut node_cmd = ProcCommand::new(crate::probe::program_path("node"));
+            let mut node_cmd = crate::tools::node_command();
             node_cmd.arg(&main_js);
             if smoke {
                 node_cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
@@ -1096,15 +1080,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
 
     // tsx fallback chain.
-    let tsx_runners = crate::npm_install::system_tool_ladder("tsx", "tsx", manager);
-    for (prog, prefix) in &tsx_runners {
-        let Some(path) = resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = ProcCommand::new(&path);
-        for p in prefix {
-            cmd.arg(p);
-        }
+    let tsx_runners = crate::tools::Ladder::tsx(manager);
+    for rung in tsx_runners.rungs() {
+        let mut cmd = rung.command();
         cmd.arg(&main_ts);
         if smoke {
             cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
@@ -1131,7 +1109,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
                 return report_timeout(program, json, stream, &e);
             }
-            Err(e) => start_failures.push(start_failure(&path, &e)),
+            Err(e) => start_failures.push(rung.start_failure(&e)),
         }
     }
 
@@ -1244,6 +1222,30 @@ fn report_no_tests(
     }
 }
 
+/// The options a `bynk test` build starts from, before overlays: the project's, the read-only
+/// event-schema registry, the `dev` profile's contracts, the stored snapshots, and (#3945) the
+/// type-argument marker on generic capability calls that tells a `stub Cap.op[T]` its calls.
+fn test_build_options(
+    input: &Path,
+    environment: &str,
+) -> Result<crate::project::CompileOptions, String> {
+    // #2078: reconcile events against the committed `bynk.schema.lock`, read-only — a
+    // non-additive change fails `test` as it fails a build, and it is never written back.
+    let o = crate::try_project_options(input)
+        .map_err(|e| e.to_string())?
+        .schema_registry(crate::schema_lock::read_only(input)?)
+        // #3107: the `dev` profile, so `[profile.dev] contracts = false` turns the guard off for
+        // a test run; on by default.
+        .contracts(crate::project_contracts(input, crate::CliProfile::Dev)?)
+        .typed_capability_calls(true)
+        // #3941: `--env` selects whose `env(…)` values the build resolves.
+        .environment(environment);
+    // #2842: the stored snapshots, inlined into the test modules.
+    let files = bynk_project::snapshots::read_snapshot_files(input)
+        .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
+    Ok(o.snapshot_files(files))
+}
+
 /// The build's options with the run's in-memory sources laid over the project's:
 /// a mutant's one file (#3069), and a caller's buffers and synthetic files, as
 /// `--sources-stdin` does for `compile` (#3585).
@@ -1310,10 +1312,7 @@ fn report_start_failures(
 fn install_advice(manager: PackageManager, coverage: bool) -> String {
     let tsc = format!(
         "  - `{}` (provides tsc, which type-checks; requires Node.js to run output)",
-        manager.global_install(&format!(
-            "typescript@{}",
-            bynk_emit::TYPESCRIPT_MAJOR_TESTED
-        ))
+        manager.global_install(&crate::tools::pins::typescript_spec())
     );
     if coverage {
         return tsc;
@@ -1322,7 +1321,7 @@ fn install_advice(manager: PackageManager, coverage: bool) -> String {
     let runner = manager.runner_label().unwrap_or("npx");
     format!(
         "{tsc}\n  - `{}` (runs TypeScript in one step, without type-checking)\n  Or run inside a project where `{runner} tsc` / `{runner} tsx` resolves.",
-        manager.global_install("tsx")
+        manager.global_install(crate::tools::pins::TSX_SPEC)
     )
 }
 
@@ -1363,6 +1362,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     refusals: None,
                     origin: c.doc.then(|| "doc".to_string()),
                     warnings: None,
+                    actual: None,
                     duration_ms: None,
                 })
                 .collect(),
@@ -1401,14 +1401,14 @@ fn finish_runner(
     timeout: Option<std::time::Duration>,
 ) -> std::io::Result<ExitCode> {
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     // #2138: the remote harness reads each Worker's URL from here; the
     // target's secrets are already in the inherited environment.
     if let Some(run) = remote {
-        cmd.env("BYNK_TEST_TARGETS", run.targets_json());
+        cmd.env(env_protocol::TEST_TARGETS, run.targets_json());
         cmd.env(crate::remote::SECRETS_ENV, run.secrets_json());
-        cmd.env("BYNK_TEST_SETTLE_MS", run.settle_ms.to_string());
+        cmd.env(env_protocol::TEST_SETTLE_MS, run.settle_ms.to_string());
         // #2138: the run's own `run.id`, always set, so a value left in the
         // environment never makes two runs share one.
         cmd.env(crate::remote::RUN_ID_ENV, &run.run_id);
@@ -1438,7 +1438,7 @@ fn finish_runner(
     }
     if format == TestFormat::Ndjson {
         // #2267: forward each event as the runner writes it.
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let mut events = crate::test_stream::Stream::new(crate::test_stream::StreamContext {
             discovered,
             skipped: selected_skips
@@ -1463,10 +1463,10 @@ fn finish_runner(
             return Ok(ExitCode::FAILURE);
         }
         events.unmatched().report(program);
-        return Ok(exit_from(status.success()));
+        return Ok(exit_from(status.success() && events.ended()));
     }
     if format == TestFormat::Json {
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let out = output_within(cmd.stdout(Stdio::piped()).stderr(Stdio::piped()), timeout)?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
@@ -1508,7 +1508,7 @@ fn finish_runner(
             emsg!("{program} test: error: could not update snapshots: {e}");
             return Ok(ExitCode::FAILURE);
         }
-        Ok(exit_from(out.status.success()))
+        Ok(exit_from_document(out.status.success(), &doc))
     } else if aliases.is_empty() && snapshots.is_none() && !crate::colour::stdout() {
         let status = cmd
             .stdout(Stdio::inherit())
@@ -1710,6 +1710,13 @@ fn exit_from(success: bool) -> ExitCode {
     }
 }
 
+/// #4000: a JSON document that carries an `error` is an incomplete or failed run
+/// (the runner's stream ended with no `run-end`, so a suite's `cases` may be
+/// missing), and it must not exit 0 whatever the runner process's own status was.
+fn exit_from_document(runner_ok: bool, doc: &TestRun) -> ExitCode {
+    exit_from(runner_ok && doc.error.is_none())
+}
+
 /// #854: a `--coverage` request that cannot be honoured (unsupported flag combo,
 /// no `tsc → node`, or a setup error). In JSON mode it is a `runtime` error so
 /// the document stays the only thing on stdout; in rich mode a plain stderr line.
@@ -1757,7 +1764,7 @@ fn run_with_coverage(
     }
     cmd.env("NODE_V8_COVERAGE", &cov_dir);
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     filter.apply(program, &mut cmd);
 
@@ -1767,7 +1774,7 @@ fn run_with_coverage(
     };
 
     let code = if json {
-        cmd.env("BYNK_TEST_FORMAT", "ndjson");
+        cmd.env(env_protocol::TEST_FORMAT, "ndjson");
         let out = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
             Ok(o) => o,
             Err(e) => {
@@ -1789,7 +1796,7 @@ fn run_with_coverage(
             crate::colour::eprintln(&warning.line(program));
         }
         unmatched.report(program);
-        exit_from(out.status.success())
+        exit_from_document(out.status.success(), &doc)
     } else {
         let colour = crate::colour::stdout();
         let status = if colour {
@@ -1857,7 +1864,7 @@ fn run_inspect(
     filter: &crate::test_filter::TestFilter,
     smoke: bool,
 ) -> ExitCode {
-    let Some(node) = resolve_tool("node") else {
+    let Some(mut cmd) = crate::tools::resolved_node_command() else {
         emsg!("{program} test --inspect: error: `node` was not found on PATH");
         return ExitCode::FAILURE;
     };
@@ -1865,9 +1872,8 @@ fn run_inspect(
     eprintln!("  Attach a JavaScript debugger to the inspector URL below; breakpoints set");
     eprintln!("  in `.bynk` sources resolve through the emitted source maps.");
     eprintln!("  (Requires Node \u{2265} 22.6 for TypeScript type-stripping.)");
-    let mut cmd = ProcCommand::new(node);
     if let Some(hex) = seed_hex {
-        cmd.env("BYNK_TEST_SEED", hex);
+        cmd.env(env_protocol::TEST_SEED, hex);
     }
     if smoke {
         cmd.env(crate::smoke::STRICT_WIRE_ENV, "1");
@@ -1904,6 +1910,38 @@ mod inspect_port_tests {
     fn uses_the_default_port_when_free_and_a_free_port_otherwise() {
         assert_eq!(inspect_brk_arg(true), "--inspect-brk");
         assert_eq!(inspect_brk_arg(false), "--inspect-brk=127.0.0.1:0");
+    }
+}
+
+#[cfg(test)]
+mod exit_from_document_tests {
+    use super::*;
+
+    fn exit_for(runner_ok: bool, stdout: &str) -> ExitCode {
+        let doc = crate::test_json::parse_ndjson(stdout).into_document("");
+        exit_from_document(runner_ok, &doc)
+    }
+
+    /// #4000: a runner that exits 0 without ever reaching `run-end` (its output
+    /// clobbered or cut short, so a suite's `cases` are missing) is a failed run.
+    #[test]
+    fn a_stream_that_never_completes_fails_the_run_even_when_the_runner_exits_zero() {
+        let failure = ExitCode::FAILURE;
+        assert_eq!(exit_for(true, ""), failure);
+        assert_eq!(
+            exit_for(true, r#"{"type":"suite-begin","name":"s","kind":"system"}"#),
+            failure
+        );
+        let complete = concat!(
+            r#"{"type":"suite-begin","name":"s","kind":"system"}"#,
+            "\n",
+            r#"{"type":"case","name":"c","outcome":"pass"}"#,
+            "\n",
+            r#"{"type":"run-end","passed":1,"failed":0}"#,
+            "\n",
+        );
+        assert_eq!(exit_for(true, complete), ExitCode::SUCCESS);
+        assert_eq!(exit_for(false, complete), failure);
     }
 }
 

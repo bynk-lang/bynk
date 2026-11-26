@@ -36,7 +36,7 @@ fn join(parts: List[Bytes]) -> Bytes {
 }
 
 service reading {
-	on call(key: String) -> Effect[Option[String]] given Blobs {
+	on call(key: String) -> Effect[Option[String]] by Caller given Blobs {
 		let d <- Blobs.read(key)
 		let parts <- d.body.collect()
 		join(parts).decodeUtf8()
@@ -44,13 +44,13 @@ service reading {
 }
 
 service upload {
-	on call(key: String) -> Effect[Receipt] given Blobs {
+	on call(key: String) -> Effect[Receipt] by Caller given Blobs {
 		Blobs.write(key, Stream.of([Bytes.fromUtf8("a"), Bytes.fromUtf8("b"), Bytes.fromUtf8("c")]))
 	}
 }
 
 service twice {
-	on call(key: String) -> Effect[Int] given Blobs {
+	on call(key: String) -> Effect[Int] by Caller given Blobs {
 		let d <- Blobs.read(key)
 		let first <- d.body.collect()
 		let second <- d.body.collect()

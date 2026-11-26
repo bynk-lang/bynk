@@ -2,14 +2,15 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Password = string & { readonly __brand: "Password" };
 
 export const Password = {
   of(value: string): Result<Password, ValidationError> {
-    if (!(value.length >= 8)) {
-      return Err({ field: "Password", message: "length must be at least 8", value });
+    if (!(__bynkCodePointLength(value) >= 8)) {
+      return Err({ field: "Password", message: "length must be at least 8", rule: { tag: "MinLength", limit: 8 }, value });
     }
     return Ok(value as Password);
   },

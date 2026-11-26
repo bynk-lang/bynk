@@ -1,0 +1,5 @@
+commons demo.errarity
+
+fn recover(r: Result[Int, String]) -> Option[String] {
+	r.err(1)
+}

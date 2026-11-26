@@ -10,6 +10,9 @@
 //! - `greenfield-status` (compiler-architecture track, T0.0, #999) runs all nineteen
 //!   probes against the tree and prints the report (the fourteen gated ones are what
 //!   the committed table is diffed on); `--apply` writes the committed table.
+//! - `module-lines` (#4085) lists the back-half source files at or over 2,000 production
+//!   lines against their committed ceilings (the ratchet `xtask/tests/module_lines_ratchet.rs`
+//!   enforces); `--apply` rewrites `xtask/module-line-ceilings.txt`;
 //! - `fn-lengths` (#3167) lists the non-test functions over 300 lines against their
 //!   committed ceilings (the ratchet `xtask/tests/fn_length_ratchet.rs` enforces);
 //!   `--apply` rewrites `xtask/fn-length-ceilings.txt` from the tree.
@@ -33,6 +36,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("check-pending") => check_pending(),
+        Some("sorted-lists") => sorted_lists(),
         Some("greenfield-status") => {
             let mut rest = args[1..].iter();
             let mut unknown = None;
@@ -96,6 +100,34 @@ fn main() -> ExitCode {
                 match ceiling {
                     Some(c) => println!("{:>6}  (ceiling {c})  {}", f.lines, f.key()),
                     None => println!("{:>6}  (no ceiling)  {}", f.lines, f.key()),
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Some("module-lines") => {
+            if let Some(bad) = args[1..].iter().find(|a| *a != "--apply") {
+                eprintln!("xtask module-lines: unknown argument {bad:?}");
+                usage();
+                return ExitCode::from(2);
+            }
+            let root = repo_root();
+            let measured = xtask::module_lines::measure(&root);
+            if args.iter().any(|a| a == "--apply") {
+                let path = root.join(xtask::module_lines::CEILINGS_FILE);
+                if let Err(e) =
+                    std::fs::write(&path, xtask::module_lines::render_ceilings(&measured))
+                {
+                    eprintln!("xtask module-lines: cannot write {}: {e}", path.display());
+                    return ExitCode::FAILURE;
+                }
+                println!("wrote {} ({} files)", path.display(), measured.len());
+                return ExitCode::SUCCESS;
+            }
+            let ceilings = xtask::module_lines::read_ceilings(&root);
+            for m in &measured {
+                match ceilings.iter().find(|(k, _)| *k == m.file) {
+                    Some((_, c)) => println!("{:>6}  (ceiling {c})  {}", m.lines, m.file),
+                    None => println!("{:>6}  (no ceiling)  {}", m.lines, m.file),
                 }
             }
             ExitCode::SUCCESS
@@ -358,6 +390,9 @@ fn editor_contract(args: &[String]) -> ExitCode {
 }
 
 fn check_pending() -> ExitCode {
+    for warning in xtask::check_warnings_in(&xtask::repo_root()) {
+        eprintln!("{warning}");
+    }
     match xtask::check_all() {
         Ok(n) => {
             println!("check-pending: {n} pending file(s) valid");
@@ -373,6 +408,26 @@ fn check_pending() -> ExitCode {
     }
 }
 
+/// `sorted-lists`: every list the Book marks as alphabetical (`<!-- sorted: … -->`) is in order,
+/// or this prints each entry that is not, and the one it should follow (#4206). Report only.
+fn sorted_lists() -> ExitCode {
+    let problems = xtask::sorted_lists::check_site(&repo_root());
+    if problems.is_empty() {
+        println!("sorted-lists: every marked list is in alphabetical order");
+        return ExitCode::SUCCESS;
+    }
+    for p in &problems {
+        eprintln!("{p}");
+    }
+    eprintln!(
+        "sorted-lists: {} problem(s). For an entry out of order, move the whole entry (a table row, \
+         or a heading with its section) to the place named, and do not rewrite its text; for a \
+         marker problem, fix the `<!-- sorted -->` marker the message names.",
+        problems.len()
+    );
+    ExitCode::FAILURE
+}
+
 fn stamp(apply: bool) -> ExitCode {
     let root = repo_root();
     let mut plan = match xtask::stamp::plan(&root) {
@@ -386,15 +441,39 @@ fn stamp(apply: bool) -> ExitCode {
         }
     };
 
-    if plan.is_empty() {
+    if plan.has_nothing() {
         println!("stamp: no pending increments — nothing to do");
         return ExitCode::SUCCESS;
+    }
+
+    for stale in &plan.already_stamped {
+        println!(
+            "stamp: {} was already stamped as v{} — it gets no new version",
+            stale.file, stale.entry.version
+        );
+    }
+    if plan.is_empty() {
+        // Only stale copies: with `--apply` they are deleted, and nothing else changes.
+        if !apply {
+            println!("stamp: dry run — pass --apply to delete the stale copies");
+            return ExitCode::SUCCESS;
+        }
+        return match xtask::stamp::apply(&root, &plan, None, |_| Ok(())) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("stamp: apply failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
 
     println!("stamp: from v{}", plan.base_version);
     let mut adr_number = plan.first_adr_number;
     for inc in &plan.increments {
-        println!("  {}  →  v{}", inc.file, inc.version);
+        match inc.pr {
+            Some(pr) => println!("  {} (#{pr})  →  v{}", inc.file, inc.version),
+            None => println!("  {}  →  v{}", inc.file, inc.version),
+        }
         println!("      changelog: {}", inc.changelog);
         for adr in &inc.adrs {
             println!("      ADR {adr_number:04}-{}: {}", adr.slug, adr.title);
@@ -580,10 +659,56 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // The base ledger: a stamp PR moves a consumed `raises:` into the ledger, so the rows it
+    // gained since the base are what excuse its rises. No ledger at the base reads as empty.
+    let base_ledger = git_stdout(
+        &root,
+        &[
+            "show",
+            &format!("{base}:{}", xtask::stamp::RAISE_LEDGER_PATH),
+        ],
+    )
+    .unwrap_or_default();
+    let base_files = base_pending(&root, &base);
+    let consumed = xtask::consumed_raised_probes(&base_files, &root);
     let live = xtask::greenfield_status::run_gated(&root);
-    match xtask::greenfield_status::check_growth(&live, &base_table, &root) {
+    match xtask::greenfield_status::check_growth_against(
+        &live,
+        &base_table,
+        (&base_ledger, &consumed),
+        &root,
+    ) {
+        Ok(()) => println!("greenfield-status: no growth probe rose against {base}"),
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth (against {base}): {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    // #4428: the growth check above, like the table gate, is excused by any pending file in the
+    // tree, including another increment's. What this PR moved must be named by this PR's own.
+    let tree = match xtask::pr_attribution::BaseTree::checkout(&root, &base) {
+        Ok(tree) => tree,
+        Err(e) => {
+            eprintln!("greenfield-status --check-growth: cannot attribute the PR's moves: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let base_live = xtask::greenfield_status::run_gated(tree.root());
+    match xtask::pr_attribution::check(
+        &base_live,
+        &live,
+        &xtask::pr_attribution::read_pending(&root),
+        &base_files,
+        (
+            &base_table,
+            &std::fs::read_to_string(xtask::greenfield_status::table_path(&root))
+                .unwrap_or_default(),
+        ),
+    ) {
         Ok(()) => {
-            println!("greenfield-status: no growth probe rose against {base}");
+            println!(
+                "greenfield-status: every probe this PR moved is named by its own pending files"
+            );
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -591,6 +716,23 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The pending files of `base` as `(file name, text)`, `README.md` excluded; empty when the
+/// revision has none. A stamp PR's consumed `raises:` are the ones in here that the tree lost.
+fn base_pending(root: &Path, base: &str) -> Vec<(String, String)> {
+    let Ok(listing) = git_stdout(root, &["ls-tree", "--name-only", base, "design/pending/"]) else {
+        return Vec::new();
+    };
+    listing
+        .lines()
+        .filter(|l| l.ends_with(".md") && !l.ends_with("/README.md"))
+        .filter_map(|path| {
+            let text = git_stdout(root, &["show", &format!("{base}:{path}")]).ok()?;
+            let name = path.rsplit('/').next()?.to_string();
+            Some((name, text))
+        })
+        .collect()
 }
 
 /// `git <args>` at `root`, stdout on success, or why it failed.
@@ -780,6 +922,12 @@ type Step = (
 fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
     let mut steps: Vec<Step> = vec![
         ("formatting", vec!["fmt", "--all", "--check"], vec![]),
+        // #4206: the Reference's marked lists stay alphabetical. Cheap, so before the builds.
+        (
+            "sorted lists",
+            vec!["run", "--locked", "-q", "-p", "xtask", "--", "sorted-lists"],
+            vec![],
+        ),
         // #3174: the examples are the corpus newcomers read, so they must be what
         // `bynk fmt` produces. (CI enforces the same via xtask's
         // `examples_fmt_clean` test.)
@@ -999,7 +1147,10 @@ fn release_notes(args: &[String]) -> ExitCode {
 /// the workspace's current version, before that version is tagged (#3868).
 /// Without `--apply`, says what it would write.
 fn release_page(apply: bool) -> ExitCode {
-    use xtask::release_pages::{INDEX_PAGE, UNRELEASED_PAGE, cut, release_page, today_utc};
+    use xtask::release_pages::{
+        INDEX_PAGE, SHIPPED_CODES, UNRELEASED_PAGE, cut, release_page, today_utc,
+        with_shipped_codes,
+    };
     let root = repo_root();
     let read = |rel: &str| {
         std::fs::read_to_string(root.join(rel)).map_err(|e| format!("cannot read {rel}: {e}"))
@@ -1028,7 +1179,7 @@ fn release_page(apply: bool) -> ExitCode {
         if !apply {
             println!(
                 "Would cut v{version} ({rows} increments): write {page}, empty {UNRELEASED_PAGE} \
-                 and add the release to {INDEX_PAGE}.\nRun again with --apply to write them."
+                 and add the release to {INDEX_PAGE}, and add the registry's codes to {SHIPPED_CODES}.\nRun again with --apply to write them."
             );
             return Ok(());
         }
@@ -1038,6 +1189,14 @@ fn release_page(apply: bool) -> ExitCode {
         write(&page, &cut.release)?;
         write(UNRELEASED_PAGE, &cut.unreleased)?;
         write(INDEX_PAGE, &cut.index)?;
+        let live: Vec<&str> = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code)
+            .collect();
+        write(
+            SHIPPED_CODES,
+            &with_shipped_codes(&read(SHIPPED_CODES)?, &live),
+        )?;
         println!(
             "Cut v{version} ({rows} increments) into {page}.\n\
              Commit it, merge it, then tag that merge commit v{version}."
@@ -1055,7 +1214,7 @@ fn release_page(apply: bool) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | sorted-lists | ci [--fast] | fn-lengths [--apply] | module-lines [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 
@@ -1075,11 +1234,17 @@ mod tests {
         let steps = ci_steps(true, false);
         assert_eq!(
             names(&steps),
-            ["formatting", "examples formatting", "clippy", "docs"]
+            [
+                "formatting",
+                "sorted lists",
+                "examples formatting",
+                "clippy",
+                "docs"
+            ]
         );
         assert_eq!(steps[0].1[0], "fmt");
-        assert_eq!(steps[2].1[0], "clippy");
-        assert_eq!(steps[3].1[0], "doc");
+        assert_eq!(steps[3].1[0], "clippy");
+        assert_eq!(steps[4].1[0], "doc");
     }
 
     /// Matches CI's `API docs (cargo doc)` job, in both `--fast` and the full
@@ -1118,6 +1283,7 @@ mod tests {
             names(&steps),
             [
                 "formatting",
+                "sorted lists",
                 "examples formatting",
                 "clippy",
                 "docs",

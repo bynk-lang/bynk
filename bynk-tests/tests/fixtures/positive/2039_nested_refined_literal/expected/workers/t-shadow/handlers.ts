@@ -12,10 +12,10 @@ export type Cents = number & { readonly __brand: "t.shadow.Cents" };
 export const Cents = {
   of(value: number): Result<Cents, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Cents", message: "must be a safe integer", value });
+      return Err({ field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 5000)) {
-      return Err({ field: "Cents", message: "must be in range [1, 5000]", value });
+      return Err({ field: "Cents", message: "must be in range [1, 5000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 5000 } }, value });
     }
     return Ok(value as Cents);
   },
@@ -26,10 +26,10 @@ export type Delta = number & { readonly __brand: "t.shadow.Delta" };
 export const Delta = {
   of(value: number): Result<Delta, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Delta", message: "must be a safe integer", value });
+      return Err({ field: "Delta", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -100 && value <= 100)) {
-      return Err({ field: "Delta", message: "must be in range [-100, 100]", value });
+      return Err({ field: "Delta", message: "must be in range [-100, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -100 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Delta);
   },
@@ -86,10 +86,10 @@ export function __deserialise_t_pay__Cents(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 1 && json <= 1000)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be in range [1, 1000]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be in range [1, 1000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 1000 } }, value: json } });
   }
   return Ok(json as unknown as t_pay.Cents);
 }
@@ -103,10 +103,10 @@ export function __deserialise_t_pay__Delta(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Delta", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Delta", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= -10 && json <= 10)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Delta", message: "must be in range [-10, 10]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Delta", message: "must be in range [-10, 10]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -10 }, hi: { tag: "IntBound", value: 10 } }, value: json } });
   }
   return Ok(json as unknown as t_pay.Delta);
 }
@@ -180,6 +180,9 @@ export function __serialise_Map_String_t_pay__Cents(value: ReadonlyMap<string, t
 }
 
 export function __deserialise_Map_String_t_pay__Cents(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, t_pay.Cents>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_t_pay__Cents(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

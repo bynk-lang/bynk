@@ -1,0 +1,3 @@
+commons demo {
+  type Name = String where AtLeast(3)
+}

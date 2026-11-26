@@ -139,9 +139,16 @@ impl Trivia {
 #[derive(Debug, Clone)]
 pub struct Commons {
     pub name: QualifiedName,
+    /// #3984: `commons x.y for tests`: a commons only suites and other test-only commons may
+    /// `uses`, left out of every deployable.
+    pub test_only: bool,
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
+    /// `consumes` clauses of this file: braced and type-only (#4044). The
+    /// toolchain also adds one that reaches the `bynk` adapter's transparent
+    /// types (#4181, `ParsedFile::add_implicit_consumes` in `bynk-project`).
+    pub consumes: Vec<ConsumesDecl>,
     /// Optional documentation block attached to the commons declaration.
     pub documentation: Option<Doc>,
     /// Surface form of the file: brace-delimited body or headerless fragment.
@@ -156,6 +163,38 @@ pub struct Commons {
     pub trailing_comments: Vec<Comment>,
 }
 
+impl Commons {
+    /// A commons as the parser reads it: the brace or fragment form, and no
+    /// trivia of its own. (The toolchain adds an implicit type-only `consumes`
+    /// after parsing, #4181.)
+    pub fn parsed(
+        name: QualifiedName,
+        items: Vec<CommonsItem>,
+        (uses, consumes): (Vec<UsesDecl>, Vec<ConsumesDecl>),
+        documentation: Option<Doc>,
+        brace: bool,
+        span: Span,
+        trailing_comments: Vec<Comment>,
+    ) -> Commons {
+        Commons {
+            name,
+            test_only: false,
+            items,
+            uses,
+            consumes,
+            documentation,
+            form: if brace {
+                CommonsForm::Brace
+            } else {
+                CommonsForm::Fragment
+            },
+            span,
+            trivia: Trivia::default(),
+            trailing_comments,
+        }
+    }
+}
+
 /// The two surface forms in which a commons body may be parsed (v0.3 §3.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommonsForm {
@@ -165,10 +204,35 @@ pub enum CommonsForm {
     Fragment,
 }
 
+/// #4045: one qualified name a unit reads through a `uses` clause.
+#[derive(Debug, Clone)]
+pub struct QualifiedRef {
+    /// The qualifier and the name as written, `Y.Status` or `lib.y.Status`.
+    pub text: String,
+    /// The name's own part, `Status`.
+    pub name: String,
+    /// Where it is first written.
+    pub span: Span,
+}
+
 /// A `uses other.commons` declaration (v0.3 §3.3).
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
+    /// #4045: `uses lib.y as Y` — the commons' public names are reached
+    /// qualified, `Y.Status`, and not bare. Mutually exclusive with `selected`.
+    pub alias: Option<Ident>,
+    /// #4045: `uses lib.y { Status as YStatus, describe }` — only the listed
+    /// names are in scope, each optionally under another name. A commons
+    /// exports types, functions and constants, so an item may name any of them;
+    /// renaming a type leaves its variants' names as they are. `None` for the
+    /// whole-commons forms; `Some` (possibly empty) for the braced form.
+    pub selected: Option<Vec<ConsumesItem>>,
+    /// #4045: the names the unit reads through this clause qualified (`Y.Status`
+    /// by alias `Y`, or `lib.y.Status`), sorted, each spelling once at its first
+    /// use. Set by the parser at the end of the unit, so the compiler knows which
+    /// of the commons' names to bring in under their qualified spelling.
+    pub qualified_refs: Vec<QualifiedRef>,
     pub span: Span,
     pub trivia: Trivia,
     /// A blank line separated this header line's leading comment from the
@@ -290,7 +354,8 @@ pub enum ExportKind {
 pub enum Visibility {
     /// Token-only outside the context: hold, pass, compare; no inspect, no construct.
     Opaque,
-    /// Readable shape outside the context: inspect fields, match variants; no construct.
+    /// Readable shape outside the context: inspect fields, match variants, and
+    /// construct (`.of`, a variant, a record literal; #3948). Not `.unsafe`.
     Transparent,
 }
 
@@ -507,6 +572,10 @@ pub struct StubClause {
     pub capability: Ident,
     /// The overridden method.
     pub method: Ident,
+    /// #3945: the explicit type arguments of a generic operation
+    /// (`stub Idempotency.dedup[Outcome](_) …`): the stub answers a call whose
+    /// own type arguments these are. Empty for an operation without any.
+    pub type_args: Vec<TypeRef>,
     /// One argument pattern per parameter (`_` or a value the arg must equal).
     pub args: Vec<ArgPattern>,
     /// The provision: a value, a fault, a per-call sequence, or none at all.
@@ -563,6 +632,13 @@ pub enum StubRhs {
     /// #2683: `never` — the call never completes. It exists to test a
     /// `within` against an effect that does not finish.
     Never(Span),
+    /// #3894: `rejected <Refusal>` — a consumed service's call is refused before its handler
+    /// runs, for the named `bynk` `Refusal` case. Only on a consumed-service stub.
+    Rejected(Ident, Span),
+    /// #3894: `faulted` — a consumed service's handler ran and faulted.
+    Faulted(Span),
+    /// #3894: `unreachable` — it is not known whether a consumed service's handler ran.
+    Unreachable(Span),
 }
 
 impl StubRhs {
@@ -572,6 +648,7 @@ impl StubRhs {
             StubRhs::Fails(s) => *s,
             StubRhs::ReturnsEach(_, s) => *s,
             StubRhs::Never(s) => *s,
+            StubRhs::Rejected(_, s) | StubRhs::Faulted(s) | StubRhs::Unreachable(s) => *s,
         }
     }
 }
@@ -1186,6 +1263,20 @@ pub struct ServiceDecl {
     /// response bodies, byte-for-byte unchanged; a route's `@json(options:)`
     /// overrides it.
     pub json: Option<JsonPolicy>,
+    /// The optional error-body policy (#3916) — an `errors { format: problem }`
+    /// section in the service body, only meaningful on a `from http` service.
+    /// `None` (or `format: bynk`) keeps Bynk's own error bodies, byte-for-byte
+    /// unchanged; a route's `@errors(format:)` overrides it.
+    pub errors: Option<ErrorsPolicy>,
+    /// The optional consumer delivery policy (#3877) — a `delivery { }` section
+    /// in the service body, only meaningful on a `from queue` service. `None`
+    /// keeps Cloudflare's defaults, except that a missing dead-letter queue is
+    /// warned about (`bynk.queue.no_dead_letter`).
+    pub delivery: Option<DeliveryPolicy>,
+    /// The optional email fallback (#3885) — a `fallback { forward: "<address>" }` section a
+    /// `from email` service may declare: mail its handler faulted on, or that could not be
+    /// parsed, is forwarded there instead of rejected. Validated by the checker.
+    pub fallback: Option<FallbackPolicy>,
     pub handlers: Vec<Handler>,
     pub documentation: Option<Doc>,
     pub span: Span,
@@ -1209,8 +1300,8 @@ pub struct ServiceDecl {
 #[derive(Debug, Clone)]
 pub struct CorsPolicy {
     /// The `cors { }` fields as written, in source order. Field names are
-    /// validated against the closed set (`origins`/`headers`/`credentials`/
-    /// `maxAge`) by the checker, not the parser.
+    /// validated against the closed set (`origins`/`headers`/`expose`/
+    /// `credentials`/`maxAge`) by the checker, not the parser.
     pub fields: Vec<CorsField>,
     pub span: Span,
     /// #1786: comments before the closing `}`, an orphaned doc block among
@@ -1266,6 +1357,19 @@ impl CorsPolicy {
     /// a `headers:` list; `None` leaves the emitter to apply its smart default.
     pub fn allow_headers(&self) -> Option<Vec<String>> {
         self.field("headers").and_then(Self::str_list_of)
+    }
+
+    /// #3925: the `expose:` header names the author listed, in order (empty when
+    /// the field is absent or malformed; the checker has reported the shape).
+    pub fn expose_headers(&self) -> Vec<String> {
+        self.field("expose")
+            .and_then(Self::str_list_of)
+            .unwrap_or_default()
+    }
+
+    /// #3925: `true` iff `expose` is exactly the wildcard `["*"]`.
+    pub fn is_wildcard_expose(&self) -> bool {
+        self.expose_headers() == ["*"]
     }
 
     /// The `Access-Control-Max-Age` in whole seconds, if a `maxAge:` duration was
@@ -1361,7 +1465,58 @@ impl SecurityPolicy {
             _ => None,
         }
     }
+
+    /// #3923: the `frameAncestors` entries as written (exact origins, `"self"`, or
+    /// `"*"`), if the field is a list of string literals; `None` when absent or
+    /// malformed (the checker has already reported it).
+    pub fn frame_ancestors(&self) -> Option<Vec<String>> {
+        match &self.field("frameAncestors")?.kind {
+            ExprKind::ListLit(items, ..) => items
+                .iter()
+                .map(|i| match &i.kind {
+                    ExprKind::StrLit(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => None,
+        }
+    }
+
+    /// #3923: the `referrerPolicy` identifier as written (camel case), if present.
+    pub fn referrer_policy(&self) -> Option<&str> {
+        match &self.field("referrerPolicy")?.kind {
+            ExprKind::Ident(id) => Some(id.name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// #3923: the verbatim `csp` policy, if the field is a string literal.
+    pub fn csp(&self) -> Option<&str> {
+        match &self.field("csp")?.kind {
+            ExprKind::StrLit(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
 }
+
+/// #3923: the `referrerPolicy` values, as `(written in Bynk, sent as the header)`.
+/// The standard Referrer-Policy tokens, in camel case.
+pub const REFERRER_POLICIES: &[(&str, &str)] = &[
+    ("noReferrer", "no-referrer"),
+    ("noReferrerWhenDowngrade", "no-referrer-when-downgrade"),
+    ("origin", "origin"),
+    ("originWhenCrossOrigin", "origin-when-cross-origin"),
+    ("sameOrigin", "same-origin"),
+    ("strictOrigin", "strict-origin"),
+    (
+        "strictOriginWhenCrossOrigin",
+        "strict-origin-when-cross-origin",
+    ),
+    ("unsafeUrl", "unsafe-url"),
+];
+
+/// #3923: the `Referrer-Policy` an HTML response gets when `security { }` names none.
+pub const DEFAULT_REFERRER_POLICY: &str = "strict-origin-when-cross-origin";
 
 /// A request-body-size policy on a `from http` service (v0.142, ADR 0165): the
 /// `limits { }` section in the service body. Parsed leniently as a list of
@@ -1419,6 +1574,18 @@ impl LimitsPolicy {
         }
     }
 
+    /// #3905: a `from websocket` service's `maxFrame`, the largest frame in bytes the Durable Object
+    /// reads or sends; [`DEFAULT_MAX_FRAME`] when the author gave none. A malformed value has been
+    /// reported by the checker and falls back to the default.
+    pub fn max_frame(&self) -> i64 {
+        match self.field("maxFrame").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if (1..=MAX_FRAME_CEILING).contains(value) => {
+                *value
+            }
+            _ => DEFAULT_MAX_FRAME,
+        }
+    }
+
     /// #3276: the service-wide per-file ceiling of a `@multipart` route, in bytes
     /// (`maxFile:`); `None` leaves a file part bounded by the body cap alone.
     pub fn max_file(&self) -> Option<i64> {
@@ -1438,9 +1605,26 @@ impl LimitsPolicy {
     }
 }
 
+/// #3905: the frame size, in bytes (1 MiB), a `from websocket` service reads and sends when no
+/// `limits { maxFrame }` says otherwise.
+pub const DEFAULT_MAX_FRAME: i64 = 1_048_576;
+
+/// #3905: the largest `maxFrame` a service may declare, in bytes (32 MiB): Cloudflare's own limit on
+/// an inbound message, which it closes with `1009` above it.
+pub const MAX_FRAME_CEILING: i64 = 33_554_432;
+
 /// #3276: the parts a `@multipart` request may carry when no `maxParts` says
 /// otherwise.
 pub const DEFAULT_MAX_PARTS: i64 = 64;
+
+/// #3921: the request-body ceiling, in bytes (1 MiB), of an HTTP route that takes a
+/// `body` when neither `@limit(maxBody:)` nor the service's `limits { maxBody }`
+/// says otherwise. It is the cross-context call wire's own cap.
+pub const DEFAULT_MAX_BODY: i64 = 1_048_576;
+
+/// #3921: the largest `maxBody` a literal may declare, in bytes (500 MB, the
+/// request-body ceiling of the largest Cloudflare plan). There is no "unlimited".
+pub const MAX_BODY_CEILING: i64 = 524_288_000;
 
 /// How an `Option` is written in an HTTP response body (#2858).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1502,6 +1686,201 @@ impl JsonPolicy {
     }
 }
 
+/// The shape of an error response body (#3916).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorFormat {
+    /// Bynk's own bodies: `{ "error": message }` from a variant and
+    /// `{ "kind": …, "details": … }` from a router rejection.
+    #[default]
+    Bynk,
+    /// RFC 9457 `application/problem+json`.
+    Problem,
+}
+
+impl ErrorFormat {
+    /// Read a bare `bynk` / `problem` identifier, the value of `format:`.
+    pub fn from_expr(e: &Expr) -> Option<ErrorFormat> {
+        match &e.kind {
+            ExprKind::Ident(n) if n.name == "bynk" => Some(ErrorFormat::Bynk),
+            ExprKind::Ident(n) if n.name == "problem" => Some(ErrorFormat::Problem),
+            _ => None,
+        }
+    }
+}
+
+/// An error-body policy on a `from http` service (#3916): the `errors { }`
+/// section in the service body. Parsed leniently as a list of `name: value`
+/// fields (as `json { }`); the closed set is `format`, whose value is the bare
+/// identifier `bynk` or `problem`.
+#[derive(Debug, Clone)]
+pub struct ErrorsPolicy {
+    pub fields: Vec<ErrorsField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// One `name: value` field inside an `errors { }` policy.
+#[derive(Debug, Clone)]
+pub struct ErrorsField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+impl ErrorsPolicy {
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+
+    /// The service-wide `format:`; a malformed value (already reported by the
+    /// checker) reads as the default, `bynk`.
+    pub fn format(&self) -> ErrorFormat {
+        self.field("format")
+            .and_then(ErrorFormat::from_expr)
+            .unwrap_or_default()
+    }
+}
+
+/// The shape a route's error bodies are written in: its own
+/// `@errors(format:)` wins over the service's `errors { format: }`, which wins
+/// over Bynk's own bodies.
+pub fn effective_error_format(service: Option<&ErrorsPolicy>, h: &Handler) -> ErrorFormat {
+    h.error_format()
+        .or_else(|| service.map(ErrorsPolicy::format))
+        .unwrap_or_default()
+}
+
+/// A queue consumer's delivery policy (#3877): the `delivery { }` section in a
+/// `from queue` service body. Parsed leniently as a list of `name: value` fields
+/// (as `limits { }`); the checker validates the closed key set, the value shapes
+/// and the ranges.
+#[derive(Debug, Clone)]
+pub struct DeliveryPolicy {
+    pub fields: Vec<DeliveryField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// One `name: value` field inside a `delivery { }` policy.
+#[derive(Debug, Clone)]
+pub struct DeliveryField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// An email service's fallback (#3885): the `fallback { }` section in a `from email` service body.
+/// Fields are parsed as `name: expr` pairs (as `delivery { }`); the checker validates the closed
+/// key set (`forward`), the address and the protocol.
+#[derive(Debug, Clone)]
+pub struct FallbackPolicy {
+    pub fields: Vec<FallbackField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+impl FallbackPolicy {
+    /// The raw value expression for a field, by name (the last one wins if a field is repeated;
+    /// the checker flags the duplicate).
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+}
+
+/// One `name: value` field inside a `fallback { }` policy.
+#[derive(Debug, Clone)]
+pub struct FallbackField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// What a `deadLetter:` key says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeadLetter<'a> {
+    /// Messages that reach the retry limit are written to this queue.
+    Queue(&'a str),
+    /// `None`: the author chose, deliberately, to let them be deleted.
+    Deleted,
+}
+
+impl DeliveryPolicy {
+    /// The value of the last field named `name` (a repeat is flagged by the
+    /// checker).
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+
+    fn int(&self, name: &str) -> Option<i64> {
+        match self.field(name).map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn secs(&self, name: &str) -> Option<i64> {
+        match self.field(name).map(|e| &e.kind) {
+            Some(ExprKind::DurationLit { millis, .. }) if millis % 1_000 == 0 => {
+                Some(millis / 1_000)
+            }
+            _ => None,
+        }
+    }
+
+    /// `retries:`, the consumer's `max_retries`. Malformed values were reported
+    /// by the checker and read as unset here.
+    pub fn retries(&self) -> Option<i64> {
+        self.int("retries").filter(|n| (0..=100).contains(n))
+    }
+
+    /// `retryDelay:` in whole seconds.
+    pub fn retry_delay_secs(&self) -> Option<i64> {
+        self.secs("retryDelay").filter(|n| (0..=86_400).contains(n))
+    }
+
+    /// `batchSize:`, the consumer's `max_batch_size`.
+    pub fn batch_size(&self) -> Option<i64> {
+        self.int("batchSize").filter(|n| (1..=100).contains(n))
+    }
+
+    /// `batchWait:` in whole seconds, the consumer's `max_batch_timeout`.
+    pub fn batch_wait_secs(&self) -> Option<i64> {
+        self.secs("batchWait").filter(|n| (0..=60).contains(n))
+    }
+
+    /// `concurrency:`, the consumer's `max_concurrency`.
+    pub fn concurrency(&self) -> Option<i64> {
+        self.int("concurrency").filter(|n| (1..=250).contains(n))
+    }
+
+    /// `deadLetter:`, `None` when the key is absent or malformed.
+    pub fn dead_letter(&self) -> Option<DeadLetter<'_>> {
+        match self.field("deadLetter").map(|e| &e.kind) {
+            Some(ExprKind::StrLit(s)) => Some(DeadLetter::Queue(s)),
+            Some(ExprKind::None) => Some(DeadLetter::Deleted),
+            _ => None,
+        }
+    }
+}
+
 /// The mode a route's response body is written in: its own `@json(options:)`
 /// wins over the service's `json { options: }`, which wins over the tagged
 /// default.
@@ -1554,8 +1933,13 @@ pub enum ServiceProtocol {
     /// domain's catch-all. `email` is a contextual identifier, matched as plain
     /// `Ident` text the way `websocket` is, so no lexer reservation. The
     /// service's handler is `on message(mail: InboundEmail) ->
-    /// Effect[EmailVerdict]`.
-    Email { address: String },
+    /// Effect[EmailVerdict]`. #3889: `address_const` is the constant the header
+    /// named, `from email(Support)`; the resolution pass fills `address` with the
+    /// literal it denotes, so every later reader sees the literal.
+    Email {
+        address: String,
+        address_const: Option<AddressConst>,
+    },
 }
 
 /// An agent declaration (v0.5 §3.6). Agents are state-bearing entities
@@ -1563,6 +1947,9 @@ pub enum ServiceProtocol {
 #[derive(Debug, Clone)]
 pub struct AgentDecl {
     pub name: Ident,
+    /// #3932: `@busyAfter(5.seconds)`, written immediately before `agent`. The
+    /// checker restricts which annotations apply.
+    pub annotations: Vec<Annotation>,
     /// State-migrations S3 (#2248): `agent New replaces Old` — the class
     /// `Old` is renamed to this one, its stored data moving with it.
     pub replaces: Option<Ident>,
@@ -1674,6 +2061,9 @@ pub struct StoreField {
     /// before the initialiser); the checker validates names against the closed
     /// registry and gates each to the slice that implements it.
     pub annotations: Vec<Annotation>,
+    /// #3793: `store name: Kind[T] replaces old` — the field was renamed from `old`, so its
+    /// stored value is read under the old name until the next commit writes the new one.
+    pub replaces: Option<Ident>,
     /// The fresh-key initial value (`= expr`), if given — same disposition as a
     /// `state` field's initialiser (ADRs 0003/0004 carry forward).
     pub init: Option<Expr>,
@@ -1710,6 +2100,10 @@ pub struct AnnotationArg {
     /// keeps the reference's span, so a diagnostic points where the author can
     /// act; this names the constant and where it is declared.
     pub from_const: Option<ConstRef>,
+    /// #3942: the constants a list argument's elements named
+    /// (`@allowedRecipients([OpsAddr])`), each with the reference's span, which
+    /// the resolved element keeps. Empty for every other argument.
+    pub element_consts: Vec<ConstRef>,
 }
 
 /// #3445: the constant an annotation argument named before the resolution pass
@@ -1722,6 +2116,56 @@ pub struct ConstRef {
     /// the reference (a span is an offset into one file); `None` for a constant
     /// from a sibling file or a used commons.
     pub decl_span: Option<Span>,
+}
+
+/// #3875: a cron handler's schedule written as the name of a constant,
+/// `on schedule(Nightly)`. The resolution pass fills the handler's
+/// [`HandlerKind::Cron`] `expr` with the literal the constant denotes, so every
+/// later reader sees the resolved text; this keeps the reference (its span, for
+/// go-to-definition and rename) and, when the constant was refused, why.
+#[derive(Debug, Clone)]
+pub struct ScheduleConst {
+    /// The reference as written.
+    pub name: Ident,
+    /// The span of the constant's declaration, when it is in the same file.
+    pub decl_span: Option<Span>,
+    /// Set by the resolution pass when the name does not denote a schedule.
+    pub refusal: Option<ScheduleRefusal>,
+}
+
+/// Why a [`ScheduleConst`] was not resolved.
+#[derive(Debug, Clone)]
+pub enum ScheduleRefusal {
+    /// No constant of that name is visible in the unit.
+    Unknown,
+    /// A constant that is not declared `String` or `CronSchedule`, or whose
+    /// initialiser is not a plain literal; the text names its declared type.
+    Declared(String),
+}
+
+/// #3889: an email service's address written as the name of a constant,
+/// `from email(Support)`. The resolution pass fills the protocol's `address`
+/// with the literal the constant denotes, so every later reader sees the
+/// resolved text; this keeps the reference (its span, for go-to-definition and
+/// rename) and, when the constant was refused, why.
+#[derive(Debug, Clone)]
+pub struct AddressConst {
+    /// The reference as written.
+    pub name: Ident,
+    /// The span of the constant's declaration, when it is in the same file.
+    pub decl_span: Option<Span>,
+    /// Set by the resolution pass when the name does not denote an address.
+    pub refusal: Option<AddressRefusal>,
+}
+
+/// Why an [`AddressConst`] was not resolved.
+#[derive(Debug, Clone)]
+pub enum AddressRefusal {
+    /// No constant of that name is visible in the unit.
+    Unknown,
+    /// A constant that is not declared exactly `String`, or whose initialiser is
+    /// not a plain literal; the text names its declared type.
+    Declared(String),
 }
 
 /// A storage kind applied to its element type(s) (v0.81): `Cell[Int]`,
@@ -1976,6 +2420,9 @@ pub struct Handler {
     /// `on call addItem(...)`). For service handlers, this is None (just
     /// `on call(...)`).
     pub method_name: Option<Ident>,
+    /// #3875: the constant an `on schedule(Name)` handler named; `None` for a
+    /// string-literal schedule and every other handler.
+    pub schedule_const: Option<ScheduleConst>,
     /// The `by <binder>: <Actor>` clause (v0.45), if present. Service handlers
     /// only; an absent clause inherits the protocol's default actor.
     pub by_clause: Option<ByClause>,
@@ -2002,6 +2449,32 @@ impl Handler {
                 }
                 _ => None,
             })
+    }
+
+    /// #3922: whether the handler's `@cache` says `noStore: true`, so its responses are
+    /// sent `Cache-Control: no-store` with no `ETag`.
+    pub fn cache_no_store(&self) -> bool {
+        self.annotations
+            .iter()
+            .find(|a| a.name.name == "cache")
+            .is_some_and(|ann| {
+                ann.args.iter().any(|arg| {
+                    arg.label.as_ref().is_some_and(|l| l.name == "noStore")
+                        && matches!(arg.value.kind, ExprKind::BoolLit(true))
+                })
+            })
+    }
+
+    /// #3921: the route's effective request-body cap, in bytes: its `@limit`, else
+    /// `service_cap` (the service's `limits { maxBody }`), else
+    /// [`DEFAULT_MAX_BODY`] when it is an HTTP route that takes a `body`. `None`
+    /// only for a route with no body (and for a non-HTTP handler).
+    pub fn effective_max_body(&self, service_cap: Option<i64>) -> Option<i64> {
+        self.limit_max_body().or(service_cap).or_else(|| {
+            (matches!(self.kind, HandlerKind::Http { .. })
+                && self.params.iter().any(|p| p.name.name == "body"))
+            .then_some(DEFAULT_MAX_BODY)
+        })
     }
 
     /// #3276: the handler's own `@limit(maxFile:)` per-file byte cap, if any.
@@ -2037,20 +2510,51 @@ impl Handler {
         })
     }
 
+    /// The handler's own `@errors(format:)`, if it carries a well-formed one
+    /// (#3916). The checker rejects a malformed `@errors`, so a bad value reads
+    /// as no override here.
+    pub fn error_format(&self) -> Option<ErrorFormat> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "errors")?;
+        ann.args.iter().find_map(|arg| match &arg.label {
+            Some(l) if l.name == "format" => ErrorFormat::from_expr(&arg.value),
+            _ => None,
+        })
+    }
+
     /// The media type a `@raw(contentType:)` handler declares: `Some` marks the
     /// handler's `body: Bytes` as the raw request body (request-side counterpart of
     /// ADR 0143). `"*/*"` accepts any content type. A malformed `@raw` is a checker
-    /// error, so a missing or non-literal `contentType` reads as not raw here.
+    /// error, so a missing or non-literal `contentType` reads as not raw here. A
+    /// list (#3912) reads as its first type: the one a driver sends.
     pub fn raw_content_type(&self) -> Option<&str> {
-        let ann = self.annotations.iter().find(|a| a.name.name == "raw")?;
-        ann.args
-            .iter()
-            .find_map(|arg| match (&arg.label, &arg.value.kind) {
-                (Some(l), ExprKind::StrLit(s)) if l.name == "contentType" && is_media_type(s) => {
-                    Some(s.as_str())
-                }
-                _ => None,
-            })
+        self.raw_content_types().into_iter().next()
+    }
+
+    /// Every media type a `@raw(contentType:)` handler accepts (#3912): the one
+    /// string, or the entries of a non-empty list of them (`"*/*"` is only valid
+    /// alone). Empty when the handler is not raw, or its `@raw` is malformed.
+    pub fn raw_content_types(&self) -> Vec<&str> {
+        let Some(ann) = self.annotations.iter().find(|a| a.name.name == "raw") else {
+            return Vec::new();
+        };
+        let Some(value) = ann.args.iter().find_map(|arg| match &arg.label {
+            Some(l) if l.name == "contentType" => Some(&arg.value),
+            _ => None,
+        }) else {
+            return Vec::new();
+        };
+        match &value.kind {
+            ExprKind::StrLit(s) if is_media_type(s) => vec![s.as_str()],
+            ExprKind::ListLit(items, ..) if !items.is_empty() => items
+                .iter()
+                .map(|e| match &e.kind {
+                    ExprKind::StrLit(s) if is_media_type(s) && s != "*/*" => Some(s.as_str()),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 }
 
@@ -2182,6 +2686,10 @@ pub enum HttpVariantPayload {
     /// `RawStreamed` (200) variant (K-streams, #2623). Its status is sent
     /// before the first chunk, so a fault mid-body aborts the response.
     RawStreamed,
+    /// Carries `(body: Stream[Bytes], contentType: String, range: ContentRange)` — a
+    /// raw body streamed as a `206 Partial Content` answer, with the `Content-Range`
+    /// its `range` states (#4389). `PartialContent`; `GET` routes only.
+    Partial,
     /// Carries `(status: ErrorStatus, body: Bytes, contentType: String)` — an
     /// error status the author chooses, with an author-owned body and no codec
     /// (#2341, L4). The `RawError` variant; `status` is one of the vocabulary's
@@ -2265,6 +2773,14 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         payload: HttpVariantPayload::None,
         status: 204,
     },
+    // #4389: a `Stream[Bytes]` body answering a range request, with the
+    // `Content-Range` its `ContentRange` states. A `GET` answer only, and
+    // sent as 206 before the body, like `RawStreamed`.
+    HttpVariant {
+        name: "PartialContent",
+        payload: HttpVariantPayload::Partial,
+        status: 206,
+    },
     // ── 3xx redirection (carry a `Location` URL) ─────────────────────────
     HttpVariant {
         name: "MovedPermanently",
@@ -2280,6 +2796,13 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         name: "SeeOther",
         payload: HttpVariantPayload::Location,
         status: 303,
+    },
+    // #4389: a conditional answer the handler works out itself (an object store's
+    // own `If-None-Match`), bodyless. The router's own `304` is separate.
+    HttpVariant {
+        name: "NotModified",
+        payload: HttpVariantPayload::None,
+        status: 304,
     },
     HttpVariant {
         name: "TemporaryRedirect",
@@ -2343,6 +2866,11 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         status: 411,
     },
     HttpVariant {
+        name: "PreconditionFailed",
+        payload: HttpVariantPayload::Message,
+        status: 412,
+    },
+    HttpVariant {
         name: "PayloadTooLarge",
         payload: HttpVariantPayload::Message,
         status: 413,
@@ -2356,6 +2884,11 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         name: "UnprocessableEntity",
         payload: HttpVariantPayload::Message,
         status: 422,
+    },
+    HttpVariant {
+        name: "PreconditionRequired",
+        payload: HttpVariantPayload::Message,
+        status: 428,
     },
     HttpVariant {
         name: "TooManyRequests",
@@ -2506,6 +3039,8 @@ pub enum QueueVariantPayload {
     None,
     /// Carries a `String` reason (`Retry`).
     Message,
+    /// Carries a `String` reason and a `Duration` delay (`RetryAfter`, #3881).
+    MessageDelay,
 }
 
 /// One variant of the built-in `QueueResult` sum (v0.44).
@@ -2516,7 +3051,8 @@ pub struct QueueVariant {
 }
 
 /// All `QueueResult` variants, in declaration order. `Ack` confirms the
-/// message; `Retry` redelivers it, carrying a reason for observability.
+/// message; `Retry` redelivers it, carrying a reason for observability;
+/// `RetryAfter` redelivers it after a delay (#3881).
 pub const QUEUE_VARIANTS: &[QueueVariant] = &[
     QueueVariant {
         name: "Ack",
@@ -2525,6 +3061,10 @@ pub const QUEUE_VARIANTS: &[QueueVariant] = &[
     QueueVariant {
         name: "Retry",
         payload: QueueVariantPayload::Message,
+    },
+    QueueVariant {
+        name: "RetryAfter",
+        payload: QueueVariantPayload::MessageDelay,
     },
 ];
 
@@ -2550,6 +3090,9 @@ pub struct TypeDecl {
     pub derives_kw: Option<Span>,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #3975: annotations before the `type` keyword (`@discriminator("type")` on a
+    /// sum). The checker admits only `@discriminator`, and only on a sum.
+    pub annotations: Vec<Annotation>,
     /// #2618: the span of a leading `private` modifier, when the declaration
     /// is unit-private: visible across its own unit's files (and to that
     /// unit's suites), never through `uses`. `None` is the default, public.
@@ -2597,7 +3140,7 @@ impl EventDecl {
     /// emission, `from Events(E)`/`Events.emit[E]`'s "must be an event, not
     /// just any type" gate) track that separately, alongside this.
     ///
-    /// Deliberately lossy: a `TypeDecl` has no `annotations`, so `@schema(N)`
+    /// Deliberately lossy: a `TypeDecl`'s annotations are a sum's `@discriminator`, so `@schema(N)`
     /// does not survive this conversion. Nothing downstream of this
     /// synthesis needs the event's schema version — only the emitter's own
     /// `Events.emit` lowering does, and it reads [`EventDecl::schema_version`]
@@ -2610,6 +3153,7 @@ impl EventDecl {
             type_params: Vec::new(),
             body: TypeBody::Record(self.body.clone()),
             documentation: self.documentation.clone(),
+            annotations: Vec::new(),
             span: self.span,
             trivia: self.trivia.clone(),
             private: None,
@@ -2792,6 +3336,11 @@ pub struct RecordField {
     pub name: Ident,
     pub type_ref: TypeRef,
     pub refinement: Option<Refinement>,
+    /// #3793: `name: T replaces old` — the field was renamed from `old`. A stored or
+    /// locked field is read under the old name too, and a wire field accepts the old key
+    /// on input; the checker records the rename in the schema lock. `None` for a field
+    /// that was never renamed.
+    pub replaces: Option<Ident>,
     /// v0.11: an optional initial-value expression. Only meaningful on agent
     /// `state` fields (the field's fresh-key value); ignored / rejected on
     /// record-type fields by the checker.
@@ -2809,16 +3358,45 @@ impl RecordField {
     /// a query key, a form field), `None` when it reads under its own name. The
     /// checker refuses a `@name` that is not exactly one string literal.
     pub fn wire_name(&self) -> Option<String> {
-        self.annotations
-            .iter()
-            .find(|a| a.name.name == "name")
-            .and_then(|a| match a.args.as_slice() {
-                [arg] => match &arg.value.kind {
-                    ExprKind::StrLit(s) => Some(s.clone()),
-                    _ => None,
-                },
+        annotation_string(&self.annotations, "name")
+    }
+}
+
+/// #3975: the string a `@<name>("…")` annotation among `annotations` carries, `None` when there
+/// is no such annotation or its argument is not one string literal (the checker reports that).
+pub fn annotation_string(annotations: &[Annotation], name: &str) -> Option<String> {
+    annotations
+        .iter()
+        .find(|a| a.name.name == name)
+        .and_then(|a| match a.args.as_slice() {
+            [arg] => match &arg.value.kind {
+                ExprKind::StrLit(s) => Some(s.clone()),
                 _ => None,
-            })
+            },
+            _ => None,
+        })
+}
+
+impl TypeDecl {
+    /// #3975: the sum's `@discriminator("…")`, the JSON key that names the variant; `None`
+    /// when the sum uses the default `kind`.
+    pub fn discriminator(&self) -> Option<String> {
+        annotation_string(&self.annotations, "discriminator")
+    }
+}
+
+impl Variant {
+    /// #3975: the variant's `@name("…")`, the value the discriminator takes on the wire;
+    /// `None` when it is the variant's own name.
+    pub fn wire_name(&self) -> Option<String> {
+        annotation_string(&self.annotations, "name")
+    }
+}
+
+impl VariantField {
+    /// #3975: the payload field's `@name("…")`, its key on the wire.
+    pub fn wire_name(&self) -> Option<String> {
+        annotation_string(&self.annotations, "name")
     }
 }
 
@@ -2852,6 +3430,9 @@ pub struct EmbedsClause {
 /// payload-less variant is a simple tag.
 #[derive(Debug, Clone)]
 pub struct Variant {
+    /// #3975: annotations before the variant (`@name("charge.succeeded") ChargeSucceeded`), in
+    /// the pipe form (after the `|`) and the `enum { }` shorthand. Only `@name` is admitted.
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub payload: Vec<VariantField>,
     pub span: Span,
@@ -2869,6 +3450,8 @@ pub struct Variant {
 /// declarations like record fields, but do not carry refinement in v0.2.
 #[derive(Debug, Clone)]
 pub struct VariantField {
+    /// #3975: annotations before the payload field (`@name("pull_request") pr: PullRequest`).
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub type_ref: TypeRef,
     pub span: Span,
@@ -2950,22 +3533,39 @@ pub enum DurationUnit {
     Days,
 }
 
+/// Which spelling of a [`DurationUnit`] a literal used: `hour` or `hours`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitForm {
+    Singular,
+    Plural,
+}
+
 impl DurationUnit {
-    /// Resolve a unit name (`minutes`) to its variant, or `None` if it is not one
-    /// of the closed set. Used by the parser to recognise an `<int>.<unit>`
-    /// literal; an unrecognised name leaves the expression a field access.
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "milliseconds" => DurationUnit::Milliseconds,
-            "seconds" => DurationUnit::Seconds,
-            "minutes" => DurationUnit::Minutes,
-            "hours" => DurationUnit::Hours,
-            "days" => DurationUnit::Days,
-            _ => return None,
+    /// Every unit, in ascending size.
+    pub const ALL: [DurationUnit; 5] = [
+        DurationUnit::Milliseconds,
+        DurationUnit::Seconds,
+        DurationUnit::Minutes,
+        DurationUnit::Hours,
+        DurationUnit::Days,
+    ];
+
+    /// Resolve a unit name (`minutes`, `minute`) to its variant and the form it
+    /// was written in, or `None` if it is not one of the closed set (#3947).
+    /// Used by the parser to recognise an `<int>.<unit>` literal.
+    pub fn from_name(name: &str) -> Option<(Self, UnitForm)> {
+        Self::ALL.into_iter().find_map(|u| {
+            if u.name() == name {
+                Some((u, UnitForm::Plural))
+            } else if u.singular_name() == name {
+                Some((u, UnitForm::Singular))
+            } else {
+                None
+            }
         })
     }
 
-    /// The unit name as written.
+    /// The plural unit name (`hours`), the one written with every number but `1`.
     pub fn name(self) -> &'static str {
         match self {
             DurationUnit::Milliseconds => "milliseconds",
@@ -2973,6 +3573,26 @@ impl DurationUnit {
             DurationUnit::Minutes => "minutes",
             DurationUnit::Hours => "hours",
             DurationUnit::Days => "days",
+        }
+    }
+
+    /// The singular unit name (`hour`), the one written with `1`.
+    pub fn singular_name(self) -> &'static str {
+        match self {
+            DurationUnit::Milliseconds => "millisecond",
+            DurationUnit::Seconds => "second",
+            DurationUnit::Minutes => "minute",
+            DurationUnit::Hours => "hour",
+            DurationUnit::Days => "day",
+        }
+    }
+
+    /// The unit name that agrees with `value`: singular for `1`, plural otherwise.
+    pub fn name_for(self, value: i64) -> &'static str {
+        if value == 1 {
+            self.singular_name()
+        } else {
+            self.name()
         }
     }
 
@@ -3021,6 +3641,57 @@ pub struct DecimalBound {
     pub span: Span,
 }
 
+/// A `Duration` refinement bound (#3948): `InRange(1.second, 1.day)`,
+/// `AtLeast(60.seconds)`. `millis` is the erased value the checks compare.
+#[derive(Debug, Clone)]
+pub struct DurationBound {
+    pub millis: i64,
+    /// The bound as written (`60.seconds`, `-1.second`).
+    pub lexeme: String,
+    pub span: Span,
+}
+
+/// The bound of a one-sided predicate (`AtLeast`, `AtMost`, #3948), of the
+/// base's own type.
+#[derive(Debug, Clone)]
+pub enum PredBound {
+    Int(IntBound),
+    Float(FloatBound),
+    Decimal(DecimalBound),
+    Duration(DurationBound),
+}
+
+impl PredBound {
+    /// The bound as written.
+    pub fn lexeme(&self) -> &str {
+        match self {
+            PredBound::Int(b) => &b.lexeme,
+            PredBound::Float(b) => &b.lexeme,
+            PredBound::Decimal(b) => &b.lexeme,
+            PredBound::Duration(b) => &b.lexeme,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            PredBound::Int(b) => b.span,
+            PredBound::Float(b) => b.span,
+            PredBound::Decimal(b) => b.span,
+            PredBound::Duration(b) => b.span,
+        }
+    }
+
+    /// The base type this bound's literal belongs to.
+    pub fn base(&self) -> BaseType {
+        match self {
+            PredBound::Int(_) => BaseType::Int,
+            PredBound::Float(_) => BaseType::Float,
+            PredBound::Decimal(_) => BaseType::Decimal,
+            PredBound::Duration(_) => BaseType::Duration,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Refinement {
     pub predicates: Vec<RefinementPred>,
@@ -3032,6 +3703,15 @@ pub struct Refinement {
     pub span: Span,
 }
 
+/// #3946: whether `T.of(value)` is total, returning `T` rather than
+/// `Result[T, ValidationError]`. True for a named type (`type Id = Int`): not
+/// opaque, and a refinement with no predicates (annotations alone are not a
+/// predicate). `Float` is the exception: its finite-number check is part of
+/// the type (ADR 0040), so a `Float` named type stays fallible.
+pub fn of_is_total(base: BaseType, refinement: Option<&Refinement>, opaque: bool) -> bool {
+    !opaque && base != BaseType::Float && refinement.is_none_or(|r| r.predicates.is_empty())
+}
+
 #[derive(Debug, Clone)]
 pub struct RefinementPred {
     pub kind: PredKind,
@@ -3039,7 +3719,61 @@ pub struct RefinementPred {
     /// (`1_000`), digit separators kept (#2993); `None` for other predicates
     /// and for a predicate built without source. Only the formatter reads it.
     pub arg_text: Option<String>,
+    /// #3951: a predicate written with a constant in an argument
+    /// (`InRange(1, MaxQty)`), before the resolution pass has replaced the
+    /// constant with the literal it is bound to. While this is set `kind` is a
+    /// placeholder that nothing may read: the pass clears it once every
+    /// argument resolves, and the checker reports an argument that did not.
+    pub pending: Option<Box<PendingPred>>,
+    /// #3951: the constants the pass substituted into this predicate, so a
+    /// diagnostic and the IDE can name them. Empty for a literal-only predicate.
+    pub from_const: Vec<ConstRef>,
     pub span: Span,
+}
+
+/// #3951: the arguments of a predicate written with a constant in one of them.
+#[derive(Debug, Clone)]
+pub struct PendingPred {
+    /// The predicate's name as written (`InRange`, `MaxLength`, …).
+    pub name: String,
+    pub args: Vec<PendingArg>,
+    /// The constants the resolution pass could not substitute, and why, for the
+    /// checker to report as `bynk.refine.bound_not_literal` (or
+    /// `bynk.resolve.const_cycle`). Empty until the pass has run.
+    pub unresolved: Vec<UnresolvedBound>,
+}
+
+/// #3951: a constant a predicate argument names that is not usable as the
+/// literal it stands for.
+#[derive(Debug, Clone)]
+pub struct UnresolvedBound {
+    pub name: Ident,
+    pub why: BoundRefusal,
+}
+
+/// Why a constant in a predicate argument was refused (ADR 0826's rule).
+#[derive(Debug, Clone)]
+pub enum BoundRefusal {
+    /// No constant of that name is in scope.
+    Unknown,
+    /// The constant is declared a type other than exactly the argument's.
+    Declared(String),
+    /// The constant is not bound to a literal, or to another constant that is.
+    NotLiteral,
+    /// The constant is declared the refined type whose bound it names; the
+    /// path is `const → type → const`.
+    Cycle(Vec<String>),
+}
+
+/// One argument of a [`PendingPred`].
+#[derive(Debug, Clone)]
+pub enum PendingArg {
+    /// A numeric literal written in place.
+    Num(PredBound),
+    /// A string literal written in place (`Matches`).
+    Str(String),
+    /// A constant to be replaced by the literal it denotes.
+    Const(Ident),
 }
 
 #[derive(Debug, Clone)]
@@ -3053,6 +3787,12 @@ pub enum PredKind {
     InRangeF(FloatBound, FloatBound),
     /// `InRange` with decimal bounds (#2622): `InRange(0.00d, 100.00d)`.
     InRangeD(DecimalBound, DecimalBound),
+    /// `InRange` with `Duration` bounds (#3948): `InRange(1.second, 1.day)`.
+    InRangeDur(DurationBound, DurationBound),
+    /// One-sided lower bound, inclusive (#3948): `AtLeast(60.seconds)`.
+    AtLeast(PredBound),
+    /// One-sided upper bound, inclusive (#3948).
+    AtMost(PredBound),
     MinLength(i64),
     MaxLength(i64),
     Length(i64),
@@ -3062,6 +3802,32 @@ pub enum PredKind {
     /// #2867: a `String` that is a real calendar date, exactly `YYYY-MM-DD`
     /// (years 0000-9999). The same date rule `Instant.fromIso` applies.
     IsoDate,
+    /// #3873: a `String` that is a valid Cloudflare cron schedule
+    /// ([`crate::cron::is_cron_expression`]).
+    Cron,
+}
+
+/// #3950: a regex literal's leading `(?flags)` group of letters, split off: the
+/// rest of the pattern and the letters. `None` when the literal opens with no
+/// such group (a lookaround `(?=`, `(?!`, `(?<` or a non-capturing `(?:` is not
+/// one). The one reading `Matches` and the `String` kernel's regex literals
+/// share; whether the letters are valid is the checker's to say.
+pub fn leading_regex_flag_group(literal: &str) -> Option<(&str, &str)> {
+    let rest = literal.strip_prefix("(?")?;
+    let end = rest.find(')')?;
+    let flags = &rest[..end];
+    (!flags.is_empty() && flags.chars().all(|c| c.is_ascii_alphabetic()))
+        .then(|| (&rest[end + 1..], flags))
+}
+
+/// #3950: the pattern and `RegExp` flags a `Matches` argument runs as: the
+/// leading flag group moved into the flags, and the `u` (Unicode) flag every
+/// Bynk regex carries added. The checker has already refused an invalid group.
+pub fn matches_pattern_and_flags(literal: &str) -> (String, String) {
+    match leading_regex_flag_group(literal) {
+        Some((pat, flags)) => (pat.to_string(), format!("{flags}u")),
+        None => (literal.to_string(), "u".to_string()),
+    }
 }
 
 /// #2867: is `s` exactly `YYYY-MM-DD` and a date that exists? The one
@@ -3099,7 +3865,12 @@ impl PredKind {
     pub fn name(&self) -> &'static str {
         match self {
             PredKind::Matches(_) => "Matches",
-            PredKind::InRange(..) | PredKind::InRangeF(..) | PredKind::InRangeD(..) => "InRange",
+            PredKind::InRange(..)
+            | PredKind::InRangeF(..)
+            | PredKind::InRangeD(..)
+            | PredKind::InRangeDur(..) => "InRange",
+            PredKind::AtLeast(_) => "AtLeast",
+            PredKind::AtMost(_) => "AtMost",
             PredKind::MinLength(_) => "MinLength",
             PredKind::MaxLength(_) => "MaxLength",
             PredKind::Length(_) => "Length",
@@ -3107,6 +3878,7 @@ impl PredKind {
             PredKind::Positive => "Positive",
             PredKind::NonEmpty => "NonEmpty",
             PredKind::IsoDate => "IsoDate",
+            PredKind::Cron => "Cron",
         }
     }
 }
@@ -3530,8 +4302,10 @@ pub enum TypeRef {
     Option(Box<TypeRef>, Span),
     /// `Effect[T]` — the built-in generic Effect type (v0.5).
     Effect(Box<TypeRef>, Span),
-    /// `HttpResult[T]` — the built-in HTTP-result sum (v0.9).
-    HttpResult(Box<TypeRef>, Span),
+    /// `HttpResult[T]` or `HttpResult[T, E]` — the built-in HTTP-result sum (v0.9). The optional
+    /// second argument is the element a `Streaming` body carries (`String` or `SseEvent`, #4394);
+    /// without it a `Streaming` body is the lenient `Stream[String]`-or-`Stream[SseEvent]` it always was.
+    HttpResult(Box<TypeRef>, Option<Box<TypeRef>>, Span),
     /// `QueueResult` — the built-in queue verdict sum (`Ack | Retry`),
     /// non-generic; the required return of a queue handler (v0.44).
     QueueResult(Span),
@@ -3624,7 +4398,7 @@ impl TypeRef {
             TypeRef::Result(_, _, s) => *s,
             TypeRef::Option(_, s) => *s,
             TypeRef::Effect(_, s) => *s,
-            TypeRef::HttpResult(_, s) => *s,
+            TypeRef::HttpResult(_, _, s) => *s,
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
@@ -3675,7 +4449,7 @@ pub fn stream_path(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Connection(a, _)
             | TypeRef::History(a, _) => walk(a, types, visited),
@@ -3751,8 +4525,20 @@ pub fn type_carries_stream(
     .is_some()
 }
 
+/// Every type name `t` mentions, descending through wrappers and generic arguments.
+pub fn type_ref_heads(t: &TypeRef) -> Vec<String> {
+    let mut out = Vec::new();
+    heads(t, &mut out);
+    out
+}
+
 /// Every type name a type mentions (heads of applications and named types,
 /// descending through wrappers and generic arguments), pushed onto `out`.
+#[cfg(test)]
+pub(crate) fn collect_type_heads(t: &TypeRef, out: &mut Vec<String>) {
+    heads(t, out)
+}
+
 fn heads(t: &TypeRef, out: &mut Vec<String>) {
     match t {
         TypeRef::Named(id) => out.push(id.name.clone()),
@@ -3770,11 +4556,16 @@ fn heads(t: &TypeRef, out: &mut Vec<String>) {
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::Connection(a, _)
         | TypeRef::History(a, _) => heads(a, out),
+        TypeRef::HttpResult(a, e, _) => {
+            heads(a, out);
+            if let Some(e) = e {
+                heads(e, out);
+            }
+        }
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             heads(a, out);
             heads(b, out);
@@ -3922,7 +4713,7 @@ pub fn recursive_generic_path(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Connection(a, _)
             | TypeRef::History(a, _) => walk(a, types, visited),
@@ -4007,7 +4798,7 @@ pub fn polymorphic_recursion_edges(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Stream(a, _)
             | TypeRef::Connection(a, _)
@@ -4211,8 +5002,11 @@ impl ExprKind {
             ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } => {
                 self.number_literal(false)
             }
-            ExprKind::DurationLit { .. }
-            | ExprKind::InterpStr(..)
+            // #3948: a `Duration` literal, in milliseconds (it has no negated form).
+            ExprKind::DurationLit { millis, .. } => {
+                Some(RefinableLiteral::Duration { millis: *millis })
+            }
+            ExprKind::InterpStr(..)
             | ExprKind::BoolLit(..)
             | ExprKind::Ident(..)
             | ExprKind::Call { .. }
@@ -4373,6 +5167,8 @@ pub enum RefinableLiteral<'a> {
         scale: u32,
         negated: bool,
     },
+    /// A `Duration` literal's resolved milliseconds (#3948).
+    Duration { millis: i64 },
     /// A string literal's value.
     Str(&'a str),
 }
@@ -4746,6 +5542,10 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
 pub struct FaultsExpr {
     pub call: Expr,
     pub principal: Option<CallSiteActor>,
+    /// #4035: `expect <call> violates <name>`: the claim names the invariant, transition or
+    /// `@unique` constraint that refused the call's commit (a dotted path: `name`,
+    /// `Agent.name` or `field.index`). `None` is the bare `faults` claim, which any fault meets.
+    pub violates: Option<Vec<Ident>>,
 }
 
 /// An observation of a capability operation's recorded calls (v0.117, testing
@@ -4755,6 +5555,9 @@ pub struct FaultsExpr {
 pub struct ObservationExpr {
     pub cap: Ident,
     pub op: Ident,
+    /// #3945: the explicit type arguments (`Idempotency.dedup[Outcome]`): the
+    /// claim is about the calls made with these. Empty counts every call.
+    pub type_args: Vec<TypeRef>,
     pub matcher: ObservationMatcher,
 }
 
@@ -5560,6 +6363,7 @@ fn f(x: Int) -> Int {
                 let ObservationExpr {
                     cap: _,
                     op: _,
+                    type_args: _,
                     matcher,
                 } = obs.as_ref();
                 match matcher {
@@ -5576,7 +6380,9 @@ fn f(x: Int) -> Int {
                 }
             }
             ExprKind::Faults(f) => {
-                let FaultsExpr { call, principal } = f.as_ref();
+                let FaultsExpr {
+                    call, principal, ..
+                } = f.as_ref();
                 if let Some(CallSiteActor {
                     actor: _,
                     identity,
@@ -5876,7 +6682,7 @@ capability Clock {
 }
 
 service greeter {
-  on call(name: String) -> Effect[String] {
+  on call(name: String) -> Effect[String] by Caller {
     Effect.pure(name)
   }
 }

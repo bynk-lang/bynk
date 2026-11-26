@@ -74,6 +74,14 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.http.body_cap_defaulted",
+        "a hint, which the positive-fixture gate leaves out; `tests/system/body_cap_hint.rs` holds it",
+    ),
+    (
+        "bynk.store.unique_implies_indexed",
+        "a warning; `positive/4038_store_unique_behaviour` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.actor.signed_cookie_ttl_long",
         "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
     ),
@@ -102,6 +110,34 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3446_cookie_untyped_has_field` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.cron.numeric_weekday",
+        "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.cron.uneven_step",
+        "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.d1.decimal_numeric_affinity",
+        "a warning; `positive/4200_d1_decimal_row` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.queue.no_dead_letter",
+        "a warning; `positive/3877_queue_no_dead_letter` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.queue.undecodable_unreachable",
+        "a warning; `positive/4279_queue_undecodable_unreachable` holds it with `expected_warnings.txt`, and `positive/4279_queue_undecodable_system_silent` shows a `system` case without it",
+    ),
+    (
+        "bynk.queue.untyped_send",
+        "a warning; `positive/3644_queue_one_consumer_many_producers` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.http.headers_field_consumed_optional",
+        "a warning; `positive/4266_headers_consumed_optional` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),
@@ -112,6 +148,14 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.mysql.sql_invalid",
         "a warning (the parser is not MySQL's own); `positive/3322_mysql_sql_invalid` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.agent.write_after_erase",
+        "a warning; `positive/3931_agent_erase_write_after` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.match.refined_pattern_is_range",
+        "a warning; `positive/3972_refined_pattern_is_range` holds it with `expected_warnings.txt`, and `positive/3972_range_pattern_is_exhaustive` holds the good case",
     ),
 ];
 
@@ -280,6 +324,7 @@ fn errors_of(source: &str, tag: &str) -> Vec<Reported> {
     let located = |errors: &[bynk_syntax::error::CompileError]| {
         errors
             .iter()
+            .filter(|e| bynk_syntax::Severity::for_error(e) != bynk_syntax::Severity::Hint)
             .map(|e| Reported {
                 code: e.category.to_string(),
                 line: bynk_syntax::span::line_col(source, e.span.start).0,
@@ -344,6 +389,7 @@ fn project_errors(root: &Path) -> Vec<Reported> {
     failure
         .errors
         .iter()
+        .filter(|a| bynk_syntax::Severity::for_error(&a.error) != bynk_syntax::Severity::Hint)
         .map(|attributed| {
             let text = attributed
                 .source_path
@@ -853,7 +899,7 @@ fn marked_lines_are_compared_without_comment_or_indent() {
 fn a_block_body_is_indented_past_the_line_that_opens_it() {
     // Two spaces or four per level, nested blocks, and a blank line all pass.
     assert!(layout_failures("fn f() -> Int {\n  1\n}").is_empty());
-    let nested = "service s {\n    on call() -> Int {   // ✗ why\n        1\n    }\n}";
+    let nested = "service s {\n    on call() -> Int by Caller {   // ✗ why\n        1\n    }\n}";
     assert!(layout_failures(nested).is_empty());
     assert!(layout_failures("fn f() -> Int { … }\nf(1)  // ✗\nf(2)  // ✓").is_empty());
     // The regression (#3163): the body's indentation was written as source

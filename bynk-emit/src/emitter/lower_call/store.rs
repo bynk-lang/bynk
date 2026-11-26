@@ -11,15 +11,17 @@ use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsStmt, TsType, TsUnaryOp};
 
 use super::super::lower::{Lowered, Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    arrow, binary, block, block_arrow, call, const_, expr_stmt, id, iife_block, member,
-    method_call_bare, param, paren, ret, string_of, take,
-};
+use super::super::lower_list::{iife_block, string_of, take};
 use super::super::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use super::query::{
-    QueryShape, QuerySource, held_values_source, lower_query_by_name, note_par_fan_out,
-    path_values_source, query_key_cmp, query_keyed, query_other_elem,
+    QueryShape, QuerySource, each, held_values_source, lower_query_by_name, path_values_source,
+    query_key_cmp, query_keyed, query_other_elem,
 };
+use crate::ts_build::{
+    arrow, binary, block, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
+    paren, ret, str_lit, strict_neq,
+};
+use bynk_ts::TsParam;
 
 /// A store field's handle, `<var>.<field>`, as a node (the working-state variable and the
 /// field's name are each an identifier).
@@ -30,19 +32,14 @@ struct Receiver {
 impl Receiver {
     fn new(var: &str, field: &str) -> Self {
         Receiver {
-            node: member(id(var), field),
+            node: member(ident(var), field),
         }
     }
 }
 
 /// `undefined`.
 fn undefined() -> TsExpr {
-    id("undefined")
-}
-
-/// `"text"`.
-fn lit_str(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
+    ident("undefined")
 }
 
 /// `return undefined;`, the end of every effectful operation.
@@ -57,12 +54,7 @@ fn awaited(e: TsExpr) -> TsStmt {
 
 /// `recv.method(args)` over a handle.
 fn op(recv: &TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    method_call_bare(recv.clone(), method, args)
-}
-
-/// `a !== b`.
-fn ne(a: TsExpr, b: TsExpr) -> TsExpr {
-    binary(TsBinaryOp::StrictNotEq, a, b)
+    method_call(recv.clone(), method, args)
 }
 
 /// `if (cond) { body }`.
@@ -85,7 +77,7 @@ fn throw_error(message: &str) -> TsStmt {
     TsStmt::throw_stmt(
         TsExpr::New {
             callee: Box::new(member_node("globalThis", "Error")),
-            args: vec![lit_str(message)],
+            args: vec![str_lit(message)],
         },
         None,
     )
@@ -120,7 +112,6 @@ fn query_op(
     cx: &mut LowerCtx,
 ) -> bynk_ts::TsExpr {
     let Site { e, method, args } = site;
-    note_par_fan_out(cx, method);
     let tys = cx.ty_render();
     let other_elem = query_other_elem(args, cx);
     lower_query_by_name(
@@ -148,6 +139,17 @@ fn query_op(
     })
 }
 
+/// #4037: the entry key of `k` in the store field `field`. A scalar key (`String`, `Int` or a
+/// refined or opaque type over one) is `String(k)`, as it always was; any other `Key` type is its
+/// canonical encoding, which faults naming the field when it is over the platform's key size.
+fn key_of(cx: &LowerCtx, field: &str, k: TsExpr) -> TsExpr {
+    if cx.agent_store_key_is_composite(field) {
+        call(ident("__bynkStoreKey"), vec![str_lit(field), k])
+    } else {
+        string_of(k)
+    }
+}
+
 /// The persisted-store receivers of a method call: a `store` field of the
 /// current agent used as `<field>.<op>(…)`. Each kind has its own function, tried
 /// in order; `None` means the receiver is none of them.
@@ -159,7 +161,8 @@ pub(in crate::emitter) fn lower_store_method_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
-    lower_store_held_map_call(e, receiver, method, args, cx, pre)
+    lower_early_exit_scan(e, receiver, method, args, cx, pre)
+        .or_else(|| lower_store_held_map_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_map_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_set_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_cache_call(e, receiver, method, args, cx, pre))
@@ -171,7 +174,7 @@ pub(in crate::emitter) fn lower_store_method_call(
 fn resolve_connection(frame: &TsType, id_: TsExpr) -> TsExpr {
     call(
         TsExpr::TypeApp {
-            callee: Box::new(id("__resolveConnection")),
+            callee: Box::new(ident("__resolveConnection")),
             type_args: vec![frame.clone()],
         },
         vec![member_node("this", "state"), id_],
@@ -183,11 +186,11 @@ fn close_if_some() -> TsStmt {
     if_then(
         binary(
             TsBinaryOp::StrictEq,
-            member(id("__c"), "tag"),
-            lit_str("Some"),
+            member(ident("__c"), "tag"),
+            str_lit("Some"),
         ),
         vec![awaited(call(
-            member(member(id("__c"), "value"), "close"),
+            member(member(ident("__c"), "value"), "close"),
             vec![],
         ))],
     )
@@ -215,7 +218,7 @@ fn lower_store_held_map_call(
     // commit as any other persisted field.
     // P6.21 (partial, continued): the receiver test reads the checker's own
     // `Callee::Store`/`Callee::Query` (P6.0): entry ops (`put`/`remove`/`contains`/`size`/
-    // `get`) are `Callee::Store`, lifted query ops (e.g. `parTraverse`) `Callee::Query`.
+    // `get`) are `Callee::Store`, lifted query ops (e.g. `parForEach`) `Callee::Query`.
     // `agent_held_map_frame` stays: it answers which *kind* of store field this is (held vs
     // ordinary), not the shadowing question `Callee` already settles.
     if let ExprKind::Ident(id_) = &receiver.kind
@@ -237,25 +240,25 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_("__new", None, call(id("__connIdOf"), vec![v])),
-                    const_(
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    const_typed("__new", None, call(ident("__connIdOf"), vec![v])),
+                    const_typed(
                         "__old",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(id("__old"), undefined()),
-                            ne(id("__old"), id("__new")),
+                            strict_neq(ident("__old"), undefined()),
+                            strict_neq(ident("__old"), ident("__new")),
                         ),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, id("__old"))),
+                            const_typed("__c", None, resolve_connection(&f_node, ident("__old"))),
                             close_if_some(),
                         ],
                     ),
-                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    awaited(op(&m.node, "put", vec![ident("__k"), ident("__new")])),
                     done(),
                 ])
             }
@@ -263,18 +266,18 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_(
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    const_typed(
                         "__cid",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(id("__cid"), undefined()),
+                        strict_neq(ident("__cid"), undefined()),
                         vec![
-                            const_("__c", None, resolve_connection(&f_node, id("__cid"))),
+                            const_typed("__c", None, resolve_connection(&f_node, ident("__cid"))),
                             close_if_some(),
-                            awaited(op(&m.node, "remove", vec![id("__k")])),
+                            awaited(op(&m.node, "remove", vec![ident("__k")])),
                         ],
                     ),
                     done(),
@@ -283,7 +286,7 @@ fn lower_store_held_map_call(
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&m.node, "has", vec![string_of(k)])
+                op(&m.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -293,11 +296,15 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 sync_iife(vec![
-                    const_("__cid", None, op(&m.node, "get", vec![string_of(k)])),
+                    const_typed(
+                        "__cid",
+                        None,
+                        op(&m.node, "get", vec![key_of(cx, &id_.name, k)]),
+                    ),
                     ret(TsExpr::Conditional {
-                        test: Box::new(ne(id("__cid"), undefined())),
-                        consequent: Box::new(resolve_connection(&f_node, id("__cid"))),
-                        alternate: Box::new(id("None")),
+                        test: Box::new(strict_neq(ident("__cid"), undefined())),
+                        consequent: Box::new(resolve_connection(&f_node, ident("__cid"))),
+                        alternate: Box::new(ident("None")),
                     }),
                 ])
             }
@@ -362,7 +369,8 @@ fn lower_store_map_call(
         if method.name == "filter"
             && let [arg] = args
             && let ExprKind::Lambda(lam) = &arg.kind
-            && let Some(routed) = pre.absorb_built(route_indexed_filter(&m, &idx_fields, lam, cx))
+            && let Some(routed) =
+                pre.absorb_built(route_indexed_filter(&m, &id_.name, &idx_fields, lam, cx))
         {
             return Some(routed);
         }
@@ -381,22 +389,22 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_("__new", None, v),
-                    const_(
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    const_typed("__new", None, v),
+                    const_typed(
                         "__old",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
                         binary(
                             TsBinaryOp::And,
-                            ne(id("__old"), undefined()),
-                            ne(id("__old"), id("__new")),
+                            strict_neq(ident("__old"), undefined()),
+                            strict_neq(ident("__old"), ident("__new")),
                         ),
-                        vec![awaited(call(member(id("__old"), "close"), vec![]))],
+                        vec![awaited(call(member(ident("__old"), "close"), vec![]))],
                     ),
-                    awaited(op(&m.node, "put", vec![id("__k"), id("__new")])),
+                    awaited(op(&m.node, "put", vec![ident("__k"), ident("__new")])),
                     done(),
                 ])
             }
@@ -406,7 +414,7 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    awaited(op(&m.node, "put", vec![string_of(k), v])),
+                    awaited(op(&m.node, "put", vec![key_of(cx, &id_.name, k), v])),
                     done(),
                 ])
             }
@@ -420,17 +428,17 @@ fn lower_store_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
-                    const_(
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    const_typed(
                         "__o",
                         None,
-                        TsExpr::Await(Box::new(op(&m.node, "get", vec![id("__k")]))),
+                        TsExpr::Await(Box::new(op(&m.node, "get", vec![ident("__k")]))),
                     ),
                     if_then(
-                        ne(id("__o"), undefined()),
+                        strict_neq(ident("__o"), undefined()),
                         vec![
-                            awaited(call(member(id("__o"), "close"), vec![])),
-                            awaited(op(&m.node, "remove", vec![id("__k")])),
+                            awaited(call(member(ident("__o"), "close"), vec![])),
+                            awaited(op(&m.node, "remove", vec![ident("__k")])),
                         ],
                     ),
                     done(),
@@ -440,14 +448,14 @@ fn lower_store_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    awaited(op(&m.node, "remove", vec![string_of(k)])),
+                    awaited(op(&m.node, "remove", vec![key_of(cx, &id_.name, k)])),
                     done(),
                 ])
             }
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&m.node, "has", vec![string_of(k)])
+                op(&m.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -456,24 +464,24 @@ fn lower_store_map_call(
             "get" => {
                 let c = a;
                 let [k] = take(c);
-                let present = op(&m.node, "get", vec![id("__k")]);
+                let present = op(&m.node, "get", vec![ident("__k")]);
                 let some = arrow(
-                    vec![param("__v", None)],
-                    call(id("Some"), vec![TsExpr::NonNull(Box::new(id("__v")))]),
+                    vec![TsParam::new("__v", None)],
+                    call(ident("Some"), vec![TsExpr::NonNull(Box::new(ident("__v")))]),
                 );
-                let then_get = call(id("__bynkThen"), vec![present, some]);
+                let then_get = call(ident("__bynkThen"), vec![present, some]);
                 let branch = TsExpr::Conditional {
-                    test: Box::new(id("__h")),
+                    test: Box::new(ident("__h")),
                     consequent: Box::new(then_get),
-                    alternate: Box::new(id("None")),
+                    alternate: Box::new(ident("None")),
                 };
                 async_iife(vec![
-                    const_("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     ret(call(
-                        id("__bynkThen"),
+                        ident("__bynkThen"),
                         vec![
-                            op(&m.node, "has", vec![id("__k")]),
-                            arrow(vec![param("__h", None)], branch),
+                            op(&m.node, "has", vec![ident("__k")]),
+                            arrow(vec![TsParam::new("__h", None)], branch),
                         ],
                     )),
                 ])
@@ -481,21 +489,26 @@ fn lower_store_map_call(
             "update" => {
                 let c = a;
                 let [k, f] = take(c);
-                let modify = block_arrow_of(
-                    vec![param("__c", None), param("__p", None)],
+                let modify = block_arrow(
+                    vec![TsParam::new("__c", None), TsParam::new("__p", None)],
+                    false,
                     vec![
                         if_then(
                             TsExpr::Unary {
                                 op: TsUnaryOp::Not,
-                                expr: Box::new(id("__p")),
+                                expr: Box::new(ident("__p")),
                             },
                             vec![throw_error("Map.update: key absent")],
                         ),
-                        ret(apply(f, TsExpr::NonNull(Box::new(id("__c"))))),
+                        ret(apply(f, TsExpr::NonNull(Box::new(ident("__c"))))),
                     ],
                 );
                 async_iife(vec![
-                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    awaited(op(
+                        &m.node,
+                        "modify",
+                        vec![key_of(cx, &id_.name, k), modify],
+                    )),
                     done(),
                 ])
             }
@@ -503,13 +516,20 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, default, f] = take(c);
                 let cur = TsExpr::Conditional {
-                    test: Box::new(id("__p")),
-                    consequent: Box::new(TsExpr::NonNull(Box::new(id("__c")))),
+                    test: Box::new(ident("__p")),
+                    consequent: Box::new(TsExpr::NonNull(Box::new(ident("__c")))),
                     alternate: Box::new(paren(default)),
                 };
-                let modify = arrow(vec![param("__c", None), param("__p", None)], apply(f, cur));
+                let modify = arrow(
+                    vec![TsParam::new("__c", None), TsParam::new("__p", None)],
+                    apply(f, cur),
+                );
                 async_iife(vec![
-                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    awaited(op(
+                        &m.node,
+                        "modify",
+                        vec![key_of(cx, &id_.name, k), modify],
+                    )),
                     done(),
                 ])
             }
@@ -574,7 +594,7 @@ fn lower_store_set_call(
                     let c = a;
                     let [k] = take(c);
                     async_iife(vec![
-                        awaited(op(&s.node, which, vec![string_of(k)])),
+                        awaited(op(&s.node, which, vec![key_of(cx, &id_.name, k)])),
                         done(),
                     ])
                 }
@@ -582,7 +602,7 @@ fn lower_store_set_call(
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&s.node, "has", vec![string_of(k)])
+                op(&s.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -608,11 +628,11 @@ fn awaited_now(deps: TsExpr) -> TsExpr {
 fn is_live() -> TsExpr {
     binary(
         TsBinaryOp::And,
-        ne(id("__e"), undefined()),
+        strict_neq(ident("__e"), undefined()),
         binary(
             TsBinaryOp::GreaterThan,
-            member(id("__e"), "exp"),
-            id("__now"),
+            member(ident("__e"), "exp"),
+            ident("__now"),
         ),
     )
 }
@@ -625,7 +645,7 @@ fn stamped(value: TsExpr, ttl: i64) -> TsExpr {
             "exp".to_string(),
             binary(
                 TsBinaryOp::Add,
-                id("__now"),
+                ident("__now"),
                 TsExpr::Lit(TsLit::Num(ttl.to_string())),
             ),
         ),
@@ -662,10 +682,13 @@ fn lower_store_cache_call(
         // operation reads it once, in its own `const __now`.
         let deps = cx.cap_deps_node();
         let now = || {
-            const_(
+            const_typed(
                 "__now",
                 None,
-                call(id("__noteClock"), vec![id(&var), awaited_now(deps.clone())]),
+                call(
+                    ident("__noteClock"),
+                    vec![ident(&var), awaited_now(deps.clone())],
+                ),
             )
         };
         let a = lower_args(args, cx, pre);
@@ -674,7 +697,7 @@ fn lower_store_cache_call(
                 let c_ = a;
                 let [k] = take(c_);
                 async_iife(vec![
-                    awaited(op(&c.node, "remove", vec![string_of(k)])),
+                    awaited(op(&c.node, "remove", vec![key_of(cx, &id_.name, k)])),
                     done(),
                 ])
             }
@@ -683,7 +706,11 @@ fn lower_store_cache_call(
                 let [k, v] = take(c_);
                 async_iife(vec![
                     now(),
-                    awaited(op(&c.node, "put", vec![string_of(k), stamped(v, ttl)])),
+                    awaited(op(
+                        &c.node,
+                        "put",
+                        vec![key_of(cx, &id_.name, k), stamped(v, ttl)],
+                    )),
                     done(),
                 ])
             }
@@ -692,15 +719,15 @@ fn lower_store_cache_call(
                 let [k] = take(c_);
                 async_iife(vec![
                     now(),
-                    const_(
+                    const_typed(
                         "__e",
                         None,
-                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![key_of(cx, &id_.name, k)]))),
                     ),
                     ret(TsExpr::Conditional {
                         test: Box::new(paren(is_live())),
-                        consequent: Box::new(call(id("Some"), vec![member(id("__e"), "v")])),
-                        alternate: Box::new(id("None")),
+                        consequent: Box::new(call(ident("Some"), vec![member(ident("__e"), "v")])),
+                        alternate: Box::new(ident("None")),
                     }),
                 ])
             }
@@ -709,10 +736,10 @@ fn lower_store_cache_call(
                 let [k] = take(c_);
                 async_iife(vec![
                     now(),
-                    const_(
+                    const_typed(
                         "__e",
                         None,
-                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![key_of(cx, &id_.name, k)]))),
                     ),
                     ret(is_live()),
                 ])
@@ -724,15 +751,16 @@ fn lower_store_cache_call(
                     ret(TsExpr::Await(Box::new(op(
                         &c.node,
                         "liveSize",
-                        vec![id("__now")],
+                        vec![ident("__now")],
                     )))),
                 ])
             }
             "update" => {
                 let c_ = a;
                 let [k, f] = take(c_);
-                let modify = block_arrow_of(
-                    vec![param("__e", None)],
+                let modify = block_arrow(
+                    vec![TsParam::new("__e", None)],
+                    false,
                     vec![
                         if_then(
                             TsExpr::Unary {
@@ -741,13 +769,13 @@ fn lower_store_cache_call(
                             },
                             vec![throw_error("Cache.update: key absent")],
                         ),
-                        ret(stamped(apply(f, member(id("__e"), "v")), ttl)),
+                        ret(stamped(apply(f, member(ident("__e"), "v")), ttl)),
                     ],
                 );
                 async_iife(vec![
                     now(),
-                    const_("__k", None, string_of(k)),
-                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
             }
@@ -756,20 +784,21 @@ fn lower_store_cache_call(
                 let [k, default, f] = take(c_);
                 let cur = TsExpr::Conditional {
                     test: Box::new(paren(is_live())),
-                    consequent: Box::new(member(id("__e"), "v")),
+                    consequent: Box::new(member(ident("__e"), "v")),
                     alternate: Box::new(paren(default)),
                 };
-                let modify = block_arrow_of(
-                    vec![param("__e", None)],
+                let modify = block_arrow(
+                    vec![TsParam::new("__e", None)],
+                    false,
                     vec![
-                        const_("__cur", None, cur),
-                        ret(stamped(apply(f, id("__cur")), ttl)),
+                        const_typed("__cur", None, cur),
+                        ret(stamped(apply(f, ident("__cur")), ttl)),
                     ],
                 );
                 async_iife(vec![
                     now(),
-                    const_("__k", None, string_of(k)),
-                    awaited(op(&c.node, "modify", vec![id("__k"), modify])),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
+                    awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
             }
@@ -818,8 +847,8 @@ fn lower_store_log_call(
                 let c = a;
                 let [v] = take(c);
                 let mut body = vec![
-                    const_("__now", None, now),
-                    awaited(op(&g.node, "append", vec![v, id("__now")])),
+                    const_typed("__now", None, now),
+                    awaited(op(&g.node, "append", vec![v, ident("__now")])),
                 ];
                 if let Some(ms) = retain {
                     body.push(awaited(op(
@@ -827,7 +856,7 @@ fn lower_store_log_call(
                         "prune",
                         vec![binary(
                             TsBinaryOp::Sub,
-                            id("__now"),
+                            ident("__now"),
                             TsExpr::Lit(TsLit::Num(ms.to_string())),
                         )],
                     )));
@@ -935,14 +964,27 @@ fn lower_store_cell_call(
 /// `None` (fall back to scan).
 fn route_indexed_filter(
     m: &Receiver,
+    map_name: &str,
     fields: &[String],
     lam: &LambdaExpr,
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    if fields.is_empty() {
-        return None;
-    }
+    let (field, value) = index_route(fields, lam)?;
+    let v = pre.lower_node(value, cx);
+    let built = paren(arrow(
+        vec![],
+        call(
+            member(m.node.clone(), "byIndex"),
+            vec![str_lit(field), index_key(cx, map_name, field, v)],
+        ),
+    ));
+    Some(pre.finish(built))
+}
+
+/// The posting-list lookup `lam` is, if it is one: `(p) => p.<field> == <value>` (either order) over
+/// an indexed field, with a value that does not mention `p`. Gives the field and the value.
+fn index_route<'e>(fields: &[String], lam: &'e LambdaExpr) -> Option<(&'e str, &'e Expr)> {
     let [param] = lam.params.as_slice() else {
         return None;
     };
@@ -955,22 +997,17 @@ fn route_indexed_filter(
         Some(f) => (f, rhs.as_ref()),
         None => (as_param_field(pname, rhs)?, lhs.as_ref()),
     };
-    if !fields.iter().any(|f| f == field) || !param_independent(value, pname) {
-        return None;
+    (fields.iter().any(|f| f == field) && param_independent(value, pname)).then_some((field, value))
+}
+
+/// The posting key of `v` in the `@indexed` field `field` of `map`: `String(v)`, or the canonical
+/// encoding when the field is not a scalar (#4037).
+fn index_key(cx: &LowerCtx, map: &str, field: &str, v: TsExpr) -> TsExpr {
+    if cx.agent_store_index_is_composite(map, field) {
+        call(ident("__bynkKeyEncode"), vec![v])
+    } else {
+        string_of(v)
     }
-    let v = pre.lower_node(value, cx);
-    let built = {
-        let c = vec![v];
-        let [v] = take(c);
-        paren(arrow(
-            vec![],
-            call(
-                member(m.node.clone(), "byIndex"),
-                vec![lit_str(field), string_of(v)],
-            ),
-        ))
-    };
-    Some(pre.finish(built))
 }
 
 /// `e` as `<param>.<field>` → the field name; else `None`.
@@ -1028,7 +1065,141 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
     }
 }
 
-/// A non-async arrow with a multi-line block body, `(params) => { body }`.
-fn block_arrow_of(params: Vec<bynk_ts::TsParam>, body: Vec<TsStmt>) -> TsExpr {
-    block_arrow(params, false, body)
+// ---- Early-exit scans (#4036) ---------------------------------------------------------------
+//
+// `<field>.any(p)`, `.all(p)`, and on a `Log` `.first()`, `.firstOrElse(d)` and `.take(n).collect()`,
+// over stages that need no whole collection (`filter`, `map`, `flatMap`, and on a `Log` `skip`),
+// read the collection a page at a time and stop at the answer. Whether a stage may stop early is
+// a question of order: a `Log`'s pages are in append order, a `Map`'s are in key order while its
+// scan order is insertion order (ADR 0109), so a `Map` stops early only where the answer does not
+// depend on the order, `any` and `all` (Decision D). Every other shape keeps the whole-array scan.
+// An equality `filter` on an `@indexed` field is the source of an `any`/`all`, read from its posting
+// list the same way (#4300).
+
+/// A terminal of the scan, with the argument count it takes.
+fn scan_terminal(name: &str) -> Option<usize> {
+    match name {
+        "first" | "collect" => Some(0),
+        "any" | "all" | "firstOrElse" => Some(1),
+        _ => None,
+    }
+}
+
+/// `<field>.<stages>….<terminal>(…)` as one scan over the handle's `lazyValues()`, or `None` when
+/// the call is not that shape, or the shape must read everything.
+fn lower_early_exit_scan(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    if scan_terminal(&method.name) != Some(args.len()) {
+        return None;
+    }
+    // The stages, outermost first, down to the receiver the chain starts at.
+    let mut stages: Vec<(&Ident, &[Expr])> = Vec::new();
+    let mut root = (e, receiver);
+    let mut cur = receiver;
+    while let ExprKind::MethodCall {
+        receiver: inner,
+        method: m,
+        args: a,
+        ..
+    } = &cur.kind
+    {
+        stages.push((m, a));
+        root = (cur, inner);
+        cur = inner;
+    }
+    let ExprKind::Ident(field) = &cur.kind else {
+        return None;
+    };
+    let is_store_call = matches!(
+        cx.commons().callee(root.0.id),
+        Some(Callee::Store { .. } | Callee::Query { .. })
+    );
+    let chained = |x: &Expr| matches!(cx.commons().callee(x.id), Some(Callee::Kernel { .. }));
+    if !is_store_call || (root.0.id != e.id && !chained(e)) {
+        return None;
+    }
+    let is_map = cx.agent_store_map_value_ts(&field.name).is_some();
+    let is_log = cx.agent_store_log_retain(&field.name).is_some();
+    if !is_map && !is_log {
+        return None;
+    }
+    // An equality `filter` on an indexed `Map` field is a posting-list lookup: `any` and `all` read
+    // that list a page at a time, and any other terminal keeps the lookup's whole-list read, since
+    // the posting list is in primary-key order and only a whole read recovers insertion order.
+    let (first_stage, first_args) = stages
+        .last()
+        .map_or((&method.name, args), |(m, a)| (&m.name, a));
+    let routed = if is_map
+        && first_stage == "filter"
+        && let [arg] = first_args
+        && let ExprKind::Lambda(lam) = &arg.kind
+    {
+        index_route(&cx.agent_store_index_fields(&field.name), lam)
+    } else {
+        None
+    };
+    if routed.is_some() && !matches!(method.name.as_str(), "any" | "all") {
+        return None;
+    }
+    let take_count = match (method.name.as_str(), stages.first()) {
+        ("collect", Some((m, [n]))) if is_log && m.name == "take" => {
+            stages.remove(0);
+            Some(n)
+        }
+        _ => None,
+    };
+    let order_free = matches!(method.name.as_str(), "any" | "all");
+    let terminal_ok = order_free || (is_log && (take_count.is_some() || method.name != "collect"));
+    let stages_ok = stages
+        .iter()
+        .all(|(m, a)| match (m.name.as_str(), a.len()) {
+            ("filter" | "map" | "flatMap", 1) => true,
+            ("skip", 1) => is_log,
+            _ => false,
+        });
+    // `collect` without a `take` reads everything, so it stays the array path.
+    if !terminal_ok || !stages_ok || (method.name == "collect" && take_count.is_none()) {
+        return None;
+    }
+    let var = cx.agent_store_var().to_string();
+    let handle = Receiver::new(&var, &field.name).node;
+    let mut scan = match routed {
+        Some((index, value)) => {
+            // The lookup is the innermost stage: it is the source, not a filter over it.
+            stages.pop();
+            let v = pre.lower_node(value, cx);
+            let key = index_key(cx, &field.name, index, v);
+            method_call(handle, "lazyByIndex", vec![str_lit(index), key])
+        }
+        None => method_call(handle, "lazyValues", vec![]),
+    };
+    for (m, a) in stages.iter().rev() {
+        let f = pre.lower_node(&a[0], cx);
+        scan = match m.name.as_str() {
+            "filter" => call(ident("__scanFilter"), vec![scan, each(f)]),
+            "map" => call(ident("__scanMap"), vec![scan, each(f)]),
+            "flatMap" => call(ident("__scanFlatMap"), vec![scan, each(f)]),
+            _ => call(ident("__scanSkip"), vec![scan, f]),
+        };
+    }
+    let a = lower_args(args, cx, pre);
+    let built = match (method.name.as_str(), take_count) {
+        (_, Some(n)) => call(ident("__scanTake"), vec![scan, pre.lower_node(n, cx)]),
+        ("any", _) => call(ident("__scanAny"), vec![scan, each(first_arg(a))]),
+        ("all", _) => call(ident("__scanAll"), vec![scan, each(first_arg(a))]),
+        ("first", _) => call(ident("__scanFirst"), vec![scan]),
+        _ => call(ident("__scanFirstOrElse"), vec![scan, first_arg(a)]),
+    };
+    Some(built)
+}
+
+fn first_arg(a: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let [x] = take(a);
+    x
 }

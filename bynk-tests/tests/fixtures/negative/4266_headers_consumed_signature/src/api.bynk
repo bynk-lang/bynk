@@ -1,0 +1,13 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor Hook { auth = Signature(secret = "WH_SECRET", header = "X-Signature") }
+
+type H = { @name("x-signature") sig: String }
+
+service api from http {
+    on POST("/x") (headers: H, body: String) -> Effect[HttpResult[String]] by Hook {
+        Ok("x")
+    }
+}

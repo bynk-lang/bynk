@@ -8,7 +8,7 @@ fn eachNote(items: List[Int], f: Int -> Effect[()]) -> Effect[()] {
 }
 
 service place {
-	on call(n: Int) -> Effect[Int] given Audit, Logger {
+	on call(n: Int) -> Effect[Int] by Caller given Audit, Logger {
 		let a <- book(n)
 		let b <- announce(a)
 		let c <- positive(b)
@@ -31,7 +31,7 @@ agent Tally {
 }
 
 service tally {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		Tally("t1").add(n)
 	}
 }

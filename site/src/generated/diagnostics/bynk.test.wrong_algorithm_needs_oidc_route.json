@@ -1,0 +1,12 @@
+{
+  "blurb": "`by WrongAlgorithm` sends two otherwise valid tokens under an algorithm the seam must refuse: one with `alg: none`, and one `HS256`-signed with the JWKS public key as the secret. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.wrong_algorithm_needs_oidc_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAlgorithm      // ✗ a `Bearer` route is not an `Oidc` one\nlet r <- api.GET(\"/who\") by WrongAlgorithm     // ✓",
+  "severity": "error",
+  "summary": "A case drives `by WrongAlgorithm` at an address that is not an http route with an `Oidc` actor; it sends a token with `alg: none` and an `HS256` token keyed with the JWKS public key, so only an `Oidc` seam can refuse them."
+}

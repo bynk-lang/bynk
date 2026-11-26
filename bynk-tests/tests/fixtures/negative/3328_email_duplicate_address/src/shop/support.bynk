@@ -6,13 +6,13 @@ consumes bynk.cloudflare {
 }
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Accept
   }
 }
 
 service helpdesk from email("Support@Shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Accept
   }
 }

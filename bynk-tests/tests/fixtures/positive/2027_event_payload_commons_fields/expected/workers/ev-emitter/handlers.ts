@@ -2,6 +2,7 @@
 // context ev.emitter
 
 import type { Result } from "../../__bynk_runtime/result.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -29,12 +30,12 @@ export const Pinged = {
 };
 
 export const api = {
-  async http_POST_ping(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<string>> {
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+  async http_POST_ping(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<string>> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const line = { qty: (3 as Qty), tag: someTag() };
       const __r0 = await (async () => {
-        __events.push({ type: "Pinged", payload: { n: (7 as Qty), tag: someTag(), line: line, lines: [line] }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Pinged", payload: { n: (7 as Qty), tag: someTag(), line: line, lines: [line] }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "ev.emitter", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return HttpResult.Created("sent");
     })();

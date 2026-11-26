@@ -402,7 +402,12 @@ impl Lin<'_> {
             && matches!(
                 method,
                 "forEach"
+                    | "parForEach"
+                    | "parForEachWith"
                     | "parTraverse"
+                    | "parTraverseWith"
+                    | "parTraverseAllWith"
+                    | "parTraverseTryWith"
                     | "traverseAll"
                     | "parTraverseAll"
                     | "traverseTry"

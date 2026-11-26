@@ -14,7 +14,7 @@ export function compose(env: Env) {
     async ping(n: number) {
       return handlers.ping.call(n, deps);
     },
-    async status(__who: { tag: "Caller", identity: string } | { tag: "Legacy" } | { tag: "Ledger" }, id: string) {
+    async status(__who: { tag: "Caller"; identity: string } | { tag: "Legacy" } | { tag: "Ledger" }, id: string) {
       return handlers.status.call(id, { ...deps, who: __who });
     },
     async total(n: number) {

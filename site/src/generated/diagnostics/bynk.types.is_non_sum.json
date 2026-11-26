@@ -1,0 +1,12 @@
+{
+  "blurb": "`value is Variant` asks which variant a sum, `Result` or `Option` holds, so its left side must be one of those. On an `Int`, a `String` or a record there is no variant to ask about. To test a number or a string against a refined type, name that type: `n is Quantity`. To compare by value, use `==`. A variant the sum does not have is `bynk.types.is_unknown_variant`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_non_sum",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "type Light = | Red | Green\n\nfn ready(n: Int) -> Bool {\n    n is Green        // ✗ `n` is an `Int`, not a `Light`\n}\n\nfn ready(l: Light) -> Bool {\n    l is Green        // ✓\n}",
+  "severity": "error",
+  "summary": "`is` was applied to a value that is not a sum type."
+}

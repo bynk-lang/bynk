@@ -15,6 +15,9 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use render::LabelHome;
 
+/// The name of the environment a build uses when `--env` is omitted (#3941).
+pub use bynk_project::vars::DEFAULT_ENVIRONMENT;
+pub mod check_json;
 pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;
@@ -41,6 +44,7 @@ pub mod test_filter;
 pub mod test_json;
 pub mod test_runner;
 pub mod test_stream;
+pub mod tools;
 pub mod tsc_report;
 
 pub use compile_cmd::{
@@ -75,6 +79,8 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
         Ok(options_for_split(input, paths)?
             .compatibility_flags(workers.compatibility_flags)
             .workers_dev(workers.workers_dev)
+            .observability(workers.observability)
+            .tuning(workers.tuning)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
             .fixture_files(discovery::list_fixture_folder(input)?)
@@ -127,6 +133,8 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .sources(sources)
                 .compatibility_flags(workers.compatibility_flags)
                 .workers_dev(workers.workers_dev)
+                .observability(workers.observability)
+                .tuning(workers.tuning)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
                 .fixture_files(fixture_files)
@@ -749,6 +757,51 @@ pub fn project_check_short_lines(check: &project::ProjectCheck) -> Vec<String> {
         .collect()
 }
 
+/// #4123: record that an input could not be checked (see
+/// [`check_json::Collector::incomplete`]).
+fn mark_unchecked(sink: Option<&mut check_json::Collector>) {
+    if let Some(sink) = sink {
+        sink.incomplete = true;
+    }
+}
+
+/// #4123: a project check's diagnostics, hints included, for a machine format.
+/// Each is positioned against its own file's text; a secondary label against
+/// the file it lies in, as [`print_attributed`] draws it, and one whose file has
+/// no text is kept without positions.
+fn collect_project_check(check: &project::ProjectCheck, out: &mut Vec<check_json::Diagnostic>) {
+    use check_json::{Home, diagnostic};
+    for ae in &check.errors {
+        let label_names: Vec<Option<(String, &str)>> = (0..ae.error.labels.len())
+            .map(|i| match ae.label_file(i) {
+                project::LabelFile::Other(path) => check
+                    .snapshots
+                    .iter()
+                    .find(|(p, _)| p == path)
+                    .map(|(_, t)| (display_path(&check.display_root, path), t.as_str())),
+                project::LabelFile::FirstParty {
+                    identity_path,
+                    source,
+                } => Some(((*identity_path).to_string(), *source)),
+                _ => None,
+            })
+            .collect();
+        let primary = attributed_snapshot(ae, &check.snapshots, &check.display_root);
+        let primary = primary.as_ref().map(|(name, text)| Home::new(name, text));
+        let others: Vec<Option<Home<'_>>> = label_names
+            .iter()
+            .map(|n| n.as_ref().map(|(name, text)| Home::new(name, text)))
+            .collect();
+        let labels: Vec<Option<&Home<'_>>> = (0..ae.error.labels.len())
+            .map(|i| match ae.label_file(i) {
+                project::LabelFile::Primary => primary.as_ref(),
+                _ => others[i].as_ref(),
+            })
+            .collect();
+        out.push(diagnostic(&ae.error, primary.as_ref(), &labels));
+    }
+}
+
 /// [`print_project_check`] via [`project_check_short_lines`].
 pub fn print_project_check_short(check: &project::ProjectCheck) {
     for line in project_check_short_lines(check) {
@@ -784,7 +837,9 @@ pub struct FmtArgs {
     /// Files or directories to format. A directory formats the `.bynk` files
     /// `check` would read in it: a project root's `[paths] include` trees minus
     /// `exclude`, a workspace root's members, or any other directory walked
-    /// recursively. Use `-` for stdin → stdout.
+    /// recursively. With none, formats the project holding the working
+    /// directory (the same files `check` reads); outside a project that is an
+    /// error. Use `-` for stdin → stdout.
     pub inputs: Vec<PathBuf>,
     /// Check formatting without writing changes. Exits non-zero if any
     /// file is not already canonical.
@@ -973,19 +1028,50 @@ impl ManifestCache {
     }
 }
 
+/// #4124: the nearest ancestor of the working directory holding a `bynk.toml`,
+/// as a path relative to it (`.`, `..`, `../..`), so the files `fmt` names and
+/// reports read the way a typed `bynk fmt <dir>` would. The search is
+/// [`bynk_fmt::find_manifest`], the one [`ManifestCache::options_for`] uses for
+/// the `[fmt]` style, so a run's file set and its style come from one manifest.
+fn enclosing_project_root() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let manifest = bynk_fmt::find_manifest(&cwd)?;
+    let root = manifest.parent()?;
+    let depth = cwd.strip_prefix(root).ok()?.components().count();
+    Some(if depth == 0 {
+        PathBuf::from(".")
+    } else {
+        (0..depth).map(|_| "..").collect()
+    })
+}
+
 /// The `fmt` command body run by `bynk fmt`: each input is
 /// formatted and rewritten only when it changes; `--check` reports
 /// non-canonical files without writing; `-` reads stdin and writes the
 /// formatted result to stdout. `prog` prefixes messages (`bynk fmt: …`).
 pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
     let check = args.check;
-    if args.inputs.is_empty() {
-        crate::emsg!(
-            "{prog} fmt: error: no input files (pass file or directory paths, or `-` for stdin)"
-        );
-        return ExitCode::FAILURE;
-    }
-    let inputs = match expand_fmt_inputs(&args.inputs) {
+    // #4124: with no paths, format the enclosing project, the same file set
+    // `check` reads (`[paths] include` minus `exclude`). Outside a project
+    // there is nothing to default to, so today's error stands.
+    let defaulted;
+    let given: &[PathBuf] = if args.inputs.is_empty() {
+        match enclosing_project_root() {
+            Some(root) => {
+                defaulted = [root];
+                &defaulted
+            }
+            None => {
+                crate::emsg!(
+                    "{prog} fmt: error: no input files (pass file or directory paths, or `-` for stdin)"
+                );
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        &args.inputs
+    };
+    let inputs = match expand_fmt_inputs(given) {
         Ok(inputs) => inputs,
         Err(e) => {
             crate::emsg!("{prog} fmt: error: {e}");
@@ -1247,10 +1333,15 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 pub fn run_check(
     prog: &str,
     input: &Path,
-    short: bool,
+    output: CheckOutput,
     fix: Option<&[String]>,
     each: bool,
+    environment: &str,
 ) -> ExitCode {
+    let short = output == CheckOutput::Short;
+    // #4123: a machine format collects every member's diagnostics and writes one
+    // document at the end, rather than printing as it goes.
+    let mut collected = output.is_machine().then(check_json::Collector::default);
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
         Err(message) => {
@@ -1294,11 +1385,19 @@ pub fn run_check(
             failed |= !fix::fix_all(prog, scope, &named);
         }
         for member in &members {
-            if !short {
+            if !short && collected.is_none() {
                 eprintln!("{}", member_header(member));
             }
-            failed |= !check_one(prog, member, short, Some(member));
+            failed |= !check_one(
+                prog,
+                member,
+                short,
+                Some(member),
+                environment,
+                collected.as_mut(),
+            );
         }
+        emit_collected(output, collected);
         return if failed {
             ExitCode::FAILURE
         } else {
@@ -1308,10 +1407,51 @@ pub fn run_check(
     let fixed = scope
         .as_ref()
         .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
-    if check_one(prog, input, short, None) && fixed {
+    let passed = check_one(prog, input, short, None, environment, collected.as_mut());
+    emit_collected(output, collected);
+    if passed && fixed {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// How `bynk check` reports its diagnostics (`--format`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CheckOutput {
+    /// Ariadne rendering with source context, on stderr.
+    Rich,
+    /// One `path:line:col: severity[category]: message` line each, on stderr.
+    Short,
+    /// #4123: one JSON document on stdout ([`check_json`]).
+    Json,
+    /// #4123: one JSON diagnostic per line, then a summary line, on stdout.
+    Ndjson,
+}
+
+impl CheckOutput {
+    /// Whether the output is a machine format, written to stdout when the run
+    /// ends, rather than printed to stderr as diagnostics are found.
+    pub fn is_machine(self) -> bool {
+        matches!(self, Self::Json | Self::Ndjson)
+    }
+}
+
+/// #4123: write the diagnostics a machine format collected. Nothing is written
+/// for the human formats, which printed as they went, nor when an input could
+/// not be checked at all: stderr has said why, and a document would read as
+/// "checked, nothing found".
+fn emit_collected(output: CheckOutput, collected: Option<check_json::Collector>) {
+    let Some(collected) = collected else {
+        return;
+    };
+    if collected.incomplete {
+        return;
+    }
+    let diagnostics = collected.diagnostics;
+    match output {
+        CheckOutput::Ndjson => print!("{}", check_json::render_ndjson(diagnostics)),
+        _ => print!("{}", check_json::render_json(diagnostics)),
     }
 }
 
@@ -1436,7 +1576,14 @@ pub fn member_header(member: &Path) -> String {
 /// [`run_check`] over one project or file; `true` when it passes. `member`
 /// names the workspace member being checked, so a project-level error says
 /// which one it is.
-fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bool {
+fn check_one(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    member: Option<&Path>,
+    environment: &str,
+    mut sink: Option<&mut check_json::Collector>,
+) -> bool {
     let prog = match member {
         Some(m) => format!("{prog}: {}", shown(m)),
         None => prog.to_string(),
@@ -1444,9 +1591,11 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
     let prog = prog.as_str();
     if input.is_dir() {
         let options = match try_project_options(input) {
-            Ok(o) => o,
+            // #3941: `--env` selects whose `env(…)` values the check resolves.
+            Ok(o) => o.environment(environment),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
@@ -1458,12 +1607,15 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
             Ok(lock) => options.schema_registry(lock),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
         let check = project::check_project(&options);
         let has_errors = check.has_errors();
-        if short {
+        if let Some(sink) = sink {
+            collect_project_check(&check, &mut sink.diagnostics);
+        } else if short {
             print_project_check_short(&check);
         } else {
             print_project_check(&check);
@@ -1474,11 +1626,22 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
             Ok(s) => s,
             Err(e) => {
                 crate::emsg!("{prog}: error: could not read `{}`: {e}", shown(input));
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
         let filename = shown(input);
-        match bynk_emit::check_with_warnings(&source, &filename) {
+        let checked = bynk_emit::check_with_warnings(&source, &filename);
+        if let Some(sink) = sink {
+            // #4123: hints included; the diagnostics are the whole of the output.
+            let (found, passed) = match &checked {
+                Ok(warnings) => (warnings, true),
+                Err(errors) => (errors, false),
+            };
+            check_json::collect_source(found, &filename, &source, &mut sink.diagnostics);
+            return passed;
+        }
+        match checked {
             Ok(warnings) => {
                 let warnings = crate::render::without_hints(&warnings);
                 if !warnings.is_empty() {
@@ -1824,7 +1987,7 @@ mod tests {
         fs::create_dir_all(dir.0.join("src")).unwrap();
         fs::write(
             dir.0.join("src/greet.bynk"),
-            "context greet\n\nservice hello {\n  on call(name: String) -> Effect[Result[String, ()]] {\n    Ok(name)\n  }\n}\n",
+            "context greet\n\nservice hello {\n  on call(name: String) -> Effect[Result[String, ()]] by Caller {\n    Ok(name)\n  }\n}\n",
         )
         .unwrap();
         dir
@@ -1893,13 +2056,657 @@ mod tests {
         ));
     }
 
+    /// #3941: `env(NAME[, default])` constants take the default environment's
+    /// values from `bynk.toml`, then their own default; the rest is refused.
+    #[test]
+    fn env_constants_resolve_from_bynk_toml_then_their_default() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            project::compile_project(&options).map(|_| ()).map_err(|f| {
+                f.errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()
+            })
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        let consts = "commons config\n\nconst Origin: String = env(APP_ORIGIN)\nconst Lines: Int = env(MAX_LINES, 100)\n";
+        // A `[vars]` value, and a default for the unset one.
+        assert_eq!(
+            build(
+                "env_ok",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"https://app\"\n"),
+                consts
+            ),
+            Ok(())
+        );
+        // A required variable with no value, in the default environment.
+        assert_eq!(
+            build("env_missing", project, consts),
+            Err(vec!["bynk.env.missing"])
+        );
+        // A value of the wrong kind, a variable nothing reads, and an
+        // environment's own variable that is read.
+        assert_eq!(
+            build(
+                "env_bad",
+                &format!("{project}[vars]\nAPP_ORIGIN = 3\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_unknown",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"x\"\nAPP_ORIGN = \"y\"\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.unknown_variable"])
+        );
+        assert_eq!(
+            build(
+                "env_staging_var_read",
+                &format!(
+                    "{project}[vars]\nAPP_ORIGIN = \"x\"\n\n[env.staging.vars]\nMAX_LINES = 5\n"
+                ),
+                consts
+            ),
+            Ok(())
+        );
+    }
+
+    /// #3941 slice 2: a build for a named environment resolves `env(…)` constants
+    /// from `[env.<name>.vars]` first, then `[vars]`, then the default; a required
+    /// variable unset for that environment is `bynk.env.missing`.
+    #[test]
+    fn env_constants_resolve_per_named_environment() {
+        let dir = scratch_dir("env_named_environment");
+        fs::write(
+            dir.0.join("bynk.toml"),
+            "[project]\nname = \"p\"\n\n[vars]\nBILLING = \"live\"\nAPP = \"prod\"\n\n[env.staging.vars]\nBILLING = \"staging\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.0.join("src")).unwrap();
+        fs::write(
+            dir.0.join("src/config.bynk"),
+            "commons config\n\nconst Billing: String = env(BILLING)\nconst App: String = env(APP)\n",
+        )
+        .unwrap();
+        let build = |environment: &str| {
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .environment(environment);
+            let out = project::compile_project(&options).unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+            out.artefacts
+                .docs
+                .values()
+                .map(|d| d.text().to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let default = build("default");
+        assert!(
+            default.contains("\"live\"") && default.contains("\"prod\""),
+            "{default}"
+        );
+        let staging = build("staging");
+        assert!(
+            staging.contains("\"staging\"") && staging.contains("\"prod\""),
+            "{staging}"
+        );
+        assert!(!staging.contains("\"live\""), "{staging}");
+    }
+
+    /// #3941 decision H: the report lists each `env(…)` constant with its value
+    /// and where it came from, for the environment being built.
+    #[test]
+    fn env_const_report_names_each_values_origin() {
+        use bynk_project::vars::ValueSource;
+        let dir = scratch_dir("env_report");
+        fs::write(
+            dir.0.join("bynk.toml"),
+            "[project]\nname = \"p\"\n\n[vars]\nBILLING = \"live\"\n\n[env.staging.vars]\nBILLING = \"staging\"\nORIGIN = \"https://s\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.0.join("src")).unwrap();
+        fs::write(
+            dir.0.join("src/config.bynk"),
+            "commons config\n\nconst Billing: String = env(BILLING)\nconst Origin: String = env(ORIGIN, \"https://p\")\nconst Lines: Int = env(LINES, 100)\n",
+        )
+        .unwrap();
+        let report = |environment: &str| {
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .environment(environment);
+            project::env_const_report(&options)
+        };
+        let staging = report("staging");
+        let by = |name: &str| staging.iter().find(|r| r.constant == name).unwrap().clone();
+        assert_eq!(by("Billing").source, ValueSource::EnvVars("staging".into()));
+        assert_eq!(by("Billing").value, "\"staging\"");
+        assert_eq!(by("Origin").source, ValueSource::EnvVars("staging".into()));
+        assert_eq!(by("Lines").source, ValueSource::Default);
+        assert_eq!(by("Lines").value, "100");
+        let default = report("default");
+        let by = |name: &str| default.iter().find(|r| r.constant == name).unwrap().clone();
+        assert_eq!(by("Billing").source, ValueSource::Vars);
+        assert_eq!(by("Origin").source, ValueSource::Default);
+        assert_eq!(by("Origin").value, "\"https://p\"");
+    }
+
+    /// #3941 review: the pass's edges. A secret-looking name warns and still
+    /// builds; a negative default repeated is not a conflict; a default of the
+    /// wrong kind is refused even when `bynk.toml` supplies the value; an
+    /// `Int` beyond the safe range and a doubly nested `env` are refused.
+    #[test]
+    fn env_constants_edges_report_precisely() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            match project::compile_project(&options) {
+                Ok(out) => Ok(out
+                    .warnings
+                    .iter()
+                    .map(|w| w.error.category)
+                    .collect::<Vec<_>>()),
+                Err(f) => Err(f
+                    .errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()),
+            }
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        assert_eq!(
+            build(
+                "env_secret_like",
+                &format!("{project}[vars]\nAPI_TOKEN = \"t\"\n"),
+                "commons config\n\nconst Token: String = env(API_TOKEN)\n"
+            ),
+            Ok(vec!["bynk.env.secret_like_name"])
+        );
+        assert_eq!(
+            build(
+                "env_negative_defaults",
+                project,
+                "commons config\n\nconst A: Int = env(RETRIES, -1)\nconst B: Int = env(RETRIES, -1)\n"
+            ),
+            Ok(vec![])
+        );
+        assert_eq!(
+            build(
+                "env_bad_default_with_value",
+                &format!("{project}[vars]\nMAX_LINES = 5\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, \"oops\")\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_out_of_range",
+                &format!("{project}[vars]\nMAX_LINES = 9007199254740993\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, 1)\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_nested_in_env",
+                project,
+                "commons config\n\nconst Lines: String = env(A, env(B, \"x\"))\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+        // In a function body it is the same refusal, not an unknown function.
+        assert_eq!(
+            build(
+                "env_in_fn_body",
+                project,
+                "commons config\n\nfn origin() -> String { env(APP_ORIGIN, \"x\") }\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+        // Nested where the default cannot stand in, it is reported once.
+        assert_eq!(
+            build(
+                "env_in_arithmetic",
+                project,
+                "commons config\n\nconst Lines: Int = env(A, 1) + 1\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+    }
+
+    /// #3942: a derived capability instance's option takes a constant, and the
+    /// binding is the one the literal gives. A constant of the wrong type keeps
+    /// the option's own error.
+    #[test]
+    fn instance_options_take_constants() {
+        let build = |name: &str, worker_arg: &str, consts: &str| {
+            let dir = scratch_dir(name);
+            fs::write(
+                dir.0.join("bynk.toml"),
+                "[project]\nname = \"p\"\n\n[unstable]\nallow = [\"bynk.cloudflare.Service\"]\n",
+            )
+            .unwrap();
+            fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+            let source = format!(
+                "context shop.billing\n\nconsumes bynk\nconsumes bynk.cloudflare {{ Service }}\n\n{consts}capability Billing = Service @worker({worker_arg})\n\nservice charge {{\n\ton call(id: String) -> Effect[Int] by Caller given Billing {{\n\t\tlet req = Request {{\n\t\t\tmethod: Post,\n\t\t\turl: \"https://legacy-billing/charge\",\n\t\t\tcontentType: Some(\"text/plain\"),\n\t\t\tauthorization: None,\n\t\t\theaders: Map.empty(),\n\t\t\tbody: Some(id),\n\t\t}}\n\t\tlet res <- Billing.send(req)\n\t\tmatch res {{\n\t\t\tOk(r) => r.status,\n\t\t\tErr(_) => 0,\n\t\t}}\n\t}}\n}}\n"
+            );
+            fs::write(dir.0.join("src/shop/billing.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .target(project::BuildTarget::Workers);
+            project::compile_project(&options)
+                .map(|out| {
+                    out.artefacts
+                        .docs
+                        .iter()
+                        .filter(|(p, _)| p.ends_with("wrangler.toml"))
+                        .map(|(_, d)| d.text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .map_err(|f| {
+                    f.errors
+                        .iter()
+                        .map(|e| e.error.category)
+                        .collect::<Vec<_>>()
+                })
+        };
+        let literal = build("inst_literal", "\"legacy-billing\"", "").expect("builds");
+        assert!(literal.contains("legacy-billing"), "{literal}");
+        let named = build(
+            "inst_const",
+            "BillingWorker",
+            "const BillingWorker: String = \"legacy-billing\"\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "a constant gives the literal's binding");
+        let chained = build(
+            "inst_chain",
+            "Outer",
+            "const Inner: String = \"legacy-billing\"\nconst Outer: String = Inner\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, chained);
+        // The wrong type is refused with the option's own error.
+        assert_eq!(
+            build("inst_wrong_type", "Lines", "const Lines: Int = 3\n\n"),
+            Err(vec!["bynk.capability.invalid_option"])
+        );
+    }
+
+    /// #3942 review: the `Int`, `Duration` and list options, a constant through
+    /// `uses`, and what an error about a constant's value says.
+    #[test]
+    fn instance_option_constants_cover_each_kind_and_say_where_a_value_came_from() {
+        // A context with `body` after the consumes line, plus extra files; the
+        // wrangler text, or each error as `(code, message, notes, labels)`.
+        type Failure = (String, String, Vec<String>, usize);
+        let build = |name: &str, base: &str, body: &str, extra: &[(&str, &str)]| {
+            let dir = scratch_dir(name);
+            fs::write(
+                dir.0.join("bynk.toml"),
+                format!(
+                    "[project]\nname = \"p\"\n\n[unstable]\nallow = [\"bynk.cloudflare.{}\"]\n",
+                    base.split(',').next().unwrap_or(base).trim()
+                ),
+            )
+            .unwrap();
+            fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+            fs::write(
+                dir.0.join("src/shop/main.bynk"),
+                format!("context shop.main\n\nconsumes bynk\nconsumes bynk.cloudflare {{ {base} }}\n\n{body}"),
+            )
+            .unwrap();
+            for (rel, text) in extra {
+                fs::write(dir.0.join(rel), text).unwrap();
+            }
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .target(project::BuildTarget::Workers);
+            project::compile_project(&options)
+                .map(|out| {
+                    out.artefacts
+                        .docs
+                        .iter()
+                        .filter(|(p, _)| p.ends_with("wrangler.toml"))
+                        .map(|(_, d)| d.text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .map_err(|f| -> Vec<Failure> {
+                    f.errors
+                        .iter()
+                        .map(|e| {
+                            (
+                                e.error.category.to_string(),
+                                e.error.message.clone(),
+                                e.error.notes.clone(),
+                                e.error.labels.len(),
+                            )
+                        })
+                        .collect()
+                })
+        };
+        let use_rate = "service api from http {\n\ton GET(\"/x\") () -> Effect[HttpResult[String]] by Visitor given Gate {\n\t\tlet ok <- Gate.allow(\"k\")\n\t\tOk(\"x\")\n\t}\n}\n";
+        // `Int` and `Duration` options.
+        let literal = build(
+            "inst_rate_literal",
+            "RateLimit",
+            &format!("capability Gate = RateLimit @limit(20) @period(1.minute)\n\n{use_rate}"),
+            &[],
+        )
+        .expect("builds");
+        let named = build(
+            "inst_rate_const",
+            "RateLimit",
+            &format!("const Cap: Int = 20\nconst Window: Duration = 1.minute\n\ncapability Gate = RateLimit @limit(Cap) @period(Window)\n\n{use_rate}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "`Int` and `Duration` constants");
+        // A `Duration` constant outside the window set keeps the window error,
+        // and says where the value came from.
+        let errors = build(
+            "inst_rate_bad_window",
+            "RateLimit",
+            &format!("const Odd: Duration = 7.seconds\n\ncapability Gate = RateLimit @limit(20) @period(Odd)\n\n{use_rate}"),
+            &[],
+        )
+        .expect_err("a window the platform does not offer");
+        assert!(
+            errors.iter().any(
+                |(code, _, notes, labels)| code == "bynk.capability.invalid_option"
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("the value comes from `const Odd`"))
+                    && *labels == 1
+            ),
+            "{errors:?}"
+        );
+        // A correctly typed constant whose value fails the option's own rule.
+        let use_svc = "service charge {\n\ton call(id: String) -> Effect[Int] by Caller given Billing {\n\t\tlet req = Request { method: Post, url: \"https://x/c\", contentType: None, authorization: None, headers: Map.empty(), body: Some(id) }\n\t\tlet res <- Billing.send(req)\n\t\tmatch res { Ok(r) => r.status, Err(_) => 0 }\n\t}\n}\n";
+        let errors = build(
+            "inst_bad_value",
+            "Service",
+            &format!("const W: String = \"Legacy Billing\"\n\ncapability Billing = Service @worker(W)\n\n{use_svc}"),
+            &[],
+        )
+        .expect_err("not a Worker name");
+        assert!(
+            errors.iter().any(
+                |(code, message, notes, _)| code == "bynk.capability.invalid_option"
+                    && message.contains("Legacy Billing")
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("the value comes from `const W`"))
+            ),
+            "{errors:?}"
+        );
+        // A constant reached through `uses` from a commons.
+        let names = (
+            "src/shop/names.bynk",
+            "commons shop.names\n\nconst BillingWorker: String = \"legacy-billing\"\n",
+        );
+        let through_uses = build(
+            "inst_uses",
+            "Service",
+            &format!(
+                "uses shop.names\n\ncapability Billing = Service @worker(BillingWorker)\n\n{use_svc}"
+            ),
+            &[names],
+        );
+        let via_literal = build(
+            "inst_uses_literal",
+            "Service",
+            &format!("capability Billing = Service @worker(\"legacy-billing\")\n\n{use_svc}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(
+            through_uses.expect("a used commons' constant resolves"),
+            via_literal
+        );
+        // List elements: a constant resolves; one of the wrong type is refused
+        // with the note on what a constant must be.
+        let use_mail = "service api from http {\n\ton POST(\"/r\") () -> Effect[HttpResult[String]] by Visitor given Mail {\n\t\tlet sent <- Mail.send(EmailMessage { from: \"a@shop.example\", to: [\"audit@shop.example\"], subject: \"s\", text: Some(\"t\") })\n\t\tOk(\"x\")\n\t}\n}\n";
+        let literal = build(
+            "inst_list_literal",
+            "Email, EmailMessage",
+            &format!(
+                "capability Mail = Email @allowedRecipients([\"audit@shop.example\"])\n\n{use_mail}"
+            ),
+            &[],
+        )
+        .expect("builds");
+        let named = build(
+            "inst_list_const",
+            "Email, EmailMessage",
+            &format!("const Audit: String = \"audit@shop.example\"\n\ncapability Mail = Email @allowedRecipients([Audit])\n\n{use_mail}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "a constant list element");
+        let errors = build(
+            "inst_list_unresolved",
+            "Email, EmailMessage",
+            &format!("const Bad: Int = 3\n\ncapability Mail = Email @allowedRecipients([Bad])\n\n{use_mail}"),
+            &[],
+        )
+        .expect_err("an `Int` is not an address");
+        assert!(
+            errors.iter().any(
+                |(code, _, notes, _)| code == "bynk.capability.invalid_option"
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("`Bad` is not a constant declared exactly"))
+            ),
+            "{errors:?}"
+        );
+        // A constant element whose value is not an address says where it came from.
+        let errors = build(
+            "inst_list_bad_address",
+            "Email, EmailMessage",
+            &format!("const Audit: String = \"not an address\"\n\ncapability Mail = Email @allowedRecipients([Audit])\n\n{use_mail}"),
+            &[],
+        )
+        .expect_err("not an address");
+        assert!(
+            errors.iter().any(|(_, _, notes, _)| notes
+                .iter()
+                .any(|n| n.contains("some of the values come from `const Audit`"))),
+            "{errors:?}"
+        );
+    }
+
+    /// #3941 decision I: a package consumed as a dependency cannot read the
+    /// consuming project's variables.
+    #[test]
+    fn env_constants_are_refused_in_a_dependency() {
+        let root = scratch_dir("env_in_dependency");
+        let write = |rel: &str, text: &str| {
+            let path = root.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "bynk.toml",
+            "[workspace]\nmembers = [\"packages/*\", \"apps/*\"]\n",
+        );
+        write(
+            "packages/money/bynk.toml",
+            "[package]\nname = \"acme/money\"\nversion = \"1.0.0\"\nexports = [\"currency\"]\n",
+        );
+        write(
+            "packages/money/src/currency.bynk",
+            "commons currency\n\nconst Home: String = env(HOME_ORIGIN, \"https://x\")\n\nfn id(n: Int) -> Int {\n  n\n}\n",
+        );
+        write(
+            "apps/shop/bynk.toml",
+            "[project]\nname = \"shop\"\n\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../../packages/money\" }\n\n[vars]\nHOME_ORIGIN = \"https://app\"\n",
+        );
+        write(
+            "apps/shop/src/pricing.bynk",
+            "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  id(n)\n}\n",
+        );
+        let options = try_project_options(&root.0.join("apps/shop")).expect("reads");
+        let codes: Vec<&str> = match project::compile_project(&options) {
+            Ok(_) => Vec::new(),
+            Err(f) => f.errors.iter().map(|e| e.error.category).collect(),
+        };
+        assert!(codes.contains(&"bynk.env.in_dependency"), "{codes:?}");
+    }
+
+    /// #4127: Workers Logs is on, keeping every invocation, unless the manifest
+    /// says otherwise; `false` and a sampling rate round-trip; an out-of-range
+    /// rate is refused.
+    #[test]
+    fn manifest_observability_reaches_wrangler_toml() {
+        let dir = workers_project("observability_default", "[project]\nname = \"p\"\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(
+            text.contains("[observability]\nenabled = true\nhead_sampling_rate = 1.0\n"),
+            "{text}"
+        );
+        let dir = workers_project(
+            "observability_set",
+            "[workers.observability]\nenabled = false\nhead_sampling_rate = 0.1\n",
+        );
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(
+                text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.1\n"),
+                "{text}"
+            );
+        }
+        let dir = workers_project(
+            "observability_bad_rate",
+            "[workers.observability]\nhead_sampling_rate = 1.5\n",
+        );
+        assert!(matches!(
+            try_project_options(&dir.0),
+            Err(ProjectOptionsError::Paths(
+                ProjectPathsError::BadObservability { .. }
+            ))
+        ));
+    }
+
+    /// #4127: a worker group's table is laid over the project's, key by key.
+    #[test]
+    fn a_worker_group_overrides_observability_key_by_key() {
+        let dir = workers_project(
+            "observability_group",
+            "[workers.observability]\nhead_sampling_rate = 0.5\n\n[deploy.workers.core]\ncontexts = [\"greet\"]\n\n[deploy.workers.core.observability]\nenabled = false\n",
+        );
+        let options = try_project_options(&dir.0).expect("reads");
+        let out = project::compile_project(&options.target(project::BuildTarget::Workers))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+        let text = out.artefacts.docs[Path::new("workers/core/wrangler.toml")].text();
+        assert!(
+            text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.5\n"),
+            "the group sets `enabled`, the project the rate: {text}"
+        );
+    }
+
+    /// #4128: `cpu_ms` and `placement` reach `[limits]` and `[placement]`, are
+    /// left out when unset, and a group's keys override the project's.
+    #[test]
+    fn manifest_cpu_limit_and_placement_reach_wrangler_toml() {
+        let dir = workers_project("tuning_default", "[project]\nname = \"p\"\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(
+            !text.contains("[limits]") && !text.contains("[placement]"),
+            "{text}"
+        );
+        let dir = workers_project(
+            "tuning_set",
+            "[workers]\ncpu_ms = 50\nplacement = \"smart\"\n",
+        );
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(text.contains("[limits]\ncpu_ms = 50\n"), "{text}");
+            assert!(text.contains("[placement]\nmode = \"smart\"\n"), "{text}");
+        }
+        let dir = workers_project(
+            "tuning_group",
+            "[workers]\ncpu_ms = 50\nplacement = \"smart\"\n\n[deploy.workers.core]\ncontexts = [\"greet\"]\ncpu_ms = 2000\nplacement = \"off\"\n",
+        );
+        let options = try_project_options(&dir.0).expect("reads");
+        let out = project::compile_project(&options.target(project::BuildTarget::Workers))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+        let text = out.artefacts.docs[Path::new("workers/core/wrangler.toml")].text();
+        assert!(text.contains("[limits]\ncpu_ms = 2000\n"), "{text}");
+        assert!(
+            !text.contains("[placement]"),
+            "the group turns placement off: {text}"
+        );
+        for bad in [
+            "[workers]\ncpu_ms = 0\n",
+            "[workers]\ncpu_ms = 300001\n",
+            "[workers]\nplacement = \"nearby\"\n",
+        ] {
+            let dir = workers_project("tuning_bad", bad);
+            assert!(
+                matches!(
+                    try_project_options(&dir.0),
+                    Err(ProjectOptionsError::Paths(
+                        ProjectPathsError::BadWorkers { .. }
+                    ))
+                ),
+                "{bad}"
+            );
+        }
+        // A bad group value takes the worker-group error path instead.
+        for bad in [
+            "[deploy.workers.core]\ncpu_ms = 0\n",
+            "[deploy.workers.core]\nplacement = \"nearby\"\n",
+        ] {
+            let dir = workers_project("tuning_bad_group", bad);
+            assert!(
+                matches!(
+                    try_project_options(&dir.0),
+                    Err(ProjectOptionsError::Paths(
+                        ProjectPathsError::BadWorkerGroup { .. }
+                    ))
+                ),
+                "{bad}"
+            );
+        }
+    }
+
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.
     #[test]
     fn a_worker_gets_the_default_compatibility_flag_without_a_workers_table() {
         let dir = workers_project("compat_flags_default_1890", "[project]\nname = \"p\"\n");
         let (text, warnings) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
         assert!(
-            text.contains("compatibility_flags = [\"global_fetch_strictly_public\"]\n"),
+            text.contains(
+                "compatibility_flags = [\"global_fetch_strictly_public\", \"nodejs_als\"]\n"
+            ),
             "{text}"
         );
         assert!(warnings.is_empty(), "{warnings:?}");

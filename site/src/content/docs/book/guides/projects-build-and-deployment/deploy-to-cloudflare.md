@@ -20,6 +20,33 @@ Use `--yes` in an automated, non-interactive invocation:
 bynk deploy --yes
 ```
 
+To deploy from GitHub Actions, see [Deploy from CI](/book/guides/projects-build-and-deployment/deploy-from-ci/).
+
+## Per-environment values
+
+A constant can take its value from `bynk.toml` at build time, so the same
+source builds with different settings per environment:
+
+```bynk,fragment
+const Origin: String = env(APP_ORIGIN)
+const MaxLines: Int = env(MAX_LINES, 100)
+```
+
+Set the values under `[vars]` in `bynk.toml` (and `[env.<name>.vars]` for one
+environment); the build resolves each constant to a literal, falling back to the
+default given to `env`. A required variable with no value, a value of the wrong
+kind, and a `bynk.toml` variable no constant reads are all build errors. Keep
+secrets out of `[vars]`: `bynk.toml` is committed, so use `Secrets` instead.
+
+`bynk deploy --env staging` builds with `[env.staging.vars]`, and the plan lists
+each constant with its value and where it came from. A named environment that
+takes `default`'s value is called out as `shared with default: …` (also in
+`--format json`, as `shared_with_default`): an `env(…)` constant left to `[vars]`
+or its default, and a `Service @worker` or `Email @to` / `@allowedRecipients`
+equal to `default`'s, so you see a staging Worker about to use production's value
+before anything is pushed. Add `--strict-environments` to refuse that. See
+[Constants](/reference/constants/) for the full rules.
+
 ## Review a plan
 
 `--dry-run` (or its `--plan` alias) changes nothing on Cloudflare or in the
@@ -40,7 +67,7 @@ bynk deploy -- --minify
 
 ## From VS Code
 
-The [VS Code extension](/docs/tooling/vscode-bynk/) deploys plan-first.
+The [VS Code extension](/reference/tooling/vscode-bynk/) deploys plan-first.
 **Bynk: Deploy…** asks for an environment (the ones recorded in
 `bynk.deploy.lock`, or a new one) and, in a multi-context project, whether to
 deploy everything or one context. It then runs `bynk deploy --dry-run --format
@@ -101,6 +128,12 @@ Queues are created *before* the Worker is pushed, and this step is doing real
 work: `wrangler deploy` does **not** create a queue for you — it checks, and
 fails with `Queue "n" does not exist. To create it, run: wrangler queues create n`.
 Creating them is what makes a queue-consuming context deployable in one command.
+
+A consumer's dead-letter queue (`delivery { deadLetter: "n" }`) is created the same
+way, qualified with the environment like the consumer's own queue, and recorded in
+`bynk.deploy.lock` only if Bynk created it. A queue name that is longer than 63
+characters once `-<environment>` is added is refused by the plan, before anything is
+created.
 
 A queue a context sends to (`capability OrderEvents = Queue @name("n")`) is
 created the same way. There is one difference: `bynk deploy` records a queue
@@ -170,6 +203,14 @@ Bynk never deletes or moves an agent's data unless you declare it:
     it is not refused.
 - **A rename, once applied,** reads `already applied by an earlier deploy` in later
   plans, the same way: `bynk.deploy.lock` records the push that carried it.
+- **Changing an agent's `@jurisdiction`** mints different Durable Object ids, which orphans
+  every existing instance. The plan shows
+  `change jurisdiction of durable object shop.Learner (none → eu; …; needs --confirm-jurisdiction shop.Learner)`,
+  and the deploy won't push it until you confirm it by name, at the prompt or with
+  `--confirm-jurisdiction shop.Learner` (repeatable). `--yes` alone never confirms it. Bynk
+  records only the jurisdiction each class was last pushed under (`agent_jurisdictions` in
+  `bynk.deploy.lock`), never a claim that a namespace exists: a stale entry at worst asks for a
+  confirmation it did not need. See [data residency](/reference/agents/#jurisdiction).
 
 Keep each declaration until a deploy prints Cloudflare's `stale_tombstone` notice
 for it ("has no effect"), then delete it from your source. A renamed class gets a
@@ -183,7 +224,7 @@ read a shape they don't know and write it back. Nothing is lost: deploy forward
 again, or move the data by hand through your own handlers. See
 [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely).
 
-**Retiring migration steps.** [`bynk migrate sweep`](/docs/bynk-cli/#bynk-migrate-sweep)
+**Retiring migration steps.** [`bynk migrate sweep`](/reference/tooling/bynk-cli/#bynk-migrate-sweep)
 wakes every stored agent instance in your deployed Workers, so the `migrate` steps
 older instances needed can be deleted. For the length of a run, each Worker holds a
 temporary secret, `BYNK_MIGRATE_KEY`, which signs the sweep's calls to its reserved
@@ -354,7 +395,7 @@ says `set` for everything, and the skip shows up when you actually run.
 
 ### Session keys
 
-A [`SignedCookie`](/book/reference/actors/#signed-cookies) actor signs the session cookies it issues, so
+A [`SignedCookie`](/reference/actors/#signed-cookies) actor signs the session cookies it issues, so
 it needs a key, and the key has to be long and random. You never choose one: when the variable named by
 `secret` is unset, `bynk deploy` mints 32 random bytes (unpadded base64url), sets it on the Worker and
 prints only its name, as for any secret. A plan lists it as `managed`.
@@ -460,11 +501,11 @@ foreign Worker then needs the new value. To share a value you already hold,
 supply it (`--secrets-file`, or `LEDGER_CALL_KEY` in the environment). The
 deploy then sets yours and prints nothing. Only your end is yours to set, so
 `--context` can mint these too. The foreign Worker signs each call as `Ledger`,
-as the [wire format](/book/reference/wire-format/#foreign-callers) describes.
+as the [wire format](/reference/wire-format/#foreign-callers) describes.
 `bynk dev` gives the secret a fixed local value.
 
 A TypeScript Worker calls through the typed client the build generates for the
-context, `bynk-client.ts` ([TypeScript client](/book/reference/typescript-client/)).
+context, `bynk-client.ts` ([TypeScript client](/reference/typescript-client/)).
 Pin the contract that client was generated at in `bynk.foreign.toml`, beside
 `bynk.toml`, and the deploy refuses a build that would break it
 (`bynk.deploy.foreign_contract_skew`) until you regenerate the client and update
@@ -492,7 +533,7 @@ calls from Workers still on it, and the other way round. So:
 
 ### Several KV namespaces
 
-Each [derived capability](/book/reference/capabilities/#derived-capabilities)
+Each [derived capability](/reference/capabilities/#derived-capabilities)
 (`capability Sessions = Kv`) is a namespace of its own. The plan gives it a line
 of its own, with its binding:
 
@@ -517,7 +558,7 @@ that before planning, `--dry-run` included, and names both namespaces.
 
 ### R2 buckets
 
-Each [`R2` instance](/book/reference/bynk-capabilities/#object-storage-r2)
+Each [`R2` instance](/reference/bynk-capabilities/#object-storage-r2)
 (`capability Archives = R2`) is a bucket of its own. There is no id to mint: the
 name is the identity, so the plan says `create` until the ledger records the
 bucket and `reuse` after:
@@ -552,7 +593,7 @@ deploy has created.
 
 ### Vectorize indexes
 
-Each [`Vectorize` instance](/book/reference/bynk-capabilities/#vector-indexes-vectorize)
+Each [`Vectorize` instance](/reference/bynk-capabilities/#vector-indexes-vectorize)
 (`capability Docs = Vectorize @dimensions(768) @metric("cosine")`) is an index of
 its own, which the deploy creates because it is state your project owns. The plan
 says `create` the first time and `reuse` after:
@@ -613,7 +654,7 @@ Docs = "docs-dev"
 
 It binds that index, remotely, and checks it against the declaration on the first
 call; a capability with no entry is unbound and a call to it fails, naming the entry
-to add. See [the manifest reference](/docs/manifest/#binding-a-vectorize-index-under-bynk-dev).
+to add. See [the manifest reference](/reference/tooling/manifest/#binding-a-vectorize-index-under-bynk-dev).
 
 A renamed or removed instance leaves its index recorded and reported as an orphan
 (`orphan vectorize shop-cart VECTORIZE_DOCS (shop-cart-docs; deleted by --prune)`).
@@ -622,7 +663,7 @@ index and saying its vectors go too. It is never deleted otherwise.
 
 ### Containers
 
-Each [`Container` instance](/book/reference/bynk-capabilities/#containers-container)
+Each [`Container` instance](/reference/bynk-capabilities/#containers-container)
 (`capability Renderer = Container @build("containers/render") @port(8080)`) is a
 Durable Object class backed by a Docker image. `bynk deploy` neither builds nor
 pushes the image: it hands the Worker to `wrangler deploy`, which builds the image
@@ -683,7 +724,7 @@ container class.
 
 ### Rate limiters
 
-Each [`RateLimit` instance](/book/reference/bynk-capabilities/#rate-limiting-ratelimit)
+Each [`RateLimit` instance](/reference/bynk-capabilities/#rate-limiting-ratelimit)
 (`capability PublishLimit = RateLimit @limit(20) @period(60.seconds)`) needs a
 `namespace_id`: a number, unique on the Cloudflare account, that names its
 counters. Cloudflare doesn't mint one; you choose it, so `bynk deploy` allocates
@@ -736,7 +777,7 @@ capability.
 
 ### D1 databases
 
-Each [`D1` instance](/book/reference/bynk-capabilities/#sql-databases-d1)
+Each [`D1` instance](/reference/bynk-capabilities/#sql-databases-d1)
 (`capability Orders = D1`) is a database of its own, named `<worker>-<capability>`
 with an environment suffix under `--env` (`shop-cart-orders-staging`).
 Cloudflare mints its id, so the plan says `create` until the ledger records the
@@ -754,6 +795,15 @@ interrupted run never makes a second one), and writes both into the generated
 deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
 environment gets its own database and id.
 
+A `D1` with `@jurisdiction("eu")` is planned as
+`d1 create shop-cart-orders (D1_ORDERS) in jurisdiction eu` and created with
+`--jurisdiction eu`; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
+source that later adds or changes it for a database already in the ledger is refused with an
+explanation, never recreated. A database already on the account but not in the ledger would be adopted,
+and Bynk cannot read back the jurisdiction it was made with, so with `@jurisdiction` the plan notes
+that it cannot be confirmed and the deploy refuses to adopt it; without the annotation it is adopted as
+before.
+
 Removing or renaming the capability leaves an orphan, reported as
 `orphan d1 shop-cart D1_ORDERS (shop-cart-orders; not deleted)`. `--prune`
 never deletes a database: it holds data. Delete it yourself, then remove its
@@ -762,7 +812,7 @@ database and refuses one no deploy has created; plain `bynk dev` uses a local
 database of wrangler's.
 
 A database's schema comes from its
-[migrations](/book/reference/bynk-capabilities/#schema-migrations),
+[migrations](/reference/bynk-capabilities/#schema-migrations),
 `migrations/<database>/NNNN_<name>.sql` in the project. The plan lists the
 files of each database that has any. It runs offline, so it can't say which
 of them the database has already applied:
@@ -785,7 +835,7 @@ apply, so wrangler doesn't ask again.
 
 #### The idempotency database
 
-A Worker that calls [`Idempotency`](/book/reference/bynk-capabilities/#the-idempotency-capability)
+A Worker that calls [`Idempotency`](/reference/bynk-capabilities/#the-idempotency-capability)
 (`claim`, `dedup` or `remember`) gets a database with no declaration: `<worker>-idempotency`,
 bound as `D1_IDEMPOTENCY`, which holds its claims and remembered values. It is provisioned, adopted and recorded like
 any other, and the plan lists it:
@@ -804,7 +854,7 @@ starts with an empty cache: what its instances held in memory is not carried ove
 
 ### Postgres databases: Hyperdrive
 
-Each [`Postgres` instance](/book/reference/bynk-capabilities/#postgres-databases-postgres)
+Each [`Postgres` instance](/reference/bynk-capabilities/#postgres-databases-postgres)
 (`capability Main = Postgres`) binds a Hyperdrive config, and `bynk deploy` makes
 it. Tell it where the database's connection string is, in `bynk.toml`, by the
 **name of an environment variable**:
@@ -893,7 +943,7 @@ message: what Cloudflare answers is scrubbed of it before it is shown.
 
 #### MySQL databases
 
-A [`MySql` instance](/book/reference/bynk-capabilities/#mysql-databases-mysql)
+A [`MySql` instance](/reference/bynk-capabilities/#mysql-databases-mysql)
 (`capability Legacy = MySql`) deploys exactly as above, with a `mysql://` URL
 (`mysql://user:password@db.example.com:3306/shop`, the port defaulting to 3306)
 under `[deploy.hyperdrive.Legacy]`. The build writes `bynk-hyperdrive.json` beside
@@ -935,7 +985,7 @@ as declared, without an environment suffix, and `--prune` never touches one.
 The secret's value never reaches `bynk`, the plan, the ledger or generated
 config: only its name and the store's id do.
 
-**Per-Worker secrets or stored secrets?** [`bynk.Secrets`](/book/reference/bynk-capabilities/#the-portable-surface--bynk)
+**Per-Worker secrets or stored secrets?** [`bynk.Secrets`](/reference/bynk-capabilities/#the-portable-surface--bynk)
 reads a secret set on one Worker, the portable kind that `bynk deploy` sets from
 your environment (see [Secrets](#secrets)). A stored secret is account-wide:
 shared across Workers, rotated once in the store, and Cloudflare-only. Use
@@ -1069,6 +1119,37 @@ removes every recorded address the same way.
 
 Email Routing must be turned on for the domain; deploy does not check that.
 
+#### Environments
+
+Wrangler applies `addresses` at the top level only. `bynk deploy --env staging` would
+therefore hand it production's list, which names rules production already holds:
+interactively Wrangler asks before taking such a rule over, and non-interactively it
+refuses after the Worker is already live. So a named environment claims **no address**
+unless `bynk.toml` gives it its own:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+`bynk deploy --env staging` then writes `addresses = ["support@staging.shop.example"]`
+and the staging Worker accepts mail to that address, delivering it to the same service.
+An environment with no entry has its `addresses` left out, which Wrangler documents as
+changing no Email Routing rule (an empty list would delete the Worker's rules); the plan
+says `email: none (no mapping for `staging` in [deploy.email]; …)` rather than listing
+production's addresses, and nothing is pruned. If the environment had a mapped
+address and has lost it, that address's rule is still live (an omitted `addresses`
+changes no rule) and still points at the Worker, which no longer accepts mail to it:
+the plan names it (`email address … no longer accepted`) so you can remove the rule
+in the dashboard, and `bynk.deploy.lock` keeps the record until you do. `default` is
+unchanged, and cannot be mapped.
+
+A key that names no `from email` address, an address Email Routing cannot match, or an
+address two environments (or the source) would both claim, fails the deploy before
+anything is pushed. A mapped address on another domain needs Email Routing turned on
+there too. This follows Wrangler's documentation; it has not yet been observed against a live
+account.
+
 #### Forward destinations
 
 A `Forward(to)` destination must be a **verified destination address** in the
@@ -1111,7 +1192,7 @@ package manager you already use (pnpm, bun, Yarn classic or npm); a warm re-run
 installs nothing and needs no network. `--no-install` (or `BYNK_NO_INSTALL=1`)
 stops instead, naming the command to run, for CI that provisions `node_modules`
 itself. `--dry-run` never installs: it reports what it would install, and with
-which tool. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
+which tool. See [Installing npm packages](/reference/tooling/bynk-cli/#installing-npm-packages).
 
 ### Workers outside the project
 

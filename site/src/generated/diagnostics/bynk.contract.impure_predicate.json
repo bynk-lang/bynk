@@ -1,0 +1,10 @@
+{
+  "blurb": "A contract clause is checked on every call in the dev and test build, and by the runner on generated inputs, so its predicate must be a pure `Bool` over the parameters and `result`. Effects (`Effect.pure`, `?`) and test-only constructs (`expect`, `val`, observations, `faults`, `trace`) cannot appear in it. State the claim as a plain comparison, and keep assertions and effects in a `case`.",
+  "category": "Contracts",
+  "categoryAnchor": "contracts",
+  "code": "bynk.contract.impure_predicate",
+  "constructs": [],
+  "example": "fn inc(x: Int) -> Int\n  ensures bigger: expect result > x   // ✗ `expect` is a test statement\n\nfn inc(x: Int) -> Int\n  ensures bigger: result > x          // ✓ a pure `Bool`",
+  "severity": "error",
+  "summary": "A contract predicate uses an effectful or test-only construct; a contract clause must be pure."
+}

@@ -28,7 +28,8 @@
 //! | `NonNegative`         | `minimum: 0`                                       |
 //! | `InRange(a, b)`       | `minimum: a`, `maximum: b`                         |
 //! | `IsoDate`             | `format: date`, `minLength: 10`, `maxLength: 10`    |
-//! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match) |
+//! | `Cron`                | `x-bynk-format: cron`, `minLength: 9`              |
+//! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match); a `(?i)` or `(?s)` group is written out, or the pattern is left out and noted |
 
 use bynk_driver::emsg;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -43,11 +44,16 @@ use bynk_ide::wire_contract::{
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl, ServiceProtocol,
-    TypeDecl, TypeRef, effective_json_options, http_variant,
+    BaseType, ErrorFormat, Handler, HttpVariantPayload, JsonOptions, PredBound, PredKind,
+    ServiceDecl, ServiceProtocol, TypeDecl, TypeRef, effective_error_format,
+    effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
+
+mod partial;
+mod plain;
+mod wire_names;
 
 use crate::cli::OpenapiFormatArg;
 
@@ -56,6 +62,8 @@ pub const OPENAPI_VERSION: &str = "3.1.0";
 
 /// The component the `400` boundary rejection is described once as.
 const BOUNDARY_ERROR: &str = "BynkBoundaryError";
+/// #3916: the RFC 9457 body a `format: problem` route answers its errors with.
+const PROBLEM_DETAILS: &str = "BynkProblemDetails";
 
 /// What names the document: the project's manifest identity.
 #[derive(Debug, Clone)]
@@ -370,6 +378,8 @@ pub fn document(
             model: &model.boundary,
             names: &names,
             plain: effective_json_options(sel.service.json.as_ref(), handler) == JsonOptions::Plain,
+            problem: effective_error_format(sel.service.errors.as_ref(), handler)
+                == ErrorFormat::Problem,
         };
         let op = operation(&r, &mut components, sel, handler, model, *method, path);
         // OpenAPI treats templated paths that differ only in parameter names
@@ -557,7 +567,7 @@ fn operation(
                 "name": name,
                 "in": "path",
                 "required": true,
-                "schema": r.parameter_schema(components, &p.type_ref),
+                "schema": path_parameter_schema(r, components, &p.type_ref),
             }));
         } else if name == "query" {
             // #2854: a typed `query` record is one `in: query` parameter per
@@ -566,9 +576,13 @@ fn operation(
         } else if name == "cookies" {
             // #3277: a typed `cookies` record is one `in: cookie` parameter per field.
             parameters.extend(query_parameters(r, components, &p.type_ref, "cookie"));
+        } else if name == "headers" {
+            // #3911: a typed `headers` record is one `in: header` parameter per field; the raw
+            // `RequestHeaders` view declares none.
+            parameters.extend(query_parameters(r, components, &p.type_ref, "header"));
         }
-        // Any other param is a `headers` (the request's headers, read-only and
-        // untyped here); the checker admits no other.
+        // Any other param is the raw `RequestHeaders` view (read-only and untyped here); the
+        // checker admits no other.
     }
     if !parameters.is_empty() {
         op.insert("parameters".into(), Value::Array(parameters));
@@ -580,10 +594,29 @@ fn operation(
     let mut responses = responses_of(r_resp, components, handler, model);
     if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, &sel.info.actors) {
         signed_cookie_security(&mut op, &mut responses, components, &seam, method);
+    } else if let Some(members) = bynk_check::actors::sum_members_for(handler, &sel.info.actors) {
+        sum_security(&mut op, &mut responses, components, &members, method);
     }
     op.insert("responses".into(), responses);
     Value::Object(op)
 }
+
+/// The `apiKey` scheme of a `SignedCookie` actor, in the cookie the seam reads.
+fn cookie_scheme(seam: &bynk_check::actors::SignedCookieSeam) -> Value {
+    json!({
+        "type": "apiKey",
+        "in": "cookie",
+        "name": seam.cookie,
+        "description": format!(
+            "A session cookie the `{}` actor issues and verifies. It is signed, not encrypted, and \
+             expires after {} seconds.",
+            seam.actor, seam.ttl_secs
+        ),
+    })
+}
+
+/// The `403` a `SignedCookie` arm answers a cross-site state-changing request with.
+const CROSS_SITE_REFUSAL: &str = "A cross-site request: its `Sec-Fetch-Site` is not `same-origin` and its `Origin` is not one of the service's credentialed CORS origins.";
 
 /// #3386: a route guarded by a `SignedCookie` actor needs that actor's cookie: an `apiKey` security
 /// scheme `in: cookie`, named after the cookie, with the seam's refusals documented: `401` for a
@@ -595,27 +628,94 @@ fn signed_cookie_security(
     seam: &bynk_check::actors::SignedCookieSeam,
     method: IrHttpMethod,
 ) {
-    components.security.entry(seam.actor.clone()).or_insert_with(|| {
-        json!({
-            "type": "apiKey",
-            "in": "cookie",
-            "name": seam.cookie,
-            "description": format!(
-                "A session cookie the `{}` actor issues and verifies. It is signed, not encrypted, and \
-                 expires after {} seconds.",
-                seam.actor, seam.ttl_secs
-            ),
-        })
-    });
+    components
+        .security
+        .entry(seam.actor.clone())
+        .or_insert_with(|| cookie_scheme(seam));
     op.insert("security".into(), json!([{ (seam.actor.clone()): [] }]));
     let mut refusals = vec![(
         "401",
         "No session cookie, or one that is forged, expired or for another actor.",
     )];
     if !matches!(method, IrHttpMethod::Get) {
+        refusals.push(("403", CROSS_SITE_REFUSAL));
+    }
+    if let Value::Object(map) = responses {
+        for (status, description) in refusals {
+            map.entry(status.to_string())
+                .or_insert_with(|| json!({ "description": description }));
+        }
+    }
+}
+
+/// #3936: a route guarded by an actor sum accepts any one of its members, so its `security` lists
+/// each as an alternative (a `Visitor` member is the empty requirement `{}`: the route is open). A
+/// `Bearer` or `Oidc` member is an `http` `bearer` JWT scheme and a `Signature` member an `apiKey`
+/// in its header. The `401` is documented unless a member is open; the `403` of the cookie arm's
+/// CSRF check is, on a state-changing method, when the sum has one.
+fn sum_security(
+    op: &mut Map<String, Value>,
+    responses: &mut Value,
+    components: &mut Components,
+    members: &[bynk_check::actors::SumMember],
+    method: IrHttpMethod,
+) {
+    use bynk_check::actors::SumMemberSeam;
+    let mut alternatives: Vec<Value> = Vec::new();
+    let mut open = false;
+    let mut has_cookie_arm = false;
+    for m in members {
+        let scheme = match &m.seam {
+            SumMemberSeam::None => {
+                open = true;
+                alternatives.push(json!({}));
+                continue;
+            }
+            SumMemberSeam::Bearer { .. } => json!({
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": format!("An HS256 bearer token the `{}` actor verifies.", m.actor_name),
+            }),
+            SumMemberSeam::Oidc(seam) => json!({
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": format!(
+                    "An OIDC token issued by {} for the audience `{}`, verified against its JWKS.",
+                    seam.issuer, seam.audience
+                ),
+            }),
+            SumMemberSeam::Signature(seam) => json!({
+                "type": "apiKey",
+                "in": "header",
+                "name": seam.header,
+                "description": format!("An HMAC signature over the body, verified by the `{}` actor.", m.actor_name),
+            }),
+            SumMemberSeam::SignedCookie(seam) => {
+                has_cookie_arm = !matches!(method, IrHttpMethod::Get);
+                cookie_scheme(seam)
+            }
+        };
+        components
+            .security
+            .entry(m.actor_name.clone())
+            .or_insert(scheme);
+        alternatives.push(json!({ (m.actor_name.clone()): [] }));
+    }
+    op.insert("security".into(), Value::Array(alternatives));
+    let mut refusals: Vec<(&str, &str)> = Vec::new();
+    if !open {
+        refusals.push((
+            "401",
+            "No credential that any of the route's actors accepts.",
+        ));
+    }
+    // With an open member nothing is refused, so there is no `403` to document either.
+    if has_cookie_arm && !open {
         refusals.push((
             "403",
-            "A cross-site request: its `Sec-Fetch-Site` is not `same-origin` and its `Origin` is not one of the service's credentialed CORS origins.",
+            "A cross-site request whose only credential is the session cookie: the cookie arm's CSRF check refuses it. A request that presents another member's credential instead is admitted by that member.",
         ));
     }
     if let Value::Object(map) = responses {
@@ -675,6 +775,19 @@ fn query_parameters(
         .collect()
 }
 
+/// #3910: a path parameter's schema. An enum is read off the segment by variant name, so it is a
+/// string enumeration of the names, not the tagged object its body form is; everything else is
+/// the type's own schema (a refined or opaque type carries its `type`, `format` and bounds).
+fn path_parameter_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Value {
+    if let TypeRef::Named(id) = ty
+        && let Some(bynk_syntax::ast::TypeBody::Sum(sum)) = r.types.get(&id.name).map(|t| &t.body)
+        && sum.variants.iter().all(|v| v.payload.is_empty())
+    {
+        return json!({ "type": "string", "enum": wire_names::path_enum_names(sum) });
+    }
+    r.parameter_schema(components, ty)
+}
+
 /// `api` + `GET` + `/check/:client` → `api_get_check_client`.
 fn operation_id(service: &str, method: IrHttpMethod, path: &str) -> String {
     let mut id = format!("{service}_{}", method.as_str().to_lowercase());
@@ -695,11 +808,19 @@ fn request_body_of(
     handler: &Handler,
     ty: &TypeRef,
 ) -> Value {
-    if let Some(ct) = handler.raw_content_type() {
-        return json!({
-            "required": true,
-            "content": { ct: { "schema": { "type": "string", "format": "binary" } } },
-        });
+    let raw_types = handler.raw_content_types();
+    if !raw_types.is_empty() {
+        // #3912: one media-type entry per accepted type.
+        let content: serde_json::Map<String, Value> = raw_types
+            .into_iter()
+            .map(|ct| {
+                (
+                    ct.to_string(),
+                    json!({ "schema": { "type": "string", "format": "binary" } }),
+                )
+            })
+            .collect();
+        return json!({ "required": true, "content": content });
     }
     let shape = wire::wire_ref(ty, r.types);
     // #3276: a `@form` route's body is the same record under the form media type.
@@ -778,6 +899,13 @@ fn renamed_form_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) 
     Some(Value::Object(schema))
 }
 
+/// The media type of a problem-details body (#3916).
+const PROBLEM_MEDIA: &str = "application/problem+json";
+
+fn problem_ref() -> Value {
+    json!({ "$ref": format!("#/components/schemas/{PROBLEM_DETAILS}") })
+}
+
 fn responses_of(
     r: &Renderer,
     components: &mut Components,
@@ -813,6 +941,30 @@ fn responses_of(
         };
         if let ResponseOrigin::BoundaryImplicit { why } = &resp.origin {
             describe(format!("{} — {why}", resp.variant));
+            // #4434: a rate-limited refusal says when to try again, whichever way it is written.
+            if resp.variant == "RateLimited" {
+                e.headers.insert(
+                    "Retry-After".into(),
+                    json!({
+                        "description": "Seconds until the limiter's window lets the caller try again.",
+                        "required": true,
+                        "schema": { "type": "integer", "minimum": 1 },
+                    }),
+                );
+            }
+            if r.problem
+                && matches!(
+                    resp.variant.as_str(),
+                    "StructuralMismatch"
+                        | "PayloadTooLarge"
+                        | "UnsupportedMediaType"
+                        | "RateLimited"
+                )
+            {
+                components.problem_details();
+                body(PROBLEM_MEDIA, problem_ref(), e);
+                continue;
+            }
             match resp.variant.as_str() {
                 "StructuralMismatch" => {
                     components.boundary_error();
@@ -822,7 +974,7 @@ fn responses_of(
                         e,
                     );
                 }
-                "PayloadTooLarge" | "UnsupportedMediaType" => body(
+                "PayloadTooLarge" | "UnsupportedMediaType" | "RateLimited" => body(
                     "application/json",
                     json!({
                         "type": "object",
@@ -851,6 +1003,10 @@ fn responses_of(
                     body("application/json", r.ref_schema(components, &shape), e);
                 }
             }
+            HttpVariantPayload::Message if r.problem => {
+                components.problem_details();
+                body(PROBLEM_MEDIA, problem_ref(), e);
+            }
             HttpVariantPayload::Message => body(
                 "application/json",
                 json!({
@@ -872,9 +1028,14 @@ fn responses_of(
             HttpVariantPayload::Raw
             | HttpVariantPayload::RawTagged
             | HttpVariantPayload::RawStreamed
+            | HttpVariantPayload::Partial
             | HttpVariantPayload::RawError => {
                 // Author-owned bytes under an author-chosen media type; no codec.
                 body("*/*", json!({ "type": "string", "format": "binary" }), e);
+                if v.payload == HttpVariantPayload::Partial {
+                    e.headers
+                        .insert("Content-Range".into(), partial::content_range_header());
+                }
                 if v.payload == HttpVariantPayload::RawTagged {
                     e.headers.insert(
                         "ETag".into(),
@@ -887,7 +1048,18 @@ fn responses_of(
     }
 
     let mut out = Map::new();
-    for (status, e) in by_status {
+    for (status, mut e) in by_status {
+        // #4434: the router's `429` always says when to try again, but a handler's own `429` at the
+        // same status need not (`TooManyRequests` carries `Retry-After` only if it asks for one), so
+        // the header is required only where the router's refusal is the one answer.
+        if e.descriptions.iter().any(|d| !d.starts_with("RateLimited"))
+            && let Some(h) = e
+                .headers
+                .get_mut("Retry-After")
+                .and_then(Value::as_object_mut)
+        {
+            h.insert("required".into(), json!(false));
+        }
         let mut resp = Map::new();
         resp.insert("description".into(), json!(e.descriptions.join("; ")));
         if !e.headers.is_empty() {
@@ -934,6 +1106,40 @@ impl Components {
         self.schemas.entry(name).or_insert_with(make);
     }
 
+    /// #3916: the RFC 9457 problem details a `format: problem` route answers an error
+    /// with (`runtime/http.ts`'s `problemResponse`).
+    fn problem_details(&mut self) {
+        self.put(PROBLEM_DETAILS.to_string(), || {
+            json!({
+                "description": "An error as RFC 9457 problem details. An error variant has \
+                                `type` `about:blank`; a router rejection has a \
+                                `https://bynk-lang.org/problems/<kind>` type and its own \
+                                members (`kind`, `path`, `expected`, `actual`, `violation`).",
+                "type": "object",
+                "required": ["type", "title", "status"],
+                "properties": {
+                    "type": { "type": "string" },
+                    "title": { "type": "string" },
+                    "status": { "type": "integer" },
+                    "detail": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "path": { "type": "string" },
+                    "expected": { "type": "string" },
+                    "actual": { "type": "string" },
+                    "violation": {
+                        "type": "object",
+                        "required": ["field", "message", "rule"],
+                        "properties": {
+                            "field": { "type": "string" },
+                            "message": { "type": "string" },
+                            "rule": { "type": "object" },
+                        },
+                    },
+                },
+            })
+        });
+    }
+
     /// The `400` body the boundary answers a malformed or invalid request with
     /// (`runtime/boundary.ts`'s `BoundaryError`, minus the caller-side
     /// `Transport`).
@@ -967,9 +1173,79 @@ impl Components {
                         "properties": {
                             "kind": { "const": "RefinementViolation" },
                             "path": { "type": "string" },
-                            "violation": { "type": "object" },
+                            "violation": { "$ref": "#/components/schemas/ValidationViolation" },
                         },
                     },
+                ],
+            })
+        });
+        self.validation_violation();
+    }
+
+    /// #3952: the `violation` of a `RefinementViolation`: the field, the message
+    /// and the rule that failed. The offending value is never part of it.
+    fn validation_violation(&mut self) {
+        self.put("ValidationViolation".to_string(), || {
+            json!({
+                "description": "The refinement a value broke. The offending value is never echoed.",
+                "type": "object",
+                "required": ["field", "message", "rule"],
+                "properties": {
+                    "field": { "type": "string" },
+                    "message": { "type": "string" },
+                    "rule": { "$ref": "#/components/schemas/ValidationRule" },
+                },
+            })
+        });
+        self.put("ValidationBound".to_string(), || {
+            let bound = |kind: &str, value: Value| {
+                json!({
+                    "type": "object",
+                    "required": ["kind", "value"],
+                    "properties": { "kind": { "const": kind }, "value": value },
+                })
+            };
+            json!({
+                "description": "A numeric argument of a rule, of the refined type's own base. \
+                                A `Decimal` is its canonical text and a `Duration` its milliseconds.",
+                "oneOf": [
+                    bound("IntBound", json!({ "type": "integer" })),
+                    bound("FloatBound", json!({ "type": "number" })),
+                    bound("DecimalBound", json!({ "type": "string" })),
+                    bound("DurationBound", json!({ "type": "integer" })),
+                ],
+            })
+        });
+        self.put("ValidationRule".to_string(), || {
+            let rule = |kind: &str, fields: &[(&str, Value)]| {
+                let mut properties = serde_json::Map::new();
+                properties.insert("kind".to_string(), json!({ "const": kind }));
+                let mut required = vec![json!("kind")];
+                for (name, schema) in fields {
+                    properties.insert((*name).to_string(), schema.clone());
+                    required.push(json!(name));
+                }
+                json!({ "type": "object", "required": required, "properties": properties })
+            };
+            let bound = json!({ "$ref": "#/components/schemas/ValidationBound" });
+            let limit = json!({ "type": "integer" });
+            json!({
+                "description": "The predicate a refinement enforces, with its argument. `WellFormed` is \
+                                a value that is not a valid member of its base type at all.",
+                "oneOf": [
+                    rule("NonNegative", &[]),
+                    rule("Positive", &[]),
+                    rule("InRange", &[("lo", bound.clone()), ("hi", bound.clone())]),
+                    rule("AtLeast", &[("bound", bound.clone())]),
+                    rule("AtMost", &[("bound", bound)]),
+                    rule("NonEmpty", &[]),
+                    rule("MinLength", &[("limit", limit.clone())]),
+                    rule("MaxLength", &[("limit", limit.clone())]),
+                    rule("Length", &[("limit", limit)]),
+                    rule("Matches", &[("pattern", json!({ "type": "string" }))]),
+                    rule("IsoDate", &[]),
+                    rule("Cron", &[]),
+                    rule("WellFormed", &[]),
                 ],
             })
         });
@@ -1075,6 +1351,8 @@ struct Renderer<'a> {
     names: &'a SchemaNames,
     /// #2858: the route renders its `Option`s as plain JSON (`U` or `null`).
     plain: bool,
+    /// #3916: the route answers its errors as RFC 9457 problem details.
+    problem: bool,
 }
 
 impl Renderer<'_> {
@@ -1101,6 +1379,11 @@ impl Renderer<'_> {
     /// The schema for one occurrence of a type.
     fn ref_schema(&self, components: &mut Components, r: &WireRef) -> Value {
         match r {
+            // #3974: a plain route writes an `Instant` as an RFC 3339 string.
+            WireRef::Base {
+                base: BaseType::Instant,
+                ..
+            } if self.plain => plain::instant_schema(),
             WireRef::Base { base, .. } => Value::Object(base_schema(*base)),
             WireRef::Bytes => Value::Object(base_schema(BaseType::Bytes)),
             WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
@@ -1146,9 +1429,9 @@ impl Renderer<'_> {
                         other => Map::from_iter([("allOf".to_string(), json!([other]))]),
                     };
                     refine(&mut fs, &f.predicates);
-                    props.insert(f.name.clone(), Value::Object(fs));
+                    props.insert(f.key.clone(), Value::Object(fs));
                     if f.default.is_none() {
-                        required.push(json!(f.name));
+                        required.push(json!(f.key));
                     }
                 }
                 let mut s = Map::new();
@@ -1156,6 +1439,10 @@ impl Renderer<'_> {
                 s.insert("properties".into(), Value::Object(props));
                 s.insert("required".into(), Value::Array(required));
                 s
+            }
+            // #3974: a plain route writes a payload-less sum as its variant's name.
+            WireBody::Sum(sum) if self.plain && plain::enum_schema(sum).is_some() => {
+                plain::enum_schema(sum).unwrap_or_default()
             }
             WireBody::Sum(sum) => {
                 let variants: Vec<Value> = sum
@@ -1173,10 +1460,10 @@ impl Renderer<'_> {
                                     }
                                 };
                                 refine(&mut fs, &f.predicates);
-                                (f.name.clone(), Value::Object(fs), f.default.is_none())
+                                (f.key.clone(), Value::Object(fs), f.default.is_none())
                             })
                             .collect();
-                        variant_schema(sum.wire_discriminant, &v.name, fields)
+                        variant_schema(&sum.wire_discriminant, &v.wire_name, fields)
                     })
                     .collect();
                 Map::from_iter([("oneOf".to_string(), Value::Array(variants))])
@@ -1212,6 +1499,15 @@ impl Renderer<'_> {
                 "items": self.ref_schema(components, &shape(elem)),
                 "uniqueItems": true,
             }),
+            // #3974: a plain route writes a `String`-keyed map as a JSON object.
+            WireInst::MapInst { key, val }
+                if self.plain && plain::is_string_key(self.types, key) =>
+            {
+                json!({
+                    "type": "object",
+                    "additionalProperties": self.ref_schema(components, &shape(val)),
+                })
+            }
             // Entries array, insertion-ordered: `[[k, v], …]`.
             WireInst::MapInst { key, val } => json!({
                 "type": "array",
@@ -1262,9 +1558,10 @@ impl Renderer<'_> {
                     let mut props = Map::new();
                     let mut required = Vec::new();
                     for (fname, ty) in &fields {
-                        props.insert(fname.clone(), self.ref_schema(components, &shape(ty)));
+                        let key = wire_names::record_field_key(self.types, name, fname);
+                        props.insert(key.clone(), self.ref_schema(components, &shape(ty)));
                         if !defaulted.contains(fname.as_str()) {
-                            required.push(json!(fname));
+                            required.push(json!(key));
                         }
                     }
                     components.put(
@@ -1277,16 +1574,13 @@ impl Renderer<'_> {
             WireInst::SumInst { name, args } => {
                 let n = self.names.of(self.unit, key, self.plain);
                 if let Some(variants) = wire::sum_inst_variants(name, args, self.types) {
+                    let names = wire_names::SumNames::of(self.types, name);
                     let vs: Vec<Value> = variants
                         .iter()
                         .map(|(vname, fields)| {
-                            let fields = fields
-                                .iter()
-                                .map(|(f, t)| {
-                                    (f.clone(), self.ref_schema(components, &shape(t)), true)
-                                })
-                                .collect();
-                            variant_schema(wire::WIRE_DISCRIMINANT, vname, fields)
+                            let fields = names
+                                .payload(vname, fields, |t| self.ref_schema(components, &shape(t)));
+                            variant_schema(&names.discriminator, &names.variant_name(vname), fields)
                         })
                         .collect();
                     components.put(n.clone(), || json!({ "oneOf": vs }));
@@ -1342,6 +1636,7 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
         return;
     }
     let mut patterns: Vec<String> = Vec::new();
+    let mut omitted: Vec<String> = Vec::new();
     // #2622: a `Decimal` schema is a string, so its numeric predicates have no
     // `minimum`/`maximum` form; they stay in `x-bynk-refinements` and the prose.
     let decimal = s.get("x-bynk-base").and_then(Value::as_str) == Some("Decimal");
@@ -1349,6 +1644,15 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
         match p {
             PredKind::Positive | PredKind::NonNegative | PredKind::InRange(..) if decimal => {}
             PredKind::InRangeD(..) => {}
+            // #3948: a `Decimal` schema is a string, as above.
+            PredKind::AtLeast(PredBound::Decimal(_)) | PredKind::AtMost(PredBound::Decimal(_)) => {}
+            PredKind::AtLeast(b) => tighten_min(s, "minimum", bound_number(b)),
+            PredKind::AtMost(b) => tighten_max(s, "maximum", bound_number(b)),
+            // A `Duration` is a number of milliseconds on the wire.
+            PredKind::InRangeDur(a, b) => {
+                tighten_min(s, "minimum", a.millis as f64);
+                tighten_max(s, "maximum", b.millis as f64);
+            }
             PredKind::NonEmpty => tighten_min(s, "minLength", 1.0),
             // #2867: JSON Schema's `date` is RFC 3339 `full-date`, the rule
             // `IsoDate` enforces; validators that ignore `format` still see
@@ -1357,6 +1661,12 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
                 s.insert("format".into(), Value::String("date".into()));
                 tighten_min(s, "minLength", 10.0);
                 tighten_max(s, "maxLength", 10.0);
+            }
+            // #3873: JSON Schema has no `format` for cron; `x-bynk-format` names it.
+            // `* * * * *` is the shortest valid schedule, nine characters.
+            PredKind::Cron => {
+                s.insert("x-bynk-format".into(), Value::String("cron".into()));
+                tighten_min(s, "minLength", 9.0);
             }
             PredKind::MinLength(n) => tighten_min(s, "minLength", *n as f64),
             PredKind::MaxLength(n) => tighten_max(s, "maxLength", *n as f64),
@@ -1375,7 +1685,15 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
                 tighten_max(s, "maximum", b.value);
             }
             // The codec anchors the whole value; JSON Schema's `pattern` searches.
-            PredKind::Matches(p) => patterns.push(format!("^(?:{p})$")),
+            // #3950: JSON Schema's `pattern` has no flags, so a `(?i)`/`(?s)`
+            // pattern is rewritten to say the same thing without them, or left
+            // out (and said so below) when it cannot be: never published wrong.
+            PredKind::Matches(p) => match json_schema_pattern(p) {
+                Ok(pattern) => patterns.push(pattern),
+                Err(why) => {
+                    omitted.push(format!("the pattern `{p}` is not published, because {why}"))
+                }
+            },
         }
     }
     let mut it = patterns.into_iter();
@@ -1390,7 +1708,10 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
     let written: Vec<String> = preds.iter().map(render_pred).collect();
     let prose: Vec<String> = preds.iter().map(pred_prose).collect();
     s.insert("x-bynk-refinements".into(), json!(written));
-    let note = format!("Re-validated at the boundary: {}.", prose.join("; "));
+    let mut note = format!("Re-validated at the boundary: {}.", prose.join("; "));
+    for why in &omitted {
+        note.push_str(&format!(" Note: {why}."));
+    }
     let d = match s.remove("description") {
         Some(Value::String(d)) => format!("{d}\n\n{note}"),
         _ => note,
@@ -1420,6 +1741,110 @@ fn tighten_max(s: &mut Map<String, Value>, key: &str, n: f64) {
     }
 }
 
+/// A one-sided bound as a JSON number: a `Duration` in milliseconds, its wire
+/// form. (A `Decimal` bound is handled before this.)
+fn bound_number(b: &PredBound) -> f64 {
+    match b {
+        PredBound::Int(a) => a.value as f64,
+        PredBound::Float(a) => a.value,
+        PredBound::Duration(a) => a.millis as f64,
+        PredBound::Decimal(_) => 0.0,
+    }
+}
+
+/// #3950: a `Matches` argument as a JSON Schema `pattern`. The schema language
+/// has no flags, so a leading `(?i)` is written out (each ASCII letter becomes a
+/// class, `a` as `[aA]`, a class gains the other case of its letters and ranges)
+/// and `(?s)` turns each `.` into `[\s\S]`. `Err` carries why it cannot be
+/// (a property or code-point escape, a non-ASCII letter, or a range across
+/// cases), and the pattern is then left out.
+fn json_schema_pattern(literal: &str) -> Result<String, &'static str> {
+    let (pat, flags) = bynk_syntax::ast::leading_regex_flag_group(literal).unwrap_or((literal, ""));
+    let (fold, dot_all) = (flags.contains('i'), flags.contains('s'));
+    if !fold && !dot_all {
+        return Ok(format!("^(?:{pat})$"));
+    }
+    let other_case = |c: char| {
+        if c.is_ascii_lowercase() {
+            c.to_ascii_uppercase()
+        } else {
+            c.to_ascii_lowercase()
+        }
+    };
+    let chars: Vec<char> = pat.chars().collect();
+    let mut out = String::new();
+    let mut in_class = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '\\' => {
+                let next = chars.get(i + 1).copied().ok_or("it ends in a backslash")?;
+                if fold && matches!(next, 'p' | 'P' | 'u' | 'x' | 'c' | 'k') {
+                    return Err(
+                        "it is case-insensitive and uses an escape with no case-insensitive form",
+                    );
+                }
+                out.push('\\');
+                out.push(next);
+                i += 2;
+                continue;
+            }
+            '[' if !in_class => {
+                in_class = true;
+                out.push('[');
+                if chars.get(i + 1) == Some(&'^') {
+                    out.push('^');
+                    i += 1;
+                }
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(']');
+            }
+            '(' if !in_class
+                && chars.get(i + 1) == Some(&'?')
+                && chars.get(i + 2) == Some(&'<')
+                && !matches!(chars.get(i + 3), Some('=') | Some('!')) =>
+            {
+                // A group's name is not text to fold.
+                while i < chars.len() && chars[i] != '>' {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+                out.push('>');
+            }
+            '.' if !in_class && dot_all => out.push_str("[\\s\\S]"),
+            c if fold && c.is_alphabetic() => {
+                if !c.is_ascii() {
+                    return Err("it is case-insensitive and holds a non-ASCII letter");
+                }
+                let is_range = in_class
+                    && chars.get(i + 1) == Some(&'-')
+                    && chars.get(i + 2).is_some_and(|h| h.is_ascii_alphabetic());
+                if is_range {
+                    let hi = chars[i + 2];
+                    if c.is_ascii_lowercase() != hi.is_ascii_lowercase() {
+                        return Err("it is case-insensitive and holds a range across cases");
+                    }
+                    out.push_str(&format!("{c}-{hi}{}-{}", other_case(c), other_case(hi)));
+                    i += 3;
+                    continue;
+                }
+                if in_class {
+                    out.push(c);
+                    out.push(other_case(c));
+                } else {
+                    out.push_str(&format!("[{c}{}]", other_case(c)));
+                }
+            }
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    Ok(format!("^(?:{out})$"))
+}
+
 /// The predicate as written: `InRange(1, 100)`.
 fn render_pred(p: &PredKind) -> String {
     match p {
@@ -1427,6 +1852,9 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("AtLeast({})", b.lexeme()),
+        PredKind::AtMost(b) => format!("AtMost({})", b.lexeme()),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -1434,6 +1862,7 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::Positive => "Positive".into(),
         PredKind::NonEmpty => "NonEmpty".into(),
         PredKind::IsoDate => "IsoDate".into(),
+        PredKind::Cron => "Cron".into(),
     }
 }
 
@@ -1446,6 +1875,9 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::InRange(a, b) => format!("must be in range [{}, {}]", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("must be at least {}", b.lexeme()),
+        PredKind::AtMost(b) => format!("must be at most {}", b.lexeme()),
         PredKind::MinLength(n) => format!("length must be at least {n}"),
         PredKind::MaxLength(n) => format!("length must be at most {n}"),
         PredKind::Length(n) => format!("length must be exactly {n}"),
@@ -1453,6 +1885,7 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::Positive => "must be positive".into(),
         PredKind::NonEmpty => "must be non-empty".into(),
         PredKind::IsoDate => "must be a calendar date (YYYY-MM-DD)".into(),
+        PredKind::Cron => "must be a valid cron schedule".into(),
     }
 }
 
@@ -1557,5 +1990,39 @@ fn yaml_value(v: &Value, indent: usize, out: &mut String) {
         out.push(' ');
         out.push_str(&yaml_scalar(v));
         out.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::json_schema_pattern;
+
+    #[test]
+    fn a_plain_pattern_is_anchored_as_written() {
+        assert_eq!(json_schema_pattern("[a-z]+").unwrap(), "^(?:[a-z]+)$");
+        // A property escape is published as is: no flag to lose.
+        assert_eq!(json_schema_pattern(r"[\p{L}]+").unwrap(), r"^(?:[\p{L}]+)$");
+    }
+
+    #[test]
+    fn a_case_insensitive_group_is_written_out() {
+        assert_eq!(
+            json_schema_pattern(r"(?i)[a-c]{3}-\d").unwrap(),
+            r"^(?:[a-cA-C]{3}-\d)$"
+        );
+        assert_eq!(json_schema_pattern("(?i)ab").unwrap(), "^(?:[aA][bB])$");
+        assert_eq!(json_schema_pattern("(?i)[xyz]").unwrap(), "^(?:[xXyYzZ])$");
+    }
+
+    #[test]
+    fn a_dot_all_group_widens_the_dot() {
+        assert_eq!(json_schema_pattern("(?s)a.b").unwrap(), r"^(?:a[\s\S]b)$");
+    }
+
+    #[test]
+    fn a_pattern_that_cannot_be_folded_is_left_out() {
+        assert!(json_schema_pattern(r"(?i)\p{L}+").is_err());
+        assert!(json_schema_pattern("(?i)é").is_err());
+        assert!(json_schema_pattern("(?i)[a-Z]").is_err());
     }
 }

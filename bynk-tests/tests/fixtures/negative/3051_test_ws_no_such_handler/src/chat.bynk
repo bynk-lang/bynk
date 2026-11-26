@@ -20,12 +20,9 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     ()
   }
 
-  // Slice 3b-iii/4: an inbound frame is posted to the room, which broadcasts it to
-  // every connection (the sender included — the §20 fan-out); on close, the stored
-  // connection is disposed via the agent. On the bundle target these are callable
-  // surface methods a `TestConnection` test drives.
-  on message (roomId: RoomId, frame: ClientFrame) -> Effect[()] by user: Participant {
-    let _ <- Room(roomId).post(user.identity, frame.text)
+  // #3902: a WebSocket service always has an `on close`; this one has no `on message`.
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(roomId).leave(user.identity)
     ()
   }
 }
@@ -51,7 +48,7 @@ agent Room {
   // `conns.parTraverse` borrows each held connection and `send`s concurrently —
   // the held-aware iteration borrow surface, the track's final piece.
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }

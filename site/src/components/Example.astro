@@ -59,19 +59,21 @@ const canEmbed = embed && runHref;
     }
   </div>
   {canEmbed && <div class="bynk-embed-mount" hidden />}
+  {canEmbed && <p class="bynk-embed-status sr-only" role="status" />}
 
   <div class="bynk-affordances">
     {
       canEmbed && (
         <button type="button" class="bynk-embed-btn">
-          ▶&nbsp;Edit &amp; run in-page
+          <span aria-hidden="true">▶&nbsp;</span>Edit &amp; run in-page
         </button>
       )
     }
     {
       runHref && (
         <a class={canEmbed ? "bynk-run bynk-run--secondary" : "bynk-run"} href={runHref} target="_blank" rel="noopener">
-          Open in playground&nbsp;↗
+          Open in playground<span aria-hidden="true">&nbsp;↗</span>
+          <span class="sr-only">(opens the playground site in a new tab)</span>
         </a>
       )
     }
@@ -85,7 +87,8 @@ const canEmbed = embed && runHref;
     {
       projectHref && (
         <a class="bynk-project" href={projectHref} target="_blank" rel="noopener">
-          Open the full project&nbsp;↗
+          Open the full project<span aria-hidden="true">&nbsp;↗</span>
+          <span class="sr-only">(opens GitHub in a new tab)</span>
         </a>
       )
     }
@@ -180,26 +183,52 @@ const canEmbed = embed && runHref;
   // The site's only client-side JavaScript (documentation track, slice 7): lazily
   // frame the deployed playground for pages carrying a `<Example runnable embed>`.
   // Inert on every other page — it only touches hosts with `data-embed-href`.
+  //
+  // Opening the editor hides the button that opened it, so focus moves into the
+  // editor once it has loaded, and the status line tells a screen reader what
+  // happened and how to leave (Escape, then Tab). Closing it returns focus to
+  // the button that opens it again.
   for (const host of document.querySelectorAll<HTMLElement>("[data-embed-href]")) {
     const href = host.dataset.embedHref;
     const openBtn = host.querySelector<HTMLButtonElement>(".bynk-embed-btn");
     const closeBtn = host.querySelector<HTMLButtonElement>(".bynk-embed-close");
     const preview = host.querySelector<HTMLElement>(".bynk-preview");
     const mount = host.querySelector<HTMLElement>(".bynk-embed-mount");
-    if (!href || !openBtn || !closeBtn || !preview || !mount) continue;
+    const status = host.querySelector<HTMLElement>(".bynk-embed-status");
+    if (!href || !openBtn || !closeBtn || !preview || !mount || !status) continue;
 
     openBtn.addEventListener("click", () => {
       if (mount.querySelector("iframe")) return; // already open
       const frame = document.createElement("iframe");
-      frame.src = href;
+      // The playground's inline embed: just the editor, Run and the results, without
+      // its own wordmark, Share, menu or "Open in playground" (this page has those),
+      // in the page's light or dark theme. The snippet stays in the URL's fragment.
+      const src = new URL(href);
+      src.searchParams.set("embed", "inline");
+      const theme = document.documentElement.dataset.theme;
+      if (theme === "light" || theme === "dark") src.searchParams.set("theme", theme);
+      frame.src = src.href;
       frame.className = "bynk-embed-frame";
       frame.loading = "lazy";
       frame.title = "Bynk playground — live editor";
+      // Once it has loaded, move focus into the editor, unless the reader has
+      // already moved on from the frame while it was loading.
+      frame.addEventListener(
+        "load",
+        () => {
+          if (document.activeElement === frame) frame.focus();
+        },
+        { once: true },
+      );
       mount.append(frame);
       mount.hidden = false;
       preview.hidden = true;
       openBtn.hidden = true;
       closeBtn.hidden = false;
+      // Until the frame loads, focus waits on the frame itself, not <body>.
+      frame.tabIndex = 0;
+      frame.focus();
+      status.textContent = "Editor opened in the page. Press Escape, then Tab, to leave the editor.";
     });
 
     closeBtn.addEventListener("click", () => {
@@ -208,6 +237,8 @@ const canEmbed = embed && runHref;
       preview.hidden = false;
       openBtn.hidden = false;
       closeBtn.hidden = true;
+      openBtn.focus();
+      status.textContent = "Editor closed.";
     });
   }
 </script>

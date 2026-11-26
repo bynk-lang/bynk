@@ -1,0 +1,10 @@
+{
+  "blurb": "An agent's body is ordered: its `key`, its storage fields (`state` and `store`), its invariants and migrations, then its handlers. Putting the fields first means the whole shape of the agent's persisted state is read before any code that uses it. A storage field declared after an invariant or a handler is refused. Move it up beside the other fields.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.storage_after_phase",
+  "constructs": [],
+  "example": "agent Counter {\n    key id: String\n    store count: Cell[Int]\n\n    on call bump() -> Effect[()] { … }\n\n    store extra: Cell[Int] = 0            // ✗ storage after a handler\n}\n\nagent Counter {\n    key id: String\n    store count: Cell[Int]\n    store extra: Cell[Int] = 0            // ✓ with the other fields\n\n    on call bump() -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "Agent storage (`state` / `store`) is declared after the invariants or handlers."
+}

@@ -41,7 +41,9 @@ intent only, and a merge-time stamp assigns the numbers in merge order. See
 
 ## Developing
 
-Build and layout are described in the [README](README.md#developing). Before you
+Build and layout are described in the [README](README.md#developing), and the
+compiler's architecture, its test fixtures and how the docs are built in the
+[contributor pages](https://bynk-lang.org/project/contributing/). Before you
 push, run the CI gates locally:
 
 ```sh
@@ -56,6 +58,17 @@ git config core.hooksPath .githooks
 ```
 
 CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
+
+**Ordered reference lists.** The long lists in the Reference (the type tables and
+sections of `reference/types.md`, the terms of `reference/glossary.md`) are kept in
+alphabetical order. A list that is ordered is wrapped in a marker, so the check never
+guesses: `<!-- sorted: table -->` around a table (its rows are ordered by their first
+code span) or `<!-- sorted: headings -->` around sections (ordered by heading), each
+closed by `<!-- /sorted -->`. When you add an entry to a marked list, put it in its
+place, and move whole entries only: a table row, or a heading with its section.
+`cargo xtask sorted-lists` (part of `cargo xtask ci --fast`) names any entry that is
+out of order and the one it should follow. Keys ignore case, backticks, symbols and a
+leading "The".
 
 ## Pull requests
 
@@ -72,9 +85,10 @@ CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 6. CI runs in stages (the table at the top of `.github/workflows/ci.yml`):
    - **Draft:** each push runs the fast Linux checks only, and `CI green` stays
      red, because the full check has not run.
-   - **Ready for review:** adds the Windows and macOS legs, the Linux system
-     tests, TypeScript 7 and the Node floor, so platform and system-test
-     failures show up while the PR is in review. A same-repo draft is marked
+   - **Ready for review:** adds the Windows leg (and macOS, when the
+     repository variable `MACOS_ON_PRS` is `true`), the Linux system tests,
+     TypeScript 7 and the Node floor, so platform and system-test failures
+     show up while the PR is in review. A same-repo draft is marked
      ready automatically once its fast checks pass (add the `keep-draft` label
      to stop that).
    - **Merge queue:** re-runs the fast Linux checks on top of the PRs queued
@@ -85,7 +99,11 @@ CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 ## Licence
 
 Licensed under either of Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)) or MIT
-([LICENSE-MIT](LICENSE-MIT)), at your option. Unless you explicitly state
-otherwise, any contribution intentionally submitted for inclusion in the work by
-you, as defined in the Apache-2.0 license, shall be dual licensed as above,
-without any additional terms or conditions.
+([LICENSE-MIT](LICENSE-MIT)), at your option, except the documentation's prose
+(the pages in `site/src/content/`), which is [CC BY 4.0](LICENSE-CC-BY-4.0.md),
+and its code snippets (code blocks in those pages, and `site/src/snippets/`),
+which are [MIT](LICENSE-MIT). Unless you explicitly state otherwise, any
+contribution intentionally submitted for inclusion in the work by you, as
+defined in the Apache-2.0 licence, shall be licensed in the same way, without
+any additional terms or conditions. The README's "Licence" section has the
+details.

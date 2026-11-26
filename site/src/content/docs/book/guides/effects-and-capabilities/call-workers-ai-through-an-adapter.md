@@ -14,9 +14,9 @@ below shows how to move a Worker's consumers to the binding.
 A hand-written adapter's binding receives only its `given` dependencies, not the
 Worker's `env`, so it cannot read the Worker's `[ai]` binding (that is what
 first-party `Ai` is for). What an adapter *can* do is call Workers AI's REST endpoint through the portable
-[`bynk.Fetch`](/book/reference/bynk-capabilities/) capability, authenticated with
-a token held in [`bynk.Secrets`](/book/reference/bynk-capabilities/). That is an
-ordinary [library adapter](/book/reference/adapters/): no new binding kind, and
+[`bynk.Fetch`](/reference/bynk-capabilities/) capability, authenticated with
+a token held in [`bynk.Secrets`](/reference/bynk-capabilities/). That is an
+ordinary [library adapter](/reference/adapters/): no new binding kind, and
 it stays portable because it consumes only `bynk`.
 
 The trade-offs are real: each call is an HTTPS round trip to the Cloudflare API
@@ -79,9 +79,9 @@ export class WorkersAi implements Ai {
 
     const res = await this.deps.Fetch.send({
       method: Method.Post,
-      url: `https://api.cloudflare.com/client/v4/accounts/${account.value}/ai/run/${model}`,
+      url: `https://api.cloudflare.com/client/v4/accounts/${account.value.reveal()}/ai/run/${model}`,
       contentType: Some("application/json"),
-      authorization: Some(`Bearer ${token.value}`),
+      authorization: Some(token.value.bearer()),
       headers: new Map(),
       body: Some(JSON.stringify({ prompt })),
     });
@@ -114,7 +114,7 @@ context assistant {
 	consumes workers_ai { Ai, AiError }
 
 	service summarise {
-		on call(text: String) -> Effect[String] given Ai {
+		on call(text: String) -> Effect[String] by Caller given Ai {
 			let reply <- Ai.complete("@cf/meta/llama-3.2-1b-instruct", "Summarise: \(text)")
 			match reply {
 				Ok(summary) => summary,
@@ -160,14 +160,15 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 				Some(t) => if !model.matchesRegex("@(cf|hf)/[a-z0-9_-]+/[a-z0-9_-][a-z0-9._-]*") {
 					Effect.pure(Err("invalid model id"))
 				} else {
-					let res <- Fetch.send(Request {
-						method: Post,
-						url: "https://api.cloudflare.com/client/v4/accounts/\(a)/ai/run/\(model)",
-						contentType: Some("application/json"),
-						authorization: Some("Bearer \(t)"),
-						headers: Map.empty(),
-						body: Some(body),
-					})
+					let res <- Fetch.send(
+						Request {
+							method: Post,
+							url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
+							contentType: Some("application/json"),
+							authorization: Some(t.bearer()),
+							body: Some(body),
+						}
+					)
 					match res {
 						Ok(r) => if r.status == 200 {
 							Effect.pure(Ok(r.body))
@@ -217,5 +218,5 @@ binding to read.
 
 - [Run a model from a Worker](/book/guides/effects-and-capabilities/run-a-model-from-a-worker/)
 - [Wrap a library as an adapter](/book/guides/effects-and-capabilities/wrap-a-library/)
-- [Adapters reference](/book/reference/adapters/)
-- [First-party `bynk` capabilities](/book/reference/bynk-capabilities/)
+- [Adapters reference](/reference/adapters/)
+- [First-party `bynk` capabilities](/reference/bynk-capabilities/)

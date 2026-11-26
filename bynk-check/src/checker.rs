@@ -26,8 +26,8 @@ use crate::index::{RefSink, SymbolKind};
 use crate::kernel_op::{
     BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
     InstantOp, IntOp, KernelOp, ListOp, MapOp, OptionOp, QueryOp, RequestCookiesOp,
-    RequestHeadersOp, RequestQueryOp, ResultOp, SetOp, StreamOp, StringOp, TestConnectionOp,
-    TokenClaimsOp,
+    RequestHeadersOp, RequestQueryOp, ResultOp, SecretOp, SetOp, StreamOp, StringOp,
+    TestConnectionOp, TokenClaimsOp,
 };
 use crate::kernel_op::{
     CellStoreOp, IntrinsicNs, LogStoreOp, LogWindowOp, MapStoreOp, SetStoreOp, StaticOp,
@@ -49,21 +49,41 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub mod analytics;
+pub(crate) mod applied_bounds;
+mod call_outcome;
 mod calls;
 pub mod codable;
+mod collections;
 mod cookie_lints;
 mod d1;
+mod events_emit;
 pub mod peek;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
 use equality::EqScope;
+mod effect_more;
+mod erase;
 mod expressions;
 mod kernels;
 mod linearity;
+mod list_basics;
+mod list_more;
+mod list_par;
+mod list_par_with;
+pub(crate) mod nested_effect;
+pub(crate) mod nested_wrapper;
 mod par;
+mod partial_content;
+mod query_more;
+mod query_par;
+mod refined_range;
 mod refinements;
+mod result_more;
+mod session_calls;
+mod sum_bad_principal;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -81,11 +101,16 @@ pub fn string_refinement_violation<'a>(
     let refinement = refinements::type_decl_refinement(decl)?;
     refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
 }
+mod decode_kind;
 mod regex_ambiguity;
+mod response_headers;
+mod string_more;
 mod usefulness;
+mod validation_rule;
 
 use calls::*;
 use expressions::*;
+pub(crate) use kernels::std_type_decls;
 use kernels::*;
 use refinements::*;
 
@@ -94,6 +119,7 @@ pub use calls::{
     BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
     check_state_initialiser, check_suite_fn,
 };
+pub use collections::BYNK_COLLECTION_DEPRECATED;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use d1::{row_base_fields, row_bool_fields};
 pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};
@@ -350,7 +376,7 @@ pub enum Ty {
     /// `Effect[T]` (v0.5).
     Effect(TyId),
     /// `HttpResult[T]` (v0.9).
-    HttpResult(TyId),
+    HttpResult(TyId, Option<TyId>),
     /// `QueueResult` — the built-in queue verdict sum (v0.44). Non-generic.
     QueueResult,
     /// `HttpOutcome[T]` — what a `system`-tier case observes when it drives an
@@ -491,7 +517,10 @@ impl Ty {
             }
             Ty::Option(t) => format!("Option[{}]", types.display(*t)),
             Ty::Effect(t) => format!("Effect[{}]", types.display(*t)),
-            Ty::HttpResult(t) => format!("HttpResult[{}]", types.display(*t)),
+            Ty::HttpResult(t, None) => format!("HttpResult[{}]", types.display(*t)),
+            Ty::HttpResult(t, Some(e)) => {
+                format!("HttpResult[{}, {}]", types.display(*t), types.display(*e))
+            }
             Ty::QueueResult => "QueueResult".to_string(),
             Ty::HttpOutcome(t) => format!("HttpOutcome[{}]", types.display(*t)),
             Ty::BoundaryRejection => "BoundaryRejection".to_string(),
@@ -826,6 +855,9 @@ pub enum Callee {
     /// actor: the session cookie the actor mints, or its matching deletion.
     /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
     SignedCookie { actor: String, issue: bool },
+    /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
+    /// every session of the identity in its session agent. An `Effect[()]`.
+    SessionRevokeAll { actor: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
@@ -859,6 +891,14 @@ pub enum Callee {
         /// bynk's own ([`crate::firstparty::resolve`]); `None` for any other
         /// capability, including a same-named one from another unit (#934).
         first_party: Option<crate::firstparty::FirstPartyCap>,
+        /// #4113: for bynk's own `Events.emit`, the event the call emits: its type argument,
+        /// written or inferred from the argument, once the owner check has accepted it. The one
+        /// place the emitter and the architecture model read the emitted event from.
+        event: Option<String>,
+        /// #4382: for a generic operation, the type arguments the call resolved to, in the
+        /// operation's declaration order (written, then inferred, #4116). Empty otherwise. A
+        /// test build keys a `stub` and an observation on the leading ones.
+        type_args: Vec<TyId>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes
@@ -876,6 +916,32 @@ pub enum Callee {
         /// quotes columns with backticks, decodes MySQL's text forms (the
         /// Postgres pass over `Int` fields) and fails as a `MySqlReadError`.
         mysql: bool,
+    },
+    /// #4105: `Cap.writeValue[T](value)` on a derived `Analytics` instance. Not a declared
+    /// operation: the emitter lowers it over `write(DataPoint)` from `mapping`, which the checker
+    /// computed from the record `T`.
+    AnalyticsWrite {
+        cap: String,
+        /// The record written, which `AnalyticsSql.select[T]` reads back from.
+        record: String,
+        mapping: analytics::AnalyticsMapping,
+        /// The record's declaration (else the call), where the schema lock reports a mapping that changed.
+        span: Span,
+    },
+    /// #4105: `AnalyticsSql.select[T](Instance, tail, params)`. The compiler writes the `SELECT`
+    /// list from `row` and the instance's written record, so `sql` is filled once the unit has
+    /// been checked (`analytics::resolve_selects`); `None` before that, and when it is refused.
+    AnalyticsSelect {
+        /// The `Analytics` instance whose dataset is read.
+        cap: String,
+        row: TyId,
+        /// The literal after the select list (it starts at `FROM`, or at a comma that continues
+        /// the list).
+        tail: String,
+        /// Names the tail defines with `AS`, which a read field may take instead of a column.
+        aliases: Vec<String>,
+        sql: Option<String>,
+        span: Span,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
@@ -914,6 +980,9 @@ pub enum Callee {
     AgentInit(String),
     /// `agent.handler(args)` — agent handler dispatch.
     Agent { agent: String, handler: String },
+    /// #3931: `self.erase()` in an agent handler — the instance's stored state is deleted when the
+    /// handler commits, instead of the handler's other writes.
+    AgentErase,
     /// A test-body service address (`svc.call`/`svc.<VERB>("/path", …)`/
     /// `svc.schedule(...)`/`svc.message(...)`). `check_test_service_address`
     /// always returns `None` by design (the runner recovers the outcome
@@ -1017,9 +1086,16 @@ pub enum HandlerAddress {
         path: Option<String>,
     },
     /// `svc.schedule(expr, …)`: a cron handler, matched by its schedule once `expr` is known.
-    Schedule { expr: Option<String> },
-    /// `svc.message(msg)`: the queue `on message` handler.
-    Message,
+    /// #3874: `param` is the position among the handler's parameters of its
+    /// `CronSchedule` one, which the address fills from `expr` (not from an argument).
+    Schedule {
+        expr: Option<String>,
+        param: Option<usize>,
+    },
+    /// `svc.message(msg)`: the queue `on message` handler. #3880: `delivery` is the position
+    /// among the handler's parameters of its `QueueDelivery` one, which the address fills from
+    /// its optional second argument, or from the default delivery.
+    Message { delivery: Option<usize> },
     /// `svc.event(payload, …)`: the `on event` handler.
     Event,
     /// A WebSocket lifecycle address on a `TestConnection`.
@@ -1031,6 +1107,24 @@ impl HandlerAddress {
     pub fn schedule(expr: &str) -> HandlerAddress {
         HandlerAddress::Schedule {
             expr: Some(expr.to_string()),
+            param: None,
+        }
+    }
+
+    /// A `schedule` address before its expression is read (#3874).
+    pub fn schedule_unread() -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: None,
+            param: None,
+        }
+    }
+
+    /// [`HandlerAddress::schedule`] for a handler with a `CronSchedule` parameter at
+    /// position `param` (#3874).
+    pub fn schedule_with_param(expr: &str, param: Option<usize>) -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: Some(expr.to_string()),
+            param,
         }
     }
 
@@ -1045,9 +1139,10 @@ impl HandlerAddress {
     }
 
     /// A `ws close` address once its handler is matched.
-    pub fn ws_close(params: usize) -> HandlerAddress {
+    pub fn ws_close(params: usize, info: bool) -> HandlerAddress {
         HandlerAddress::Ws(WsAddress::Close {
             params: Some(params),
+            info,
         })
     }
 
@@ -1060,9 +1155,11 @@ impl HandlerAddress {
                 verb,
                 path: Some(path),
             } => format!("{} {path}", verb.as_str()),
-            HandlerAddress::Schedule { expr: None } => "schedule".to_string(),
-            HandlerAddress::Schedule { expr: Some(expr) } => format!("schedule {expr}"),
-            HandlerAddress::Message => "message".to_string(),
+            HandlerAddress::Schedule { expr: None, .. } => "schedule".to_string(),
+            HandlerAddress::Schedule {
+                expr: Some(expr), ..
+            } => format!("schedule {expr}"),
+            HandlerAddress::Message { .. } => "message".to_string(),
             HandlerAddress::Event => "event".to_string(),
             HandlerAddress::Ws(WsAddress::Open) => "ws open".to_string(),
             HandlerAddress::Ws(WsAddress::Message { .. }) => "ws message".to_string(),
@@ -1077,8 +1174,15 @@ impl HandlerAddress {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WsAddress {
     Open,
-    Message { frame: Option<WsMessageShape> },
-    Close { params: Option<usize> },
+    Message {
+        frame: Option<WsMessageShape>,
+    },
+    /// `params` counts every parameter of the handler; `info` is whether the last is the trailing
+    /// `close: CloseInfo` (#3902), which the driver fills rather than recovering from the connection.
+    Close {
+        params: Option<usize>,
+        info: bool,
+    },
 }
 
 /// The shape of a `ws message` handler: which parameter takes the inbound frame
@@ -1244,12 +1348,14 @@ impl TypedCommons {
     pub fn empty() -> Self {
         TypedCommons {
             commons: Arc::new(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),
                 },
                 items: Vec::new(),
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Fragment,
                 span: Default::default(),
@@ -1601,6 +1707,20 @@ pub fn check_record_in(
 
     // 1b. #2617: check each constant declared in this file — its name, its
     // initialiser's static-ness and type — and the cycles through it.
+    // #3975: the wire names (`@name`, `@discriminator`) this unit's own types declare.
+    crate::wire_names::validate_wire_names(
+        input.commons.items.iter().filter_map(|i| match i {
+            CommonsItem::Type(t) => Some(t),
+            _ => None,
+        }),
+        &input.consts,
+        &mut errors,
+    );
+    for item in &input.commons.items {
+        if let CommonsItem::Event(e) = item {
+            crate::wire_names::validate_record(&e.name.name, &e.body, &input.consts, &mut errors);
+        }
+    }
     let local_consts: Vec<&ConstDecl> = input
         .commons
         .items
@@ -1980,10 +2100,16 @@ pub struct HandlerBodyCheck<'a> {
     /// connection is owned).
     pub borrowed_held: HashSet<String>,
     /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
-    pub oidc_binder: Option<String>,
+    pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`).
+    pub claims_sum_arms: Vec<String>,
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
+    /// #4389: the body is an `on http` handler of a method other than `GET`, where
+    /// `PartialContent` and `NotModified` are refused.
+    pub http_non_get: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -2009,8 +2135,10 @@ impl<'a> HandlerBodyCheck<'a> {
             actor_binding: None,
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
-            oidc_binder: None,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             service_handler: false,
+            http_non_get: false,
         }
     }
 }
@@ -2035,8 +2163,10 @@ pub fn check_handler_body(
         actor_binding,
         store_fields,
         borrowed_held,
-        oidc_binder,
+        claims_binder,
+        claims_sum_arms,
         service_handler: in_service_handler,
+        http_non_get,
     } = check;
     let CheckSinks {
         tys,
@@ -2117,6 +2247,7 @@ pub fn check_handler_body(
         effectful,
         agent_state_ty,
         commit_seen: false,
+        fold_init_expected: None,
         caps: CapabilityCtx {
             capabilities,
             declared_capabilities,
@@ -2127,7 +2258,9 @@ pub fn check_handler_body(
             ..Default::default()
         },
         in_test_body: false,
-        oidc_binder,
+        lambda_depth: 0,
+        claims_binder,
+        claims_sum_arms,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
@@ -2136,6 +2269,7 @@ pub fn check_handler_body(
         store_fields,
         in_agent_handler: agent_state_ty.is_some(),
         in_service_handler,
+        http_non_get,
         in_fn_body: false,
         test_values: false,
     };
@@ -2143,6 +2277,8 @@ pub fn check_handler_body(
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
         return;
     };
+    // #3931: a `:=` after `self.erase()` is dropped by the commit.
+    erase::warn_writes_after_erase(body, false, &mut ctx);
     // v0.102 (§3 step 11): the held-resource linearity pass, now that
     // `expr_types` is fully populated by the body walk above.
     linearity::check(
@@ -2182,7 +2318,13 @@ pub fn check_handler_body(
             .push(calls::with_of_hint(err, body_ty, return_ty, &ctx));
     }
     if report_unused {
-        report_unused_given(&mut ctx, &given_entries, return_ty_span);
+        let given_removal_anchor = ctx.caps.given_anchor.unwrap_or(return_ty_span);
+        report_unused_given(
+            &mut ctx,
+            &given_entries,
+            return_ty_span,
+            given_removal_anchor,
+        );
     }
 }
 
@@ -2194,6 +2336,7 @@ pub(crate) fn report_unused_given(
     ctx: &mut Ctx,
     given_entries: &[(String, Span)],
     return_ty_span: Span,
+    removal_anchor: Span,
 ) {
     // Bidirectional `given` check.
     // 1) Every used capability is declared. (Handled in capability-call site.)
@@ -2222,7 +2365,7 @@ pub(crate) fn report_unused_given(
             .with_suggestion(
                 format!("remove `{c}` from the `given` clause"),
                 vec![(
-                    given_removal_span(given_entries, i, return_ty_span),
+                    given_removal_span(given_entries, i, removal_anchor),
                     String::new(),
                 )],
                 Applicability::MachineApplicable,
@@ -2291,9 +2434,12 @@ pub fn check_body(
         effectful: return_ty.is_effect(tys),
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps,
         in_test_body: true,
-        oidc_binder: None,
+        lambda_depth: 0,
+        claims_binder: None,
+        claims_sum_arms: Vec::new(),
         test_services,
         test_actors,
         type_vars: HashSet::new(),
@@ -2302,12 +2448,18 @@ pub fn check_body(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        http_non_get: false,
         in_fn_body: false,
         test_values: false,
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-        if let Some(actual) = type_of(w, Some(bool_ty), &mut ctx)
+        // #3982: the filter is a plain predicate, lowered as one, not the body that fails the
+        // case on a `?`: counting it as a lambda keeps `?` there under its ordinary rules.
+        ctx.lambda_depth += 1;
+        let filter_ty = type_of(w, Some(bool_ty), &mut ctx);
+        ctx.lambda_depth -= 1;
+        if let Some(actual) = filter_ty
             && actual.base(tys) != Some(BaseType::Bool)
         {
             ctx.errors.push(CompileError::new(
@@ -2332,6 +2484,204 @@ pub fn check_body(
     result
 }
 
+/// #4034: the `store` collection fields of an agent that an `invariant` or
+/// `transition` predicate meets. A `Map`, `Set` or `Cache` field may be asked its
+/// `size()` (the commit knows the staged count) and nothing else; a `Log` has no
+/// `size()`, so it may be asked nothing.
+#[derive(Default)]
+pub struct PredicateCollections {
+    /// The `Map`/`Set`/`Cache` fields a predicate calls `size()` on.
+    pub sized: HashMap<String, StoreField>,
+    /// The `Log` fields.
+    pub logs: HashSet<String>,
+    /// The `Cache` fields: a handler's `size()` counts the live entries at its clock, which a
+    /// commit has not fixed, so a predicate may not ask it.
+    pub caches: HashSet<String>,
+}
+
+impl PredicateCollections {
+    /// The collections among an agent's `store` fields (a `Cell` is state, read by
+    /// name as before).
+    pub fn of(fields: &HashMap<String, StoreField>) -> Self {
+        let mut out = Self::default();
+        for (name, f) in fields {
+            match f {
+                StoreField::Cell(_) => {}
+                StoreField::Log(_) => {
+                    out.logs.insert(name.clone());
+                }
+                StoreField::Cache(..) => {
+                    out.caches.insert(name.clone());
+                }
+                StoreField::Map(..) | StoreField::Set(_) => {
+                    out.sized.insert(name.clone(), *f);
+                }
+            }
+        }
+        out
+    }
+}
+
+/// #4034: the collection field `e` names, if it is one: a bare name (in an invariant, where it is
+/// the shape `size()` takes, or in a transition, where it is refused), or `old.<field>` /
+/// `new.<field>`. A name a lambda parameter in `shadowed` binds is that local, not the field.
+fn predicate_collection_ref<'a>(
+    e: &'a Expr,
+    names: &PredicateCollections,
+    shadowed: &[&str],
+) -> Option<&'a Ident> {
+    let known =
+        |n: &str| names.sized.contains_key(n) || names.logs.contains(n) || names.caches.contains(n);
+    match &e.kind {
+        ExprKind::Ident(id) if known(&id.name) && !shadowed.contains(&id.name.as_str()) => Some(id),
+        ExprKind::FieldAccess { receiver, field }
+            if known(&field.name)
+                && matches!(&receiver.kind, ExprKind::Ident(r) if (r.name == "old" || r.name == "new") && !shadowed.contains(&r.name.as_str())) =>
+        {
+            Some(field)
+        }
+        _ => None,
+    }
+}
+
+/// #4034: `Int`, when `receiver.method(args)` is `size()` on a `store` collection
+/// field inside an invariant or transition predicate: a bare field name in an
+/// invariant, `old.<field>`/`new.<field>` in a transition (where `old` is in scope). Both
+/// are pure contexts: a handler is effectful, so its `size()` stays an `Effect[Int]`. A
+/// local of the field's name (a lambda parameter) is that local, and the other shape is
+/// left to the ordinary typing, which refuses it.
+fn predicate_collection_size(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    ctx: &Ctx,
+) -> Option<TyId> {
+    if ctx.effectful || method.name != "size" || !args.is_empty() || ctx.store_fields.is_empty() {
+        return None;
+    }
+    let step = ctx.lookup("old").is_some();
+    let name = match &receiver.kind {
+        ExprKind::Ident(id) if !step && ctx.lookup(&id.name).is_none() => &id.name,
+        ExprKind::FieldAccess { receiver: r, field }
+            if step
+                && matches!(&r.kind, ExprKind::Ident(o) if (o.name == "old" || o.name == "new") && ctx.lookup(&o.name).is_some()) =>
+        {
+            &field.name
+        }
+        _ => return None,
+    };
+    ctx.store_fields
+        .get(name)
+        .is_some_and(|f| !matches!(f, StoreField::Cell(_)))
+        .then(|| ctx.tys.intern(Ty::Base(BaseType::Int)))
+}
+
+/// #4034: the first read of a collection field that is not `size()`, as the
+/// `collection_scan` error for an `invariant` (`kind` is `"invariant"`) or a
+/// `transition`. A predicate runs at every commit, so `contains`, `get` or a
+/// query would read the collection each time; `size()` reads one count.
+fn collection_scan_error(
+    pred: &Expr,
+    names: &PredicateCollections,
+    step: bool,
+    owner: &str,
+) -> Option<CompileError> {
+    if names.sized.is_empty() && names.logs.is_empty() && names.caches.is_empty() {
+        return None;
+    }
+    let kind = if step { "transition" } else { "invariant" };
+    #[derive(Clone, Copy, PartialEq)]
+    enum ScanKind {
+        Sized,
+        Log,
+        Cache,
+    }
+    fn walk<'a>(
+        e: &'a Expr,
+        names: &PredicateCollections,
+        step: bool,
+        shadowed: &[&'a str],
+    ) -> Option<(&'a Ident, ScanKind)> {
+        if let ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+            ..
+        } = &e.kind
+            && method.name == "size"
+            && args.is_empty()
+            && let Some(f) = predicate_collection_ref(receiver, names, shadowed)
+            && names.sized.contains_key(&f.name)
+            // The shape `size()` takes: a bare name in an invariant, `old.`/`new.` in a transition.
+            && matches!(&receiver.kind, ExprKind::FieldAccess { .. }) == step
+        {
+            return None;
+        }
+        if let Some(f) = predicate_collection_ref(e, names, shadowed) {
+            let kind = if names.logs.contains(&f.name) {
+                ScanKind::Log
+            } else if names.caches.contains(&f.name) {
+                ScanKind::Cache
+            } else {
+                ScanKind::Sized
+            };
+            return Some((f, kind));
+        }
+        if let ExprKind::Lambda(lam) = &e.kind {
+            let mut inner = shadowed.to_vec();
+            inner.extend(lam.params.iter().map(|p| p.name.name.as_str()));
+            return walk(&lam.body, names, step, &inner);
+        }
+        bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .find_map(|c| walk(c, names, step, shadowed))
+    }
+    let (field, scan) = walk(pred, names, step, &[])?;
+    let is_log = scan == ScanKind::Log;
+    let what = format!(
+        "{} runs at every commit, so reading `{}` beyond its `size()` would read the collection each time",
+        if step { "a transition" } else { "an invariant" },
+        field.name
+    );
+    let message = if is_log {
+        format!(
+            "{kind} `{owner}` can't read `{}`: a `Log` has no `size()`, and its entries are not read at a commit",
+            field.name
+        )
+    } else if scan == ScanKind::Cache {
+        format!(
+            "{kind} `{owner}` can't read `{}`: a `Cache` counts only its live entries, and a commit has no clock to judge them by",
+            field.name
+        )
+    } else {
+        format!(
+            "{kind} `{owner}` can't read `{}` beyond its `size()`",
+            field.name
+        )
+    };
+    Some(
+        CompileError::new(
+            if step {
+                "bynk.transition.collection_scan"
+            } else {
+                "bynk.invariant.collection_scan"
+            },
+            field.span,
+            message,
+        )
+        .with_note(what)
+        .with_note(format!(
+            "check it in the handler that writes `{}`{}",
+            field.name,
+            if is_log || scan == ScanKind::Cache {
+                String::new()
+            } else {
+                format!(", or bound it with `{}.size()`", field.name)
+            }
+        )),
+    )
+}
+
 /// Check an agent's invariant declarations (v0.80 §14). Each predicate is a pure
 /// `Bool`-typed expression over the agent's state fields (referenced by bare
 /// name), plus `implies`/`is`. The pass enforces:
@@ -2351,6 +2701,7 @@ pub fn check_invariants(
     // A `store`-bearing agent's invariants reference its `Cell` fields by bare
     // name (a pure read of the staged value), so they form the predicate scope.
     store_cells: &HashMap<String, TyId>,
+    collections: &PredicateCollections,
     agent_name: &str,
     input: &ResolvedCommons,
     tys: &Types,
@@ -2386,8 +2737,11 @@ pub fn check_invariants(
     for (name, ty) in store_cells {
         field_scope.insert(name.clone(), *ty);
     }
-
     for inv in invariants {
+        if let Some(e) = collection_scan_error(&inv.predicate, collections, false, &inv.name.name) {
+            errors.push(e);
+            continue;
+        }
         // Reject cross-agent references and impure/effectful constructs before
         // type-checking, so the bespoke diagnostics win over any cascade.
         if let Some(span) = predicate_cross_agent_ref(&inv.predicate, input) {
@@ -2454,6 +2808,7 @@ pub fn check_invariants(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2464,15 +2819,18 @@ pub fn check_invariants(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            lambda_depth: 0,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
             last_witness: None,
-            store_fields: HashMap::new(),
+            store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -2611,6 +2969,7 @@ pub(crate) fn check_contracts(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2621,7 +2980,9 @@ pub(crate) fn check_contracts(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            lambda_depth: 0,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
@@ -2630,6 +2991,7 @@ pub(crate) fn check_contracts(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -2729,6 +3091,7 @@ pub fn check_transitions(
     // it, so `old.field` / `new.field` read as the field's element type.
     state_ty: TyId,
     agent_name: &str,
+    collections: &PredicateCollections,
     // Resolved commons carrying the synthetic `<Agent>State` record so field
     // access on `old`/`new` resolves.
     input: &ResolvedCommons,
@@ -2765,6 +3128,10 @@ pub fn check_transitions(
     scope.insert("new".to_string(), state_ty);
 
     for tr in transitions {
+        if let Some(e) = collection_scan_error(&tr.predicate, collections, true, &tr.name.name) {
+            errors.push(e);
+            continue;
+        }
         // Reject cross-agent references and impure constructs before type-checking,
         // so the bespoke diagnostics win over any cascade.
         if let Some(span) = predicate_cross_agent_ref(&tr.predicate, input) {
@@ -2848,6 +3215,7 @@ pub fn check_transitions(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2858,15 +3226,18 @@ pub fn check_transitions(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            lambda_depth: 0,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
             eq: EqScope::default(),
             last_witness: None,
-            store_fields: HashMap::new(),
+            store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -3042,6 +3413,7 @@ pub fn check_migrations(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -3052,7 +3424,9 @@ pub fn check_migrations(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            lambda_depth: 0,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3061,6 +3435,7 @@ pub fn check_migrations(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -3266,6 +3641,8 @@ enum ConstLit {
     Float(f64),
     /// #2622: a decimal literal's coefficient (with any `-`) and scale.
     Decimal(String, u32),
+    /// #3948: a `Duration` literal, in milliseconds.
+    Duration(i64),
     Str(String),
     Bool(bool),
     Unit,
@@ -3277,6 +3654,16 @@ impl ConstLit {
             ConstLit::Int(n) => n.to_string(),
             ConstLit::Float(v) => v.to_string(),
             ConstLit::Decimal(coef, scale) => bynk_syntax::decimal::render(coef, *scale),
+            ConstLit::Duration(ms) => {
+                // The largest unit that divides it exactly: `30000` is `30.seconds`.
+                let unit = bynk_syntax::ast::DurationUnit::ALL
+                    .into_iter()
+                    .rev()
+                    .find(|u| *ms != 0 && ms % u.millis() == 0)
+                    .unwrap_or(bynk_syntax::ast::DurationUnit::Milliseconds);
+                let n = ms / unit.millis();
+                format!("{n}.{}", unit.name_for(n))
+            }
             ConstLit::Str(s) => format!("{s:?}"),
             ConstLit::Bool(b) => b.to_string(),
             ConstLit::Unit => "()".to_string(),
@@ -3290,6 +3677,10 @@ impl ConstLit {
 /// (v0.29.10). Empty (`Default`) for pure functions / non-context code.
 #[derive(Default)]
 pub struct CapabilityCtx {
+    /// #3981: whether a statement-form `expect … is P(x)` keeps `x` bound for the rest of its
+    /// block. True for a case body; false (the default) for a `property`, which evaluates its
+    /// claims once per input, and for production code.
+    pub expect_is_bindings: bool,
     /// Capabilities in scope for the current handler, as a name → CapabilityInfo
     /// map. Empty for pure functions and non-context code.
     pub capabilities: HashMap<String, CapabilityInfo>,
@@ -3472,6 +3863,11 @@ pub(crate) struct Ctx<'a> {
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
     /// Determines whether `<-` and capability calls are permitted.
     pub effectful: bool,
+    /// #4193: the expected result type of the `fold` call whose `init` is being
+    /// typed, so an empty collection there (`Set.empty()`) can take its element type
+    /// from the accumulator the call is expected to produce. Set by the call site just
+    /// before dispatch and taken by the fold arms; `None` everywhere else.
+    pub fold_init_expected: Option<TyId>,
     /// If inside an agent handler, the agent's state type and the agent's
     /// name. Used to validate `commit` statements.
     pub agent_state_ty: Option<TyId>,
@@ -3484,9 +3880,16 @@ pub(crate) struct Ctx<'a> {
     /// True when the body being checked is a test case body. Permits
     /// `expect` statements (v0.7; renamed from `assert` in v0.112).
     pub in_test_body: bool,
+    /// #3982: how many lambdas deep the expression being typed is, inside the body of the
+    /// function or test case being checked. A `?` in a test body fails the case only at depth
+    /// 0: inside a lambda it returns from the lambda, by the lambda's own return type.
+    pub lambda_depth: u32,
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
-    pub oidc_binder: Option<String>,
+    pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`). Empty elsewhere.
+    pub claims_sum_arms: Vec<String>,
     /// The target unit's services, populated for test case bodies (v0.25).
     /// `svc.call(args)` in a test invokes the target's service; the checker
     /// resolves the service's `on call` handler here to check the call's
@@ -3531,6 +3934,8 @@ pub(crate) struct Ctx<'a> {
     /// abandoned effect to the execution context, which only a service
     /// handler's `deps` carry.
     pub in_service_handler: bool,
+    /// #4389: see [`HandlerBodyCheck::http_non_get`].
+    pub http_non_get: bool,
     /// #2719: true while checking the body of a `fn` or a method, lambdas
     /// included. A function takes the execution context as a hidden trailing
     /// parameter when its body (or a function it calls) hands work to it, so
@@ -3571,6 +3976,8 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #4116: the op's type parameters declared `Key`.
+    pub key_params: Vec<String>,
     /// #3458: what an undecodable reply means for a typed read, as declared.
     pub reply_policy: codable::ReplyPolicy,
     /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
@@ -3726,7 +4133,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
         }
         _ => {
-            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal, Duration, Instant) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`"
         }
     }
 }
@@ -3804,7 +4211,13 @@ pub fn resolve_type_ref_in(
         ),
         TypeRef::Option(t, _) => Ty::Option(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref_in(t, types, vars, tys)?),
-        TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref_in(t, types, vars, tys)?),
+        TypeRef::HttpResult(t, e, _) => Ty::HttpResult(
+            resolve_type_ref_in(t, types, vars, tys)?,
+            match e {
+                Some(e) => Some(resolve_type_ref_in(e, types, vars, tys)?),
+                None => None,
+            },
+        ),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Set(t, _) => Ty::Set(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref_in(t, types, vars, tys)?),
@@ -3829,12 +4242,12 @@ pub fn resolve_type_ref_in(
         // existence/arity are validated in the resolver, so an unknown or
         // mis-applied name simply produces no type here.
         TypeRef::App { name, args, .. } => {
-            let decl = types.get(&name.name)?;
+            let decl = crate::prelude_record::lookup(&name.name, types)?;
             let args: Option<Vec<TyId>> = args
                 .iter()
                 .map(|a| resolve_type_ref_in(a, types, vars, tys))
                 .collect();
-            return Some(named_ty_with_args(decl, args?, tys));
+            return Some(named_ty_with_args(&decl, args?, tys));
         }
         _ => return resolve_type_ref(r, types, tys),
     };
@@ -3851,7 +4264,10 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         Ty::Result(a, b) => Ty::Result(substitute(*a, subst, tys), substitute(*b, subst, tys)),
         Ty::Option(a) => Ty::Option(substitute(*a, subst, tys)),
         Ty::Effect(a) => Ty::Effect(substitute(*a, subst, tys)),
-        Ty::HttpResult(a) => Ty::HttpResult(substitute(*a, subst, tys)),
+        Ty::HttpResult(a, e) => Ty::HttpResult(
+            substitute(*a, subst, tys),
+            e.map(|e| substitute(e, subst, tys)),
+        ),
         Ty::HttpOutcome(a) => Ty::HttpOutcome(substitute(*a, subst, tys)),
         Ty::List(a) => Ty::List(substitute(*a, subst, tys)),
         Ty::Set(a) => Ty::Set(substitute(*a, subst, tys)),
@@ -3906,7 +4322,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         Ty::Result(a, b) | Ty::Map(a, b) => contains_var(*a, tys) || contains_var(*b, tys),
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -3935,6 +4351,26 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
     }
 }
 
+/// #4394: the streaming element two `HttpResult` types carry agree. An `HttpResult[T]` that names none
+/// leaves a `Streaming` body as lenient as it has always been, so it is compatible with any element;
+/// two that name one must name the same.
+pub(crate) fn stream_elements_compatible(a: Option<TyId>, b: Option<TyId>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x == y,
+        _ => true,
+    }
+}
+
+/// #4394: the element of the merge of two `HttpResult` types: the one that names it, `None` for neither,
+/// and no merge when both name different ones.
+fn merge_stream_elements(a: Option<TyId>, b: Option<TyId>) -> Option<Option<TyId>> {
+    match (a, b) {
+        (None, None) => Some(None),
+        (Some(x), None) | (None, Some(x)) => Some(Some(x)),
+        (Some(x), Some(y)) => (x == y).then_some(Some(x)),
+    }
+}
+
 /// Merge two list element types that may still mention flexible variables of
 /// an enclosing generic call (`Result[Int, E]` and `Result[Int, String]` give
 /// `Result[Int, String]`). `None` when their concrete parts disagree.
@@ -3954,7 +4390,10 @@ fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<
         (Ty::Option(x), Ty::Option(y)) => Ty::Option(merge_open(x, y, rigid, tys)?),
         (Ty::List(x), Ty::List(y)) => Ty::List(merge_open(x, y, rigid, tys)?),
         (Ty::Set(x), Ty::Set(y)) => Ty::Set(merge_open(x, y, rigid, tys)?),
-        (Ty::HttpResult(x), Ty::HttpResult(y)) => Ty::HttpResult(merge_open(x, y, rigid, tys)?),
+        (Ty::HttpResult(x, ex), Ty::HttpResult(y, ey)) => {
+            let element = merge_stream_elements(ex, ey)?;
+            Ty::HttpResult(merge_open(x, y, rigid, tys)?, element)
+        }
         (Ty::Effect(x), Ty::Effect(y)) => Ty::Effect(merge_open(x, y, rigid, tys)?),
         (Ty::Stream(x), Ty::Stream(y)) => Ty::Stream(merge_open(x, y, rigid, tys)?),
         (Ty::Query(x), Ty::Query(y)) => Ty::Query(merge_open(x, y, rigid, tys)?),
@@ -4027,7 +4466,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         }
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -4093,7 +4532,7 @@ pub(crate) fn unify(
         }
         (Ty::Option(a1), Ty::Option(a2))
         | (Ty::Effect(a1), Ty::Effect(a2))
-        | (Ty::HttpResult(a1), Ty::HttpResult(a2))
+        | (Ty::HttpResult(a1, _), Ty::HttpResult(a2, _))
         | (Ty::HttpOutcome(a1), Ty::HttpOutcome(a2))
         | (Ty::List(a1), Ty::List(a2))
         | (Ty::Set(a1), Ty::Set(a2))
@@ -4140,7 +4579,7 @@ pub(crate) fn unify(
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -4203,13 +4642,18 @@ pub fn record_type_refs(
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _) => record_type_refs(t, types, skip, refs),
+        TypeRef::HttpResult(t, e, _) => {
+            record_type_refs(t, types, skip, refs);
+            if let Some(e) = e {
+                record_type_refs(e, types, skip, refs);
+            }
+        }
         // v0.157 (ADR 0183): a `Name[Arg, …]` application records the generic
         // type's name plus every argument.
         TypeRef::App { name, args, .. } => {
@@ -4271,16 +4715,7 @@ fn unresolved_type_ref_error(
     vars: &HashSet<String>,
 ) -> CompileError {
     match first_unresolved_type_name(r, types, vars) {
-        Some(id) => CompileError::new(
-            "bynk.resolve.unknown_type",
-            id.span,
-            format!("unknown type `{}`", id.name),
-        )
-        .with_note(
-            "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
-             `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
-             `ValidationError`, and the types this unit declares or imports",
-        ),
+        Some(id) => crate::resolver::unknown_type_error(id),
         None => CompileError::new(
             "bynk.resolve.unknown_type",
             r.span(),
@@ -4301,7 +4736,9 @@ fn first_unresolved_type_name<'a>(
             (!types.contains_key(&id.name) && !vars.contains(&id.name)).then_some(id)
         }
         TypeRef::App { name, args, .. } => {
-            if !types.contains_key(&name.name) && !vars.contains(&name.name) {
+            if crate::prelude_record::lookup(&name.name, types).is_none()
+                && !vars.contains(&name.name)
+            {
                 return Some(name);
             }
             args.iter()
@@ -4313,13 +4750,16 @@ fn first_unresolved_type_name<'a>(
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => first_unresolved_type_name(t, types, vars),
+        TypeRef::HttpResult(t, e, _) => first_unresolved_type_name(t, types, vars).or_else(|| {
+            e.as_ref()
+                .and_then(|e| first_unresolved_type_name(e, types, vars))
+        }),
         TypeRef::Fn(params, ret, _) => params
             .iter()
             .find_map(|p| first_unresolved_type_name(p, types, vars))
@@ -4370,6 +4810,25 @@ pub fn embedding_for(
     None
 }
 
+/// #3945: the identity of a generic capability operation's explicit type arguments, which a call
+/// site and a `stub` or observation naming them must agree on: each resolved type's display, so
+/// `Outcome`, `orders.Outcome` and an alias of it are one key. A type that does not resolve (a
+/// suite's own type, which no call site can name) falls back to the arguments as written.
+pub fn capability_type_key(
+    type_args: &[TypeRef],
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> String {
+    let resolved: Option<Vec<String>> = type_args
+        .iter()
+        .map(|t| resolve_type_ref(t, types, tys).map(|id| tys.display(id)))
+        .collect();
+    match resolved {
+        Some(shown) => ["[", shown.join(", ").as_str(), "]"].concat(),
+        None => bynk_syntax::print::type_args_src(type_args),
+    }
+}
+
 pub fn resolve_type_ref(
     r: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -4396,7 +4855,13 @@ pub fn resolve_type_ref(
         ),
         TypeRef::Option(t, _) => Ty::Option(resolve_type_ref(t, types, tys)?),
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref(t, types, tys)?),
-        TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref(t, types, tys)?),
+        TypeRef::HttpResult(t, e, _) => Ty::HttpResult(
+            resolve_type_ref(t, types, tys)?,
+            match e {
+                Some(e) => Some(resolve_type_ref(e, types, tys)?),
+                None => None,
+            },
+        ),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref(t, types, tys)?),
         TypeRef::Set(t, _) => Ty::Set(resolve_type_ref(t, types, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref(t, types, tys)?),
@@ -4420,12 +4885,12 @@ pub fn resolve_type_ref(
         TypeRef::History(_, _) => return None,
         // v0.157 (ADR 0183): `Name[Arg, …]` — a user generic-type application.
         TypeRef::App { name, args, .. } => {
-            let decl = types.get(&name.name)?;
+            let decl = crate::prelude_record::lookup(&name.name, types)?;
             let args: Option<Vec<TyId>> = args
                 .iter()
                 .map(|a| resolve_type_ref(a, types, tys))
                 .collect();
-            return Some(named_ty_with_args(decl, args?, tys));
+            return Some(named_ty_with_args(&decl, args?, tys));
         }
         TypeRef::ValidationError(_) => Ty::ValidationError,
         TypeRef::DecodeError(_) => Ty::DecodeError,
@@ -4491,9 +4956,10 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         }
         (Ty::Option(a), Ty::Option(b)) => compatible(*a, *b, tys),
         (Ty::Effect(a), Ty::Effect(b)) => compatible(*a, *b, tys),
-        (Ty::HttpResult(a), Ty::HttpResult(b)) | (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
-            compatible(*a, *b, tys)
+        (Ty::HttpResult(a, ea), Ty::HttpResult(b, eb)) => {
+            compatible(*a, *b, tys) && stream_elements_compatible(*ea, *eb)
         }
+        (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => compatible(*a, *b, tys),
         // v0.20b: collections are covariant in their element/value types;
         // Map keys must match exactly — key-position widening would split a
         // map's keys across refined/base identities at lookup time.
@@ -4548,7 +5014,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -4677,7 +5143,7 @@ pub(crate) fn contains_never(t: TyId, tys: &Types) -> bool {
         Ty::Result(a, b) | Ty::Map(a, b) => contains_never(*a, tys) || contains_never(*b, tys),
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -5038,6 +5504,15 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         ),
                     ));
                 }
+                // #3981: a statement-form `expect … is P(x)` ends the case when it fails, so the
+                // names the predicate binds stay bound to the end of the block.
+                if ctx.caps.expect_is_bindings {
+                    let scope = Span::new(a.span.end, block.span.end);
+                    record_is_locals(&a.value, true, scope, ctx);
+                    for (name, ty) in collect_is_bindings(&a.value, ctx) {
+                        ctx.bind(name, ty);
+                    }
+                }
             }
             Statement::Advance(a) => check_advance(a, ctx),
             Statement::Par(p) => par::check_par(p, block.span.end, ctx),
@@ -5149,16 +5624,23 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
-/// 0698: its canonical text) — or a refinement of one (which widens to its base
-/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
-/// — each has an explicit rendering method — and opaque types are excluded,
-/// their base being hidden (`.raw` it first).
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, `Decimal` (ADR
+/// 0698: its canonical text), or (#3977) `Instant` (RFC 3339 UTC) and `Duration`
+/// (`1h30m`), the text their `toString()` gives — or a refinement of one (which
+/// widens to its base for display). `Bytes` has no implicit string form (hex or
+/// base64 is a real choice), and opaque types are excluded, their base being
+/// hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
     let scalar = |b: BaseType| {
         matches!(
             b,
-            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+            BaseType::String
+                | BaseType::Int
+                | BaseType::Float
+                | BaseType::Bool
+                | BaseType::Decimal
+                | BaseType::Duration
+                | BaseType::Instant
         )
     };
     match &*tys.get(ty) {
@@ -5194,9 +5676,11 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         // like any other literal.
         ExprKind::DecimalLit { .. } => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::Decimal)))),
-        // v0.86 (ADR 0112): a `Duration` literal always takes the base
-        // `Duration` (no refined `Duration` types exist).
-        ExprKind::DurationLit { .. } => Some(tys.intern(Ty::Base(BaseType::Duration))),
+        // v0.86 (ADR 0112): a `Duration` literal takes the base `Duration`;
+        // #3948: in a refined-`Duration` position it is admitted like any
+        // other literal, checked against the predicates now.
+        ExprKind::DurationLit { .. } => admit_refined_literal(expr, expected, ctx)
+            .or(Some(tys.intern(Ty::Base(BaseType::Duration)))),
         ExprKind::StrLit(_) => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::String)))),
         // An interpolated string (v0.43, ADR 0075). Each hole must type to a
@@ -5214,6 +5698,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 };
                 match type_of(hole, None, ctx) {
                     Some(ty) if interpolable(ty, tys) => {}
+                    // #3976: a `DecodeErrorKind` interpolates as its variant's name.
+                    Some(ty) if decode_kind::decode_error_kind_ty(ctx) == Some(ty) => {}
                     Some(other) => ctx.errors.push(
                         CompileError::new(
                             "bynk.types.interpolation_non_scalar",
@@ -5518,6 +6004,11 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             args,
             ..
         } => {
+            // #4034: `<field>.size()` in an invariant or transition reads the
+            // staged count, a plain `Int`.
+            if let Some(int) = predicate_collection_size(receiver, method, args, ctx) {
+                return Some(int);
+            }
             // `<field>.<op>(…)` on a `store` field — effectful storage
             // operations, dispatched by receiver provenance (a bare ident
             // naming a store field). Finding #36: one lookup into the unified
@@ -5569,6 +6060,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 QueryOp::from_name(&method.name),
                                 args,
                                 v,
+                                Some(receiver),
                                 expr.span,
                                 ctx,
                             );
@@ -5736,7 +6228,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 _ => None,
             };
             let inner_ty = type_of(inner, expected_inner, ctx)?;
-            Some(tys.intern(Ty::Effect(inner_ty)))
+            nested_effect::pure(inner_ty, inner.span, ctx)
         }
         ExprKind::RecordSpread {
             type_name,
@@ -5912,8 +6404,17 @@ fn check_unbound_effects(e: &Expr, allowed: bool, ctx: &mut Ctx) {
 /// Peel one optional `Effect[_]` wrapper to expose an underlying `HttpResult[T]`.
 pub(crate) fn peel_to_http_result(ty: TyId, tys: &Types) -> Option<TyId> {
     match &*tys.get(ty) {
-        Ty::HttpResult(inner) => Some(*inner),
+        Ty::HttpResult(inner, _) => Some(*inner),
         Ty::Effect(inner) => peel_to_http_result(*inner, tys),
+        _ => None,
+    }
+}
+
+/// #4394: the streaming element an `HttpResult[T, E]` (under an optional `Effect[_]`) names, if it names one.
+pub(crate) fn peel_to_http_result_element(ty: TyId, tys: &Types) -> Option<TyId> {
+    match &*tys.get(ty) {
+        Ty::HttpResult(_, element) => *element,
+        Ty::Effect(inner) => peel_to_http_result_element(*inner, tys),
         _ => None,
     }
 }
@@ -6040,7 +6541,10 @@ pub(crate) fn rebrand_return_type(
         )),
         Ty::Option(t) => tys.intern(Ty::Option(rebrand_return_type(*t, caller_types, tys))),
         Ty::Effect(t) => tys.intern(Ty::Effect(rebrand_return_type(*t, caller_types, tys))),
-        Ty::HttpResult(t) => tys.intern(Ty::HttpResult(rebrand_return_type(*t, caller_types, tys))),
+        Ty::HttpResult(t, e) => tys.intern(Ty::HttpResult(
+            rebrand_return_type(*t, caller_types, tys),
+            e.map(|e| rebrand_return_type(e, caller_types, tys)),
+        )),
         Ty::HttpOutcome(t) => {
             tys.intern(Ty::HttpOutcome(rebrand_return_type(*t, caller_types, tys)))
         }
@@ -6142,7 +6646,7 @@ pub(crate) fn rebrand_conflict(
                 .then(|| name.clone())
         }
         Ty::Result(a, b) | Ty::Map(a, b) => walk(*a).or_else(|| walk(*b)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => walk(*a),
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a, _) | Ty::List(a) | Ty::Set(a) => walk(*a),
         // `Query`, `Stream` and `Connection` are non-boundary, so a
         // cross-context return never carries one.
         _ => None,
@@ -6274,7 +6778,7 @@ pub(crate) fn ambiguous_projection_note(
         }
         Ty::Result(a, b) | Ty::Map(a, b) => ambiguous_projection_note(*a, ambiguous, tys)
             .or_else(|| ambiguous_projection_note(*b, ambiguous, tys)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => {
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a, _) | Ty::List(a) | Ty::Set(a) => {
             ambiguous_projection_note(*a, ambiguous, tys)
         }
         _ => None,
@@ -6310,7 +6814,11 @@ fn structurally_compatible_inner(
         (Ty::Effect(a), Ty::Effect(b)) => {
             structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
         }
-        (Ty::HttpResult(a), Ty::HttpResult(b)) | (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
+        (Ty::HttpResult(a, ea), Ty::HttpResult(b, eb)) => {
+            stream_elements_compatible(*ea, *eb)
+                && structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
+        }
+        (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
             structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
         }
         // The boundary-crossing collections walk their element types like
@@ -6382,7 +6890,7 @@ fn structurally_compatible_inner(
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -6604,6 +7112,12 @@ fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refineme
     }
 }
 
+/// #3878: the pattern-only `QueueResult` variant a `system` case sees for a body that did not decode.
+pub const QUEUE_UNDECODABLE: &str = "Undecodable";
+
+/// #4279: the warning for an `Undecodable` pattern that can never match.
+pub const UNDECODABLE_UNREACHABLE: &str = "bynk.queue.undecodable_unreachable";
+
 /// `pub` since P6.4 (#1157, Decision A) — see [`VariantInfo`]'s own doc
 /// comment for why `bynk-emit` needs this exact function rather than a
 /// re-derived copy (R5.11, for the IR side).
@@ -6686,7 +7200,7 @@ pub fn variants_of(
                 })
                 .collect(),
         ),
-        Ty::HttpResult(t) => Some(
+        Ty::HttpResult(t, element) => Some(
             HTTP_VARIANTS
                 .iter()
                 .map(|v| VariantInfo {
@@ -6706,8 +7220,11 @@ pub fn variants_of(
                                 tys.intern(Ty::Base(BaseType::String)),
                             )]
                         }
+                        // #4394: the element the route declares (`HttpResult[T, E]`), `String`
+                        // when it names none.
                         HttpVariantPayload::Streamed => {
-                            let elem = tys.intern(Ty::Base(BaseType::String));
+                            let elem =
+                                element.unwrap_or_else(|| tys.intern(Ty::Base(BaseType::String)));
                             vec![("stream".to_string(), tys.intern(Ty::Stream(elem)))]
                         }
                         // v0.111: the first two-field payload. Field names are
@@ -6741,6 +7258,21 @@ pub fn variants_of(
                                 ),
                             ]
                         }
+                        // #4389: a test drains the bound body.
+                        HttpVariantPayload::Partial => {
+                            let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+                            vec![
+                                ("body".to_string(), tys.intern(Ty::Stream(bytes))),
+                                (
+                                    "contentType".to_string(),
+                                    tys.intern(Ty::Base(BaseType::String)),
+                                ),
+                                (
+                                    "range".to_string(),
+                                    partial_content::content_range_for_binding(tys),
+                                ),
+                            ]
+                        }
                         // #2341 (L4): the status matches as its number
                         // (`RawError(403, _, _)`); `ErrorStatus` names are a
                         // construction-site vocabulary, not a type.
@@ -6768,8 +7300,24 @@ pub fn variants_of(
                         QueueVariantPayload::Message => {
                             vec![("reason".to_string(), tys.intern(Ty::Base(BaseType::String)))]
                         }
+                        QueueVariantPayload::MessageDelay => vec![
+                            ("reason".to_string(), tys.intern(Ty::Base(BaseType::String))),
+                            (
+                                "delay".to_string(),
+                                tys.intern(Ty::Base(BaseType::Duration)),
+                            ),
+                        ],
                     },
                 })
+                // #3878: a `system` case reads a body that did not decode as
+                // `Undecodable`. It is a pattern of the verdict a test sees, not a
+                // `QueueResult` a handler can build (`QUEUE_VARIANTS` has no entry), so
+                // it is the last variant. A `match` of a `QueueResult` names it or has a
+                // wildcard, since a `system` case's verdict can be it.
+                .chain(std::iter::once(VariantInfo {
+                    name: QUEUE_UNDECODABLE.to_string(),
+                    payload: vec![],
+                }))
                 .collect(),
         ),
         // #1934: the `system`-tier wire outcome. Field names are the runtime
@@ -6781,7 +7329,7 @@ pub fn variants_of(
             },
             VariantInfo {
                 name: "Handled".to_string(),
-                payload: vec![("value".to_string(), tys.intern(Ty::HttpResult(*t)))],
+                payload: vec![("value".to_string(), tys.intern(Ty::HttpResult(*t, None)))],
             },
         ]),
         Ty::BoundaryRejection => Some(
@@ -6820,6 +7368,11 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     // #3276: the router's `400` to a `multipart/form-data` body that is not one
     // (no boundary, never closed). A breaking addition to a closed sum, as ADR 0586's.
     ("MalformedForm", true),
+    // #3908: the router's `400` to a path whose percent-encoding does not decode.
+    ("MalformedPath", true),
+    // #3926: the router's `429` to a client over a `@rateLimit` route's limit. A
+    // breaking addition to a closed sum, as ADR 0586's was.
+    ("RateLimited", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────
@@ -7166,6 +7719,8 @@ mod pure_helper_pins {
         RefinementPred {
             kind,
             arg_text: None,
+            pending: None,
+            from_const: Vec::new(),
             span: sp(),
         }
     }
@@ -7196,6 +7751,7 @@ mod pure_helper_pins {
     }
     fn refined_decl(name: &str, base: BaseType, refinement: Option<Refinement>) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),
@@ -7213,6 +7769,7 @@ mod pure_helper_pins {
     }
     fn record_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),
@@ -7388,7 +7945,7 @@ mod pure_helper_pins {
     fn peel_to_http_result_matches_and_misses() {
         let tys = &Types::new();
         assert_eq!(
-            peel_to_http_result(tys.intern(Ty::HttpResult(int(tys))), tys),
+            peel_to_http_result(tys.intern(Ty::HttpResult(int(tys), None)), tys),
             Some(int(tys)),
         );
         assert_eq!(peel_to_http_result(int(tys), tys), None);

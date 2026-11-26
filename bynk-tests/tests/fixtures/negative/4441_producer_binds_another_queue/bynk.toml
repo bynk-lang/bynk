@@ -1,0 +1,9 @@
+[project]
+name = "queue-producer-other-queue"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+[unstable]
+allow = ["bynk.cloudflare.Queue", "bynk.cloudflare.Queue.sendValue"]

@@ -21,7 +21,7 @@ context shop.support
 consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     if mail.size > 10000000 {
       Reject("too large")
     } else if mail.subject == "refund" {
@@ -45,13 +45,139 @@ you.
 service names. Two services cannot claim the same address; a named address and
 the catch-all together are fine, and the named address wins.
 
+## Route by tag
+
+A plus-address such as `support+1234@shop.example` is mail to `support@shop.example`
+with a tag. Your `support` service receives it, and `mail.subaddress` holds the tag:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    match mail.subaddress {
+      Some(ticket) => Forward("tickets@shop.example"),
+      None => Accept,
+    }
+  }
+}
+```
+
+Claim a tagged address yourself (`from email("support+vip@shop.example")`) and that
+service takes that exact address; every other tag still goes to `support`. Turn
+subaddressing on for the domain in Email Routing, or Cloudflare will not deliver
+tagged mail to the Worker at all.
+
+## Share an address through a commons
+
+An address often appears in more than one place: the service header, a `Forward` in
+another service, a test. Write it once as a constant and name it in the header:
+
+```bynk,ignore
+commons shop.addresses
+
+const Support: String = "support@shop.example"
+const Billing: String = "billing@shop.example"
+```
+
+```bynk,ignore
+context shop.support
+uses shop.addresses
+
+service support from email(Support) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Forward(Billing)
+  }
+}
+```
+
+The constant is declared `String`, and the compiler resolves it to its literal, so
+routing and deploy see `support@shop.example` as if you had written it there. A
+change is made in one place, and two services that end up claiming the same address
+are still `bynk.email.duplicate_address`.
+
+## Don't lose mail when something fails
+
+When the handler faults, or a message cannot be parsed, the message is rejected, which is a
+permanent SMTP error: the sender is told it was not accepted, even if the cause was a few
+seconds' outage of a database. A `fallback` forwards such mail to a verified address instead:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    fallback { forward: "ops@shop.example" }
+
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Tickets { … }
+}
+```
+
+The forward carries `X-Bynk-Fallback: handler-fault` (or `unreadable`) so whoever receives it
+knows why. The address must be a verified destination address on your Cloudflare account, and not
+one of your service addresses. Mail over the size limit, a `Reply` the platform refuses and a
+`Forward` it refuses are still rejected.
+
+To never reject at all, accept every message and put the work on a queue, so an outage delays
+processing instead of bouncing mail. The queue brings its retries and a dead-letter queue (see
+[Receive a queue message](/book/guides/entry-points/queue/)):
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Work {
+        let _ <- Work.sendValue(Ticket { from: mail.from, subject: mail.subject, text: mail.text })
+        Accept
+    }
+}
+```
+
+A queue message is at most 128 KB, so put the parsed fields on the queue, not the attachments.
+
+## Forward and acknowledge
+
+One verdict can do several things: forward to billing and audit, tell the customer, and tag the
+forwards so the receiving mailbox can file them. Build it with `Route`:
+
+```bynk,ignore
+on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+        tag: Map.empty().insert("X-Ticket", "T-1234"),
+    })
+}
+```
+
+The reply goes first, then each forward. A refused action is logged and the rest still run; the
+message is rejected only when every action was refused, because a forward cannot be taken back.
+Every literal destination is checked at deploy to be a verified destination address, as for a
+plain `Forward`.
+
+## Thread a conversation
+
+`inReplyTo` and `references` are the message ids the sender says this message answers, as
+`messageId` is written, so a handler groups a conversation without parsing `headers`:
+
+```bynk,ignore
+on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Tickets {
+    // The message this one answers: look its id up among the ids of the tickets you have
+    // seen, as `mail.messageId` of an earlier message is written the same way.
+    match mail.inReplyTo {
+      Some(parent) => …
+      None => …
+    }
+}
+```
+
+`replyTo` says where to answer when it is not `from`, `cc` who else received the message and
+`date` when the sender wrote it, all as the sender claims: a `Date` is often malformed (`None`) and is
+not the arrival time. `headerList` has every header occurrence in order, for the ones that repeat,
+such as `Received`. A `Reply` verdict still extends the incoming chain for you.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The
-handler's default actor is `Sender`, which carries the address and whether
+handler states its actor with `by` (`by Sender` is "any mail"), and `Sender` carries the address and whether
 Cloudflare found the sender's domain authenticated with DMARC
 (`DmarcPass`, `DmarcFail` or `DmarcNone`). Forward or reply on a claim; act
-on the evidence.
+on the evidence. To act only on authenticated mail, name a refinement of `Sender`
+(`actor Authenticated = Sender where Dmarc(DmarcPass)`) in the `by` clause, and the
+Worker refuses other mail before your handler runs.
 
 ## Deploy it
 
@@ -67,7 +193,7 @@ with, at an exact version. `bynk dev`, `bynk deploy` and `bynk test` install it
 for you, with the package manager you already use, into the build directory
 (`.bynk/dev`, `.bynk/deploy`, `out`), and only when it is missing. For the
 output directory of a plain `bynk compile`, run your package manager's `install`
-there yourself. See [Installing npm packages](/docs/bynk-cli/#installing-npm-packages).
+there yourself. See [Installing npm packages](/reference/tooling/bynk-cli/#installing-npm-packages).
 
 A reply goes out only for a sender whose mail passed DMARC, and only once per
 message. The runtime does the sending, so the handler stays a pure decision.
@@ -101,4 +227,4 @@ suite shop.support {
 Fields after `to` have defaults, so a case writes only what it cares about.
 `bynk test` runs it with no Worker and no mail.
 
-**See also:** [Reference — Inbound email](/book/reference/inbound-email/).
+**See also:** [Reference — Inbound email](/reference/inbound-email/).

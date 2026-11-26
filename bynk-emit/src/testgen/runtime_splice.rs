@@ -1,0 +1,450 @@
+//! The test runtime as spliced text (back-half paydown 1B.3a, #4047, Decisions A and C).
+//!
+//! Each fragment a generated test module embeds is authored as a module under
+//! `bynk-emit/runtime/src/testing/`, type-checked with the rest of the runtime, and written back
+//! by `runtime/scripts/bundle.mjs` to `testgen/test_runtime/<name>.ts` in its splice form. The
+//! generated `test_runtime_modules.rs` table is the only place an artifact is `include_str!`'d, so
+//! this module is the only way the harness reaches the test runtime: [`splice`] for a fragment as
+//! it stands, [`TestRuntimeModule::source`] for one a caller builds on.
+//!
+//! The generated test module still *splices* the text rather than importing it (Decision A): each
+//! module keeps its own clock, retry count, snapshot state and timer queue, and the output stays
+//! byte-identical. Moving to imports is a change to [`splice`] once 1B.5 derives the test modules'
+//! imports.
+
+use bynk_ts::{TsBindingName, TsExpr, TsLit, TsProgram, TsStmt, TsType};
+
+use super::test_runtime_modules::TEST_RUNTIME_MODULES;
+
+/// One row of the generated table: name, sibling modules, runtime names, splice text.
+type TestRuntimeRow = (
+    &'static str,
+    &'static [&'static str],
+    &'static [&'static str],
+    &'static str,
+);
+
+/// One module of the test runtime. Exhaustive: a module added to `runtime/src/testing/` has to be
+/// named here (the `every_module_is_in_the_table_both_ways` test holds the two together).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum TestRuntimeModule {
+    /// #1883: `__bynkAssetGet`, which answers a case's asset fetch from the embedded files.
+    AssetGet,
+    /// #2267: the per-case timer (`CaseResult`, `__bynkCaseSince`).
+    CaseTiming,
+    /// #2137: the harness clock (`__bynkClockNow`, `__bynkAdvanceClock`) and the `Clock` that reads it.
+    Clock,
+    /// `ExpectationError` and the `expect` helpers every test module carries.
+    Expectation,
+    /// v0.119: the history-property runtime (`for all run: History[Agent]`).
+    History,
+    /// #2135: the test-only `Signature` signer.
+    HmacSigner,
+    /// ADR 0478: the cron and queue drivers.
+    Jobs,
+    /// #3328: the `from email` driver.
+    JobsEmail,
+    /// The `Authorization: Bearer …` signer (`__bynkSignHs256`).
+    JwtSigner,
+    /// v0.117: the observation runtime (`Cap.op called …`, `trace(Cap.op)`).
+    Observation,
+    /// #3052: the test OIDC issuer an `Oidc` route's drivers mint tokens with.
+    OidcIssuer,
+    /// The value-property runtime (seeded generation and shrinking).
+    Property,
+    /// #3899: the test-only producer of a signed queue message (`__bynkSysQueueBody`).
+    QueueSigner,
+    /// A remote build's Service Bindings (`--against`).
+    Remote,
+    /// #2138: `__bynkRunId`, the value `run.id` reads in a remote build.
+    RunId,
+    /// #1994: the execution-context double and the settle helper for `detach`.
+    Send,
+    /// A remote build's settle loop.
+    Settle,
+    /// #2842: the snapshot runtime.
+    Snapshot,
+    /// #291: `__bynkOverlay`, the layer a `stub` puts over a seam's tier default.
+    StubOverlay,
+    /// #4190: `__bynkWireStub`, the codec round trip a stubbed call makes at `integration`.
+    StubWire,
+    /// #2273: the `--suite` / `--case` filter `tests/main.ts` applies.
+    TestFilter,
+    /// #2683: the harness clock on virtual time.
+    VirtualTime,
+}
+
+impl TestRuntimeModule {
+    /// Every module, in the table's order.
+    pub(super) const ALL: [TestRuntimeModule; 22] = [
+        TestRuntimeModule::AssetGet,
+        TestRuntimeModule::CaseTiming,
+        TestRuntimeModule::Clock,
+        TestRuntimeModule::Expectation,
+        TestRuntimeModule::History,
+        TestRuntimeModule::HmacSigner,
+        TestRuntimeModule::Jobs,
+        TestRuntimeModule::JobsEmail,
+        TestRuntimeModule::JwtSigner,
+        TestRuntimeModule::Observation,
+        TestRuntimeModule::OidcIssuer,
+        TestRuntimeModule::Property,
+        TestRuntimeModule::QueueSigner,
+        TestRuntimeModule::Remote,
+        TestRuntimeModule::RunId,
+        TestRuntimeModule::Send,
+        TestRuntimeModule::Settle,
+        TestRuntimeModule::Snapshot,
+        TestRuntimeModule::StubOverlay,
+        TestRuntimeModule::StubWire,
+        TestRuntimeModule::TestFilter,
+        TestRuntimeModule::VirtualTime,
+    ];
+
+    /// The module's name: its file under `runtime/src/testing/`, without the extension.
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            TestRuntimeModule::AssetGet => "asset_get",
+            TestRuntimeModule::CaseTiming => "case_timing",
+            TestRuntimeModule::Clock => "clock",
+            TestRuntimeModule::Expectation => "expectation",
+            TestRuntimeModule::History => "history",
+            TestRuntimeModule::HmacSigner => "hmac_signer",
+            TestRuntimeModule::Jobs => "jobs",
+            TestRuntimeModule::JobsEmail => "jobs_email",
+            TestRuntimeModule::JwtSigner => "jwt_signer",
+            TestRuntimeModule::Observation => "observation",
+            TestRuntimeModule::OidcIssuer => "oidc_issuer",
+            TestRuntimeModule::Property => "property",
+            TestRuntimeModule::QueueSigner => "queue_signer",
+            TestRuntimeModule::Remote => "remote",
+            TestRuntimeModule::RunId => "run_id",
+            TestRuntimeModule::Send => "send",
+            TestRuntimeModule::Settle => "settle",
+            TestRuntimeModule::Snapshot => "snapshot",
+            TestRuntimeModule::StubOverlay => "stub_overlay",
+            TestRuntimeModule::StubWire => "stub_wire",
+            TestRuntimeModule::TestFilter => "test_filter",
+            TestRuntimeModule::VirtualTime => "virtual_time",
+        }
+    }
+
+    fn row(self) -> &'static TestRuntimeRow {
+        TEST_RUNTIME_MODULES
+            .iter()
+            .find(|(name, _, _, _)| *name == self.name())
+            .unwrap_or_else(|| panic!("`{}` is not in TEST_RUNTIME_MODULES", self.name()))
+    }
+
+    /// The module's splice text: exactly what a generated test module embeds.
+    pub(super) fn source(self) -> &'static str {
+        self.row().3
+    }
+
+    /// The runtime names the module's text uses (`import`ed from `../*.ts` where it is authored).
+    pub(super) fn runtime_names(self) -> &'static [&'static str] {
+        self.row().2
+    }
+
+    /// The module's text as one statement, ready to splice into a generated test module.
+    pub(super) fn splice(self) -> TsStmt {
+        TsStmt::raw_using(self.source(), self.runtime_names())
+    }
+
+    /// The modules this one's text uses names from, which a test module has to splice first.
+    pub(super) fn deps(self) -> Vec<TestRuntimeModule> {
+        self.row()
+            .1
+            .iter()
+            .map(|dep| {
+                TestRuntimeModule::ALL
+                    .into_iter()
+                    .find(|m| m.name() == *dep)
+                    .unwrap_or_else(|| panic!("`{dep}` is not a test runtime module"))
+            })
+            .collect()
+    }
+}
+
+/// Debug check (Decision C): every fragment spliced into `stmts` comes after each fragment it
+/// uses names from, and every such fragment is spliced at all. Today's order, "expectation first",
+/// was implicit in where each call sat; this makes it a checked rule.
+fn debug_assert_splice_order(stmts: &[TsStmt]) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+    let position = |module: TestRuntimeModule| {
+        stmts
+            .iter()
+            .position(|stmt| stmt.raw_text().is_some_and(|t| t.contains(module.source())))
+    };
+    for module in TestRuntimeModule::ALL {
+        let Some(at) = position(module) else { continue };
+        for dep in module.deps() {
+            match position(dep) {
+                Some(dep_at) => debug_assert!(
+                    dep_at < at,
+                    "the test runtime `{}` is spliced before `{}`, whose names it uses",
+                    module.name(),
+                    dep.name()
+                ),
+                None => debug_assert!(
+                    false,
+                    "the test runtime `{}` is spliced without `{}`, whose names it uses",
+                    module.name(),
+                    dep.name()
+                ),
+            }
+        }
+    }
+}
+
+/// A program of `stmts`, after checking that its spliced fragments are in dependency order.
+pub(super) fn checked_program(stmts: Vec<TsStmt>) -> TsProgram {
+    debug_assert_splice_order(&stmts);
+    TsProgram { stmts }
+}
+
+/// #2138: `__bynkRunId`, the value `run.id` reads. A remote build's `system` module reads
+/// `BYNK_TEST_RUN_ID` (the runner sets a fresh one); every in-process module is the fixed
+/// `"local"`, even when the variable is set (an `--against` run's unit suites share its process
+/// environment).
+pub(super) fn run_id_stmt(remote: bool) -> TsStmt {
+    if remote {
+        TestRuntimeModule::RunId.splice()
+    } else {
+        TsStmt::const_stmt(
+            TsBindingName::Ident("__bynkRunId".to_string()),
+            Some(TsType::named("string")),
+            TsExpr::Lit(TsLit::Str("local".to_string())),
+            None,
+        )
+    }
+}
+
+/// #3052: `const __bynkOidcRemote: boolean = <remote>;`, the flag the `system` drivers pass to
+/// `__bynkOidcToken` (the issuer's text takes it as a parameter and does not read it itself).
+pub(super) fn oidc_remote_flag(remote: bool) -> TsStmt {
+    TsStmt::const_stmt(
+        TsBindingName::Ident("__bynkOidcRemote".to_string()),
+        Some(TsType::named("boolean")),
+        TsExpr::Lit(TsLit::Bool(remote)),
+        None,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// The enum and the generated table name the same modules, both ways, so neither can
+    /// gain or lose one without the other.
+    #[test]
+    fn every_module_is_in_the_table_both_ways() {
+        let enum_names: BTreeSet<&str> = TestRuntimeModule::ALL.iter().map(|m| m.name()).collect();
+        let table_names: BTreeSet<&str> =
+            TEST_RUNTIME_MODULES.iter().map(|(n, _, _, _)| *n).collect();
+        assert_eq!(enum_names, table_names);
+        assert_eq!(enum_names.len(), TestRuntimeModule::ALL.len());
+        assert_eq!(TestRuntimeModule::ALL.len(), TEST_RUNTIME_MODULES.len());
+    }
+
+    /// `ALL` follows the table's order, so a reader can lay one beside the other.
+    #[test]
+    fn all_follows_the_tables_order() {
+        let names: Vec<&str> = TestRuntimeModule::ALL.iter().map(|m| m.name()).collect();
+        let table: Vec<&str> = TEST_RUNTIME_MODULES.iter().map(|(n, _, _, _)| *n).collect();
+        assert_eq!(names, table);
+    }
+
+    /// The identifiers `text` spells as code: string and comment contents are skipped, as is a
+    /// member name after a `.`. A template literal's text is read as code, which can only
+    /// over-report (a spelling inside one would be listed, never missed).
+    fn code_words(text: &str) -> BTreeSet<&str> {
+        let bytes = text.as_bytes();
+        let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+        let mut out = BTreeSet::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                quote @ (b'"' | b'\'') => {
+                    i += 1;
+                    while i < bytes.len() && bytes[i] != quote {
+                        i += if bytes[i] == b'\\' { 2 } else { 1 };
+                    }
+                    i += 1;
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                }
+                b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                    i += 2;
+                    while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                        i += 1;
+                    }
+                    i += 2;
+                }
+                b if ident(b) => {
+                    let start = i;
+                    while i < bytes.len() && ident(bytes[i]) {
+                        i += 1;
+                    }
+                    if start == 0 || bytes[start - 1] != b'.' {
+                        out.insert(&text[start..i]);
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        out
+    }
+
+    /// `(module, name)`: a runtime export a fragment spells as a local of its own, which a word
+    /// scan cannot tell from a use (`import_shadow`'s `UNIMPORTED_RUNTIME_OK` has the same entry).
+    const LOCAL_SPELLINGS: &[(&str, &str)] = &[
+        ("hmac_signer", "signature"),
+        ("stub_wire", "BoundaryError"),
+        ("test_filter", "Result"),
+    ];
+
+    /// Decision C's guard: the runtime names a fragment carries (the column `bundle.mjs` reads
+    /// from its `../*.ts` imports) are the runtime exports its artifact spells, so a fragment
+    /// that starts using `Ok` cannot leave a test module under-importing it.
+    #[test]
+    fn a_fragments_runtime_names_are_the_runtime_exports_it_spells() {
+        for module in TestRuntimeModule::ALL {
+            let listed: BTreeSet<&str> = module.runtime_names().iter().copied().collect();
+            let spelled: BTreeSet<&str> = code_words(module.source())
+                .into_iter()
+                .filter(|w| crate::emitter::runtime_files::is_runtime_export(w))
+                .filter(|w| !LOCAL_SPELLINGS.contains(&(module.name(), *w)))
+                .collect();
+            assert_eq!(
+                listed,
+                spelled,
+                "`{}`: its runtime names differ from the runtime exports its text spells",
+                module.name()
+            );
+        }
+    }
+
+    /// A fragment is a script: nothing in it imports, and the only line-initial `export` is
+    /// the one named in `bundle.mjs`'s `SPLICE_EXPORTS`.
+    #[test]
+    fn a_spliced_fragment_is_a_script() {
+        for module in TestRuntimeModule::ALL {
+            for line in module.source().lines() {
+                assert!(
+                    !line.starts_with("import "),
+                    "{} splices an import: {line}",
+                    module.name()
+                );
+                if line.starts_with("export ") {
+                    assert_eq!(
+                        (module, line.contains("__bynkSnapshotReport")),
+                        (TestRuntimeModule::Snapshot, true),
+                        "{} splices an export: {line}",
+                        module.name()
+                    );
+                }
+            }
+        }
+    }
+
+    /// The dependency graph has no cycle of any length: a depth-first walk that meets a module
+    /// it is still inside has found one.
+    #[test]
+    fn the_dependency_graph_has_no_cycle() {
+        fn visit(
+            module: TestRuntimeModule,
+            path: &mut Vec<TestRuntimeModule>,
+            done: &mut Vec<TestRuntimeModule>,
+        ) {
+            if done.contains(&module) {
+                return;
+            }
+            assert!(
+                !path.contains(&module),
+                "a dependency cycle through `{}`: {:?}",
+                module.name(),
+                path.iter().map(|m| m.name()).collect::<Vec<_>>()
+            );
+            path.push(module);
+            for dep in module.deps() {
+                visit(dep, path, done);
+            }
+            path.pop();
+            done.push(module);
+        }
+        let mut done = Vec::new();
+        for module in TestRuntimeModule::ALL {
+            visit(module, &mut Vec::new(), &mut done);
+        }
+        assert_eq!(done.len(), TestRuntimeModule::ALL.len());
+    }
+
+    /// The generated declaration in `harness.ts` is the name `snapshot_harness` writes.
+    #[test]
+    fn the_harness_contract_matches_the_generator() {
+        let contract = include_str!("../../runtime/src/testing/harness.ts");
+        let written: String =
+            crate::testgen::test_module::snapshot_harness(&std::collections::BTreeMap::new(), None)
+                .iter()
+                .map(|s| bynk_ts::print_stmt(s, 0))
+                .collect();
+        assert!(
+            contract.contains(
+                "declare const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile>;"
+            ),
+            "harness.ts does not declare `__bynkSnapshotFiles` as the generator writes it"
+        );
+        assert!(
+            written.contains(
+                "const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {"
+            ),
+            "the generator no longer writes the declaration harness.ts mirrors"
+        );
+        // The asset table: the generator's name and type are the ones `harness.ts` declares.
+        let assets = format!(
+            "declare const {}: {};",
+            crate::testgen::test_deps::ASSET_FILES_NAME,
+            crate::testgen::test_deps::ASSET_FILES_TYPE
+        );
+        assert!(
+            contract.contains(&assets),
+            "harness.ts does not declare the asset table as the generator writes it: {assets}"
+        );
+    }
+
+    /// No stored golden holds a snapshot table, so its text is pinned: the runtime, then the table
+    /// directly after it, as it was written before the table was a node (1B.5a).
+    #[test]
+    fn the_snapshot_table_prints_as_it_always_did() {
+        let mut keys = std::collections::BTreeMap::new();
+        keys.insert(
+            "a.snap".to_string(),
+            vec![
+                ("one".to_string(), "x".to_string()),
+                ("two".to_string(), "y\"z".to_string()),
+            ],
+        );
+        keys.insert(
+            "b.snap".to_string(),
+            vec![("c".to_string(), "n".to_string())],
+        );
+        let mut stored = std::collections::BTreeMap::new();
+        stored.insert("a.snap".to_string(), "line\n\"q\"".to_string());
+        let printed: String = crate::testgen::test_module::snapshot_harness(&keys, Some(&stored))
+            .iter()
+            .map(|s| bynk_ts::print_stmt(s, 0))
+            .collect();
+        let expected = format!(
+            "{}const __bynkSnapshotFiles: globalThis.Record<string, __SnapshotFile> = {{\n  \"a.snap\": {{ stored: \"line\\n\\\"q\\\"\", live: [[\"one\", \"x\"], [\"two\", \"y\\\"z\"]] }},\n  \"b.snap\": {{ stored: null, live: [[\"c\", \"n\"]] }},\n}};\n",
+            TestRuntimeModule::Snapshot.source()
+        );
+        assert_eq!(printed, expected);
+    }
+}

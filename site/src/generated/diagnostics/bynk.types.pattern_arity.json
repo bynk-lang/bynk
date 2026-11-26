@@ -1,0 +1,12 @@
+{
+  "blurb": "A variant pattern takes one binding for each payload field the variant declares, in order, or none to ignore the payload. A different count, or any binding on a variant with no payload, is refused: an extra name has nothing to hold, and a missing one would silently drop a field. Use `_` for a field you do not need, or name the fields you want (`radius: r`). Building a variant with the wrong number of arguments is `bynk.types.variant_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.pattern_arity",
+  "constructs": [
+    "variant_pattern"
+  ],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r, extra) => r    // ✗ `Circle` has one field\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r           // ✓\n        Dot => 0\n    }\n}",
+  "severity": "error",
+  "summary": "A pattern binds the wrong number of payload fields."
+}

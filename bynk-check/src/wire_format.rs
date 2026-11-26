@@ -78,11 +78,11 @@ pub const SIGNING_SCHEME: &str = "BYNK-CALL-1";
 
 /// I2 (#1971): the secret a callee holds for the edge from one caller,
 /// [`edge_key_from`].
-pub const EDGE_FROM_PREFIX: &str = "BYNK_CALL_FROM_";
+pub use bynk_project::env_protocol::CALL_FROM_PREFIX as EDGE_FROM_PREFIX;
 
 /// I2 (#1971): the secret a caller holds for the edge to one callee,
 /// [`edge_key_to`].
-pub const EDGE_TO_PREFIX: &str = "BYNK_CALL_TO_";
+pub use bynk_project::env_protocol::CALL_TO_PREFIX as EDGE_TO_PREFIX;
 
 /// State-migrations S4 (#2259 Decision D): the prefix of `bynk migrate
 /// sweep`'s wake route, `/_bynk/migrate/<Class>`. Not part of the published
@@ -95,7 +95,7 @@ pub const MIGRATE_CALLER: &str = "bynk.migrate";
 
 /// State-migrations S4 (#2259): the secret a sweep's key is set under for the
 /// sweep's duration. Without it the route answers `404`.
-pub const MIGRATE_KEY: &str = "BYNK_MIGRATE_KEY";
+pub use bynk_project::env_protocol::MIGRATE_KEY;
 
 /// I2 (#1971): whether `context` is a name an edge key can be derived from:
 /// dot-separated segments, each a lowercase letter, then lowercase letters
@@ -215,6 +215,11 @@ pub const HEADERS: &[Header] = &[
         name: WIRE_HEADER,
         required: "no",
         meaning: "The wire version the caller speaks, exactly the decimal digits of an accepted version (`1`, not `01` or `+1`). Absent means `1`.",
+    },
+    Header {
+        name: "traceparent",
+        required: "no",
+        meaning: "The trace the call belongs to, as a [W3C `traceparent`](https://www.w3.org/TR/trace-context/): `00-<trace id>-<span id>-01`, the trace id 32 and the span id 16 lowercase hex digits, neither all zero. A Bynk caller sends it from inside a trace and never otherwise. The callee reads it only once the signature has held, and ignores one that is missing or malformed; it is not part of the signing input, and a call is never refused for it.",
     },
     Header {
         name: "content-type",

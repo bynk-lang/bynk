@@ -20,7 +20,7 @@ capability Prices {
 }
 
 service prices {
-	on call(sku: Int) -> Effect[Int] given Prices {
+	on call(sku: Int) -> Effect[Int] by Caller given Prices {
 		Prices.get("east", sku).race(Prices.get("west", sku))
 	}
 }
@@ -53,7 +53,7 @@ are idempotent. Racing two payments pays twice. It also does the work twice, so 
 costs twice what one call does: it pays when the latency you save is worth that.
 
 Use `FetchOptions.timeout` when work must actually stop. For more, read
-[what a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/).
+[what a timeout stops](/book/concepts/effects-and-capabilities/what-a-timeout-stops/).
 
 ## Where it is allowed
 
@@ -73,7 +73,7 @@ argument, decide the winner:
 suite shop.prices {
 	case "the faster mirror wins" {
 		stub Prices.get("east", _) returns 1 after 2.seconds
-		stub Prices.get("west", _) returns 2 after 1.seconds
+		stub Prices.get("west", _) returns 2 after 1.second
 		let p <- prices.call(7)
 		expect p == 2
 		expect Prices.get called 2 times  // the loser was still called
@@ -83,4 +83,4 @@ suite shop.prices {
 
 Stubs replace capabilities, so a race between two *contexts* runs at `integration` or
 `system`, not at `unit`. At `system`, `race` runs in real time. See
-[testing](/book/reference/testing/#stub-latency).
+[testing](/reference/testing/#stub-latency).

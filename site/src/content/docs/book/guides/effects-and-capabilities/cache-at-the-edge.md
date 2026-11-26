@@ -144,5 +144,5 @@ added to `bynk.deploy.lock`.
 
 ## Related
 
-- [`EdgeCache` reference](/book/reference/bynk-capabilities/#edge-caching-edgecache)
-- [HTTP reference: declared freshness (`@cache`)](/book/reference/http/#declared-freshness-cache)
+- [`EdgeCache` reference](/reference/bynk-capabilities/#edge-caching-edgecache)
+- [HTTP reference: declared freshness (`@cache`)](/reference/http/#declared-freshness-cache)

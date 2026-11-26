@@ -1,0 +1,12 @@
+{
+  "blurb": "`includes` ships WebAssembly modules beside the binding, so each file it names has to exist: the path is read relative to the adapter's source file. A misspelt name, or a module left out of the tree, is the usual cause. Correct the path, or add the file.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.include_missing",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "adapter math {\n    binding \"./math.binding.ts\" includes [\"./absent.wasm\"]    // ✗ no such file beside the adapter\n}\n\nadapter math {\n    binding \"./math.binding.ts\" includes [\"./adder.wasm\"]     // ✓ the module exists\n}",
+  "severity": "error",
+  "summary": "An adapter `binding … includes [ … ]` entry names a file that could not be read."
+}

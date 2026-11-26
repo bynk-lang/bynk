@@ -652,3 +652,154 @@ service api from http {
         "{text}"
     );
 }
+
+/// #3916: a route that answers its errors as problem details is typed with a `problem: Problem`
+/// reply, decoded from the `problem` body kind; a route that does not keeps `error: string`.
+#[test]
+fn problem_details_replies_are_typed_as_problem() {
+    let dir = scratch("problem-details");
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"problems\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/api.bynk"),
+        "context api\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           on GET(\"/reserve\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n\n\
+         service plain from http {\n  \
+           on GET(\"/plain\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n",
+    )
+    .unwrap();
+    let text = module(&dir, &[]);
+    assert!(
+        text.contains("export interface Problem {"),
+        "the module declares Problem"
+    );
+    assert!(
+        text.contains("readonly problem: Problem"),
+        "a problem reply is typed"
+    );
+    assert!(
+        text.contains("body: \"problem\""),
+        "and decoded as the problem body kind"
+    );
+    assert!(
+        text.contains("readonly error: string"),
+        "a plain route keeps `error: string`"
+    );
+}
+
+/// #4434: a `@rateLimit` route can answer `429` (`RateLimited`) before its body is read, whichever key
+/// it counts by, so the client types that outcome for it: a caller that matches on the outcome
+/// exhaustively must handle it. A route with no `@rateLimit` cannot answer one and keeps its union.
+#[test]
+fn a_rate_limited_route_has_a_rate_limited_outcome() {
+    let dir = scratch("rate-limited");
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let template = "context api\n\n\
+         consumes bynk.cloudflare { RateLimit }\n\n\
+         type UserId = String where NonEmpty\n\n\
+         actor Reader { auth = Bearer(secret = \"API_TOKEN_SECRET\"), identity = UserId }\n\n\
+         capability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\
+         capability NoteLimit = RateLimit @limit(2) @period(60.seconds)\n\n\
+         service api from http {\n  \
+           __SIGNUP_RATE_LIMIT__\
+           on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(NoteLimit, key: identity)\n  \
+           on POST(\"/notes\") (body: String) -> Effect[HttpResult[String]] by r: Reader {\n    Ok(\"noted\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n\n  \
+           on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"up\")\n  }\n}\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol-mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n}\n";
+    let limited = "@rateLimit(SignupLimit, key: clientIp)\n  ";
+    std::fs::write(
+        dir.join("src/api.bynk"),
+        template.replace("__SIGNUP_RATE_LIMIT__", limited),
+    )
+    .unwrap();
+    let text = module(&dir, &[]);
+    golden("http-client-rate-limited.ts", &text);
+    // The outcome is typed on each limited route: the router's `{ kind, details }` body on a plain
+    // service, problem details on a problem one. `/health` has none.
+    let member = "readonly status: 429; readonly kind: \"RateLimited\"";
+    assert_eq!(text.matches(member).count(), 5, "{text}");
+    assert!(
+        text.contains(&format!(
+            "{member}; readonly error: {{ readonly kind: \"RateLimited\"; readonly details: string }}"
+        )),
+        "a plain route types the refusal's body"
+    );
+    assert!(
+        text.contains(&format!("{member}; readonly problem: Problem")),
+        "a problem route types it as problem details"
+    );
+    // Where a handler also answers `429`, both are members at the one status, and the reply table lists
+    // both, the handler's first, so the client tells them apart by the body each writes.
+    for (route, handler_body, router_body) in [
+        ("postMixed", "message", "boundary"),
+        ("postEnrolMixed", "problem", "problem-rejection"),
+    ] {
+        let at = text
+            .find(&format!("What `POST /{}` answers", route_path(route)))
+            .unwrap_or_else(|| panic!("no union for {route}: {text}"));
+        let union = &text[at..at + 700];
+        assert!(
+            union.contains("readonly kind: \"TooManyRequests\"")
+                && union.contains("readonly kind: \"RateLimited\""),
+            "{route} has both members: {union}"
+        );
+        assert!(
+            text.contains(&format!(
+                "429: [{{ kind: \"TooManyRequests\", body: \"{handler_body}\" }}, {{ kind: \"RateLimited\", body: \"{router_body}\" }}]"
+            )),
+            "{route} lists both replies at 429, told apart by body"
+        );
+    }
+    assert!(
+        text.contains("429: [{ kind: \"RateLimited\", body: \"boundary\" }]")
+            && text.contains("429: [{ kind: \"RateLimited\", body: \"problem-rejection\" }]"),
+        "a route with no handler 429 lists the router's alone"
+    );
+    // The route's contract hash moves when `@rateLimit` is added or removed, and only that route's.
+    let plain = dir.join("../http-client-rate-limited-bare");
+    let _ = std::fs::remove_dir_all(&plain);
+    std::fs::create_dir_all(plain.join("src")).unwrap();
+    std::fs::copy(dir.join("bynk.toml"), plain.join("bynk.toml")).unwrap();
+    std::fs::write(
+        plain.join("src/api.bynk"),
+        template.replace("__SIGNUP_RATE_LIMIT__", ""),
+    )
+    .unwrap();
+    let bare = module(&plain, &[]);
+    assert_ne!(
+        contract_of(&text, "postSignup"),
+        contract_of(&bare, "postSignup"),
+        "adding @rateLimit moves the route's hash"
+    );
+    assert_eq!(
+        contract_of(&text, "getHealth"),
+        contract_of(&bare, "getHealth"),
+        "and no other route's"
+    );
+}
+
+/// `postEnrolMixed` is `POST /enrol-mixed`: the path a generated function name was made from.
+fn route_path(function: &str) -> String {
+    match function {
+        "postMixed" => "mixed".to_string(),
+        "postEnrolMixed" => "enrol-mixed".to_string(),
+        other => other.to_string(),
+    }
+}

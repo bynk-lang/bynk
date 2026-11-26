@@ -1,0 +1,12 @@
+{
+  "blurb": "`from queue(\"…\")` names a Cloudflare queue, so the name must be one Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. An empty name, capitals or `_` are refused here, rather than failing at deploy. Rename it, for example `order-events`.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.invalid_name",
+  "constructs": [
+    "queue_handler"
+  ],
+  "example": "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses."
+}

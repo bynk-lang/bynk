@@ -9,7 +9,7 @@ WebSocket handlers go in a `service` inside a `context`. The protocol is bound o
 the service header — `from websocket(in:, out:)` — naming the **frame types** the
 client sends (`in`) and the server sends (`out`). Unlike HTTP, the connection
 outlives the handler: `on open` is handed an owned
-[`Connection`](/book/reference/types/#connection) that it must **dispose** of,
+[`Connection`](/reference/types/#connection) that it must **dispose** of,
 the canonical disposal being transfer into an agent that holds it.
 
 ## Open a connection
@@ -42,11 +42,36 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 The upgrade **authenticates at the edge** through the `by` clause — exactly like an
 HTTP route, and fail-closed: there is no anonymous upgrade, so `on open` *must*
 name its actor. (A browser `WebSocket` cannot set an `Authorization` header, so a
-`Bearer` token rides the `Sec-WebSocket-Protocol` subprotocol; the boundary admits
-`None`/`Bearer` and rejects `Signature`.) Only on success is the handler run with a
+`Bearer` token rides the `Sec-WebSocket-Protocol` subprotocols, as the pair
+`new WebSocket(url, ["bynk.bearer", token])`; an `Oidc` token the same with `"bynk.oidc"`, and a
+`SignedCookie` actor reads the session cookie behind an `Origin` check, see below. The boundary admits
+`None`, `Bearer`, `Oidc` and `SignedCookie` and rejects `Signature`.) Only on success is the handler run with a
 fresh, **owned** `connection: Connection[ServerFrame]`.
 
-That connection is a [held resource](/book/reference/types/#connection): it has
+### Authenticate a browser with a session cookie
+
+A page that already has a [`SignedCookie`](/reference/actors/#signed-cookies) session can open the socket
+without handling a token: the browser sends the cookie on the upgrade. Because a cookie is sent from
+any site, and a WebSocket is not covered by CORS, the service says which pages may open it:
+
+```bynk,fragment
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	on open (roomId: RoomId) -> Effect[()] by user: Member {
+		let _ <- Room(roomId).join(user.identity, connection)
+	}
+}
+```
+
+The upgrade is refused with `403` unless its `Origin` header is exactly one of those origins, and a missing
+`Origin` is refused too, before the cookie is read. Without the `cors` block the service does not compile
+(`bynk.ws.cookie_needs_origins`). The rules are in the
+[reference](/reference/websocket/#authenticate-with-a-session-cookie).
+
+That connection is a [held resource](/reference/types/#connection): it has
 exactly one owner and must be disposed before the handler returns. Here it is
 **transferred into the `Room` agent** (`Room(roomId).join(…, connection)`); leaving
 it undisposed is a compile error (`bynk.held.leak`).
@@ -95,7 +120,9 @@ when deployed a closed socket no longer resolves, so `get` on that key returns `
 ## Receive inbound frames and broadcast
 
 Inbound frames arrive through `on message`; `on close` fires when the client
-disconnects. Each delegates to the room agent, which broadcasts over its held map:
+disconnects, and every WebSocket service needs one: `on open` handed the connection to the
+room agent, and nothing else removes it when the client leaves (a service without `on close` is
+`bynk.ws.missing_close`). Each delegates to the room agent, which broadcasts over its held map:
 
 ```bynk,fragment
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
@@ -117,14 +144,58 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 }
 ```
 
+### Binary frames and frame limits
+
+A frame is JSON text by default. For audio, images or a compact protocol, make the frame type `Bytes`:
+`in: Bytes` delivers each inbound binary message to `on message` as `Bytes`, and `out: Bytes` sends
+binary messages. A service declares the largest frame it reads or sends with `limits { maxFrame }`, in
+bytes (1 MiB if you say nothing, at most 32 MiB):
+
+```bynk,fragment
+service Audio from websocket(in: Bytes, out: Bytes) {
+  limits { maxFrame: 262_144 }
+  on message (roomId: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+    ()
+  }
+}
+```
+
+A frame over `maxFrame` closes the connection with `1009` before it is parsed, a text frame to a `Bytes`
+service and a binary frame to a JSON one with `1003`, and a frame your code sends over `maxFrame`
+faults the send. The [reference](/reference/websocket/#frame-size-and-binary-frames) has the rules.
+
+### Leaving a room
+
+A client that goes away must be removed from the room, or a later broadcast raises on its dead
+connection. `on close` is where that happens. To see why the connection ended, add a trailing
+`close: CloseInfo` parameter (`consumes bynk { CloseInfo }`): its `code` and `reason` are the
+client's close frame (`1000` is a normal closure, `1006` an abnormal disconnection with no frame),
+and `clean` is whether the close handshake completed:
+
+```bynk,ignore
+on close (roomId: RoomId, close: CloseInfo) -> Effect[()] by user: Participant {
+  let _ <- Room(roomId).leave(user.identity, close.code)
+  ()
+}
+```
+
+A connection that ends with a non-disconnection error runs `on close` once with
+`CloseInfo { code: 1011, reason: "error", clean: false }`, so the room releases it the same way.
+
+To close a connection from the server with a code the client can read, call
+`connection.close(4001, "room archived")` in the agent. The code is `1000` or `3000` to `4999`
+and the reason at most 123 bytes; a literal outside that is a compile error
+(`bynk.ws.bad_close_code`, `bynk.ws.bad_close_reason`).
+
 ```bynk,fragment
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 ```
 
-`parTraverse` sends to every connection **in parallel** (so one slow client cannot
+`parForEach` sends to every connection **in parallel** (so one slow client cannot
 stall the room, and it waits for every send to settle before it raises a fault); `forEach` is the sequential sibling. In the broadcast closure each
 `c` is **borrowed** — you may `send` to it, but closing or transferring it is
 `bynk.held.consume_on_borrow`. To broadcast to everyone *but* the sender, filter on
@@ -158,7 +229,7 @@ suite chat {
 `open` takes the route params and the actor (`by`); `message` and `close` reuse
 both from the connection, as the platform does. To test an agent without the
 service, pass it `tc.connection()`. See [Driving a WebSocket
-service](/book/reference/testing/#websocket-address).
+service](/reference/testing/#websocket-address).
 
 ## Build and run
 
@@ -221,17 +292,17 @@ agent Room {
 	}
 
 	on call post(sender: UserId, text: String) -> Effect[()] {
-		let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame {
-			text: text,
-		}))
+		let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(
+			ServerFrame { text: text }
+		))
 	}
 }
 ```
 
 ## Related
 
-- Reference: [WebSocket](/book/reference/websocket/) — the full handler surface,
+- Reference: [WebSocket](/reference/websocket/) — the full handler surface,
   broadcast, authentication, and diagnostics.
-- Reference: [Type system — Connection](/book/reference/types/#connection) — the
+- Reference: [Type system — Connection](/reference/types/#connection) — the
   held-resource type and its linearity discipline.
 - Guide: [Handle an HTTP request](/book/guides/entry-points/http/) — the sibling request/response protocol.

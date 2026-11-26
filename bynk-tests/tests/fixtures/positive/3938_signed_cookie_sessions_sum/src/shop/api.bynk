@@ -1,0 +1,62 @@
+context shop.api
+
+consumes bynk { Clock }
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+// A web app signs in with a session cookie; CLI and partner clients send an OIDC token.
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sessions = true), identity = UserId }
+actor ApiClient {
+	auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
+	identity = UserId
+}
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	// The arms are tried in declared order, so a request carrying both is the cookie's.
+	on POST("/orders") () -> Effect[HttpResult[String]] by who: User | ApiClient {
+		match who {
+			User(u) => Ok("cookie \(u)")
+			ApiClient(c) => Ok("token \(c)")
+		}
+	}
+
+	// The token first: an explicit token wins over an ambient cookie.
+	on POST("/orders/token-first") () -> Effect[HttpResult[String]] by who: ApiClient | User {
+		match who {
+			ApiClient(c) => Ok("token \(c)")
+			User(u) => Ok("cookie \(u)")
+		}
+	}
+
+	// A safe method: the cookie arm applies no CSRF check.
+	on GET("/orders") () -> Effect[HttpResult[String]] by who: User | ApiClient {
+		match who {
+			User(u) => Ok("cookie \(u)")
+			ApiClient(c) => Ok("token \(c)")
+		}
+	}
+
+	// Ending the session from a sum handler: the cookie arm threads the verified session in.
+	on POST("/logout") () -> Effect[HttpResult[()]] by who: User | ApiClient {
+		match who {
+			User(_) => {
+				let c <- User.expire()
+				NoContent.withCookie(c)
+			}
+			ApiClient(_) => NoContent
+		}
+	}
+
+	// Ending every session of one identity.
+	on POST("/revoke-all") () -> Effect[HttpResult[()]] by who: User | ApiClient {
+		match who {
+			User(u) => {
+				let _ <- User.revokeAll(u)
+				NoContent
+			}
+			ApiClient(_) => NoContent
+		}
+	}
+}

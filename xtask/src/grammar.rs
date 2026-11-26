@@ -271,7 +271,7 @@ fn render_extra(node: &Value) -> String {
 }
 
 /// Render the complete grammar reference appendix
-/// (`site/src/content/docs/book/reference/grammar-appendix.md`): the
+/// (`site/src/content/docs/reference/grammar-appendix.md`): the
 /// generated-file header, the
 /// notation note, the full `ebnf` block of every production (display names,
 /// trivial wrappers collapsed), and the Tokens & trivia section.
@@ -588,7 +588,14 @@ mod tests {
         // #3386 (`SignedCookie`) added: scheme_duration (`ttl = 12.hours` in a
         // scheme config). Net +1.
         // #3443 (removal of `~>`) removed: effect_send_stmt. Net -1.
-        assert_eq!(rules.len(), 196);
+        // #3877 (queue `delivery { }`) added: delivery_policy, delivery_field.
+        // Net +2.
+        // #3916 (`errors { }`) added: errors_policy, errors_field. Net +2.
+        // #4045 (`uses` braced list and alias) added: qualified_type_ref. Net +1.
+        // #4035 (`expect <call> violates <name>`) added: violates_name. Net +1.
+        // #3885 (email `fallback { }`) added: fallback_policy, fallback_field. Net +2.
+        // #3975 (wire names) added: _variant_annotation. Net +1.
+        assert_eq!(rules.len(), 205);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

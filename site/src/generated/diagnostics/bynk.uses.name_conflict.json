@@ -1,0 +1,12 @@
+{
+  "blurb": "A unit's own declaration shadows a `uses`-imported one of the same name, as it does in the emitted module, and a reference the local declaration cannot answer cannot mean the import either: a call to a type, a bare service name, a name written where the local declaration hides a type. Rename the local declaration, or `uses` the commons with an alias or a braced list that renames the import (`uses lib.util { total as totalOf }`). Two used commons that declare one name are not this: that is `bynk.uses.ambiguous_name`, reported where the name is written.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.name_conflict",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// lib/util.bynk\ncommons lib.util\n\nfn total() -> Int {\n  1\n}\n\n// app/main.bynk\ncontext app\n\nuses lib.util\n\ntype total = { n: Int }\ntype Totals = { n: Int }               // ✓ a name of its own\n\nfn sum() -> Int {\n  total()                              // ✗ the local type `total` hides the imported function\n}",
+  "severity": "error",
+  "summary": "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
+}

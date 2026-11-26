@@ -15,23 +15,50 @@
 //! A kind takes what it needs through the contexts here and reaches into nothing else
 //! (Decision B, and `design/tracks/back-half-paydown.md` §12): not `DeployOptions`, not
 //! `plan::run`'s locals, not the CLI's flags. It does not write the ledger: provisioning and
-//! pruning say what they recorded or forgot, and the caller writes the ledger at once, so a
+//! pruning return what they would record or forget as [`Commit`]s, and the apply's one
+//! [`LedgerWriter`] (`apply.rs`, 1D.2a) writes each before the kind's next account call, so a
 //! record still lands before the push (ADR 0180).
 //!
-//! Converted so far: KV (1D.1a), R2 and D1 (1D.1b). The others follow in 1D.1c–e, and until then
-//! keep their own code beside the loops; where one sits between converted kinds in the plan's order,
-//! the list holds a [`Legacy`] slot for it, so a loop that prints keeps today's order.
+//! Converted so far: KV (1D.1a), R2 and D1 (1D.1b), Vectorize and Hyperdrive (1D.1c), rate limiters
+//! and queues (1D.1d). The linked kinds and container images follow in 1D.1e, and until then keep
+//! their own code after the loops, which is where they sit in the plan's order. The orphan report's
+//! Worker block, which is not a kind, has a [`Slot`] in the list.
+//!
+//! `--prune` follows the list's order too, as the maintainer ruled for 1D.1c (22 November 2026):
+//! its notices and its deletes used to come in orders of their own.
+//!
+//! 1D.2b (#4001): a kind's apply is its typed [`ResourceKind::Step`]s, decided at plan time from
+//! the declarations and the ledger and held in the context's [`WorkerSteps`], and its
+//! [`ResourceKind::apply`] of one. Where a kind's plan line is a view of its step (KV, R2, D1,
+//! Hyperdrive, Vectorize), the line is rendered from the step, so the plan and the apply share one
+//! decision. The apply's order is [`for_each_apply_phase`], not [`for_each_kind`].
 
 use super::*;
 use bynk_driver::emsg;
 
+mod ai_search;
+mod container_image;
 mod d1;
+mod hyperdrive;
 mod kv;
+mod mtls_certificate;
+mod queue;
 mod r2;
+mod ratelimit;
+mod stored_secret;
+mod vectorize;
 
+pub(crate) use ai_search::*;
+pub(crate) use container_image::*;
 pub(crate) use d1::*;
+pub(crate) use hyperdrive::*;
 pub(crate) use kv::*;
+pub(crate) use mtls_certificate::*;
+pub(crate) use queue::*;
 pub(crate) use r2::*;
+pub(crate) use ratelimit::*;
+pub(crate) use stored_secret::*;
+pub(crate) use vectorize::*;
 
 /// Each kind of resource the deploy names on the account. Field-less, matched exhaustively.
 ///
@@ -44,6 +71,12 @@ pub(crate) enum KindId {
     D1,
     Queue,
     Vectorize,
+    Hyperdrive,
+    RateLimit,
+    StoredSecret,
+    AiSearch,
+    MtlsCertificate,
+    ContainerImage,
 }
 
 impl KindId {
@@ -55,6 +88,12 @@ impl KindId {
             KindId::D1 => "D1 databases",
             KindId::Queue => "queues",
             KindId::Vectorize => "Vectorize indexes",
+            KindId::Hyperdrive => "Hyperdrive configs",
+            KindId::RateLimit => "rate limiters",
+            KindId::StoredSecret => "Secrets Store secrets",
+            KindId::AiSearch => "AI Search instances",
+            KindId::MtlsCertificate => "mTLS certificates",
+            KindId::ContainerImage => "container images",
         }
     }
 }
@@ -190,61 +229,251 @@ pub(crate) struct OrphanCx<'l> {
     pub(crate) resources: &'l BTreeMap<String, Resources>,
 }
 
-/// The tools a kind's account calls go through. In 1D.1 a holder of what today's wrangler and
-/// REST calls take; 1D.3 swaps its contents for the `Wrangler` trait and the shared REST client.
+/// The tools a kind's account calls go through: the account operations ([`CloudflareApi`], 1D.3)
+/// and the project root.
 #[derive(Clone, Copy)]
 pub(crate) struct Tools<'a> {
-    pub(crate) provenance: &'a Provenance,
+    /// The account operations (1D.3, #4043): every call the apply makes to Cloudflare.
+    pub(crate) api: &'a dyn CloudflareApi,
     pub(crate) project_root: &'a Path,
 }
 
-/// What a kind's provisioning and pruning act in: one Worker of one environment, the ledger to
-/// record in (and, for an account-wide name, read across environments), the account state the
-/// run read once, and the tools.
-pub(crate) struct ApplyCx<'a, K: ResourceKind> {
+/// What a kind's provisioning and pruning act in: one Worker of one environment, the ledger as it
+/// stands (and, for an account-wide name, across environments), the account state the run read
+/// once, and the tools.
+///
+/// The ledger is read-only here (1D.2a, #4001): a kind says what it would record or forget as
+/// [`Commit`]s, and the apply's one [`LedgerWriter`] writes each before the kind's next account
+/// call, so a record still lands before the push, and before anything that could fail after it
+/// (ADR 0180).
+pub(crate) struct StepCx<'a, 'l, K: ResourceKind> {
     pub(crate) environment: &'a str,
     pub(crate) worker: &'a str,
     /// The whole project, for a check across it that a create re-runs.
     pub(crate) project: &'a BTreeMap<String, Resources>,
-    pub(crate) environments: &'a mut BTreeMap<String, Environment>,
-    pub(crate) live: &'a K::Live,
+    pub(crate) lock: &'a DeployLock,
+    pub(crate) live: K::Live<'l>,
     pub(crate) tools: Tools<'a>,
 }
 
-impl<K: ResourceKind> ApplyCx<'_, K> {
+impl<K: ResourceKind> StepCx<'_, '_, K> {
     /// The ledger as it stands, for reading.
     pub(crate) fn ledger(&self) -> LedgerView<'_> {
-        LedgerView {
-            environment: self.environment,
-            environments: self.environments,
+        LedgerView::of(self.lock, self.environment)
+    }
+
+    /// The commit that records `record` for this Worker's `binding`. `done` says what was done to
+    /// the account, for the message when the write fails: "{done} but could not record it in …".
+    pub(crate) fn recording(
+        &self,
+        binding: &str,
+        record: K::Record,
+        done: &str,
+    ) -> Commit<TableChange<K::Table>> {
+        Commit::recorded(TableChange::insert(self.worker, binding, record), done)
+    }
+}
+
+/// One change to one environment of the ledger, which the apply's [`LedgerWriter`] makes.
+pub(crate) trait LedgerChange {
+    /// Make the change in `environment` of `lock`. Whether the ledger is to be written for it: a
+    /// queue already recorded as it would be is not (a re-run that provisions nothing writes
+    /// nothing).
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool;
+}
+
+/// A record put in, or taken out of, a kind's [`LedgerTable`].
+pub(crate) enum TableChange<T: LedgerTable> {
+    /// Record `record` for `worker`'s `binding`, replacing any, making the environment if the
+    /// ledger has none yet.
+    Insert {
+        worker: String,
+        binding: String,
+        record: T::Record,
+    },
+    /// Forget `worker`'s `binding`, if the ledger has the environment.
+    Remove { worker: String, binding: String },
+}
+
+impl<T: LedgerTable> TableChange<T> {
+    pub(crate) fn insert(worker: &str, binding: &str, record: T::Record) -> Self {
+        TableChange::Insert {
+            worker: worker.to_string(),
+            binding: binding.to_string(),
+            record,
         }
     }
 
-    /// Record `record` for this Worker's `binding`.
-    pub(crate) fn record(&mut self, binding: &str, record: K::Record) {
-        let env = self
-            .environments
-            .entry(self.environment.to_string())
-            .or_default();
-        K::Table::insert(env, self.worker, binding, record);
-    }
-
-    /// Forget this Worker's `binding`.
-    pub(crate) fn forget(&mut self, binding: &str) {
-        if let Some(env) = self.environments.get_mut(self.environment) {
-            K::Table::remove(env, self.worker, binding);
+    pub(crate) fn remove(worker: &str, binding: &str) -> Self {
+        TableChange::Remove {
+            worker: worker.to_string(),
+            binding: binding.to_string(),
         }
     }
 }
 
-/// What provisioning one declared instance did.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Provisioned<B> {
-    /// The binding and what the push binds it to, written into the generated configuration.
-    pub(crate) bound: Option<(String, B)>,
-    /// `Some(what)` when a record was made: the caller writes the ledger before anything else
-    /// happens (ADR 0180), and a failure to says "created {what} but could not record it".
-    pub(crate) recorded: Option<String>,
+impl<T: LedgerTable> LedgerChange for TableChange<T> {
+    fn apply(self, lock: &mut DeployLock, environment: &str) -> bool {
+        match self {
+            TableChange::Insert {
+                worker,
+                binding,
+                record,
+            } => T::insert(
+                lock.environments
+                    .entry(environment.to_string())
+                    .or_default(),
+                &worker,
+                &binding,
+                record,
+            ),
+            TableChange::Remove { worker, binding } => {
+                if let Some(env) = lock.environments.get_mut(environment) {
+                    T::remove(env, &worker, &binding);
+                }
+            }
+        }
+        true
+    }
+}
+
+/// What one write of the ledger covers: its changes, made in order, and the message when the write
+/// fails, before " in {path}: {error}".
+pub(crate) struct Commit<C> {
+    pub(crate) changes: Vec<C>,
+    pub(crate) failure: String,
+}
+
+impl<C> Commit<C> {
+    /// `changes` in one write, failing with `failure`.
+    pub(crate) fn of(changes: Vec<C>, failure: String) -> Self {
+        Commit { changes, failure }
+    }
+
+    /// One change, for what `done` did to the account: "{done} but could not record it".
+    pub(crate) fn recorded(change: C, done: &str) -> Self {
+        Commit::of(vec![change], format!("{done} but could not record it"))
+    }
+}
+
+/// The links a Worker's instances of a linked kind (stored secrets, AI Search, mTLS certificates)
+/// make, recorded in one write only when one of them changes what the ledger holds.
+pub(crate) struct Links<K: ResourceKind> {
+    pending: BTreeMap<String, K::Record>,
+    changed: bool,
+}
+
+impl<K: ResourceKind> Links<K>
+where
+    K::Record: PartialEq,
+    K::Table: LedgerTable<Record = K::Record>,
+{
+    pub(crate) fn new() -> Self {
+        Links {
+            pending: BTreeMap::new(),
+            changed: false,
+        }
+    }
+
+    /// Record `link` for this Worker's `binding`, unless it is what the ledger (or an earlier link
+    /// of this Worker) already holds.
+    pub(crate) fn link(&mut self, cx: &StepCx<'_, '_, K>, binding: &str, link: K::Record) {
+        let held = self
+            .pending
+            .get(binding)
+            .or_else(|| cx.ledger().recorded::<K>(cx.worker, binding));
+        if held == Some(&link) {
+            return;
+        }
+        self.pending.insert(binding.to_string(), link);
+        self.changed = true;
+    }
+
+    /// The one write of `worker`'s links when any changed, failing with "{failure} in …".
+    pub(crate) fn commit(
+        self,
+        worker: &str,
+        failure: String,
+    ) -> Option<Commit<TableChange<K::Table>>> {
+        self.changed.then(|| {
+            Commit::of(
+                self.pending
+                    .into_iter()
+                    .map(|(binding, link)| TableChange::insert(worker, &binding, link))
+                    .collect(),
+                failure,
+            )
+        })
+    }
+}
+
+/// What applying one step did (1D.2b, #4001 Decision A): what the push binds, and what to
+/// record, each [`Commit`] written in order before the next step is applied.
+pub(crate) struct Applied<K: ResourceKind> {
+    /// What the push binds, by binding, written into the generated configuration.
+    pub(crate) bound: Vec<(String, K::Bound)>,
+    /// What to record, each written in order before anything else is asked of the account.
+    pub(crate) commits: Vec<Commit<K::Change>>,
+}
+
+impl<K: ResourceKind> Applied<K> {
+    /// Nothing bound and nothing to record.
+    pub(crate) fn nothing() -> Self {
+        Applied {
+            bound: Vec::new(),
+            commits: Vec::new(),
+        }
+    }
+
+    /// `binding` bound to `bound`, with nothing to record.
+    pub(crate) fn bound(binding: &str, bound: K::Bound) -> Self {
+        Applied {
+            bound: vec![(binding.to_string(), bound)],
+            commits: Vec::new(),
+        }
+    }
+
+    /// And `commit` to write.
+    pub(crate) fn with(mut self, commit: Commit<K::Change>) -> Self {
+        self.commits.push(commit);
+        self
+    }
+
+    /// And `commit` to write, if there is one.
+    pub(crate) fn with_any(self, commit: Option<Commit<K::Change>>) -> Self {
+        match commit {
+            Some(commit) => self.with(commit),
+            None => self,
+        }
+    }
+}
+
+/// The account state a run reads once, for every kind: each kind takes its own with
+/// [`ResourceKind::live_in`]. The default is a run that read nothing (a plan, or a test).
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Lives<'a> {
+    /// The account's KV namespace ids, when they were read ([`Kv::read_live`]).
+    pub(crate) kv: Option<&'a BTreeSet<String>>,
+    /// What each `Postgres` binding wants, and the API to ask.
+    pub(crate) hyperdrive: super::hyperdrive::HyperdriveRun<'a>,
+    /// The queues this run has already attempted to make, across Workers: a queue two contexts
+    /// consume is one queue, made once per run (ADR 0194 D2). `None` attempts every queue.
+    pub(crate) queues: Option<&'a std::cell::RefCell<BTreeSet<String>>>,
+    /// The ids each stored secret's Secrets Store and each mTLS certificate was linked to before
+    /// the run confirmed, by `(worker, binding)` ([`link_for_run`]). With `None`, every declared
+    /// stored secret or certificate is reported as not linked.
+    pub(crate) linked: Option<&'a BTreeMap<(String, String), String>>,
+}
+
+impl<'a> Lives<'a> {
+    /// What a plan has read before the run authenticates: what each `Postgres` binding wants,
+    /// and no API.
+    pub(crate) fn for_plan(wants: &'a super::hyperdrive::Wants) -> Self {
+        Lives {
+            hyperdrive: super::hyperdrive::HyperdriveRun::new(wants, None),
+            ..Lives::default()
+        }
+    }
 }
 
 /// A line `--prune` prints before it asks: through the styled message printer, or plain.
@@ -282,11 +511,25 @@ pub(crate) trait ResourceKind: Sized {
     type Line<'r>: Serialize;
     /// One recorded instance the build no longer declares.
     type Orphan: Serialize;
-    /// Account state the run reads once, before any Worker is provisioned.
-    type Live: Default;
+    /// Account state the run reads once, before any Worker is provisioned, as the kind's stages
+    /// see it.
+    type Live<'a>: Copy;
     /// What the push binds one instance to, written into the generated configuration (KV: its
     /// id; D1: its name and id; R2, bound by name already: nothing).
-    type Bound;
+    type Bound: 'static;
+    /// One change provisioning or pruning makes to the kind's records, which the apply writes
+    /// (most kinds: a [`TableChange`] of their table).
+    type Change: LedgerChange;
+    /// One unit of the apply (1D.2b, #4001 Decision A): what one write of the ledger covers, so
+    /// the write timing cannot move. Decided at plan time from the declarations and the ledger,
+    /// never from the account, and held in the context's [`WorkerSteps`].
+    type Step<'r>: std::fmt::Debug;
+
+    /// What the apply may still ask of the account on top of what a step decided (#4001
+    /// Decision B), each named. Pinned by a test, so a new one is a reviewed diff; nothing else
+    /// reads it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    const GUARDS: &'static [&'static str] = &[];
 
     /// The Worker's declared instances, in the order they are planned and provisioned.
     fn declared(r: &Resources) -> Vec<Self::Decl<'_>>;
@@ -298,8 +541,12 @@ pub(crate) trait ResourceKind: Sized {
     fn lines<'p, 'r>(context: &'p ContextPlan<'r>) -> &'p [Self::Line<'r>];
     fn lines_mut<'p, 'r>(context: &'p mut ContextPlan<'r>) -> &'p mut Vec<Self::Line<'r>>;
 
+    /// This kind's part of `lives`.
+    fn live_in<'a>(lives: Lives<'a>) -> Self::Live<'a>;
+
     /// The plan line for `decl`.
-    fn plan_line<'r>(cx: &PlanCx<'_>, decl: Self::Decl<'r>) -> Self::Line<'r>;
+    fn plan_line<'r>(cx: &PlanCx<'_>, decl: Self::Decl<'r>, live: Self::Live<'_>)
+    -> Self::Line<'r>;
 
     /// `line` in the short format, with its newline.
     fn short_line(line: &Self::Line<'_>, out: &mut String);
@@ -330,12 +577,18 @@ pub(crate) trait ResourceKind: Sized {
         None
     }
 
-    /// The kind's orphans in a plan's orphan report.
-    fn orphans_in(orphans: &Orphans) -> &[Self::Orphan];
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<Self::Orphan>;
+    /// The kind's orphans in a plan's orphan report. None for a kind that reports none.
+    fn orphans_in(_orphans: &Orphans) -> &[Self::Orphan] {
+        &[]
+    }
+
+    /// Put `found` in the kind's place in an orphan report.
+    fn set_orphans(_orphans: &mut Orphans, _found: Vec<Self::Orphan>) {}
 
     /// Every recorded instance `cx.resources` no longer declares.
-    fn orphans(cx: &OrphanCx<'_>) -> Vec<Self::Orphan>;
+    fn orphans(_cx: &OrphanCx<'_>) -> Vec<Self::Orphan> {
+        Vec::new()
+    }
 
     /// `orphan` as the plan shows it in `environment`.
     fn shown_orphan(orphan: &Self::Orphan, environment: &str) -> Self::Orphan;
@@ -356,25 +609,36 @@ pub(crate) trait ResourceKind: Sized {
         None
     }
 
-    /// Delete `orphan` from the account and forget it. `Some(what)` when the ledger changed, for
-    /// the caller to write at once. Report-only by default.
+    /// Delete `orphan` from the account, and what forgetting it changes. Only called for a
+    /// [`ResourceKind::prunable`] orphan; report-only by default.
     fn prune(
-        _cx: &mut ApplyCx<'_, Self>,
+        _cx: &StepCx<'_, '_, Self>,
         _orphan: &Self::Orphan,
-    ) -> Result<Option<String>, DeployFailure> {
+    ) -> Result<Option<Commit<Self::Change>>, DeployFailure> {
         Ok(None)
     }
 
-    /// Read what the run checks the ledger against, once.
-    fn live(_tools: Tools<'_>, _cx: &ProjectCx<'_>) -> Self::Live {
-        Self::Live::default()
-    }
+    /// The Worker's steps, in the order they are applied, decided from its declarations and the
+    /// ledger.
+    fn steps<'r>(
+        cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        live: Self::Live<'_>,
+    ) -> Vec<Self::Step<'r>>;
 
-    /// Create or reuse `decl` on the account, recording what it made.
-    fn provision(
-        cx: &mut ApplyCx<'_, Self>,
-        decl: Self::Decl<'_>,
-    ) -> Result<Provisioned<Self::Bound>, DeployFailure>;
+    /// The kind's steps in a context's [`WorkerSteps`].
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [Self::Step<'r>];
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<Self::Step<'r>>;
+
+    /// Do `step` against the account. The ledger is read-only here; what to record is returned.
+    fn apply(
+        cx: &StepCx<'_, '_, Self>,
+        step: &Self::Step<'_>,
+    ) -> Result<Applied<Self>, DeployFailure>;
+
+    /// Change the ledger once the Worker's push has succeeded: a rate limiter the source no
+    /// longer declares is free again only then.
+    fn after_push(_env: &mut Environment, _worker: &str, _declared: &Resources) {}
 
     /// Write the ids provisioning bound, by binding, into the generated configuration.
     fn materialise(
@@ -392,70 +656,170 @@ pub(crate) trait ResourceKind: Sized {
     }
 }
 
-/// A kind not yet converted that sits between converted ones in the plan's order. A pass that
-/// prints, or that stops at the first answer, handles it where it sits; every other pass ignores
-/// it. A slot goes when its kind is converted.
+/// A place in the list that is not a kind, which a pass that prints fills where it sits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Legacy {
-    /// Vectorize (1D.1c): its lines and orphans print between R2's and D1's, and its name
-    /// problem is checked between theirs.
-    Vectorize,
+pub(crate) enum Slot {
+    /// The orphan report's Workers, which it lists after Hyperdrive's orphans and before the
+    /// queues.
+    WorkerOrphans,
+    /// The plan's Analytics Engine datasets, after the queues and before the stored secrets.
+    Datasets,
+    /// The plan's foreign Service Bindings, email addresses and Durable Object classes, after the
+    /// mTLS certificates and before the containers.
+    BindingsAndObjects,
 }
+
+/// An orphan of a kind that reports none (a rate limiter is forgotten after the push instead):
+/// it cannot be made.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) enum NoOrphan {}
 
 /// A pass over every kind: one stage of the deploy, generic in the kind.
 pub(crate) trait KindVisitor {
     fn visit<K: ResourceKind>(&mut self);
 
-    /// The place of a kind not yet converted.
-    fn legacy(&mut self, _slot: Legacy) {}
+    /// A place in the list that is not a kind.
+    fn slot(&mut self, _slot: Slot) {}
 }
 
 /// The one list of kinds, in the plan's line order (the same in both formats).
 pub(crate) fn for_each_kind(v: &mut impl KindVisitor) {
     v.visit::<Kv>();
     v.visit::<R2>();
-    v.legacy(Legacy::Vectorize);
+    v.visit::<Vectorize>();
     v.visit::<D1>();
+    v.visit::<Hyperdrive>();
+    v.visit::<RateLimit>();
+    v.slot(Slot::WorkerOrphans);
+    v.visit::<Queue>();
+    v.slot(Slot::Datasets);
+    v.visit::<StoredSecret>();
+    v.visit::<AiSearch>();
+    v.visit::<MtlsCertificate>();
+    v.slot(Slot::BindingsAndObjects);
+    v.visit::<ContainerImage>();
 }
 
-/// Fill each kind's lines of `context`, for Worker `worker`'s declarations `declared`.
+/// A context's steps (1D.2b, #4001): one list per kind, and the Worker the other apply phases
+/// work on. Held in its [`ContextPlan`], never printed: the plan's two formats cannot see them.
+#[derive(Debug, Default)]
+pub(crate) struct WorkerSteps<'r> {
+    pub(crate) kv: Vec<KvStep<'r>>,
+    pub(crate) r2: Vec<R2Step<'r>>,
+    pub(crate) vectorize: Vec<VectorizeStep<'r>>,
+    pub(crate) d1: Vec<D1Step<'r>>,
+    pub(crate) hyperdrive: Vec<HyperdriveStep<'r>>,
+    pub(crate) ratelimits: Vec<RateLimitStep<'r>>,
+    pub(crate) queues: Vec<QueueStep<'r>>,
+    pub(crate) stored_secrets: Vec<StoredSecretStep<'r>>,
+    pub(crate) ai_search: Vec<AiSearchStep<'r>>,
+    pub(crate) mtls_certificates: Vec<MtlsCertificateStep<'r>>,
+    pub(crate) containers: Vec<ContainerImageStep<'r>>,
+    /// The Worker these steps are for, by its name in the project, and what it declared: the
+    /// non-kind phases ([`ApplySlot`]) read it, since the push's secrets and deploy facts, the
+    /// `[env.<name>]` block and the migrations take a declaration (Decision D).
+    pub(crate) worker: Option<(&'r str, &'r Resources)>,
+}
+
+/// A phase of a Worker's apply that is not a kind's step ([`for_each_apply_phase`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ApplySlot {
+    /// A named environment's `[env.<name>]` block, synthesised into the generated configuration.
+    EnvironmentBlock,
+    /// An adopted Vectorize index's account name, written into the configuration.
+    AdoptedVectorize,
+    /// An adopted container image, written into the configuration.
+    AdoptedContainers,
+    /// Each D1 database's pending migrations.
+    Migrations,
+    /// The secrets, then `wrangler deploy`.
+    Push,
+}
+
+/// A pass over one Worker's apply, in [`for_each_apply_phase`]'s order.
+pub(crate) trait ApplyVisitor {
+    /// Apply each of the kind's steps.
+    fn apply<K: ResourceKind>(&mut self);
+    /// Write what the kind's steps bound into the generated configuration.
+    fn materialise<K: ResourceKind>(&mut self);
+    /// A phase that is not a kind's.
+    fn slot(&mut self, slot: ApplySlot);
+}
+
+/// The one order a Worker is applied in (#4001 Decision D), which is not [`for_each_kind`]'s:
+/// everything the push needs exists first, the linked kinds before the rate limiters and queues,
+/// and each kind's materialisation where it was (KV's after the rate limiters'). Which resources
+/// exist after a failure follows from it, so changing it is a ruled change, as `--prune`'s order
+/// was for 1D.1c. Pinned by a test.
+pub(crate) fn for_each_apply_phase(v: &mut impl ApplyVisitor) {
+    v.apply::<Kv>();
+    v.apply::<R2>();
+    v.apply::<Vectorize>();
+    v.apply::<D1>();
+    v.materialise::<D1>();
+    v.apply::<Hyperdrive>();
+    v.materialise::<Hyperdrive>();
+    v.apply::<StoredSecret>();
+    v.materialise::<StoredSecret>();
+    v.apply::<MtlsCertificate>();
+    v.materialise::<MtlsCertificate>();
+    v.apply::<AiSearch>();
+    v.apply::<RateLimit>();
+    v.materialise::<RateLimit>();
+    v.materialise::<Kv>();
+    v.apply::<Queue>();
+    v.slot(ApplySlot::EnvironmentBlock);
+    v.slot(ApplySlot::AdoptedVectorize);
+    v.slot(ApplySlot::AdoptedContainers);
+    v.apply::<ContainerImage>();
+    v.slot(ApplySlot::Migrations);
+    v.slot(ApplySlot::Push);
+}
+
+/// Fill each kind's lines and steps of `context`, for Worker `cx.worker`'s declarations
+/// `declared`, with what the run has read in `lives`.
 pub(crate) fn fill_kind_lines<'r>(
     context: &mut ContextPlan<'r>,
     declared: &'r Resources,
     cx: &PlanCx<'_>,
+    lives: Lives<'_>,
 ) {
-    struct Fill<'p, 'c, 'r> {
+    struct Fill<'p, 'c, 'r, 'v> {
         context: &'p mut ContextPlan<'r>,
         declared: &'r Resources,
         cx: &'p PlanCx<'c>,
+        lives: Lives<'v>,
     }
-    impl KindVisitor for Fill<'_, '_, '_> {
+    impl KindVisitor for Fill<'_, '_, '_, '_> {
         fn visit<K: ResourceKind>(&mut self) {
+            let live = K::live_in(self.lives);
             let lines = K::declared(self.declared)
                 .into_iter()
-                .map(|decl| K::plan_line(self.cx, decl))
+                .map(|decl| K::plan_line(self.cx, decl, live))
                 .collect();
             *K::lines_mut(self.context) = lines;
+            *K::steps_mut(&mut self.context.steps) = K::steps(self.cx, self.declared, live);
         }
     }
     for_each_kind(&mut Fill {
         context,
         declared,
         cx,
+        lives,
     });
 }
 
-/// Each kind's lines of `context` in the short format.
-/// `legacy` prints the lines of a kind not yet converted, at its [`Legacy`] slot.
+/// Each kind's lines of `context` in the short format, with `slots` printing the plan's other
+/// lines at each [`Slot`].
 pub(crate) fn short_kind_lines(
     context: &ContextPlan<'_>,
     out: &mut String,
-    legacy: &mut dyn FnMut(Legacy, &mut String),
+    slots: &mut dyn FnMut(Slot, &mut String),
 ) {
     struct Short<'p, 'r> {
         context: &'p ContextPlan<'r>,
         out: &'p mut String,
-        legacy: &'p mut dyn FnMut(Legacy, &mut String),
+        slots: &'p mut dyn FnMut(Slot, &mut String),
     }
     impl KindVisitor for Short<'_, '_> {
         fn visit<K: ResourceKind>(&mut self) {
@@ -463,14 +827,14 @@ pub(crate) fn short_kind_lines(
                 K::short_line(line, self.out);
             }
         }
-        fn legacy(&mut self, slot: Legacy) {
-            (self.legacy)(slot, self.out);
+        fn slot(&mut self, slot: Slot) {
+            (self.slots)(slot, self.out);
         }
     }
     for_each_kind(&mut Short {
         context,
         out,
-        legacy,
+        slots,
     });
 }
 
@@ -512,14 +876,9 @@ pub(crate) fn check_kind_lines(
 }
 
 /// The first kind's account-name problem, in list order.
-/// `legacy` checks a kind not yet converted, at its [`Legacy`] slot.
-pub(crate) fn kind_name_problem(
-    cx: &ProjectCx<'_>,
-    legacy: &dyn Fn(Legacy) -> Option<String>,
-) -> Option<String> {
+pub(crate) fn kind_name_problem(cx: &ProjectCx<'_>) -> Option<String> {
     struct First<'p, 'l> {
         cx: &'p ProjectCx<'l>,
-        legacy: &'p dyn Fn(Legacy) -> Option<String>,
         found: Option<String>,
     }
     impl KindVisitor for First<'_, '_> {
@@ -528,17 +887,8 @@ pub(crate) fn kind_name_problem(
                 self.found = K::name_problem(self.cx);
             }
         }
-        fn legacy(&mut self, slot: Legacy) {
-            if self.found.is_none() {
-                self.found = (self.legacy)(slot);
-            }
-        }
     }
-    let mut first = First {
-        cx,
-        legacy,
-        found: None,
-    };
+    let mut first = First { cx, found: None };
     for_each_kind(&mut first);
     first.found
 }
@@ -569,7 +919,7 @@ pub(crate) fn find_kind_orphans(cx: &OrphanCx<'_>, orphans: &mut Orphans) {
     }
     impl KindVisitor for Find<'_, '_> {
         fn visit<K: ResourceKind>(&mut self) {
-            *K::orphans_in_mut(self.orphans) = K::orphans(self.cx);
+            K::set_orphans(self.orphans, K::orphans(self.cx));
         }
     }
     for_each_kind(&mut Find { cx, orphans });
@@ -584,10 +934,11 @@ pub(crate) fn show_kind_orphans(from: &Orphans, environment: &str, to: &mut Orph
     }
     impl KindVisitor for Shown<'_> {
         fn visit<K: ResourceKind>(&mut self) {
-            *K::orphans_in_mut(self.to) = K::orphans_in(self.from)
+            let shown = K::orphans_in(self.from)
                 .iter()
                 .map(|orphan| K::shown_orphan(orphan, self.environment))
                 .collect();
+            K::set_orphans(self.to, shown);
         }
     }
     for_each_kind(&mut Shown {
@@ -597,17 +948,17 @@ pub(crate) fn show_kind_orphans(from: &Orphans, environment: &str, to: &mut Orph
     });
 }
 
-/// Each kind's orphans of `orphans` in the short format.
-/// `legacy` prints the orphans of a kind not yet converted, at its [`Legacy`] slot.
+/// Each kind's orphans of `orphans` in the short format, with `workers` printing the Worker
+/// block at its [`Slot`].
 pub(crate) fn short_kind_orphans(
     orphans: &Orphans,
     out: &mut String,
-    legacy: &mut dyn FnMut(Legacy, &mut String),
+    workers: &mut dyn FnMut(&mut String),
 ) {
     struct Short<'p> {
         orphans: &'p Orphans,
         out: &'p mut String,
-        legacy: &'p mut dyn FnMut(Legacy, &mut String),
+        workers: &'p mut dyn FnMut(&mut String),
     }
     impl KindVisitor for Short<'_> {
         fn visit<K: ResourceKind>(&mut self) {
@@ -615,29 +966,44 @@ pub(crate) fn short_kind_orphans(
                 K::short_orphan(orphan, self.out);
             }
         }
-        fn legacy(&mut self, slot: Legacy) {
-            (self.legacy)(slot, self.out);
+        fn slot(&mut self, slot: Slot) {
+            match slot {
+                Slot::WorkerOrphans => (self.workers)(self.out),
+                // The plan's lines, not its orphans.
+                Slot::Datasets | Slot::BindingsAndObjects => {}
+            }
         }
     }
     for_each_kind(&mut Short {
         orphans,
         out,
-        legacy,
+        workers,
     });
 }
 
 /// How many of each kind's orphans `--prune` deletes, printing what it says of each.
 pub(crate) fn announce_prunable_kinds(orphans: &Orphans, environment: &str) -> usize {
+    let (notices, count) = prune_notices(orphans, environment);
+    for notice in &notices {
+        notice.print();
+    }
+    count
+}
+
+/// What `--prune` says before it asks, in the list's order (ruled for 1D.1c), and how many
+/// orphans it deletes.
+pub(crate) fn prune_notices(orphans: &Orphans, environment: &str) -> (Vec<Notice>, usize) {
     struct Announce<'p> {
         orphans: &'p Orphans,
         environment: &'p str,
+        notices: Vec<Notice>,
         count: usize,
     }
     impl KindVisitor for Announce<'_> {
         fn visit<K: ResourceKind>(&mut self) {
             for orphan in K::orphans_in(self.orphans) {
                 if let Some(notice) = K::prune_notice(orphan, self.environment) {
-                    notice.print();
+                    self.notices.push(notice);
                 }
                 self.count += usize::from(K::prunable(orphan));
             }
@@ -646,10 +1012,11 @@ pub(crate) fn announce_prunable_kinds(orphans: &Orphans, environment: &str) -> u
     let mut announce = Announce {
         orphans,
         environment,
+        notices: Vec::new(),
         count: 0,
     };
     for_each_kind(&mut announce);
-    announce.count
+    (announce.notices, announce.count)
 }
 
 /// Whether any kind has an orphan `--prune` deletes.
@@ -740,119 +1107,31 @@ pub(crate) fn recorded_bound_id(
     find.found
 }
 
-/// Where a kind is provisioned: one Worker of one environment, in the whole project, through
-/// the run's tools.
-#[derive(Clone, Copy)]
-pub(crate) struct Site<'a> {
-    pub(crate) tools: Tools<'a>,
-    pub(crate) environment: &'a str,
-    pub(crate) worker: &'a str,
-    pub(crate) project: &'a BTreeMap<String, Resources>,
-}
-
-/// Provision each of the declared instances of `K` at `site`, in order, writing the ledger the
-/// moment one is recorded, before the next is made (ADR 0180: an interrupted run never makes a
-/// second). The `(binding, id)`s the push binds.
-pub(crate) fn provision_kind<K: ResourceKind>(
-    site: Site<'_>,
-    declared: &Resources,
+/// Each kind's change to the ledger once `worker`'s push has succeeded
+/// ([`ResourceKind::after_push`]).
+pub(crate) fn kinds_after_push(
     lock: &mut DeployLock,
-    lock_path: &Path,
-    live: &K::Live,
-) -> Result<BTreeMap<String, K::Bound>, DeployFailure> {
-    let mut bound = BTreeMap::new();
-    for decl in K::declared(declared) {
-        let done = K::provision(
-            &mut ApplyCx {
-                environment: site.environment,
-                worker: site.worker,
-                project: site.project,
-                environments: &mut lock.environments,
-                live,
-                tools: site.tools,
-            },
-            decl,
-        )?;
-        if let Some(what) = done.recorded {
-            write_lock(lock_path, lock).map_err(|e| {
-                DeployFailure::driver(format!(
-                    "created {what} but could not record it in {}: {e}",
-                    lock_path.display()
-                ))
-            })?;
-        }
-        if let Some((binding, id)) = done.bound {
-            bound.insert(binding, id);
-        }
-    }
-    Ok(bound)
-}
-
-/// Delete each kind's orphans `--prune` deletes, writing the ledger as each is forgotten, so a
-/// prune interrupted half-way is resumed rather than repeated.
-pub(crate) fn prune_kind_orphans(
-    tools: Tools<'_>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
     environment: &str,
-    orphans: &Orphans,
-) -> Result<(), DeployFailure> {
-    struct Prune<'p> {
-        tools: Tools<'p>,
-        lock: &'p mut DeployLock,
-        lock_path: &'p Path,
-        environment: &'p str,
-        orphans: &'p Orphans,
-        result: Result<(), DeployFailure>,
+    worker: &str,
+    declared: &Resources,
+) {
+    struct After<'p> {
+        env: Option<&'p mut Environment>,
+        worker: &'p str,
+        declared: &'p Resources,
     }
-    impl Prune<'_> {
-        fn prune<K: ResourceKind>(&mut self) -> Result<(), DeployFailure> {
-            let project = BTreeMap::new();
-            let live = K::Live::default();
-            for orphan in K::orphans_in(self.orphans)
-                .iter()
-                .filter(|o| K::prunable(o))
-            {
-                let forgot = K::prune(
-                    &mut ApplyCx {
-                        environment: self.environment,
-                        worker: K::orphan_worker(orphan),
-                        project: &project,
-                        environments: &mut self.lock.environments,
-                        live: &live,
-                        tools: self.tools,
-                    },
-                    orphan,
-                )?;
-                if let Some(what) = forgot {
-                    write_lock(self.lock_path, self.lock).map_err(|e| {
-                        DeployFailure::driver(format!(
-                            "deleted {what} but could not record it in {}: {e}",
-                            self.lock_path.display()
-                        ))
-                    })?;
-                }
-            }
-            Ok(())
-        }
-    }
-    impl KindVisitor for Prune<'_> {
+    impl KindVisitor for After<'_> {
         fn visit<K: ResourceKind>(&mut self) {
-            if self.result.is_ok() {
-                self.result = self.prune::<K>();
+            if let Some(env) = self.env.as_deref_mut() {
+                K::after_push(env, self.worker, self.declared);
             }
         }
     }
-    let mut prune = Prune {
-        tools,
-        lock,
-        lock_path,
-        environment,
-        orphans,
-        result: Ok(()),
-    };
-    for_each_kind(&mut prune);
-    prune.result
+    for_each_kind(&mut After {
+        env: lock.environments.get_mut(environment),
+        worker,
+        declared,
+    });
 }
 
 /// #3494: a plan action checked against whether the account holds the resource: a `create` of
@@ -863,5 +1142,185 @@ pub(crate) fn held_verb(action: &'static str, held: Option<bool>) -> &'static st
         ("create" | "create or reuse", Some(true)) => "reuse",
         ("create or reuse", Some(false)) => "create",
         (other, _) => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one list, whose order every pass follows: the plan's line order, and (ruled for 1D.1c)
+    /// `--prune`'s.
+    #[test]
+    fn the_kind_list_is_the_plans_order_with_the_worker_block_before_the_queues() {
+        #[derive(Default)]
+        struct Order(Vec<String>);
+        impl KindVisitor for Order {
+            fn visit<K: ResourceKind>(&mut self) {
+                self.0.push(format!("{:?}", K::ID));
+            }
+            fn slot(&mut self, slot: Slot) {
+                self.0.push(format!("{slot:?}"));
+            }
+        }
+        let mut order = Order::default();
+        for_each_kind(&mut order);
+        assert_eq!(
+            order.0,
+            [
+                "Kv",
+                "R2",
+                "Vectorize",
+                "D1",
+                "Hyperdrive",
+                "RateLimit",
+                "WorkerOrphans",
+                "Queue",
+                "Datasets",
+                "StoredSecret",
+                "AiSearch",
+                "MtlsCertificate",
+                "BindingsAndObjects",
+                "ContainerImage",
+            ]
+        );
+    }
+
+    /// The apply's order (#4001 Decision D), today's `deploy_one` order exactly: the linked kinds
+    /// before the rate limiters and queues, mTLS before AI Search, KV materialised after the rate
+    /// limiters, and the push last. A change here changes what exists after a failure.
+    #[test]
+    fn the_apply_order_is_pinned() {
+        #[derive(Default)]
+        struct Order(Vec<String>);
+        impl ApplyVisitor for Order {
+            fn apply<K: ResourceKind>(&mut self) {
+                self.0.push(format!("{:?}", K::ID));
+            }
+            fn materialise<K: ResourceKind>(&mut self) {
+                self.0.push(format!("Materialise({:?})", K::ID));
+            }
+            fn slot(&mut self, slot: ApplySlot) {
+                self.0.push(format!("{slot:?}"));
+            }
+        }
+        let mut order = Order::default();
+        for_each_apply_phase(&mut order);
+        assert_eq!(
+            order.0,
+            [
+                "Kv",
+                "R2",
+                "Vectorize",
+                "D1",
+                "Materialise(D1)",
+                "Hyperdrive",
+                "Materialise(Hyperdrive)",
+                "StoredSecret",
+                "Materialise(StoredSecret)",
+                "MtlsCertificate",
+                "Materialise(MtlsCertificate)",
+                "AiSearch",
+                "RateLimit",
+                "Materialise(RateLimit)",
+                "Materialise(Kv)",
+                "Queue",
+                "EnvironmentBlock",
+                "AdoptedVectorize",
+                "AdoptedContainers",
+                "ContainerImage",
+                "Migrations",
+                "Push",
+            ]
+        );
+    }
+
+    /// Where the apply still asks the account on top of what a step decided (#4001 Decision B):
+    /// a new guard is a change to this list, so review sees it.
+    #[test]
+    fn the_apply_time_guards_are_named() {
+        #[derive(Default)]
+        struct Guards(Vec<(String, &'static str)>);
+        impl KindVisitor for Guards {
+            fn visit<K: ResourceKind>(&mut self) {
+                for guard in K::GUARDS {
+                    self.0.push((format!("{:?}", K::ID), guard));
+                }
+            }
+        }
+        let mut guards = Guards::default();
+        for_each_kind(&mut guards);
+        let kinds: Vec<&str> = guards.0.iter().map(|(kind, _)| kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                "Kv",
+                "Vectorize",
+                "Vectorize",
+                "Vectorize",
+                "RateLimit",
+                "Queue",
+                "Queue"
+            ],
+            "{:#?}",
+            guards.0
+        );
+    }
+
+    /// The order the maintainer ruled for `--prune` (22 November 2026): KV, Vectorize, Hyperdrive,
+    /// then queues. R2 and D1 are reported, never deleted, and Workers are never pruned.
+    #[test]
+    fn prune_names_one_orphan_of_each_kind_in_the_ruled_order() {
+        let orphans = Orphans {
+            kv: vec![OrphanKv {
+                worker: "gone".to_string(),
+                binding: None,
+            }],
+            r2: vec![OrphanR2 {
+                worker: "gone".to_string(),
+                binding: "R2_FILES".to_string(),
+                bucket: "gone-files".to_string(),
+                jurisdiction: None,
+            }],
+            vectorize: vec![OrphanVectorize {
+                worker: "gone".to_string(),
+                binding: "VECTORIZE_DOCS".to_string(),
+                index: "gone-docs".to_string(),
+                adopted: false,
+            }],
+            d1: vec![OrphanD1 {
+                worker: "gone".to_string(),
+                binding: "D1_ORDERS".to_string(),
+                database: "gone-orders".to_string(),
+            }],
+            hyperdrive: vec![OrphanHyperdrive {
+                worker: "gone".to_string(),
+                binding: "HYPERDRIVE_MAIN".to_string(),
+                config: "gone-main".to_string(),
+                id: "id-1".to_string(),
+                adopted: false,
+            }],
+            workers: vec!["gone".to_string()],
+            queues: vec!["jobs".to_string()],
+            ..Orphans::default()
+        };
+        let (notices, count) = prune_notices(&orphans, "default");
+        let text: Vec<&str> = notices
+            .iter()
+            .map(|notice| match notice {
+                Notice::Styled(text) | Notice::Plain(text) => text.as_str(),
+            })
+            .collect();
+        assert_eq!(
+            text,
+            [
+                "bynk: will delete KV namespace for `gone`",
+                "bynk: will delete Vectorize index `gone-docs` of `gone`'s `VECTORIZE_DOCS`, and every vector in it",
+                "bynk: will delete Hyperdrive config `gone-main` of `gone`'s `HYPERDRIVE_MAIN`",
+                "bynk: will delete queue `jobs`",
+            ]
+        );
+        assert_eq!(count, 4);
+        assert!(orphans.has_prunable());
     }
 }

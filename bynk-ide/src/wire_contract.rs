@@ -159,11 +159,19 @@ pub struct WireContractModel {
     /// so a consumer that wants only what the handler *can* answer — the
     /// OpenAPI export (#856) — uses this to drop it when it provably cannot.
     pub ok_reachable: bool,
-    /// #3609: the `T` of the handler's `HttpResult[T]`, resolved against
-    /// [`Self::boundary`] as the envelope's refs are. `None` for a non-HTTP
-    /// handler, a return that is not an `HttpResult`, and a `()` payload —
-    /// which is what a raw-response handler (`Raw(..)`) declares, so a client
-    /// knows there is no typed body to check paths against.
+    /// The value a successful call returns, resolved against [`Self::boundary`] as the
+    /// envelope's refs are. Two meanings, told apart by [`Self::kind`]:
+    ///
+    /// - HTTP (#3609): the `T` of the handler's `HttpResult[T]`. `None` for a return that is
+    ///   not an `HttpResult` and for a `()` payload, which is what a raw-response handler
+    ///   (`Raw(..)`) declares, so a client knows there is no typed body to check paths against.
+    /// - `on call` with a cross-context form (#3687): the whole declared return type with
+    ///   `Effect` stripped. A `Result[T, E]` is kept whole, since the caller decodes both arms
+    ///   (unlike HTTP, where `success` is the `T` *inside* `HttpResult[T]`). `None` for a `()`
+    ///   return.
+    ///
+    /// `None` for every other handler, and for an `on call` one with no cross-context form
+    /// ([`Self::no_cross_context`] is set).
     pub success: Option<WireRef>,
     pub no_cross_context: Option<NoCrossContextReason>,
 }
@@ -311,13 +319,9 @@ pub fn wire_contract_for_service(
         None
     };
 
-    let success = if matches!(kind, BoundaryKind::Http { .. }) {
-        http_result_inner(&handler.return_type)
-            .filter(|t| !matches!(t, TypeRef::Unit(_)))
-            .map(|t| wire::wire_ref(t, &info.types))
-    } else {
-        None
-    };
+    let success = success_type(&kind, handler, contract.is_some())
+        .filter(|t| !matches!(t, TypeRef::Unit(_)))
+        .map(|t| wire::wire_ref(t, &info.types));
     let (responses, ok_reachable) = if matches!(kind, BoundaryKind::Http { .. }) {
         (
             http_responses(handler, real.span.file, expr_types, tys),
@@ -342,6 +346,22 @@ pub fn wire_contract_for_service(
         success,
         no_cross_context,
     })
+}
+
+/// #3687: the type [`WireContractModel::success`] resolves. An HTTP handler's is the `T` inside
+/// its `HttpResult[T]`; a cross-context `on call` handler's is its whole declared return type
+/// with `Effect` stripped, so a `Result[T, E]` stays whole (the caller decodes both arms). Any
+/// other handler, and an `on call` one with no cross-context form, has none.
+fn success_type<'a>(
+    kind: &BoundaryKind,
+    handler: &'a Handler,
+    has_contract: bool,
+) -> Option<&'a TypeRef> {
+    match kind {
+        BoundaryKind::Http { .. } => http_result_inner(&handler.return_type),
+        BoundaryKind::Call if has_contract => Some(strip_effect(&handler.return_type)),
+        _ => None,
+    }
 }
 
 /// 1-indexed line number of `offset` in `text`.
@@ -492,15 +512,35 @@ fn http_responses(
                 why: "the request's Content-Type is not `application/x-www-form-urlencoded` (UTF-8)",
             },
         });
-        if handler.limit_max_body().is_some() {
-            out.push(HttpResponse {
-                status: 413,
-                variant: "PayloadTooLarge".to_string(),
-                origin: ResponseOrigin::BoundaryImplicit {
-                    why: "a capped body is counted as it is read and cut off at the route's cap",
-                },
-            });
-        }
+    }
+    // #3921: every body-taking route has a cap (1 MiB unless declared), counted as the
+    // body is read; `@raw` and `@multipart` routes name theirs above.
+    if handler.params.iter().any(|p| p.name.name == "body")
+        && handler.raw_content_type().is_none()
+        && !multipart
+    {
+        out.push(HttpResponse {
+            status: 413,
+            variant: "PayloadTooLarge".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the body is counted as it is read and cut off at the route's cap (1 MiB unless `@limit` or `limits` says otherwise)",
+            },
+        });
+    }
+    // #4434: a `@rateLimit` route's limiter is asked before the body is read, and a caller over
+    // the limit gets the router's own `429` with a `Retry-After`, whatever the handler does.
+    if handler
+        .annotations
+        .iter()
+        .any(|a| a.name.name == "rateLimit")
+    {
+        out.push(HttpResponse {
+            status: 429,
+            variant: "RateLimited".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the route's `@rateLimit` limiter refused the request before its body was read (a `Retry-After` header says when to try again)",
+            },
+        });
     }
     if walk.saw_option_question {
         out.push(HttpResponse {
@@ -554,7 +594,7 @@ fn ok_is_reachable(
 /// with `bynk openapi` so the two cannot drift.
 pub fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
     match strip_effect(t) {
-        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
+        TypeRef::HttpResult(inner, _, _) => Some(inner.as_ref()),
         _ => None,
     }
 }
@@ -607,6 +647,7 @@ pub fn response_body(resp: &HttpResponse, success: Option<&WireRef>) -> Option<R
         HttpVariantPayload::Raw
         | HttpVariantPayload::RawTagged
         | HttpVariantPayload::RawStreamed
+        | HttpVariantPayload::Partial
         | HttpVariantPayload::RawError => ResponseBody::Raw,
         HttpVariantPayload::None => return None,
     })
@@ -683,7 +724,7 @@ impl<'a> ResponseWalk<'a> {
     /// `is_http_result_ident` below.
     fn is_http_result_expr(&self, span: Span) -> bool {
         match self.expr_ty(span).as_deref() {
-            Some(Ty::HttpResult(_)) => true,
+            Some(Ty::HttpResult(_, _)) => true,
             Some(_) => false,
             None => self.declared_is_http_result,
         }
@@ -700,7 +741,7 @@ impl<'a> ResponseWalk<'a> {
     /// expression the plan's risk 7 is about; a bare identifier read has no
     /// such asymmetry — unknown stays unknown.
     fn is_http_result_ident(&self, span: Span) -> bool {
-        matches!(self.expr_ty(span).as_deref(), Some(Ty::HttpResult(_)))
+        matches!(self.expr_ty(span).as_deref(), Some(Ty::HttpResult(_, _)))
     }
 
     fn push(&mut self, variant: HttpVariant, span: Span) {
@@ -764,7 +805,7 @@ impl<'a> ResponseWalk<'a> {
             }
             _ => false,
         };
-        (leaf_opaque && matches!(self.expr_ty(e.span).as_deref(), Some(Ty::HttpResult(_))))
+        (leaf_opaque && matches!(self.expr_ty(e.span).as_deref(), Some(Ty::HttpResult(_, _))))
             || expr_children(e)
                 .into_iter()
                 .any(|c| self.opaque_http_result(c))
@@ -1156,7 +1197,7 @@ service api from http {
                 .1
                 .as_deref();
             assert!(
-                matches!(ty, Some(Ty::HttpResult(_))),
+                matches!(ty, Some(Ty::HttpResult(_, _))),
                 "`{src}` should resolve to a recorded HttpResult, got {ty:?}"
             );
         }
@@ -1210,7 +1251,7 @@ service api from http {
 type Quote = { amount: Int, currency: String }
 
 service Pricing {
-  on call(sku: String, qty: Int) -> Effect[Quote] {
+  on call(sku: String, qty: Int) -> Effect[Quote] by Caller {
     Quote { amount: qty * 100, currency: "USD" }
   }
 }
@@ -1220,7 +1261,7 @@ service Pricing {
 consumes billing
 
 service checkout {
-  on call(sku: String, qty: Int) -> Effect[Int] {
+  on call(sku: String, qty: Int) -> Effect[Int] by Caller {
     let q <- billing.Pricing(sku, qty)
     q.amount
   }
@@ -1304,7 +1345,7 @@ service checkout {
         let src = r#"context solo
 
 service Ping {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     1
   }
 }
@@ -1445,7 +1486,7 @@ service api from http {
         let tys = Types::new();
         let file = FileId(0);
         let error = tys.intern(Ty::Error);
-        let http = tys.intern(Ty::HttpResult(error));
+        let http = tys.intern(Ty::HttpResult(error, None));
         let expr_types = [
             (Span::new_in(file, 10, 20), http),
             (Span::new_in(file, 30, 40), error),
@@ -1464,7 +1505,7 @@ service api from http {
         // A reparsed span (`FileId::UNKNOWN`) over the same range matches.
         assert!(matches!(
             walk.expr_ty(Span::new(10, 20)).as_deref(),
-            Some(Ty::HttpResult(_))
+            Some(Ty::HttpResult(_, _))
         ));
         assert!(walk.is_http_result_ident(Span::new(10, 20)));
 
@@ -1530,7 +1571,7 @@ service api from http {
             walked.iter().any(|(t, ty)| t == "Found"
                 && ty
                     .as_deref()
-                    .is_some_and(|ty| !matches!(ty, Ty::HttpResult(_)))),
+                    .is_some_and(|ty| !matches!(ty, Ty::HttpResult(_, _)))),
             "the tail `Found` should resolve to its recorded non-HttpResult type: {walked:?}"
         );
 
@@ -1632,7 +1673,7 @@ service api from http {
         assert!(
             expr_types.iter().any(|(s, t)| s.file != file
                 && (s.start, s.end) == (target, target + 5)
-                && matches!(*diag.ty_intern.get(*t), Ty::HttpResult(_))),
+                && matches!(*diag.ty_intern.get(*t), Ty::HttpResult(_, _))),
             "the premise: a.bynk's expr types hold b.bynk's `Ok(1)` at the same range"
         );
 

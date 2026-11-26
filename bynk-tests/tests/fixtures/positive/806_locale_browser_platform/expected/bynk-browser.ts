@@ -9,10 +9,11 @@ import type {
   Response as FetchResponse,
   StreamResponse,
 } from "./bynk.js";
-import type { FetchError } from "./bynk.js";
+import type { FetchError, Secret } from "./bynk.js";
 import { Claim, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { None, Some, type Option, type Result } from "./__bynk_runtime/result.js";
+import { withTraceField } from "./__bynk_runtime/traceparent.js";
 
 // Clock, Random, and Logger are identical to the Node binding: `Date.now()`,
 // Web Crypto's `crypto.randomUUID()`, `Math.random()`, and `console` are all Web
@@ -61,7 +62,7 @@ export class LoggerProvider implements Logger {
   // K5a (#2586): the message, then the fields, which a browser console shows
   // as an expandable object.
   async log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): Promise<void> {
-    const fieldsObject = Object.fromEntries(fields);
+    const fieldsObject = withTraceField(Object.fromEntries(fields));
     const write = {
       Debug: () => console.debug(msg, fieldsObject),
       Info: () => console.log(msg, fieldsObject),
@@ -127,7 +128,7 @@ export class FetchProvider implements Fetch {
 // construction, then ignores it — there is nothing to read.)
 export class SecretsProvider implements Secrets {
   constructor(_env?: unknown) {}
-  async get(_name: string): Promise<Option<string>> {
+  async get(_name: string): Promise<Option<Secret>> {
     throw new Error(
       "bynk.Secrets is unavailable in the browser playground: there is no secret store. Run the program on a platform that provides Secrets (node or cloudflare).",
     );

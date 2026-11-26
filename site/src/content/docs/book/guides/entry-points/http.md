@@ -31,6 +31,24 @@ A `:name` segment in the route becomes a parameter of the same name:
   }
 ```
 
+A parameter is not limited to text. It takes the types a typed query field
+takes (`Int`, `Bool`, `Decimal`, an enum, or a refinement over one of those), so
+an order number can be a positive `Int`, read and checked before the handler runs:
+
+```bynk,fragment
+type OrderNo = Int where Positive
+```
+
+```bynk,fragment
+  on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[String]] by Visitor {
+    Ok("order \(id)")
+  }
+```
+
+`/orders/42` reaches the handler with `id` bound to `42`. `/orders/abc` is a `400`
+`StructuralMismatch` and `/orders/0` a `400` `RefinementViolation`, both at
+`path.id`, so the handler never re-checks. The route matched, so neither is a `404`.
+
 ## Accept a date in a URL
 
 A path parameter of a refined type is checked before the handler runs.
@@ -54,7 +72,7 @@ and a string literal such as `"2026-11-03"` is checked at compile time.
 
 A `Day` is still a `String`, so it interpolates and stores as one. To reach the
 day's first instant, pair it with `Instant.fromIso`, which is always `Some` for
-a `Day`; add `+ 1.days` for the next day:
+a `Day`; add `+ 1.day` for the next day:
 
 ```bynk,fragment
 let start = Instant.fromIso("\(day)T00:00:00Z")
@@ -83,8 +101,8 @@ service api from http {
 
 `GET /notes?owner=ada&limit=100` reaches the handler; `GET /notes?limit=0` is a
 `400` before it. Keys the record doesn't declare are ignored. For keys you can't
-name ahead of time, take a raw [`query: RequestQuery`](/book/reference/http/#request-query)
-instead. See [Query strings](/book/reference/http/#query-strings).
+name ahead of time, take a raw [`query: RequestQuery`](/reference/http/#request-query)
+instead. See [Query strings](/reference/http/#query-strings).
 
 ## Accept a request body
 
@@ -101,15 +119,24 @@ service api from http {
 }
 ```
 
+A JSON route answers `415` to a form or multipart post, so a `curl` call names its
+type:
+
+```sh
+curl -X POST http://localhost:8787/notes \
+  -H 'content-type: application/json' \
+  -d '{"title": "first"}'
+```
+
 ## Choose the right status
 
 Return the `HttpResult` variant matching the outcome — `Ok` (200),
-`Created` (201), `Accepted` (202), `NoContent` (204), a redirect such as
-`Found(url)` (302) or `SeeOther(url)` (303), `BadRequest(msg)` (400),
+`Created` (201), `Accepted` (202), `NoContent` (204), `PartialContent(…)` (206) for a range read, a
+redirect such as `Found(url)` (302) or `SeeOther(url)` (303), `NotModified` (304), `BadRequest(msg)` (400),
 `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict(msg)` (409),
 `UnprocessableEntity(msg)` (422), `TooManyRequests(msg)` (429),
 `ServerError(msg)` (500), `ServiceUnavailable(msg)` (503). See the
-[HTTP reference](/book/reference/http/) for the full table. Map domain errors
+[HTTP reference](/reference/http/) for the full table. Map domain errors
 to statuses with `match`:
 
 ```bynk
@@ -136,13 +163,13 @@ on POST("/hook") (headers: RequestHeaders, body: Bytes) -> Effect[HttpResult[Str
 ```
 
 The checker warns on `headers.get("X")?` and offers this rewrite as a fix. See
-[HTTP → Answering another status](/book/reference/http/#answering-another-status).
+[HTTP → Answering another status](/reference/http/#answering-another-status).
 
 ## Stream an incremental response
 
 To send a response as it is produced — a progress feed, a token relay, a live
 tick — return `Streaming(stream)` instead of a buffered `Ok(value)`. It carries a
-[`Stream[String]`](/book/reference/types/#stream) and emits it as Server-Sent
+[`Stream[String]`](/reference/types/#stream) and emits it as Server-Sent
 Events (`text/event-stream`); each stream element is one `data:` event.
 
 ```bynk
@@ -157,7 +184,7 @@ service Feed from http {
 
 A streamed response returns `Effect[HttpResult[()]]` — there is no JSON body
 value, so the parameter is `()`. Because the status is sent before the first
-chunk, streaming is **200-only**: decide any failure *before* you start, and
+chunk, streaming is **200-only** (a range read is the one exception, below): decide any failure *before* you start, and
 return an ordinary variant instead — it shares `HttpResult[()]`, so both live in
 one handler:
 
@@ -171,15 +198,56 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by Visitor {
 }
 ```
 
-See [HTTP → Streamed responses](/book/reference/http/#streamed-responses) for
+See [HTTP → Streamed responses](/reference/http/#streamed-responses) for
 the framing rules and the mid-stream-error pattern.
+
+## Stream events a browser can resume
+
+A browser's `EventSource` reconnects when a stream drops and sends the last `id` it
+saw as `Last-Event-ID`. To give it something to resume from, stream `SseEvent`
+records (from `bynk`) instead of plain strings: `id` names the event, `event` picks
+the name it is dispatched under, and `retry` sets the reconnection delay. Declare the route as
+`HttpResult[(), SseEvent]` (a second type argument naming what it streams) so the compiler holds
+the body to a `Stream[SseEvent]` and a test reads its events as `SseEvent`s.
+
+```bynk
+context updates
+
+consumes bynk { SseEvent }
+
+service Updates from http {
+	on GET("/updates") () -> Effect[HttpResult[()]] by Visitor {
+		Streaming(Stream.of([
+			SseEvent {
+				data: "first",
+				id: Some("1"),
+				event: Some("update"),
+			},
+			SseEvent {
+				data: "second",
+				id: Some("2"),
+				event: Some("update"),
+				retry: Some(5.seconds),
+			},
+		]))
+	}
+}
+```
+
+Only `data` is required. To keep an idle stream open through a proxy, add
+`.heartbeat(15.seconds)` after `Streaming(…)`, and to let a reconnecting browser pick up where it
+left off, read `Last-Event-ID` through a typed `headers` record and send what followed it; see
+[HTTP → Resuming after a dropped connection](/reference/http/#resuming-after-a-dropped-connection).
+See
+[HTTP → Structured events](/reference/http/#structured-events) for the framing and the
+values the wire cannot carry.
 
 ## Return a non-JSON body
 
 Handlers return typed values, serialised as JSON. To serve something that is
 *not* JSON — `robots.txt`, `sitemap.xml`, an RSS feed, a CSV download, a QR-code
 PNG — return `Raw(body, contentType)`. It writes a raw
-[`Bytes`](/book/reference/types/#bytes) body straight into the response under the
+[`Bytes`](/reference/types/#bytes) body straight into the response under the
 `content-type` you declare, with **no codec** in between.
 
 `Bytes` is binary-first: a PNG flows in directly, and text goes through
@@ -204,13 +272,18 @@ A body too large to hold in memory streams instead: `RawStreamed(body,
 contentType)` takes a `Stream[Bytes]`, usually from a capability, and writes each
 chunk as the client reads it. It sends no `ETag`, and a fault partway through cuts
 the response off, since the status is already sent. See
-[Streamed raw responses](/book/reference/http/#streamed-raw-responses).
+[Streamed raw responses](/reference/http/#streamed-raw-responses).
+
+A range read answers differently: `PartialContent(body, contentType, range)` streams just the bytes the
+client asked for as a **206**, with the `ContentRange` it covers sent as `Content-Range`, and
+`NotModified` is a bodyless **304** for a conditional read the handler resolved itself. Both are `GET`
+answers. See [Partial content](/reference/http/#partial-content).
 
 **Why can't I just return HTML?** Because rendering is the frontend tier's job,
 not the service's. Bynk serves *bytes with a content-type*; it deliberately has
 no HTML template layer. A page — including a styled `404` — belongs in the
 frontend (Cloudflare Pages), not in a handler. See
-[HTTP → Raw responses](/book/reference/http/#raw-responses) for the full rules.
+[HTTP → Raw responses](/reference/http/#raw-responses) for the full rules.
 
 ## Call it from a browser (CORS)
 
@@ -248,16 +321,33 @@ That is all it takes. From the policy the compiler:
 The allowed **methods** are taken from the routes you already declared — you never
 restate them. Allowed **headers** default to `content-type` (plus `Authorization`
 when the service authenticates with a Bearer actor). Add `credentials: true` to
-allow cookies / `Authorization`, and `maxAge: 1.hours` to let the browser cache
+allow cookies / `Authorization`, and `maxAge: 1.hour` to let the browser cache
 the preflight. A request from an origin *not* on the list simply gets no grant, so
 the browser blocks it — the same fail-closed posture as authentication.
+
+A script on that page can read only the CORS-safelisted response headers, plus the ones
+Bynk writes for a client: `WWW-Authenticate`, `Retry-After`, `Location` and `ETag`. List
+another header you set yourself in `expose`, and write an origin once as a constant when
+more than one service, or a staging build, needs it:
+
+```bynk,ignore
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://app.example.com"])
+
+service api from http {
+  cors {
+    origins: AppOrigins,
+    expose:  ["x-request-id"],
+  }
+  …
+}
+```
 
 > **Wildcard + credentials is a compile error.** `origins: ["*"]` opens the service
 > to any origin, but you cannot combine it with `credentials: true` — the browser
 > rejects that pair at runtime, so Bynk rejects it at compile time. With
-> credentials, name the exact origins.
+> credentials, name the exact origins. The same goes for `expose: ["*"]`.
 
-See [HTTP → CORS](/book/reference/http/#cors) for the full field table and matching
+See [HTTP → CORS](/reference/http/#cors) for the full field table and matching
 rules.
 
 ### Cross-site cookies need `credentials: true`
@@ -282,7 +372,34 @@ service api from http {
 Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
 (`bynk.http.cookie_domain_widens`) unless the name starts `__Host-`, where a `domain` is an
 error. Drop `domain` to keep a cookie to the host that set it. See
-[HTTP → Setting cookies](/book/reference/http/#setting-cookies).
+[HTTP → Setting cookies](/reference/http/#setting-cookies).
+
+## Limit how often a client may call a route
+
+A flood of large requests costs a service the full read and parse of every body before
+anything says no. A route can refuse a client over its limit *before* its body is read.
+Declare a `RateLimit` in the route's context and name it on the route with `@rateLimit`:
+
+```bynk,ignore
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor { … }
+}
+```
+
+The router asks the limiter first of all, before the media-type check, the body-size check
+and authentication. A client over its limit gets `429 Too Many Requests` with a `Retry-After` of
+the limiter's window in seconds, and a service's [`on rejected`](/reference/http/#rendering-rejections)
+can render it: the rejection is `RateLimited(detail)`, and a `system` test asserts
+`Rejected(RateLimited(_))`. `clientIp` counts by the caller's `CF-Connecting-IP`, so users
+behind one address share a count. On a route with a `Bearer`, `Oidc` or `SignedCookie` actor,
+`key: identity` counts per signed-in caller instead: the router checks the credential first, so a
+forged one is refused with its usual `401` and never spends anyone's limit. `RateLimit` is experimental and Cloudflare's; see
+[HTTP → Rate limiting](/reference/http/#rate-limiting) for the rest.
 
 ## Set a cookie from the record that reads it
 
@@ -325,7 +442,71 @@ and `Domain` the cookie was set with. A cookie in no record is still written as 
 Decoding a cookie is not authenticating it: a `cookies` record reads what the browser sends,
 and anyone can send any value. To sign a user in, use a [signed cookie](/book/guides/actors/authenticate-with-a-signed-cookie/)
 (its session cookie cannot be written through a record). See
-[HTTP → Writing a cookie from its record](/book/reference/http/#typed-cookie-write).
+[HTTP → Writing a cookie from its record](/reference/http/#typed-cookie-write).
+
+## Add a header to a response
+
+A header the handler owns goes on any `HttpResult` with `withHeader`. The statuses that have a
+standard header take a typed helper instead, which checks the value for you:
+
+```bynk,fragment
+on GET("/report") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("ready").withHeader("X-Request-Id", "abc")
+}
+
+on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+  Created(body).at("/things/1")
+}
+
+on GET("/search") () -> Effect[HttpResult[String]] by v: Visitor {
+  TooManyRequests("slow down").retryAfter(30.seconds)
+}
+```
+
+`.at(url)` writes `Location` on a `Created`, `.retryAfter(delay)` writes `Retry-After` in whole
+seconds on a `TooManyRequests` or `ServiceUnavailable`, and `.download(filename)` writes
+`Content-Disposition: attachment` on a `Raw` result. Write a helper on the variant itself, and
+call it once: a second call replaces the first.
+
+`withHeader` refuses the headers the router writes itself (`Cache-Control`, `Set-Cookie`,
+`Content-Type`, `Location`, the security and CORS headers and the rest), because setting them here
+would undo `@cache`, `security { }` or `cors { }`. A literal that is one, or that is not a valid
+header, is a compile error (`bynk.http.reserved_response_header`,
+`bynk.http.invalid_response_header`); a computed one answers `500` and is logged. In a test,
+`result.headers()` reads the headers a result carries. See
+[HTTP → Response headers](/reference/http/#response-headers).
+
+## Reject a stale update
+
+To let a client update something only if it has not changed since it read it, have it send `If-Match`
+with the validator it was given, and answer `428` without one and `412` when it is stale:
+
+```bynk,ignore
+type DocHeaders = { @name("if-match") ifMatch: Option[String] }
+
+on PUT("/docs/:id") (id: DocId, headers: DocHeaders, body: DocUpdate) -> Effect[HttpResult[()]] by u: User given Docs {
+  match headers.ifMatch {
+    None => PreconditionRequired("send If-Match with the document's ETag")
+    Some(expected) => {
+      let current <- Docs.version(id)
+      if "\"\(current)\"" != expected {
+        PreconditionFailed("the document changed since you read it")
+      } else {
+        let _ <- Docs.save(id, body)
+        NoContent
+      }
+    }
+  }
+}
+```
+
+This compares one strong tag. `If-Match` may also be `*` or a comma-separated list, and a weak tag
+(`W/"…"`) is refused under strong comparison; to accept `*` or a list, split the header on commas, trim
+each part and accept `*` or any part equal to the current validator.
+
+The `ETag` the router adds to a `GET` is weak, and `If-Match` compares strongly, so serve the version the
+client will send back yourself, with `RawTagged` or a version field. See
+[HTTP → Conditional writes](/reference/http/#conditional-writes).
 
 ## Secure by default (security headers)
 
@@ -356,7 +537,7 @@ service api from http {
 
 Reach for `security { nosniff: false }` only if you have a specific reason to send
 no security headers (for instance, HSTS and `nosniff` are already terminated at
-your edge). See [HTTP → Security headers](/book/reference/http/#security-headers)
+your edge). See [HTTP → Security headers](/reference/http/#security-headers)
 for the field table and the caveats.
 
 ## Cache a read endpoint
@@ -393,18 +574,38 @@ That adds `Cache-Control: private, max-age=300`. Reach for `scope: public` only
 when a **shared** cache or CDN should store the response too:
 
 ```bynk,fragment
-@cache(maxAge: 1.hours, scope: public)
+@cache(maxAge: 1.hour, scope: public)
 on GET("/config") () -> Effect[HttpResult[String]] by v: Visitor {
   Ok("…")
 }
 ```
 
 The default is `private` — a per-user cache, never a shared one — because that is
-the safe choice for anything that might vary by caller. Durations are plural
-(`5.minutes`, `1.hours`), and `@cache` is only valid on a `GET` returning `Ok`;
-the compiler flags a singular unit or a misplaced annotation.
+the safe choice for anything that might vary by caller. A duration's unit agrees with
+its number (`5.minutes`, `1.hour`), and `@cache` is only valid on a `GET` returning `Ok`
+(the one exception is `noStore`, below); the compiler flags a bare number or a misplaced
+annotation.
 
-See [HTTP → Caching](/book/reference/http/#caching) for the eligibility rules and
+**A route guarded by a credential is private without asking.** If the route's actor is a
+`Bearer`, `Oidc`, `SignedCookie` or `Signature` one, its responses are one caller's, so they
+carry `Cache-Control: private` whether or not you write `@cache` — a `200`, but also a `404`
+or the actor's own `401`. The caller's browser can still keep and revalidate them; only a
+shared cache is told not to store them. `scope: public` on such a route is refused, because
+a CDN would replay one caller's answer to another.
+
+For data that must never be stored at all, such as a one-time token, say so with `noStore`.
+It works on a route of any HTTP method, and it takes no `maxAge`:
+
+```bynk,fragment
+@cache(noStore: true)
+on GET("/me/tokens") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("…")
+}
+```
+
+That sends `Cache-Control: no-store` and no `ETag`, since nothing is stored to revalidate.
+
+See [HTTP → Caching](/reference/http/#caching) for the eligibility rules and
 the full field table.
 
 ## Cap request size
@@ -441,7 +642,7 @@ understated) — nothing reaches your handler. `@limit` is only valid on a body-
 `maxBody` is a byte count (the `_` is just visual grouping). A route with no cap is
 unchanged, so this is opt-in.
 
-See [HTTP → Request body limits](/book/reference/http/#request-body-limits) for the
+See [HTTP → Request body limits](/reference/http/#request-body-limits) for the
 precedence rule, how the bytes read are counted, and the field tables.
 
 ## Serve JSON to non-Bynk clients
@@ -473,7 +674,7 @@ service api from http {
 client still reads it. Plain mode refuses an `Option[Option[T]]` or `Option[()]` in a response
 type (`Some(None)` and `None` would both be `null`).
 
-See [HTTP → JSON for non-Bynk clients](/book/reference/http/#json-for-non-bynk-clients).
+See [HTTP → JSON for non-Bynk clients](/reference/http/#json-for-non-bynk-clients).
 
 ## Build and run
 
@@ -482,5 +683,5 @@ HTTP services compile to a Cloudflare Worker with `--target workers`. See
 
 ## Related
 
-- Tutorial: [Build a small HTTP service](/book/tutorials/02-http-service/).
-- Reference: [HTTP](/book/reference/http/) — the complete variant/status table.
+- Tutorial: [Build a small HTTP service](/book/tutorials/http-service/).
+- Reference: [HTTP](/reference/http/) — the complete variant/status table.

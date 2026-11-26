@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkIsIsoDate } from "../../__bynk_runtime/time.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -15,8 +16,8 @@ export type UserId = string & { readonly __brand: "shop.api.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -27,7 +28,7 @@ export type Day = string & { readonly __brand: "shop.api.Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkIsIsoDate(value))) {
-      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value });
+      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value });
     }
     return Ok(value as Day);
   },
@@ -41,10 +42,10 @@ export const Booking = {
 };
 
 export const api = {
-  async http_GET_x_Param_day(day: Day, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_x_Param_day(day: Day, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(day);
   },
-  async http_POST_book(body: Booking, deps: { identity: UserId }): globalThis.Promise<HttpResult<Booking>> {
+  async http_POST_book(body: Booking, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Booking>> {
     return HttpResult.Created(body);
   },
 };

@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability operation with its own type parameter, `fn dedup[T](…)`, can only be implemented by an external provider: a class written in TypeScript in an adapter's binding file. A provider with a Bynk body has no `T` to work with, so it could only return a value it was already given. Declare the capability in an `adapter` and give `provides` no body. An external provider inside a context is refused, as `bynk.context.external_provider`.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.generic_op_requires_external",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "capability Audit {\n    fn note[T](key: String) -> Effect[()]\n}\n\nprovides Audit = MemoAudit {   // ✗ a generic operation cannot have a Bynk body\n    fn note(key: String) -> Effect[()] { … }\n}\n\nadapter audit {\n    binding \"./audit.binding.ts\"\n    provides Audit = MemoAudit   // ✓ the binding supplies it\n}",
+  "severity": "error",
+  "summary": "A Bynk-bodied `provides` implements a capability operation that declares its own type parameter — only an external (bodiless) provider can."
+}

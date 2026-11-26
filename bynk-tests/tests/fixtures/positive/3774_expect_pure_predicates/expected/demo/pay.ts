@@ -2,6 +2,7 @@
 // context demo.pay
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type AuthId = string & { readonly __brand: "demo.pay.AuthId" };
@@ -19,8 +20,8 @@ export type Day = string & { readonly __brand: "demo.pay.Day" };
 
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Day", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Day", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Day);
   },

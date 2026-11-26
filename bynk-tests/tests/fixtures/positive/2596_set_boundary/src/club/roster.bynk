@@ -2,7 +2,7 @@
 context club.roster
 
 service members {
-  on call(extra: Set[String]) -> Effect[Set[String]] {
+  on call(extra: Set[String]) -> Effect[Set[String]] by Caller {
     extra.toList().fold(Set.of(["ada", "bo"]), (acc, x) => acc.insert(x))
   }
 }

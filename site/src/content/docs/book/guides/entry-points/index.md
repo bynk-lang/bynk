@@ -15,10 +15,11 @@ schedules, queue messages, WebSocket connections, and inbound email.
 - [Branch on the caller's country](/book/guides/entry-points/branch-on-the-callers-country/)
 - [Accept a file upload](/book/guides/entry-points/accept-a-file-upload/)
 - [Stream a large upload](/book/guides/entry-points/stream-a-large-upload/)
+- [Map a domain error to a status once](/book/guides/entry-points/map-a-domain-error-to-a-status/)
 - [Call your API from a front end](/book/guides/entry-points/call-from-a-front-end/)
 
-**See also:** [Reference — HTTP](/book/reference/http/),
-[Cron](/book/reference/cron/), [Queue](/book/reference/queue/),
-[WebSocket](/book/reference/websocket/),
-[Inbound email](/book/reference/inbound-email/),
-[HTTP client](/book/reference/http-client/).
+**See also:** [Reference — HTTP](/reference/http/),
+[Cron](/reference/cron/), [Queue](/reference/queue/),
+[WebSocket](/reference/websocket/),
+[Inbound email](/reference/inbound-email/),
+[HTTP client](/reference/http-client/).

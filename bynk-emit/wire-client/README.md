@@ -6,7 +6,7 @@ that is not written in Bynk imports the generated client; the client imports
 this package for the codec helpers and for `callService`, which signs each
 request and decodes each answer.
 
-Reference: <https://bynk-lang.org/book/reference/typescript-client/>.
+Reference: <https://bynk-lang.org/reference/typescript-client/>.
 
 ## Versioning
 

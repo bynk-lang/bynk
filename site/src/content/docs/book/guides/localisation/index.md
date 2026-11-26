@@ -6,7 +6,7 @@ bundle** turns that into text in a particular language. Adding a language
 touches the bundle and nothing else.
 
 **Understand**
-- [Understand localisation](/book/guides/localisation/understand-localisation/)
+- [Understand localisation](/book/concepts/localisation/understand-localisation/)
 
 **Do**
 - [Declare a message bundle](/book/guides/localisation/declare-a-message-bundle/)
@@ -16,5 +16,5 @@ touches the bundle and nothing else.
 — an HTTP service that negotiates a locale and renders from a three-language
 bundle.
 
-**See also:** [First-party `bynk` capabilities](/book/reference/bynk-capabilities/),
-[Diagnostics](/book/reference/diagnostics/).
+**See also:** [First-party `bynk` capabilities](/reference/bynk-capabilities/),
+[Diagnostics](/reference/diagnostics/).

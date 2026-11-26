@@ -59,6 +59,14 @@ pub enum SymbolKind {
     /// #2617: a `const Name: Type = …` declaration — a value of its annotated
     /// type, keyed by its name in the declaring unit.
     Const,
+    /// #4183 (decision A): a unit — a context or a commons — keyed by its
+    /// qualified name (`shop.pay`) in itself, since a unit is not declared in
+    /// another. Its definition is the name in the `context …` / `commons …`
+    /// header (the first file's, for a unit split across files); its references
+    /// are the same name in the other files' headers, in a `consumes` or `uses`
+    /// clause, as a suite's target and inside `IsContext(…)`. Each site spans the
+    /// whole dotted name, and a token is drawn per segment.
+    Unit,
 }
 
 impl SymbolKey {
@@ -91,6 +99,7 @@ impl SymbolKind {
             SymbolKind::Asset => "asset",
             SymbolKind::Embed => "embed",
             SymbolKind::Const => "constant",
+            SymbolKind::Unit => "unit",
         }
     }
 }
@@ -524,6 +533,9 @@ pub struct IndexBuilder {
     /// (`consumes U { T as Alias }`) names, so a reference to the alias reaches
     /// the real declaration.
     type_aliases: HashMap<String, HashMap<String, (String, String)>>,
+    /// #4045: per unit, a name a `uses` clause renames or qualifies, to the commons
+    /// and the name it declares it as.
+    use_renames: HashMap<String, HashMap<String, (String, String)>>,
     /// v0.129 (#259): refined/opaque-type → builtin-base edges, accumulated at
     /// the type-def walk (no ref-resolution needed). Assembled in [`build`].
     refinements: Vec<RefineEdge>,
@@ -639,6 +651,13 @@ impl IndexBuilder {
 
     pub fn set_consumes(&mut self, consumes: HashMap<String, Vec<String>>) {
         self.consumes = consumes;
+    }
+
+    pub fn set_use_renames(
+        &mut self,
+        use_renames: HashMap<String, HashMap<String, (String, String)>>,
+    ) {
+        self.use_renames = use_renames;
     }
 
     pub fn set_type_aliases(
@@ -811,6 +830,22 @@ impl IndexBuilder {
         };
         if has(&local) {
             return Some(local);
+        }
+        // #4045: a name a `uses` clause renames or qualifies is the declaration of
+        // the commons it comes from, under the name that commons gives it.
+        if let Some((target, original)) = self
+            .use_renames
+            .get(ns)
+            .and_then(|renames| renames.get(&edge.name))
+        {
+            let key = SymbolKey {
+                unit: target.clone(),
+                kind: edge.kind,
+                name: original.clone(),
+            };
+            if has(&key) {
+                return Some(key);
+            }
         }
         for target in self.uses.get(ns).into_iter().flatten() {
             let imported = SymbolKey {

@@ -1,6 +1,6 @@
 context demo.wallet
 
-type Code = String where Matches("[A-Z]{3}")
+type Code = String where Matches("(?=[A-Z])[A-Z]{3}")
 
 agent Wallet {
   key id: String

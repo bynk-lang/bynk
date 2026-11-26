@@ -2,6 +2,7 @@
 // context app
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import { HttpResult } from "./__bynk_runtime/httpresult.js";
 
@@ -11,8 +12,8 @@ export type UserId = string & { readonly __brand: "app.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -23,7 +24,7 @@ export const api = {
     const __r0 = await deps.Logger.info("ping");
     return HttpResult.Ok("pong");
   },
-  async http_GET_me(deps: { Logger: bynk.Logger; identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_me(deps: { Logger: bynk.Logger; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     const __r0 = await deps.Logger.info("me");
     return HttpResult.Ok(deps.identity);
   },

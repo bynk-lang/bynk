@@ -85,7 +85,7 @@ export class JoseJwt implements Jwt {
 
   private async secret(): Promise<string> {
     const s = await this.deps.Secrets.get("JWT_SECRET");
-    return s.tag === "Some" ? s.value : "";
+    return s.tag === "Some" ? s.value.reveal() : "";
   }
 }
 ```
@@ -101,7 +101,7 @@ context auth.sessions {
 	consumes tokens { Jwt }  // flatten `Jwt` into the local namespace
 
 	service login {
-		on call() -> Effect[String] given Jwt {
+		on call() -> Effect[String] by Caller given Jwt {
 			let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
 			token
 		}
@@ -147,5 +147,5 @@ binding that loads it. Only `.wasm` files can be included.
 
 ## See also
 
-- [Adapters reference](/book/reference/adapters/)
-- [Adapter errors](/book/reference/diagnostics/#adapters)
+- [Adapters reference](/reference/adapters/)
+- [Adapter errors](/reference/diagnostics/#adapters)

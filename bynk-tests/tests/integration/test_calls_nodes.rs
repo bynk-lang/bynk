@@ -36,8 +36,12 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
     } else {
+        // Unique per call: tests sharing a fixture run in parallel, and one removing the copy
+        // while another compiles it was the flake (#4405).
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let tmp =
-            std::env::temp_dir().join(format!("bynk_tcalls_{}_{fixture}", std::process::id()));
+            std::env::temp_dir().join(format!("bynk_tcalls_{}_{n}_{fixture}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         copy_dir(&original, &tmp);
         for (path, text) in rewrite {
@@ -134,12 +138,12 @@ case "principals" {
         false,
     );
     for line in [
-        r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id } });"#,
-        "const b = await api.http_GET_plain({ ...deps, identity: (id as any) });",
+        r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id, claims: __tokenClaims([]) } });"#,
+        "const b = await api.http_GET_plain({ ...deps, identity: (id as any), claims: __tokenClaims([]) });",
         r#"const c = await api.http_GET({ ...deps, who: { tag: "Visitor" } });"#,
         "const d = await api.http_GET_open(deps);",
         r#"const e = await api.http_GET_item_Param_id("7", deps);"#,
-        r#"const f = await api.http_GET({ ...deps, who: { tag: "User", identity: UserId.unsafe("bob") } });"#,
+        r#"const f = await api.http_GET({ ...deps, who: { tag: "User", identity: UserId.unsafe("bob"), claims: __tokenClaims([]) } });"#,
         "const g = await api.http_GET_open(deps);",
     ] {
         assert_line(&text, line);
@@ -194,8 +198,8 @@ service api from http {
 fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
     let text = emit("2020_test_actor_sum_principal", &[]);
     for line in [
-        r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });"#,
-        r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any) });"#,
+        r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any), claims: __tokenClaims([]) } });"#,
+        r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any), claims: __tokenClaims([]) });"#,
         r#"const v = await api.http_GET_greet({ ...deps, who: { tag: "Visitor" } });"#,
     ] {
         assert_line(&text, line);
@@ -283,7 +287,7 @@ fn an_inbound_email_message_is_built_with_and_without_a_principal() {
         );
         assert_contains(
             &text,
-            r#"const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example""#,
+            r#"const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers, __m.headerList) } }))({ from: "a@b.example""#,
         );
     }
 }
@@ -295,7 +299,7 @@ fn the_websocket_lifecycle_addresses_stay_text() {
     let text = emit("3051_test_websocket_address", &[]);
     assert_contains(
         &text,
-        r#"(async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1]); return ChatGateway.open(...__a); })()"#,
+        r#"(async () => { const __c = alice; const __a: Parameters<typeof ChatGateway.open> = [__c, room, { ...deps, identity: (UserId.unsafe("alice") as any) }]; __c.remember([room], __a[__a.length - 1], ChatGateway.maxFrame); return ChatGateway.open(...__a); })()"#,
     );
     assert_contains(&text, "const __o = __c.opened();");
 }
@@ -328,7 +332,7 @@ fn a_system_http_call_drives_the_driver_its_principal_picks() {
         true,
     );
     for line in [
-        r#"const c = await __sysdrive_api_http_GET(undefined, "", "Visitor");"#,
+        r#"const c = await __sysdrive_api_http_GET(undefined, "", {}, "Visitor");"#,
         r#"const d = await __sysdrive_api_http_GET_open(undefined, "");"#,
         r#"const e = await __sysdrive_api_http_GET_item_Param_id("7", undefined, "");"#,
         r#"const f = await __sysdrive_noauth_api_http_GET_plain(undefined, "");"#,
@@ -422,7 +426,7 @@ service api from http {
 
 /// The system principal's claims and acting actor reach the signing drivers: a refinement actor's
 /// witness claims (a table built in `bynk-driver`, kept as text), an `Oidc` call's claims lines, and
-/// an actor-sum route's actor name; the no-auth and forged drivers sign nothing.
+/// an actor-sum route's actor name (a bad credential on a sum names its member, #4385); the no-auth and forged drivers sign nothing.
 #[test]
 fn a_system_call_passes_its_claims_and_its_acting_actor() {
     let refinement = emit("2019_system_refinement_actor_principal", &[]);
@@ -437,20 +441,20 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
     let oidc = emit("3052_system_oidc_refusals", &[]);
     assert_line(
         &oidc,
-        r#"const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims(["repository: acme/money"]));"#,
+        r#"const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkClaimLines(["repository: acme/money"]));"#,
     );
     assert_line(
         &oidc,
-        r#"const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkOidcClaims([]));"#,
+        r#"const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkClaimLines([]));"#,
     );
     let sum = emit("2155_system_sum_route_credential", &[]);
     assert_line(
         &sum,
-        r#"const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", "Processor");"#,
+        r#"const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", {}, "Processor");"#,
     );
     assert_line(
         &sum,
-        r#"const forged = await __sysdrive_forged_api_http_POST_notify("hi", undefined, "");"#,
+        r#"const forged = await __sysdrive_sumbad_api_http_POST_notify("hi", undefined, "forged", "", "Processor");"#,
     );
 }
 
@@ -465,7 +469,7 @@ fn a_system_cron_or_queue_address_drives_its_driver() {
             "tests/jobs_system.bynk",
             r#"suite cr.jobs as system {
 	case "a" {
-		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
 		let d <- deliveries.message(Delivery { id: "c" })
 	}
 }

@@ -379,6 +379,7 @@ fn describe_at(
             doc_scope: &a.doc_scope,
             boundary_info: &a.boundary_info,
             context_count,
+            analytics: &a.analytics,
         }),
         // The files are read from disk and not edited, so the analysed text is
         // the live text.

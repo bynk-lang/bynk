@@ -111,7 +111,7 @@ suite hooks as system {
 `by Stale` needs the `timestamp` and `tolerance` of the second actor above. A
 `Wire("…")` body is signed as written, so a case can also check a signed but
 malformed body. See [the failure
-principals](/book/reference/testing/#failure-principals).
+principals](/reference/testing/#failure-principals).
 
-**See also:** [Reference — Actors](/book/reference/actors/),
+**See also:** [Reference — Actors](/reference/actors/),
 [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/).

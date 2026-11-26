@@ -1,0 +1,13 @@
+{
+  "blurb": "An or-pattern, `A(n) | B(n)`, runs one arm for either alternative, so a name it binds must mean the same thing in both: the arm's body has only one `n` to use. Here `n` is an `Int` in one alternative and a `String` in the other, so the body could not be checked. A refined type and its base count as different too. Give each alternative its own arm, or bind a value of the same type in both.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.or_pattern_type_mismatch",
+  "constructs": [
+    "match_arm",
+    "is_expr"
+  ],
+  "example": "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
+  "severity": "error",
+  "summary": "An or-pattern's alternatives give a shared binding different types (or refinements)."
+}

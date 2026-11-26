@@ -1,0 +1,12 @@
+{
+  "blurb": "`Name { field: value }` builds a record, so `Name` has to be a record type. A sum is built by naming one of its variants, and a refined type with `Name.of(value)`, which checks the value. A type that is opaque is its own error, `bynk.resolve.opaque_record_construction`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.not_a_record_type",
+  "constructs": [
+    "record_construction"
+  ],
+  "example": "type Shape = | Circle | Square\n\nfn make() -> Shape { Shape { side: 1 } }   // ✗ `Shape` is a sum, not a record\n\nfn make() -> Shape { Circle }              // ✓ name a variant",
+  "severity": "error",
+  "summary": "Record syntax was used on a non-record type."
+}

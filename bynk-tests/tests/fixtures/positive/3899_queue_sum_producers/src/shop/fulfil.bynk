@@ -1,0 +1,11 @@
+context shop.fulfil
+
+consumes bynk.cloudflare { Queue }
+
+// #4441: a context a `Producer` refinement admits declares the `Queue` it sends to, which is what
+// signs its messages; `shop.orders` names this context, so the refinement is not dead configuration.
+capability Orders = Queue @name("orders")
+
+service ping {
+  on call() -> Effect[String] by Caller { "pong" }
+}

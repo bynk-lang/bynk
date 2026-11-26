@@ -4,7 +4,7 @@ uses commerce.money
 consumes commerce.payment
 
 service placeOrder {
-  on call(total: Money, raw: String) -> Effect[Result[Int, Int]] {
+  on call(total: Money, raw: String) -> Effect[Result[Int, Int]] by Caller {
     let m = Json.decode[Money](raw)
     let t <- commerce.payment.authorise(total)
     Ok(0)

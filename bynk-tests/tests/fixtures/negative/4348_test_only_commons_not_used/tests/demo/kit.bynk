@@ -1,0 +1,5 @@
+commons demo.kit for tests
+
+const Start: Int = 1
+
+fn twice(n: Int) -> Int { n + n }

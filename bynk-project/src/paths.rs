@@ -171,10 +171,19 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3883: a `[deploy.email."<address>"]` entry that is not well formed. An empty
+    /// `address` names the table itself.
+    BadEmailDeploy { address: String, reason: String },
     /// #3562: a `[deploy.workers.<key>]` group that is not well formed, or
     /// that breaks a rule across groups. The reason may lead with the
     /// `bynk.deploy.*` code it is.
     BadWorkerGroup { key: String, reason: String },
+    /// #3941: a `[vars]` or `[env.<name>.vars]` table that is not well formed.
+    BadVars { reason: String },
+    /// #4127: a `[workers.observability]` table that is not well formed.
+    BadObservability { reason: String },
+    /// #4128: a `[workers]` `cpu_ms` or `placement` that is not well formed.
+    BadWorkers { reason: String },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
     /// `"allow"`.
     BadDevAck { key: String, reason: String },
@@ -241,10 +250,19 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("paths", &["include", "exclude"]),
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
-    ("workers", &["compatibility_flags", "workers_dev"]),
+    (
+        "workers",
+        &[
+            "compatibility_flags",
+            "workers_dev",
+            "observability",
+            "cpu_ms",
+            "placement",
+        ],
+    ),
     (
         "deploy",
-        &["hyperdrive", "vectorize", "containers", "workers"],
+        &["hyperdrive", "vectorize", "containers", "workers", "email"],
     ),
     (
         "dev",
@@ -274,6 +292,11 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("unstable", &["allow"]),
     ("test", &["targets", "mutate", "postgres"]),
     ("workspace", &["members", "exclude"]),
+    // #3941: the build-time variables of `env(NAME)` constants. Their keys are
+    // the user's own names, so the key lists are empty (unchecked here) and
+    // `vars::vars_from` checks the shape.
+    ("vars", &[]),
+    ("env", &[]),
 ];
 
 /// #3054: the named build profiles, each a `[profile.<name>]` table. The set is
@@ -438,6 +461,17 @@ impl std::fmt::Display for ProjectPathsError {
                 reason,
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadEmailDeploy { address, reason } if address.is_empty() => {
+                write!(f, "`[deploy.email]` {reason}")
+            }
+            ProjectPathsError::BadEmailDeploy { address, reason } => {
+                write!(f, "`[deploy.email.\"{address}\"]` {reason}")
+            }
+            ProjectPathsError::BadWorkers { reason } => write!(f, "`[workers]` {reason}"),
+            ProjectPathsError::BadVars { reason } => write!(f, "{reason}"),
+            ProjectPathsError::BadObservability { reason } => {
+                write!(f, "`[workers.observability]` {reason}")
             }
             ProjectPathsError::BadWorkerGroup { key, reason } if key.is_empty() => {
                 write!(f, "`[deploy.workers]` {reason}")
@@ -635,6 +669,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "deploy" => {
                 drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
                 drop(crate::vectorize::deploy_vectorize_from(entries)?);
+                drop(crate::email_deploy::deploy_email_from(entries)?);
                 drop(crate::containers::deploy_containers_from(entries)?);
                 drop(crate::worker_groups::deploy_workers_from(entries)?);
             }
@@ -646,6 +681,9 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             _ => {}
         }
     }
+    // #3941: `[vars]` and `[env.<name>.vars]` take user-chosen names, so their
+    // shape is checked here, not by a key list.
+    drop(crate::vars::vars_from(&doc)?);
     // #2207: the rules across tables.
     if declared.contains(&"project") && declared.contains(&"package") {
         return Err(ProjectPathsError::ProjectAndPackage);
@@ -730,6 +768,13 @@ pub struct WorkersConfig {
     /// served on its `*.workers.dev` URL. `None` leaves the key out, so
     /// Cloudflare's default (on) applies.
     pub workers_dev: Option<bool>,
+    /// #4127: the project's Workers Logs settings, from
+    /// `[workers.observability]`; on, keeping every invocation, when the table
+    /// is absent.
+    pub observability: crate::observability::Observability,
+    /// #4128: the project's CPU limit and Smart Placement, from `[workers]`'s
+    /// `cpu_ms` and `placement`; unset leaves Cloudflare's defaults.
+    pub tuning: crate::worker_tuning::WorkerTuning,
 }
 
 /// Read `bynk.toml`'s `[workers]` table, honouring `overlay` for `bynk.toml`
@@ -1133,10 +1178,9 @@ pub fn read_test_postgres(project_root: &Path) -> TestPostgres {
 
 /// The `[test]` table's `targets`, each checked for shape: `url` a table of
 /// strings (at least one), `secrets` a list of strings, `production` a
-/// boolean, `vars` a table of strings, and nothing else.
-/// #3513 B: the prefix of the `[vars]` entries `bynk` writes for `Analytics.dataset()`.
-const RESERVED_DATASET_VAR_PREFIX: &str = "BYNK_DATASET_";
-
+/// boolean, `vars` a table of strings, and nothing else. A `vars` name may not
+/// start with [`crate::env_protocol::DATASET_PREFIX`] (#3513 B): `bynk` writes
+/// those for `Analytics.dataset()`.
 fn test_targets_from(
     table: &toml::Table,
 ) -> Result<BTreeMap<String, TestTarget>, ProjectPathsError> {
@@ -1182,10 +1226,11 @@ fn test_targets_from(
                     if let Some(reserved) = target
                         .vars
                         .keys()
-                        .find(|k| k.starts_with(RESERVED_DATASET_VAR_PREFIX))
+                        .find(|k| k.starts_with(crate::env_protocol::DATASET_PREFIX))
                     {
                         return Err(bad(&format!(
-                            "`vars.{reserved}` is reserved: `{RESERVED_DATASET_VAR_PREFIX}…` names are set by `bynk` to carry each `Analytics` dataset's name"
+                            "`vars.{reserved}` is reserved: `{}…` names are set by `bynk` to carry each `Analytics` dataset's name",
+                            crate::env_protocol::DATASET_PREFIX
                         )));
                     }
                 }
@@ -1315,9 +1360,25 @@ fn workers_config_from(table: &toml::Table) -> Result<WorkersConfig, ProjectPath
             });
         }
     };
+    let observability = match table.get("observability") {
+        None => crate::observability::Observability::default(),
+        Some(toml::Value::Table(t)) => crate::observability::from_table(t)
+            .map_err(|reason| ProjectPathsError::BadObservability { reason })?
+            .over(crate::observability::Observability::default()),
+        Some(_) => {
+            return Err(ProjectPathsError::BadObservability {
+                reason: "must be a table, like `[workers.observability]`".to_string(),
+            });
+        }
+    };
+    let tuning = crate::worker_tuning::from_table(table)
+        .map_err(|reason| ProjectPathsError::BadWorkers { reason })?
+        .over(crate::worker_tuning::WorkerTuning::default());
     Ok(WorkersConfig {
         compatibility_flags,
         workers_dev,
+        observability,
+        tuning,
     })
 }
 
@@ -1610,10 +1671,43 @@ pub fn renamed_unit_name(old_rel: &Path, old_name: &str, new_rel: &Path) -> Opti
     None
 }
 
+/// The leading `include`-root components of a project-relative path (`src` for
+/// `src/ops/admin.bynk` declaring `ops.admin`), found the way [`renamed_unit_name`]
+/// finds them: `name` as a suffix of the path's stem (single file) or of its parent
+/// directory (one file of a multi-file unit). `None` when the path fits neither.
+pub fn include_prefix_of_unit(rel_path: &Path, name: &str) -> Option<PathBuf> {
+    let name_parts: Vec<&str> = name.split('.').collect();
+    let stem = stem_parts(rel_path);
+    let ends_with_name = |parts: &[String]| {
+        parts.len() >= name_parts.len()
+            && parts[parts.len() - name_parts.len()..]
+                .iter()
+                .zip(name_parts.iter())
+                .all(|(a, b)| a == b)
+    };
+    let prefix_len = if ends_with_name(&stem) {
+        stem.len() - name_parts.len()
+    } else if !stem.is_empty() && ends_with_name(&stem[..stem.len() - 1]) {
+        stem.len() - 1 - name_parts.len()
+    } else {
+        return None;
+    };
+    Some(stem[..prefix_len].iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn include_prefix_of_unit_finds_the_include_root() {
+        let p = |s: &str, n: &str| include_prefix_of_unit(Path::new(s), n);
+        assert_eq!(p("src/ops/admin.bynk", "ops.admin"), Some("src".into()));
+        assert_eq!(p("src/ops/admin/a.bynk", "ops.admin"), Some("src".into()));
+        assert_eq!(p("ops/admin.bynk", "ops.admin"), Some(PathBuf::new()));
+        assert_eq!(p("src/other.bynk", "ops.admin"), None);
+    }
 
     // -- is_unpinned_range ----------------------------------------------------
     #[test]

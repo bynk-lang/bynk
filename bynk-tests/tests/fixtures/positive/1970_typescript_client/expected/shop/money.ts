@@ -2,6 +2,7 @@
 // commons shop.money
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -9,8 +10,8 @@ export type Currency = string & { readonly __brand: "Currency" };
 
 export const Currency = {
   of(value: string): Result<Currency, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}" + ")$").test(value))) {
-      return Err({ field: "Currency", message: "must match /[A-Z]{3}/", value });
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
+      return Err({ field: "Currency", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Currency);
   },
@@ -61,7 +62,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   }
   const __cents = obj["cents"];
   if (!(__cents >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.cents`, violation: { field: "cents", message: "must be non-negative", value: __cents } });
+    return Err({ kind: "RefinementViolation", path: `${path}.cents`, violation: { field: "cents", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __cents } });
   }
   const __r_currency = __deserialise_Currency(obj["currency"], `${path}.currency`);
   if (__r_currency.tag === "Err") return __r_currency;

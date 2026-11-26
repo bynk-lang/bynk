@@ -1,0 +1,7 @@
+suite shop.orders {
+  case "payment is reached without a stub" {
+    stub shop.stock.reserve(_) returns Ok(())
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("r1")
+  }
+}

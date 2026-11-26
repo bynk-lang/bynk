@@ -1,0 +1,10 @@
+{
+  "blurb": "A migration step must be pure and must not read the agent's key. A migration sweep wakes each stored instance by its object ID, which does not recover the key, so a step cannot depend on who the instance is, and it cannot use `?`, `expect` or `Effect.pure`. Compute the new value from `old` and the carried fields. If it needs the key, do that in a handler after the migration.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_impure",
+  "constructs": [],
+  "example": "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    ownerName := id    // ✗ reads the agent's key\n}\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner    // ✓\n}",
+  "severity": "error",
+  "summary": "A `migrate` step uses an effect, a capability, `?`, `expect`, or the agent's `key`; steps are pure and key-free so a migration sweep can run them by object ID."
+}

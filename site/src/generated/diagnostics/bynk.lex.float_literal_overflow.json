@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Float` is a 64-bit IEEE 754 double, and a literal must be a finite one: the largest is about 1.8e308. A literal past that would round to infinity, which no `Float` literal can spell, so it is refused rather than changed silently. Write a value in range.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.float_literal_overflow",
+  "constructs": [
+    "float_literal"
+  ],
+  "example": "const Big: Float = 1e999    // ✗ past the largest double\nconst Big: Float = 1e308    // ✓",
+  "severity": "error",
+  "summary": "A float literal does not fit a finite 64-bit float."
+}

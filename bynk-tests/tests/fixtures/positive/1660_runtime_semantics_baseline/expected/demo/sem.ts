@@ -53,12 +53,12 @@ export function survivesJson(l: Light): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Light(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Light);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Light(l)));
   switch (__r0.tag) {
     case "Ok": {
@@ -458,6 +458,16 @@ export function __serialise_Light(value: Light): __JsonValue {
 }
 
 export function __deserialise_Light(json: __JsonValue, path: string = "$"): Result<Light, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Red":
+        return Ok({ tag: "Red" } as Light);
+      case "Green":
+        return Ok({ tag: "Green" } as Light);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

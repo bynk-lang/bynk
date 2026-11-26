@@ -200,48 +200,6 @@ pub(crate) fn materialise_adopted_containers(
     })
 }
 
-/// An adopted container image replaces the Dockerfile `wrangler` would build,
-/// in the configuration it is about to read, and is recorded before the push.
-pub(crate) fn adopt_containers_for_push(
-    config: &Path,
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    materialise_adopted_containers(config, worker, declared, environment)?;
-    if declared.containers.is_empty() {
-        return Ok(());
-    }
-    record_container_images(lock, worker, declared, environment);
-    write_lock(lock_path, lock).map_err(|e| {
-        DeployFailure::driver(format!(
-            "could not record the container images of `{worker}` in {}: {e}",
-            lock_path.display()
-        ))
-    })
-}
-
-/// Record each adopted image of `worker` in the ledger, and forget one whose
-/// adoption was dropped (its container is built again). Written before the push,
-/// as the other provisioned facts are.
-pub(crate) fn record_container_images(
-    lock: &mut DeployLock,
-    worker: &str,
-    declared: &Resources,
-    environment: &str,
-) {
-    for container in &declared.containers {
-        lock.record_container_image(
-            environment,
-            worker,
-            &container.capability,
-            container.adopt.as_deref(),
-        );
-    }
-}
-
 /// Fixtures the plan's tests share.
 #[cfg(test)]
 pub(crate) mod tests_support {
@@ -429,34 +387,5 @@ mod tests {
             Some("/bin/podman".into())
         );
         assert_eq!(resolve_docker(&running, "/no/such/engine"), None);
-    }
-
-    #[test]
-    fn the_ledger_records_an_adopted_image_and_forgets_a_dropped_one() {
-        let mut lock = DeployLock::default();
-        let adopted = Resources {
-            containers: vec![decl("Renderer", None, Some(IMAGE))],
-            ..Resources::default()
-        };
-        record_container_images(&mut lock, "shop-render", &adopted, "production");
-        assert_eq!(
-            recorded_container_image(&lock, "shop-render", "Renderer", "production"),
-            Some(IMAGE)
-        );
-        assert_eq!(
-            recorded_container_image(&lock, "shop-render", "Renderer", "staging"),
-            None
-        );
-        // Built again: the record goes, and the environment's entry with it.
-        let built = Resources {
-            containers: vec![decl("Renderer", None, None)],
-            ..Resources::default()
-        };
-        record_container_images(&mut lock, "shop-render", &built, "production");
-        assert_eq!(
-            recorded_container_image(&lock, "shop-render", "Renderer", "production"),
-            None
-        );
-        assert!(lock.environments["production"].container_images.is_empty());
     }
 }

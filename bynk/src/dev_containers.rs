@@ -22,44 +22,39 @@
 
 use bynk_driver::colour;
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use crate::probe::Toolbox;
 
 /// The served Workers that have a container, by worker directory, each with its
-/// containers' capability names (`Renderer`), read from the build's
-/// `bynk-containers.json`.
+/// containers' capability names (`Renderer`), from the build's binding model.
 pub(crate) type Containers = BTreeMap<String, Vec<String>>;
 
-/// The capability names of the containers `worker` (a directory of
-/// `workers_dir`) declares, or none when it has no manifest or the manifest
-/// cannot be read as the layout this build writes.
-fn capabilities_of(workers_dir: &Path, worker: &str) -> Vec<String> {
-    let path = workers_dir
-        .join(worker)
-        .join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST);
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return Vec::new();
-    };
-    let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    let mut names: Vec<String> = json["containers"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|entry| entry["capability"].as_str().map(str::to_string))
+/// The capability names of the containers `worker` (a Worker directory)
+/// declares, from the build's binding model, sorted.
+fn capabilities_of(model: &bynk_emit::emit_model::WorkersBuild, worker: &str) -> Vec<String> {
+    use bynk_check::worker_bindings::BindingSource;
+    let mut names: Vec<String> = model
+        .bindings
+        .of_worker(worker)
+        .iter()
+        .filter_map(|binding| match &binding.source {
+            BindingSource::ContainerInstance { capability, .. } => Some(capability.clone()),
+            _ => None,
+        })
         .collect();
     names.sort();
     names
 }
 
 /// The served Workers that declare a container.
-pub(crate) fn served_containers(workers_dir: &Path, serving: &[String]) -> Containers {
+pub(crate) fn served_containers(
+    model: &bynk_emit::emit_model::WorkersBuild,
+    serving: &[String],
+) -> Containers {
     serving
         .iter()
         .filter_map(|worker| {
-            let names = capabilities_of(workers_dir, worker);
+            let names = capabilities_of(model, worker);
             (!names.is_empty()).then(|| (worker.clone(), names))
         })
         .collect()
@@ -158,12 +153,12 @@ pub(crate) fn session(tb: &dyn Toolbox, containers: &Containers) -> bool {
 /// The served Workers' containers, or `None` after printing why not: `--remote`
 /// with a container is refused ([`remote_refusal`]).
 pub(crate) fn for_session(
-    workers_dir: &Path,
+    model: &bynk_emit::emit_model::WorkersBuild,
     serving: &[crate::dev::Serving],
     wrangler_args: &[String],
 ) -> Option<Containers> {
     let names: Vec<String> = serving.iter().map(|s| s.worker.clone()).collect();
-    let containers = served_containers(workers_dir, &names);
+    let containers = served_containers(model, &names);
     let remote = crate::dev::is_remote(wrangler_args);
     if let Some(refusal) = remote_refusal(&containers, remote) {
         colour::eprintln(&refusal);
@@ -196,6 +191,7 @@ pub(crate) fn off_args() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::path::PathBuf;
 
     fn containers() -> Containers {
@@ -281,18 +277,33 @@ mod tests {
     }
 
     #[test]
-    fn the_manifest_names_the_containers_a_worker_declares() {
-        let dir = std::env::temp_dir().join(format!("bynk-dev-containers-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join("shop-render")).unwrap();
-        std::fs::create_dir_all(dir.join("shop-plain")).unwrap();
-        std::fs::write(
-            dir.join("shop-render")
-                .join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST),
-            "{ \"version\": 1, \"containers\": [{ \"capability\": \"Thumbs\", \"class\": \"__Container_Thumbs\", \"build\": \"c\", \"instance_type\": null }, { \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"c\", \"instance_type\": null }] }",
-        )
-        .unwrap();
+    fn the_model_names_the_containers_a_worker_declares() {
+        use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+        let container = |capability: &str| WorkerBinding {
+            name: format!("CONTAINER_{}", capability.to_uppercase()),
+            source: BindingSource::ContainerInstance {
+                capability: capability.to_string(),
+                class_name: format!("__Container_{capability}"),
+                build: "c".to_string(),
+                root_from_worker: String::new(),
+                port: 8080,
+                sleep_after: None,
+                instance_type: None,
+                forward: Vec::new(),
+            },
+        };
+        let model = bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([
+                (
+                    "shop-render".to_string(),
+                    vec![container("Thumbs"), container("Renderer")],
+                ),
+                ("shop-plain".to_string(), Vec::new()),
+            ])),
+            layout: bynk_project::worker_layout::WorkerLayout::identity(),
+        };
         let found = served_containers(
-            &dir,
+            &model,
             &[
                 "shop-render".to_string(),
                 "shop-plain".to_string(),
@@ -301,6 +312,5 @@ mod tests {
         );
         assert_eq!(found.len(), 1);
         assert_eq!(found["shop-render"], ["Renderer", "Thumbs"]);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

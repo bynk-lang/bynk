@@ -145,7 +145,7 @@ service api from http {
 suite demo {
   case "c" {
     let r <- svc.GET("/") by User("bob")
-    advance Clock by 1.minutes
+    advance Clock by 1.minute
   }
 }
 

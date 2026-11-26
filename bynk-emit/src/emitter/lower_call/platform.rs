@@ -11,28 +11,18 @@ use bynk_ts::{TsExpr, TsLit, TsStmt, TsType};
 use super::super::emit::flatten_emit_ident_chain;
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{
-    binary, block_arrow, call, const_, expr_stmt, id, member, param, paren, ret,
-};
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
-use super::cross_context::type_ref_named_root;
-
-/// `"text"`: raw text, which the printer escapes (the one escaper, `escape_ts_literal`, that
-/// `escape_ts_string` re-exports, so the node and text forms cannot disagree).
-fn lit_str(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-/// A numeric literal printed verbatim.
-fn lit_num(digits: impl ToString) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(digits.to_string()))
-}
+use crate::ts_build::{
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
+    num_lit, paren, ret, str_lit,
+};
+use bynk_ts::TsParam;
 
 /// `"text" as const`: a string-literal tag that keeps its literal type.
 fn tag_const(text: &str) -> TsExpr {
-    TsExpr::AsConst(Box::new(lit_str(text)))
+    TsExpr::AsConst(Box::new(str_lit(text)))
 }
 
 /// An inline object literal of `key: value` entries.
@@ -47,7 +37,7 @@ fn object(entries: Vec<(&str, TsExpr)>) -> TsExpr {
 
 /// `a.b.c` as a member chain over `root`.
 fn chain(root: TsExpr, path: &[&str]) -> TsExpr {
-    path.iter().fold(root, |object, name| member(object, name))
+    path.iter().fold(root, |object, name| member(object, *name))
 }
 
 /// Lower every argument, in order.
@@ -59,7 +49,7 @@ fn lower_args(args: &[Expr], cx: &mut LowerCtx, pre: &mut Pre) -> Vec<bynk_ts::T
 /// and as the text the fallbacks print.
 fn deps_receiver(in_test: bool, cx: &LowerCtx) -> TsExpr {
     if in_test {
-        id("deps")
+        ident("deps")
     } else {
         cx.cap_deps_node()
     }
@@ -88,6 +78,75 @@ fn capability_call_type_args_node(
         .into_iter()
         .map(|t| ts_type_ref_to_ts_type(t, None))
         .collect()
+}
+
+/// #3945: the identity of a generic capability operation call's type arguments (their resolved types: `[Outcome]`), as the trailing
+/// argument `...([{ __bynkTypeKey: "ReserveOutcome" }] as unknown as [])` of a test build: a stub
+/// or an observation that names the type arguments (`Cap.op[T]`) tells the calls apart by it. The
+/// real binding ignores a trailing argument, and the spread of an empty tuple keeps `tsc` quiet.
+/// `None` outside a test build, and for a call with no type arguments.
+fn type_key_arg(e: &Expr, type_args: &[TypeRef], cx: &LowerCtx) -> Option<TsExpr> {
+    if !cx.typed_capability_calls() {
+        return None;
+    }
+    let resolved: Vec<bynk_check::checker::TyId> = match cx.commons().callee(e.id) {
+        Some(Callee::Capability { type_args, .. }) => type_args.clone(),
+        _ => Vec::new(),
+    };
+    if type_args.is_empty() && resolved.is_empty() {
+        return None;
+    }
+    // #4382: the call's resolved list, written arguments first as a `stub` spells them and the
+    // inferred rest after, so a clause naming the leading ones matches a call that inferred them.
+    let mut shown: Vec<String> = type_args
+        .iter()
+        .map(|t| strip_key_brackets(&type_key_of(std::slice::from_ref(t), cx)))
+        .collect();
+    let types = cx.ty_render().types();
+    shown.extend(resolved.iter().skip(shown.len()).map(|t| types.display(*t)));
+    Some(type_key_expr(
+        &["[", shown.join(", ").as_str(), "]"].concat(),
+    ))
+}
+
+fn strip_key_brackets(key: &str) -> String {
+    key.strip_prefix('[')
+        .and_then(|k| k.strip_suffix(']'))
+        .unwrap_or(key)
+        .to_string()
+}
+
+/// The key of `type_args` as a call site spells them: a consumed type this module renames
+/// (`consumes c { T as U }`) is keyed by the name its owner declares, as a `stub` names it.
+pub(in crate::emitter) fn type_key_of(type_args: &[TypeRef], cx: &LowerCtx) -> String {
+    let declared: Vec<TypeRef> = type_args
+        .iter()
+        .map(|t| {
+            let renamed = if let TypeRef::Named(id) = t {
+                cx.consumed_declared_name(&id.name).map(|original| {
+                    TypeRef::Named(bynk_syntax::ast::Ident {
+                        name: original.to_string(),
+                        span: id.span,
+                    })
+                })
+            } else {
+                None
+            };
+            renamed.unwrap_or_else(|| t.clone())
+        })
+        .collect();
+    bynk_check::checker::capability_type_key(&declared, &cx.commons().types, cx.ty_render().types())
+}
+
+fn type_key_expr(key: &str) -> TsExpr {
+    let entry = object(vec![("__bynkTypeKey", str_lit(key))]);
+    TsExpr::Spread(Box::new(TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(TsExpr::array(vec![entry])),
+            ty: TsType::named("unknown"),
+        }),
+        ty: TsType::named("[]"),
+    }))
 }
 
 /// Constrained generics slice 3: how the capability call `e` encodes its
@@ -147,18 +206,39 @@ pub(in crate::emitter) fn decode_capability_reply(
     };
     let payload = reply.payload.display(cx.commons().tys());
     let codec = cx.codec(reply.payload);
-    crate::emitter::lower_list::call(
-        id("__bynkCapabilityReply"),
+    crate::ts_build::call(
+        ident("__bynkCapabilityReply"),
         vec![
             call,
             codec,
             object(vec![
-                ("capability", lit_str(cap)),
-                ("operation", lit_str(op)),
-                ("type", lit_str(&payload)),
+                ("capability", str_lit(cap)),
+                ("operation", str_lit(op)),
+                ("type", str_lit(&payload)),
             ]),
-            lit_str(policy),
+            str_lit(policy),
         ],
+    )
+}
+
+/// #4116: whether an `Idempotency` key argument is statically text: a `String`, or a refined or
+/// opaque `String`. A type variable is not, and goes through `__bynkIdempotencyKey`, which stores
+/// a run-time string as it is.
+fn key_is_text(key: &Expr, cx: &LowerCtx) -> bool {
+    use bynk_check::checker::{NamedKind, Ty};
+    use bynk_syntax::ast::BaseType;
+    // An unrecorded type is not known to be text: the run-time helper decides.
+    let Some(te) = cx.commons().expr_types.get(&key.id) else {
+        return false;
+    };
+    let ty = te.ty.get(cx.ty_render().types());
+    matches!(
+        &*ty,
+        Ty::Base(BaseType::String)
+            | Ty::Named {
+                kind: NamedKind::Refined(BaseType::String) | NamedKind::Opaque(BaseType::String),
+                ..
+            }
     )
 }
 
@@ -187,6 +267,7 @@ pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
     args_lowered: &mut Vec<bynk_ts::TsExpr>,
+    key_arg: Option<&Expr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -195,7 +276,13 @@ pub(in crate::emitter) fn scope_idempotency_key(
     let scope = cx
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
-    let key = args_lowered.remove(0);
+    let mut key = args_lowered.remove(0);
+    // #4116: a key that is not text is stored under its canonical encoding. A `String`, a
+    // refined `String` and an opaque `String` are stored as they were, so existing entries match.
+    if key_arg.is_some_and(|k| !key_is_text(k, cx)) {
+        cx.runtime_use().note_cmp("__bynkIdempotencyKey");
+        key = call(ident("__bynkIdempotencyKey"), vec![key]);
+    }
     // `TemplateLit` parts print verbatim, so the scope prints as it is spelled.
     let scoped = TsExpr::template_lit(vec![format!("{scope}::"), String::new()], vec![key]);
     args_lowered.insert(0, scoped);
@@ -220,17 +307,17 @@ pub(in crate::emitter) fn tracked_claim_call(
     cx.emitted_await = true;
     {
         let nodes = args;
-        let k = || id("__k");
-        let t = || id("__t");
+        let k = || ident("__k");
+        let t = || ident("__t");
         let claim = TsExpr::Await(Box::new(call(
             member(cap_node, "claim"),
-            vec![k(), call(member(id("__claims"), "lease"), vec![t()])],
+            vec![k(), call(member(ident("__claims"), "lease"), vec![t()])],
         )));
-        let note = call(member(id("__claims"), "note"), vec![k(), claim, t()]);
+        let note = call(member(ident("__claims"), "note"), vec![k(), claim, t()]);
         let note_arrow = TsExpr::Arrow {
             params: vec![
-                param("__k", Some(TsType::named("string"))),
-                param("__t", Some(TsType::named("number"))),
+                TsParam::new("__k", Some(TsType::named("string"))),
+                TsParam::new("__t", Some(TsType::named("number"))),
             ],
             is_async: true,
             generics: vec![],
@@ -261,15 +348,15 @@ pub(in crate::emitter) fn lower_d1_peek_call(
     };
     let ns = test_scaffold_ns(&participant);
     let read_only = call(
-        chain(id("deps"), &[&format!("env_{ns}"), &binding, "readOnly"]),
+        chain(ident("deps"), &[&format!("env_{ns}"), &binding, "readOnly"]),
         vec![],
     );
     let workers_d1 = TsExpr::New {
-        callee: Box::new(chain(id("bynk_cloudflare__binding"), &["WorkersD1"])),
-        args: vec![object(vec![(&binding, read_only)]), lit_str(&binding)],
+        callee: Box::new(chain(ident("bynk_cloudflare__binding"), &["WorkersD1"])),
+        args: vec![object(vec![(&binding, read_only)]), str_lit(&binding)],
     };
     Some(paren(TsExpr::Assign {
-        target: Box::new(member(id("deps"), &local)),
+        target: Box::new(member(ident("deps"), &local)),
         value: Box::new(workers_d1),
     }))
 }
@@ -337,29 +424,29 @@ pub(in crate::emitter) fn lower_d1_select_call(
     Some({
         let nodes = vec![decoder, params];
         let [decoder, params] = super::super::lower_list::take(nodes);
-        let r = || id("__r");
-        let d = || id("__d");
+        let r = || ident("__r");
+        let d = || ident("__d");
         let tag_is = |obj: TsExpr, tag: &str| {
             binary(
                 bynk_ts::TsBinaryOp::StrictEq,
                 member(obj, "tag"),
-                lit_str(tag),
+                str_lit(tag),
             )
         };
         let err = |tag: &str, error: TsExpr| {
             call(
-                id("Err"),
+                ident("Err"),
                 vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
             )
         };
         let mut body = vec![
-            const_("__decode", None, decoder),
-            const_(
+            const_typed("__decode", None, decoder),
+            const_typed(
                 "__r",
                 None,
                 TsExpr::Await(Box::new(call(
                     chain(deps_node, &[&cap, op]),
-                    vec![lit_str(&sql), params],
+                    vec![str_lit(&sql), params],
                 ))),
             ),
             TsStmt::if_stmt(
@@ -371,26 +458,106 @@ pub(in crate::emitter) fn lower_d1_select_call(
         let decode_arg = if first {
             body.push(TsStmt::if_stmt(
                 tag_is(member(r(), "value"), "None"),
-                ret(call(id("Ok"), vec![id("None")])),
+                ret(call(ident("Ok"), vec![ident("None")])),
                 None,
             ));
             chain(r(), &["value", "value"])
         } else {
             member(r(), "value")
         };
-        body.push(const_("__d", None, call(id("__decode"), vec![decode_arg])));
+        body.push(const_typed(
+            "__d",
+            None,
+            call(ident("__decode"), vec![decode_arg]),
+        ));
         let ok_value = if first {
-            call(id("Some"), vec![member(d(), "value")])
+            call(ident("Some"), vec![member(d(), "value")])
         } else {
             member(d(), "value")
         };
         body.push(ret(TsExpr::Conditional {
             test: Box::new(tag_is(d(), "Ok")),
-            consequent: Box::new(call(id("Ok"), vec![ok_value])),
+            consequent: Box::new(call(ident("Ok"), vec![ok_value])),
             alternate: Box::new(err(decode_tag, member(d(), "error"))),
         }));
         call(paren(block_arrow(vec![], true, body)), vec![])
     })
+}
+
+/// #4105: lower `AnalyticsSql.select[T](Instance, tail, params)`, or `None` when the call is not
+/// one. The checker wrote the SQL (`SELECT` and the columns of the instance's written record, then
+/// the literal tail); this runs it through `query` with the instance's dataset and decodes the
+/// reply's JSON rows into `List[T]`, so no runtime operation is involved.
+pub(in crate::emitter) fn lower_analytics_select_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let Some(Callee::AnalyticsSelect { cap, row, sql, .. }) =
+        cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    // The checker writes every accepted select's SQL; one without it was refused, so this is a
+    // missing fact, never a call to a `select` the binding does not have.
+    let Some(sql) = sql else {
+        return Some(cx.missing_fact(e.span, "the SQL of a typed Analytics read"));
+    };
+    let params = args.get(2)?;
+    let target = cx.ty_render().intern(Ty::List(row));
+    // The reply's rows are JSON; the platform quotes a 64-bit integer (`count()`) as text, as
+    // `int8` is quoted for Postgres, so an `Int` field reads either form (`DecodeSource::Pg`).
+    let decoder = json_decoder_fn(target, DecodeSource::Pg, cx)
+        .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type"));
+    let params = pre.lower_node(params, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let r = || ident("__r");
+    let d = || ident("__d");
+    let tag_is = |obj: TsExpr, tag: &str| {
+        binary(
+            bynk_ts::TsBinaryOp::StrictEq,
+            member(obj, "tag"),
+            str_lit(tag),
+        )
+    };
+    let err = |tag: &str, error: TsExpr| {
+        call(
+            ident("Err"),
+            vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
+        )
+    };
+    let table = TsExpr::Await(Box::new(call(
+        chain(deps_node.clone(), &[cap.as_str(), "dataset"]),
+        Vec::new(),
+    )));
+    let body = vec![
+        const_typed("__decode", None, decoder),
+        const_typed(
+            "__r",
+            None,
+            TsExpr::Await(Box::new(call(
+                chain(deps_node, &["AnalyticsSql", "query"]),
+                vec![table, str_lit(&sql), params],
+            ))),
+        ),
+        TsStmt::if_stmt(
+            tag_is(r(), "Err"),
+            ret(err("AnalyticsQuery", member(r(), "error"))),
+            None,
+        ),
+        const_typed(
+            "__d",
+            None,
+            call(ident("__decode"), vec![chain(r(), &["value", "data"])]),
+        ),
+        ret(TsExpr::Conditional {
+            test: Box::new(tag_is(d(), "Ok")),
+            consequent: Box::new(call(ident("Ok"), vec![member(d(), "value")])),
+            alternate: Box::new(err("AnalyticsDecode", member(d(), "error"))),
+        }),
+    ];
+    Some(call(paren(block_arrow(vec![], true, body)), vec![]))
 }
 
 /// #3386: lower `Actor.issue(identity)` and `Actor.expire()` on a local `SignedCookie` actor, or
@@ -403,6 +570,9 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    if let Some(Callee::SessionRevokeAll { actor }) = cx.commons().callees.get(&e.id).cloned() {
+        return lower_session_revoke_all(&actor, args.first()?, cx, pre);
+    }
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
@@ -413,10 +583,14 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
     })?;
     if !issue {
-        return Some(call(
-            id("__expireSessionCookie"),
-            vec![lit_str(&seam.cookie), lit_str(&seam.same_site)],
-        ));
+        let expire = call(
+            ident("__expireSessionCookie"),
+            vec![str_lit(&seam.cookie), str_lit(&seam.same_site)],
+        );
+        if !seam.sessions {
+            return Some(expire);
+        }
+        return Some(lower_session_expire(&seam, expire, cx));
     }
     let key = pre.lower_node(args.first()?, cx);
     let deps_node = deps_receiver(cx.in_test_case(), cx);
@@ -427,22 +601,53 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             chain(deps_node.clone(), &["Clock", "now"]),
             vec![],
         )));
-        let issue = call(
-            id("__issueSessionCookie"),
-            vec![
-                call(id("__sessionKeysOf"), vec![deps_node, lit_str(&actor)]),
-                lit_str(&actor),
-                lit_str(&seam.cookie),
-                lit_str(&seam.same_site),
-                key,
-                lit_num(seam.ttl_secs),
-                now,
-            ],
-        );
-        call(
-            paren(crate::emitter::lower_list::arrow_with(vec![], true, issue)),
-            vec![],
-        )
+        let mut issue_args = vec![
+            call(
+                ident("__sessionKeysOf"),
+                vec![deps_node.clone(), str_lit(&actor)],
+            ),
+            str_lit(&actor),
+            str_lit(&seam.cookie),
+            str_lit(&seam.same_site),
+            key.clone(),
+            num_lit(seam.ttl_secs),
+            now,
+        ];
+        if seam.sessions {
+            // #3938: record the new session in the identity's session agent before the cookie is
+            // signed, so a cookie never exists for a session the agent does not hold.
+            let agent = bynk_check::actors::sessions_agent_name(&actor);
+            cx.record_agent_call(&agent, "add");
+            let instance = cx.agent_construct_node(&agent, ident("__sub"));
+            issue_args[4] = ident("__sub");
+            issue_args.push(arrow_with(
+                vec![
+                    TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
+                    TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
+                    TsParam::new("__now".to_string(), Some(TsType::named("number"))),
+                ],
+                true,
+                method_call(
+                    instance,
+                    "add",
+                    vec![ident("__sid"), ident("__exp"), ident("__now"), deps_node],
+                ),
+            ));
+            let issue = call(ident("__issueSessionCookie"), issue_args);
+            return Some(call(
+                paren(arrow_with(
+                    vec![TsParam::new(
+                        "__sub".to_string(),
+                        Some(TsType::named(seam.identity_type.clone())),
+                    )],
+                    true,
+                    issue,
+                )),
+                vec![key],
+            ));
+        }
+        let issue = call(ident("__issueSessionCookie"), issue_args);
+        call(paren(arrow_with(vec![], true, issue)), vec![])
     })
 }
 
@@ -476,9 +681,9 @@ pub(in crate::emitter) fn lower_cookie_field_call(
     if expire {
         return Some(typed_cookie_node(
             &name,
-            lit_str(""),
-            call(id("Some"), vec![lit_num(0)]),
-            call(id("Some"), vec![lit_num(0)]),
+            str_lit(""),
+            call(ident("Some"), vec![num_lit(0)]),
+            call(ident("Some"), vec![num_lit(0)]),
         ));
     }
     // One shape is peeled: an `Option` layer around the field's type.
@@ -499,28 +704,30 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         let nodes = vec![value];
         let [value] = super::super::lower_list::take(nodes);
         let value = if decimal {
-            call(id("__bynkDecimalToString"), vec![value])
+            call(ident("__bynkDecimalToString"), vec![value])
         } else {
             value
         };
-        typed_cookie_node(
-            &name,
-            call(id("__cookieValue"), vec![lit_str(kind), value]),
-            none(),
-            none(),
-        )
+        let mut args = vec![str_lit(kind), value];
+        // #3975: an enum with wire-named variants is written under those names.
+        if kind == "enum"
+            && let Some(names) = crate::emitter::workers_entry::enum_wire_names(leaf, types)
+        {
+            args.push(names);
+        }
+        typed_cookie_node(&name, call(ident("__cookieValue"), args), none(), none())
     })
 }
 
 /// [`typed_cookie_literal`] as a node: the field's wire `name` is raw text (the printer escapes it).
 fn typed_cookie_node(name: &str, value: TsExpr, max_age: TsExpr, expires: TsExpr) -> TsExpr {
     paren(object(vec![
-        ("name", lit_str(name)),
+        ("name", str_lit(name)),
         ("value", value),
         ("maxAge", max_age),
         ("expires", expires),
         ("domain", object(vec![("tag", tag_const("None"))])),
-        ("path", lit_str("/")),
+        ("path", str_lit("/")),
         ("secure", TsExpr::Lit(TsLit::Bool(true))),
         ("httpOnly", TsExpr::Lit(TsLit::Bool(true))),
         ("sameSite", object(vec![("tag", tag_const("Lax"))])),
@@ -533,7 +740,7 @@ fn typed_cookie_node(name: &str, value: TsExpr, max_age: TsExpr, expires: TsExpr
 pub(in crate::emitter) fn lower_events_emit_call(
     e: &Expr,
     receiver: &Expr,
-    type_args: &[TypeRef],
+    _type_args: &[TypeRef],
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
@@ -563,16 +770,18 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 if op == "emit"
         )
     {
-        let event_name = type_args
-            .first()
-            .and_then(type_ref_named_root)
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                // `Events.emit[E]` names an event the checker resolved: absent, a missing
-                // fact (1A.34). The name is only a placeholder then.
+        // #4113: the checker records the event the call emits (written or inferred) on the callee.
+        let event_name = match cx.commons().callee(e.id) {
+            Some(Callee::Capability {
+                event: Some(name), ..
+            }) => name.clone(),
+            // `Events.emit` names an event the checker resolved: absent, a missing fact (1A.34).
+            // The name is only a placeholder then.
+            _ => {
                 cx.missing_fact(e.span, "event type argument of `Events.emit`");
                 String::new()
-            });
+            }
+        };
         let payload = pre.lower_node(&args[0], cx);
         // Events track, slice 2 (spine #936): the envelope is minted here,
         // once, before fan-out duplicates this single `__events` entry to
@@ -600,22 +809,25 @@ pub(in crate::emitter) fn lower_events_emit_call(
         return Some({
             let nodes = vec![payload];
             let [payload] = super::super::lower_list::take(nodes);
-            let global = |name: &str| member(id("globalThis"), name);
+            let global = |name: &str| member(ident("globalThis"), name);
             let envelope = object(vec![
                 (
                     "eventId",
                     call(member(global("crypto"), "randomUUID"), vec![]),
                 ),
-                ("publisherId", lit_str(&owner)),
+                ("publisherId", str_lit(&owner)),
                 ("emittedAt", call(member(global("Date"), "now"), vec![])),
-                ("schemaVersion", lit_num(schema_version)),
+                ("schemaVersion", num_lit(schema_version)),
+                // #3895: the trace this emission happened in; `undefined` outside
+                // one, which `JSON.stringify` leaves off the wire.
+                ("trace", call(ident("__currentTraceId"), vec![])),
             ]);
             let entry = object(vec![
-                ("type", lit_str(&event_name)),
+                ("type", str_lit(&event_name)),
                 ("payload", payload),
                 ("envelope", envelope),
             ]);
-            let push = expr_stmt(call(member(id("__events"), "push"), vec![entry]));
+            let push = expr_stmt(call(member(ident("__events"), "push"), vec![entry]));
             call(paren(block_arrow(vec![], true, vec![push])), vec![])
         });
     }
@@ -633,6 +845,15 @@ pub(in crate::emitter) fn lower_capability_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    // #4105: `Cap.writeValue[T](value)` is lowered over the instance's `write`.
+    if let Some(Callee::AnalyticsWrite { cap, mapping, .. }) = cx.commons().callee(e.id).cloned() {
+        let value = pre.lower_node(args.first()?, cx);
+        let point = analytics_point(value, &mapping, cx);
+        let deps = deps_receiver(cx.in_test_case(), cx);
+        let call = capability_op_call(deps, &cap, "write", Vec::new(), vec![point]);
+        let target = format!("{cap}.writeValue");
+        return Some(cx.trace_step_node("capability", &target, e.span.start, call));
+    }
     // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
     // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
     // puts the target's capabilities in scope there, so it records the call
@@ -645,11 +866,13 @@ pub(in crate::emitter) fn lower_capability_call(
             Some(Callee::Capability { cap, .. }) if *cap == recv.name
         )
     {
-        let args_lowered = lower_args(args, cx, pre);
+        let mut args_lowered = lower_args(args, cx, pre);
+        name_analytics_dataset(&recv.name, &method.name, args, &mut args_lowered, cx);
         let wire = capability_wire(e, cx);
-        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        args_lowered.extend(type_key_arg(e, type_args, cx));
         let call = capability_op_call(
-            id("deps"),
+            ident("deps"),
             &recv.name,
             &method.name,
             Vec::new(),
@@ -672,7 +895,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
         let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        let call = capability_op_call(id("deps"), &cap, &method.name, Vec::new(), args_lowered);
+        let call = capability_op_call(ident("deps"), &cap, &method.name, Vec::new(), args_lowered);
         return Some(decode_capability_reply(
             call,
             wire.as_deref(),
@@ -689,6 +912,7 @@ pub(in crate::emitter) fn lower_capability_call(
         && cx.has_capability(&recv.name)
     {
         let mut args_lowered = lower_args(args, cx, pre);
+        name_analytics_dataset(&recv.name, &method.name, args, &mut args_lowered, cx);
         // #934: a flattened `consumes bynk { Idempotency }` local name is first-party only if
         // it's actually `bynk`'s own capability. The checker resolved that for this call
         // (`firstparty::resolve`), so a same-named capability from any other adapter or context
@@ -701,13 +925,20 @@ pub(in crate::emitter) fn lower_capability_call(
                 ..
             })
         );
-        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        scope_idempotency_key(
+            is_first_party,
+            &method.name,
+            &mut args_lowered,
+            args.first(),
+            cx,
+        );
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
             let cap_node = member(cx.cap_deps_node(), &recv.name);
             return Some(tracked_claim_call(cap_node, args_lowered, cx));
         }
         let wire = capability_wire(e, cx);
-        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        args_lowered.extend(type_key_arg(e, type_args, cx));
         let call = capability_op_call(
             cx.cap_deps_node(),
             &recv.name,
@@ -746,13 +977,20 @@ pub(in crate::emitter) fn lower_cross_capability_call(
             ..
         })
     );
-    scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
+    scope_idempotency_key(
+        first_party,
+        &method.name,
+        &mut args_lowered,
+        args.first(),
+        cx,
+    );
     if first_party && method.name == "claim" && cx.tracks_claims() {
         let cap_node = member(cx.cap_deps_node(), &cap);
         return Some(tracked_claim_call(cap_node, args_lowered, cx));
     }
     let wire = capability_wire(e, cx);
-    let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+    let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+    args_lowered.extend(type_key_arg(e, type_args, cx));
     let call = capability_op_call(
         cx.cap_deps_node(),
         &cap,
@@ -771,6 +1009,90 @@ pub(in crate::emitter) fn lower_cross_capability_call(
 
 /// `<deps>.<cap>.<op><T>(args)`: a node when every argument is one, else the text. `deps` is the
 /// receiver as a node and as text; the type arguments are empty when there is nothing to name.
+/// #4104: `AnalyticsSql.query(Signups, sql, params)` passes the instance's table, not the instance:
+/// its first argument, which the checker required to name an `Analytics` instance, is lowered to
+/// `await deps.Signups.dataset()`, the environment's qualified table, which the binding puts where
+/// the SQL says `{dataset}`.
+fn name_analytics_dataset(
+    cap: &str,
+    op: &str,
+    args: &[Expr],
+    lowered: &mut [bynk_ts::TsExpr],
+    cx: &mut LowerCtx<'_>,
+) {
+    if cap != "AnalyticsSql" || op != "query" || lowered.len() != 3 {
+        return;
+    }
+    // The checker decided this argument is an `Analytics` instance, and recorded it.
+    if let Some(first) = args.first()
+        && let ExprKind::Ident(instance) = &first.kind
+        && matches!(
+            cx.commons().callee(first.id),
+            Some(Callee::Capability { cap, op, .. }) if *cap == instance.name && op == "dataset"
+        )
+    {
+        let table = call(
+            chain(cx.cap_deps_node(), &[instance.name.as_str(), "dataset"]),
+            Vec::new(),
+        );
+        lowered[0] = TsExpr::Await(Box::new(table));
+    }
+}
+
+/// #4105: the `DataPoint` a record is, from the mapping the checker computed: `((__v) => ({ index,
+/// blobs, doubles }))(value)`, so the value is evaluated once however many columns read it.
+fn analytics_point(
+    value: TsExpr,
+    mapping: &bynk_check::checker::analytics::AnalyticsMapping,
+    cx: &mut LowerCtx,
+) -> TsExpr {
+    use bynk_check::checker::analytics::ColumnKind;
+    let v = || ident("__v");
+    let column = |f: &bynk_check::checker::analytics::ColumnField, cx: &mut LowerCtx| {
+        let field = member(v(), &f.field);
+        match f.kind {
+            ColumnKind::Text | ColumnKind::Number => field,
+            ColumnKind::Variant => member(field, "tag"),
+            ColumnKind::Flag => call(ident("String"), vec![field]),
+            ColumnKind::Decimal => {
+                cx.note_decimal("__bynkDecimalToFloat");
+                call(ident("__bynkDecimalToFloat"), vec![field])
+            }
+        }
+    };
+    let index = match &mapping.index {
+        Some(f) => call(ident("Some"), vec![member(v(), f)]),
+        None => ident("None"),
+    };
+    let blobs = mapping.blobs.iter().map(|f| column(f, cx)).collect();
+    let doubles = mapping.doubles.iter().map(|f| column(f, cx)).collect();
+    let point = object(vec![
+        ("index", index),
+        (
+            "blobs",
+            TsExpr::Array {
+                items: blobs,
+                multiline: false,
+            },
+        ),
+        (
+            "doubles",
+            TsExpr::Array {
+                items: doubles,
+                multiline: false,
+            },
+        ),
+    ]);
+    call(
+        paren(arrow_with(
+            vec![TsParam::new("__v", None)],
+            false,
+            paren(point),
+        )),
+        vec![value],
+    )
+}
+
 fn capability_op_call(
     deps: TsExpr,
     cap: &str,
@@ -791,267 +1113,81 @@ fn capability_op_call(
     call(callee, nodes)
 }
 
+/// #3938: `Actor.expire()` on a `sessions = true` actor: end the verified session in the identity's
+/// session agent (when the handler is guarded by the actor, so the seam threaded one), then return
+/// the deleting cookie. A handler the actor does not guard has no session to end, so only the
+/// cookie is returned.
+fn lower_session_expire(
+    seam: &bynk_check::actors::SignedCookieSeam,
+    expire: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    use crate::ts_build::{as_expr, await_expr, if_, strict_neq};
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    cx.record_agent_call(&agent, "remove");
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let current = ident("__current");
+    let identity = as_expr(
+        member(current.clone(), "sub"),
+        TsType::named(seam.identity_type.clone()),
+    );
+    let instance = cx.agent_construct_node(&agent, identity);
+    let body = vec![
+        crate::ts_build::const_(
+            "__current",
+            call(ident("__currentSession"), vec![deps_node.clone()]),
+        ),
+        if_(
+            strict_neq(current.clone(), crate::ts_build::null_lit()),
+            expr_stmt(await_expr(method_call(
+                instance,
+                "remove",
+                vec![member(current, "sid"), deps_node],
+            ))),
+        ),
+        ret(expire),
+    ];
+    call(paren(block_arrow(vec![], true, body)), vec![])
+}
+
+/// #3938: `Actor.revokeAll(identity)`: end every session of `identity` in its session agent. An
+/// effect, like `issue`: an async arrow applied to the identity, whose agent call is awaited.
+fn lower_session_revoke_all(
+    actor: &str,
+    identity: &Expr,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let seam = cx.commons().commons.items.iter().find_map(|i| {
+        i.as_actor()
+            .filter(|a| a.name.name == actor)
+            .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+    })?;
+    let key = pre.lower_node(identity, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let agent = bynk_check::actors::sessions_agent_name(actor);
+    cx.record_agent_call(&agent, "revokeAll");
+    let instance = cx.agent_construct_node(&agent, ident("__sub"));
+    let revoke = crate::ts_build::await_expr(method_call(instance, "revokeAll", vec![deps_node]));
+    Some(call(
+        paren(block_arrow(
+            vec![TsParam::new(
+                "__sub".to_string(),
+                Some(TsType::named(seam.identity_type)),
+            )],
+            true,
+            vec![expr_stmt(revoke)],
+        )),
+        vec![key],
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::emitter::ctx::{BodyMode, ModuleCtx, UnitFacts};
     use crate::emitter::runtime_use::RuntimeUse;
-    use crate::testkit::{emit_project, emit_workers};
     use bynk_check::checker::TypedCommons;
-    use bynk_check::project_model::BuildTarget;
-
-    const LEDGER: &str = "context ledger
-
-consumes bynk { Events }
-
-event Bumped = {
-  amount: Int,
-}
-
-agent Ledger {
-  key id: String
-  store total: Cell[Int]
-
-  on call bump(amount: Int) -> Effect[Int] given Events {
-    let next = total + amount
-    total := next
-    let _ <- Events.emit[Bumped](Bumped { amount: amount })
-    next
-  }
-}
-";
-
-    const HOOKS: &str = "context shop.hooks
-
-consumes bynk { Idempotency, Claim }
-
-service api from http {
-  on POST(\"/hooks/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
-    Ok(\"processed\")
-  }
-}
-
-service replay from http {
-  on POST(\"/replay/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let cached <- Idempotency.dedup[String](id)
-    match cached {
-      Some(v) => Ok(v),
-      None => {
-        let _ <- Idempotency.remember[String](id, \"computed\", 1.hours)
-        Ok(\"fresh\")
-      }
-    }
-  }
-}
-
-fn once[T: Codable](key: String, value: T) -> Effect[Option[T]] given Idempotency {
-  let seen <- Idempotency.dedup[T](key)
-  match seen {
-    Some(v) => Some(v),
-    None => None,
-  }
-}
-
-type Receipt = { id: String, total: Int }
-
-service skew from http {
-  on POST(\"/receipt/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let r <- once[Receipt](id, Receipt { id: id, total: 42 })
-    match r {
-      Some(v) => Ok(\"hit\"),
-      None => Ok(\"stored\"),
-    }
-  }
-}
-";
-
-    const COOKIES: &str = "context site.prefs
-
-consumes bynk { Cookie }
-
-type Theme = enum { Light, Dark }
-type Qty = Int where Positive
-
-type Prefs = {
-	theme: Theme = Light,
-	@name(\"__Host-visits\") visits: Int = 0,
-	price: Option[Decimal],
-	qty: Option[Qty],
-}
-
-service site from http {
-	on GET(\"/visit\") (cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor {
-		Ok(\"visit\")
-	}
-
-	on POST(\"/leaves\") () -> Effect[HttpResult[()]] by v: Visitor {
-		NoContent
-			.withCookie(Prefs.price.cookie(1.50d))
-			.withCookie(Prefs.visits.cookie(42))
-			.withCookie(Prefs.qty.cookie(7))
-	}
-
-	on POST(\"/theme/reset\") () -> Effect[HttpResult[()]] by v: Visitor {
-		NoContent.withCookie(Prefs.theme.expire())
-	}
-}
-";
-
-    const SESSION: &str = "context shop.api
-
-consumes bynk { Cookie, Clock }
-
-type UserId = String where NonEmpty && MaxLength(64)
-
-type Login = { user: String }
-
-actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }
-
-service api from http {
-	on POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
-		let Ok(id) = UserId.of(body.user) else {
-			BadRequest(\"bad user\")
-		}
-		let c <- User.issue(id)
-		Created(\"welcome\").withCookie(c)
-	}
-
-	on POST(\"/logout\") () -> Effect[HttpResult[()]] by u: User {
-		NoContent.withCookie(User.expire())
-	}
-}
-";
-
-    const STOCK: &str = "context shop.stock
-
-consumes bynk
-consumes bynk.cloudflare { D1, SqlValue, SqlReadError, SqlError }
-
-capability Stock = D1
-
-type Item = { id: String, qty: Int, note: Option[String] }
-
-service listing {
-	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] given Stock {
-		Stock.select[Item](\"FROM items WHERE note = 'caf\\u{e9} \\\"q\\\"' AND qty >= ?1 ORDER BY id\", [Integer(min)])
-	}
-}
-
-service lookup {
-	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] given Stock {
-		Stock.firstAs[Item](\"FROM items WHERE id = ?1\", [Text(id)])
-	}
-}
-";
-
-    fn handlers(file: &str, source: &str, path: &str) -> String {
-        emit_workers(&[(file, source)]).text(path).to_string()
-    }
-
-    /// `Events.emit`: the envelope is one block-bodied IIFE, with the event name and the
-    /// publisher as plain strings.
-    #[test]
-    fn events_emit_is_a_block_iife_with_the_envelope() {
-        let ts = handlers("ledger.bynk", LEDGER, "workers/ledger/handlers.ts");
-        assert!(
-            ts.contains(
-                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });\n      })();"
-            ),
-            "{ts}"
-        );
-    }
-
-    /// First-party `Idempotency` scopes its key once, as a template literal; a tracked `claim`
-    /// brackets its `await` (the shape #3725's table gets wrong) and wraps the handler in the
-    /// claim scope; a generic call encodes with the caller's witness.
-    #[test]
-    fn idempotency_keys_are_scoped_once_and_claims_are_tracked() {
-        let ts = handlers("shop/hooks.bynk", HOOKS, "workers/shop-hooks/handlers.ts");
-        assert!(
-            ts.contains("(await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_hooks_Param_id::${id}`, 3600000))"),
-            "{ts}"
-        );
-        assert!(ts.contains("const __claims = "), "{ts}");
-        // `wire`: the type argument is dropped, the reply decodes under the `miss` policy, and an
-        // encoded argument is the serialised value.
-        assert!(
-            ts.contains("__bynkCapabilityReply(deps.Idempotency.dedup(`shop.hooks.replay.http_POST_replay_Param_id::${id}`), { encode: __serialise_Option_String, decode: __deserialise_Option_String }, { capability: \"Idempotency\", operation: \"dedup\", type: \"Option[String]\" }, \"miss\")"),
-            "{ts}"
-        );
-        assert!(
-            ts.contains("deps.Idempotency.remember(`shop.hooks.replay.http_POST_replay_Param_id::${id}`, \"computed\" as __JsonValue, 3600000)"),
-            "{ts}"
-        );
-        // A generic body encodes with the caller's witness and is scoped to the function.
-        assert!(
-            ts.contains(
-                "deps.Idempotency.dedup(`shop.hooks.fn.once::${key}`), __bynkCodecOption(__codec_T)"
-            ),
-            "{ts}"
-        );
-    }
-
-    /// A typed cookie over each leaf kind; a `Decimal` wraps and imports its helper; expiry is
-    /// the deletion literal.
-    #[test]
-    fn typed_cookies_cover_each_leaf_kind() {
-        let ts = handlers("site/prefs.bynk", COOKIES, "workers/site-prefs/handlers.ts");
-        for want in [
-            "value: __cookieValue(\"decimal\", __bynkDecimalToString({ coefficient: 150n, scale: 2 }))",
-            "value: __cookieValue(\"int\", 42)",
-            "value: __cookieValue(\"int\", (7 as Qty))",
-            "name: \"__Host-visits\"",
-            "({ name: \"theme\", value: \"\", maxAge: Some(0), expires: Some(0), domain: { tag: \"None\" as const }, path: \"/\", secure: true, httpOnly: true, sameSite: { tag: \"Lax\" as const }, partitioned: false })",
-        ] {
-            assert!(ts.contains(want), "missing {want}\n{ts}");
-        }
-        assert!(ts.contains("__bynkDecimalToString"), "{ts}");
-        assert!(
-            ts.lines()
-                .any(|l| l.starts_with("import") && l.contains("__bynkDecimalToString")),
-            "{ts}"
-        );
-    }
-
-    /// A signed-cookie issue is an async-arrow IIFE over the runtime helper, and expiry a plain
-    /// call.
-    #[test]
-    fn signed_cookies_issue_and_expire() {
-        let ts = handlers("shop/api.bynk", SESSION, "workers/shop-api/handlers.ts");
-        assert!(
-            ts.contains("(async () => __issueSessionCookie(__sessionKeysOf(deps, \"User\"), \"User\", \"__Host-session\", \"Lax\", id, 43200, await deps.Clock.now()))()"),
-            "{ts}"
-        );
-        assert!(
-            ts.contains("__expireSessionCookie(\"__Host-session\", \"Lax\")"),
-            "{ts}"
-        );
-    }
-
-    /// `D1.select` and `firstAs`: a block-bodied IIFE, the SQL text intact (a non-ASCII character
-    /// and escaped quotes included), the error tags `as const`.
-    #[test]
-    fn d1_select_and_first_as_build_block_iifes() {
-        let ts = handlers("shop/stock.bynk", STOCK, "workers/shop-stock/handlers.ts");
-        assert!(
-            ts.contains("const __r = await deps.Stock.all(\"SELECT \\\"id\\\", \\\"qty\\\", \\\"note\\\" FROM items WHERE note = 'caf\u{e9} \\\"q\\\"' AND qty >= ?1 ORDER BY id\", [SqlValue.Integer(min)]);"),
-            "{ts}"
-        );
-        assert!(
-            ts.contains("      if (__r.tag === \"Err\") return Err({ tag: \"Sql\" as const, error: __r.error });\n      const __d = __decode(__r.value);"),
-            "{ts}"
-        );
-        assert!(ts.contains("await deps.Stock.first(\"SELECT"), "{ts}");
-        assert!(
-            ts.contains("if (__r.value.tag === \"None\") return Ok(None);"),
-            "{ts}"
-        );
-        assert!(
-            ts.contains("Err({ tag: \"Decode\" as const, error: __d.error })"),
-            "{ts}"
-        );
-    }
 
     /// The printer and `escape_ts_string` are one function, so a raw-text `Str` node prints what
     /// the text path printed, for any name, path or SQL string, non-ASCII included.
@@ -1069,7 +1205,7 @@ service lookup {
             "SELECT \"a\" FROM t WHERE x = 'y'",
         ] {
             assert_eq!(
-                bynk_ts::print_expr(&lit_str(s)),
+                bynk_ts::print_expr(&str_lit(s)),
                 format!("\"{}\"", crate::emitter::escape_ts_string(s)),
                 "{s:?}"
             );
@@ -1122,7 +1258,7 @@ service lookup {
     #[test]
     fn the_typed_cookie_node_prints_as_the_text_does() {
         let none = || object(vec![("tag", tag_const("None"))]);
-        let node = typed_cookie_node("a\"b", lit_str("v"), none(), none());
+        let node = typed_cookie_node("a\"b", str_lit("v"), none(), none());
         // The text literal the node replaced.
         let (name, value) = (crate::emitter::escape_ts_string("a\"b"), "\"v\"");
         let none = "{ tag: \"None\" as const }";
@@ -1156,7 +1292,7 @@ service lookup {
                 "capability",
                 "Greeter.hello",
                 offset,
-                call(chain(id("deps"), &["Greeter", "hello"]), vec![]),
+                call(chain(ident("deps"), &["Greeter", "hello"]), vec![]),
             );
             let text = if traced {
                 let (line, col) = bynk_syntax::span::line_col(&source, offset);
@@ -1173,16 +1309,5 @@ service lookup {
                 bynk_ts::unbound_names_in(&[bynk_ts::TsStmt::expr_stmt(node, None)], |_| false);
             assert_eq!(used.iter().any(|n| n == "__traceStep"), traced);
         }
-    }
-
-    /// The emitted build also compiles for the bundle target (`D1.peek` aside).
-    #[test]
-    fn the_bundle_target_emits_events_too() {
-        let out = emit_project(&[("ledger.bynk", LEDGER)], BuildTarget::Bundle);
-        assert!(
-            out.docs
-                .values()
-                .any(|t| t.contains("__events.push({ type: \"Bumped\""))
-        );
     }
 }

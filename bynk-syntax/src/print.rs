@@ -130,7 +130,12 @@ pub fn type_ref_to_string(t: &TypeRef) -> String {
         ),
         TypeRef::Option(t, _) => format!("Option[{}]", type_ref_to_string(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", type_ref_to_string(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", type_ref_to_string(t)),
+        TypeRef::HttpResult(t, None, _) => format!("HttpResult[{}]", type_ref_to_string(t)),
+        TypeRef::HttpResult(t, Some(e), _) => format!(
+            "HttpResult[{}, {}]",
+            type_ref_to_string(t),
+            type_ref_to_string(e)
+        ),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
@@ -210,13 +215,36 @@ pub fn matches_argument_span(p: &RefinementPred) -> Span {
     })
 }
 
+/// #3951: a predicate still holding a constant name in an argument, as written
+/// (`InRange(1, MaxQty)`); `None` for any other. The formatter reads it too, so
+/// the name survives a format.
+pub fn pending_pred_to_string(p: &RefinementPred) -> Option<String> {
+    let pending = p.pending.as_ref()?;
+    let args: Vec<String> = pending
+        .args
+        .iter()
+        .map(|a| match a {
+            PendingArg::Num(b) => b.lexeme().to_string(),
+            PendingArg::Str(s) => format!("\"{}\"", escape_string(s)),
+            PendingArg::Const(id) => id.name.clone(),
+        })
+        .collect();
+    Some(format!("{}({})", pending.name, args.join(", ")))
+}
+
 fn pred_to_string(p: &RefinementPred) -> String {
+    if let Some(text) = pending_pred_to_string(p) {
+        return text;
+    }
     let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
     match &p.kind {
         PredKind::Matches(re) => format!("Matches({})", literal_text(matches_argument_span(p), re)),
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("AtLeast({})", b.lexeme()),
+        PredKind::AtMost(b) => format!("AtMost({})", b.lexeme()),
         PredKind::MinLength(n) => format!("MinLength({})", arg(*n)),
         PredKind::MaxLength(n) => format!("MaxLength({})", arg(*n)),
         PredKind::Length(n) => format!("Length({})", arg(*n)),
@@ -224,6 +252,7 @@ fn pred_to_string(p: &RefinementPred) -> String {
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
         PredKind::IsoDate => "IsoDate".to_string(),
+        PredKind::Cron => "Cron".to_string(),
     }
 }
 
@@ -277,7 +306,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
         ExprKind::DecimalLit { lexeme, .. } => lexeme.clone(),
         // v0.86 (ADR 0112): a duration literal `<value>.<unit>`.
-        ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name()),
+        ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name_for(*value)),
         ExprKind::StrLit(s) => {
             written_string_form(e, Some(s)).unwrap_or_else(|| format!("\"{}\"", escape_string(s)))
         }
@@ -514,16 +543,34 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         // #1706: the fault claim — the call, then the contextual `faults`.
         // #1812: the call-site principal sits between the call and `faults`,
         // in the same position as on an effect-let.
-        ExprKind::Faults(f) => match &f.principal {
-            Some(p) => format!(
-                "{} {} faults",
-                expr_with_prec(&f.call, 0),
-                call_site_actor_src(p)
-            ),
-            None => format!("{} faults", expr_with_prec(&f.call, 0)),
-        },
+        ExprKind::Faults(f) => {
+            // #4035: `violates <name>` in place of `faults`.
+            let claim = match &f.violates {
+                Some(path) => format!(
+                    "violates {}",
+                    path.iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".")
+                ),
+                None => "faults".to_string(),
+            };
+            match &f.principal {
+                Some(p) => format!(
+                    "{} {} {claim}",
+                    expr_with_prec(&f.call, 0),
+                    call_site_actor_src(p)
+                ),
+                None => format!("{} {claim}", expr_with_prec(&f.call, 0)),
+            }
+        }
         ExprKind::Observation(o) => {
-            let subject = format!("{}.{}", o.cap.name, o.op.name);
+            let subject = format!(
+                "{}.{}{}",
+                o.cap.name,
+                o.op.name,
+                type_args_src(&o.type_args)
+            );
             match &o.matcher {
                 ObservationMatcher::NeverCalled => format!("{subject} never called"),
                 ObservationMatcher::Before { cap, op } => {
@@ -546,6 +593,15 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             }
         }
     }
+}
+
+/// #3945: `[T, U]` after a stub or observation target's operation, or nothing.
+pub fn type_args_src(type_args: &[TypeRef]) -> String {
+    if type_args.is_empty() {
+        return String::new();
+    }
+    let list: Vec<String> = type_args.iter().map(type_ref_to_string).collect();
+    ["[", &list.join(", "), "]"].concat()
 }
 
 /// #2891: the `if` an `else if` desugars to. The parser wraps it in a

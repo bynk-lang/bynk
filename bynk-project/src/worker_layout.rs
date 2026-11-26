@@ -36,6 +36,13 @@ pub struct WorkerLayout {
     /// Each group's members in the order its `contexts` list gives them, by the
     /// group's directory: the order the group's entry tries them in.
     order: BTreeMap<String, Vec<String>>,
+    /// #4127: each group's own Workers Logs settings, by the group's directory.
+    observability: BTreeMap<String, crate::observability::ObservabilityOverride>,
+    /// #4128: each group's own CPU limit and placement, by the group's directory.
+    tuning: BTreeMap<String, crate::worker_tuning::WorkerTuningOverride>,
+    /// #3883: the `[deploy.email]` mapping, so a Worker's `email()` accepts the address each
+    /// environment claims in place of a `from email` service's own.
+    email: crate::email_deploy::EmailDeployConfig,
 }
 
 impl WorkerLayout {
@@ -53,10 +60,25 @@ impl WorkerLayout {
         project_root: &std::path::Path,
         overlay: &std::collections::HashMap<PathBuf, String>,
     ) -> Self {
-        match crate::worker_groups::try_read_worker_groups_with(project_root, overlay) {
-            Ok(groups) if !groups.is_empty() => Self::from_groups(&groups),
-            _ => Self::identity(),
-        }
+        let mut layout =
+            match crate::worker_groups::try_read_worker_groups_with(project_root, overlay) {
+                Ok(groups) if !groups.is_empty() => Self::from_groups(&groups),
+                _ => Self::identity(),
+            };
+        layout.email = crate::email_deploy::try_read_email_deploy_with(project_root, overlay)
+            .unwrap_or_default();
+        layout
+    }
+
+    /// #3883: the project's `[deploy.email]` mapping, as the build read it.
+    pub fn email_deploy(&self) -> &crate::email_deploy::EmailDeployConfig {
+        &self.email
+    }
+
+    /// #3883: the addresses a named environment claims in place of the `from email` address
+    /// `source`, sorted. A Worker accepts mail to each beside the source's own.
+    pub fn email_aliases(&self, source: &str) -> Vec<String> {
+        crate::email_deploy::mapped_addresses(&self.email, source)
     }
 
     /// The layout of `groups`: a member goes in its group's directory, under a
@@ -81,7 +103,45 @@ impl WorkerLayout {
                 })
             })
             .collect();
-        Self { members, order }
+        let observability = groups
+            .iter()
+            .filter_map(|(key, group)| group.observability.map(|o| (key.clone(), o)))
+            .collect();
+        let tuning = groups
+            .iter()
+            .filter_map(|(key, group)| group.tuning.map(|t| (key.clone(), t)))
+            .collect();
+        Self {
+            members,
+            order,
+            observability,
+            tuning,
+            email: Default::default(),
+        }
+    }
+
+    /// #4128: the CPU limit and placement of the Worker `context` belongs to:
+    /// `base` (the project's), with its group's keys laid over it.
+    pub fn tuning(
+        &self,
+        context: &str,
+        base: crate::worker_tuning::WorkerTuning,
+    ) -> crate::worker_tuning::WorkerTuning {
+        self.tuning
+            .get(&self.dir(context))
+            .map_or(base, |t| t.over(base))
+    }
+
+    /// #4127: the Workers Logs settings of the Worker `context` belongs to:
+    /// `base` (the project's), with its group's table laid over it.
+    pub fn observability(
+        &self,
+        context: &str,
+        base: crate::observability::Observability,
+    ) -> crate::observability::Observability {
+        self.observability
+            .get(&self.dir(context))
+            .map_or(base, |o| o.over(base))
     }
 
     /// Whether `context` is a member of a group, so its entry is one of several
@@ -355,5 +415,25 @@ mod tests {
             WorkerLayout::identity().handlers_specifier("shop.orders", "shop.orders"),
             "../shop-orders/handlers.js"
         );
+    }
+}
+
+#[cfg(test)]
+mod email_alias_tests {
+    use super::*;
+
+    /// #3883: the layout a project's build uses carries its `[deploy.email]` mapping, with or
+    /// without a `[deploy.workers]` group.
+    #[test]
+    fn the_project_layout_carries_the_email_mapping() {
+        let toml = "[project]\nname = \"p\"\nversion = \"0.1.0\"\n\n[deploy.email.\"support@shop.example\"]\naddress = { staging = \"support@staging.shop.example\" }\n";
+        let root = std::path::Path::new("/project");
+        let overlay = std::collections::HashMap::from([(root.join("bynk.toml"), toml.to_string())]);
+        let layout = WorkerLayout::for_project(root, &overlay);
+        assert_eq!(
+            layout.email_aliases("Support@Shop.example"),
+            ["support@staging.shop.example"]
+        );
+        assert!(layout.email_aliases("sales@shop.example").is_empty());
     }
 }

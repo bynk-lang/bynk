@@ -113,4 +113,4 @@ To bind a record's fields without a `match`, see
 
 **See also:** [Pattern-match with `match`](/book/guides/type-system/match/),
 [Narrow and bind with `is`](/book/guides/type-system/narrow-with-is/),
-[Reference — Record patterns](/book/reference/types/#record-patterns).
+[Reference — Record patterns](/reference/types/#record-patterns).

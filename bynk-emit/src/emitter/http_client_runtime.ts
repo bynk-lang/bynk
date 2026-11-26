@@ -13,11 +13,66 @@ export type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue };
 
+/** The numeric argument of a rule, of whichever base the refined type has. A `Decimal` is `{ coefficient, scale }`, a `Duration` its milliseconds. */
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+/** The predicate a refinement check enforces, with its argument; `WellFormed` is a value that is not a valid member of its base type at all. */
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 /** A refinement a value broke. */
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
+}
+
+/** A rule as the server's `400` writes it: `kind` where the in-memory form has `tag`, a `Decimal` bound as its text. */
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+/** A violation as the server's `400` carries it: the field, the message and the rule, never the value. */
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
+}
+
+/**
+ * An error answered as RFC 9457 problem details (a service with `errors { format: problem }`): an error
+ * variant has `type` `about:blank`; a router rejection has a `https://bynk-lang.org/problems/<kind>` type
+ * and its own members: `kind`, `path`, a structural mismatch's `expected` and `actual`, and a refinement's
+ * `violation`.
+ */
+export interface Problem {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail?: string;
+  readonly kind?: string;
+  readonly path?: string;
+  readonly expected?: string;
+  readonly actual?: string;
+  readonly violation?: WireViolation;
 }
 
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
@@ -32,7 +87,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
@@ -113,8 +168,8 @@ export function viaBinding(
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;
-  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, or nothing. */
-  readonly body: "value" | "message" | "location" | "boundary" | "raw" | "events" | "none";
+  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, problem details, or nothing. */
+  readonly body: "value" | "message" | "location" | "boundary" | "problem" | "problem-rejection" | "raw" | "events" | "none";
   /** A `raw` reply's `ETag`: `maybe` when the server may leave it out, `required` when it always sends one. */
   readonly etag?: "maybe" | "required";
   readonly decode?: (json: JsonValue) => Result<unknown, BoundaryError>;
@@ -146,6 +201,8 @@ export interface __Request {
   readonly multipart?: globalThis.FormData;
   /** The `Cookie` header's value. A browser sets its own and ignores this. */
   readonly cookies?: string;
+  /** The typed `headers` record, as header names and values. */
+  readonly headers?: Readonly<Record<string, string>>;
   /** A `@raw` body: the caller's bytes, sent as given. */
   readonly raw?: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>;
   /** The content type the route declared for its `@raw` body. */
@@ -195,13 +252,17 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
     if (typeof v === "object" && !globalThis.Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      // A payload-less sum's one value is its variant's wire name, under whatever key its
+      // `@discriminator` gave it.
+      const first = globalThis.Object.values(v)[0];
+      return typeof first === "string" ? first : undefined;
     }
     return globalThis.String(v);
   };
   if (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire)) {
     for (const f of fields) {
-      const value = wire[f.name];
+      // The wire form is keyed by wire name.
+      const value = wire[f.wire ?? f.name];
       if (value === undefined) continue;
       for (const item of globalThis.Array.isArray(value) ? value : [value]) {
         const text = leaf(item);
@@ -253,6 +314,31 @@ export function __cookieString(wire: JsonValue, fields: readonly __QueryField[])
     pairs.push(`${name}=${value}`);
   });
   return pairs.join("; ");
+}
+
+/**
+ * A `headers` record's wire form as header names and values (a list's items joined with `, `,
+ * a field left out absent). A value with a control character (a line break would add a header
+ * the caller never declared) is refused.
+ */
+export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  // A field is a list when its wire value is an array.
+  const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
+  const lists = new globalThis.Set(
+    fields.filter((f) => globalThis.Array.isArray(record[f.wire ?? f.name])).map((f) => f.wire ?? f.name),
+  );
+  new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
+    const bad = (expected: string): never => {
+      throw new __Refusal({ kind: "StructuralMismatch", path: `headers.${name}`, expected, actual: value });
+    };
+    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(value)) bad("header text with no control character");
+    // A list's items are joined with `, ` and split again by the router at commas outside quotes, so an
+    // item holding a comma or a quote would not arrive as one item: it is refused, not sent as two.
+    if (lists.has(name) && /[,"]/.test(value)) bad("a list item with no comma or double quote");
+    out[name] = name in out ? `${out[name]}, ${value}` : value;
+  });
+  return out;
 }
 
 /** The text parts of a `@multipart` body: `a=1&b=x` read back into `form`. */
@@ -312,6 +398,8 @@ async function __headers(
     const have = headers.get("cookie");
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
+  // Typed headers are the call's own: they replace a header of the same name the caller configured.
+  for (const [name, value] of globalThis.Object.entries(request.headers ?? {})) headers.set(name, value);
   if (options.origin !== undefined) headers.set("origin", options.origin);
   if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
@@ -319,6 +407,11 @@ async function __headers(
 
 function __isObject(v: JsonValue): v is { [k: string]: JsonValue } {
   return typeof v === "object" && v !== null && !globalThis.Array.isArray(v);
+}
+
+/** RFC 9457 problem details as the interface promises them: a string `type` and `title` and a numeric `status`. */
+function __isProblem(v: JsonValue): v is { [k: string]: JsonValue } {
+  return __isObject(v) && typeof v.type === "string" && typeof v.title === "string" && typeof v.status === "number";
 }
 
 /** The reply of `route` that `response` is, or why it is none. */
@@ -355,6 +448,15 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
         if (parsed && __isObject(json) && typeof json.kind === "string") {
           return { status, kind: reply.kind, error: json };
         }
+        break;
+      // An error variant's problem has no `kind` (its `type` is `about:blank`); a router rejection's has a
+      // string `kind`. Both can answer at one status (a handler's `BadRequest` beside the boundary's `400`), so
+      // the two body kinds are told apart by it.
+      case "problem":
+        if (parsed && __isProblem(json) && json.kind === undefined) return { status, kind: reply.kind, problem: json };
+        break;
+      case "problem-rejection":
+        if (parsed && __isProblem(json) && typeof json.kind === "string") return { status, kind: reply.kind, problem: json };
         break;
       case "value": {
         if (!parsed) break;
@@ -473,6 +575,72 @@ export function __streamed(route: __Route, response: globalThis.Response): unkno
   reply.bytes = async () => new globalThis.Uint8Array(await response.arrayBuffer());
   reply.text = () => response.text();
   return reply;
+}
+
+/**
+ * #3918: a `Streaming` route read through the browser's own `EventSource`, which reconnects by
+ * itself and sends the last event's `id` back as `Last-Event-ID`. The arguments are encoded as for a
+ * call, and the URL is the one a call would fetch. An `EventSource` can send no header of its
+ * own, so no `Authorization`, no `x-bynk-contract` and no typed `headers`: a route that needs
+ * one is read through the call's `events` instead. `credentials: "include"` makes it send cookies
+ * to another origin. Returns the `EventSource`, or the `CallFailure` that stopped it being made.
+ */
+export function __eventSource(
+  options: ClientOptions,
+  route: __Route,
+  build: () => Result<__Request, BoundaryError>,
+): unknown {
+  let request: __Request;
+  try {
+    const built = build();
+    if (built.tag === "Err") return { kind: "Invalid", error: built.error } satisfies CallFailure;
+    request = built.value;
+  } catch (e) {
+    return __invalid(e);
+  }
+  for (const [name, value] of globalThis.Object.entries(request.params ?? {})) {
+    if (value === "." || value === "..") {
+      return {
+        kind: "Invalid",
+        error: { kind: "StructuralMismatch", path: `path.${name}`, expected: "a path segment", actual: value },
+      } satisfies CallFailure;
+    }
+  }
+  // A header the caller set cannot reach the wire through an `EventSource`; refuse it rather than drop it.
+  const headerNames = globalThis.Object.keys(request.headers ?? {});
+  if (headerNames.length > 0) {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: `headers.${headerNames[0]}`,
+        expected: "no typed headers: an EventSource sends none (read the route through `events` instead)",
+        actual: (request.headers ?? {})[headerNames[0]!] ?? "",
+      },
+    } satisfies CallFailure;
+  }
+  // A browser sends its own cookies and an `EventSource` cannot add to them: refuse typed cookies as a
+  // call does, never lose them silently.
+  if (request.cookies !== undefined && request.cookies !== "") {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: "cookies",
+        expected: "no typed cookies: an EventSource sends the browser's own (pass `credentials: \"include\"`)",
+        actual: request.cookies,
+      },
+    } satisfies CallFailure;
+  }
+  const make = (globalThis as { readonly EventSource?: typeof globalThis.EventSource }).EventSource;
+  if (make === undefined) {
+    return { kind: "Transport", cause: new globalThis.Error("this environment has no EventSource") } satisfies CallFailure;
+  }
+  try {
+    return new make(__url(options, route, request), { withCredentials: options.credentials === "include" });
+  } catch (cause) {
+    return { kind: "Transport", cause } satisfies CallFailure;
+  }
 }
 
 /** Make one call: encode, send, classify. Returns the route's reply, or the `CallFailure`. */

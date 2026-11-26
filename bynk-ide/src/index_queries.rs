@@ -53,7 +53,7 @@ pub fn definition_at<'a>(
 }
 
 /// `prepareRename`: the renameable range under the cursor, or `None` for
-/// out-of-scope symbols (locals, unit names) —
+/// out-of-scope symbols (locals) —
 /// the request is refused rather than falling through to a partial rename.
 pub fn prepare_rename<'a>(
     index: &'a ProjectIndex,
@@ -182,6 +182,10 @@ pub fn prepare_call_hierarchy<'a>(
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
     // #3582: also a service handler's `on` keyword.
     let (key, _) = index.call_symbol_at(path, offset)?;
+    // #4183: a unit is indexed now, but it is not something that is called.
+    if key.kind == SymbolKind::Unit {
+        return None;
+    }
     Some((key, index.symbols.get(key)?.def.as_ref()?))
 }
 
@@ -1004,7 +1008,7 @@ fn resolve_own_part(
 pub fn named_type_target(ty: TyId, tys: &Types) -> Option<String> {
     match &*tys.get(ty) {
         Ty::Named { name, .. } => Some(name.clone()),
-        Ty::Option(t) | Ty::Effect(t) | Ty::List(t) | Ty::HttpResult(t) => {
+        Ty::Option(t) | Ty::Effect(t) | Ty::List(t) | Ty::HttpResult(t, _) => {
             named_type_target(*t, tys)
         }
         _ => None,
@@ -1041,15 +1045,31 @@ pub fn plan_rename(
     offset: usize,
     new_name: &str,
 ) -> Result<RenamePlan, String> {
-    validate_new_name(new_name)?;
     let (key, _) = index.symbol_at(path, offset).ok_or_else(|| {
         "no renameable symbol at the cursor — types, fns, methods, record fields, \
-         capability ops, capabilities, services, agents and providers rename; \
-         local bindings and unit names are not yet supported"
+         capability ops, capabilities, services, agents, providers and context or \
+         commons names rename; local bindings are not yet supported"
             .to_string()
     })?;
-    if key_segment(&key.name) == new_name {
-        return Err(format!("`{new_name}` is already the symbol's name"));
+    if key.kind == SymbolKind::Unit {
+        validate_unit_name(new_name)?;
+        if key.name == new_name {
+            return Err(format!("`{new_name}` is already the unit's name"));
+        }
+        if index
+            .symbols
+            .keys()
+            .any(|k| k.kind == SymbolKind::Unit && k.name == new_name)
+        {
+            return Err(format!(
+                "`{new_name}` is already a unit of this project — renaming onto it would merge the two"
+            ));
+        }
+    } else {
+        validate_new_name(new_name)?;
+        if key_segment(&key.name) == new_name {
+            return Err(format!("`{new_name}` is already the symbol's name"));
+        }
     }
     let mut edits: BTreeMap<PathBuf, Vec<Span>> = BTreeMap::new();
     for site in index.sites(key) {
@@ -1080,6 +1100,11 @@ pub fn add_doc_link_edits(
     snapshots: &HashMap<PathBuf, String>,
     locals: &FileLocals,
 ) {
+    // #4183: no doc link resolves to a unit (`DOC_LINK_BARE_KINDS` has none), so there is
+    // nothing of this rename to rewrite in one.
+    if plan.key.kind == SymbolKind::Unit {
+        return;
+    }
     let Some(entry) = index.symbols.get(&plan.key) else {
         return;
     };
@@ -1147,6 +1172,9 @@ pub fn doc_links_rebound(
     let renamed = renamed_key_name(&plan.key.name, &plan.new_name);
     let owner_prefix = format!("{}.", plan.key.name);
     let expect = |k: &SymbolKey| -> SymbolKey {
+        if plan.key.kind == SymbolKind::Unit {
+            return rekeyed_in_unit(k, plan);
+        }
         let mut k = k.clone();
         if k == plan.key {
             k.name = renamed.clone();
@@ -1218,6 +1246,18 @@ pub fn doc_links_rebound(
     Ok(())
 }
 
+/// #4183 (decision B): a unit's new name is a dotted name, each segment an
+/// identifier. It is the name as written in source (`shop.pay`), not a path: the
+/// files that lay the unit out are renamed by hand, and `rename` says so.
+pub fn validate_unit_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.split('.').any(|seg| validate_new_name(seg).is_err()) {
+        return Err(format!(
+            "`{name}` is not a valid unit name — a unit's name is identifiers joined by `.` (such as `shop.pay`)"
+        ));
+    }
+    Ok(())
+}
+
 /// A new name must lex as exactly one identifier (keywords lex as their own
 /// token kinds, so they fail this check).
 pub fn validate_new_name(name: &str) -> Result<(), String> {
@@ -1231,6 +1271,84 @@ pub fn validate_new_name(name: &str) -> Result<(), String> {
             Ok(())
         }
         _ => Err(err()),
+    }
+}
+
+/// #4352: a site written through a `uses` qualifier (`Y.Status`, `lib.y.Status`) is one span over
+/// the whole qualified name, but the rename replaces the name alone: the edit narrows to the
+/// segment after the last dot, so the qualifier stays.
+pub fn narrow_qualified_edits(
+    plan: &mut RenamePlan,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+) {
+    // #4183: a unit's every site is its whole dotted name, which the rename replaces.
+    if plan.key.kind == SymbolKind::Unit {
+        return;
+    }
+    let old = key_segment(&plan.key.name).to_string();
+    for (path, spans) in plan.edits.iter_mut() {
+        let Some(text) = snapshots.get(path) else {
+            continue;
+        };
+        for s in spans.iter_mut() {
+            *s = narrow_qualified_span(text, *s, &old);
+        }
+        // #4455: a site written under another spelling of the declaration (`S` of
+        // `uses lib.y { Status as S }`) is the unit's own name for it, which a rename of the
+        // declaration leaves alone.
+        spans.retain(|s| !is_other_spelling(text, *s, &old));
+        spans.sort();
+        spans.dedup();
+    }
+}
+
+/// #4455: why a rename started at `offset` is refused, when the cursor is on a use of a
+/// declaration under another name (`S` of `uses lib.y { Status as S }`), or `None`. Such a rename
+/// would rename the declaration in its commons while leaving the spot the user is on, which is not
+/// what they asked for, and a rename of the alias itself is not a rename of the declaration.
+pub fn alias_rename_refusal(
+    index: &ProjectIndex,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+    path: &Path,
+    offset: usize,
+) -> Option<String> {
+    let (key, site) = index.symbol_at(path, offset)?;
+    if key.kind == SymbolKind::Unit {
+        return None; // #4183: a unit is written as itself, never under an alias.
+    }
+    let text = snapshots.get(path)?;
+    let name = key_segment(&key.name);
+    let span = narrow_qualified_span(text, site.span, name);
+    is_other_spelling(text, span, name).then(|| {
+        let written = &text[span.start..span.end];
+        format!(
+            "`{written}` is `{name}` under another name (an alias in a `uses` list): rename `{name}` at its declaration, or edit the alias by hand"
+        )
+    })
+}
+
+/// Whether `span` of `text` is a plain identifier other than `name`: a declaration written under
+/// an alias, not `name` itself or `name` after a qualifier.
+fn is_other_spelling(text: &str, span: Span, name: &str) -> bool {
+    text.get(span.start..span.end).is_some_and(|written| {
+        written != name
+            && !written.is_empty()
+            && written.chars().all(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
+/// #4352: `span` of `text`, narrowed to the segment after the last dot when it is `name` written
+/// through a qualifier (`Y.Status`), else unchanged. The one place both `prepareRename`'s range
+/// and a rename's edits take the name alone.
+pub fn narrow_qualified_span(text: &str, span: Span, name: &str) -> Span {
+    match text
+        .get(span.start..span.end)
+        .and_then(|w| w.rfind('.').map(|d| (w, d)))
+    {
+        Some((written, dot)) if &written[dot + 1..] == name => {
+            Span::new_in(span.file, span.start + dot + 1, span.end)
+        }
+        _ => span,
     }
 }
 
@@ -1255,13 +1373,21 @@ pub fn remap_site(site: &SiteRef, plan: &RenamePlan) -> SiteRef {
     };
     // The edit replaces the member segment only (`"m"` of `"Type.m"`), so the
     // length delta is against that segment, not the whole compound key name.
-    let delta = plan.new_name.len() as isize - key_segment(&plan.key.name).len() as isize;
+    // A unit's edit replaces its whole dotted name (#4183).
+    let replaced = if plan.key.kind == SymbolKind::Unit {
+        plan.key.name.len()
+    } else {
+        key_segment(&plan.key.name).len()
+    };
+    let delta = plan.new_name.len() as isize - replaced as isize;
     let shift: isize = spans.iter().filter(|s| s.end <= site.span.start).count() as isize * delta;
     let start = (site.span.start as isize + shift) as usize;
+    // An edited span inside the site (the name after a qualifier, #4352) moves its end too.
+    let end_shift: isize = spans.iter().filter(|s| s.end <= site.span.end).count() as isize * delta;
     let end = if spans.binary_search(&site.span).is_ok() {
         start + plan.new_name.len()
     } else {
-        (site.span.end as isize + shift) as usize
+        (site.span.end as isize + end_shift) as usize
     };
     SiteRef {
         path: site.path.clone(),
@@ -1278,6 +1404,18 @@ pub fn index_unchanged_modulo_rename(
     post: &ProjectIndex,
     plan: &RenamePlan,
 ) -> bool {
+    // #4183: renaming a unit re-keys every symbol it declares, since the unit is
+    // part of each key, and the unit's own key.
+    if plan.key.kind == SymbolKind::Unit {
+        let mut rekeyed = pre.clone();
+        rekeyed.symbols = pre
+            .symbols
+            .iter()
+            .map(|(k, e)| (rekeyed_in_unit(k, plan), e.clone()))
+            .collect();
+        // Every key already carries its post-rename name: nothing further is renamed.
+        return rekeyed.equals_modulo_rename(post, &plan.key, "", |s| remap_site(s, plan));
+    }
     // v0.36 (ADR 0069): a member key carries a compound name (`"Type.method"`),
     // but the edit replaces only the member segment — so the post-rename key is
     // the prefix plus the new segment, not the bare new name.
@@ -1303,6 +1441,19 @@ pub fn index_unchanged_modulo_rename(
     rekeyed.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
 }
 
+/// #4183: `key` as it reads once the unit `plan` renames has its new name: a symbol declared in
+/// the unit is declared in the new one, and the unit's own key takes the new name.
+fn rekeyed_in_unit(key: &SymbolKey, plan: &RenamePlan) -> SymbolKey {
+    let mut key = key.clone();
+    if key.unit == plan.key.name {
+        key.unit = plan.new_name.clone();
+    }
+    if key.kind == SymbolKind::Unit && key.name == plan.key.name {
+        key.name = plan.new_name.clone();
+    }
+    key
+}
+
 /// The post-rename value of a (possibly compound) key name: for a member key
 /// `"Type.method"`, replace the segment after the last `.`; for a bare name,
 /// the new name as-is.
@@ -1315,8 +1466,67 @@ fn renamed_key_name(old: &str, new_segment: &str) -> String {
 
 /// The member segment of a (possibly compound) key name — the text the rename
 /// actually edits (every site span covers exactly this).
-fn key_segment(name: &str) -> &str {
+pub fn key_segment(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
+}
+
+/// #4183 (decision B): renaming a unit does not rename its files, so the edited project is
+/// expected to carry `bynk.project.inconsistent_commons_name` where a file's path no longer
+/// matches its unit's new name. That is what the rename warns about
+/// ([`layout_warnings`]), not a reason to refuse it, so validator (1) does not count it.
+pub fn without_expected_diagnostics(
+    plan: &RenamePlan,
+    diagnostics: Vec<(PathBuf, String)>,
+) -> Vec<(PathBuf, String)> {
+    if plan.key.kind != SymbolKind::Unit {
+        return diagnostics;
+    }
+    diagnostics
+        .into_iter()
+        .filter(|(_, category)| category != "bynk.project.inconsistent_commons_name")
+        .collect()
+}
+
+/// #4183 (decision B): what a unit rename leaves for the user to do by hand. Each file that
+/// declares the unit and whose path matched its old name but not its new one is named, with
+/// where it should live. `snapshots` are the files as they were before the edits.
+pub fn layout_warnings(
+    plan: &RenamePlan,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+) -> Vec<String> {
+    if plan.key.kind != SymbolKind::Unit {
+        return Vec::new();
+    }
+    let layout = plan.new_name.replace('.', "/");
+    let mut out = Vec::new();
+    for path in plan.edits.keys() {
+        let Some((declared, _)) = snapshots
+            .get(path)
+            .and_then(|text| crate::symbols::own_declaration_name(text))
+        else {
+            continue;
+        };
+        if declared != plan.key.name {
+            continue;
+        }
+        // Paths are project-relative and still carry the include root (`src/`); the
+        // layout check wants them root-stripped. A file that did not sit where the
+        // old name put it was already inconsistent, so it is not this rename's to warn on.
+        let Some(root) = bynk_project::paths::include_prefix_of_unit(path, &plan.key.name) else {
+            continue;
+        };
+        let stripped = path.strip_prefix(&root).unwrap_or(path);
+        if bynk_project::paths::unit_path_matches(stripped, &plan.new_name) {
+            continue;
+        }
+        let shown = path.to_string_lossy().replace('\\', "/");
+        let at = root.join(&layout).to_string_lossy().replace('\\', "/");
+        out.push(format!(
+            "`{}` is now `{}`, but `{shown}` is still where `{}` was: move it to `{at}.bynk` (or into `{at}/`) so the layout matches, or `bynk check` reports `bynk.project.inconsistent_commons_name`",
+            plan.key.name, plan.new_name, plan.key.name
+        ));
+    }
+    out
 }
 
 /// Validator (1): refuse when the edited project carries a diagnostic the
@@ -1345,6 +1555,35 @@ pub fn no_new_diagnostics(
 
 #[cfg(test)]
 mod tests {
+    /// #4352: a qualified site narrows to the name after the last dot; a bare one is unchanged.
+    #[test]
+    fn a_qualified_site_narrows_to_its_name() {
+        let text = "fn f(a: Y.Status, b: lib.y.Status, c: Status) {}";
+        let at = |needle: &str| {
+            let start = text.find(needle).unwrap();
+            Span::new(start, start + needle.len())
+        };
+        let seg = |s: Span| &text[s.start..s.end];
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Status")),
+            "Status"
+        );
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("lib.y.Status"), "Status")),
+            "Status"
+        );
+        let bare = Span::new(
+            text.rfind("Status").unwrap(),
+            text.rfind("Status").unwrap() + 6,
+        );
+        assert_eq!(narrow_qualified_span(text, bare, "Status"), bare);
+        // A qualified name that is not the symbol's own is left whole.
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Other")),
+            "Y.Status"
+        );
+    }
+
     /// Context-free resolution, as the unit-scope tests read it.
     fn resolve_doc_link(
         index: &ProjectIndex,

@@ -11,7 +11,7 @@ context api
 uses money
 
 service check {
-  on call(c: Cents) -> Effect[Int] {
+  on call(c: Cents) -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

@@ -32,6 +32,15 @@ struct Claims<'a> {
     routes: HashMap<(HttpMethod, String), &'a str>,
 }
 
+/// One HTTP route of a group member, for the whole-group reachability check.
+struct GroupRoute<'a> {
+    ctx: &'a str,
+    method: HttpMethod,
+    path: String,
+    span: bynk_syntax::span::Span,
+    file: std::path::PathBuf,
+}
+
 /// Check the members of one group for a route or queue two of them claim.
 pub fn group_trigger_conflicts(
     key: &str,
@@ -41,6 +50,7 @@ pub fn group_trigger_conflicts(
     errors: &mut ErrorSink,
 ) {
     let mut claims = Claims::default();
+    let mut all_routes: Vec<GroupRoute> = Vec::new();
     for ctx in members {
         let indices = groups.get(ctx).map(Vec::as_slice).unwrap_or_default();
         for &i in indices {
@@ -69,6 +79,13 @@ pub fn group_trigger_conflicts(
                     let HandlerKind::Http { method, path } = &handler.kind else {
                         continue;
                     };
+                    all_routes.push(GroupRoute {
+                        ctx: ctx.as_str(),
+                        method: *method,
+                        path: path.clone(),
+                        span: handler.span,
+                        file: parsed[i].identity_path(),
+                    });
                     match claims.routes.get(&(*method, path.clone())) {
                         Some(&earlier) if earlier != ctx => clash(
                             "bynk.deploy.route_conflict",
@@ -85,5 +102,63 @@ pub fn group_trigger_conflicts(
                 }
             }
         }
+    }
+    unreachable_across_members(key, &all_routes, errors);
+}
+
+/// #3909: a route one member declares that the routes of the whole group answer
+/// first. One that its own context's routes already shadow is that context's
+/// `bynk.http.unreachable_route`, reported with the context.
+fn unreachable_across_members(key: &str, routes: &[GroupRoute], errors: &mut ErrorSink) {
+    let keys: Vec<(&str, &str)> = routes
+        .iter()
+        .map(|r| (r.method.as_str(), r.path.as_str()))
+        .collect();
+    for (r, covering) in crate::route_order::shadowed(&keys) {
+        let own: Vec<usize> = (0..routes.len())
+            .filter(|&i| routes[i].ctx == routes[r].ctx)
+            .collect();
+        let own_keys: Vec<(&str, &str)> = own.iter().map(|&i| keys[i]).collect();
+        let own_pos = own.iter().position(|&i| i == r);
+        if crate::route_order::shadowed(&own_keys)
+            .iter()
+            .any(|(j, _)| Some(*j) == own_pos)
+        {
+            continue;
+        }
+        let route = &routes[r];
+        let mut err = CompileError::new(
+            "bynk.http.unreachable_route",
+            route.span,
+            format!(
+                "route `{} {}` can never be reached: every path it matches is answered first by another route of Worker `{key}`",
+                route.method.as_str(),
+                route.path
+            ),
+        )
+        .with_note(
+            "contexts that share a Worker share one router: at the first segment where two routes differ, a literal segment beats a `:name` one",
+        );
+        for c in covering {
+            let other = &routes[c];
+            if other.file == route.file {
+                err = err.with_label(
+                    other.span,
+                    format!(
+                        "`{} {}` answers it first",
+                        other.method.as_str(),
+                        other.path
+                    ),
+                );
+            } else {
+                err = err.with_note(format!(
+                    "`{} {}` of context `{}` answers it first",
+                    other.method.as_str(),
+                    other.path,
+                    other.ctx
+                ));
+            }
+        }
+        errors.push_for(Some(&route.file), err);
     }
 }

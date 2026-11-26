@@ -7,20 +7,22 @@ hand-write, no layout to remember, no blank file to stare at.
 ```sh
 bynk new hello
 cd hello
+bynk test         # the starter test passes
 bynk dev          # already serving on http://localhost:8787
 ```
 
 `bynk new` scaffolds a **complete, runnable** project: a `bynk.toml`, a
-`.gitignore`, and a starter HTTP service under `src/`. The scaffold is chosen so
+`.gitignore`, a starter HTTP service under `src/`, and a test for it under
+`tests/`. The scaffold is chosen so
 [`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/) serves it unmodified — that end-to-end loop is the
 whole point. `bynk new` is the first step of the driver arc *is my machine ready*
-([`bynk doctor`](/docs/editor-and-tooling/doctor/)) → *make me something*
+([`bynk doctor`](/reference/tooling/editor-and-tooling/doctor/)) → *make me something*
 (`bynk new`) → *run it* ([`bynk dev`](/book/guides/projects-build-and-deployment/run-locally/)).
 
 > **`bynk new` needs no toolchain.** Unlike `dev`, it only writes files — it
 > shells nothing, compiles nothing, and reads no network. It works *before*
 > Node or `wrangler` are installed, which is exactly why it can be your
-> very first command. (Run [`bynk doctor`](/docs/editor-and-tooling/doctor/) once
+> very first command. (Run [`bynk doctor`](/reference/tooling/editor-and-tooling/doctor/) once
 > you want to build or serve.)
 
 ## What it writes
@@ -28,9 +30,11 @@ whole point. `bynk new` is the first step of the driver arc *is my machine ready
 ```text
 hello/
 ├── bynk.toml            # [project] name/version + optional [paths] include/exclude
-├── .gitignore           # /.bynk — the build dir `bynk dev` writes
-└── src/
-    └── hello.bynk       # context hello — a GET "/" HTTP service
+├── .gitignore           # /out, /.bynk, .wrangler/, node_modules/ — generated output and local state
+├── src/
+│   └── hello.bynk       # context hello — a GET "/" HTTP service
+└── tests/
+    └── hello.test.bynk  # one case that drives that route and checks its answer
 ```
 
 The starter is a minimal but real service — the single-file analogue of the
@@ -49,8 +53,22 @@ service api from http {
 }
 ```
 
-That is everything you need to compile and serve. From here, edit `src/hello.bynk`
-and let `bynk dev` reload it.
+That is everything you need to compile and serve. The starter's own test drives
+the route and checks the answer, and observes the `Logger` call the handler makes:
+
+```bynk,fragment
+suite hello {
+	case "the home page greets the visitor" {
+		let r <- api.GET("/") by Visitor
+		expect r is Ok("Hello from hello!")
+		expect Logger.info called once
+	}
+}
+```
+
+`bynk test` runs it in process (it needs Node and `tsc`, which `bynk new` does
+not); see [Write tests](/book/guides/testing/write-tests/) for the rest of the
+test language. From here, edit `src/hello.bynk` and let `bynk dev` reload it.
 
 ## Naming the project
 
@@ -92,4 +110,4 @@ away if you want a new one.
   `new` wrote.
 - [Lay out a project](/book/guides/projects-build-and-deployment/layout/) — how the source tree maps to contexts and
   commons as the project grows beyond one file.
-- Reference: [the `bynk` driver CLI](/docs/bynk-cli/).
+- Reference: [the `bynk` driver CLI](/reference/tooling/bynk-cli/).

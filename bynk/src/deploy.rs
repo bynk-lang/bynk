@@ -10,8 +10,9 @@
 //! imports, the `mod` declarations, and the re-exports external callers see,
 //! while each child opens with `use super::*;` and documents its own items.
 //!
-//! - `config.rs` — the generated `wrangler.toml` / build-output model, and the
-//!   `[env.<name>]` synthesis a non-default `--env` needs.
+//! - `config.rs` — the generated `wrangler.toml` / build-output model. (The
+//!   `[env.<name>]` block a non-default `--env` needs is `bynk-emit`'s
+//!   `wrangler::environment`, which `apply.rs` calls.)
 //! - `graph.rs` — the binding graph, the upload order it forces, and the
 //!   deploy-time contract-skew check.
 //! - `ledger.rs` — the committed `bynk.deploy.lock`: what this project has
@@ -20,21 +21,22 @@
 //!   gate that refuses a build breaking it (I4, #1970).
 //! - `provisioning.rs` — every call out to the `wrangler` CLI.
 //! - `secrets.rs` — which secrets a run sets, and where each value comes from.
-//! - `plan.rs` — the plan/apply flow that drives all of the above.
+//! - `plan.rs` — the plan/apply flow that drives all of the above, in `plan/`'s five children:
+//!   `run`, `model`, `keys`, `skew` and `messages`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, IsTerminal, Write};
 use std::path::Path;
-use std::process::{ExitCode, Stdio};
+use std::process::ExitCode;
 
 use bynk_check::contract_compat::{Compatibility, ServiceShape, check_call};
 use serde::{Deserialize, Serialize};
 
-use crate::doctor::{self, Capability, Context, DoctorOptions, Report};
-use crate::probe::{self, Provenance, Toolbox};
-use crate::report::{self, Format};
-use crate::shell::exit_status_byte;
-use crate::workers;
+use crate::cloudflare::{CloudflareApi, Exit, Failure, PushCall, VectorizeOp, Wrangler};
+use crate::doctor::{self, Capability, Context, DoctorOptions};
+#[cfg(test)]
+use crate::probe::Provenance;
+use crate::probe::{self, Toolbox};
 
 const LOCK_FILE: &str = "bynk.deploy.lock";
 // P7.4 (#1305): every non-test use of the placeholder now goes through
@@ -46,11 +48,15 @@ const LOCK_FILE: &str = "bynk.deploy.lock";
 use bynk_emit::emitter::wrangler::KV_NAMESPACE_ID_PLACEHOLDER;
 
 mod agent_move;
+mod apply;
 mod config;
 pub(crate) mod containers;
+mod declared;
 mod destinations;
+pub(crate) mod email;
 mod facts;
 mod first_deploy;
+mod gates;
 mod graph;
 mod hyperdrive;
 mod kind;
@@ -66,9 +72,11 @@ mod senders;
 mod vectorize;
 
 use agent_move::*;
+use apply::*;
 use config::*;
 use containers::*;
-use destinations::*;
+use declared::*;
+use gates::*;
 use graph::*;
 use kind::*;
 use ledger::*;
@@ -121,9 +129,9 @@ pub(crate) fn deployed_environments(
 pub(crate) fn local_edge_keys(
     workers_dir: &Path,
     workers: &[String],
-    project_root: &Path,
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources_for(workers_dir, workers, project_root)?;
+    let resources = project_resources(workers_dir, workers, model)?;
     let edges = project_edges(&resources);
     for edge in &edges {
         edge.ends()?;
@@ -152,8 +160,9 @@ pub(crate) fn local_edge_keys(
 pub(crate) fn local_session_keys(
     workers_dir: &Path,
     workers: &[String],
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Vec<String>>, String> {
-    let resources = project_resources(workers_dir, workers)?;
+    let resources = project_resources(workers_dir, workers, model)?;
     Ok(workers
         .iter()
         .map(|w| {
@@ -169,6 +178,12 @@ pub(crate) fn local_session_key(binding: &str) -> String {
     secrets::local_session_key(binding)
 }
 
+#[cfg(test)]
+mod apply_tests;
+// Unix: it runs each call through the real adapter with `sh -c`, and pins the OS's own text for a
+// wrangler that cannot start.
+#[cfg(all(test, unix))]
+mod messages_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]
@@ -263,11 +278,13 @@ mod tests {
                 actor: "Ledger".into(),
                 binding: "LEDGER_CALL_KEY".into(),
                 worker: Some("ledger-svc".into()),
+                queue: false,
             },
             ForeignCaller {
                 actor: "Legacy".into(),
                 binding: "LEGACY_CALL_KEY".into(),
                 worker: None,
+                queue: false,
             },
         ];
         out.push_str(&plan_report(
@@ -764,6 +781,7 @@ mod tests {
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         let rotating: BTreeMap<Edge, EdgeKey> = [(
             edge.clone(),

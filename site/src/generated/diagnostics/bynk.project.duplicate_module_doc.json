@@ -1,0 +1,10 @@
+{
+  "blurb": "A unit's module doc is one piece of prose. When a unit is split across files, at most one of them may open with it: with two, the tools would have to join them in some file order and the result would read oddly. The error names every file that carries one. Keep the doc in the file that best introduces the unit, and remove the others.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.duplicate_module_doc",
+  "constructs": [],
+  "example": "// text/case.bynk\n---\nText helpers.\n---\ncommons text\n\n// text/trim.bynk\n---\nTrimming.\n---\ncommons text       // ✗ a second module doc\n\ncommons text       // ✓ the doc stays in case.bynk",
+  "severity": "error",
+  "summary": "More than one file of a multi-file unit carries a module doc."
+}

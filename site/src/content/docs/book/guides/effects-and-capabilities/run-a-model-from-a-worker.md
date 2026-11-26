@@ -213,12 +213,12 @@ the call goes ahead. Once you have read it, silence the warning in `bynk.toml`:
 ai = "allow"
 ```
 
-See [Acknowledging a remote-only binding](/docs/manifest/#acknowledging-a-remote-only-binding).
+See [Acknowledging a remote-only binding](/reference/tooling/manifest/#acknowledging-a-remote-only-binding).
 Read the setting at the start of a session: a change takes effect the next time
 `bynk dev` starts.
 
 ## See also
 
-- [`Ai` in the Cloudflare capabilities reference](/book/reference/bynk-capabilities/#workers-ai-ai)
+- [`Ai` in the Cloudflare capabilities reference](/reference/bynk-capabilities/#workers-ai-ai)
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/), the REST route for code that must run outside a Worker
 - [Rate-limit a route](/book/guides/effects-and-capabilities/rate-limit-a-route/)

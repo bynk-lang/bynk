@@ -7,7 +7,7 @@ export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_a_b_() {
       return handlers.api.http_GET_a_b_(deps);

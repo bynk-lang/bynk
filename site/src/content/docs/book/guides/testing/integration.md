@@ -27,17 +27,18 @@ case "a small order prices with tax" as integration { … }  // real collaborato
 ```
 
 At `unit` a collaborator's provision is under your control (you may stub a seam
-with [`stub`](/book/reference/testing/#stub)). At `integration` the real
+with [`stub`](/reference/testing/#stub)). At `integration` the real
 collaborators *within the context* run, so their own invariants and contracts run
 too. A green `unit` case that *fails* when promoted means a collaborator's
 invariant has caught a defect a stub was hiding, with **no new test code**.
 
 Neither tier crosses into **another context**. A consumed context isn't stood up
-in-process, and `stub` doubles capabilities, not a context's services, so a
-`unit` or `integration` case, or a `property`, that reaches another context's
-service (directly, or through a service or agent handler that calls one) is
-[`bynk.tier.cross_context_needs_system`](/book/reference/diagnostics/bynk.tier.cross_context_needs_system/).
-That flow belongs in a `system` suite.
+in-process, so a `unit` or `integration` case, or a `property`, that reaches
+another context's service (directly, or through a service or agent handler that
+calls one) is
+[`bynk.tier.cross_context_needs_system`](/reference/diagnostics/bynk.tier.cross_context_needs_system/)
+unless it [stubs that service](/book/guides/testing/test-a-handler-that-calls-another-context/).
+A flow that really crosses belongs in a `system` suite.
 
 ## `system`: a suite of its own
 
@@ -56,14 +57,14 @@ suite shop.orders as system {
 
 A `system` suite holds `system` cases only. A suite that mixes them with `unit`
 or `integration` cases is
-[`bynk.tier.mixed_system_suite`](/book/reference/diagnostics/bynk.tier.mixed_system_suite/):
+[`bynk.tier.mixed_system_suite`](/reference/diagnostics/bynk.tier.mixed_system_suite/):
 keep each target's in-process cases and its `system` cases in separate suites.
 
 ### Configuring the Workers: a fake provider
 
 A `stub` has no seam to override at `system`, because each Worker builds its own
 providers from its `env`. To run a flow with a fake provider, give the suite the
-variables that choose it with an [`env`](/book/reference/testing/#env) clause.
+variables that choose it with an [`env`](/reference/testing/#env) clause.
 The entries go on every participant's `env`, and a case's `env` overrides a name
 for that case only:
 
@@ -120,7 +121,7 @@ dependency graph. (The old `suite integration "…" { wires … }` form and its
 
 A `system` case whose inferred set is fewer than two contexts — the target and at
 least one consumed context — is
-[`bynk.tier.system_needs_wire`](/book/reference/diagnostics/bynk.tier.system_needs_wire/):
+[`bynk.tier.system_needs_wire`](/reference/diagnostics/bynk.tier.system_needs_wire/):
 `system` describes the *cross-context, wired* tier, so it needs a wire to cross.
 To exercise one context's real collaborators without a wire, use `as integration`.
 
@@ -161,7 +162,7 @@ provides Bank = StubBank {
 }
 
 service authorise {
-	on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {
+	on call(cents: Int) -> Effect[Result[Int, PayError]] by Caller given Bank {
 		let r <- Bank.charge(cents)
 		r
 	}
@@ -177,7 +178,7 @@ exports transparent { OrderError }
 type OrderError = enum { Rejected }
 
 service place {
-	on call(cents: Int) -> Effect[Result[Int, OrderError]] {
+	on call(cents: Int) -> Effect[Result[Int, OrderError]] by Caller {
 		let a <- Pay.authorise(cents)
 		match a {
 			Ok(n) => Ok(n),
@@ -245,6 +246,6 @@ mode under `out/workers/`, stands each one up as an in-process Worker, wires the
 bindings, type-checks everything with `tsc --strict`, and runs it on Node. No
 `wrangler` or `miniflare` is needed.
 
-See the [testing reference](/book/reference/testing/#tiers-the-as-tier-clause), the
-[`stub`](/book/reference/testing/#stub) seam override, and
-[`bynk.tier.*`](/book/reference/diagnostics/#test-tiers) and [`bynk.stub.*`](/book/reference/diagnostics/#stubs) errors.
+See the [testing reference](/reference/testing/#tiers-the-as-tier-clause), the
+[`stub`](/reference/testing/#stub) seam override, and
+[`bynk.tier.*`](/reference/diagnostics/#test-tiers) and [`bynk.stub.*`](/reference/diagnostics/#stubs) errors.

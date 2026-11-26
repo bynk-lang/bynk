@@ -373,7 +373,8 @@ impl Edge {
 
 /// Every edge of the project: a Worker's Service Binding to another of the
 /// project's Workers is one (a caller to the context it calls, or a publisher
-/// to a subscriber). A binding to anything else is not a Bynk edge.
+/// to a subscriber), and so is a queue producer's signing key to a signed consumer's Worker
+/// (#3899). A binding to anything else is not a Bynk edge.
 pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge> {
     let members = |worker: &str| resources[worker].members.clone();
     let mut edges: Vec<Edge> = resources
@@ -390,6 +391,19 @@ pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge
                 })
         })
         .collect();
+    // #3899: a Worker whose queue producers sign for a consumer holds an edge key with the
+    // consumer's Worker, as a call does, though no Service Binding joins them.
+    edges.extend(resources.iter().flat_map(|(caller, r)| {
+        r.signs_queue_to
+            .iter()
+            .filter(|callee| resources.contains_key(*callee))
+            .map(|callee| Edge {
+                caller: caller.clone(),
+                callee: callee.clone(),
+                caller_contexts: members(caller),
+                callee_contexts: members(callee),
+            })
+    }));
     // #3562: a group's members call each other through the Worker's own dispatcher
     // (G3-2), signed as any call is, so the Worker holds a key for each of them. The
     // Worker binds to itself, which is no deploy-order edge but is a key edge.
@@ -641,6 +655,19 @@ pub(crate) fn foreign_hand_off(
     runner: &str,
 ) -> String {
     let context = context_of(worker);
+    if caller.queue {
+        // #3899: a producer of queue messages holds the value however its own Worker names it, and
+        // signs each message with it, so there is no key name or command to give.
+        return format!(
+            "bynk: note: minted {binding} for `{actor}`, a foreign producer of `{context}`'s queues. Its operator keeps this value where their producer reads it:\n\n  \
+             {value}\n\n  \
+             It signs each message it sends as `{actor}` under that key; see the signed queue messages section of the wire format reference.\n  \
+             This is the only time the value is shown: `{deploy} --force` mints a new one.\n",
+            binding = caller.binding,
+            actor = caller.actor,
+            deploy = deploy_command(environment),
+        );
+    }
     let key = bynk_emit::edge_key_to(&context).unwrap_or_else(|| "BYNK_CALL_KEY".to_string());
     let name = caller
         .worker
@@ -709,7 +736,7 @@ pub(crate) struct Secrets<'a> {
 /// except the advisory presence read.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prepare_bindings(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     worker: &str,
     declared: &Resources,
@@ -742,7 +769,7 @@ pub(crate) fn prepare_bindings(
     // before the loop, so this reuses that answer.
     let present = match secrets.listed.get(worker) {
         Some(listed) => listed.clone(),
-        None => list_secrets(provenance, worker_dir, environment),
+        None => list_secrets(api, worker_dir, environment),
     };
     let mut prepared = Vec::new();
     // I2 (#1971): this Worker's end of each edge being keyed, first, so a
@@ -855,15 +882,20 @@ pub(crate) fn binding_put_failure(
 /// it: everything that can fail for a reason the user can fix — a missing value,
 /// a malformed file — has already happened by the time this runs.
 pub(crate) fn apply_secrets(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     worker_dir: &Path,
     worker: &str,
     prepared: &[(String, String)],
     environment: &str,
 ) -> Result<(), DeployFailure> {
     for (binding_name, value) in prepared {
-        set_secret(provenance, worker_dir, binding_name, value, environment).map_err(|e| {
-            DeployFailure::driver(binding_put_failure(environment, worker, binding_name, &e))
+        set_secret(api, worker_dir, binding_name, value, environment).map_err(|e| {
+            DeployFailure::driver(binding_put_failure(
+                environment,
+                worker,
+                binding_name,
+                &e.to_string(),
+            ))
         })?;
         eprintln!(
             "{}",
@@ -1270,7 +1302,12 @@ WITH_EQUALS=a=b
         const SENTINEL: &str = "sk_live_do_not_commit_me";
         let mut lock = DeployLock::default();
         lock.record_deployed("default", "api", Some(Default::default()));
-        lock.record_queue("default", "intake");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "intake",
+        );
         let text = toml::to_string_pretty(&lock).expect("the ledger serialises");
         assert!(!text.contains(SENTINEL));
         assert!(
@@ -1437,6 +1474,31 @@ WITH_EQUALS=a=b
         // A group of one has nobody to call.
         resources.get_mut("front").unwrap().members.truncate(1);
         assert!(project_edges(&resources).is_empty());
+    }
+
+    #[test]
+    fn a_queue_producer_signing_for_a_consumer_holds_an_edge_key_with_it() {
+        // #3899: no Service Binding joins them, yet the producer signs under the key of its edge
+        // to the consumer, which verifies under the same one.
+        let mut resources = BTreeMap::new();
+        resources.insert(
+            "shop-orders".to_string(),
+            Resources {
+                signs_queue_to: vec!["shop-fulfil".to_string(), "elsewhere".to_string()],
+                ..Resources::default()
+            },
+        );
+        resources.insert("shop-fulfil".to_string(), Resources::default());
+        let edges = project_edges(&resources);
+        assert_eq!(edges.len(), 1, "{edges:?}");
+        assert_eq!(
+            edge_keys_of("shop-orders", &edges),
+            ["BYNK_CALL_TO_SHOP__FULFIL"]
+        );
+        assert_eq!(
+            edge_keys_of("shop-fulfil", &edges),
+            ["BYNK_CALL_FROM_SHOP__ORDERS"]
+        );
     }
 
     #[test]
@@ -1742,6 +1804,7 @@ WITH_EQUALS=a=b
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         let text = foreign_hand_off("default", "shop-orders", &caller, "abc123", "npx");
         assert!(
@@ -1765,6 +1828,28 @@ WITH_EQUALS=a=b
         );
     }
 
+    /// #3899: a foreign producer of queue messages is told the value and what it is for, not a
+    /// `wrangler` key name for a call.
+    #[test]
+    fn a_queue_senders_hand_off_gives_the_value_and_no_call_key() {
+        let producer = ForeignCaller {
+            actor: "Legacy".into(),
+            binding: "LEGACY_QUEUE_KEY".into(),
+            worker: None,
+            queue: true,
+        };
+        let text = foreign_hand_off("default", "shop", &producer, "abc123", "npx");
+        assert!(text.contains("abc123"), "{text}");
+        assert!(
+            text.contains("a foreign producer of `shop`'s queues") && text.contains("`Legacy`"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("BYNK_CALL_TO") && !text.contains("wrangler secret put"),
+            "a queue sender signs messages, it does not call: {text}"
+        );
+    }
+
     #[test]
     fn the_hand_off_names_the_detected_managers_runner() {
         use bynk_driver::npm_install::PackageManager::{Bun, Npm, Pnpm, Yarn};
@@ -1772,6 +1857,7 @@ WITH_EQUALS=a=b
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         for (manager, runner) in [
             (Npm, "npx"),

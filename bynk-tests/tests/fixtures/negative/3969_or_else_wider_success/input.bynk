@@ -1,0 +1,11 @@
+commons demo.orelsewidersuccess
+
+type Qty = Int where InRange(1, 100)
+
+fn anyInt() -> Result[Int, String] {
+	Ok(-1)
+}
+
+fn recover(r: Result[Qty, String]) -> Result[Qty, String] {
+	r.orElse((e) => anyInt())
+}

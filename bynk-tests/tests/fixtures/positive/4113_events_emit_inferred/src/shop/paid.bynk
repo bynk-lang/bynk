@@ -1,0 +1,17 @@
+context shop.paid
+
+consumes bynk { Events, Idempotency }
+
+// #4113: `Events.emit(e)` infers its event type from the argument, as
+// `Idempotency.remember(...)` infers `T`.
+event Paid = {
+  orderId: String,
+}
+
+service api from http {
+  on POST("/paid") () -> Effect[HttpResult[String]] by Visitor given Events, Idempotency {
+    let _ <- Idempotency.remember("k", true, 1.hour)
+    let _ <- Events.emit(Paid { orderId: "o1" })
+    Created("sent")
+  }
+}

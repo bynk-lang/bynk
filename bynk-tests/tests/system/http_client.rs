@@ -562,6 +562,231 @@ fn a_plain_json_route_and_a_tagged_one_decode_to_the_same_null() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// #3916: on a route that answers its errors as problem details, a handler's `BadRequest` and the
+/// router's `400` share a status and a `Problem` shape, and the client tells them apart: the variant's
+/// problem has no `kind` and the rejection's has one.
+const PROBLEM_DRIVER: &str = r#"
+import worker from "./out/workers/api/index.js";
+import { createClient } from "./dist/api.js";
+// A call whose body the client would refuse to send is sent as written here, so the router rejects it.
+const send = (body) => (url, init) => worker.fetch(new Request(url, body === undefined ? init : { ...init, body }), {});
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const ok = createClient({ baseUrl: "http://api.test", fetch: send(undefined) });
+const bad = createClient({ baseUrl: "http://api.test", fetch: send('{"qty":"many"}') });
+show("variant", await ok.api.postWidgets({ qty: 1 }));
+show("rejection", await bad.api.postWidgets({ qty: 2 }));
+"#;
+
+#[test]
+fn a_problem_variant_and_a_problem_rejection_at_one_status_are_told_apart() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("problem");
+    let proj = dir.join("project");
+    fs::create_dir_all(proj.join("src")).unwrap();
+    fs::write(
+        proj.join("bynk.toml"),
+        "[project]\nname = \"problems\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        proj.join("src/api.bynk"),
+        "context api\n\ntype Widget = { qty: Int }\n\n\
+         service api from http {\n  errors { format: problem }\n\n  \
+           on POST(\"/widgets\") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {\n    \
+             if body.qty == 1 { BadRequest(\"no such widget\") } else { Created(\"ok\") }\n  }\n}\n",
+    )
+    .unwrap();
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the problem-details client");
+    let out = run_driver(&dir, PROBLEM_DRIVER, &[]);
+    let variant: serde_json::Value = serde_json::from_str(line(&out, "variant")).unwrap();
+    assert_eq!(variant["kind"], "BadRequest", "{out}");
+    assert_eq!(variant["problem"]["type"], "about:blank", "{out}");
+    assert_eq!(variant["problem"]["detail"], "no such widget", "{out}");
+    let rejection: serde_json::Value = serde_json::from_str(line(&out, "rejection")).unwrap();
+    assert_eq!(rejection["kind"], "StructuralMismatch", "{out}");
+    assert_eq!(
+        rejection["problem"]["type"], "https://bynk-lang.org/problems/structural-mismatch",
+        "{out}"
+    );
+    assert_eq!(rejection["problem"]["kind"], "StructuralMismatch", "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #4434: a `@rateLimit` route's router `429` (`RateLimited`) and a handler's own `TooManyRequests`
+/// share a status, and the client tells them apart in both modes: by the `error` a handler's variant
+/// carries and the `kind` the router's refusal does, and in problem mode by the same `kind`.
+const RATE_LIMIT_DRIVER: &str = r#"
+import worker from "./out/workers/api/index.js";
+import { createClient } from "./dist/api.js";
+// A limiter that answers the same to every key: `allow` is whether it lets the request through.
+const limiter = (allow) => ({ limit: async () => ({ success: allow }) });
+const via = (allow) => (url, init) => worker.fetch(new Request(url, init), { RATELIMIT_SIGNUP_LIMIT: limiter(allow) });
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const refused = createClient({ baseUrl: "http://api.test", fetch: via(false) });
+const allowed = createClient({ baseUrl: "http://api.test", fetch: via(true) });
+show("router", await refused.api.postMixed("slow"));
+show("handler", await allowed.api.postMixed("slow"));
+show("fine", await allowed.api.postMixed("fine"));
+"#;
+
+fn rate_limit_project(dir: &Path, problem: bool) -> PathBuf {
+    let proj = dir.join("project");
+    fs::create_dir_all(proj.join("src")).unwrap();
+    fs::write(
+        proj.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    )
+    .unwrap();
+    let errors = if problem {
+        "  errors { format: problem }\n\n"
+    } else {
+        ""
+    };
+    fs::write(
+        proj.join("src/api.bynk"),
+        format!(
+            "context api\n\nconsumes bynk.cloudflare {{ RateLimit }}\n\n\
+             capability SignupLimit = RateLimit @limit(1) @period(60.seconds)\n\n\
+             service api from http {{\n{errors}  \
+               @rateLimit(SignupLimit, key: clientIp)\n  \
+               on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {{\n    \
+                 if body == \"slow\" {{ TooManyRequests(\"slow down\") }} else {{ Created(\"ok\") }}\n  }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    proj
+}
+
+#[test]
+fn a_router_429_and_a_handler_429_are_told_apart() {
+    if skip_without_tools() {
+        return;
+    }
+    for problem in [false, true] {
+        let dir = scratch(if problem {
+            "rate-limit-problem"
+        } else {
+            "rate-limit"
+        });
+        let proj = rate_limit_project(&dir, problem);
+        generate(&proj, &dir, &[]);
+        compile_worker(&proj, &dir);
+        tsc(&dir, "the rate-limited client");
+        let out = run_driver(&dir, RATE_LIMIT_DRIVER, &[]);
+        let router: serde_json::Value = serde_json::from_str(line(&out, "router")).unwrap();
+        let handler: serde_json::Value = serde_json::from_str(line(&out, "handler")).unwrap();
+        let fine: serde_json::Value = serde_json::from_str(line(&out, "fine")).unwrap();
+        assert_eq!(router["status"], 429, "{out}");
+        assert_eq!(router["kind"], "RateLimited", "problem={problem}: {out}");
+        assert_eq!(handler["status"], 429, "{out}");
+        assert_eq!(
+            handler["kind"], "TooManyRequests",
+            "problem={problem}: {out}"
+        );
+        assert_eq!(fine["kind"], "Created", "{out}");
+        if problem {
+            assert_eq!(router["problem"]["kind"], "RateLimited", "{out}");
+            assert_eq!(
+                router["problem"]["type"], "https://bynk-lang.org/problems/rate-limited",
+                "{out}"
+            );
+            assert_eq!(handler["problem"]["type"], "about:blank", "{out}");
+            assert_eq!(handler["problem"]["detail"], "slow down", "{out}");
+        } else {
+            assert_eq!(router["error"]["kind"], "RateLimited", "{out}");
+            assert!(router["error"]["details"].is_string(), "{out}");
+            assert_eq!(handler["error"], "slow down", "{out}");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+/// #3910: a typed path parameter is written as its text: an `Int` its digits, an enum its
+/// variant's name, and the router decodes it back.
+const PATH_DRIVER: &str = r#"
+import worker from "./out/workers/shop-api/index.js";
+import { createClient } from "./dist/api.js";
+const viaWorker = (url, init) => worker.fetch(new Request(url, init), {});
+const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+console.log("keys", Object.keys(c.api).sort().join(","));
+const show = (label, v) => console.log(label, JSON.stringify(v));
+show("order", await c.api.getOrderById(42));
+show("status", await c.api.getOrdersStatuByS({ tag: "Closed" }));
+show("price", await c.api.getPriceByP({ coefficient: 1250n, scale: 2 }));
+"#;
+
+#[test]
+fn a_typed_path_parameter_round_trips_through_the_client() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("typed-path");
+    let proj = dir.join("project");
+    copy_project(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/3910_http_path_param_types"),
+        &proj,
+    );
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the typed path-parameter client");
+    let out = run_driver(&dir, PATH_DRIVER, &[]);
+    assert_eq!(
+        line(&out, "order"),
+        r#"{"status":200,"kind":"Ok","body":"order 42"}"#
+    );
+    assert_eq!(
+        line(&out, "status"),
+        r#"{"status":200,"kind":"Ok","body":"closed"}"#
+    );
+    assert_eq!(
+        line(&out, "price"),
+        r#"{"status":200,"kind":"Ok","body":"price 12.50"}"#
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #3911: a typed `headers` record is sent as request headers, under each field's `@name`.
+const HEADERS_DRIVER: &str = r#"
+import worker from "./out/workers/shop-api/index.js";
+import { createClient } from "./dist/api.js";
+const viaWorker = (url, init) => worker.fetch(new Request(url, init), {});
+const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+console.log("keys", Object.keys(c.api).sort().join(","));
+const show = (label, v) => console.log(label, JSON.stringify(v));
+show("probe", await c.api.getProbe({ length: 7, key: "abcdefgh", tags: ["a", "b"], mode: { tag: "Slow" } }));
+show("short", await c.api.getProbe({ length: 7, key: "x", tags: [] }));
+"#;
+
+#[test]
+fn a_typed_headers_record_is_sent_as_headers_by_the_client() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("typed-headers");
+    let proj = dir.join("project");
+    copy_project(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/3911_http_typed_headers"),
+        &proj,
+    );
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the typed headers client");
+    let out = run_driver(&dir, HEADERS_DRIVER, &[]);
+    assert_eq!(
+        line(&out, "probe"),
+        r#"{"status":200,"kind":"Ok","body":"7 abcdefgh 2 slow 5"}"#
+    );
+    // The client checks the refinement before sending, as the server would.
+    assert!(line(&out, "short").contains("Invalid"), "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// `GET path` on `port`: the response, or why there is none yet.
 fn get(port: u16, path: &str) -> Result<String, String> {
     let addr = format!("127.0.0.1:{port}");
@@ -604,8 +829,8 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
     let out_log = fs::File::create(&log).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
-            .args(["-y", wrangler::SPEC, "dev"])
+        wrangler::npx()
+            .args(["dev"])
             .args([
                 "--port",
                 &port.to_string(),
@@ -879,8 +1104,8 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
-            tools::base_command("npx")
-                .args(["-y", wrangler::SPEC, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),
@@ -982,6 +1207,24 @@ const seen = [];
 for await (const e of live.events) { seen.push(e); break; }
 show("feed-break", seen);
 show("feed-404", await c.api.getFeedByMode("off"));
+
+// #3918: the same routes through the browser's own `EventSource`.
+const opened = [];
+globalThis.EventSource = class { constructor(url, init) { opened.push([url, init.withCredentials]); } };
+const viaEs = createClient({ baseUrl: "http://x", credentials: "include" }).api;
+viaEs.getTicksEventSource();
+viaEs.getFeedByModeEventSource("a b");
+c.api.getTicksEventSource();
+show("es-opened", opened);
+show("es-dot", viaEs.getFeedByModeEventSource(".."));
+// #3918: a header or a cookie cannot reach the wire through an `EventSource`, so one that is set is
+// refused, not dropped; an absent optional header is fine.
+opened.length = 0;
+show("es-header-absent", [viaEs.getResumeEventSource({}) instanceof globalThis.EventSource, opened.length]);
+show("es-header-set", viaEs.getResumeEventSource({ lastId: "x" }));
+show("es-cookie-set", viaEs.getWatchEventSource({ watcher: "w" }));
+delete globalThis.EventSource;
+show("es-none", Object.keys(viaEs.getTicksEventSource()));
 
 // The parser, over frames cut at awkward places and written by other servers.
 const framed = (parts, type = "text/event-stream") => async () =>
@@ -1085,6 +1328,31 @@ fn check_raw(out: &str) {
     );
     assert_eq!(v("feed-break"), r#"["a"]"#);
     assert_eq!(v("feed-404"), r#"{"status":404,"kind":"NotFound"}"#);
+    // An `EventSource` opens the URL a call would fetch, with credentials only when asked.
+    let opened = v("es-opened");
+    assert!(
+        opened.contains(r#"["http://x/ticks",true]"#)
+            && opened.contains(r#"["http://x/feed/a%20b",true]"#),
+        "{opened}"
+    );
+    assert!(opened.ends_with(r#",false]]"#), "{opened}");
+    assert!(
+        v("es-dot").contains(r#""kind":"Invalid""#),
+        "{}",
+        v("es-dot")
+    );
+    assert_eq!(v("es-header-absent"), "[true,1]");
+    let header = v("es-header-set");
+    assert!(
+        header.contains(r#""kind":"Invalid""#) && header.contains("headers.last-event-id"),
+        "{header}"
+    );
+    let cookie = v("es-cookie-set");
+    assert!(
+        cookie.contains(r#""kind":"Invalid""#) && cookie.contains(r#""path":"cookies""#),
+        "{cookie}"
+    );
+    assert_eq!(v("es-none"), r#"["kind","cause"]"#);
     // The server splits an element on `\n` only, so a `\r` in one ends a line for a reader.
     assert_eq!(v("cr"), r#"["a"]"#);
     // The parser follows the specification.
@@ -1279,8 +1547,8 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
-            tools::base_command("npx")
-                .args(["-y", wrangler::SPEC, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),

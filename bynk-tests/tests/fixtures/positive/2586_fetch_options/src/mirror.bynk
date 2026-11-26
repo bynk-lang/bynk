@@ -6,7 +6,7 @@ context mirror
 consumes bynk { Fetch, Logger, Request, Method, FetchOptions, Redirect, LogLevel, FetchError }
 
 service probe {
-	on call(url: String) -> Effect[Int] given Fetch, Logger {
+	on call(url: String) -> Effect[Int] by Caller given Fetch, Logger {
 		let req = Request { method: Patch, url: url, contentType: None, authorization: None, headers: Map.empty(), body: Some("{}") }
 		let res <- Fetch.sendWith(req, FetchOptions { timeout: Some(5.seconds), redirect: Manual })
 		match res {
@@ -27,7 +27,7 @@ service probe {
 }
 
 service headProbe {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let res <- Fetch.send(Request { method: Head, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
 		match res {
 			Ok(r) => Effect.pure(r.status)

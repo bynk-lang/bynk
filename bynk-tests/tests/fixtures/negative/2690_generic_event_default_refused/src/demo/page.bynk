@@ -13,7 +13,7 @@ event Listed = {
 }
 
 service list {
-  on call(id: String) -> Effect[()] given Events {
+  on call(id: String) -> Effect[()] by Caller given Events {
     Events.emit[Listed](Listed { id: id })
   }
 }

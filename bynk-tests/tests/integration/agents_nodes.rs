@@ -125,7 +125,7 @@ provides Via = RoomVia {
 }
 
 service api {
-	on call(v: Int) -> Effect[Result[Int, String]] given Via {
+	on call(v: Int) -> Effect[Result[Int, String]] by Caller given Via {
 		let a <- Room("a").bump(v)
 		let k = "lit"
 		let b <- Room(k).bump(a)
@@ -140,20 +140,20 @@ service api {
 }
 
 service meter {
-	on call() -> Effect[Int] given Meter {
+	on call() -> Effect[Int] by Caller given Meter {
 		Room("m").metered()
 	}
 }
 
 service meter_bound {
-	on call() -> Effect[Int] given Meter {
+	on call() -> Effect[Int] by Caller given Meter {
 		let r = Room("m")
 		r.metered()
 	}
 }
 
 service bare {
-	on call() -> Effect[Result[Int, String]] {
+	on call() -> Effect[Result[Int, String]] by Caller {
 		let r = Room(pick("y")?)
 		let n <- r.bump(1)
 		Effect.pure(Ok(n))
@@ -170,7 +170,7 @@ agent Tag {
 }
 
 service tagged {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		Tag("abc").touch()
 	}
 }

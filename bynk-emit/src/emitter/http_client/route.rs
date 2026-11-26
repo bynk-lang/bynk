@@ -9,11 +9,12 @@ use bynk_check::contract;
 use bynk_check::project_model::TypeDecl;
 use bynk_check::wire::{TypeBody, TypeRef};
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt,
-    TsType, TsTypeMember,
+    TsArrowBody, TsBinaryOp, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsStmt, TsType,
+    TsTypeMember,
 };
 
 use super::*;
+use crate::ts_build::{binary, call, const_typed, ident, member, str_lit};
 
 impl Gen {
     // -----------------------------------------------------------------
@@ -27,7 +28,7 @@ impl Gen {
         rp: &RoutePlan,
         types: &HashMap<String, Arc<TypeDecl>>,
     ) -> Result<RouteText, ClientError> {
-        let ident = format!("__route_{}_{}", sanitise(service), rp.function);
+        let route_ident = format!("__route_{}_{}", sanitise(service), rp.function);
         let hash = contract::http_route_contract_hash(&Self::contract_of(r), types);
         let success = r.success.as_ref().map(|t| self.renamed(t));
         let replies = self.replies(r, &success)?;
@@ -83,6 +84,12 @@ impl Gen {
                             ),
                             TsTypeMember::readonly_prop("details", TsType::named("string")),
                         ]),
+                    ));
+                }
+                ReplyPayload::Problem | ReplyPayload::ProblemRejection => {
+                    fields.push(TsTypeMember::readonly_prop(
+                        "problem",
+                        TsType::named("Problem"),
                     ));
                 }
                 ReplyPayload::Events => {
@@ -150,17 +157,17 @@ impl Gen {
                     let t = success.clone().expect("a value reply has a success type");
                     let decode = serialisation::deserialise_ref_via(&t, "", &self.ru);
                     let converts = self.holds_option(&t);
-                    let conv = self.convert(&t, Dir::ToPublic, id("v"), 0)?;
+                    let conv = self.convert(&t, Dir::ToPublic, ident("v"), 0)?;
                     let decode = if converts {
                         // `(json) => __then(decode(json, "$"), (v) => conv)`
                         arrow(
                             vec!["json"],
                             call(
-                                "__then",
+                                ident("__then"),
                                 vec![
                                     TsExpr::Call {
                                         callee: Box::new(decode),
-                                        args: vec![id("json"), str_lit("$")],
+                                        args: vec![ident("json"), str_lit("$")],
                                     },
                                     arrow(vec!["v"], conv),
                                 ],
@@ -180,6 +187,8 @@ impl Gen {
                 | other @ ReplyPayload::None
                 | other @ ReplyPayload::BoundaryError
                 | other @ ReplyPayload::BoundaryRefusal
+                | other @ ReplyPayload::Problem
+                | other @ ReplyPayload::ProblemRejection
                 | other @ ReplyPayload::Raw
                 | other @ ReplyPayload::RawEtag
                 | other @ ReplyPayload::RawTagged
@@ -188,6 +197,8 @@ impl Gen {
                         ReplyPayload::Message => "message",
                         ReplyPayload::Location => "location",
                         ReplyPayload::BoundaryError | ReplyPayload::BoundaryRefusal => "boundary",
+                        ReplyPayload::Problem => "problem",
+                        ReplyPayload::ProblemRejection => "problem-rejection",
                         ReplyPayload::Events => "events",
                         ReplyPayload::Value
                         | ReplyPayload::None
@@ -220,11 +231,11 @@ impl Gen {
             .iter()
             .any(|(_, _, p)| p.is_raw() || *p == ReplyPayload::Events)
         {
-            constant_entries.push(TsObjectEntry::prop("streamed", id("__streamed")));
+            constant_entries.push(TsObjectEntry::prop("streamed", ident("__streamed")));
         }
         let constant = TsStmt::decl(
             TsDecl::ConstDecl {
-                name: ident.clone(),
+                name: route_ident.clone(),
                 ty: Some(TsType::named("__Route")),
                 init: TsExpr::multiline_object_entries(constant_entries),
             },
@@ -233,6 +244,8 @@ impl Gen {
 
         // The function: its parameters and the encoding of each.
         let (mut params, build, arg_types) = self.encoding(r, rp)?;
+        // #3918: the arguments alone, for the `EventSource` form of a streaming `GET`.
+        let event_source_form = has_event_source(r).then(|| (params.clone(), build.clone()));
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::super::ts_ident(name) == "init"),
@@ -255,11 +268,11 @@ impl Gen {
         };
         let promise = TsType::named_with_args("globalThis.Promise", vec![ret]);
         let call = TsExpr::Call {
-            callee: Box::new(id("__call")),
+            callee: Box::new(ident("__call")),
             args: vec![
-                id("options"),
-                id(init),
-                id(&ident),
+                ident("options"),
+                ident(init),
+                ident(&route_ident),
                 TsExpr::Arrow {
                     params: Vec::new(),
                     is_async: false,
@@ -285,10 +298,13 @@ impl Gen {
         if let Some(doc) = r.doc.as_deref() {
             method = method.with_doc(doc);
         }
+        let event_source = event_source_form
+            .map(|(params, build)| event_source_entry(&rp.function, &route_ident, params, build));
         Ok(RouteText {
             hash,
             constant,
             method,
+            event_source,
             response_type,
             arg_types,
         })
@@ -375,6 +391,12 @@ impl Gen {
                     ty: Some(ty.clone()),
                     detail: None,
                 },
+                ParamInput::Headers { ty } => contract::HttpRouteParam {
+                    kind: "headers".to_string(),
+                    name: "headers".to_string(),
+                    ty: Some(ty.clone()),
+                    detail: None,
+                },
                 ParamInput::Body { ty, kind } => {
                     let (kind, ty, detail) = match kind {
                         BodyKind::Json => ("body-json", Some(ty.clone()), None),
@@ -424,6 +446,8 @@ impl Gen {
                 | p @ ReplyPayload::None
                 | p @ ReplyPayload::BoundaryError
                 | p @ ReplyPayload::BoundaryRefusal
+                | p @ ReplyPayload::Problem
+                | p @ ReplyPayload::ProblemRejection
                 | p @ ReplyPayload::Raw
                 | p @ ReplyPayload::RawEtag
                 | p @ ReplyPayload::RawTagged
@@ -450,11 +474,25 @@ impl Gen {
             match p {
                 ParamInput::Path { name, ty } => {
                     let ty = self.renamed(ty);
-                    let ident = super::super::ts_ident(name);
-                    signature.push(TsParam::new(ident.clone(), Some(self.public_type(&ty)?)));
+                    let param_ident = super::super::ts_ident(name);
+                    signature.push(TsParam::new(
+                        param_ident.clone(),
+                        Some(self.public_type(&ty)?),
+                    ));
                     let checked = match &ty {
-                        TypeRef::Base(..) => call("globalThis.String", vec![id(&ident)]),
-                        TypeRef::Named(_)
+                        // A `Decimal`'s public value is an object, so it goes through the codec
+                        // like a named type, and the wire text is the segment.
+                        TypeRef::Base(..)
+                            if crate::emitter::workers_entry::query_leaf_kind(
+                                &ty,
+                                &self.sc.types,
+                                false,
+                            ) != "decimal" =>
+                        {
+                            call(ident("globalThis.String"), vec![ident(&param_ident)])
+                        }
+                        TypeRef::Base(..)
+                        | TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
                         | TypeRef::Effect(..)
@@ -478,12 +516,37 @@ impl Gen {
                         | TypeRef::Unit(_)
                         | TypeRef::Fn(..)
                         | TypeRef::App { .. } => {
-                            let ser =
-                                serialisation::serialise_expr_via(&ty, &id(&ident), "", &self.ru);
+                            let ser = serialisation::serialise_expr_via(
+                                &ty,
+                                &ident(&param_ident),
+                                "",
+                                &self.ru,
+                            );
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
-                            let local = format!("__p_{ident}");
+                            let local = format!("__p_{param_ident}");
                             build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
-                            call("globalThis.String", vec![member(id(&local), "value")])
+                            // #3910: an enum's wire form is `{ kind }`; the segment is the name.
+                            let wire = member(ident(&local), "value");
+                            let text = if crate::emitter::workers_entry::query_leaf_kind(
+                                &ty,
+                                &self.sc.types,
+                                false,
+                            ) == "enum"
+                            {
+                                member(
+                                    TsExpr::Paren(Box::new(TsExpr::As {
+                                        expr: Box::new(wire),
+                                        ty: TsType::Object(vec![TsTypeMember::readonly_prop(
+                                            "kind",
+                                            TsType::named("string"),
+                                        )]),
+                                    })),
+                                    "kind",
+                                )
+                            } else {
+                                wire
+                            };
+                            call(ident("globalThis.String"), vec![text])
                         }
                     };
                     params.push(TsObjectEntry::prop(format!("\"{name}\""), checked));
@@ -494,11 +557,11 @@ impl Gen {
                 } => {
                     let ty = self.renamed(ty);
                     signature.push(TsParam::new("body", Some(self.public_type(&ty)?)));
-                    let wired = self.convert(&ty, Dir::ToWire, id("body"), 0)?;
+                    let wired = self.convert(&ty, Dir::ToWire, ident("body"), 0)?;
                     let ser = serialisation::serialise_expr_via(&ty, &wired, "", &self.ru);
                     let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
                     build.extend(checked_stmts("__b", ser, de, "$"));
-                    entries.push(TsObjectEntry::prop("body", member(id("__b"), "value")));
+                    entries.push(TsObjectEntry::prop("body", member(ident("__b"), "value")));
                 }
                 ParamInput::Body {
                     ty,
@@ -511,8 +574,8 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "form",
                         call(
-                            "__formString",
-                            vec![id("__w_body"), TsExpr::array(arg.specs)],
+                            ident("__formString"),
+                            vec![ident("__w_body"), TsExpr::array(arg.specs)],
                         ),
                     ));
                 }
@@ -523,7 +586,7 @@ impl Gen {
                     let ty = self.renamed(ty);
                     signature.push(TsParam::new("body", Some(self.multipart_type(&ty)?)));
                     build.extend(self.multipart_arg(&ty)?);
-                    entries.push(TsObjectEntry::prop("multipart", id("__form")));
+                    entries.push(TsObjectEntry::prop("multipart", ident("__form")));
                 }
                 ParamInput::Body {
                     kind: BodyKind::Raw { content_type },
@@ -538,7 +601,7 @@ impl Gen {
                             TsType::named("globalThis.ReadableStream<globalThis.Uint8Array>"),
                         ])),
                     ));
-                    entries.push(TsObjectEntry::prop("raw", id("body")));
+                    entries.push(TsObjectEntry::prop("raw", ident("body")));
                     if let Some(ct) = content_type {
                         entries.push(TsObjectEntry::prop("rawType", str_lit(ct)));
                     }
@@ -551,8 +614,8 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "query",
                         call(
-                            "__queryString",
-                            vec![id("__w_query"), TsExpr::array(arg.specs.clone())],
+                            ident("__queryString"),
+                            vec![ident("__w_query"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
                     signature.push(arg.parameter("query", &name));
@@ -569,11 +632,29 @@ impl Gen {
                     entries.push(TsObjectEntry::prop(
                         "cookies",
                         call(
-                            "__cookieString",
-                            vec![id("__w_cookies"), TsExpr::array(arg.specs.clone())],
+                            ident("__cookieString"),
+                            vec![ident("__w_cookies"), TsExpr::array(arg.specs.clone())],
                         ),
                     ));
                     signature.push(arg.parameter("cookies", &name));
+                    arg_types.extend(arg.decl);
+                }
+                ParamInput::Headers { ty } => {
+                    let ty = self.renamed(ty);
+                    let name = rp
+                        .headers
+                        .clone()
+                        .expect("a headers route has a headers type");
+                    let arg = self.record_arg(&ty, "headers", "headers", Some(&name))?;
+                    build.extend(arg.stmts.iter().cloned());
+                    entries.push(TsObjectEntry::prop(
+                        "headers",
+                        call(
+                            ident("__headerRecord"),
+                            vec![ident("__w_headers"), TsExpr::array(arg.specs.clone())],
+                        ),
+                    ));
+                    signature.push(arg.parameter("headers", &name));
                     arg_types.extend(arg.decl);
                 }
             }
@@ -583,7 +664,7 @@ impl Gen {
             TsObjectEntry::prop("params", TsExpr::object_entries(params)),
         );
         build.push(TsStmt::return_stmt(
-            Some(call("Ok", vec![TsExpr::object_entries(entries)])),
+            Some(call(ident("Ok"), vec![TsExpr::object_entries(entries)])),
             None,
         ));
         Ok((signature, build, arg_types))
@@ -610,11 +691,11 @@ impl Gen {
         };
         let mut stmts = vec![
             wire_object_stmt("body"),
-            const_of(
+            const_typed(
                 "__form",
                 None,
                 TsExpr::New {
-                    callee: Box::new(member(id("globalThis"), "FormData")),
+                    callee: Box::new(member(ident("globalThis"), "FormData")),
                     args: Vec::new(),
                 },
             ),
@@ -626,11 +707,12 @@ impl Gen {
             let wire = f.wire_name().unwrap_or_else(|| fname.clone());
             let (inner, list, option) = serialisation::peel_list_option(&f.type_ref);
             let is_file = matches!(inner, TypeRef::Named(i) if self.is_file(&i.name));
-            let field = || member(id("body"), &fname);
+            let field = || member(ident("body"), &fname);
             if !is_file {
                 let wired = self.convert(&f.type_ref, Dir::ToWire, field(), 0)?;
                 let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
-                stmts.push(wire_assign("body", &fname, ser));
+                // #3975: the object is the record's wire form, keyed by wire name.
+                stmts.push(wire_assign("body", &wire, ser));
                 specs.push(field_spec(&fname, f.wire_name()));
                 continue;
             }
@@ -645,8 +727,12 @@ impl Gen {
             let append = |part: TsExpr| {
                 TsStmt::expr_stmt(
                     TsExpr::Call {
-                        callee: Box::new(member(id("__form"), "append")),
-                        args: vec![str_lit(&wire), part.clone(), call("__fileName", vec![part])],
+                        callee: Box::new(member(ident("__form"), "append")),
+                        args: vec![
+                            str_lit(&wire),
+                            part.clone(),
+                            call(ident("__fileName"), vec![part]),
+                        ],
                     },
                     None,
                 )
@@ -663,26 +749,30 @@ impl Gen {
                             body: Box::new(TsArrowBody::Expr(Box::new(stub()))),
                         }],
                     },
-                    TsStmt::for_of("part", field(), append(id("part")), None),
+                    TsStmt::for_of("part", field(), append(ident("part")), None),
                 ),
                 (_, true) => {
                     let present = TsExpr::Binary {
                         op: TsBinaryOp::And,
-                        left: Box::new(compare(
+                        left: Box::new(binary(
                             TsBinaryOp::StrictNotEq,
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(TsBinaryOp::StrictNotEq, field(), id("undefined"))),
+                        right: Box::new(binary(
+                            TsBinaryOp::StrictNotEq,
+                            field(),
+                            ident("undefined"),
+                        )),
                     };
                     let absent = TsExpr::Binary {
                         op: TsBinaryOp::Or,
-                        left: Box::new(compare(
+                        left: Box::new(binary(
                             TsBinaryOp::StrictEq,
                             field(),
                             TsExpr::Lit(TsLit::Null),
                         )),
-                        right: Box::new(compare(TsBinaryOp::StrictEq, field(), id("undefined"))),
+                        right: Box::new(binary(TsBinaryOp::StrictEq, field(), ident("undefined"))),
                     };
                     (
                         TsExpr::Conditional {
@@ -702,13 +792,16 @@ impl Gen {
             parts.push(appended);
         }
         let de = serialisation::deserialise_ref_via(record, "", &self.ru);
-        stmts.extend(checked_stmts("__c_body", id("__w_body"), de, "body"));
+        stmts.extend(checked_stmts("__c_body", ident("__w_body"), de, "body"));
         stmts.push(TsStmt::expr_stmt(
             call(
-                "__appendText",
+                ident("__appendText"),
                 vec![
-                    id("__form"),
-                    call("__formString", vec![id("__w_body"), TsExpr::array(specs)]),
+                    ident("__form"),
+                    call(
+                        ident("__formString"),
+                        vec![ident("__w_body"), TsExpr::array(specs)],
+                    ),
                 ],
             ),
             None,
@@ -754,13 +847,14 @@ impl Gen {
                 optional,
                 readonly: true,
             });
-            let given = member(id(arg), &fname);
+            let given = member(ident(arg), &fname);
             let wired = self.convert(&f.type_ref, Dir::ToWire, given.clone(), 0)?;
             let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
-            let write = wire_assign(arg, &fname, ser);
+            // #3975: the object is the record's wire form, keyed by wire name.
+            let write = wire_assign(arg, &f.wire_name().unwrap_or_else(|| fname.clone()), ser);
             if optional {
                 stmts.push(TsStmt::if_stmt(
-                    compare(TsBinaryOp::StrictNotEq, given, id("undefined")),
+                    binary(TsBinaryOp::StrictNotEq, given, ident("undefined")),
                     write,
                     None,
                 ));
@@ -772,7 +866,7 @@ impl Gen {
         let de = serialisation::deserialise_ref_via(record, "", &self.ru);
         stmts.extend(checked_stmts(
             &format!("__c_{arg}"),
-            id(&format!("__w_{arg}")),
+            ident(format!("__w_{arg}")),
             de,
             at,
         ));
@@ -791,6 +885,8 @@ impl Gen {
                     if arg == "query" {
                         "The `query` of the call: a field left out is absent from the query string."
                             .to_string()
+                    } else if arg == "headers" {
+                        "The `headers` of the call, sent as request headers: a field left out is absent. A\nbrowser sets some headers itself (`Content-Length`, `Host`, …) and drops one a\nscript writes, so a route that reads one of those is for a server-side call.".to_string()
                     } else {
                         "The `cookies` of the call, sent as its `Cookie` header: a field left out is\nabsent. **For a server-side call** (a framework's server, a Worker, Node). A\nbrowser sets its own `Cookie` header and drops one a script writes, so a call\nmade where `document` exists with cookies given returns `CallFailure` `Invalid`\nrather than lose them; a page uses `credentials: \"include\"` instead.".to_string()
                     },
@@ -839,28 +935,6 @@ impl RecordArg {
 // Small node builders
 // ---------------------------------------------------------------------
 
-fn id(name: &str) -> TsExpr {
-    TsExpr::Ident(name.to_string())
-}
-
-fn str_lit(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(text.to_string()))
-}
-
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
-fn call(callee: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(id(callee)),
-        args,
-    }
-}
-
 /// `(a, b) => body`.
 fn arrow(params: Vec<&str>, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
@@ -882,22 +956,10 @@ fn object_of(fields: Vec<(&str, TsExpr)>) -> TsExpr {
     )
 }
 
-fn compare(op: TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn const_of(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
-}
-
 /// `const __w_<arg>: { [k: string]: JsonValue } = {};`
 fn wire_object_stmt(arg: &str) -> TsStmt {
-    const_of(
-        &format!("__w_{arg}"),
+    const_typed(
+        format!("__w_{arg}"),
         Some(TsType::Object(vec![TsTypeMember::index(
             "k",
             TsType::named("string"),
@@ -911,7 +973,7 @@ fn wire_object_stmt(arg: &str) -> TsStmt {
 fn wire_assign(arg: &str, field: &str, value: TsExpr) -> TsStmt {
     TsStmt::assign(
         TsExpr::Index {
-            object: Box::new(id(&format!("__w_{arg}"))),
+            object: Box::new(ident(format!("__w_{arg}"))),
             index: Box::new(str_lit(field)),
         },
         value,
@@ -931,18 +993,18 @@ fn field_spec(field: &str, wire: Option<String>) -> TsExpr {
 /// `const <local> = __checked(value, decoder, "at"); if (<local>.tag === "Err") return <local>;`
 fn checked_stmts(local: &str, value: TsExpr, decoder: TsExpr, at: &str) -> Vec<TsStmt> {
     vec![
-        const_of(
+        const_typed(
             local,
             None,
-            call("__checked", vec![value, decoder, str_lit(at)]),
+            call(ident("__checked"), vec![value, decoder, str_lit(at)]),
         ),
         TsStmt::if_stmt(
-            compare(
+            binary(
                 TsBinaryOp::StrictEq,
-                member(id(local), "tag"),
+                member(ident(local), "tag"),
                 str_lit("Err"),
             ),
-            TsStmt::return_stmt(Some(id(local)), None),
+            TsStmt::return_stmt(Some(ident(local)), None),
             None,
         ),
     ]
@@ -953,6 +1015,49 @@ pub(super) struct RouteText {
     pub(super) hash: String,
     pub(super) constant: TsStmt,
     pub(super) method: TsObjectEntry,
+    /// #3918: the same route through a browser `EventSource`, for a `Streaming` `GET`.
+    pub(super) event_source: Option<TsObjectEntry>,
     pub(super) response_type: Option<Vec<TsStmt>>,
     pub(super) arg_types: Vec<TsStmt>,
+}
+
+/// #3918: a streaming `GET` route through the browser's own `EventSource`: the call's
+/// arguments, handed to `__eventSource` with the same encoding.
+fn event_source_entry(
+    function: &str,
+    route_ident: &str,
+    params: Vec<TsParam>,
+    build: Vec<TsStmt>,
+) -> TsObjectEntry {
+    let call = TsExpr::Call {
+        callee: Box::new(ident("__eventSource")),
+        args: vec![
+            ident("options"),
+            ident(route_ident),
+            TsExpr::Arrow {
+                params: Vec::new(),
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(TsArrowBody::Multiline(build)),
+            },
+        ],
+    };
+    let ret = TsType::named("globalThis.EventSource | CallFailure");
+    TsObjectEntry::prop(
+        property(&event_source_name(function)),
+        TsExpr::Arrow {
+            params,
+            is_async: false,
+            generics: Vec::new(),
+            return_type: Some(ret.clone()),
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::As {
+                expr: Box::new(call),
+                ty: ret,
+            }))),
+        },
+    )
+    .with_doc(
+        "The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: \"include\"` sends cookies to another origin.",
+    )
 }

@@ -199,6 +199,7 @@ pub(crate) fn const_literal(e: &Expr) -> Option<ConstLit> {
         ExprKind::IntLit { value: n, .. } => Some(ConstLit::Int(*n)),
         ExprKind::FloatLit { value, .. } => Some(ConstLit::Float(*value)),
         ExprKind::DecimalLit { coef, scale, .. } => Some(ConstLit::Decimal(coef.clone(), *scale)),
+        ExprKind::DurationLit { millis, .. } => Some(ConstLit::Duration(*millis)),
         ExprKind::StrLit(s) => Some(ConstLit::Str(s.clone())),
         ExprKind::BoolLit(b) => Some(ConstLit::Bool(*b)),
         ExprKind::UnitLit => Some(ConstLit::Unit),
@@ -218,8 +219,8 @@ pub(crate) fn const_literal(e: &Expr) -> Option<ConstLit> {
 /// expected base type doesn't match the literal (e.g. a length predicate on an
 /// int) returns `true` here — the base/predicate mismatch is a declaration-time
 /// error reported by `check_refinement`, not a construction concern. String
-/// length is measured in Unicode scalar values, which agrees with JS `.length`
-/// for the BMP (the range fixtures use ASCII).
+/// length is measured in code points (#3949), the unit the emitted run-time
+/// check (`__bynkCodePointLength`), `chars()` and OpenAPI's `maxLength` use too.
 pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
     match (pred, lit) {
         (PredKind::NonNegative, ConstLit::Int(n)) => *n >= 0,
@@ -235,19 +236,48 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
             bynk_syntax::decimal::cmp(&lo.coef, lo.scale, c, *s) != Greater
                 && bynk_syntax::decimal::cmp(c, *s, &hi.coef, hi.scale) != Greater
         }
+        (PredKind::NonNegative, ConstLit::Duration(ms)) => *ms >= 0,
+        (PredKind::Positive, ConstLit::Duration(ms)) => *ms > 0,
+        (PredKind::InRangeDur(lo, hi), ConstLit::Duration(ms)) => {
+            lo.millis <= *ms && *ms <= hi.millis
+        }
+        (PredKind::AtLeast(b), lit) => {
+            bound_cmp(b, lit).is_none_or(|o| o != std::cmp::Ordering::Less)
+        }
+        (PredKind::AtMost(b), lit) => {
+            bound_cmp(b, lit).is_none_or(|o| o != std::cmp::Ordering::Greater)
+        }
         (PredKind::MinLength(k), ConstLit::Str(s)) => s.chars().count() as i64 >= *k,
         (PredKind::MaxLength(k), ConstLit::Str(s)) => (s.chars().count() as i64) <= *k,
         (PredKind::Length(k), ConstLit::Str(s)) => s.chars().count() as i64 == *k,
         (PredKind::NonEmpty, ConstLit::Str(s)) => !s.is_empty(),
         (PredKind::IsoDate, ConstLit::Str(s)) => bynk_syntax::ast::is_iso_date(s),
+        (PredKind::Cron, ConstLit::Str(s)) => bynk_syntax::cron::is_cron_expression(s).is_ok(),
         (PredKind::Matches(pat), ConstLit::Str(s)) => {
             // Evaluated with the same engine semantics the emitted
-            // `new RegExp(...)` runs under (ECMAScript, no flags).
-            regress::Regex::new(&format!("^(?:{pat})$"))
+            // `RegExp` runs under (ECMAScript, Unicode mode, the pattern's
+            // own leading flags; #3950).
+            let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(pat);
+            regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str())
                 .map(|re| re.find(s).is_some())
                 .unwrap_or(false)
         }
         _ => true,
+    }
+}
+
+/// #3948: how the literal compares with a one-sided bound (`lit` against
+/// `bound`), or `None` when they are of different bases (a base/predicate
+/// mismatch, reported at the declaration).
+fn bound_cmp(bound: &PredBound, lit: &ConstLit) -> Option<std::cmp::Ordering> {
+    match (bound, lit) {
+        (PredBound::Int(b), ConstLit::Int(n)) => Some(n.cmp(&b.value)),
+        (PredBound::Float(b), ConstLit::Float(v)) => v.partial_cmp(&b.value),
+        (PredBound::Decimal(b), ConstLit::Decimal(c, s)) => {
+            Some(bynk_syntax::decimal::cmp(c, *s, &b.coef, b.scale))
+        }
+        (PredBound::Duration(b), ConstLit::Duration(ms)) => Some(ms.cmp(&b.millis)),
+        _ => None,
     }
 }
 
@@ -323,6 +353,7 @@ pub(crate) fn literal_matches_base(lit: &ConstLit, base: BaseType) -> bool {
             | (ConstLit::Bool(_), BaseType::Bool)
             | (ConstLit::Float(_), BaseType::Float)
             | (ConstLit::Decimal(..), BaseType::Decimal)
+            | (ConstLit::Duration(_), BaseType::Duration)
     )
 }
 
@@ -413,33 +444,62 @@ pub(crate) fn check_refinement(
     check_refinement_annotations(base, refinement, errors);
 
     for pred in &refinement.predicates {
+        // #3951: a constant that did not resolve to a literal is reported
+        // here; the predicate's own kind is a placeholder until it does.
+        if pred.pending.is_some() {
+            errors.extend(crate::refinement_consts::pending_errors(pred, base));
+            continue;
+        }
         if !pred_applies_to(&pred.kind, base) {
             // v0.21: `InRange` bounds must match the numeric base type —
             // `Float where InRange(0, 1)` is the no-coercion rule applied
             // to refinement bounds, not a predicate/base mismatch.
             let numeric_bound_mismatch = matches!(
                 (&pred.kind, base),
-                (PredKind::InRange(_, _), BaseType::Float | BaseType::Decimal)
-                    | (PredKind::InRangeF(_, _), BaseType::Int | BaseType::Decimal)
-                    | (PredKind::InRangeD(_, _), BaseType::Int | BaseType::Float)
+                (
+                    PredKind::InRange(_, _),
+                    BaseType::Float | BaseType::Decimal | BaseType::Duration
+                ) | (
+                    PredKind::InRangeF(_, _),
+                    BaseType::Int | BaseType::Decimal | BaseType::Duration
+                ) | (
+                    PredKind::InRangeD(_, _),
+                    BaseType::Int | BaseType::Float | BaseType::Duration
+                ) | (
+                    PredKind::InRangeDur(_, _),
+                    BaseType::Int | BaseType::Float | BaseType::Decimal
+                )
+            ) || matches!(
+                &pred.kind,
+                PredKind::AtLeast(b) | PredKind::AtMost(b)
+                    if is_ordered_numeric(base) && b.base() != base
             );
             if numeric_bound_mismatch {
-                let bounds = match &pred.kind {
-                    PredKind::InRange(..) => "`Int`",
-                    PredKind::InRangeF(..) => "`Float`",
-                    _ => "`Decimal`",
+                let (pred_name, bounds) = match &pred.kind {
+                    PredKind::InRange(..) => ("InRange", "`Int`"),
+                    PredKind::InRangeF(..) => ("InRange", "`Float`"),
+                    PredKind::InRangeD(..) => ("InRange", "`Decimal`"),
+                    PredKind::InRangeDur(..) => ("InRange", "`Duration`"),
+                    PredKind::AtLeast(b) => ("AtLeast", bound_type_name(b)),
+                    PredKind::AtMost(b) => ("AtMost", bound_type_name(b)),
+                    _ => ("InRange", "`Decimal`"),
                 };
-                let want = match base {
-                    BaseType::Float => "`InRange(0.0, 1.0)`",
-                    BaseType::Decimal => "`InRange(0.00d, 1.00d)`",
-                    _ => "`InRange(0, 1)`",
+                let want = match (base, pred_name) {
+                    (BaseType::Float, "InRange") => "`InRange(0.0, 1.0)`".to_string(),
+                    (BaseType::Decimal, "InRange") => "`InRange(0.00d, 1.00d)`".to_string(),
+                    (BaseType::Duration, "InRange") => "`InRange(1.second, 1.day)`".to_string(),
+                    (_, "InRange") => "`InRange(0, 1)`".to_string(),
+                    (BaseType::Float, n) => format!("`{n}(0.0)`"),
+                    (BaseType::Decimal, n) => format!("`{n}(0.00d)`"),
+                    (BaseType::Duration, n) => format!("`{n}(1.second)`"),
+                    (_, n) => format!("`{n}(0)`"),
                 };
                 errors.push(
                     CompileError::new(
                         "bynk.types.no_numeric_coercion",
                         pred.span,
                         format!(
-                            "`InRange` bounds are {bounds} literals, but the base type is `{}`",
+                            "`{pred_name}` bounds are {bounds} literals, but the base type is `{}`",
                             base.name()
                         ),
                     )
@@ -471,68 +531,25 @@ pub(crate) fn check_refinement(
             );
         }
         match &pred.kind {
-            PredKind::Matches(pat) => {
+            PredKind::Matches(literal) => {
                 // Validate with ECMAScript semantics (the `regress` engine):
                 // the emitted check runs the pattern under JS `RegExp`, so a
                 // pattern the Rust `regex` crate accepts but JS rejects
-                // (`(?P<name>…)`, inline flags) would otherwise compile
-                // cleanly and then throw at runtime — a 500 on the request
-                // path instead of a compile error.
-                if let Err(e) = regress::Regex::new(pat) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.invalid_regex",
-                            pred.span,
-                            format!("invalid regular expression in `Matches(\"{pat}\")`"),
-                        )
-                        .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")),
-                    );
-                } else if has_nested_unbounded_quantifier(pat) && !proved_linear(pat, "") {
-                    // The emitted boundary check runs this pattern under JS
-                    // `RegExp`, a backtracking engine. A repeated group that
-                    // itself contains an unbounded quantifier (`(a+)+`) makes
-                    // matching take exponential time on a crafted near-miss
-                    // input — a refined `String` on an HTTP boundary would let
-                    // an unauthenticated client stall the Worker (ReDoS, #724).
-                    // Reject the pattern at compile time rather than ship the
-                    // hazard. This cheap first pass keeps its own, clearer
-                    // message; the ambiguity analysis below covers the rest.
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.catastrophic_regex",
-                            pred.span,
-                            format!(
-                                "the pattern in `Matches(\"{pat}\")` nests unbounded quantifiers, \
-                                 which can cause catastrophic backtracking (ReDoS)"
-                            ),
-                        )
-                        .with_note(
-                            "a repeated group that itself contains `*`, `+`, or `{n,}` makes \
-                             matching take exponential time on crafted input; restructure the \
-                             pattern so no unbounded quantifier is nested inside another",
-                        ),
-                    );
-                } else if let Some(e) = ambiguity_diagnostic(
-                    pat,
-                    "",
-                    pred.span,
-                    &format!("`Matches(\"{pat}\")`"),
-                    // The tightest length bound the refinement states. Length
-                    // predicates run before `Matches` (`in_check_order`), so it
-                    // caps the input the pattern ever sees.
-                    Some(
-                        refinement
-                            .predicates
-                            .iter()
-                            .filter_map(|p| match p.kind {
-                                PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
-                                // `IsoDate` admits only `YYYY-MM-DD`.
-                                PredKind::IsoDate => Some(10),
-                                _ => None,
-                            })
-                            .min(),
-                    ),
-                ) {
+                // (`(?P<name>…)`) would otherwise compile cleanly and then
+                // throw at runtime — a 500 on the request path instead of a
+                // compile error. #3950: in Unicode mode (`u`), as the kernel's
+                // regex literals are, and with their leading flag group.
+                let max_len = refinement
+                    .predicates
+                    .iter()
+                    .filter_map(|p| match p.kind {
+                        PredKind::MaxLength(n) | PredKind::Length(n) => Some(n),
+                        // `IsoDate` admits only `YYYY-MM-DD`.
+                        PredKind::IsoDate => Some(10),
+                        _ => None,
+                    })
+                    .min();
+                if let Err(e) = check_matches_pattern(literal, pred.span, max_len) {
                     errors.push(e);
                 }
             }
@@ -600,6 +617,25 @@ pub(crate) fn check_refinement(
                     );
                 }
             }
+            PredKind::InRangeDur(lo, hi) => {
+                if lo.millis > hi.millis {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.inverted_range",
+                            pred.span,
+                            format!(
+                                "`InRange({}, {})` has its bounds inverted (`min` must be ≤ `max`)",
+                                lo.lexeme, hi.lexeme
+                            ),
+                        )
+                        .with_suggestion(
+                            "swap the bounds",
+                            vec![(lo.span, hi.lexeme.clone()), (hi.span, lo.lexeme.clone())],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
+                }
+            }
             PredKind::MinLength(n) | PredKind::MaxLength(n) | PredKind::Length(n) => {
                 if *n < 0 {
                     errors.push(CompileError::new(
@@ -609,8 +645,13 @@ pub(crate) fn check_refinement(
                     ));
                 }
             }
-            PredKind::NonNegative | PredKind::Positive | PredKind::NonEmpty | PredKind::IsoDate => {
-            }
+            PredKind::AtLeast(_)
+            | PredKind::AtMost(_)
+            | PredKind::NonNegative
+            | PredKind::Positive
+            | PredKind::NonEmpty
+            | PredKind::IsoDate
+            | PredKind::Cron => {}
         }
     }
 
@@ -626,48 +667,73 @@ pub(crate) fn check_refinement(
         BaseType::String => check_string_refinement_consistency(refinement, errors),
         BaseType::Bool => {}
         BaseType::Float => check_float_refinement_consistency(refinement, errors),
-        // v0.86/v0.90/v0.110: no refinement predicate applies to `Duration`,
-        // `Instant`, or `Bytes` (none is in any `pred_applies_to` row), so a
-        // refined one is rejected upstream and there is nothing to
-        // consistency-check here.
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => {}
-        // #2622: a decimal range has no further consistency check here; an
-        // inverted `InRange` is reported above.
-        BaseType::Decimal => {}
+        // #3948: `Duration` takes the numeric predicates; `Instant` and
+        // `Bytes` take none, so a refined one is rejected upstream.
+        BaseType::Duration => check_duration_refinement_consistency(refinement, errors),
+        BaseType::Instant | BaseType::Bytes => {}
+        // #2622: an inverted `InRange` is reported above; #3948: bounds that
+        // contradict each other across predicates are reported here.
+        BaseType::Decimal => check_decimal_refinement_consistency(refinement, errors),
     }
 }
 
 fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
+    // #3948: a one-sided bound applies to an ordered numeric base whose own
+    // literal it is; a bound of another type is `no_numeric_coercion`.
+    if let PredKind::AtLeast(b) | PredKind::AtMost(b) = pred {
+        return is_ordered_numeric(base) && b.base() == base;
+    }
     matches!(
         (pred, base),
         (PredKind::Matches(_), BaseType::String)
             | (PredKind::InRange(_, _), BaseType::Int)
             | (PredKind::InRangeF(_, _), BaseType::Float)
             | (PredKind::InRangeD(_, _), BaseType::Decimal)
+            | (PredKind::InRangeDur(_, _), BaseType::Duration)
             | (PredKind::MinLength(_), BaseType::String)
             | (PredKind::MaxLength(_), BaseType::String)
             | (PredKind::Length(_), BaseType::String)
             | (
                 PredKind::NonNegative,
-                BaseType::Int | BaseType::Float | BaseType::Decimal
+                BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
             )
             | (
                 PredKind::Positive,
-                BaseType::Int | BaseType::Float | BaseType::Decimal
+                BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
             )
             | (PredKind::NonEmpty, BaseType::String)
             | (PredKind::IsoDate, BaseType::String)
+            | (PredKind::Cron, BaseType::String)
     )
+}
+
+/// #3948: the bases the numeric predicates (`InRange`, `AtLeast`, `AtMost`) apply to.
+fn is_ordered_numeric(base: BaseType) -> bool {
+    matches!(
+        base,
+        BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
+    )
+}
+
+fn bound_type_name(b: &PredBound) -> &'static str {
+    match b {
+        PredBound::Int(_) => "`Int`",
+        PredBound::Float(_) => "`Float`",
+        PredBound::Decimal(_) => "`Decimal`",
+        PredBound::Duration(_) => "`Duration`",
+    }
 }
 
 fn predicate_base_help(name: &str) -> &'static str {
     match name {
-        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" => {
+        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" | "Cron" => {
             "this predicate applies to `String` only"
         }
-        "NonNegative" | "Positive" => "this predicate applies to `Int`, `Float` and `Decimal` only",
-        "InRange" => {
-            "this predicate applies to `Int`, `Float` and `Decimal` only, with bounds matching the base"
+        "NonNegative" | "Positive" => {
+            "this predicate applies to `Int`, `Float`, `Decimal` and `Duration` only"
+        }
+        "InRange" | "AtLeast" | "AtMost" => {
+            "this predicate applies to `Int`, `Float`, `Decimal` and `Duration` only, with bounds matching the base"
         }
         _ => "see the documentation for valid predicate-base combinations",
     }
@@ -687,6 +753,8 @@ pub(crate) fn check_int_refinement_consistency(
                 lo = lo.max(a.value);
                 hi = hi.min(b.value);
             }
+            PredKind::AtLeast(PredBound::Int(a)) => lo = lo.max(a.value),
+            PredKind::AtMost(PredBound::Int(b)) => hi = hi.min(b.value),
             _ => {}
         }
     }
@@ -729,6 +797,11 @@ pub(crate) fn check_float_refinement_consistency(
                 }
                 hi = hi.min(b.value);
             }
+            PredKind::AtLeast(PredBound::Float(a)) if a.value > lo => {
+                lo = a.value;
+                lo_exclusive = false;
+            }
+            PredKind::AtMost(PredBound::Float(b)) => hi = hi.min(b.value),
             _ => {}
         }
     }
@@ -751,6 +824,112 @@ pub(crate) fn check_float_refinement_consistency(
     }
 }
 
+/// #3948: the `Duration` twin of the integer check, over milliseconds.
+pub(crate) fn check_duration_refinement_consistency(
+    refinement: &Refinement,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut lo: i64 = i64::MIN;
+    let mut hi: i64 = i64::MAX;
+    for p in &refinement.predicates {
+        match &p.kind {
+            PredKind::Positive => lo = lo.max(1),
+            PredKind::NonNegative => lo = lo.max(0),
+            // An inverted range is `inverted_range`'s to report, once.
+            PredKind::InRangeDur(a, b) if a.millis <= b.millis => {
+                lo = lo.max(a.millis);
+                hi = hi.min(b.millis);
+            }
+            PredKind::AtLeast(PredBound::Duration(a)) => lo = lo.max(a.millis),
+            PredKind::AtMost(PredBound::Duration(b)) => hi = hi.min(b.millis),
+            _ => {}
+        }
+    }
+    if lo > hi {
+        errors.push(
+            CompileError::new(
+                "bynk.types.empty_refinement",
+                refinement.span,
+                "this refinement has no valid values — the predicates contradict each other",
+            )
+            .with_note(format!(
+                "the effective range is `{lo}..={hi}` milliseconds, which is empty"
+            )),
+        );
+    }
+}
+
+/// #3948: the `Decimal` check — a lower bound above an upper bound, across
+/// `InRange`, `AtLeast`, `AtMost`, `NonNegative` and `Positive`.
+pub(crate) fn check_decimal_refinement_consistency(
+    refinement: &Refinement,
+    errors: &mut Vec<CompileError>,
+) {
+    use bynk_syntax::decimal::cmp;
+    use std::cmp::Ordering;
+    // (coefficient, scale, exclusive)
+    let mut lo: Option<(String, u32, bool)> = None;
+    let mut hi: Option<(String, u32)> = None;
+    let raise = |lo: &mut Option<(String, u32, bool)>, c: &str, s: u32, excl: bool| {
+        let replace = match lo {
+            None => true,
+            Some((lc, ls, lx)) => match cmp(c, s, lc, *ls) {
+                Ordering::Greater => true,
+                Ordering::Equal => excl && !*lx,
+                Ordering::Less => false,
+            },
+        };
+        if replace {
+            *lo = Some((c.to_string(), s, excl));
+        }
+    };
+    for p in &refinement.predicates {
+        match &p.kind {
+            PredKind::Positive => raise(&mut lo, "0", 0, true),
+            PredKind::NonNegative => raise(&mut lo, "0", 0, false),
+            // An inverted range is `inverted_range`'s to report, once.
+            PredKind::InRangeD(a, b)
+                if cmp(&a.coef, a.scale, &b.coef, b.scale) != Ordering::Greater =>
+            {
+                raise(&mut lo, &a.coef, a.scale, false);
+                if hi
+                    .as_ref()
+                    .is_none_or(|(c, s)| cmp(&b.coef, b.scale, c, *s) == Ordering::Less)
+                {
+                    hi = Some((b.coef.clone(), b.scale));
+                }
+            }
+            PredKind::AtLeast(PredBound::Decimal(a)) => raise(&mut lo, &a.coef, a.scale, false),
+            PredKind::AtMost(PredBound::Decimal(b))
+                if hi
+                    .as_ref()
+                    .is_none_or(|(c, s)| cmp(&b.coef, b.scale, c, *s) == Ordering::Less) =>
+            {
+                hi = Some((b.coef.clone(), b.scale));
+            }
+            _ => {}
+        }
+    }
+    if let (Some((lc, ls, lx)), Some((hc, hs))) = (&lo, &hi) {
+        let o = cmp(lc, *ls, hc, *hs);
+        if o == Ordering::Greater || (o == Ordering::Equal && *lx) {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.empty_refinement",
+                    refinement.span,
+                    "this refinement has no valid values — the predicates contradict each other",
+                )
+                .with_note(format!(
+                    "the effective range is `{}..={}`{}, which is empty",
+                    bynk_syntax::decimal::render(lc, *ls),
+                    bynk_syntax::decimal::render(hc, *hs),
+                    if *lx { " (lower bound exclusive)" } else { "" }
+                )),
+            );
+        }
+    }
+}
+
 pub(crate) fn check_string_refinement_consistency(
     refinement: &Refinement,
     errors: &mut Vec<CompileError>,
@@ -768,6 +947,8 @@ pub(crate) fn check_string_refinement_consistency(
                 min_len = min_len.max(10);
                 max_len = max_len.min(10);
             }
+            // #3873: `* * * * *` is the shortest valid schedule, nine characters.
+            PredKind::Cron => min_len = min_len.max(9),
             PredKind::Length(n) => {
                 if let Some(prev) = exact_len {
                     if prev != *n {
@@ -810,10 +991,12 @@ pub(crate) fn check_string_refinement_consistency(
 /// it contains a `Matches` predicate, where bare `Val[T]` must be given an
 /// explicit pin instead.
 pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
-    refinement
-        .predicates
-        .iter()
-        .any(|p| matches!(p.kind, PredKind::Matches(_) | PredKind::IsoDate))
+    refinement.predicates.iter().any(|p| {
+        matches!(
+            p.kind,
+            PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron
+        )
+    })
 }
 
 /// #2686: the `@example(<arg>)` annotation's argument on a refinement, if
@@ -1053,6 +1236,8 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
             PredKind::InRange(lo, hi) => lo.value <= 0 && 0 <= hi.value,
+            PredKind::AtLeast(PredBound::Int(b)) => b.value <= 0,
+            PredKind::AtMost(PredBound::Int(b)) => b.value >= 0,
             // Length/Matches predicates don't apply to Int; reject conservatively.
             _ => false,
         },
@@ -1067,9 +1252,18 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
         },
         // The only Bool zero is `false`; no Bool refinement predicates exist.
         BaseType::Bool => true,
-        // No refinement predicate applies to `Duration`, `Instant`, or
-        // `Bytes`, so the question is vacuous — admit it (mirrors `Bool`).
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => true,
+        // No refinement predicate applies to `Instant` or `Bytes`, so the
+        // question is vacuous — admit it (mirrors `Bool`).
+        BaseType::Instant | BaseType::Bytes => true,
+        // #3948: `Duration`'s zero is `0.milliseconds`.
+        BaseType::Duration => match k {
+            PredKind::NonNegative => true,
+            PredKind::Positive => false,
+            PredKind::InRangeDur(lo, hi) => lo.millis <= 0 && 0 <= hi.millis,
+            PredKind::AtLeast(PredBound::Duration(b)) => b.millis <= 0,
+            PredKind::AtMost(PredBound::Duration(b)) => b.millis >= 0,
+            _ => false,
+        },
         BaseType::Decimal => match k {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
@@ -1077,12 +1271,16 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
                 bynk_syntax::decimal::sign(&lo.coef) <= 0
                     && bynk_syntax::decimal::sign(&hi.coef) >= 0
             }
+            PredKind::AtLeast(PredBound::Decimal(b)) => bynk_syntax::decimal::sign(&b.coef) <= 0,
+            PredKind::AtMost(PredBound::Decimal(b)) => bynk_syntax::decimal::sign(&b.coef) >= 0,
             _ => false,
         },
         BaseType::Float => match k {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
             PredKind::InRangeF(lo, hi) => lo.value <= 0.0 && 0.0 <= hi.value,
+            PredKind::AtLeast(PredBound::Float(b)) => b.value <= 0.0,
+            PredKind::AtMost(PredBound::Float(b)) => b.value >= 0.0,
             // Other predicates don't apply to Float; reject conservatively.
             _ => false,
         },
@@ -1093,7 +1291,8 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
 /// emitted refined-type constructor anchors it (`^(?:pattern)$`), and
 /// evaluated with the same engine semantics (ECMAScript, no flags).
 fn regex_matches_empty(pattern: &str) -> bool {
-    match regress::Regex::new(&format!("^(?:{pattern})$")) {
+    let (pattern, flags) = bynk_syntax::ast::matches_pattern_and_flags(pattern);
+    match regress::Regex::with_flags(&format!("^(?:{pattern})$"), flags.as_str()) {
         Ok(re) => re.find("").is_some(),
         Err(_) => false,
     }
@@ -1216,6 +1415,90 @@ fn ambiguity_diagnostic(
     })
 }
 
+/// #3950: validate a `Matches` argument: the leading flag group (`(?i)`, `(?s)`;
+/// each at most once, and not `m`, which means nothing under `Matches`'
+/// whole-string anchoring), then the pattern in Unicode mode, then the ReDoS
+/// analyses under the same flags. `max_len` is the tightest length bound the
+/// refinement states: length predicates run before `Matches`
+/// (`in_check_order`), so it caps the input the pattern ever sees.
+fn check_matches_pattern(
+    literal: &str,
+    span: Span,
+    max_len: Option<i64>,
+) -> Result<(), CompileError> {
+    let label = format!("`Matches(\"{literal}\")`");
+    let (pat, flags) = match leading_flag_group(literal) {
+        Some((pat, flags)) => {
+            let mut seen = String::new();
+            for c in flags.chars() {
+                if c == 'm' {
+                    return Err(CompileError::new(
+                        "bynk.types.invalid_regex",
+                        span,
+                        format!("the `(?m)` flag in {label} has no meaning under `Matches`"),
+                    )
+                    .with_note(
+                        "`Matches` tests the whole string, so `^` and `$` already mean its start \
+                         and end; use `(?i)` or `(?s)`, or drop the group",
+                    ));
+                }
+                if !"is".contains(c) || seen.contains(c) {
+                    return Err(CompileError::new(
+                        "bynk.types.invalid_regex",
+                        span,
+                        format!("invalid inline flags `(?{flags})` in {label}"),
+                    )
+                    .with_note("`Matches` accepts `(?i)` and `(?s)`, each at most once"));
+                }
+                seen.push(c);
+            }
+            (pat.to_string(), format!("{seen}u"))
+        }
+        None => (literal.to_string(), "u".to_string()),
+    };
+    if let Err(e) = regress::Regex::with_flags(&pat, flags.as_str()) {
+        return Err(CompileError::new(
+            "bynk.types.invalid_regex",
+            span,
+            format!("invalid regular expression in {label}"),
+        )
+        .with_note(format!(
+            "regex parse error (JS `RegExp` semantics, Unicode mode): {e}"
+        ))
+        .with_note(
+            "every Bynk regex runs in Unicode mode (`u`), where an identity escape such as `\\-` \
+             outside a class is an error: drop a needless backslash",
+        ));
+    }
+    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &flags) {
+        // The emitted boundary check runs this pattern under JS `RegExp`, a
+        // backtracking engine. A repeated group that itself contains an
+        // unbounded quantifier (`(a+)+`) makes matching take exponential time
+        // on a crafted near-miss input — a refined `String` on an HTTP boundary
+        // would let an unauthenticated client stall the Worker (ReDoS, #724).
+        // Reject the pattern at compile time rather than ship the hazard. This
+        // cheap first pass keeps its own, clearer message; the ambiguity
+        // analysis below covers the rest.
+        return Err(CompileError::new(
+            "bynk.types.catastrophic_regex",
+            span,
+            format!(
+                "the pattern in {label} nests unbounded quantifiers, which can cause \
+                 catastrophic backtracking (ReDoS)"
+            ),
+        )
+        .with_note(
+            "a repeated group that itself contains `*`, `+`, or `{n,}` makes matching take \
+             exponential time on crafted input; restructure the pattern so no unbounded \
+             quantifier is nested inside another",
+        ));
+    }
+    match ambiguity_diagnostic(&pat, &flags, span, &label, Some(max_len)) {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
 /// K6c (#2594's sibling, #2600): check a regex method's pattern argument the
 /// way a `Matches` pattern is checked: valid under ECMAScript semantics
 /// (`regress`), no nested unbounded quantifier, and no ambiguity the automaton
@@ -1246,15 +1529,20 @@ pub(crate) fn check_regex_literal(
         }
         None => (literal.to_string(), String::new()),
     };
-    if let Err(e) = regress::Regex::with_flags(&pat, flags.as_str()) {
+    // #3950: every Bynk regex runs in Unicode mode, so it is validated and
+    // analysed under `u` as well.
+    let uflags = format!("{flags}u");
+    if let Err(e) = regress::Regex::with_flags(&pat, uflags.as_str()) {
         return Err(CompileError::new(
             "bynk.types.invalid_regex",
             span,
             format!("invalid regular expression {label}"),
         )
-        .with_note(format!("regex parse error (JS `RegExp` semantics): {e}")));
+        .with_note(format!(
+            "regex parse error (JS `RegExp` semantics, Unicode mode): {e}"
+        )));
     }
-    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &flags) {
+    if has_nested_unbounded_quantifier(&pat) && !proved_linear(&pat, &uflags) {
         return Err(CompileError::new(
             "bynk.types.catastrophic_regex",
             span,
@@ -1269,7 +1557,7 @@ pub(crate) fn check_regex_literal(
              quantifier is nested inside another",
         ));
     }
-    if let Some(e) = ambiguity_diagnostic(&pat, &flags, span, &label, None) {
+    if let Some(e) = ambiguity_diagnostic(&pat, &uflags, span, &label, None) {
         return Err(e);
     }
     Ok((pat, flags))
@@ -1279,11 +1567,7 @@ pub(crate) fn check_regex_literal(
 /// and the letters. `None` when the literal opens with no such group (a
 /// lookaround `(?=`, `(?!`, `(?<` or a non-capturing `(?:` is not one).
 fn leading_flag_group(literal: &str) -> Option<(&str, &str)> {
-    let rest = literal.strip_prefix("(?")?;
-    let end = rest.find(')')?;
-    let flags = &rest[..end];
-    (!flags.is_empty() && flags.chars().all(|c| c.is_ascii_alphabetic()))
-        .then(|| (&rest[end + 1..], flags))
+    bynk_syntax::ast::leading_regex_flag_group(literal)
 }
 
 /// K6c (#2600): a checked regex literal as the emitter writes it, the pattern

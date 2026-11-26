@@ -20,7 +20,7 @@
 //! objects a page. P5b (#2626) adds the streamed reads and writes (a wrong
 //! declared size faulting, nothing stored) and multipart uploads (completed
 //! from the handle in a later request; R2's minimum part size) to the same
-//! smoke, so it keeps band 1.
+//! smoke.
 //!
 //! The same toolchain skip and `BYNK_REQUIRE_WORKERD` gate as the events smokes;
 //! see `events_ordering_workerd.rs` for why each exists. Teardown is the shared
@@ -55,7 +55,7 @@ service api from http {
 \t}
 
 \ton GET(\"/ttl/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Kv {
-\t\tlet _ <- Kv.putTtl(key, value, 120)
+\t\tlet _ <- Kv.putTtl(key, value, 2.minutes)
 \t\tOk(\"ttl\")
 \t}
 
@@ -129,11 +129,6 @@ service api from http {
 }
 ";
 
-/// A `band` that asks [`run_smoke_with`] for ports the operating system says
-/// are free, for a smoke that has no band of its own: every one below port
-/// 65_536 is taken (the last, 10, by the D1 migrations smoke, #2608).
-const FREE_PORTS: u16 = u16::MAX;
-
 fn skip(reason: &str) -> bool {
     if require::is_required(REQUIRE_ENV) {
         panic!("{REQUIRE_ENV} is set but {reason}");
@@ -195,18 +190,17 @@ fn check_steps(port: u16, steps: &[(&str, u16, &str)]) -> Vec<String> {
 /// One Worker under `wrangler dev`, driven over HTTP. `source` is a context
 /// named `<ctx>.smoke` in the project `<project>`, which must answer `GET
 /// <boot>` once up; `drive` talks to it on its port and returns what the
-/// platform answered differently from the contract. `band` offsets the port
-/// within this file's own range so that two smokes can run at once. The
+/// platform answered differently from the contract. The Worker and its
+/// inspector take ports the operating system says are free. The
 /// disagreements with the wrangler log, or `None` when the smoke was skipped.
 fn run_smoke(
     project: &str,
     ctx: &str,
     source: &str,
     boot: &str,
-    band: u16,
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
-    run_smoke_with(project, ctx, source, &[], &|_| None, boot, band, &[], drive)
+    run_smoke_with(project, ctx, source, &[], &|_| None, boot, &[], drive)
 }
 
 /// [`run_smoke`] with `files` (project-relative path, content) written into
@@ -214,8 +208,7 @@ fn run_smoke(
 /// directory before `wrangler dev` starts; a `Some` from it is a failure that
 /// stops the smoke. `env` is set on `wrangler dev`'s own environment (and
 /// nowhere else), as `bynk dev` sets a Hyperdrive binding's local connection
-/// string (#3319). A `band` of [`FREE_PORTS`] takes two ports the operating
-/// system says are free instead of a band of its own.
+/// string (#3319).
 #[allow(clippy::too_many_arguments)]
 fn run_smoke_with(
     project: &str,
@@ -224,7 +217,6 @@ fn run_smoke_with(
     files: &[(&str, &str)],
     prepare: &dyn Fn(&std::path::Path) -> Option<String>,
     boot: &str,
-    band: u16,
     env: &[(&str, &str)],
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
@@ -244,7 +236,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -276,26 +268,13 @@ fn run_smoke_with(
         return Some((vec![failure], String::new()));
     }
 
-    // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
-    // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
-    // and 6 (40_000 to 48_000) share a port with the events smokes for half
-    // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
-    // migrations smoke 10, the last band below port 65_536 (#2608).
-    let (port, inspector_port) = if band == FREE_PORTS {
-        let [port, inspector_port] = wrangler::ports::free_ports();
-        (port, inspector_port)
-    } else {
-        let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
-        (port, port + 1)
-    };
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
     let spawned = wrangler::Wrangler::spawn(
-        tools::base_command("npx")
+        wrangler::npx()
             .args([
-                "-y",
-                wrangler::SPEC,
                 "dev",
                 "--port",
                 &port.to_string(),
@@ -366,7 +345,7 @@ fn workers_kv_round_trips_on_workerd() {
         // user:2, user:3 (TTL'd) and user:4 (expiring): two pages.
         ("/pages/user:", 200, r#""2 true 1 false 1""#),
     ];
-    let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", 0, &|port| {
+    let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", &|port| {
         check_steps(port, steps)
     }) else {
         return;
@@ -467,6 +446,45 @@ service api from http {
 \t\tOk(page.keys.map((o) => o.key))
 \t}
 
+\ton GET(\"/range/:key/:offset/:length\") (key: String, offset: Int, length: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Span(offset, Some(length)))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/rangeto/:key/:offset\") (key: String, offset: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Span(offset, None))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/suffix/:key/:length\") (key: String, length: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Suffix(length))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/ifmatch/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet r <- Archives.getStreamIf(key, IfEtagMatches(etag))
+\t\tOk(describe(r))
+\t}
+
+\ton GET(\"/ifdiffer/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet r <- Archives.getStreamIf(key, IfEtagDiffers(etag))
+\t\tOk(describe(r))
+\t}
+
+\ton GET(\"/children/:prefix/:delim\") (prefix: String, delim: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet page <- Archives.listWith(R2List { prefix: Some(prefix), cursor: None, delimiter: Some(delim) })
+\t\tOk(\"\\(page.keys.map((o) => o.key).join(\",\")) | \\(page.prefixes.join(\",\"))\")
+\t}
+
 \ton GET(\"/page1/:prefix\") (prefix: String) -> Effect[HttpResult[List[String]]] by Visitor given Archives {
 \t\tlet first <- Archives.list(Some(prefix), None)
 \t\tOk(first.keys.map((o) => o.key))
@@ -558,6 +576,19 @@ service api from http {
 \t}
 }
 
+// The text of a range, with what R2 served and the object's whole size.
+fn partial(p: R2Partial) -> String {
+\t\"range \\(p.offset)+\\(p.length) of \\(p.object.size)\"
+}
+
+fn describe(r: R2Read) -> String {
+\tmatch r {
+\t\tPresent(b) => \"found \\(b.object.size)\"
+\t\tMissing => \"missing\"
+\t\tNotModified(o) => \"not modified \\(o.size)\"
+\t}
+}
+
 // 2^n copies of `b`: 8 MiB from one byte at n = 23, over R2's 5 MiB minimum part.
 fn grow(b: Bytes, n: Int) -> Bytes {
 \tif n == 0 {
@@ -594,6 +625,26 @@ fn workers_r2_round_trips_on_workerd() {
         ("/delete/a", 200, r#""deleted""#),
         ("/delete/a", 200, r#""deleted""#),
         ("/get/a", 404, ""),
+        // #4049: a byte range is the bytes R2 serves, with the offset and length of the body
+        // (a length past the end is clamped), a suffix is the last bytes, and a missing key is None
+        ("/put/rg/0123456789", 200, ""),
+        ("/range/rg/2/4", 200, r#""range 2+4 of 10""#),
+        ("/range/rg/8/50", 200, r#""range 8+2 of 10""#),
+        ("/rangeto/rg/7", 200, r#""range 7+3 of 10""#),
+        ("/suffix/rg/3", 200, r#""range 7+3 of 10""#),
+        ("/suffix/rg/50", 200, r#""range 0+10 of 10""#),
+        ("/range/absent/0/1", 404, ""),
+        // a range that starts at the end of the object is R2's own refusal, not clamped
+        ("/rangeto/rg/10", 500, ""),
+        ("/range/rg/99/1", 500, ""),
+        // #4049: a delimiter folds keys into prefixes
+        ("/put/d~a~1/x", 200, ""),
+        ("/put/d~a~2/x", 200, ""),
+        ("/put/d~b~1/x", 200, ""),
+        ("/put/d~c/x", 200, ""),
+        ("/children/d~/~", 200, r#""d~c | d~a~,d~b~""#),
+        ("/children/d~a~/~", 200, r#""d~a~1,d~a~2 | ""#),
+        ("/children/d~/-", 200, r#""d~a~1,d~a~2,d~b~1,d~c | ""#),
         // list by prefix, in key order
         ("/put/p~2/x", 200, ""),
         ("/put/p~1/x", 200, ""),
@@ -626,7 +677,7 @@ fn workers_r2_round_trips_on_workerd() {
         ("/mp/abort/ab", 200, r#""aborted""#),
         ("/get/ab", 404, ""),
     ];
-    let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", 1, &|port| {
+    let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", &|port| {
         let mut failures = check_steps(port, steps);
         // Compare-and-swap on the etag R2 minted: it swaps once, and the same
         // etag is then stale.
@@ -644,6 +695,25 @@ fn workers_r2_round_trips_on_workerd() {
                 ));
             }
             other => failures.push(format!("/etag/c: {other:?}")),
+        }
+        // #4049: a read gated on the etag R2 minted reads when it holds, and answers
+        // not modified (the object's metadata, no body) when it does not
+        match get(port, "/etag/rg") {
+            Ok((200, body)) => {
+                let etag = body.trim().trim_matches('"').to_string();
+                failures.extend(check_steps(
+                    port,
+                    &[
+                        (&format!("/ifmatch/rg/{etag}"), 200, r#""found 10""#),
+                        ("/ifmatch/rg/not-the-etag", 200, r#""not modified 10""#),
+                        (&format!("/ifdiffer/rg/{etag}"), 200, r#""not modified 10""#),
+                        ("/ifdiffer/rg/not-the-etag", 200, r#""found 10""#),
+                        ("/ifmatch/absent/x", 200, r#""missing""#),
+                        ("/ifdiffer/absent/x", 200, r#""missing""#),
+                    ],
+                ));
+            }
+            other => failures.push(format!("/etag/rg: {other:?}")),
         }
         // P5b (#2626): a streamed body is served as the object's bytes.
         match get(port, "/stream/sc") {
@@ -757,19 +827,74 @@ fn workers_ratelimit_counts_on_workerd() {
         ("/reads/a", 200, "true"),
         ("/reads/a", 200, "false"),
     ];
-    let Some((failures, log)) = run_smoke(
-        "rl-smoke",
-        "rl",
-        RATELIMIT_SOURCE,
-        "/reads/boot",
-        2,
-        &|port| check_steps(port, steps),
-    ) else {
+    let Some((failures, log)) =
+        run_smoke("rl-smoke", "rl", RATELIMIT_SOURCE, "/reads/boot", &|port| {
+            check_steps(port, steps)
+        })
+    else {
         return;
     };
     assert!(
         failures.is_empty(),
         "WorkersRateLimit on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const CRYPTO_SOURCE: &str = "context cr.smoke
+
+consumes bynk.crypto { Crypto }
+
+service api from http {
+\ton GET(\"/roundtrip/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet stored <- Crypto.hashPassword(pw)
+\t\tlet ok <- Crypto.verifyPassword(pw, stored)
+\t\tlet wrong <- Crypto.verifyPassword(pw.concat(\"x\"), stored)
+\t\tlet stale <- Crypto.needsRehash(stored)
+\t\tOk(\"\\(ok) \\(wrong) \\(stale)\")
+\t}
+
+\ton GET(\"/derive\") () -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet okm <- Crypto.deriveKey(Bytes.fromUtf8(\"master\"), Bytes.fromUtf8(\"salt\"), Bytes.fromUtf8(\"webhook-mac/v1\"), 32)
+\t\tOk(okm.toHex())
+\t}
+
+\ton GET(\"/high/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet stored = \"pbkdf2-sha256$150000$c2FsdFNBTFRzYWx0U0FMVHNhbHRTQUxUc2FsdFNBTFRzYWx0$fFHzxfX1vycWjsrju6y+e7OVY5XXMfCEDWrzb9AnxCZlmKkH6ZlWgA\"
+\t\tlet ok <- Crypto.verifyPassword(pw, stored)
+\t\tlet wrong <- Crypto.verifyPassword(pw.concat(\"x\"), stored)
+\t\tOk(\"\\(ok) \\(wrong)\")
+\t}
+}
+";
+
+#[test]
+fn crypto_password_hashing_and_hkdf_run_on_workerd() {
+    // #4118: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
+    // Workers count (100,000), a stored hash above it (refused by the binding's own cap, `false`), and the
+    // HKDF answer `node:crypto` gives for the same input. What this cannot see is the limit itself:
+    // `wrangler dev` runs the open-source workerd, which accepts 600,000, while deployed Workers refuse
+    // more than 100,000 (`NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+    // supported`), so a local run would pass at either count. The cap is pinned by the binding's own tests
+    // (`bynk-std/test/crypto.mjs`), which simulate the platform's refusal, and by the count the binding
+    // chooses for the cloudflare platform.
+    let steps: &[(&str, u16, &str)] = &[
+        ("/roundtrip/horse", 200, "\"true false false\""),
+        (
+            "/derive",
+            200,
+            "\"c1a70c6be6f6e6bf655da130593cef039aa373a2c7b62622c0bbc3c62fe6f146\"",
+        ),
+        ("/high/passwordPASSWORDpassword", 200, "\"false false\""),
+    ];
+    let Some((failures, log)) = run_smoke("cr-smoke", "cr", CRYPTO_SOURCE, "/derive", &|port| {
+        check_steps(port, steps)
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "bynk.crypto on workerd disagrees with the contract the Node suite checks:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }
@@ -793,7 +918,7 @@ service api from http {
 \t}
 
 \ton GET(\"/later/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
-\t\tlet _ <- Orders.sendWith(Json.encode(Placed { id: id, total: 8 }), QueueSend { delay: Some(1.seconds) })
+\t\tlet _ <- Orders.sendWith(Json.encode(Placed { id: id, total: 8 }), QueueSend { delay: Some(1.second) })
 \t\tOk(\"sent\")
 \t}
 
@@ -808,7 +933,7 @@ service api from http {
 \t}
 
 \ton GET(\"/valuelater/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
-\t\tlet _ <- Orders.sendValueWith(Placed { id: id, total: 10 }, QueueSend { delay: Some(1.seconds) })
+\t\tlet _ <- Orders.sendValueWith(Placed { id: id, total: 10 }, QueueSend { delay: Some(1.second) })
 \t\tOk(\"sent\")
 \t}
 
@@ -832,7 +957,7 @@ service api from http {
 }
 
 service fulfilment from queue(\"q-smoke-orders\") {
-\ton message(m: Placed) -> Effect[QueueResult] given Kv {
+\ton message(m: Placed) -> Effect[QueueResult] by Producer given Kv {
 \t\tlet _ <- Kv.put(m.id, m.total.toString())
 \t\tAck
 \t}
@@ -858,7 +983,7 @@ service intake from email(\"Support@Q.Example\") {
 }
 
 service catchall from email(\"*@q.example\") {
-\ton message(mail: InboundEmail) -> Effect[EmailVerdict] {
+\ton message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
 \t\tReject(\"no such mailbox\")
 \t}
 }
@@ -878,7 +1003,6 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
         &[],
         &install_npm_dependencies,
         "/seen/boot",
-        3,
         &[],
         &|port| {
             let mut failures = check_steps(
@@ -1100,10 +1224,8 @@ const LOCAL_SECRET_VALUE: &str = "workerd-smoke-secret";
 /// Worker reads in the local Secrets Store beside its configuration, where
 /// `wrangler dev` finds it. `None` on success.
 fn seed_local_secret(dir: &std::path::Path) -> Option<String> {
-    let created = tools::base_command("npx")
+    let created = wrangler::npx()
         .args([
-            "-y",
-            wrangler::SPEC,
             "secrets-store",
             "secret",
             "create",
@@ -1159,7 +1281,7 @@ service api from http {
 
 \ton GET(\"/secret\") () -> Effect[HttpResult[String]] by Visitor given StripeKey {
 \t\tlet key <- StripeKey.get()
-\t\tif key == \"workerd-smoke-secret\" { Ok(\"matched\") } else { Ok(\"different\") }
+\t\tif key.matches(\"workerd-smoke-secret\") { Ok(\"matched\") } else { Ok(\"different\") }
 \t}
 
 \ton GET(\"/missing\") () -> Effect[HttpResult[String]] by Visitor given MissingKey {
@@ -1226,7 +1348,6 @@ fn workers_analytics_writes_on_workerd() {
         &[],
         &seed_local_secret,
         "/bare",
-        4,
         &[],
         &|port| {
             check_steps(
@@ -1346,7 +1467,7 @@ fn workers_d1_round_trips_on_workerd() {
     // blob column decodes as `Bytes` (so the binding reads D1's blob shape), a
     // UNIQUE or CHECK breach is `Constraint`, a batch that breaks one rolls
     // back, and a syntax error is `Failed`.
-    let Some((failures, log)) = run_smoke("d-smoke", "d", D1_SOURCE, "/setup", 7, &|port| {
+    let Some((failures, log)) = run_smoke("d-smoke", "d", D1_SOURCE, "/setup", &|port| {
         check_steps(
             port,
             &[
@@ -1427,16 +1548,8 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         ),
     ];
     let apply = |dir: &std::path::Path| -> Option<String> {
-        let out = tools::base_command("npx")
-            .args([
-                "-y",
-                wrangler::SPEC,
-                "d1",
-                "migrations",
-                "apply",
-                "D1_ITEMS",
-                "--local",
-            ])
+        let out = wrangler::npx()
+            .args(["d1", "migrations", "apply", "D1_ITEMS", "--local"])
             .current_dir(dir)
             .stdin(Stdio::null())
             .output()
@@ -1456,7 +1569,6 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         &files,
         &apply,
         "/items",
-        10,
         &[],
         &|port| {
             check_steps(
@@ -1543,7 +1655,7 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
     // `302`, and an upstream that never answers is `Err(Timeout)`.
     let upstream = upstream();
     let source = fetch_source(upstream);
-    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 9, &|port| {
+    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", &|port| {
         check_steps(
             port,
             &[
@@ -1859,7 +1971,7 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     // `fetch`: bytes 0–255 come down and go back up unchanged, and the
     // upload's Content-Type is the one the request set.
     //
-    // K5c (#2627), in the same Worker (the port bands are all taken):
+    // K5c (#2627), in the same Worker (no new smoke is needed):
     // `receiveStream` hands out a platform stream that outlasts its head
     // timeout, `sendStream` pipes it upstream chunked with no content-length,
     // `RawStreamed` re-serves one, and a second read of one faults.
@@ -1868,7 +1980,7 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     let source = fetch_bytes_source(upstream, streams);
     let expected = format!(r#""{ALL_BYTES_BASE64} {ALL_BYTES_BASE64} application/octet-stream""#);
     let streamed = format!(r#""{ALL_BYTES_BASE64} chunked none""#);
-    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 8, &|port| {
+    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", &|port| {
         let mut failures = check_steps(
             port,
             &[
@@ -2186,7 +2298,6 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
         // imports must resolve under the emitted compatibility date.
         &install_npm_dependencies,
         "/ready",
-        FREE_PORTS,
         &env,
         &|port| {
             // A handler's `String` is a JSON string on the wire.
@@ -2566,7 +2677,6 @@ fn workers_mysql_runs_through_hyperdrive_on_workerd() {
         // must be enough for workerd.
         &install_npm_dependencies,
         "/ready",
-        FREE_PORTS,
         &env,
         &|port| {
             let q = |text: &str| serde_json::to_string(text).unwrap();
@@ -2802,7 +2912,6 @@ fn workers_ai_stream_decodes_and_cancels_on_workerd() {
         &[],
         &fake_ai,
         "/ready",
-        FREE_PORTS,
         &[],
         &|port| {
             let mut failures = Vec::new();

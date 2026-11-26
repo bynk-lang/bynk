@@ -1,0 +1,12 @@
+{
+  "blurb": "A provider with no body (`provides Clock = SystemClock`) says its implementation comes from elsewhere, and only an `adapter` has a binding to supply it. In a context every provider is written in Bynk, so it needs a body implementing the capability's operations. Add one, or move the capability into an adapter if the code is TypeScript. The reverse mistake is `bynk.adapter.provider_has_body`.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.external_provider",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "provides Clock = SystemClock             // ✗ no body, and a context has no binding\n\nprovides Clock = SystemClock {           // ✓ implemented in Bynk\n    fn now() -> Effect[Int] {\n        Effect.pure(0)\n    }\n}",
+  "severity": "error",
+  "summary": "A bodiless (external) provider was declared outside an `adapter`."
+}

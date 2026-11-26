@@ -561,11 +561,31 @@ pub fn chain_literal<'a>(
     start: &'a ConstDecl,
     base: BaseType,
     limit: usize,
+    next: impl FnMut(&str) -> Option<&'a ConstDecl>,
+) -> Option<&'a Expr> {
+    chain_literal_with(
+        start,
+        base,
+        |ty| matches!(ty, TypeRef::Base(b, _) if *b == base),
+        limit,
+        next,
+    )
+}
+
+/// [`chain_literal`] with the declared-type test supplied: each constant on the
+/// chain must satisfy `accepts`, and the chain must end at a literal of `base`.
+/// #3875: a cron schedule position accepts a constant declared exactly
+/// `CronSchedule` as well as `String`.
+pub fn chain_literal_with<'a>(
+    start: &'a ConstDecl,
+    base: BaseType,
+    accepts: impl Fn(&TypeRef) -> bool,
+    limit: usize,
     mut next: impl FnMut(&str) -> Option<&'a ConstDecl>,
 ) -> Option<&'a Expr> {
     let mut current = start;
     for _ in 0..=limit {
-        if !matches!(current.ty, TypeRef::Base(b, _) if b == base) {
+        if !accepts(&current.ty) {
             return None;
         }
         match &current.init.kind {
@@ -641,6 +661,130 @@ pub fn resolve_const_literal<'a>(
     })
 }
 
+/// #3925: resolve the bare name `name`, written in unit `at`, to the list of
+/// string literals a constant declared exactly `List[String]` denotes (a chain of
+/// such constants ends at a list literal of string literals). `None` when any hop
+/// is not that, so the position's own diagnostic reports the argument as written.
+pub fn resolve_string_list_const<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+) -> Option<ResolvedConst<'a>> {
+    let is_string_list = |ty: &TypeRef| matches!(ty, TypeRef::List(inner, _) if matches!(**inner, TypeRef::Base(BaseType::String, _)));
+    let (table, uses) = unit(at)?;
+    let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+    let first = vis.get(name)?;
+    let (decl, owner) = (first.decl, first.owner);
+    let mut scope = owner.unwrap_or(at);
+    let mut current = decl;
+    for _ in 0..=64 {
+        if !is_string_list(&current.ty) {
+            return None;
+        }
+        match &current.init.kind {
+            ExprKind::ListLit(items, ..)
+                if items.iter().all(|i| matches!(i.kind, ExprKind::StrLit(_))) =>
+            {
+                return Some(ResolvedConst {
+                    decl,
+                    literal: &current.init,
+                    owner,
+                });
+            }
+            ExprKind::Ident(n) => {
+                let (table, uses) = unit(scope)?;
+                let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+                let found = vis.get(n.name.as_str())?;
+                if let Some(o) = found.owner {
+                    scope = o;
+                }
+                current = found.decl;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
+/// #3875: whether a constant's declared type is one a cron schedule position
+/// takes: exactly `String`, or exactly the prelude's `CronSchedule`. A constant
+/// of any other refined type (`String where MaxLength(20)`, a user's own
+/// `type Nightly = String where Cron`) is refused, which keeps named types
+/// distinct inside a context (ADR 0714 B).
+pub fn is_schedule_type(ty: &TypeRef) -> bool {
+    match ty {
+        TypeRef::Base(BaseType::String, _) => true,
+        TypeRef::Named(id) => id.name == "CronSchedule",
+        _ => false,
+    }
+}
+
+/// #3875: [`resolve_const_literal`] for a cron schedule: the chain's constants
+/// are each `String` or `CronSchedule` ([`is_schedule_type`]).
+pub fn resolve_schedule_literal<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
+    resolve_literal_accepting(unit, at, name, is_schedule_type)
+}
+
+/// #3889: whether a constant's declared type is one an email address position
+/// takes: exactly `String`. No refined address type exists, so a refined or opaque
+/// constant (`String where MaxLength(40)`) is refused, which keeps named types
+/// distinct inside a context (ADR 0714 B).
+pub fn is_address_type(ty: &TypeRef) -> bool {
+    matches!(ty, TypeRef::Base(BaseType::String, _))
+}
+
+/// #3889: [`resolve_const_literal`] for an email address: the chain's constants are
+/// each exactly `String` ([`is_address_type`]).
+pub fn resolve_address_literal<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
+    resolve_literal_accepting(unit, at, name, is_address_type)
+}
+
+/// Resolve the bare name `name`, written in unit `at`, to the string literal it
+/// denotes, each constant on the chain satisfying `accepts` (the position's
+/// declared-type test). `Err(None)` is an unknown name; `Err(Some(decl))` a
+/// constant that does not end at an accepted literal.
+fn resolve_literal_accepting<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+    accepts: impl Fn(&TypeRef) -> bool,
+) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
+    let Some((table, uses)) = unit(at) else {
+        return Err(None);
+    };
+    let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+    let Some(first) = vis.get(name) else {
+        return Err(None);
+    };
+    let (decl, owner) = (first.decl, first.owner);
+    let mut scope = owner.unwrap_or(at);
+    let literal = chain_literal_with(decl, BaseType::String, accepts, 64, |n| {
+        let (table, uses) = unit(scope)?;
+        let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+        let found = vis.get(n)?;
+        if let Some(o) = found.owner {
+            scope = o;
+        }
+        Some(found.decl)
+    });
+    match literal {
+        Some(literal) => Ok(ResolvedConst {
+            decl,
+            literal,
+            owner,
+        }),
+        None => Err(Some(decl)),
+    }
+}
+
 /// A constant visible in a unit ([`visible_consts`]), with where it is declared.
 pub struct VisibleConst<'a> {
     pub decl: &'a ConstDecl,
@@ -665,7 +809,7 @@ pub fn visible_consts<'a>(
         .map(|(n, decl)| (n.clone(), VisibleConst { decl, owner: None }))
         .collect();
     for used in uses {
-        let Some(used_table) = used_table(used) else {
+        let Some(used_table) = used_table(used).map(|t| table.seen_through(used, t)) else {
             continue;
         };
         // A used commons' `private` constants stay in it.

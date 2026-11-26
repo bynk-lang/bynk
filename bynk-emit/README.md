@@ -39,7 +39,7 @@ bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-project           project model: discovery, unit graph, paths
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std, ts
+└── bynk-check             name resolution and type checking   + project, std
     ├── bynk-model         the system model and its builder
     ├── bynk-emit          TS emission from a checked program + ts, model, project
     │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, ts, model, strip
@@ -62,11 +62,15 @@ directly.
 
 ```toml
 [dependencies]
-bynk-driver = "0.640"
-bynk-emit = "0.640"
+bynk-driver = "0.794"
+bynk-emit = "0.794"
 ```
 
-```rust
+<!-- Not a doctest: it drives `bynk-driver`, which `bynk-emit` does not depend on, even for its tests
+(#4028). It runs as `integration::emit_readme_example` in `bynk-tests`, which also checks that it still
+matches this block. -->
+
+```rust,ignore
 use std::collections::HashMap;
 use std::path::PathBuf;
 

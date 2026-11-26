@@ -5,13 +5,15 @@
 
 use super::keying::{KeySite, check_key};
 use super::*;
-use crate::kernel_methods::{KernelMethod, LIST_METHODS, QUERY_METHODS};
+use crate::kernel_methods::{
+    EFFECT_RESULT_METHODS, KernelMethod, LIST_METHODS, MAP_METHODS, QUERY_METHODS, SET_METHODS,
+};
 
 /// Render a kernel's method names for a `method_not_found` message —
 /// `` `map`, `filter`, … `` — generated from a `KernelMethod` table rather
 /// than hand-listed at each call site, so the message can't drift from the
 /// table the way `Query`'s once did (T1.6′).
-fn kernel_vocabulary(methods: &[KernelMethod]) -> String {
+pub(super) fn kernel_vocabulary(methods: &[KernelMethod]) -> String {
     methods
         .iter()
         .map(|k| format!("`{}`", k.name))
@@ -36,6 +38,10 @@ pub(crate) fn check_collection_static(
     // comes from the list, or from the expected `Set`.
     if type_name.name == SET && method.name == "of" {
         return check_set_of(args, span, expected, ctx);
+    }
+    // #3961: `Map.of(entries)` builds a map from a list of `MapEntry`.
+    if type_name.name == MAP && method.name == "of" {
+        return super::collections::check_map_of(args, span, expected, ctx);
     }
     for a in args {
         let _ = type_of(a, None, ctx);
@@ -84,7 +90,7 @@ pub(crate) fn check_collection_static(
                 ),
             )
             .with_note(
-                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected",
+                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected; for a `fold`, annotate its result (`let tags: Set[String] = xs.fold(Set.empty(), …)`) or pass a typed seed",
             ),
         );
     }
@@ -139,11 +145,17 @@ pub(crate) fn check_set_kernel_method(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_set_more(method, o, args, elem, span, ctx))
+    {
+        return r;
+    }
     let sig: Option<(Vec<TyId>, Ty)> = match op {
         Some(SetOp::Length) => Some((vec![], Ty::Base(BaseType::Int))),
         Some(SetOp::Contains) => Some((vec![elem], Ty::Base(BaseType::Bool))),
         Some(SetOp::Insert | SetOp::Remove) => Some((vec![elem], Ty::Set(elem))),
         Some(SetOp::ToList) => Some((vec![], Ty::List(elem))),
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -151,9 +163,10 @@ pub(crate) fn check_set_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Set[{}]` type has no method `{}` — the kernel is `length`, `contains`, `insert`, `remove`, `toList` (and `bynk.set` has `union`, `intersect`, …)",
+                "the built-in `Set[{}]` type has no method `{}` — the kernel is {}",
                 elem.display(tys),
-                method.name
+                method.name,
+                kernel_vocabulary(SET_METHODS)
             ),
         ));
         for a in args {
@@ -498,7 +511,11 @@ pub(crate) fn check_list_kernel_method(
             if !arity(2, ctx) {
                 return None;
             }
-            let acc = type_of(&args[0], None, ctx)?;
+            let acc = type_of(
+                &args[0],
+                super::collections::fold_seed_expected(&args[0], ctx),
+                ctx,
+            )?;
             let step = Ty::Fn {
                 params: vec![acc, elem],
                 ret: acc,
@@ -543,44 +560,18 @@ pub(crate) fn check_list_kernel_method(
             }
             Some(tys.intern(Ty::Effect(acc)))
         }
-        // v0.146 (ADR 0170): `forEach(f: T -> Effect[()]) -> Effect[()]` runs an
-        // effectful step for each element **in turn**; v0.147 (ADR 0171):
-        // `parTraverse` runs them **concurrently** (the fan-out form) and awaits
-        // them together. Same type — the difference is sequential-vs-parallel
-        // lowering. Both are the `List` analogue of the `Query` terminals; like
-        // `foldEff`, each runs an effectful function value and so is confined to
-        // effectful contexts.
-        Some(ListOp::ForEach | ListOp::ParTraverse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            let f = Ty::Fn {
-                params: vec![elem],
-                ret: tys.intern(Ty::Effect(tys.intern(Ty::Unit))),
-            };
-            check_arg(
-                &args[0],
-                tys.intern(f.clone()),
-                &format!("the `List.{}` function", method.name),
-                ctx,
-            );
-            if !ctx.effectful {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.effect.fn_value_in_pure_context",
-                        span,
-                        format!(
-                            "`List.{}` runs an effectful function and cannot be called in a pure context",
-                            method.name
-                        ),
-                    )
-                    .with_note(
-                        "effectful function values may only be called where the enclosing body is effectful (its return type is an Effect)",
-                    ),
-                );
-            }
-            Some(tys.intern(Ty::Effect(tys.intern(Ty::Unit))))
+        // v0.146 (ADR 0170) `forEach`, v0.147 (ADR 0171) `parForEach` (#3967: was
+        // `parTraverse`), and the value-returning `parTraverse` (#3967).
+        Some(o @ (ListOp::ForEach | ListOp::ParForEach | ListOp::ParTraverse)) => {
+            super::list_par::check_effect_iter(method, o, args, elem, span, ctx)
         }
+        // #3968: the bounded concurrent forms.
+        Some(
+            o @ (ListOp::ParForEachWith
+            | ListOp::ParTraverseWith
+            | ListOp::ParTraverseAllWith
+            | ListOp::ParTraverseTryWith),
+        ) => super::list_par_with::check_par_with(method, o, args, elem, span, ctx),
         // v0.148 (ADR 0172): the collect-all effectful iterators.
         // `traverseAll(f: A -> Effect[Result[B, E]]) -> Effect[List[Result[B, E]]]`
         // runs `f` over each element **in order**; `parTraverseAll` runs them
@@ -769,12 +760,6 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::List(elem)))
         }
-        Some(ListOp::Count) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Base(BaseType::Int)))
-        }
         Some(ListOp::Any | ListOp::All) => {
             if !arity(1, ctx) {
                 return None;
@@ -791,19 +776,6 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::Base(BaseType::Bool)))
         }
-        Some(ListOp::First) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Option(elem)))
-        }
-        Some(ListOp::FirstOrElse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            check_arg(&args[0], elem, "the `List.firstOrElse` fallback", ctx);
-            Some(elem)
-        }
         // v0.88 (ADR 0116 D2/D3/D4): ordering and aggregate vocabulary. The
         // key is the projection's return type; orderable/numeric widen through
         // `Ty::base()` (so Opaque keys, whose base is hidden, are rejected —
@@ -819,6 +791,7 @@ pub(crate) fn check_list_kernel_method(
             require_key_ord(key, &format!("List.{name}"), args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
+        Some(ListOp::SortWith) => check_sort_with(args, elem, span, ctx),
         Some(ListOp::Distinct) => {
             if !arity(0, ctx) {
                 return None;
@@ -841,6 +814,28 @@ pub(crate) fn check_list_kernel_method(
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
             Some(sum_result(key, "List.sum", args[0].span, ctx))
         }
+        Some(o @ (ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile)) => {
+            super::list_more::check_list_more(method, o, args, elem, span, ctx)
+        }
+        Some(o @ ListOp::Count) if !args.is_empty() => {
+            super::list_more::check_list_more(method, o, args, elem, span, ctx)
+        }
+        Some(o @ (ListOp::Min | ListOp::Max)) if args.is_empty() => {
+            super::list_basics::check_list_basic(method, o, args, elem, span, ctx)
+        }
+        Some(
+            o @ (ListOp::Reverse
+            | ListOp::Find
+            | ListOp::Contains
+            | ListOp::Last
+            | ListOp::LastOrElse
+            | ListOp::IsEmpty
+            | ListOp::Sort
+            | ListOp::Traverse
+            | ListOp::First
+            | ListOp::FirstOrElse
+            | ListOp::Count),
+        ) => super::list_basics::check_list_basic(method, o, args, elem, span, ctx),
         Some(ListOp::Min | ListOp::Max) => {
             if !arity(1, ctx) {
                 return None;
@@ -876,6 +871,9 @@ pub(crate) fn check_list_kernel_method(
         Some(ListOp::LeftJoin) => Some(tys.intern(Ty::List(check_equi_join(
             args, elem, span, false, true, ctx,
         )?))),
+        Some(ListOp::Join) if args.len() == 1 => {
+            super::string_more::check_list_join(method, args, elem, ctx)
+        }
         Some(ListOp::Join) => {
             Some(tys.intern(Ty::List(check_pred_join(args, elem, span, false, ctx)?)))
         }
@@ -939,6 +937,7 @@ pub(crate) fn check_query_kernel_method(
     op: Option<QueryOp>,
     args: &[Expr],
     elem: TyId,
+    receiver: Option<&Expr>,
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
@@ -1068,6 +1067,12 @@ pub(crate) fn check_query_kernel_method(
             check_arg(&args[0], elem, "the `Query.firstOrElse` fallback", ctx);
             Some(eff(elem))
         }
+        Some(o @ (QueryOp::FilterMap | QueryOp::TakeWhile | QueryOp::SkipWhile)) => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
+        }
+        Some(o @ QueryOp::Count) if !args.is_empty() => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
+        }
         Some(QueryOp::Count) => {
             if !arity(0, ctx) {
                 return None;
@@ -1139,25 +1144,14 @@ pub(crate) fn check_query_kernel_method(
             };
             Some(eff(tys.intern(Ty::Option(tys.intern(result)))))
         }
-        // v0.107 (slice 4): `forEach` runs the effectful function over each element
-        // **in turn**; `parTraverse` runs them **concurrently** (the broadcast form —
-        // a slow/half-dead connection must not head-of-line-block the rest). Same
-        // type; the difference is sequential-vs-parallel lowering.
-        Some(QueryOp::ForEach | QueryOp::ParTraverse) => {
+        // `forEach` (in turn), `parForEach` (concurrently: the broadcast form) and, #4177,
+        // the retired `parTraverse` spelling. They share one type; see `query_par`.
+        Some(op @ (QueryOp::ForEach | QueryOp::ParForEach | QueryOp::ParTraverse)) => {
+            super::query_par::report_old_name(op, method, ctx);
             if !arity(1, ctx) {
                 return None;
             }
-            let f = Ty::Fn {
-                params: vec![elem],
-                ret: tys.intern(Ty::Effect(tys.intern(Ty::Unit))),
-            };
-            check_arg(
-                &args[0],
-                tys.intern(f.clone()),
-                &format!("the `Query.{}` function", method.name),
-                ctx,
-            );
-            Some(eff(tys.intern(Ty::Unit)))
+            Some(super::query_par::check_step(method, args, elem, ctx))
         }
         // v0.149 (ADR 0173): the collect-all terminals over a lazy `Query`/a
         // lifted storage collection (the broadcast form for a held
@@ -1411,18 +1405,7 @@ pub(crate) fn check_connection_method(
             Some(tys.intern(eff_unit()))
         }
         Some(ConnectionOp::Close) => {
-            if !args.is_empty() {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.method_arity",
-                    span,
-                    format!("`Connection.close` takes no arguments, got {}", args.len()),
-                ));
-                for a in args {
-                    let _ = type_of(a, None, ctx);
-                }
-                return None;
-            }
-            Some(tys.intern(eff_unit()))
+            check_close_arguments(args, span, ctx).then(|| tys.intern(eff_unit()))
         }
         None => {
             ctx.errors.push(CompileError::new(
@@ -1442,6 +1425,66 @@ pub(crate) fn check_connection_method(
     }
 }
 
+/// #3902: `connection.close(code?, reason?)`. An application may send `1000` or `3000`-`4999`
+/// (RFC 6455 reserves the rest, and `1004`, `1005`, `1006` and `1015` are never sent), and a reason
+/// is at most 123 bytes of UTF-8. A literal outside either is a compile error; a computed one is
+/// held to the same at run time (a code faults, a reason is cut on a character boundary).
+fn check_close_arguments(args: &[Expr], span: Span, ctx: &mut Ctx) -> bool {
+    let tys = ctx.tys;
+    if args.len() > 2 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Connection.close` takes at most 2 arguments (`close(code?, reason?)`), got {}",
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return false;
+    }
+    if let Some(code) = args.first() {
+        let int = tys.intern(Ty::Base(BaseType::Int));
+        check_arg(code, int, "the `Connection.close` code", ctx);
+        if let ExprKind::IntLit { value, .. } = &code.kind
+            && !(*value == 1000 || (3000..=4999).contains(value))
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.ws.bad_close_code",
+                    code.span,
+                    format!("`{value}` is not a close code an application may send"),
+                )
+                .with_note(
+                    "close with `1000` (normal) or a code from `3000` to `4999` for the application's own reasons; `1001` to `2999` are the protocol's, and `1004`, `1005`, `1006` and `1015` are never sent",
+                ),
+            );
+        }
+    }
+    if let Some(reason) = args.get(1) {
+        let string = tys.intern(Ty::Base(BaseType::String));
+        check_arg(reason, string, "the `Connection.close` reason", ctx);
+        if let ExprKind::StrLit(text) = &reason.kind
+            && text.len() > 123
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.ws.bad_close_reason",
+                    reason.span,
+                    format!(
+                        "the close reason is {} bytes of UTF-8, but the protocol allows at most 123",
+                        text.len()
+                    ),
+                )
+                .with_note("shorten the reason; a computed reason is cut to 123 bytes on a character boundary"),
+            );
+        }
+    }
+    true
+}
+
 /// #3051: the operations on a case's `TestConnection[F]`. `sent()` is the frames
 /// the server wrote, `closed()` whether the server closed it, `connection()` the
 /// owned `Connection[F]` an agent receives (once per handle).
@@ -1457,6 +1500,15 @@ pub(crate) fn check_test_connection_method(
     let ret = match op {
         Some(TestConnectionOp::Sent) => Some(tys.intern(Ty::List(frame))),
         Some(TestConnectionOp::Closed) => Some(tys.intern(Ty::Base(BaseType::Bool))),
+        // #3902: the code and reason the server closed with, when it gave them.
+        Some(TestConnectionOp::CloseCode) => {
+            let int = tys.intern(Ty::Base(BaseType::Int));
+            Some(tys.intern(Ty::Option(int)))
+        }
+        Some(TestConnectionOp::CloseReason) => {
+            let string = tys.intern(Ty::Base(BaseType::String));
+            Some(tys.intern(Ty::Option(string)))
+        }
         Some(TestConnectionOp::Connection) => Some(tys.intern(Ty::Connection(frame))),
         None => None,
     };
@@ -1465,7 +1517,7 @@ pub(crate) fn check_test_connection_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()` and `connection()`",
+                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()`, `closeCode()`, `closeReason()` and `connection()`",
                 frame.display(tys),
                 method.name
             ),
@@ -1632,8 +1684,16 @@ pub(crate) fn check_duration_kernel_method(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let sig: Option<(Vec<TyId>, Ty)> = match op {
-        Some(DurationOp::ToMillis) => Some((vec![], Ty::Base(BaseType::Int))),
-        Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
+        Some(
+            DurationOp::ToMillis
+            | DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+        ) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(DurationOp::ToString | DurationOp::ToIso) => {
+            Some((vec![], Ty::Base(BaseType::String)))
+        }
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -1641,7 +1701,7 @@ pub(crate) fn check_duration_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toString`",
+                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`, `toIso`",
                 method.name
             ),
         ));
@@ -1730,8 +1790,8 @@ pub(crate) fn check_instant_kernel_method(
 /// build-from-`String` direction) are resolved separately as type statics.
 ///
 /// #2016 (standard-library K1): `concat`, `slice` (clamped like
-/// `String.slice`), `compare` (unsigned lexicographic, `-1`/`0`/`1`; `Bytes`
-/// stays unorderable), `toHex` and `toBase64Url`.
+/// `String.slice`), `toHex` and `toBase64Url`. `compare` is no longer a `Bytes`
+/// kernel: #3955 made it the universal `Ordering`-returning method.
 pub(crate) fn check_bytes_kernel_method(
     method: &Ident,
     op: Option<BytesOp>,
@@ -1755,7 +1815,6 @@ pub(crate) fn check_bytes_kernel_method(
             vec![tys.intern(int.clone()), tys.intern(int.clone())],
             bytes,
         )),
-        Some(BytesOp::Compare) => Some((vec![tys.intern(bytes)], int)),
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -1764,7 +1823,7 @@ pub(crate) fn check_bytes_kernel_method(
             method.span,
             format!(
                 "the built-in `Bytes` type has no method `{}` — the kernel is `length`, \
-                 `concat`, `slice`, `compare`, `toHex`, `toBase64`, `toBase64Url`, `decodeUtf8`",
+                 `concat`, `slice`, `toHex`, `toBase64`, `toBase64Url`, `decodeUtf8`",
                 method.name
             ),
         ));
@@ -1908,11 +1967,24 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
 /// embedded source. A system suite sees only the types of the context it
 /// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
 fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    std_decl("Cookie")
+}
+
+/// A type of the `bynk` adapter by name, from its embedded source (parsed once).
+pub(crate) fn std_decl(name: &str) -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    std_type_decls()
+        .iter()
+        .find(|t| t.name.name == name)
+        .cloned()
+}
+
+/// Every type the `bynk` adapter declares, from its embedded source (parsed once).
+pub(crate) fn std_type_decls() -> &'static [std::sync::Arc<bynk_syntax::ast::TypeDecl>] {
     use bynk_syntax::ast::{CommonsItem, SourceUnit};
-    static COOKIE: std::sync::OnceLock<Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>>> =
-        std::sync::OnceLock::new();
-    COOKIE
-        .get_or_init(|| {
+    type Decls = Vec<std::sync::Arc<bynk_syntax::ast::TypeDecl>>;
+    static TYPES: std::sync::OnceLock<Decls> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        let parsed_types = || -> Option<Decls> {
             let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
             let file = crate::project_model::firstparty_file_id(unit);
             let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
@@ -1927,14 +1999,18 @@ fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
             let SourceUnit::Adapter(a) = &parsed else {
                 return None;
             };
-            a.items.iter().find_map(|i| match i {
-                CommonsItem::Type(t) if t.name.name == "Cookie" => {
-                    Some(std::sync::Arc::new(t.clone()))
-                }
-                _ => None,
-            })
-        })
-        .clone()
+            Some(
+                a.items
+                    .iter()
+                    .filter_map(|i| match i {
+                        CommonsItem::Type(t) => Some(std::sync::Arc::new(t.clone())),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        };
+        parsed_types().unwrap_or_default()
+    })
 }
 
 /// #3386: the `SignedCookie` actor `name` declared in this context, if it is one.
@@ -1989,13 +2065,16 @@ pub(crate) fn check_signed_cookie_call(
     let decl = signed_cookie_actor(&actor.name, ctx)?;
     let tys = ctx.tys;
     ctx.refs.record(actor.span, SymbolKind::Actor, &actor.name);
+    if method.name == "revokeAll" {
+        return super::session_calls::check_revoke_all(decl, actor, args, span, expr_id, ctx);
+    }
     let issue = method.name == "issue";
     if !issue && method.name != "expire" {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "a `SignedCookie` actor has no member `{}`: it has `issue(identity)` and `expire()`",
+                "a `SignedCookie` actor has no member `{}`: it has `issue(identity)`, `expire()` and, with `sessions = true`, `revokeAll(identity)`",
                 method.name
             ),
         ));
@@ -2031,7 +2110,33 @@ pub(crate) fn check_signed_cookie_call(
         },
     );
     if !issue {
-        return Some(Some(cookie));
+        // #3938: with `sessions = true`, `expire()` also ends the current session server-side, so
+        // it is an effect that runs in a handler (the session agent is reached from there).
+        let sessions = crate::actors::signed_cookie_seam_of(decl, None).is_some_and(|s| s.sessions);
+        if !sessions {
+            return Some(Some(cookie));
+        }
+        if !ctx.effectful {
+            ctx.errors.push(CompileError::new(
+                "bynk.effect.capability_in_pure_context",
+                span,
+                format!(
+                    "`{}.expire` ends the session in its session agent, so it can only be called inside an effectful body (one returning `Effect[T]`)",
+                    actor.name
+                ),
+            ));
+        }
+        if !ctx.in_service_handler && !ctx.in_test_body {
+            ctx.errors.push(CompileError::new(
+                "bynk.actor.signed_cookie_issue_outside_handler",
+                span,
+                format!(
+                    "`{}.expire` can only be called in a service handler",
+                    actor.name
+                ),
+            ));
+        }
+        return Some(Some(tys.intern(Ty::Effect(cookie))));
     }
     // The identity the cookie will carry is the actor's own type, so a handler can only issue a
     // session for a value that is already a valid, sealed identity.
@@ -2264,18 +2369,25 @@ pub(crate) fn check_cookie_field_call(
 pub(crate) fn check_http_result_method(
     method: &Ident,
     op: Option<HttpResultOp>,
+    receiver: &Expr,
     recv_ty: TyId,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    // #3915: the response-header methods have their own rules.
+    if let Some(op) = op.filter(|op| super::response_headers::is_response_header_op(*op)) {
+        return super::response_headers::check_response_header_method(
+            op, method, receiver, recv_ty, args, span, ctx,
+        );
+    }
     let Some(op) = op else {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)` and `cookies()`",
+                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)`, `cookies()`, `withHeader(name, value)`, `retryAfter(d)`, `at(url)`, `download(filename)` and `headers()`",
                 method.name
             ),
         ));
@@ -2331,8 +2443,9 @@ pub(crate) fn check_http_result_method(
         lint_cookie_literal(a, ctx);
     }
     Some(match op {
-        HttpResultOp::WithCookie | HttpResultOp::ClearCookie => recv_ty,
         HttpResultOp::Cookies => tys.intern(Ty::List(cookie)),
+        // The response-header methods returned above.
+        _ => recv_ty,
     })
 }
 
@@ -2570,6 +2683,87 @@ pub(crate) fn check_token_claims_method(
     Some(tys.intern(ret))
 }
 
+/// #4111: type a method on a `Secret`. `reveal()` hands the text back as a `String`, the one
+/// deliberate exit; `matches(candidate)` compares in constant time and answers a `Bool`;
+/// `bearer()` and `basic(user)` make the `Authorization` a request carries. An `Authorization`
+/// has no methods of its own: `Fetch` is where it is revealed.
+pub(crate) fn check_secret_method(
+    kind: crate::context_checks::SecretKind,
+    method: &Ident,
+    op: Option<SecretOp>,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    use crate::context_checks::SecretKind;
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let Some(op) = op.filter(|_| kind == SecretKind::Secret) else {
+        let (name, has) = match kind {
+            SecretKind::Secret => (
+                "Secret",
+                " — it has `reveal()`, `matches(candidate)`, `bearer()` and `basic(user)`",
+            ),
+            SecretKind::Authorization => (
+                "Authorization",
+                " — it has none: it is set as a request's `authorization` and revealed only by `Fetch`",
+            ),
+        };
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!("`{name}` has no method `{}`{has}", method.name),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let expected_args = match op {
+        SecretOp::Reveal | SecretOp::Bearer => 0,
+        SecretOp::Matches | SecretOp::Basic => 1,
+    };
+    if args.len() != expected_args {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Secret.{}` takes {expected_args} argument{}, got {}",
+                method.name,
+                if expected_args == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(a) = args.first() {
+        let what = match op {
+            SecretOp::Matches => "the `Secret.matches` candidate",
+            _ => "the `Secret.basic` user",
+        };
+        check_arg(a, string, what, ctx);
+    }
+    Some(match op {
+        SecretOp::Reveal => string,
+        SecretOp::Matches => tys.intern(Ty::Base(BaseType::Bool)),
+        SecretOp::Bearer | SecretOp::Basic => {
+            // The `Authorization` the `bynk` adapter exports: the caller's own entry for it, or its
+            // embedded declaration when the caller consumes no `Authorization` by name.
+            let decl = ctx
+                .input
+                .types
+                .values()
+                .find(|d| crate::context_checks::secret_kind(d) == Some(SecretKind::Authorization))
+                .cloned()
+                .or_else(|| std_decl("Authorization"))?;
+            crate::checker::named_ty(&decl, tys)
+        }
+    })
+}
+
 /// v0.22a: type a built-in `String` kernel method (ADR 0046). `String` is
 /// opaque (no char access), so its operations are compiler built-ins
 /// lowering to TS string methods — the 0034/0037 hybrid posture. Semantics
@@ -2607,6 +2801,14 @@ pub(crate) fn check_string_kernel_method(
             vec![tys.intern(s.clone())],
             Ty::List(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
         )),
+        // #3979: the named groups of the first match, by name.
+        Some(StringOp::FindRegexNamed) => {
+            let group = tys.intern(Ty::Option(tys.intern(s.clone())));
+            Some((
+                vec![tys.intern(s.clone())],
+                Ty::Option(tys.intern(Ty::Map(tys.intern(s.clone()), group))),
+            ))
+        }
         Some(StringOp::ReplaceRegex) => Some((
             vec![tys.intern(s.clone()), tys.intern(s.clone())],
             s.clone(),
@@ -2623,6 +2825,17 @@ pub(crate) fn check_string_kernel_method(
         Some(StringOp::IndexOf) => Some((vec![tys.intern(s.clone())], Ty::Option(tys.intern(int)))),
         Some(StringOp::Chars) => Some((vec![], strings)),
         Some(StringOp::Concat) => Some((vec![tys.intern(s.clone())], s.clone())),
+        Some(
+            o @ (StringOp::IsEmpty
+            | StringOp::TrimStart
+            | StringOp::TrimEnd
+            | StringOp::PadStart
+            | StringOp::PadEnd
+            | StringOp::Repeat
+            | StringOp::Lines
+            | StringOp::LastIndexOf
+            | StringOp::ReplaceFirst),
+        ) => Some(super::string_more::signature(o, tys)),
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         Some(StringOp::PercentEncode) => Some((vec![], s.clone())),
         Some(StringOp::PercentDecode) => Some((vec![], Ty::Option(tys.intern(s.clone())))),
@@ -2637,7 +2850,8 @@ pub(crate) fn check_string_kernel_method(
                  `length`, `split`, `trim`, `contains`, `startsWith`, `endsWith`, \
                  `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`, \
                  `percentEncode`, `percentDecode`, `matchesRegex`, `containsRegex`, `findRegex`, \
-                 `findAllRegex`, `replaceRegex`, `splitRegex`",
+                 `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`, `isEmpty`, `trimStart`, `trimEnd`, \
+                 `padStart`, `padEnd`, `repeat`, `lines`, `lastIndexOf`, `replaceFirst`",
                 method.name
             ),
         ));
@@ -2671,16 +2885,25 @@ pub(crate) fn check_string_kernel_method(
             ctx,
         );
     }
+    if matches!(op, Some(StringOp::PadStart | StringOp::PadEnd)) {
+        super::string_more::check_pad_fill(method, args, ctx);
+    }
     // K6c (#2600): a regex method's pattern must be a string literal, so the
     // compile-time ReDoS checks can see it; then it is checked as a `Matches`
     // pattern is.
-    if method.name.ends_with("Regex")
+    if (method.name.ends_with("Regex") || matches!(op, Some(StringOp::FindRegexNamed)))
         && let Some(pattern) = args.first()
     {
         match &pattern.kind {
             ExprKind::StrLit(literal) => {
                 if let Err(e) = super::refinements::check_regex_literal(literal, pattern.span) {
                     ctx.errors.push(e);
+                } else if matches!(op, Some(StringOp::FindRegexNamed)) {
+                    if let Some(name) = crate::regex_groups::duplicate_group_name(literal) {
+                        ctx.errors.push(duplicate_group_name(&name, pattern.span));
+                    } else if crate::regex_groups::group_names(literal).is_empty() {
+                        ctx.errors.push(no_named_groups(pattern.span));
+                    }
                 }
             }
             _ => ctx.errors.push(
@@ -2700,6 +2923,30 @@ pub(crate) fn check_string_kernel_method(
         }
     }
     Some(tys.intern(ret))
+}
+
+/// #3979: a group name used twice is refused by the runtimes, even across
+/// alternatives, so the pattern would throw when it is built.
+fn duplicate_group_name(name: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.types.regex_duplicate_group_name",
+        span,
+        format!("the pattern of `String.findRegexNamed` names the group `{name}` more than once"),
+    )
+    .with_note("give each group its own name; a repeated name is refused when the pattern is built")
+}
+
+/// #3979: `findRegexNamed` reads a pattern's named groups, so a pattern with
+/// none has nothing to key the result by.
+fn no_named_groups(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.types.regex_no_named_groups",
+        span,
+        "the pattern of `String.findRegexNamed` has no named capture group",
+    )
+    .with_note(
+        "name a group with `(?<name>…)`, or use `findRegex`, which returns the groups by position",
+    )
 }
 
 /// #2683, #2711: the execution-context check shared by `e.within(d)` and
@@ -2796,6 +3043,7 @@ pub(crate) fn check_effect_method(
     match method.name.as_str() {
         "within" => check_effect_within_method(method, args, inner, span, ctx),
         "race" => check_effect_race_method(args, inner, span, ctx),
+        "map" | "andThen" => super::effect_more::check_map_and_then(method, args, inner, span, ctx),
         _ => check_effect_detach_method(receiver, args, span, ctx),
     }
 }
@@ -2990,7 +3238,12 @@ pub(crate) fn check_effect_race_method(
 /// the return is read from the actual: an expected return carrying a
 /// flexible variable lets a lambda type bottom-up (the v0.20a pass-2 rule),
 /// and `unify` captures it here. Returns the function's return type.
-fn check_kernel_fn_arg(arg: &Expr, params: Vec<TyId>, label: &str, ctx: &mut Ctx) -> Option<TyId> {
+pub(super) fn check_kernel_fn_arg(
+    arg: &Expr,
+    params: Vec<TyId>,
+    label: &str,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
     let tys = ctx.tys;
     const RET_VAR: &str = "__kernel_ret";
     let expected = Ty::Fn {
@@ -3331,13 +3584,17 @@ pub(crate) fn check_result_kernel_method(
             }
             Some(tys.intern(Ty::Option(ok)))
         }
+        // #3969: recovery from an `Err`, and the `Err` side as an `Option`.
+        Some(o @ (ResultOp::OrElse | ResultOp::Err)) => {
+            super::result_more::check_result_more(o, method, args, ok, err, span, ctx)
+        }
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
                     "the built-in `Result[{}, {}]` type has no method `{}` — the kernel is \
-                     `map`, `andThen`, `mapErr`, `getOrElse`, `isOk`, `isErr`, `ok`",
+                     `map`, `andThen`, `mapErr`, `orElse`, `getOrElse`, `isOk`, `isErr`, `ok`, `err`",
                     ok.display(tys),
                     err.display(tys),
                     method.name
@@ -3479,11 +3736,11 @@ pub(crate) fn check_effect_result_kernel_method(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "the built-in `Effect[Result[{}, {}]]` type has no method `{}` — the kernel is \
-                     `mapOk`, `mapErr`, `flatMapOk`, `flatMapErr`",
+                    "the built-in `Effect[Result[{}, {}]]` type has no method `{}` — the kernel is {}",
                     ok.display(tys),
                     err.display(tys),
-                    method.name
+                    method.name,
+                    kernel_vocabulary(EFFECT_RESULT_METHODS)
                 ),
             ));
             for a in args {
@@ -3593,7 +3850,7 @@ pub(crate) fn first_recursive_generic(
         | Ty::List(a)
         | Ty::Set(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)
@@ -4346,6 +4603,11 @@ pub(crate) fn check_map_kernel_method(
         }
         true
     };
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_map_more(method, o, args, key, val, span, ctx))
+    {
+        return r;
+    }
     match op {
         Some(MapOp::Length) => {
             if !arity(0, ctx) {
@@ -4381,15 +4643,17 @@ pub(crate) fn check_map_kernel_method(
             check_arg(&args[1], val, "the `Map.insert` value", ctx);
             Some(tys.intern(Ty::Map(key, val)))
         }
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is `length`, `keys`, `values`, `get`, `insert`",
+                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is {}",
                     key.display(tys),
                     val.display(tys),
-                    method.name
+                    method.name,
+                    kernel_vocabulary(MAP_METHODS)
                 ),
             ));
             for a in args {
@@ -4549,6 +4813,54 @@ pub(crate) fn check_decimal_static(
         ctx,
     );
     Some(tys.intern(ret))
+}
+
+/// #3955: `xs.sortWith((a, b) => a.compare(b))`. The comparator returns an
+/// `Ordering`; the sort is stable, like `sortBy`.
+fn check_sort_with(args: &[Expr], elem: TyId, span: Span, ctx: &mut Ctx) -> Option<TyId> {
+    let tys = ctx.tys;
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`List.sortWith` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    let Some(ordering) = super::ordering::ordering_ty(ctx) else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.method_not_found",
+                span,
+                "`List.sortWith` needs the `Ordering` of `bynk.ordering`, which is not in scope here",
+            )
+            .with_note(
+                "a type of your own named `Ordering` hides it; rename yours to use the `Ordering` of `bynk.ordering`",
+            ),
+        );
+        let _ = type_of(&args[0], None, ctx);
+        return None;
+    };
+    let want = tys.intern(Ty::Fn {
+        params: vec![elem, elem],
+        ret: ordering,
+    });
+    let actual = type_of(&args[0], Some(want), ctx)?;
+    if !compatible(actual, want, tys) {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.argument_mismatch",
+            args[0].span,
+            format!(
+                "the `List.sortWith` comparator has type `{}`, but `{}` is required",
+                actual.display(tys),
+                want.display(tys)
+            ),
+        ));
+    }
+    Some(tys.intern(Ty::List(elem)))
 }
 
 #[cfg(test)]

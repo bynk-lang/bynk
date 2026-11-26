@@ -51,24 +51,45 @@ pub use bynk_project::SchemaLock;
 /// language server never analyses it as a project.
 pub use bynk_project::is_workspace_root;
 
+pub mod actor_refinement;
+pub mod actor_sum;
+pub mod agent_busy;
 pub mod agent_effects;
+pub mod agent_erase;
+pub mod agent_jurisdiction;
 /// #2220: the agent state model lives in `bynk-check`, shared with the
 /// checker; re-exported here so existing paths keep working.
 pub use bynk_check::agent_state;
+pub mod analytics_tooling;
 pub mod architecture;
+pub mod call_outcome;
 pub mod capability_path;
 pub mod completion;
 pub mod doc_link_urls;
 pub mod documentation;
+mod duration_completion;
+pub mod email_fallback;
+pub mod env_const;
+pub mod expected_type;
+pub mod field_rename;
 pub mod first_party_docs;
+pub mod header_completion;
 pub mod hover;
 pub mod index_queries;
 pub mod locals_nav;
 pub mod packages;
+mod plain_shape;
+pub use bynk_project::schema_registry::AnalyticsEntry;
+pub mod queue_delivery;
+pub mod rate_limit_completion;
 pub mod sequence;
 pub mod signature_help;
 pub mod symbols;
+pub mod token_claims;
+pub mod violates;
 pub mod wire_contract;
+pub mod wire_names;
+pub mod ws_handshake;
 
 /// One diagnostic produced from a recovery-mode compile of a single file.
 #[derive(Debug, Clone)]
@@ -235,6 +256,9 @@ pub struct ProjectDiagnostics {
     /// boundary shape and cross-context hash against.
     /// See `bynk_check::analysis::ProjectAnalysis::boundary_info`.
     pub boundary_info: HashMap<String, ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`. See `bynk_check::analysis::ProjectAnalysis::analytics`.
+    pub analytics: std::collections::BTreeMap<String, AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets. See `bynk_check::analysis::ProjectAnalysis::doc_scope`.
@@ -412,6 +436,7 @@ fn diagnostics_of(analysis: bynk_check::analysis::ProjectAnalysis) -> ProjectDia
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     } = analysis;
@@ -455,6 +480,7 @@ fn diagnostics_of(analysis: bynk_check::analysis::ProjectAnalysis) -> ProjectDia
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     }

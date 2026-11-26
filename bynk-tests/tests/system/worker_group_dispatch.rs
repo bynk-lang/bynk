@@ -59,7 +59,7 @@ service tick from cron {
 }
 
 service intake from queue("jobs-a") {
-  on message(d: Job) -> Effect[QueueResult] {
+  on message(d: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -71,7 +71,7 @@ service support from email("support@shop.example") {
 }
 
 service order_count {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }
@@ -103,7 +103,7 @@ service sweep from cron {
 }
 
 service intake_b from queue("jobs-b") {
-  on message(d: Job) -> Effect[QueueResult] {
+  on message(d: Job) -> Effect[QueueResult] by Producer {
     Retry("later")
   }
 }
@@ -115,7 +115,7 @@ service catch_all from email("*@shop.example") {
 }
 
 service price {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }
@@ -239,7 +239,7 @@ fn without_a_group_each_context_keeps_its_own_worker_and_marks_nothing() {
     let _ = fs::remove_dir_all(&root);
 }
 
-const SCRIPT: &str = r#"import worker from "./out-js/workers/core/index.js";
+const SCRIPT: &str = r#"import worker from "./out/out-js/workers/core/index.js";
 const ctx = { waitUntil() {} };
 const results = [];
 const show = async (label, request) => {
@@ -267,7 +267,7 @@ for (const [name, method, body] of [["post", "POST", "[1]"], ["get", "GET", unde
 }
 await show("event-unsigned", new Request(u("/_bynk/event/nothing"), { method: "POST", body: "{}" }));
 const logs = [];
-console.error = (...args) => { logs.push(args.map(String).join(" ")); };
+console.error = (...args) => { logs.push(args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ")); };
 const observe = async (label, run) => {
   logs.length = 0;
   const extra = await run();
@@ -327,11 +327,15 @@ fn run_group(root: &Path) -> Option<Vec<serde_json::Value>> {
         .output()
         .expect("run tsc");
     assert!(emitted.status.success(), "tsc failed:\n{}", text(&emitted));
-    fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(
+        root.join("out/out-js/package.json"),
+        "{\"type\":\"module\"}",
+    )
+    .unwrap();
     // The email runtime imports `postal-mime`, an npm dependency of a project with
     // an email service. These cases never reach the parser (they stop at the size
     // cap or the recipient), so a stub stands in for it.
-    let stub = root.join("out-js/node_modules/postal-mime");
+    let stub = root.join("out/out-js/node_modules/postal-mime");
     fs::create_dir_all(&stub).unwrap();
     fs::write(
         stub.join("package.json"),
@@ -473,15 +477,15 @@ fn a_groups_scheduled_queue_and_email_go_to_the_members_that_own_them() {
             .join("\n")
     };
 
-    // Two members share a cron: both run. Another cron is one member's alone.
+    // Two members share a cron: both run, each reporting its failed run (#3872 names the service). Another cron is one member's alone.
     let both = logged("cron-both");
     assert!(
-        both.contains("ran-orders") && both.contains("ran-pricing"),
+        both.contains("(tick)") && both.contains("(sweep)"),
         "{both}"
     );
     let one = logged("cron-one");
     assert!(
-        one.contains("ran-pricing-30") && !one.contains("ran-orders"),
+        one.contains("(sweep)") && one.contains("30 * * * *") && !one.contains("(tick)"),
         "{one}"
     );
     assert_eq!(logged("cron-none"), "");

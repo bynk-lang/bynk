@@ -82,8 +82,13 @@ impl Version {
 /// One pending increment stamped with the version it will ship as.
 #[derive(Debug)]
 pub struct Stamped {
+    /// The hash of the pending file's bytes, which the ledger records (#4319).
+    pub hash: String,
     /// The pending file that produced this (relative name under `design/pending/`).
     pub file: String,
+    /// The PR that added the pending file to `main`, read from that commit's subject, if git
+    /// history has it. A batch of several increments gets each one's own PR this way.
+    pub pr: Option<u32>,
     pub version: Version,
     pub changelog: String,
     pub adrs: Vec<Adr>,
@@ -102,11 +107,21 @@ pub struct Stamped {
     pub breaking: Option<String>,
 }
 
+/// A pending file whose slug and content the ledger already holds (#4319).
+#[derive(Debug)]
+pub struct AlreadyStamped {
+    pub file: String,
+    pub entry: crate::stamped::Entry,
+}
+
 /// The full stamp plan for the pending files present.
 #[derive(Debug)]
 pub struct Plan {
     pub base_version: Version,
     pub increments: Vec<Stamped>,
+    /// Pending files the ledger says the stamp has already consumed (#4319). They get no version:
+    /// `apply` deletes them and says so.
+    pub already_stamped: Vec<AlreadyStamped>,
     /// The next free ADR number, for materialisation.
     pub first_adr_number: u32,
     /// Growth-probe rises measured at stamp time (committed row before the stamp
@@ -129,11 +144,16 @@ impl Plan {
     pub fn is_empty(&self) -> bool {
         self.increments.is_empty()
     }
+
+    /// Nothing to stamp and nothing stale to remove.
+    pub fn has_nothing(&self) -> bool {
+        self.increments.is_empty() && self.already_stamped.is_empty()
+    }
 }
 
 /// Build the plan for `root`: read the workspace version and the pending files,
-/// and assign each pending file (in filename order — a deterministic proxy for
-/// merge order) its own next version. Returns validation errors verbatim.
+/// and assign each pending file its own next version, in merge order (see
+/// [`merge_order`]). Returns validation errors verbatim.
 pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
     let cargo = root.join("Cargo.toml");
     let cargo_src = fs::read_to_string(&cargo)
@@ -141,7 +161,14 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
     let base_version = parse_workspace_version(&cargo_src)
         .ok_or_else(|| vec![format!("no `version = \"X.Y.Z\"` in {}", cargo.display())])?;
 
-    let pending = validated_pending_in(root)?;
+    let mut pending = validated_pending_in(root)?;
+    let order = merge_order(root);
+    // Oldest addition first. `sort_by_key` is stable, so files git does not know (no history, or
+    // not yet committed) keep their filename order, after every file it does.
+    pending.sort_by_key(|(file, _)| match order.get(file.as_str()) {
+        Some(m) => (0, std::cmp::Reverse(m.rank)),
+        None => (1, std::cmp::Reverse(0)),
+    });
     let first_adr_number = next_adr_number(root).map_err(|e| {
         vec![format!(
             "cannot scan {}: {e}",
@@ -149,11 +176,35 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
         )]
     })?;
 
+    let ledger = crate::stamped::read(root).map_err(|e| {
+        vec![format!(
+            "cannot read {}: {e}",
+            root.join(crate::stamped::LEDGER_PATH).display()
+        )]
+    })?;
     let mut version = base_version;
     let mut increments = Vec::new();
+    let mut already_stamped = Vec::new();
     for (file, p) in pending {
+        // A file the ledger holds (same slug, same bytes) was consumed by an earlier stamp and
+        // came back on a branch. It gets no version of its own (#4319).
+        let bytes = fs::read(root.join("design/pending").join(&file))
+            .map_err(|e| vec![format!("{file}: cannot read: {e}")])?;
+        let hash = crate::stamped::content_hash(&bytes);
+        let slug = file.strip_suffix(".md").unwrap_or(&file);
+        // The ledger first; then git history, for a stamp made before the ledger held it.
+        let known = crate::stamped::find(&ledger, slug, &hash)
+            .cloned()
+            .or_else(|| crate::stamped::find_in_git_history(root, &file, &hash));
+        if let Some(entry) = known {
+            already_stamped.push(AlreadyStamped { file, entry });
+            continue;
+        }
         version = version.next(&p.level);
+        let pr = order.get(file.as_str()).and_then(|m| m.pr);
         increments.push(Stamped {
+            hash,
+            pr,
             file,
             version,
             changelog: p.changelog,
@@ -168,9 +219,79 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
     Ok(Plan {
         base_version,
         increments,
+        already_stamped,
         first_adr_number,
         growth_rises: Vec::new(),
     })
+}
+
+/// Where a pending file was added on `main`'s first-parent line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Added {
+    /// 0 for the newest adding commit, rising with age.
+    pub rank: usize,
+    /// The PR named in that commit's subject (`… (#1234)`), if any.
+    pub pr: Option<u32>,
+}
+
+/// The merge order of the pending files, from git: for each file under `design/pending/`, the
+/// most recent commit on `main`'s first-parent line that added it (#4319 cut-over).
+///
+/// Numbering in filename order was a fair proxy while each merge got its own stamp run, so a
+/// plan held one file. A batched stamp holds many, and filename order (`l11-…` before `l2-…`)
+/// would hand out versions in an order unrelated to when the increments merged. Empty when git
+/// or the history is unavailable, which leaves the caller's filename order in place.
+pub fn merge_order(root: &Path) -> std::collections::HashMap<String, Added> {
+    let mut order = std::collections::HashMap::new();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+    };
+    // In a shallow clone the boundary commit looks like a root that added every file present
+    // there, which would give them all its PR and one rank. Filename order is the honest answer.
+    match git(&["rev-parse", "--is-shallow-repository"]) {
+        Some(out) if String::from_utf8_lossy(&out.stdout).trim() == "false" => {}
+        _ => return order,
+    }
+    let Some(out) = git(&[
+        "log",
+        "--first-parent",
+        "--diff-merges=first-parent",
+        // Independent of `diff.renames`: a renamed pending file is an addition here.
+        "--no-renames",
+        "--diff-filter=A",
+        "--format=%x01%s",
+        "--name-only",
+        "--",
+        "design/pending",
+    ]) else {
+        return order;
+    };
+    parse_merge_order(&String::from_utf8_lossy(&out.stdout), &mut order);
+    order
+}
+
+/// Parse `git log --format=%x01%s --name-only` output, newest commit first, into `order`. A file
+/// added more than once keeps its newest addition: that is the copy now pending.
+fn parse_merge_order(log: &str, order: &mut std::collections::HashMap<String, Added>) {
+    for (rank, commit) in log.split('\u{1}').filter(|c| !c.is_empty()).enumerate() {
+        let mut lines = commit.lines();
+        let subject = lines.next().unwrap_or_default();
+        let pr = crate::pr_number_from_subject(subject.trim());
+        for path in lines {
+            let Some(file) = path.trim().strip_prefix("design/pending/") else {
+                continue;
+            };
+            if file.contains('/') || !file.ends_with(".md") {
+                continue;
+            }
+            order.entry(file.to_string()).or_insert(Added { rank, pr });
+        }
+    }
 }
 
 /// Apply `plan` to `root`: write ADR files + index rows, insert changelog rows,
@@ -211,7 +332,8 @@ pub fn apply(
     bump: impl Fn(Version) -> io::Result<()>,
 ) -> io::Result<()> {
     if plan.is_empty() {
-        return Ok(());
+        // Nothing to stamp, but a stale copy of a consumed file still goes (#4319).
+        return remove_already_stamped(root, plan);
     }
 
     let decisions = root.join("design/decisions");
@@ -248,7 +370,9 @@ pub fn apply(
     let mut rule_ledger_rows_all = Vec::new();
     let mut raise_ledger_rows_all = Vec::new();
     let mut upgrading_entries = Vec::new();
+    let mut stamped_lines: Vec<String> = Vec::new();
     for inc in &plan.increments {
+        let first_number = number;
         for adr in &inc.adrs {
             let path = decisions.join(format!("{number:04}-{}.md", adr.slug));
             // Refuse to clobber an ADR that already exists: a number that is not
@@ -267,9 +391,12 @@ pub fn apply(
             index_rows.push(index_row(number, adr, inc.version));
             number += 1;
         }
+        stamped_lines.push(stamped_ledger_line(inc, first_number..number));
         changelog_rows.push(changelog_row(inc.version, &inc.changelog));
-        rule_ledger_rows_all.extend(rule_ledger_rows(inc, ledger_pr_number));
-        raise_ledger_rows_all.extend(raise_ledger_rows(inc, &plan.growth_rises, ledger_pr_number));
+        // The increment's own PR, from the commit that added its pending file, before the run's.
+        let pr = inc.pr.or(ledger_pr_number);
+        rule_ledger_rows_all.extend(rule_ledger_rows(inc, pr));
+        raise_ledger_rows_all.extend(raise_ledger_rows(inc, &plan.growth_rises, pr));
         if let Some(note) = &inc.breaking {
             upgrading_entries.push(crate::release_notes::upgrading_entry(inc.version, note));
         }
@@ -351,6 +478,14 @@ pub fn apply(
         Some((before, after))
     };
 
+    // The stamped-files ledger (#4319): every increment stamped here is recorded, so a stale copy
+    // of its pending file is never stamped again. Synthesised on first use, restored or removed
+    // on rollback like the other ledgers.
+    let stamped_path = root.join(crate::stamped::LEDGER_PATH);
+    let stamped_before = fs::read_to_string(&stamped_path).ok();
+    let stamped_after =
+        crate::stamped::appended(stamped_before.as_deref().unwrap_or(""), &stamped_lines);
+
     // --- Commit: mutate the tree. Track what we write so a mid-flight failure
     // (the injected `bump` is the likely one) can be unwound. ---
     let mut written_adrs: Vec<PathBuf> = Vec::new();
@@ -372,6 +507,7 @@ pub fn apply(
         if let Some((_, after)) = &upgrading_edit {
             fs::write(&upgrading_path, after)?;
         }
+        fs::write(&stamped_path, &stamped_after)?;
         // The flaky step, run last so its failure unwinds cleanly here rather
         // than stranding a changelog that cites a version the manifests never
         // reached.
@@ -409,6 +545,14 @@ pub fn apply(
                 }
             }
         }
+        match &stamped_before {
+            Some(orig) => {
+                let _ = fs::write(&stamped_path, orig);
+            }
+            None => {
+                let _ = fs::remove_file(&stamped_path);
+            }
+        }
         for path in &written_adrs {
             let _ = fs::remove_file(path);
         }
@@ -419,6 +563,25 @@ pub fn apply(
     // succeeded, so a re-run finds nothing to do.
     for inc in &plan.increments {
         fs::remove_file(root.join("design/pending").join(&inc.file))?;
+    }
+    remove_already_stamped(root, plan)
+}
+
+/// The ledger line for an increment stamped as `inc.version` with the ADR numbers in `adrs`.
+fn stamped_ledger_line(inc: &Stamped, adrs: std::ops::Range<u32>) -> String {
+    let slug = inc.file.strip_suffix(".md").unwrap_or(&inc.file);
+    let numbers: Vec<u32> = adrs.collect();
+    crate::stamped::line(slug, &inc.hash, &inc.version.to_string(), &numbers)
+}
+
+/// Delete the pending files the ledger says were already stamped, saying which and why (#4319).
+fn remove_already_stamped(root: &Path, plan: &Plan) -> io::Result<()> {
+    for stale in &plan.already_stamped {
+        println!(
+            "stamp: {} was already stamped as v{} — removing the stale copy, assigning nothing",
+            stale.file, stale.entry.version
+        );
+        fs::remove_file(root.join("design/pending").join(&stale.file))?;
     }
     Ok(())
 }
@@ -624,9 +787,38 @@ mod tests {
         }
     }
 
+    #[test]
+    fn merge_order_ranks_newest_addition_first_and_reads_each_pr() {
+        // `git log` lists the newest commit first. `b.md` was added, consumed, then added again:
+        // the pending copy is the newer one, from #12.
+        let log = "\u{1}Third (#12)\n\ndesign/pending/b.md\n\u{1}Second (#11)\n\ndesign/pending/a.md\ndesign/pending/README.md\n\u{1}chore(stamp): assign version + ADR number(s) on merge\n\ndesign/pending/c.md\n\u{1}First (#10)\n\ndesign/pending/b.md\n";
+        let mut order = std::collections::HashMap::new();
+        parse_merge_order(log, &mut order);
+        assert_eq!(
+            order["b.md"],
+            Added {
+                rank: 0,
+                pr: Some(12)
+            }
+        );
+        assert_eq!(
+            order["a.md"],
+            Added {
+                rank: 1,
+                pr: Some(11)
+            }
+        );
+        assert_eq!(order["c.md"], Added { rank: 2, pr: None });
+        // README.md is listed like any .md; `validated_pending_in` never offers it, so its entry
+        // is harmless.
+        assert_eq!(order.len(), 4);
+    }
+
     fn stamped_with_raises(raises: Vec<crate::Raise>) -> Stamped {
         Stamped {
+            hash: String::new(),
             file: "x.md".into(),
+            pr: None,
             version: Version::parse("0.250.3").unwrap(),
             changelog: "c".into(),
             adrs: vec![],

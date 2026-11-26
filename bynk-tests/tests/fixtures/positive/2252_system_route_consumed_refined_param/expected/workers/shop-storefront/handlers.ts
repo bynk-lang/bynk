@@ -2,6 +2,7 @@
 // context shop.storefront
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -25,8 +26,8 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{1,16}" + ")$").test(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[a-z0-9]{1,16}/", value: json } });
+  if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(json))) {
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value: json } });
   }
   return Ok(json as unknown as shop_catalogue.Sku);
 }

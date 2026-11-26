@@ -3,7 +3,7 @@ context app.demo
 consumes bynk { Clock, Random, Logger, Fetch, Secrets, Method, Request }
 
 service demo {
-  on call(url: String) -> Effect[Int] given Clock, Random, Logger, Fetch, Secrets {
+  on call(url: String) -> Effect[Int] by Caller given Clock, Random, Logger, Fetch, Secrets {
     let _   <- Logger.info("probe")
     let _   <- Clock.now()
     let _   <- Random.uuid()
@@ -13,7 +13,7 @@ service demo {
       method: Get,
       url: url,
       contentType: None,
-      authorization: tok,
+      authorization: tok.map((t) => t.bearer()),
       headers: Map.empty(),
       body: None,
     }

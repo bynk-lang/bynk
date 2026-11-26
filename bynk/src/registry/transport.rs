@@ -441,7 +441,7 @@ fn agent() -> Result<ureq::Agent, String> {
         .timeout_global(Some(Duration::from_secs(120)));
     // The system's roots over rustls (ring), as `bynk migrate` uses. Without
     // them, only plain `http://localhost` works, which `index_problem` allows.
-    if let Ok(base) = crate::migrate::live::agent() {
+    if let Ok(base) = crate::cloudflare::rest::agent() {
         builder = builder.tls_config(base.config().tls_config().clone());
     }
     Ok(ureq::Agent::with_parts(

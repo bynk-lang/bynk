@@ -2,7 +2,7 @@
 name = "ops-hub"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[kv_namespaces]]
 binding = "KV"
@@ -19,4 +19,8 @@ storage = "sqlite"
 [[queues.consumers]]
 queue = "job-intake"
 max_batch_size = 10
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

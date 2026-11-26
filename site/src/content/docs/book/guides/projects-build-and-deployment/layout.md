@@ -57,8 +57,16 @@ version = "0.1.0"
 exclude = ["vendor"]   # skip subtrees (monorepo, vendored, generated .bynk)
 ```
 
-See the [`bynk.toml` reference](/docs/manifest/) for every key. The tool always
+See the [`bynk.toml` reference](/reference/tooling/manifest/) for every key. The tool always
 skips its own `out/` and `node_modules/` caches and dot-directories.
+
+## Shared test code
+
+Code several suites share, such as request builders, fixtures and row types, lives in a
+test-only commons, `commons shop.testkit for tests`. By convention it sits under `tests/`
+(for example `tests/shop/testkit.bynk`), and its file path follows its name like any
+commons'. A deployable never contains it; see
+[Sharing between suites](/reference/testing/#test-only-commons).
 
 ## Path identity
 
@@ -205,4 +213,4 @@ identity: it is a build grouping only.
 
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/).
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/).
-- Reference: [`bynk.toml` manifest](/docs/manifest/).
+- Reference: [`bynk.toml` manifest](/reference/tooling/manifest/).

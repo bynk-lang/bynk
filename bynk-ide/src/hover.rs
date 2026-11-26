@@ -79,6 +79,9 @@ pub struct HoverAnalysis<'a> {
     /// second "context" and `NoCrossContextReason::SingleContext` would
     /// almost never fire).
     pub context_count: usize,
+    /// #4502: the round's recorded Analytics column mappings, by `<unit>.<Instance>`.
+    pub analytics:
+        &'a std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
 }
 
 /// Everything the ladder reads.
@@ -101,6 +104,128 @@ pub struct HoverInput<'a> {
     pub files: Option<&'a HashMap<PathBuf, String>>,
 }
 
+/// What rung 1 describes an index key as. A unit (#4183) is described from every
+/// file that declares it, since its module doc may sit in a sibling of the file
+/// its definition is in, and says which file the definition is in; every other
+/// kind is the declaration in its defining file.
+fn describe_indexed(
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    def_path: &Path,
+    def_text: &str,
+) -> Option<String> {
+    if key.kind != SymbolKind::Unit {
+        // #4393: an actor's description depends on the rest of its unit's files (a shadowing
+        // `Sender`), so it sees every other file; the other kinds do not need them.
+        let others: Vec<&str> = if key.kind == SymbolKind::Actor {
+            a.snapshots
+                .iter()
+                .filter(|(p, _)| p.as_path() != def_path)
+                .map(|(_, t)| t.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        return crate::symbols::describe_key_with(key.kind, def_text, &key.name, &others);
+    }
+    let mut siblings: Vec<(&PathBuf, &String)> = a
+        .snapshots
+        .iter()
+        .filter(|(p, _)| p.as_path() != def_path)
+        .collect();
+    siblings.sort_by(|x, y| x.0.cmp(y.0));
+    let sources = std::iter::once(def_text).chain(siblings.into_iter().map(|(_, t)| t.as_str()));
+    let described = crate::symbols::describe_unit(sources, &key.name)?;
+    let file = def_path.to_string_lossy().replace('\\', "/");
+    // After the fenced `<kind> <name>` line, before the module doc.
+    Some(match described.find("\n```\n") {
+        Some(at) => {
+            let (head, rest) = described.split_at(at + 5);
+            format!("{head}\nDeclared in `{file}`.\n{rest}")
+        }
+        None => format!("{described}\nDeclared in `{file}`.\n"),
+    })
+}
+
+/// What a resolved key's hover gains after everything `describe_symbol` rendered. This changes only the
+/// *tail* of what rung 1 already returns `Some` for, never whether it answers.
+///
+/// - #855: a `Service` symbol (the declaration's own name, or a cross-context/test-service call site, which
+///   both record this kind, see `bynk-check/src/symbols.rs`) gets its wire contract.
+/// - #4453: a record `Field` of a type a plain-JSON route writes says which shape it takes there.
+fn with_kind_appendix(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    def_path: &Path,
+    def_text: &str,
+) -> String {
+    match key.kind {
+        SymbolKind::Service => match wire_contract_for_service_key(a, key, def_path, def_text) {
+            Some(model) => format!("{content}{}", wire_contract_appendix(&model)),
+            None => content,
+        },
+        SymbolKind::Field => {
+            let split = key.name.split_once('.');
+            let plain = split.and_then(|(ty, field)| {
+                crate::plain_shape::field_section(ty, field, a.boundary_info)
+            });
+            let column = split.and_then(|(ty, field)| {
+                crate::analytics_tooling::column_section(ty, field, a.analytics)
+            });
+            format!(
+                "{content}{}{}",
+                plain.unwrap_or_default(),
+                column.unwrap_or_default()
+            )
+        }
+        _ => content,
+    }
+}
+
+/// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
+    let (text, offset) = input.doc?;
+    crate::analytics_tooling::dataset_hover_at(text, offset)
+}
+
+/// `content` with [`used_name_note`] appended when there is one.
+fn with_used_name_note(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+) -> String {
+    match used_name_note(a, key) {
+        Some(note) => format!("{content}\n\n{note}"),
+        None => content,
+    }
+}
+
+/// #4045: a name a `uses` clause renames or qualifies (`YStatus`, `Y.Status`) says
+/// which declaration it is and where from, since the spelling in the file is not
+/// the one the commons declares.
+fn used_name_note(a: &HoverAnalysis<'_>, key: &bynk_check::index::SymbolKey) -> Option<String> {
+    let (at, site) = a.index.symbol_at(a.rel, a.offset)?;
+    let written = a.snapshots.get(a.rel)?.get(site.span.range())?;
+    (at == key && written != key.name)
+        .then(|| format!("`{written}` is `{}` of `{}`", key.name, key.unit))
+}
+
+/// #4035: the name after `violates` in a refusal claim: the declaration that refuses, with its
+/// predicate. Read ahead of the locals rung, which would take it for a name in scope.
+fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    crate::violates::describe_at(text, a.offset, Some(a.snapshots))
+}
+
+/// A bare keyword's one-line doc, or the string of a `@name("…")` / `@discriminator("…")`
+/// annotation (#3975), where the cursor is on no identifier.
+fn describe_keyword_or_wire_annotation(text: &str, offset: usize) -> Option<String> {
+    crate::symbols::describe_keyword_at(text, offset)
+        .map(str::to_string)
+        .or_else(|| crate::wire_names::describe_wire_annotation_at(text, offset))
+}
+
 /// The hover Markdown for the cursor, or `None` when no rung resolves it.
 ///
 /// The rung order is the contract; see the module doc. Each rung is tried in
@@ -120,7 +245,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    `Method`/`CapabilityOp` came to render the wrong declaration.
         if let Some((key, def)) = crate::index_queries::definition_at(a.index, a.rel, a.offset)
             && let Some(def_text) = a.snapshots.get(&def.path)
-            && let Some(content) = crate::symbols::describe_symbol(def_text, &key.name)
+            && let Some(content) = describe_indexed(a, key, &def.path, def_text)
         {
             // #848: rewrite any resolvable intra-doc link in the rendered
             // doc comment into a Markdown link, scoped to `key.unit` (the
@@ -140,48 +265,28 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 &key.unit,
                 Some(&ctx),
             );
-            // #855: a resolved `Service` symbol (the declaration's own name,
-            // or a cross-context/test-service call site — both record this
-            // kind, see `bynk-check/src/symbols.rs`) gets its wire
-            // contract appended after everything `describe_symbol` already
-            // rendered. This changes only the *tail* of what rung 1 already
-            // returns `Some` for — never whether it answers.
-            let content = if key.kind == SymbolKind::Service {
-                match wire_contract_for_service_key(a, key, &def.path, def_text) {
-                    Some(model) => format!("{content}{}", wire_contract_appendix(&model)),
-                    None => content,
-                }
-            } else {
-                content
-            };
-            return Some(with_capability_path(content, a));
+            let content = with_kind_appendix(content, a, key, &def.path, def_text);
+            return Some(with_capability_path(
+                with_used_name_note(content, a, key),
+                a,
+            ));
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.
-        if let Some(section) = capability_path_section(a) {
+        if let Some(section) = capability_path_section(a).or_else(|| dataset_hover(input)) {
             return Some(section);
         }
-        // 2. #611 (gap C): a `store` field's operation (`items.put(…)`) — a
-        //    structural match on the enclosing agent's declared field, so it
-        //    outranks the locals rung below, which guesses by name in scope.
-        //    Takes `locals` to honour the checker's by-provenance dispatch: a
-        //    local shadowing the field makes this an ordinary value method.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some(content) = crate::symbols::describe_store_op_at(
-                text,
-                a.offset,
-                a.locals.get(a.rel).map_or(&[], |l| l.as_slice()),
-            )
-        {
+        // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the
+        //    terminal of a `Map`/`Log` pipeline. A structural match on the enclosing agent's
+        //    declared field, so it outranks the locals rung below, which guesses by name in
+        //    scope; a local shadowing the field makes this an ordinary value method.
+        if let Some(content) = store_op_hover(a).or_else(|| violates_hover(a)) {
             return Some(content);
         }
-        // 2b. #2839: the `?` of an `Option` — `None` answers `404 NotFound`. Ahead of the locals rung, which
-        //     would otherwise describe the operand the `?` abuts.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some(entries) = a.expr_types.get(a.rel)
-            && let Some(content) =
-                crate::symbols::describe_question_at(text, a.offset, entries, tys)
-        {
+        // 2b. #2839: the `?` of an `Option`; #4363: an interpolation hole's delimiters.
+        //     Ahead of the locals rung, which would otherwise describe the operand the
+        //     `?` abuts.
+        if let Some(content) = operator_hover(a, tys) {
             return Some(content);
         }
         // 3. v0.122 (slice 1): a local / parameter → its inferred type, and
@@ -200,18 +305,18 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             if let Some(content) = local {
                 // #2854: an HTTP handler's typed `query` also lists the keys it
                 // reads off the query string, their types and defaults.
-                if let Some(section) = query_param_section(a, text) {
+                if let Some(section) = param_section(a, text) {
                     return Some(format!("{content}\n\n{section}"));
                 }
                 return Some(content);
             }
         }
         // 3a. #2683, #2711: the `within` of `e.within(d)` or the `race` of
-        //     `a.race(b)` on an `Effect`.
+        //     `a.race(b)` on an `Effect`; #3894: the `outcome` of a service call.
         if let Some(text) = a.snapshots.get(a.rel)
             && let Some(entries) = a.expr_types.get(a.rel)
             && let Some(content) =
-                crate::symbols::describe_effect_method_at(text, a.offset, entries, tys)
+                crate::call_outcome::describe_member_at(text, a.offset, entries, tys)
         {
             return Some(content);
         }
@@ -242,7 +347,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 tys,
                 a.context_count,
             ) {
-                return Some(wire_contract_standalone(&model));
+                return Some(with_cron_schedule(text, a.offset, &model));
             }
         }
         // 4b. #2460: the cursor inside a doc-comment `[Name]` link previews
@@ -266,7 +371,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         // falls here — its one-line `keywords` registry doc, the same text
         // completion shows. Richer per-declaration hover is `describe_symbol`'s
         // job, not this fallback's.
-        return crate::symbols::describe_keyword_at(text, offset).map(str::to_string);
+        return describe_keyword_or_wire_annotation(text, offset);
     };
     // 5. #1885: a unit name — the file's own header name, or a `uses` /
     //    `consumes` / suite target path — shows the unit's module doc. Guarded
@@ -300,8 +405,8 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     {
         return Some(content);
     }
-    // 5a. #2137: the contextual `advance` of `advance Clock by <Duration>`.
-    if let Some(content) = crate::symbols::describe_advance_at(text, span.start) {
+    // 5a. #2137, #3877: the contextual `advance`, and the queue `delivery` section.
+    if let Some(content) = crate::symbols::describe_contextual_word_at(text, span.start) {
         return Some(content);
     }
     // 5a. #3191: the contextual `by` of an actor clause (an ordinary `by` name
@@ -323,6 +428,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     }
     // 5a'. #2618: the contextual `private` modifier before a declaration.
     if let Some(content) = crate::symbols::describe_private_at(text, span.start) {
+        return Some(content);
+    }
+    // 5a'''. #3984: the `tests` of a `commons x.y for tests` header.
+    if let Some(content) = crate::symbols::describe_test_only_at(text, span.start) {
         return Some(content);
     }
     // 5a''. #2841: the contextual `fixture` of a suite `fixture` declaration.
@@ -430,9 +539,92 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
 }
 
+/// #2839, #4363: the hover of a `?` on an `Option`, or of an interpolation hole's
+/// own delimiters. Both read the buffer text and the expression types.
+fn operator_hover(a: &HoverAnalysis<'_>, tys: &bynk_check::checker::Types) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    // #3982: a suite file may have no retained expression types; a `?` in a case needs none.
+    let entries = a.expr_types.get(a.rel).map_or(&[][..], |e| e.as_slice());
+    crate::symbols::describe_question_at(text, a.offset, entries, tys)
+        .or_else(|| crate::symbols::describe_interpolation_hole_at(text, a.offset, entries, tys))
+}
+
+/// A `store` field's operation hover (#611) and, on the terminal of a `Map`/`Log` pipeline
+/// (#4036), a note on whether it reads every entry, under the signature when the terminal is
+/// called directly on the field.
+fn store_op_hover(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    let locals = a.locals.get(a.rel).map_or(&[][..], |l| l.as_slice());
+    let op = crate::symbols::describe_store_op_at(text, a.offset, locals);
+    match crate::symbols::describe_scan_reads_at(text, a.offset, locals) {
+        Some(note) => Some(op.map_or(note.clone(), |op| format!("{op}\n\n{note}"))),
+        None => op,
+    }
+}
+
+fn describe_cron_predicate(name: &str, before: &str) -> Option<String> {
+    if name != "Cron" {
+        return None;
+    }
+    let line = before.rsplit('\n').next().unwrap_or(before);
+    (line.contains("where") || line.trim_end().ends_with("&&")).then(|| {
+        "```bynk\nCron\n```\n\nA `String` refinement predicate: the value is a valid Cloudflare \
+         cron schedule. Five fields (`minute hour day-of-month month day-of-week`) separated by \
+         exactly one space; minute `0-59`, hour `0-23`, day of month `1-31` (also `L`, `W`), \
+         month `1-12` or `JAN`-`DEC`, day of week `1-7` with `1` = Sunday, or `SUN`-`SAT` \
+         (also `L`, `#`). `* , - /` work in every field. No seconds, year, `?` or `@daily`. \
+         Schedules run in UTC. Checked at compile time for a literal, and at runtime by `.of`, \
+         `Json.decode` and the HTTP boundary."
+            .to_string()
+    })
+}
+
+/// #3873: on a cron handler's header, with the cursor inside the schedule's
+/// string literal, the schedule's fields are named ahead of the wire contract.
+fn with_cron_schedule(
+    text: &str,
+    offset: usize,
+    model: &crate::wire_contract::WireContractModel,
+) -> String {
+    let contract = wire_contract_standalone(model);
+    match describe_cron_schedule_literal(text, offset) {
+        Some(fields) => format!("{fields}\n\n---\n\n{contract}"),
+        None => contract,
+    }
+}
+
+/// #3873: hover inside the string literal of `on schedule("…")`: the schedule's
+/// five fields, named. `None` off a schedule literal or for an invalid schedule
+/// (the checker reports that one).
+pub(crate) fn describe_cron_schedule_literal(text: &str, offset: usize) -> Option<String> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let at = offset - line_start;
+    let open = line.find("schedule(\"")? + "schedule(\"".len();
+    let close = open + line[open..].find('"')?;
+    if at < open - 1 || at > close {
+        return None;
+    }
+    let fields = bynk_syntax::cron::describe_fields(&line[open..close])?;
+    let rows: Vec<String> = fields
+        .iter()
+        .map(|(name, text)| format!("- {name}: `{text}`"))
+        .collect();
+    Some(format!(
+        "```bynk\nschedule(\"{}\")\n```\n\nA cron schedule (UTC):\n\n{}",
+        &line[open..close],
+        rows.join("\n")
+    ))
+}
+
 /// #2867: hover for the `IsoDate` predicate name after `where` or `&&`: its rule
 /// and the `Instant` pairing the guide documents.
 fn describe_iso_date_predicate(name: &str, before: &str) -> Option<String> {
+    // #3873: the `Cron` predicate hovers the same way.
+    if name == "Cron" {
+        return describe_cron_predicate(name, before);
+    }
     if name != "IsoDate" {
         return None;
     }
@@ -712,8 +904,15 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
     None
 }
 
+/// The appendix a handler parameter's hover carries: the keys of a typed `query` or `cookies`
+/// (#2854), or, for a path parameter's declaration, how its segment is decoded and the `400`s
+/// that can answer (#3910).
+fn param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
+    query_param_section(a, text).or_else(|| crate::symbols::describe_path_param_at(text, a.offset))
+}
+
 /// #2854: when the cursor is on the `query` parameter (or a use of it) of an
-/// `on http` handler whose type is a record, the keys the router reads off the
+/// `on http` handler whose type is a record (#3277 `cookies`, #3911 `headers` read the same way), the keys the router reads off the
 /// query string: each field's type, and whether it is required, optional, or
 /// defaulted (with the default). Empty for the raw `RequestQuery` view and for
 /// anything that is not that parameter.
@@ -734,6 +933,9 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
         }
         "cookies" => {
             "**Cookies** — parsed from the `Cookie` header, decoded and validated before the handler runs; unknown cookies are ignored."
+        }
+        "headers" => {
+            "**Request headers** — decoded and validated before the handler runs; names match without case, a `List` field splits a comma-separated value, unknown headers are ignored."
         }
         _ => return None,
     };
@@ -765,7 +967,11 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
     let Some(TypeBody::Record(record)) = info.types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    let key = if word == "cookies" { "cookie" } else { "key" };
+    let key = match word {
+        "cookies" => "cookie",
+        "headers" => "header",
+        _ => "key",
+    };
     let mut out = format!("{heading}\n\n| {key} | type | |\n|---|---|---|\n");
     for f in &record.fields {
         let note = match (&f.type_ref, &f.init) {
@@ -959,6 +1165,28 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// #3873: `Cron` hovers with its rule inside a `where` clause only, and the
+    /// schedule literal of `on schedule("…")` names its fields.
+    #[test]
+    fn cron_predicate_and_schedule_literal_hover() {
+        let src = "commons demo.m\n\ntype S = String where Cron\n";
+        let h = hover_at(src, "Cron", 0).expect("`Cron` hovers");
+        assert!(h.contains("cron schedule"), "{h}");
+        let elsewhere = hover_at("commons demo.m\n\nfn Cron() -> Int { 1 }\n", "Cron", 0);
+        assert!(!elsewhere.is_some_and(|h| h.contains("refinement predicate")));
+
+        let line = "  on schedule(\"0 2 * * MON-FRI\") () -> Effect[Result[(), String]] {";
+        let at = line.find("2 *").unwrap();
+        let h = describe_cron_schedule_literal(line, at).expect("fields named");
+        assert!(
+            h.contains("- minute: `0`") && h.contains("- day of week: `MON-FRI`"),
+            "{h}"
+        );
+        assert!(describe_cron_schedule_literal(line, 0).is_none());
+        let bad = "  on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] {";
+        assert!(describe_cron_schedule_literal(bad, 16).is_none());
+    }
     use super::*;
 
     fn hover_at(src: &str, needle: &str, nth: usize) -> Option<String> {
@@ -971,11 +1199,19 @@ mod tests {
         })
     }
 
+    /// #3889: the constant named in `from email(Support)` hovers with the address it denotes.
+    #[test]
+    fn an_email_address_constant_hovers_with_its_address() {
+        let src = "context shop.support\n\nconst Support: String = \"support@shop.example\"\n\nservice support from email(Support) {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Accept\n  }\n}\n";
+        let h = hover_at(src, "Support", 1).expect("the address constant hovers");
+        assert!(h.contains("support@shop.example"), "{h}");
+    }
+
     /// #2868: a function that declares `given` hovers with it, at the
     /// declaration and at a call.
     #[test]
     fn a_given_fn_hovers_with_its_capabilities() {
-        let src = "context demo.m\n\ncapability Logger {\n  fn error(m: String) -> Effect[()]\n}\n\nfn warn(what: String) -> Effect[()] given Logger {\n  Logger.error(what)\n}\n\nservice s {\n  on call() -> Effect[()] given Logger {\n    warn(\"x\")\n  }\n}\n";
+        let src = "context demo.m\n\ncapability Logger {\n  fn error(m: String) -> Effect[()]\n}\n\nfn warn(what: String) -> Effect[()] given Logger {\n  Logger.error(what)\n}\n\nservice s {\n  on call() -> Effect[()] by Caller given Logger {\n    warn(\"x\")\n  }\n}\n";
         for nth in [0, 1] {
             let h = hover_at(src, "warn", nth).expect("`warn` hovers");
             assert!(
@@ -984,6 +1220,25 @@ mod tests {
                 "{h}"
             );
         }
+    }
+
+    /// #3983: a suite helper that declares `given` hovers with it, at the declaration and at the
+    /// call in a case.
+    #[test]
+    fn a_suite_helper_hovers_with_its_given() {
+        let src = "suite demo.m {\n  fn warm() -> Effect[Int] given Meter {\n    Meter.read()\n  }\n\n  case \"c\" {\n    let n <- warm()\n    expect n == 1\n  }\n}\n";
+        for nth in [0, 1] {
+            let h = hover_at(src, "warm", nth).expect("`warm` hovers");
+            assert!(h.contains("warm() -> Effect[Int] given Meter"), "{h}");
+        }
+    }
+
+    /// #3984: the `tests` of a test-only commons' header hovers with what the marker means.
+    #[test]
+    fn a_test_only_commons_marker_hovers() {
+        let src = "commons shop.kit for tests\n\nconst Start: Int = 1\n";
+        let h = hover_at(src, "tests", 0).expect("`tests` hovers");
+        assert!(h.contains("test-only commons"), "{h}");
     }
 
     /// #2620: the ambient fault built-ins hover with their signature and doc; a

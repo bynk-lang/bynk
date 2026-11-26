@@ -5,49 +5,52 @@
 # Start
 
 - [What is Bynk?](introduction/what-is-bynk.md)
-- [Why Bynk exists](about/why-bynk-exists.md)
 - [Anatomy of a Bynk service](introduction/anatomy-of-a-service.md)
 - [Coming from TypeScript](introduction/coming-from-typescript.md)
 - [Install](introduction/install.md)
 
 # Learn Bynk
 
-- [1. Compile your first program](tutorials/01-first-program.md)
-- [2. Build a small HTTP service](tutorials/02-http-service.md)
-- [3. Model your data with types](tutorials/03-modelling-data.md)
-- [4. Make illegal states unrepresentable](tutorials/04-refined-types.md)
-- [5. Add a stateful agent](tutorials/05-stateful-agent.md)
-- [6. Test it](tutorials/06-testing.md)
+- [1. Compile your first program](tutorials/first-program.md)
+- [2. Build a small HTTP service](tutorials/http-service.md)
+- [3. Model your data with types](tutorials/modelling-data.md)
+- [4. Make illegal states unrepresentable](tutorials/refined-types.md)
+- [5. Handle failure with `Result`](tutorials/failure-and-result.md)
+- [6. Reach out with capabilities](tutorials/capabilities.md)
+- [7. Add a stateful agent](tutorials/stateful-agent.md)
+- [8. Split into contexts](tutorials/contexts.md)
+- [9. Test it](tutorials/testing.md)
+- [10. Deploy it](tutorials/deploy.md)
 
 # Concepts
 
-- [Program structure](guides/program-structure/index.md)
-  - [How a Bynk program is shaped](guides/program-structure/how-a-program-is-shaped.md)
-- [The type system](guides/type-system/index.md)
-  - [The type-system philosophy](guides/type-system/philosophy.md)
-  - [The refined-literal admission model](guides/type-system/refined-literal-admission.md)
-  - [Recursion and iteration](guides/type-system/recursion-and-iteration.md)
-  - [Understand ordering your own types](guides/type-system/ordering-your-own-types.md)
-- [Effects & capabilities](guides/effects-and-capabilities/index.md)
-  - [Understand the capability model](guides/effects-and-capabilities/understand-the-capability-model.md)
-  - [Synchronous and asynchronous sends](guides/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
-  - [What a join guarantees on failure](guides/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
-  - [What a timeout stops](guides/effects-and-capabilities/what-a-timeout-stops.md)
-- [Agents & state](guides/agents-and-state/index.md)
-  - [The agent model](guides/agents-and-state/the-agent-model.md)
-  - [Understand: invariants as contracts](guides/agents-and-state/understand-invariants.md)
-- [Entry points](guides/entry-points/index.md)
-- [Actors & access control](guides/actors/index.md)
-- [Events](guides/events/index.md)
-  - [Understand events](guides/events/understand-events.md)
-- [Localisation](guides/localisation/index.md)
-  - [Understand localisation](guides/localisation/understand-localisation.md)
-- [Testing](guides/testing/index.md)
-  - [The testing philosophy](guides/testing/philosophy.md)
-- [Projects, build & deployment](guides/projects-build-and-deployment/index.md)
-  - [Why compile to TypeScript](guides/projects-build-and-deployment/why-compile-to-typescript.md)
-- [Bynk compared to TypeScript](about/bynk-compared-to-typescript.md)
-- [Bynk compared to the alternatives](about/bynk-compared-to-the-alternatives.md)
+- [Concepts](concepts/index.md)
+  - Program structure
+    - [How a Bynk program is shaped](concepts/program-structure/how-a-program-is-shaped.md)
+  - The type system
+    - [The type-system philosophy](concepts/type-system/philosophy.md)
+    - [The refined-literal admission model](concepts/type-system/refined-literal-admission.md)
+    - [Recursion and iteration](concepts/type-system/recursion-and-iteration.md)
+    - [Understand ordering your own types](concepts/type-system/ordering-your-own-types.md)
+  - Effects & capabilities
+    - [Understand the capability model](concepts/effects-and-capabilities/understand-the-capability-model.md)
+    - [Synchronous and asynchronous sends](concepts/effects-and-capabilities/synchronous-and-asynchronous-sends.md)
+    - [What a join guarantees on failure](concepts/effects-and-capabilities/what-a-join-guarantees-on-failure.md)
+    - [What a timeout stops](concepts/effects-and-capabilities/what-a-timeout-stops.md)
+  - Agents & state
+    - [The agent model](concepts/agents-and-state/the-agent-model.md)
+    - [Understand: invariants as contracts](concepts/agents-and-state/understand-invariants.md)
+  - Events
+    - [Understand events](concepts/events/understand-events.md)
+  - Localisation
+    - [Understand localisation](concepts/localisation/understand-localisation.md)
+  - Testing
+    - [The testing philosophy](concepts/testing/philosophy.md)
+  - Projects, build & deployment
+    - [Why compile to TypeScript](concepts/projects-build-and-deployment/why-compile-to-typescript.md)
+  - Bynk compared
+    - [Bynk compared to TypeScript](concepts/about/bynk-compared-to-typescript.md)
+    - [Bynk compared to the alternatives](concepts/about/bynk-compared-to-the-alternatives.md)
 
 # Guides
 
@@ -72,6 +75,8 @@
     - [Generic code that crosses the boundary](guides/type-system/generic-code-that-crosses-the-boundary.md)
     - [Constructors for generic types](guides/type-system/constructors-for-generic-types.md)
     - [Recursive generic types](guides/type-system/recursive-generic-types.md)
+    - [Rename a field safely](guides/type-system/rename-a-field-safely.md)
+    - [Decode a third-party webhook into typed values](guides/type-system/decode-a-third-party-webhook.md)
   - Structuring code
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
@@ -86,6 +91,7 @@
     - [Stream a large upload](guides/entry-points/stream-a-large-upload.md)
     - [Call your API from a front end](guides/entry-points/call-from-a-front-end.md)
     - [Branch on the caller's country](guides/entry-points/branch-on-the-callers-country.md)
+    - [Map a domain error to a status once](guides/entry-points/map-a-domain-error-to-a-status.md)
     - [Serve a page from an HTML file](guides/entry-points/serve-a-page.md)
     - [Run a task on a schedule (cron)](guides/entry-points/cron.md)
     - [Process a queued message](guides/entry-points/queue.md)
@@ -100,6 +106,7 @@
     - [Add an authorisation invariant](guides/actors/authorisation.md)
     - [Know which context called you](guides/actors/cross-context-callers.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
+    - [Store a password](guides/effects-and-capabilities/store-a-password.md)
   - Storing data
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)
@@ -130,12 +137,14 @@
   - Agents and state
     - [Build a stateful agent](guides/agents-and-state/stateful-agent.md)
     - [Model an agent as a state machine](guides/agents-and-state/state-machine.md)
+    - [Delete a user's data](guides/agents-and-state/delete-a-users-data.md)
   - Localisation
     - [Declare a message bundle](guides/localisation/declare-a-message-bundle.md)
     - [Format with ICU](guides/localisation/format-with-icu.md)
   - Testing
     - [Write tests and mock collaborators](guides/testing/write-tests.md)
     - [Test a flow across Workers](guides/testing/integration.md)
+    - [Test a handler that calls another context](guides/testing/test-a-handler-that-calls-another-context.md)
     - [Run your tests](guides/testing/run-tests.md)
     - [Check what a request stored](guides/testing/check-what-the-app-stored.md)
     - [Try an expression against your project](guides/testing/try-an-expression.md)
@@ -148,73 +157,21 @@
     - [Apply a breaking-change migration without an editor](guides/projects-build-and-deployment/apply-a-migration-without-an-editor.md)
     - [Run your project locally](guides/projects-build-and-deployment/run-locally.md)
     - [Deploy to Cloudflare](guides/projects-build-and-deployment/deploy-to-cloudflare.md)
+    - [Deploy from CI](guides/projects-build-and-deployment/deploy-from-ci.md)
+    - [Keep a project's data in one jurisdiction](guides/projects-build-and-deployment/keep-data-in-a-jurisdiction.md)
     - [Roll back a deployment](guides/projects-build-and-deployment/roll-back-a-deployment.md)
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
+    - [Follow a request across contexts](guides/projects-build-and-deployment/follow-a-request-across-contexts.md)
     - [Target Cloudflare Workers](guides/projects-build-and-deployment/cloudflare-workers.md)
     - [Adopt Bynk beside a TypeScript Worker](guides/projects-build-and-deployment/adopt-beside-a-typescript-worker.md)
-
-# Reference
-
-- [Reference](reference/index.md)
-  - [Syntax & grammar](reference/grammar.md)
-    - [Complete grammar (appendix)](reference/grammar-appendix.md)
-  - [Keywords](reference/keywords.md)
-  - [Glossary](reference/glossary.md)
-  - [Type system](reference/types.md)
-  - [Generics and bounds](reference/generics.md)
-  - [Refined-type API](reference/refined-types.md)
-  - [Operators & built-ins](reference/operators.md)
-  - [Agents](reference/agents.md)
-  - [Agent invariants](reference/agent-invariants.md)
-  - [Capabilities & providers](reference/capabilities.md)
-  - [First-party `bynk` capabilities](reference/bynk-capabilities.md)
-  - [Adapters](reference/adapters.md)
-  - [HTTP](reference/http.md)
-  - [Cron](reference/cron.md)
-  - [Queue](reference/queue.md)
-  - [WebSocket](reference/websocket.md)
-  - [Inbound email](reference/inbound-email.md)
-  - [Static assets](reference/assets.md)
-  - [Embedded text](reference/embeds.md)
-  - [Test fixtures](reference/fixtures.md)
-  - [Named constants](reference/constants.md)
-  - [Actors](reference/actors.md)
-  - [Testing](reference/testing.md)
-  - [Wire format](reference/wire-format.md)
-  - [TypeScript client](reference/typescript-client.md)
-  - [HTTP client](reference/http-client.md)
-  - [Diagnostic index](reference/diagnostics.md)
-  - [Releases](reference/releases/index.md)
-    - {release pages}
-  - [Upgrading](reference/upgrading.md)
-
-# Specification
-
-- [The Bynk Language Specification](spec/index.md)
-  - [§1 Scope & conformance](spec/scope.md)
-  - [§2 Notation & conventions](spec/conventions.md)
-  - [§3 Lexical grammar](spec/lexical-grammar.md)
-  - [§4 Syntactic grammar](spec/syntactic-grammar.md)
-  - [§5 Static semantics](spec/static-semantics.md)
-  - [§6 The type system](spec/type-system.md)
-  - [§7 Meaning by translation](spec/emission.md)
-    - [§7.4 The runtime library](spec/runtime-library.md)
-  - [§8 Compilation model](spec/compilation-model.md)
-  - [§9 Diagnostics](spec/diagnostics.md)
-  - [§10 Conformance & test corpus](spec/conformance.md)
-  - [§11 Complete grammar](spec/grammar-appendix.md)
-  - [Appendix A — Planned features](spec/appendix-planned.md)
-  - [Appendix B — Version history](spec/appendix-version-history.md)
-
-# About Bynk
-
-- [Versioning & roadmap](about/versioning-and-roadmap.md)
-
----
-
-# Contributing
-
-- [Contributing to the compiler](contributing/index.md)
-  - [Compiler architecture](contributing/architecture.md)
-  - [Testing & fixtures](contributing/testing.md)
-  - [Working on the docs](contributing/documentation.md)
+  - By topic
+    - [Program structure](guides/program-structure/index.md)
+    - [The type system](guides/type-system/index.md)
+    - [Effects & capabilities](guides/effects-and-capabilities/index.md)
+    - [Agents & state](guides/agents-and-state/index.md)
+    - [Entry points](guides/entry-points/index.md)
+    - [Actors & access control](guides/actors/index.md)
+    - [Events](guides/events/index.md)
+    - [Localisation](guides/localisation/index.md)
+    - [Testing](guides/testing/index.md)
+    - [Projects, build & deployment](guides/projects-build-and-deployment/index.md)

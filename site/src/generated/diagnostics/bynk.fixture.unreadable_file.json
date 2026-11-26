@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.unreadable_file",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A suite's `fixture` names a listed file that could not be read."
+}

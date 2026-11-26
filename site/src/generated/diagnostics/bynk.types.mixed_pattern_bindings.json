@@ -1,0 +1,12 @@
+{
+  "blurb": "A variant pattern binds its payload either by field name, `Circle(r: x, d: y)`, or by position, `Circle(x, y)`. Mixing the two leaves it unclear which field a bare name takes, so Bynk wants one style in each pattern. Name every field, or none.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.mixed_pattern_bindings",
+  "constructs": [
+    "variant_pattern"
+  ],
+  "example": "type Shape = | Circle(r: Int, d: Int) | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r: x, y) => x    // ✗ one named binding, one positional\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(x, y) => x       // ✓ all positional\n        Dot => 0\n    }\n}",
+  "severity": "error",
+  "summary": "A pattern mixes named and positional bindings."
+}

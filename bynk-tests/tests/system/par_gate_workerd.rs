@@ -16,8 +16,12 @@
 //! - **serial:** the second is sent only after the first has finished.
 //!
 //! Each run's outcome is what both requests read, and the field's final value.
-//! The claim holds when the `par` outcome of every schedule is one the
-//! sequential version produces for some schedule. The test also prints the
+//! The claim holds when the outcome of every schedule is one that sequential
+//! awaits allow for some schedule: the requests ran one after the other, or they
+//! interleaved and the second write overwrote the first. Those two are fixed by
+//! the handler, not observed, so whether the platform let the second request in
+//! while the first waited (a matter of timing) never decides pass or fail; only
+//! an outcome no sequential schedule produces does. The test also prints the
 //! order the subrequests reached the server in, which differs between the two
 //! forms by construction (`par` issues both of a request's subrequests at once)
 //! and is not part of the claim.
@@ -27,11 +31,10 @@
 //! stopped, with its `workerd`, when the guard drops (#1686).
 
 use bynk_driver::project::BuildTarget;
-use std::collections::BTreeSet;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -106,17 +109,6 @@ service api from http {{
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves.
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 fn skip(reason: &str) -> bool {
@@ -204,11 +196,13 @@ impl Held {
         self.arrived.lock().unwrap().clone()
     }
 
-    /// Wait until `label` has arrived. `false` on timeout.
-    fn wait_for(&self, label: &str, within: Duration) -> bool {
+    /// Wait until `label` has arrived among the arrivals from index `since` on
+    /// (the start of the current run: labels repeat from run to run, so an
+    /// earlier run's arrival must not stand for this one's). `false` on timeout.
+    fn wait_for(&self, label: &str, since: usize, within: Duration) -> bool {
         let end = Instant::now() + within;
         while Instant::now() < end {
-            if self.arrivals().iter().any(|l| l == label) {
+            if self.arrivals().iter().skip(since).any(|l| l == label) {
                 return true;
             }
             std::thread::sleep(Duration::from_millis(20));
@@ -233,6 +227,17 @@ struct Outcome {
     last: String,
 }
 
+impl Outcome {
+    /// Whether some schedule of two sequential-await requests produces this: the
+    /// second ran after the first (`0`, `1`, final `2`), or both read the field
+    /// before either wrote it (`0`, `0`, final `1`).
+    fn is_sequentially_consistent(&self) -> bool {
+        let seen =
+            |a: &str, b: &str, last: &str| self.first == a && self.second == b && self.last == last;
+        seen("\"0\"", "\"1\"", "\"2\"") || seen("\"0\"", "\"0\"", "\"1\"")
+    }
+}
+
 /// Drive two requests at one agent through `mode` (`seq` or `par`). With
 /// `overlap`, the second is sent while the first waits on its subrequests;
 /// otherwise only after the first is done. Returns the outcome and the order
@@ -245,14 +250,14 @@ fn run(port: u16, held: &Held, mode: &str, overlap: bool, room: &str) -> (Outcom
     };
     let first = spawn_request("r1");
     assert!(
-        held.wait_for("r1/a", Duration::from_secs(30)),
+        held.wait_for("r1/a", start_len, Duration::from_secs(30)),
         "the first request's subrequest never arrived"
     );
     let second = if overlap {
         let second = spawn_request("r2");
         // Whether the second request starts while the first waits is part of
         // what is being compared, so a miss here is an outcome, not a failure.
-        let _ = held.wait_for("r2/a", Duration::from_secs(3));
+        let _ = held.wait_for("r2/a", start_len, Duration::from_secs(3));
         // Release until both are done.
         let end = Instant::now() + Duration::from_secs(30);
         while !(first.is_finished() && second.is_finished()) && Instant::now() < end {
@@ -268,7 +273,7 @@ fn run(port: u16, held: &Held, mode: &str, overlap: bool, room: &str) -> (Outcom
         }
         let second = spawn_request("r2");
         assert!(
-            held.wait_for("r2/a", Duration::from_secs(30)),
+            held.wait_for("r2/a", start_len, Duration::from_secs(30)),
             "the second request's subrequest never arrived"
         );
         while !second.is_finished() && Instant::now() < end {
@@ -332,17 +337,14 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
         "expected {dir:?}"
     );
 
-    // A port band clear of the other workerd tests' (20_000 and up; see the notes in
-    // `callee_faulted_workerd.rs`).
-    let base = 10_000 + 2 * (std::process::id() % 4_000) as u16;
-    let (port, inspector) = (base, base + 1);
+    let [port, inspector] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let spawned = (|| -> std::io::Result<wrangler::Wrangler> {
         let out_log = fs::File::create(&log_path)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args([
                     "--port",
                     &port.to_string(),
@@ -389,7 +391,6 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
     }
 
     let held = Held::start(listener);
-    let mut seq_outcomes = BTreeSet::new();
     let mut report = String::new();
     let record = |report: &mut String,
                   mode: &str,
@@ -404,39 +405,30 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
             outcome.last,
         ));
     };
-    for (overlap, room) in [(true, "seq-overlap"), (false, "seq-serial")] {
-        let (outcome, order) = run(port, &held, "seq", overlap, room);
-        record(&mut report, "seq", overlap, &outcome, &order);
-        seq_outcomes.insert(outcome);
-    }
-    // Whether the second request starts while the first waits is the platform's
-    // call, and could differ between two runs. So a `par` outcome the sequential
-    // runs so far did not produce earns the sequential form more runs, before it
-    // counts as a finding.
-    const ATTEMPTS: usize = 3;
-    for (overlap, room) in [(false, "par-serial"), (true, "par-overlap")] {
-        for attempt in 1..=ATTEMPTS {
-            let (outcome, order) = run(port, &held, "par", overlap, &format!("{room}-{attempt}"));
-            record(&mut report, "par", overlap, &outcome, &order);
-            if seq_outcomes.contains(&outcome) {
-                break;
-            }
-            assert!(
-                attempt < ATTEMPTS,
-                "a `par` join produced an outcome the sequential form cannot: {outcome:?} \
-                 (sequential forms produced {seq_outcomes:?})\n{report}\n--- worker log ---\n{}",
-                log()
-            );
-            let (more, order) = run(
-                port,
-                &held,
-                "seq",
-                overlap,
-                &format!("seq-{room}-{attempt}"),
-            );
-            record(&mut report, "seq", overlap, &more, &order);
-            seq_outcomes.insert(more);
-        }
+    for (mode, overlap, room) in [
+        ("seq", true, "seq-overlap"),
+        ("seq", false, "seq-serial"),
+        ("par", false, "par-serial"),
+        ("par", true, "par-overlap"),
+    ] {
+        let (outcome, order) = run(port, &held, mode, overlap, room);
+        record(&mut report, mode, overlap, &outcome, &order);
+        let allowed = if overlap {
+            outcome.is_sequentially_consistent()
+        } else {
+            // Sent only after the first finished: the second must see its write.
+            (
+                outcome.first.as_str(),
+                outcome.second.as_str(),
+                outcome.last.as_str(),
+            ) == ("\"0\"", "\"1\"", "\"2\"")
+        };
+        assert!(
+            allowed,
+            "a `{mode}` {} run produced an outcome no sequential schedule does: {outcome:?}\n{report}\n--- worker log ---\n{}",
+            if overlap { "overlap" } else { "serial" },
+            log()
+        );
     }
     eprintln!("par gate (workerd):\n{report}");
     drop(guard);

@@ -17,7 +17,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -35,7 +35,7 @@ exports transparent { Code }
 type Code = enum { Alpha, Beta }
 
 service flip {
-  on call(c: Code) -> Effect[Code] {
+  on call(c: Code) -> Effect[Code] by Caller {
     match c {
       Alpha => Effect.pure(Beta)
       Beta => Effect.pure(Alpha)
@@ -49,7 +49,7 @@ const SOURCE_APP: &str = r#"context alias.app
 consumes alias.lib { Code as LibCode }
 
 service echo {
-  on call(c: LibCode) -> Effect[LibCode] {
+  on call(c: LibCode) -> Effect[LibCode] by Caller {
     Effect.pure(c)
   }
 }
@@ -80,17 +80,6 @@ service api from http {
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves.
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 fn skip(reason: &str) -> bool {
@@ -189,10 +178,9 @@ fn an_aliased_context_service_runs_across_workers() {
         );
     }
 
-    // Six ports (three servers, three inspectors) in a band clear of the other
-    // workerd tests' (20_000 + 2·pid, 30_000 + 4·pid, 40_000 + 2·pid,
-    // 45_000 + 4·pid, 55_000 + 2·pid and 63_000 + 4·pid, each pid bounded).
-    let base = 50_000 + 6 * (std::process::id() % 600) as u16;
+    // Six ports: three servers and three inspectors.
+    let [p0, p1, p2, i0, i1, i2] = wrangler::ports::free_ports();
+    let (ports, inspector_ports) = ([p0, p1, p2], [i0, i1, i2]);
     let logs_paths: Vec<_> = names
         .iter()
         .map(|n| tmp.join(format!("{n}-wrangler.log")))
@@ -201,8 +189,8 @@ fn an_aliased_context_service_runs_across_workers() {
         let out_log = fs::File::create(&logs_paths[i])?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 // I2 (#1971): each caller signs its calls under the key for its
                 // edge, as under `bynk dev`.
                 .args(wrangler::local_edge_vars(&[
@@ -211,9 +199,9 @@ fn an_aliased_context_service_runs_across_workers() {
                 ]))
                 .args([
                     "--port",
-                    &(base + i as u16).to_string(),
+                    &ports[i].to_string(),
                     "--inspector-port",
-                    &(base + 3 + i as u16).to_string(),
+                    &inspector_ports[i].to_string(),
                 ])
                 .current_dir(&dirs[i])
                 .stdout(Stdio::from(out_log))
@@ -242,8 +230,8 @@ fn an_aliased_context_service_runs_across_workers() {
         text
     };
 
-    let app_port = base + 1;
-    let edge_port = base + 2;
+    let app_port = ports[1];
+    let edge_port = ports[2];
 
     // The first hop (`app` -> `lib`) answers once the Workers are up and the
     // Service Binding has connected, so it doubles as the readiness probe.

@@ -2,7 +2,7 @@
 name = "shop-orders"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[services]]
 binding = "SHOP_PAYMENT"
@@ -15,4 +15,8 @@ class_name = "Order"
 [exports.Order]
 type = "durable-object"
 storage = "sqlite"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

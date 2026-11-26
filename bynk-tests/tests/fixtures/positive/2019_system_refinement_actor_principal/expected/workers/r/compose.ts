@@ -2,14 +2,14 @@
 // composition root for `r` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_admin(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -21,7 +21,7 @@ export function compose(env: Env) {
       if (!(globalThis.Boolean(__claims.value.claims["admin"]))) return HttpResult.Forbidden;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_admin({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_admin({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_ops(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -33,7 +33,7 @@ export function compose(env: Env) {
       if (!(((__claims.value.claims["role"] === "ops") && (!globalThis.Boolean(__claims.value.claims["suspended"]))))) return HttpResult.Forbidden;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_ops({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_ops({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_staff(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -45,7 +45,7 @@ export function compose(env: Env) {
       if (!((globalThis.Boolean(__claims.value.claims["role"]) && (!(__claims.value.claims["role"] === "banned"))))) return HttpResult.Forbidden;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_staff({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_staff({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_gate(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");

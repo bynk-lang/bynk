@@ -1,0 +1,10 @@
+{
+  "blurb": "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.unkeyable_key",
+  "constructs": [],
+  "example": "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
+  "severity": "error",
+  "summary": "A store `Set` element or `Map`/`Cache` key is not a `Key` type (a `Float`, a `Map`, a `Set` or a function appears in it)."
+}

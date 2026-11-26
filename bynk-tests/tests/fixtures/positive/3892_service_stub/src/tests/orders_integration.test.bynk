@@ -1,0 +1,12 @@
+suite shop.orders as integration {
+  consumes shop.pay { Receipt }
+
+  stub shop.stock.reserve(_) returns Ok(())
+
+  case "an integration case stubs a consumed service too" {
+    stub Pay.authorise(_) returns Ok(Receipt { id: "wired" })
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("wired")
+    expect Pay.authorise called once
+  }
+}

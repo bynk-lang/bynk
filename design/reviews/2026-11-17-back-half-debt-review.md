@@ -335,6 +335,10 @@ Consequences:
 - **Test support is split across two places.** About 900 of `storage.ts`'s 1,230 lines are test
   fakes (`makeIntegration*`, `makeTestState`) shipped in the production runtime, while the rest of
   the test runtime lives in the driver.
+
+  > **Correction (22 November 2026, #4047):** "about 900" counted `InMemoryStorage` and
+  > `makeTestState`, which are the Bundle target's agent storage and stay in production. The
+  > test-only `makeIntegration*` factories and their helpers are 653 of `storage.ts`'s 1,234 lines.
 - **The driver edits generated TypeScript as text after the fact.** It has a hand-written TS lexer,
   `names_ident` (`system_support.rs:19`), which `integration_module.rs:678` uses to decide imports.
   `merge_cookie` (`system_support.rs`) runs `strip_prefix("\"cookie\": ")` over emitted text.

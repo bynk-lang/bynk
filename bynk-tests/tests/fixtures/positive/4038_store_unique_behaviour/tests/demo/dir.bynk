@@ -1,0 +1,67 @@
+---
+#4038: uniqueness is enforced at commit, against the staged state. #4035: each refusal is claimed
+by name, so a case passes only when `@unique` refused the commit, not on any fault.
+---
+suite demo.dir
+
+case "distinct emails commit" {
+	do Directory("a").add("c1", "x@e.com")
+	do Directory("a").add("c2", "y@e.com")
+	let n <- Directory("a").size()
+	expect n == 2
+}
+
+case "a duplicate put is refused" {
+	do Directory("b").add("c1", "x@e.com")
+	expect Directory("b").add("c2", "x@e.com") violates customers.email
+}
+
+case "two puts of one email in one handler are refused" {
+	expect Directory("c").addPair("c1", "c2", "x@e.com") violates customers.email
+}
+
+case "overwriting an entry with its own email is not a duplicate" {
+	do Directory("d").add("c1", "x@e.com")
+	do Directory("d").add("c1", "x@e.com")
+	let n <- Directory("d").size()
+	expect n == 1
+}
+
+case "a value moved from one entry to another in one handler is allowed" {
+	do Directory("e").add("c1", "x@e.com")
+	do Directory("e").move("c1", "c2", "z@e.com")
+	let owner <- Directory("e").owner("x@e.com")
+	expect owner.isSome()
+	let n <- Directory("e").size()
+	expect n == 2
+}
+
+case "a value freed by a removal-free overwrite can be reused" {
+	do Directory("f").add("c1", "x@e.com")
+	do Directory("f").add("c1", "y@e.com")
+	do Directory("f").add("c2", "x@e.com")
+	let n <- Directory("f").size()
+	expect n == 2
+}
+
+case "an equality filter routes through the unique index" {
+	do Directory("g").add("c1", "x@e.com")
+	do Directory("g").add("c2", "y@e.com")
+	let hit <- Directory("g").owner("y@e.com")
+	let miss <- Directory("g").owner("q@e.com")
+	expect hit.isSome()
+	expect miss.isNone()
+}
+
+case "any number of entries may have no nick" {
+	do Directory("h").nick("a", None)
+	do Directory("h").nick("b", None)
+	do Directory("h").nick("c", Some("n1"))
+	let n <- Directory("h").nickCount()
+	expect n == 3
+}
+
+case "two entries with the same nick are refused" {
+	do Directory("i").nick("a", Some("n"))
+	expect Directory("i").nick("b", Some("n")) violates byNick.nick
+}

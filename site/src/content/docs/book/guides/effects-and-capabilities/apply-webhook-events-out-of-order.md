@@ -220,8 +220,8 @@ against can still arrive. Prune past that, from a cron handler:
 
 ```bynk,fragment
 service retention from cron {
-	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), SqlError]] given Deliveries {
-		let cutoff = (Instant.fromEpochMillis(at) - 1.days).toIso()
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), SqlError]] given Deliveries {
+		let cutoff = (at - 1.day).toIso()
 		let Ok(_) <- Deliveries.run(
 			"DELETE FROM review_tombstones WHERE at < strftime('%Y-%m-%dT%H:%M:%SZ', ?1)",
 			[Text(cutoff)]
@@ -269,4 +269,4 @@ database from a case. A mutation pass (break each guard, expect a failure) is
 the quickest check that the suite pins every rule.
 
 **See also:** [Verify an inbound webhook](/book/guides/actors/verify-webhooks/),
-[Reference, SQL databases: `D1`](/book/reference/bynk-capabilities/#sql-databases-d1).
+[Reference, SQL databases: `D1`](/reference/bynk-capabilities/#sql-databases-d1).

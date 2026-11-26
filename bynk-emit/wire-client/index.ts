@@ -453,19 +453,80 @@ export function __bynkDecimalShow(v: unknown): string {
   }
 }
 
+// #3952: the numeric argument of a rule, of whichever base the refined type has
+// (`bynk.validation`'s `Bound`). A `Decimal` is the runtime's `{ coefficient, scale }`
+// and a `Duration` its milliseconds, as those types erase everywhere else.
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+// #3952: the predicate a refinement check enforces, with its argument
+// (`bynk.validation`'s `ValidationRule`); `WellFormed` is a value that is not a
+// valid member of its base type at all. A plain tagged object, as the compiler
+// shapes every sum, so a `match` on `e.rule` reads it with no conversion.
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
 }
 
+// #3952: a rule as a `400` body writes it: `kind` where the in-memory form has `tag`
+// (every sum is `{"kind": …}` on the wire), a `Decimal` bound as its text.
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+// #3952: a violation as the `400` body carries it: the field, the message and the rule,
+// never the value (#4278). What a client reads back from a server's refusal.
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
+}
+
+// #3976: why a decode failed (`bynk.decode`'s `DecodeErrorKind`). A plain tagged object,
+// as the compiler shapes every sum, so a `match` on `e.kind` reads it with no conversion.
+// The HTTP `400` bodies and `rejectionDetail` keep writing the name as text.
+export type DecodeErrorKind =
+  | { readonly tag: "Malformed" }
+  | { readonly tag: "StructuralMismatch" }
+  | { readonly tag: "RefinementViolation" }
+  | { readonly tag: "UnsupportedAnchor" }
+  | { readonly tag: "UnsupportedAlias" }
+  | { readonly tag: "UnsupportedMergeKey" }
+  | { readonly tag: "UnsupportedTag" }
+  | { readonly tag: "MultipleDocuments" }
+  | { readonly tag: "UnsupportedSyntax" }
+  | { readonly tag: "UnsupportedValue" }
+  | { readonly tag: "DuplicateKey" }
+  | { readonly tag: "LimitExceeded" };
+
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information
 // (the discriminating kind and the tracked field path) flattened into a
-// uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse
-// failure, else the BoundaryError kind ("StructuralMismatch",
-// "RefinementViolation").
+// uniform, Bynk-inspectable record. `kind` is `Malformed` for a JSON.parse
+// failure, else the BoundaryError kind (`StructuralMismatch`,
+// `RefinementViolation`), or one of the YAML decoder's refusals.
 export interface DecodeError {
-  readonly kind: string;
+  readonly kind: DecodeErrorKind;
   readonly path: string;
   readonly message: string;
 }
@@ -481,14 +542,14 @@ export interface InvariantViolation {
   readonly invariant: string;
   // #2272: which declaration fired, and where it is. An invariant and a transition
   // may share a name, so the name alone does not say which one it was.
-  readonly declaration: "invariant" | "transition";
+  readonly declaration: "invariant" | "transition" | "unique";
   readonly location: string;
 }
 
 export function invariantViolation(
   agent: string,
   invariant: string,
-  declaration: "invariant" | "transition",
+  declaration: "invariant" | "transition" | "unique",
   location: string,
 ): Error {
   const e = new Error(`InvariantViolation: ${agent}.${invariant}`);
@@ -574,6 +635,17 @@ function canonical(v: unknown): unknown {
 /** The canonical string a collection indexes a key by. */
 export function __bynkKeyEncode(v: unknown): string {
   return JSON.stringify(canonical(v));
+}
+
+/**
+ * The string a first-party `Idempotency` operation stores a key under (#4116). A key that is text
+ * at run time is stored as it is, so existing entries still match; any other key is `k:` and its
+ * canonical encoding, so two keys of one type share an entry exactly when they are `==`. The call
+ * site skips this call for a key it knows is text; a key of a type variable (a generic helper) or
+ * of an unrecorded type comes here, and gets the same string either way.
+ */
+export function __bynkIdempotencyKey(k: unknown): string {
+  return typeof k === "string" ? k : "k:" + __bynkKeyEncode(k);
 }
 
 /** Whether `k` can key a plain `Map`/`Set` (SameValueZero is value equality). */
@@ -774,6 +846,358 @@ export function __bynkLeftJoin<T, U, K, V>(
   });
 }
 
+/** #3961: a map of `pairs` in order, keyed by value; a later pair for a key replaces the value and keeps the first position. */
+function mapOfPairs<K, V>(pairs: Iterable<[K, V]>): ReadonlyMap<K, V> {
+  const list = [...pairs];
+  return list.some(([k]) => !plainKey(k)) ? new __BynkKeyMap<K, V>(list) : new Map<K, V>(list);
+}
+
+/** `Map.of`: a map from `{ key, value }` entries. */
+export function __bynkMapOf<K, V>(
+  entries: Iterable<{ readonly key: K; readonly value: V }>,
+): ReadonlyMap<K, V> {
+  return mapOfPairs([...entries].map((e): [K, V] => [e.key, e.value]));
+}
+
+/** `m` without `k`: a copy that keeps `m`'s kind; a no-op when `k` is absent. */
+export function __bynkMapRemove<K, V>(m: ReadonlyMap<K, V>, k: K): ReadonlyMap<K, V> {
+  const out = m instanceof __BynkKeyMap ? new __BynkKeyMap<K, V>(m) : new Map<K, V>(m);
+  out.delete(k);
+  return out;
+}
+
+/** `Map.entries`: the entries as `{ key, value }` records, in insertion order. */
+export function __bynkMapEntries<K, V>(
+  m: ReadonlyMap<K, V>,
+): { readonly key: K; readonly value: V }[] {
+  return [...m].map(([key, value]) => ({ key, value }));
+}
+
+/** `Map.filter`: the entries for which `p(key, value)` holds, in order. */
+export function __bynkMapFilter<K, V>(
+  m: ReadonlyMap<K, V>,
+  p: (k: K, v: V) => boolean,
+): ReadonlyMap<K, V> {
+  return mapOfPairs([...m].filter(([k, v]) => p(k, v)));
+}
+
+/** `Map.mapValues`: each value through `f`, keys and order kept. */
+export function __bynkMapMapValues<K, V, U>(
+  m: ReadonlyMap<K, V>,
+  f: (v: V) => U,
+): ReadonlyMap<K, U> {
+  return mapOfPairs([...m].map(([k, v]): [K, U] => [k, f(v)]));
+}
+
+/** `Map.fold`: `step` applied from `init` across the entries, in insertion order. */
+export function __bynkMapFold<K, V, U>(
+  m: ReadonlyMap<K, V>,
+  init: U,
+  step: (acc: U, k: K, v: V) => U,
+): U {
+  let acc = init;
+  for (const [k, v] of m) acc = step(acc, k, v);
+  return acc;
+}
+
+/** `Set.union`: every element of `a`, then those of `b` not already in it. */
+export function __bynkSetUnion<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a, ...b]);
+}
+
+/** `Set.intersect`: the elements of `a` also in `b`, in `a`'s order. */
+export function __bynkSetIntersect<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a].filter((x) => b.has(x)));
+}
+
+/** `Set.difference`: the elements of `a` not in `b`, in `a`'s order. */
+export function __bynkSetDifference<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a].filter((x) => !b.has(x)));
+}
+
+/** `Set.isSubsetOf`: whether every element of `a` is in `b`. */
+export function __bynkSetIsSubsetOf<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+/** `Set.filter`: the elements for which `p` holds, in order. */
+export function __bynkSetFilter<T>(s: ReadonlySet<T>, p: (x: T) => boolean): ReadonlySet<T> {
+  return __bynkSetOf([...s].filter(p));
+}
+
+/** `Set.map`: each element through `f`; elements that map alike merge at the first position. */
+export function __bynkSetMap<T, U>(s: ReadonlySet<T>, f: (x: T) => U): ReadonlySet<U> {
+  return __bynkSetOf([...s].map((x) => f(x)));
+}
+
+/** `Set.fold`: `step` applied from `init` across the elements, in insertion order. */
+export function __bynkSetFold<T, U>(s: ReadonlySet<T>, init: U, step: (acc: U, x: T) => U): U {
+  let acc = init;
+  for (const x of s) acc = step(acc, x);
+  return acc;
+}
+
+// String measures that the language defines independently of the host's UTF-16
+// representation (#3949).
+
+/** A string's length in code points: what `MinLength`/`MaxLength`/`Length` count (#3949). */
+export function __bynkCodePointLength(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    // A high surrogate followed by a low one is one code point, not two units.
+    if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d < 0xe000) {
+        n -= 1;
+        i += 1;
+      }
+    }
+  }
+  return n;
+}
+
+const regExps = new Map<string, RegExp>();
+
+/**
+ * The `RegExp` for a source and flags, built once (#3950). A refinement's
+ * `Matches` check runs on every construction, so it shares one compiled
+ * pattern; a non-global, non-sticky `RegExp`'s `test` keeps no state, which
+ * makes sharing safe.
+ */
+export function __bynkRegExp(source: string, flags: string): RegExp {
+  const key = `${flags}/${source}`;
+  let re = regExps.get(key);
+  if (re === undefined) {
+    re = new RegExp(source, flags);
+    regExps.set(key, re);
+  }
+  return re;
+}
+
+/**
+ * `String.padStart` / `padEnd` (#3978). The width counts code points, not UTF-16 units,
+ * so an astral character is one position; `fill` is cut to fit (by code points too).
+ * An empty `fill` has nothing to repeat and faults.
+ */
+export function __bynkPad(s: string, width: number, fill: string, atStart: boolean): string {
+  const unit = [...fill];
+  if (unit.length === 0) throw new Error("String.padStart/padEnd: `fill` is empty");
+  const need = width - [...s].length;
+  if (need <= 0) return s;
+  let pad = "";
+  for (let i = 0; i < need; i += 1) pad += unit[i % unit.length];
+  return atStart ? pad + s : s + pad;
+}
+
+/** `String.repeat` (#3978): `n` copies; a negative `n` faults. */
+export function __bynkRepeat(s: string, n: number): string {
+  if (n < 0) throw new Error(`String.repeat: a negative count (${n})`);
+  return s.repeat(n);
+}
+
+/**
+ * `String.lines` (#3978): split on `\n` and `\r\n` (not a lone `\r`); a trailing line
+ * break gives no empty last element, and the empty string gives `[]`.
+ */
+export function __bynkLines(s: string): string[] {
+  if (s === "") return [];
+  const parts = s.split(/\r?\n/);
+  if (parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
+// #3895: the W3C `traceparent` that correlates one request's logs across the
+// contexts it crosses (ADR in design/pending/claude-l3-3895.md).
+//
+// A trace is one 32-hex-digit id. Every cross-context call and event delivery
+// carries it as a `traceparent` header (`00-<trace id>-<span id>-01`), so the
+// callee's logs carry the id of the request that caused them. The span id is
+// minted afresh for each hop; the flags are always `01` (sampled), because Bynk
+// never decides sampling.
+//
+// A trace must never fail a request. Every function here that reads the scope
+// or parses a header answers `undefined` when there is nothing usable, and the
+// caller carries on without a trace.
+//
+// The request scope is `AsyncLocalStorage`, found through
+// `process.getBuiltinModule("node:async_hooks")` as `trace.ts` finds it, because
+// a generated project has no `@types/node`. Where it is unavailable (a Worker
+// without `nodejs_als` or `nodejs_compat`) the scope is empty and nothing is
+// carried.
+
+/** The header a caller sends a trace in, and a callee reads it from. */
+export const W3C_TRACEPARENT_HEADER = "traceparent";
+
+const TRACEPARENT_SHAPE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
+const ALL_ZERO = /^0+$/;
+
+/** A trace id, as 32 lowercase hex digits that are not all zero. */
+export type TraceId = string;
+
+// The scope's store is a box, so an entry point can start a trace and the
+// admission of a signed call can then replace it with the caller's.
+interface TraceBox {
+  trace: TraceId;
+}
+
+interface TraceScope {
+  getStore(): TraceBox | undefined;
+  run<R>(store: TraceBox, fn: () => R): R;
+}
+
+let scope: TraceScope | undefined | null = null;
+
+function traceScope(): TraceScope | undefined {
+  if (scope === null) {
+    try {
+      const host = (globalThis as {
+        process?: { getBuiltinModule?(id: string): unknown };
+      }).process;
+      const hooks = host?.getBuiltinModule?.("node:async_hooks") as
+        | { AsyncLocalStorage?: new () => TraceScope }
+        | undefined;
+      scope = hooks?.AsyncLocalStorage === undefined ? undefined : new hooks.AsyncLocalStorage();
+    } catch {
+      scope = undefined;
+    }
+  }
+  return scope;
+}
+
+function randomHex(bytes: number): string {
+  const buffer = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(buffer);
+  // An all-zero id is invalid, and astronomically unlikely; fix the last digit
+  // rather than loop.
+  if (buffer.every((b) => b === 0)) buffer[bytes - 1] = 1;
+  let out = "";
+  for (const b of buffer) out += (b < 16 ? "0" : "") + b.toString(16);
+  return out;
+}
+
+/** A fresh trace id. */
+export function mintTraceId(): TraceId {
+  return randomHex(16);
+}
+
+/** The trace id in a `traceparent` header value, or `undefined` when it is absent or malformed. */
+export function parseTraceparent(value: string | null | undefined): TraceId | undefined {
+  if (typeof value !== "string") return undefined;
+  const m = TRACEPARENT_SHAPE.exec(value);
+  if (m === null) return undefined;
+  if (ALL_ZERO.test(m[1]) || ALL_ZERO.test(m[2])) return undefined;
+  return m[1];
+}
+
+/** A `traceparent` header value for `trace`, with a fresh span id. */
+export function formatTraceparent(trace: TraceId): string {
+  return `00-${trace}-${randomHex(8)}-01`;
+}
+
+/** Whether `value` is a trace id this module would mint. */
+export function isTraceId(value: unknown): value is TraceId {
+  return typeof value === "string" && /^[0-9a-f]{32}$/.test(value) && !ALL_ZERO.test(value);
+}
+
+/** Run `fn` with `trace` as the current request's trace; runs it plainly where there is no scope. */
+export function runInTrace<R>(trace: TraceId, fn: () => R): R {
+  const s = traceScope();
+  return s === undefined ? fn() : s.run({ trace }, fn);
+}
+
+/** The current request's trace id, or `undefined` outside a trace or where there is no scope. */
+export function currentTraceId(): TraceId | undefined {
+  try {
+    return traceScope()?.getStore()?.trace;
+  } catch {
+    return undefined;
+  }
+}
+
+// The trace id Cloudflare gives the current invocation, when it gives one
+// (`tracing.getActiveSpan()?.spanContext().traceId`, which matches the one on
+// the invocation's logs). It is read through a dynamic import of a computed
+// specifier, so a Node, browser or test build never resolves
+// `cloudflare:workers`. Only the id is used: Cloudflare's `traceFlags` is not
+// a sampling decision, so it is never copied into a `traceparent`.
+let platformModule: Promise<unknown> | undefined;
+
+async function platformTraceId(): Promise<TraceId | undefined> {
+  try {
+    const specifier = "cloudflare:workers";
+    platformModule ??= import(specifier).catch(() => undefined);
+    const mod = (await platformModule) as
+      | { tracing?: { getActiveSpan?(): { spanContext?(): { traceId?: unknown } } | undefined } }
+      | undefined;
+    const id = mod?.tracing?.getActiveSpan?.()?.spanContext?.().traceId;
+    return isTraceId(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run an entry point's work inside a new trace (decision B of #3895): the
+ * platform's own trace id when it gives one, otherwise a random one. A public
+ * HTTP request, a cron run, a queue batch and an email each start here; a signed
+ * call or event delivery starts here too and `verifyCall` then replaces the
+ * trace with the one its caller carried. Where there is no request scope this
+ * runs `fn` as it is.
+ */
+export async function enterTrace<R>(fn: () => Promise<R>): Promise<R> {
+  const s = traceScope();
+  if (s === undefined) return fn();
+  // A Worker group's dispatcher and the member it hands the request to are both
+  // entries; the member joins the dispatcher's trace, which a signed call may
+  // already have replaced.
+  if (s.getStore() !== undefined) return fn();
+  return s.run({ trace: (await platformTraceId()) ?? mintTraceId() }, fn);
+}
+
+/** `message`, followed by ` trace=<id>` inside a trace: how the runtime's own log lines carry the trace. */
+export function withTrace(message: string): string {
+  const trace = currentTraceId();
+  return trace === undefined ? message : `${message} trace=${trace}`;
+}
+
+/** `fields` with the current trace under `trace`, or as they are outside a trace. The trace wins over a field of the same name. */
+export function withTraceField<F extends Record<string, unknown>>(fields: F): F | (F & { trace: TraceId }) {
+  const trace = currentTraceId();
+  return trace === undefined ? fields : { ...fields, trace };
+}
+
+/** The `traceparent` header a call or event delivery from here sends, or `undefined` outside a trace. */
+export function outgoingTraceparent(): string | undefined {
+  const trace = currentTraceId();
+  return trace === undefined ? undefined : formatTraceparent(trace);
+}
+
+// The trace a verified inbound request carried. Only `verifyCall` records here,
+// after the signature holds, so a `traceparent` from anyone who is not a
+// signed Bynk or foreign caller is never read (decision C of #3895).
+const admitted = new WeakMap<Request, TraceId>();
+
+/** Record the trace a request carried; called by `verifyCall` once the request is proved. */
+export function admitTrace(request: Request): void {
+  const trace = parseTraceparent(request.headers.get(W3C_TRACEPARENT_HEADER));
+  if (trace === undefined) return;
+  admitted.set(request, trace);
+  // The request is now in its caller's trace.
+  try {
+    const box = traceScope()?.getStore();
+    if (box !== undefined) box.trace = trace;
+  } catch {
+    // A trace never fails a request.
+  }
+}
+
+/** The trace an admitted request carried, or `undefined`. */
+export function admittedTrace(request: Request): TraceId | undefined {
+  return admitted.get(request);
+}
+
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
 export type JsonValue =
@@ -795,9 +1219,45 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
+
+// #3952 (Decision D): a refinement violation as it goes on the wire in a `400`: the field,
+// the message and the rule, never the offending value. A rejected password failing
+// `MinLength` must not be echoed back, so `value` stays runtime-only. Applied to the body of
+// every `RefinementViolation` answer; any other body passes through untouched.
+//
+// The rule is written as every sum is on the wire, with `kind` in place of the in-memory
+// `tag`; a `Decimal` bound is its canonical text and a `Duration` its milliseconds.
+function wireBound(b: ValidationBound): Record<string, unknown> {
+  return b.tag === "DecimalBound"
+    ? { kind: b.tag, value: __bynkDecimalToString(b.value) }
+    : { kind: b.tag, value: b.value };
+}
+
+function wireRule(r: ValidationRule): Record<string, unknown> {
+  switch (r.tag) {
+    case "InRange":
+      return { kind: r.tag, lo: wireBound(r.lo), hi: wireBound(r.hi) };
+    case "AtLeast":
+    case "AtMost":
+      return { kind: r.tag, bound: wireBound(r.bound) };
+    default: {
+      const { tag, ...rest } = r;
+      return { kind: tag, ...rest };
+    }
+  }
+}
+
+export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
+  const violation = body.violation as ValidationError | undefined;
+  if (body.kind !== "RefinementViolation" || violation === undefined) return body;
+  return {
+    ...body,
+    violation: { field: violation.field, message: violation.message, rule: wireRule(violation.rule) },
+  };
+}
 
 // v0.177 (#643): the deployed callee's compiled contract is not the one this
 // caller was compiled against — a deploy skew, not a bad payload. The callee
@@ -830,6 +1290,14 @@ export interface CalleeFaulted {
   readonly service: string;
   readonly status: number;
 }
+
+// #3894: the shape of the `bynk` adapter's `CallOutcome[R]`, which the generated
+// code declares: the runtime builds one structurally.
+export type CallOutcome<R> =
+  | { readonly tag: "Handled"; readonly result: R }
+  | { readonly tag: "Rejected"; readonly reason: { readonly tag: string } }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
 
 /// #2193: the header a callee's fault response names its context in.
 export const FAULT_HEADER = "X-Bynk-Fault";
@@ -986,6 +1454,27 @@ export function reportUnknownStoredKeys(agent: string, stored: object, zero: obj
   }
 }
 
+// #3793: `store new: Cell[T] replaces old` reads a record stored under `old` as `new`. Each
+// `[old, new]` pair moves `old`'s value to `new` unless the record already holds `new`, so a value
+// the new build wrote is never replaced by a stale one; `old` is dropped, so the next commit writes
+// only `new`. Returns `stored` itself when no pair applies, and a copy otherwise (the record read
+// from storage is never mutated). Pairs are most-recent-name first, so a field renamed twice is
+// read from whichever of its names the record holds.
+export function renameStoredFields(
+  stored: object,
+  renames: readonly (readonly [string, string])[],
+): object {
+  const has = (key: string): boolean => globalThis.Object.hasOwn(stored, key);
+  if (!renames.some(([old, name]) => has(old) && old !== name)) return stored;
+  const out: { [key: string]: unknown } = { ...(stored as { [key: string]: unknown }) };
+  for (const [old, name] of renames) {
+    if (!globalThis.Object.hasOwn(out, old) || old === name) continue;
+    if (!globalThis.Object.hasOwn(out, name)) out[name] = out[old];
+    delete out[old];
+  }
+  return out;
+}
+
 // State-migrations S2 (#2224 Decision D): the fault a step that throws
 // becomes. The thrown value is discarded, not logged: it can carry stored data.
 export function migrationFailed(agent: string, from: number): Error {
@@ -1116,6 +1605,24 @@ export async function signature(key: string, fields: SignedFields): Promise<stri
   return hex(await crypto.subtle.sign("HMAC", await hmacKey(key, "sign"), new TextEncoder().encode(signingInput(fields))));
 }
 
+// #3895: the `traceparent` header a call sends from inside a trace, and none
+// outside one. It is not part of the signing input: it is observability
+// metadata, and a callee reads it only from a request that has already proved
+// its caller.
+function traceHeaders(): Record<string, string> {
+  const traceparent = outgoingTraceparent();
+  return traceparent === undefined ? {} : { [W3C_TRACEPARENT_HEADER]: traceparent };
+}
+
+// #3895: the header an event delivery sends, from the envelope's `trace` alone
+// and never from the request scope. The fan-out Durable Object delivers outside
+// the emitting request, and the handler reads the same trace as `env.trace`, so
+// the header and the envelope cannot disagree.
+function eventTraceHeaders(envelope: unknown): Record<string, string> {
+  const trace = (envelope as { trace?: unknown } | null)?.trace;
+  return isTraceId(trace) ? { [W3C_TRACEPARENT_HEADER]: formatTraceparent(trace) } : {};
+}
+
 // The sending side: the headers that prove `caller` sent `body` to `callee`.
 // Throws, naming the unset key, when the Worker holds none for the edge:
 // sending without it would only come back as an opaque 401.
@@ -1230,7 +1737,10 @@ export async function verifyCall(
     sig,
     new TextEncoder().encode(signingInput(fields)),
   );
-  return ok ? new TextDecoder().decode(bytes) : refused;
+  if (!ok) return refused;
+  // #3895: only a request that proved its caller is read for a trace.
+  admitTrace(request);
+  return new TextDecoder().decode(bytes);
 }
 
 // #1969: the published cross-context wire format's version
@@ -1241,7 +1751,15 @@ export async function verifyCall(
 export const WIRE_VERSION_HEADER = "X-Bynk-Wire";
 export const WIRE_VERSION = "1";
 
-export async function callService<R>(
+// What one call came to before it is a return value or a thrown fault: shared
+// by `callService` (which throws) and `callServiceOutcome` (which reports it as
+// a `CallOutcome`).
+type CallRaw<R> =
+  | { readonly kind: "ok"; readonly value: R }
+  | { readonly kind: "error"; readonly error: CallError }
+  | { readonly kind: "thrown"; readonly thrown: unknown };
+
+async function callServiceCore<R>(
   binding: ServiceBinding,
   servicePath: string,
   argsJson: JsonValue,
@@ -1254,8 +1772,9 @@ export async function callService<R>(
   deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
   // v0.54: the calling context's qualified name, stamped beside the args so the
   // callee's `by c: Caller` handler can present a live `CallerId` (Q7). A
-  // compile-time constant; the args body itself is unchanged. The `Internal`
-  // channel trusts the binding, so this is identity, not authentication.
+  // compile-time constant; the args body itself is unchanged. The name is only a
+  // claim until the request's per-edge signature (ADR 0485) proves it: the
+  // callee checks the signature, then admits the proven caller.
   callerContext: string = "",
   // v0.177 (#643): this caller's compiled hash of the callee's contract. A
   // compile-time constant, stamped beside the caller identity as metadata — the
@@ -1268,7 +1787,7 @@ export async function callService<R>(
   // which the signature binds the request to.
   env: unknown = undefined,
   calleeContext: string = "",
-): Promise<R> {
+): Promise<CallRaw<R>> {
   const body = JSON.stringify(argsJson);
   const path = `/_bynk/call/${servicePath}`;
   const signed = await signedHeaders(env, callerContext, calleeContext, path, contractHash, WIRE_VERSION, body, `the call to ${servicePath}`);
@@ -1279,11 +1798,17 @@ export async function callService<R>(
       "X-Bynk-Caller": callerContext,
       "X-Bynk-Contract": contractHash,
       [WIRE_VERSION_HEADER]: WIRE_VERSION,
+      ...traceHeaders(),
       ...signed,
     },
     body,
   });
-  const response = await binding.fetch(request);
+  let response: Response;
+  try {
+    response = await binding.fetch(request);
+  } catch (thrown) {
+    return { kind: "thrown", thrown };
+  }
   if (!response.ok) {
     // Read the body **once**: the stream is consumed on first read, so a second
     // read throws `TypeError: Body is unusable` — which would replace the very
@@ -1306,8 +1831,8 @@ export async function callService<R>(
       if (detail && detail.kind === "ContractMismatch") {
         // #1826: logged on the caller's side too, with both hashes, before the
         // fault: the caller's catch reports only `BoundaryError: ContractMismatch`.
-        globalThis.console.error(`ContractMismatch ${callerContext} -> ${servicePath}`, detail);
-        throw boundaryError(detail);
+        globalThis.console.error(withTrace(`ContractMismatch ${callerContext} -> ${servicePath}`), detail);
+        return { kind: "error", error: detail };
       }
     }
     // #2193: a marked 500 is the callee's own fault. Logged here too, naming
@@ -1321,26 +1846,126 @@ export async function callService<R>(
         service: servicePath,
         status: response.status,
       };
-      globalThis.console.error(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`);
-      throw boundaryError(detail);
+      globalThis.console.error(withTrace(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`));
+      return { kind: "error", error: detail };
     }
-    throw boundaryError({
-      kind: "Transport",
-      status: response.status,
-      details: raw,
-    });
+    return { kind: "error", error: { kind: "Transport", status: response.status, details: raw } };
   }
   let responseJson: JsonValue;
   try {
     responseJson = (await response.json()) as JsonValue;
   } catch (e) {
-    throw boundaryError({ kind: "MalformedJson", details: String(e) });
+    return { kind: "error", error: { kind: "MalformedJson", details: String(e) } };
   }
   const result = deserialiseResult(responseJson);
   if (result.tag === "Err") {
-    throw boundaryError(result.error);
+    return { kind: "error", error: result.error };
   }
-  return result.value;
+  return { kind: "ok", value: result.value };
+}
+
+export async function callService<R>(
+  binding: ServiceBinding,
+  servicePath: string,
+  argsJson: JsonValue,
+  deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
+  callerContext: string = "",
+  contractHash: string = "",
+  env: unknown = undefined,
+  calleeContext: string = "",
+): Promise<R> {
+  const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
+  if (raw.kind === "ok") return raw.value;
+  if (raw.kind === "thrown") throw raw.thrown;
+  throw boundaryError(raw.error);
+}
+
+// #3894: `<context>.<service>.outcome(args)`. The same call as `callService`,
+// but a failure to reach the callee's handler is a value, not a thrown fault:
+// each of the callee's refusals (`reference/wire-format.md`) is a `Rejected`,
+// its marked `500` is `Faulted`, and any other status or a thrown `fetch` is
+// `Unreachable`. A failure to read a `200` stays a fault: the contract hashes
+// make it a toolchain bug, not an outcome. The failure is logged once, as
+// `callService` logs it (`ContractMismatch`, `CalleeFaulted`), and by this
+// function for the rest.
+export async function callServiceOutcome<R>(
+  binding: ServiceBinding,
+  servicePath: string,
+  argsJson: JsonValue,
+  deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
+  callerContext: string = "",
+  contractHash: string = "",
+  env: unknown = undefined,
+  calleeContext: string = "",
+): Promise<CallOutcome<R>> {
+  const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
+  if (raw.kind === "ok") return { tag: "Handled", result: raw.value };
+  if (raw.kind === "thrown") {
+    globalThis.console.error(withTrace(`CallUnreachable ${callerContext} -> ${servicePath}`));
+    return { tag: "Unreachable", status: None };
+  }
+  const outcome = outcomeOfCallError<R>(raw.error);
+  if (outcome === null) throw boundaryError(raw.error);
+  if (raw.error.kind === "Transport") {
+    globalThis.console.error(withTrace(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`));
+  }
+  return outcome;
+}
+
+// #3894: the callee's answer to a refused or failed call, as the caller's
+// `CallOutcome`; `null` when it is not a refusal or a failure to reach (an
+// unreadable `200`).
+function outcomeOfCallError<R>(error: CallError): CallOutcome<R> | null {
+  const refused = (reason: string): CallOutcome<R> => ({ tag: "Rejected", reason: { tag: reason } });
+  switch (error.kind) {
+    case "ContractMismatch":
+      return refused("StaleContract");
+    case "CalleeFaulted":
+      return { tag: "Faulted" };
+    case "Transport": {
+      switch (error.status) {
+        case 413:
+          return refused("TooLarge");
+        case 401:
+          return refused("NotAuthenticated");
+        case 404:
+          return refused("NoSuchService");
+        case 403:
+          return refused("NotAdmitted");
+        case 400: {
+          let kind: unknown = null;
+          try {
+            kind = (JSON.parse(error.details) as { kind?: unknown }).kind;
+          } catch {
+            // Not a JSON body: an undecodable one.
+          }
+          return refused(kind === "UnsupportedWireVersion" ? "UnsupportedWire" : "Undecodable");
+        }
+        default:
+          return { tag: "Unreachable", status: Some(error.status) };
+      }
+    }
+    default:
+      return null;
+  }
+}
+
+// #3894: the `bundle` target has no wire, so `.outcome(…)` awaits the in-process
+// call: a result is `Handled`, a fault is `Faulted`. A test stub that is
+// `rejected` or `unreachable` throws a marked error (`__bynkCallStub`), which
+// reads back as that outcome.
+export async function callOutcome<R>(call: Promise<R>): Promise<CallOutcome<R>> {
+  try {
+    return { tag: "Handled", result: await call };
+  } catch (e) {
+    const stub = (e as { bynkCallStub?: { tag: string; reason?: string; status?: number } } | null)?.bynkCallStub;
+    if (stub?.tag === "Rejected") return { tag: "Rejected", reason: { tag: stub.reason ?? "" } };
+    if (stub?.tag === "Unreachable") {
+      return { tag: "Unreachable", status: stub.status === undefined ? None : Some(stub.status) };
+    }
+    globalThis.console.error(withTrace("CalleeFaulted bundle call"));
+    return { tag: "Faulted" };
+  }
 }
 
 // Events track, slice 0: the fan-out DO's own delivery to one subscriber,
@@ -1372,7 +1997,7 @@ export async function deliverEvent(
   const signed = await signedHeaders(env, publisher, subscriber, path, "", "1", body, `the event delivery to ${servicePath}`);
   const request = new Request(`http://internal/_bynk/event/${servicePath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...signed },
+    headers: { "content-type": "application/json", ...eventTraceHeaders(envelope), ...signed },
     body,
   });
   const response = await binding.fetch(request);
@@ -1381,7 +2006,18 @@ export async function deliverEvent(
   }
 }
 
-// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion }`)
+// #3895: the envelope a subscriber's handler is handed, from one that was
+// minted in this process. The minting site writes `trace` as a bare id (so it
+// serialises as the wire's optional string, and is absent outside a trace); a
+// handler reads it as an `Option[String]`. An envelope that already carries an
+// `Option` is returned as it is.
+export function eventEnvelopeOf<E extends object>(envelope: E): Omit<E, "trace"> & { trace: Option<string> } {
+  const trace = (envelope as { trace?: unknown }).trace;
+  if (typeof trace === "object" && trace !== null) return envelope as Omit<E, "trace"> & { trace: Option<string> };
+  return { ...envelope, trace: isTraceId(trace) ? Some(trace) : None };
+}
+
+// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion, trace }`)
 // is declared in `adapter bynk`, not by a consumed context, so it never goes
 // through the ordinary `emit_record_codec` machinery a context's own boundary
 // types get (that machinery is rooted at a *consumed context's* exports;
@@ -1397,7 +2033,7 @@ export function deserialiseEventEnvelope(
   json: JsonValue,
   path: string = "$",
 ): Result<
-  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number },
+  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace: Option<string> },
   BoundaryError
 > {
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
@@ -1440,7 +2076,15 @@ export function deserialiseEventEnvelope(
       actual: typeof schemaVersion,
     });
   }
-  return Ok({ eventId, publisherId, emittedAt, schemaVersion });
+  // #3895: optional and additive. Absent, `null` and a malformed id are all
+  // `None`: a trace must never make an event undeliverable. On the wire the
+  // trace is a bare id string, as the fan-out carries it. That is not the
+  // tagged `{ kind: "Some", value }` form the std codec writes for an
+  // `Option` field, which this route reads as `None`: the two shapes do not
+  // round-trip, and nothing sends the std form here.
+  const wireTrace = obj["trace"];
+  const trace = isTraceId(wireTrace) ? Some(wireTrace) : None;
+  return Ok({ eventId, publisherId, emittedAt, schemaVersion, trace });
 }
 
 // I4 (#1970): the part of @bynk/wire-client that is the package's own, beside

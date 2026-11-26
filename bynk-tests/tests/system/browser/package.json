@@ -1,0 +1,8 @@
+{
+  "name": "bynk-system-browser",
+  "private": true,
+  "description": "Playwright for the system tier's browser test (sse_browser.rs). Nothing here is shipped.",
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`Reps.of(x)` checks a value of the type's base against its predicates, so `x` must already be that base: an `Int` for `Reps`. The constructor validates; it does not convert, so a `String` is refused before any predicate runs. Turn the value into the base first, such as with `Int.parse`, or take it as the base type. `Reps.unsafe` on an opaque type has the same rule.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.constructor_base_mismatch",
+  "constructs": [],
+  "example": "type Reps = Int where InRange(1, 100)\n\nfn parse(s: String) -> Result[Reps, ValidationError] {\n    Reps.of(s)        // ✗ `Reps.of` takes an `Int`\n}\n\nfn parse(n: Int) -> Result[Reps, ValidationError] {\n    Reps.of(n)        // ✓\n}",
+  "severity": "error",
+  "summary": "A `.of` constructor was given an argument of the wrong base type."
+}

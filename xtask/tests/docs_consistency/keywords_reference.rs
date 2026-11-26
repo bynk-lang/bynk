@@ -3,7 +3,7 @@
 //!
 //! 1. The alphabetic `#[token("…")]` keywords in `lexer.rs` must match exactly
 //!    `bynk_syntax::keywords::KEYWORDS`.
-//! 2. `site/src/content/docs/book/reference/keywords.md` must match what the
+//! 2. `site/src/content/docs/reference/keywords.md` must match what the
 //!    registry renders.
 //! 3. The LLM primer's hand-written `## Keywords` section (`site/public/llms.txt`)
 //!    must list exactly the registry's words (#2464).
@@ -112,7 +112,7 @@ fn registry_matches_lexer_tokens() {
 #[test]
 fn generated_keywords_page_is_up_to_date() {
     let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/book/reference/keywords.md");
+        .join("../site/src/content/docs/reference/keywords.md");
     let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
 
     if std::env::var_os("BYNK_BLESS").is_some() {
@@ -123,7 +123,7 @@ fn generated_keywords_page_is_up_to_date() {
     let current = fs::read_to_string(&page).unwrap_or_default();
     assert_eq!(
         current, rendered,
-        "site/src/content/docs/book/reference/keywords.md is out of date.\n\
+        "site/src/content/docs/reference/keywords.md is out of date.\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency keywords_reference::"
     );
 }

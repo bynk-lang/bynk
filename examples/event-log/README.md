@@ -13,7 +13,7 @@ What it shows:
   dedup key, since an at-least-once retry can append twice.
 - **Time-window reads, clock-free** — `since`/`recent` build a `Query[T]` over the
   entry values; the caller passes the cutoff instant, derived with `Instant` /
-  `Duration` arithmetic (`now - 1.hours`). A reading handler needs no clock.
+  `Duration` arithmetic (`now - 1.hour`). A reading handler needs no clock.
 - **One shared query vocabulary** — a windowed `breakdown` collects the window and
   tallies it with `summarise` from `commons digest`, whose `groupBy` runs eagerly
   over a `List` — the same vocabulary the agent runs lazily over storage.

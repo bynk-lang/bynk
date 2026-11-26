@@ -1,10 +1,9 @@
 //! `LowerCtx`: the per-body lowering context and its `impl`.
 
 use super::ctx::*;
-use super::lower::str_node;
-use super::lower_list::{call, id};
 use super::ts_types::ts_ty_to_ts_type;
 use super::*;
+use crate::ts_build::{call, ident, num_lit, str_lit};
 use bynk_check::firstparty::FirstPartyCap;
 
 /// Per-body lowering context: what module we are emitting into ([`ModuleCtx`]),
@@ -57,6 +56,12 @@ pub(crate) struct LowerCtx<'a> {
     /// by walking the stack innermost-out and falls back to the natural
     /// `ts_ident` name when no frame renamed it.
     pub shadow_scopes: Vec<HashMap<String, String>>,
+    /// #3980: the `match`es being lowered, innermost last, so an `expect false` arm can name its
+    /// arm and the value matched (`lower::expect_was`).
+    scrutinee_frames: Vec<super::lower::expect_was::ScrutineeFrame>,
+    /// #3981: whether a statement-form `expect … is P(x)` declares `x` for the statements after
+    /// it: a case body, not a `property` body (mirrors the checker's `expect_is_bindings`).
+    pub(crate) expect_is_bindings: bool,
     /// #2024: identifiers the generated scaffold around this body already
     /// binds in the body's own JS scope — a test runner's `deps`, `__obs`, and
     /// the target's destructured services, agents, functions and assets. A
@@ -110,12 +115,13 @@ pub(crate) struct LowerCtx<'a> {
     /// #2135: the call-site principal is `by Forged` or `by Stale` — drive a
     /// `Signature` route with a signature its seam refuses (`"forged"` /
     /// `"stale"`, the driver's name). `None` for any other principal.
-    pub call_site_bad_signature: Option<&'static str>,
+    pub call_site_bad_signature: Option<super::lower_call::test_calls::BadDriver>,
     /// Slice 1 (ADR 0103): the source-map builder for the file being emitted, if
     /// any. The deep lowering chain records `(generated offset → source span)`
     /// checkpoints here; `emit_project` owns the `RefCell` and threads a shared
     /// borrow in. `None` for the single-file `emit()` path and any body emitted
     /// outside a project, where no map is produced.
+    #[cfg(test)]
     pub source_map: Option<&'a RefCell<SourceMapBuilder>>,
     /// T2.2 (R6.4): set at the two statement sites that emit a literal `await`
     /// (`EffectLet`, `Do`) and read-and-reset around a value-position `match`/`if`
@@ -167,7 +173,7 @@ pub(crate) struct LowerCtx<'a> {
 }
 
 impl<'a> LowerCtx<'a> {
-    pub(super) fn new(module: ModuleCtx<'a>, mode: BodyMode) -> Self {
+    pub(crate) fn new(module: ModuleCtx<'a>, mode: BodyMode) -> Self {
         Self {
             module,
             mode,
@@ -181,6 +187,8 @@ impl<'a> LowerCtx<'a> {
             // at `__r0`.
             next_tmp: 0,
             shadow_scopes: vec![HashMap::new()],
+            scrutinee_frames: Vec::new(),
+            expect_is_bindings: false,
             harness_bound: HashSet::new(),
             is_receiver_temps: HashMap::new(),
             is_temp_hoist: None,
@@ -191,6 +199,7 @@ impl<'a> LowerCtx<'a> {
             call_site_actor: None,
             call_site_no_credential: false,
             call_site_bad_signature: None,
+            #[cfg(test)]
             source_map: None,
             emitted_await: false,
             claim_scope_used: false,
@@ -212,7 +221,6 @@ impl<'a> LowerCtx<'a> {
         let list = witness_list(f, &self.commons().types);
         if list.iter().any(|w| w.kind == WitnessKind::Codec) {
             // The witness type names these, whether or not the body encodes.
-            self.runtime_use().note_json_codec();
         }
         list.into_iter()
             .map(|w| {
@@ -362,6 +370,21 @@ impl<'a> LowerCtx<'a> {
     /// v0.8 build target.
     pub(crate) fn target(&self) -> BuildTarget {
         self.module.target
+    }
+
+    /// #2887: the name a consumed type is declared under by its owner, when this
+    /// module renames it (`consumes c { T as U }`); `None` when it is not renamed.
+    pub(crate) fn consumed_declared_name(&self, alias: &str) -> Option<&str> {
+        self.module
+            .consumed_type_declared
+            .get(alias)
+            .map(String::as_str)
+    }
+
+    /// #3945: whether a call to a generic capability operation also passes its type arguments'
+    /// identity (a test build; see `CompileOptions::typed_capability_calls`).
+    pub(crate) fn typed_capability_calls(&self) -> bool {
+        self.module.typed_capability_calls
     }
 
     /// #2045: whether `name` is a consumed context's type on `workers`.
@@ -575,7 +598,7 @@ impl<'a> LowerCtx<'a> {
     /// body, or a `stub`/`where`/`requires` predicate value), where branded
     /// types are destructured into `any`-typed value bindings rather than
     /// referenced as types. Callers that emit a branded `as`-cast consult this
-    /// to pick `unchecked_construct_test` (→ `(v as any)`) over the production
+    /// to pick `unchecked_construct_test_node` (→ `(v as any)`) over the production
     /// `(v as T)` form, which cannot resolve `T` in the test module's scope.
     pub(crate) fn in_test_scaffold(&self) -> bool {
         self.test().is_some_and(|t| t.test_scaffold)
@@ -601,16 +624,14 @@ impl<'a> LowerCtx<'a> {
         };
         let (line, col) = bynk_syntax::span::line_col(&loc.source, offset);
         let path = loc.rel_path.replace('\\', "/");
-        let lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
-        let num = |n: usize| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(n.to_string()));
         let site = bynk_ts::TsExpr::object(vec![
-            ("file".to_string(), lit(&path)),
-            ("line".to_string(), num(line)),
-            ("col".to_string(), num(col)),
+            ("file".to_string(), str_lit(&path)),
+            ("line".to_string(), num_lit(line)),
+            ("col".to_string(), num_lit(col)),
         ]);
         let step = bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Ident("__traceStep".to_string())),
-            args: vec![lit(kind), lit(target), site],
+            args: vec![str_lit(kind), str_lit(target), site],
         };
         bynk_ts::TsExpr::Call {
             callee: Box::new(step),
@@ -637,7 +658,7 @@ impl<'a> LowerCtx<'a> {
     /// agent's state field names.
     pub(crate) fn invariant_state(&self) -> Option<(&str, &HashSet<String>)> {
         match &self.mode {
-            BodyMode::Invariant { name, fields } => Some((name.as_str(), fields)),
+            BodyMode::Invariant { name, fields, .. } => Some((name.as_str(), fields)),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -653,11 +674,31 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #4034: inside an invariant predicate, the agent's `Map`, `Set` and `Cache`
+    /// fields.
+    pub(crate) fn invariant_collections(&self) -> Option<&HashSet<String>> {
+        if let BodyMode::Invariant { collections, .. } = &self.mode {
+            Some(collections)
+        } else {
+            None
+        }
+    }
+
+    /// #4034: inside a `transition` predicate, the agent's `Map`, `Set` and `Cache`
+    /// fields.
+    pub(crate) fn transition_collections(&self) -> Option<&HashSet<String>> {
+        if let BodyMode::Transition { collections, .. } = &self.mode {
+            Some(collections)
+        } else {
+            None
+        }
+    }
+
     /// v0.116: inside a `transition` predicate, the JS names bound to the
     /// contextual `old`/`new` state records.
     pub(crate) fn transition_states(&self) -> Option<(&str, &str)> {
         match &self.mode {
-            BodyMode::Transition { old, new } => Some((old.as_str(), new.as_str())),
+            BodyMode::Transition { old, new, .. } => Some((old.as_str(), new.as_str())),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -770,6 +811,21 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn is_agent_held_map(&self, name: &str) -> bool {
         self.agent_store()
             .is_some_and(|s| s.held_maps.contains_key(name))
+    }
+
+    /// #4037: whether the `Map`, `Set` or `Cache` field `name` has a key that is not a scalar,
+    /// and is keyed by the canonical encoding.
+    pub(crate) fn agent_store_key_is_composite(&self, name: &str) -> bool {
+        self.agent_store()
+            .is_some_and(|s| s.composite_keys.contains(name))
+    }
+
+    /// #4037: whether the `@indexed(by: field)` index of `map` is over a non-scalar field.
+    pub(crate) fn agent_store_index_is_composite(&self, map: &str, field: &str) -> bool {
+        self.agent_store().is_some_and(|s| {
+            s.composite_indexes
+                .contains(&(map.to_string(), field.to_string()))
+        })
     }
 
     /// 1A.33: whether the plain `store Map` field `name` holds `Connection` values, by its
@@ -966,12 +1022,12 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #2380 (L5): whether the addressed http handler binds an `Oidc` actor,
+    /// #2380 (L5), #3937: whether the addressed http handler binds an `Oidc` or `Bearer` actor,
     /// so an in-process call passes it `deps.claims`.
-    pub(crate) fn is_oidc_handler(&self, service: &str, key: &str) -> bool {
+    pub(crate) fn is_claims_handler(&self, service: &str, key: &str) -> bool {
         match &self.mode {
             BodyMode::TestCase { sum_handlers, .. } => {
-                sum_handlers.contains(&(service.to_string(), format!("oidc:{key}")))
+                sum_handlers.contains(&(service.to_string(), format!("claims:{key}")))
             }
             BodyMode::Method
             | BodyMode::FreeFn
@@ -1087,6 +1143,12 @@ impl<'a> LowerCtx<'a> {
             | BodyMode::PredicateScaffold { .. }
             | BodyMode::TestCase { .. } => None,
         }
+    }
+
+    /// #3899: whether the queue service `service` admits only signed messages, so its driver
+    /// takes the foreign actor a case acts as.
+    pub(crate) fn system_queue_signed(&self, service: &str) -> bool {
+        matches!(&self.mode, BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.signed_queue.contains(service))
     }
 
     /// #2136: the `__sysdrive_message_<q>` driver for a queue address
@@ -1206,8 +1268,23 @@ impl<'a> LowerCtx<'a> {
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some({
                     let c = vec![lines];
-                    call(id("__bynkOidcClaims"), c)
+                    call(ident("__bynkClaimLines"), c)
                 })
+            }
+            // #3937: a `Bearer` route whose binder reads `.claims` signs the principal's own lines
+            // beside a refinement's witness claims (which the lines override), or just the witness
+            // claims, or none, when it gives no lines.
+            BodyMode::IntegrationCase {
+                system_http_claims, ..
+            } if system_http_claims.bearer_claim_routes.contains(route) => {
+                let witness = system_http_claims.witness_on(route, self.call_site_actor.as_ref());
+                let presented = self.call_site_claim_lines.clone().map(|lines| {
+                    let c = vec![lines];
+                    call(ident("__bynkClaimLines"), c)
+                });
+                Some(super::claim_predicate::bearer_claims_node(
+                    witness, presented,
+                ))
             }
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1218,7 +1295,7 @@ impl<'a> LowerCtx<'a> {
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
                     // The actor's witness claims, as `{ "name": value, … }`.
-                    Some(witness) => witness_claims_node(witness),
+                    Some(witness) => super::claim_predicate::witness_claims_node(witness),
                     None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
@@ -1238,13 +1315,14 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #3052: whether this body is a `system` case on a target with an
-    /// `Oidc` route, whose calls mint their claims from `TokenClaims.of` lines.
-    pub(crate) fn is_system_oidc_body(&self) -> bool {
+    /// #3052, #3937: whether this body is a `system` case on a target with a route that mints
+    /// its token's claims from `TokenClaims.of` lines (`Oidc`, or a `Bearer` whose binder reads them).
+    pub(crate) fn is_system_claims_body(&self) -> bool {
         matches!(
             &self.mode,
             BodyMode::IntegrationCase { system_http_claims, .. }
                 if !system_http_claims.oidc_routes.is_empty()
+                    || !system_http_claims.bearer_claim_routes.is_empty()
         )
     }
 
@@ -1261,7 +1339,7 @@ impl<'a> LowerCtx<'a> {
             } => system_http_claims
                 .sum_routes
                 .get(route)
-                .map(|primary| str_node(self.call_site_actor.as_deref().unwrap_or(primary))),
+                .map(|primary| str_lit(self.call_site_actor.as_deref().unwrap_or(primary))),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -1327,7 +1405,8 @@ impl<'a> LowerCtx<'a> {
         self.in_test_scaffold() || self.suite_fn
     }
 
-    pub(super) fn with_source_map(mut self, map: Option<&'a RefCell<SourceMapBuilder>>) -> Self {
+    #[cfg(test)]
+    pub(crate) fn with_source_map(mut self, map: Option<&'a RefCell<SourceMapBuilder>>) -> Self {
         self.source_map = map;
         self
     }
@@ -1338,71 +1417,9 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_bytes();
     }
 
-    /// Record that this lowering emitted a `Bytes` operation helper (#2016), so
-    /// the module imports that group.
-    pub(super) fn note_bytes_ops(&self) {
-        self.runtime_use().note_bytes_ops();
-    }
-
-    /// #2867: record a refinement check that calls a runtime helper.
-    pub(super) fn note_predicate(&self, pred: &PredKind) {
-        self.runtime_use().note_predicate(pred);
-    }
-
-    /// Record that this lowering emitted an `Instant` ISO-8601 helper (#2592).
-    pub(super) fn note_time_ops(&self) {
-        self.runtime_use().note_time_ops();
-    }
-
-    /// Record that this lowering emitted a percent-encoding helper (#2594).
-    pub(super) fn note_url_ops(&self) {
-        self.runtime_use().note_url_ops();
-    }
-
-    /// Record that this lowering emitted a `within` race (#2683).
-    pub(super) fn note_within(&self) {
-        self.runtime_use().note_within();
-    }
-
-    /// Record that this lowering emitted a `__fault` call (#2620).
-    pub(super) fn note_fault(&self) {
-        self.runtime_use().note_fault();
-    }
-
     /// Record that this lowering emitted a `detach` (#3437).
     pub(super) fn note_detach(&self) {
         self.runtime_use().note_detach();
-    }
-
-    /// Record that this lowering emitted a `race` (#2711).
-    pub(super) fn note_race(&self) {
-        self.runtime_use().note_race();
-    }
-
-    /// Record that this lowering emitted a `par` join (#2640).
-    pub(super) fn note_settle_all(&self) {
-        self.runtime_use().note_settle_all();
-    }
-
-    /// Record that this lowering built a `RequestHeaders` value (#2341), so
-    /// the module imports `__requestHeaders`.
-    pub(super) fn note_request_headers(&self) {
-        self.runtime_use().note_request_headers();
-    }
-
-    /// Record that this lowering built a `RequestCookies` value (#3277).
-    pub(super) fn note_request_cookies(&self) {
-        self.runtime_use().note_request_cookies();
-    }
-
-    /// Record that this lowering built a `RequestQuery` value (#2854).
-    pub(super) fn note_request_query(&self) {
-        self.runtime_use().note_request_query();
-    }
-
-    /// Record that this lowering turned a typed query into a query string (#2854).
-    pub(super) fn note_query_string(&self) {
-        self.runtime_use().note_query_string();
     }
 
     /// Record that this lowering used an `HttpResult` cookie method (#3277).
@@ -1410,42 +1427,9 @@ impl<'a> LowerCtx<'a> {
         self.runtime_use().note_http_result_cookie();
     }
 
-    /// Record that this lowering turned a typed `cookies` record into a `Cookie` header (#3277).
-    pub(super) fn note_cookie_string(&self) {
-        self.runtime_use().note_cookie_string();
-    }
-
-    /// Record that this lowering built a `TokenClaims` value (#2380).
-    pub(super) fn note_token_claims(&self) {
-        self.runtime_use().note_token_claims();
-    }
-
-    /// Record that this lowering constructed an `HttpResult` variant (#1934),
-    /// so a test module imports it.
-    pub(super) fn note_http_result(&self) {
-        self.runtime_use().note_http_result();
-    }
-
-    /// Record that this lowering constructed a `QueueResult` variant (#2839).
-    pub(super) fn note_queue_result(&self) {
-        self.runtime_use().note_queue_result();
-    }
-
-    /// Record that this lowering emitted a reference to `__bynkEq` (#1652), so
-    /// the module imports it.
-    pub(super) fn note_eq(&self) {
-        self.runtime_use().note_eq();
-    }
-
     /// Record that this lowering referenced a `Decimal` runtime helper (#2622).
     pub(crate) fn note_decimal(&self, name: &'static str) {
         self.runtime_use().note_decimal(name);
-    }
-
-    /// Record that this lowering emitted an `Int` domain trap (#1657), so the
-    /// module imports the helpers.
-    pub(super) fn note_int(&self) {
-        self.runtime_use().note_int();
     }
 
     /// Record a checkpoint: generated text from `out_len` onward originates at
@@ -1458,7 +1442,8 @@ impl<'a> LowerCtx<'a> {
     /// into its own local `String` — `lower_if`'s value-position wrapper,
     /// `build_match_iife`'s — before splicing it elsewhere must not call this
     /// with that buffer's own length (render it with `render_text`).
-    pub(super) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
+    #[cfg(test)]
+    pub(crate) fn record_span(&self, out_len: usize, span: bynk_syntax::span::Span) {
         if let Some(map) = self.source_map {
             map.borrow_mut().record(out_len, span);
         }
@@ -1488,7 +1473,7 @@ impl<'a> LowerCtx<'a> {
         });
         let mut args = vec![key];
         args.extend(deps_env);
-        call(id(&factory), args)
+        call(ident(&factory), args)
     }
 
     /// #527: note that the body calls `agent.method`, folding the method's
@@ -1593,7 +1578,7 @@ impl<'a> LowerCtx<'a> {
     /// expression.
     pub(super) fn is_receiver_ref(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::node(super::lower::ident_node(t));
+            return Lowered::node(crate::ts_build::ident(t));
         }
         let mut pre = Pre::new();
         let lowered = pre.lower_node(value, self);
@@ -1606,7 +1591,7 @@ impl<'a> LowerCtx<'a> {
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(super::lower::ident_node(&tmp))
+        pre.finish(crate::ts_build::ident(&tmp))
     }
 
     /// Declare an `is` receiver temp holding `lowered`: a `const` in place, or,
@@ -1642,7 +1627,7 @@ impl<'a> LowerCtx<'a> {
         let n = lowered;
         if hoisting {
             pre.push_node(bynk_ts::TsStmt::assign(
-                super::lower::ident_node(tmp),
+                crate::ts_build::ident(tmp),
                 n,
                 None,
             ));
@@ -1663,14 +1648,14 @@ impl<'a> LowerCtx<'a> {
     /// temp first and both the check and the binding read the temp.
     pub(super) fn is_receiver_ref_forced(&mut self, value: &Expr) -> Lowered {
         if let Some(t) = self.is_receiver_temps.get(&value.span) {
-            return Lowered::node(super::lower::ident_node(t));
+            return Lowered::node(crate::ts_build::ident(t));
         }
         let mut pre = Pre::new();
         let lowered = pre.lower_node(value, self);
         let tmp = self.fresh();
         self.declare_is_temp(value, &tmp, lowered, &mut pre);
         self.is_receiver_temps.insert(value.span, tmp.clone());
-        pre.finish(super::lower::ident_node(&tmp))
+        pre.finish(crate::ts_build::ident(&tmp))
     }
 
     /// v0.13: true when `value is Name` is a *refinement* check — the value is a
@@ -1709,6 +1694,26 @@ impl<'a> LowerCtx<'a> {
     }
     /// #2617: whether a simple `is` receiver (an ident or a field-access
     /// chain ending at one) starts at a constant.
+    pub(in crate::emitter) fn scrutinee_frames(
+        &self,
+    ) -> &[super::lower::expect_was::ScrutineeFrame] {
+        &self.scrutinee_frames
+    }
+    pub(in crate::emitter) fn push_scrutinee(
+        &mut self,
+        f: Option<super::lower::expect_was::ScrutineeFrame>,
+    ) -> bool {
+        match f {
+            Some(f) => {
+                self.scrutinee_frames.push(f);
+                true
+            }
+            None => false,
+        }
+    }
+    pub(in crate::emitter) fn pop_scrutinee(&mut self) {
+        self.scrutinee_frames.pop();
+    }
     pub(crate) fn roots_at_const(&self, value: &Expr) -> bool {
         match value.kind.chain_link() {
             Some(bynk_syntax::ast::ChainLink::Root(_)) => self.const_ref(value).is_some(),
@@ -1758,13 +1763,18 @@ impl<'a> LowerCtx<'a> {
         // carried in the `identity` field of the tagged object.
         let disc_node = discriminant_ty.map(|t| tys.get(t));
         if let Some(Ty::ActorSum(_)) = disc_node.as_deref() {
-            return "identity".to_string();
+            // #4344: a `Bearer` arm's second binder reads its verified claims.
+            return if idx == 1 { "claims" } else { "identity" }.to_string();
         }
         // #1934: the payloads a case binds from a queue verdict and a
         // boundary rejection, named as `queue.ts` and `http.ts` name them.
         match disc_node.as_deref() {
-            Some(Ty::QueueResult) if variant == "Retry" && idx == 0 => {
+            Some(Ty::QueueResult) if matches!(variant, "Retry" | "RetryAfter") && idx == 0 => {
                 return "reason".to_string();
+            }
+            // #3881: `RetryAfter(reason, delay)`.
+            Some(Ty::QueueResult) if variant == "RetryAfter" && idx == 1 => {
+                return "delay".to_string();
             }
             Some(Ty::BoundaryRejection) if idx == 0 => return "detail".to_string(),
             _ => {}
@@ -1790,7 +1800,7 @@ impl<'a> LowerCtx<'a> {
         // checking, which is still lowered and its output discarded.
         if matches!(
             disc_node.as_deref(),
-            None | Some(Ty::HttpResult(_)) | Some(Ty::Error)
+            None | Some(Ty::HttpResult(_, _)) | Some(Ty::Error)
         ) && let Some(v) = bynk_syntax::ast::http_variant(variant)
         {
             use bynk_syntax::ast::HttpVariantPayload as P;
@@ -1802,6 +1812,7 @@ impl<'a> LowerCtx<'a> {
                 P::Streamed => &["stream"],
                 P::Raw | P::RawStreamed => &["body", "contentType"],
                 P::RawTagged => &["body", "contentType", "etag"],
+                P::Partial => &["body", "contentType", "range"],
                 P::RawError => &["status", "body", "contentType"],
             };
             if let Some(field) = fields.get(idx) {
@@ -1829,12 +1840,12 @@ impl<'a> LowerCtx<'a> {
                 ("Err", 0) => Some(*e),
                 _ => None,
             },
-            Some(Ty::HttpResult(t)) if variant == "Ok" && idx == 0 => Some(*t),
+            Some(Ty::HttpResult(t, _)) if variant == "Ok" && idx == 0 => Some(*t),
             // #1934: `Handled(Created(i))` resolves `i`'s field through the
             // `HttpResult` it carries.
             Some(Ty::HttpOutcome(t)) if idx == 0 => match variant {
                 "Rejected" => Some(tys.intern(Ty::BoundaryRejection)),
-                "Handled" => Some(tys.intern(Ty::HttpResult(*t))),
+                "Handled" => Some(tys.intern(Ty::HttpResult(*t, None))),
                 _ => None,
             },
             Some(Ty::Option(t)) if variant == "Some" && idx == 0 => Some(*t),
@@ -1868,23 +1879,116 @@ impl<'a> LowerCtx<'a> {
     }
 }
 
-/// An actor's witness claims as an object literal: each claim a quoted key, so a name that is not
-/// an identifier reads the same, and `true` or its string value.
-fn witness_claims_node(witness: &[(String, bynk_check::actors::WitnessValue)]) -> bynk_ts::TsExpr {
-    use bynk_check::actors::WitnessValue;
-    bynk_ts::TsExpr::object_entries(
-        witness
-            .iter()
-            .map(|(name, value)| {
-                let value = match value {
-                    WitnessValue::True => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-                    WitnessValue::Str(v) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(v.clone())),
-                };
-                bynk_ts::TsObjectEntry::prop(
-                    format!("\"{}\"", bynk_ts::escape_ts_literal(name)),
-                    value,
-                )
-            })
-            .collect(),
-    )
+// ---- #4034: `size()` of a `store` collection inside a predicate ---------------
+//
+// A predicate runs in `commitState`, over the staged state. A collection's count
+// is not a field of that state: it lives in the collection's handle (the staged
+// count) and in storage (the committed count). So `commitState` binds each count
+// it needs before the checks, and the predicate reads the binding:
+// `__size_new_<field>` for the staged count (`lines.size()` in an invariant,
+// `new.lines.size()` in a transition) and `__size_old_<field>` for the last
+// committed one (`old.lines.size()`).
+
+/// The agent's `Map`, `Set` and `Cache` store fields: the collections whose
+/// `size()` a predicate may read.
+pub(crate) fn collection_names(
+    a: &bynk_syntax::ast::AgentDecl,
+) -> std::collections::HashSet<String> {
+    a.store_fields
+        .iter()
+        .filter(|f| matches!(f.kind.head.name.as_str(), "Map" | "Set" | "Cache"))
+        .map(|f| f.name.name.clone())
+        .collect()
+}
+
+/// The binding a predicate reads the count from: `old` is the committed count.
+pub(crate) fn size_binding(old: bool, field: &str) -> String {
+    ["__size_", if old { "old" } else { "new" }, "_", field].concat()
+}
+
+/// Which counts the predicates of an agent read, as field names.
+#[derive(Default)]
+pub(crate) struct SizeReads {
+    /// The staged counts: a bare `f.size()` in an invariant, `new.f.size()`.
+    pub staged: std::collections::BTreeSet<String>,
+    /// The committed counts: `old.f.size()`.
+    pub committed: std::collections::BTreeSet<String>,
+}
+
+/// The collections whose `size()` the agent's invariants and transitions read.
+pub(crate) fn size_reads(a: &bynk_syntax::ast::AgentDecl) -> SizeReads {
+    let collections = collection_names(a);
+    let mut out = SizeReads::default();
+    for inv in &a.invariants {
+        collect(&inv.predicate, &collections, false, &mut out);
+    }
+    for tr in &a.transitions {
+        collect(&tr.predicate, &collections, true, &mut out);
+    }
+    out
+}
+
+/// `(is the old state, field)` when `receiver.size()` reads a collection count:
+/// a bare collection name in an invariant, `old|new.<collection>` in a transition.
+pub(crate) fn size_read(
+    receiver: &bynk_syntax::ast::Expr,
+    collections: &std::collections::HashSet<String>,
+    step: bool,
+) -> Option<(bool, String)> {
+    if !step {
+        let bynk_syntax::ast::ExprKind::Ident(id) = &receiver.kind else {
+            return None;
+        };
+        return collections
+            .contains(&id.name)
+            .then(|| (false, id.name.clone()));
+    }
+    let bynk_syntax::ast::ExprKind::FieldAccess { receiver: r, field } = &receiver.kind else {
+        return None;
+    };
+    let bynk_syntax::ast::ExprKind::Ident(state) = &r.kind else {
+        return None;
+    };
+    if !collections.contains(&field.name) {
+        return None;
+    }
+    match state.name.as_str() {
+        "old" => Some((true, field.name.clone())),
+        "new" => Some((false, field.name.clone())),
+        _ => None,
+    }
+}
+
+pub(crate) fn is_size_call(
+    method: &bynk_syntax::ast::Ident,
+    args: &[bynk_syntax::ast::Expr],
+) -> bool {
+    method.name == "size" && args.is_empty()
+}
+
+fn collect(
+    e: &bynk_syntax::ast::Expr,
+    collections: &std::collections::HashSet<String>,
+    step: bool,
+    out: &mut SizeReads,
+) {
+    if let bynk_syntax::ast::ExprKind::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &e.kind
+        && is_size_call(method, args)
+        && let Some((old, field)) = size_read(receiver, collections, step)
+    {
+        if old {
+            out.committed.insert(field);
+        } else {
+            out.staged.insert(field);
+        }
+        return;
+    }
+    for c in bynk_syntax::ast::expr_children(e) {
+        collect(c, collections, step, out);
+    }
 }

@@ -1,0 +1,10 @@
+{
+  "blurb": "A signature shows that a request is authentic, not who sent it, so a `Signature` actor has no principal to give an identity. The event is the handler's `body`. Remove `identity`. For an actor that carries a principal, see `bynk.actor.bearer_identity_not_string_constructible`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signature_identity_unsupported",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\"), identity = String }   // ✗ no principal\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }                       // ✓",
+  "severity": "error",
+  "summary": "A `Signature` actor declared an `identity`, which is not yet supported."
+}

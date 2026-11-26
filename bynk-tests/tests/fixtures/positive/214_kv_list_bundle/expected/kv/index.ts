@@ -25,7 +25,7 @@ export const scan = {
 
 export const cache = {
   async call(key: string, e: Entry, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<Option<Entry>> {
-    const __r0 = await deps.Kv.putTtl(key, globalThis.JSON.stringify(__serialise_Entry(e)), 60);
+    const __r0 = await deps.Kv.putTtl(key, globalThis.JSON.stringify(__serialise_Entry(e)), (60000 as bynk_cloudflare.KvTtl));
     const stored = await deps.Kv.get(key);
     switch (stored.tag) {
       case "Some": {
@@ -46,12 +46,12 @@ export const cache = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: "Malformed", path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
           }
           const __r = __deserialise_Entry(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as Entry);
           const __be = __r.error;
-          return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+          return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
         })(s));
       }
       case "None": {

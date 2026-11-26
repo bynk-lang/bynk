@@ -6,7 +6,7 @@ anything that can `fetch`) with typed requests and responses, the server's own
 validation, and a CI gate that fails when the client is out of date.
 
 `bynk client` writes one TypeScript module for your routes. This page is the
-workflow and the recipes; the [HTTP client reference](/book/reference/http-client/)
+workflow and the recipes; the [HTTP client reference](/reference/http-client/)
 has every flag, type and rule.
 
 :::note
@@ -21,8 +21,8 @@ current documentation before relying on them.
 | You want | Use |
 |---|---|
 | A typed TypeScript front end, with the server's validation and its `Option`, opaque and refinement behaviour on the client | `bynk client` |
-| Documentation, a Swagger or Redoc UI, a client in another language, mocks | [`bynk openapi`](/docs/tooling/bynk-openapi/) |
-| A Worker that is not Bynk calling an `on call` service | the [TypeScript client](/book/reference/typescript-client/) |
+| Documentation, a Swagger or Redoc UI, a client in another language, mocks | [`bynk openapi`](/reference/tooling/bynk-openapi/) |
+| A Worker that is not Bynk calling an `on call` service | the [TypeScript client](/reference/typescript-client/) |
 
 ## The API
 
@@ -210,7 +210,7 @@ const api = createClient({
 ```
 
 A `Set-Cookie` in a response reaches the browser only if your server relays it. See
-[Cookies and CSRF](/book/reference/http-client/#cookies-and-csrf).
+[Cookies and CSRF](/reference/http-client/#cookies-and-csrf).
 
 ## A browser-only singleton
 
@@ -334,7 +334,7 @@ const api = createClient({ ...viaBinding(env.API) }).orders;
 ```
 
 Where `env` comes from depends on the adapter and its version, and is listed in
-the [reference](/book/reference/http-client/#calling-through-a-service-binding).
+the [reference](/reference/http-client/#calling-through-a-service-binding).
 A binding call carries no `Origin`, so a state-changing route under a signed cookie
 needs `origin` as above; your front end's server must authenticate its caller.
 
@@ -352,8 +352,8 @@ if (res.kind === "Streaming") {
 }
 ```
 
-See [Raw bodies and streams](/book/reference/http-client/#raw-bodies-and-streams)
-and [Forms and uploads](/book/reference/http-client/#forms-and-uploads).
+See [Raw bodies and streams](/reference/http-client/#raw-bodies-and-streams)
+and [Forms and uploads](/reference/http-client/#forms-and-uploads).
 
 ## Test without a server
 
@@ -369,6 +369,6 @@ const res = await api.postOrders({ sku: "A1", qty: 2, note: null });
 // res.kind === "Created"
 ```
 
-**See also:** [Reference — HTTP client](/book/reference/http-client/),
+**See also:** [Reference — HTTP client](/reference/http-client/),
 [Handle an HTTP request](/book/guides/entry-points/http/),
-[`bynk client`](/docs/tooling/bynk-client/).
+[`bynk client`](/reference/tooling/bynk-client/).

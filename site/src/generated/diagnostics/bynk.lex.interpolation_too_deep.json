@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.interpolation_too_deep",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A string interpolation `\\(…)` nests deeper than the lexer's fixed limit."
+}

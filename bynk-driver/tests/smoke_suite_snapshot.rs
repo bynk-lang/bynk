@@ -34,6 +34,10 @@ service api from http {
     Created(body)
   }
 
+  on POST("/batch") (body: List[Item]) -> Effect[HttpResult[String]] by u: User {
+    Created("batch")
+  }
+
   on PUT("/cart/:sku") (sku: String, body: Item) -> Effect[HttpResult[Item]] by u: User {
     Created(body)
   }
@@ -64,7 +68,7 @@ service ticker from cron {
 }
 
 service calc {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     x
   }
 }

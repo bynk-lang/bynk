@@ -1,0 +1,10 @@
+{
+  "blurb": "A `@raw` route hands the handler its request body as untouched octets, buffered in memory up to a cap. With no cap there is no bound on that buffer, which is the denial of service request body limits exist to stop, so a raw route must have one: a `@limit(maxBody:)` on the handler, or a `limits { maxBody = … }` on the service.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_body_unbounded",
+  "constructs": [],
+  "example": "@raw(contentType: \"image/png\")           // ✗ no cap anywhere\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")           // ✓ capped\n@limit(maxBody: 5_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@raw` route has no request-body cap (no `@limit` and no service `limits`)."
+}

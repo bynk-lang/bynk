@@ -3,9 +3,14 @@ dist/
 .astro/
 
 # Generated Rust API docs (built by `cargo doc` in the deploy workflow, then
-# copied here and served at /docs/api/). CI-generated, never committed.
-public/docs/api/
+# copied here and served at /reference/api/). CI-generated, never committed.
+public/reference/api/
 
 # Inlined Book, regenerated from the Book markdown by the `prebuild` npm hook on
 # every `npm run build` (CI + deploy). A build artifact, never committed.
 public/llms-full.txt
+
+# The diagnostic index, assembled from `src/generated/diagnostics/<code>.json` by
+# `scripts/build-diagnostics-index.mjs` (the `prebuild` and `predev` hooks), so two
+# changes that each add a code never both rewrite one committed page. Never committed.
+src/content/docs/reference/diagnostics.md

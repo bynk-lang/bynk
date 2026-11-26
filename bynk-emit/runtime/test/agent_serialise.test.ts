@@ -4,13 +4,23 @@ import {
   AGENT_CHAIN_HEADER,
   AGENT_CHAIN_MAX,
   AGENT_QUEUE_WAIT_MS,
+  AGENT_BUSY_HEADER,
   AgentQueue,
-  makeIntegrationDoNamespace,
+  agentBusy,
+  agentBusyAfter,
+  agentBusyResponse,
+  callAgentOutcome,
+  callDurableObjectMethod,
+  reentrantAgentCall,
   serialiseAgentClass,
   serialiseBundleAgent,
+  StateRegistry,
+  stubAgents,
   type DurableObjectNamespace,
 } from "../src/agent.ts";
 import { makeTestState, type DurableObjectState } from "../src/storage.ts";
+import { makeIntegrationDoNamespace } from "../src/testing/bindings.ts";
+import { boundaryError, rehydrationViolation } from "../src/boundary.ts";
 
 // #3202: an agent instance runs one handler at a time.
 
@@ -453,4 +463,351 @@ test("serialiseAgentClass passes extra constructor arguments and keeps the class
   const inst = new S(makeTestState("k"), { A: 1 }, "x");
   assert.equal(inst.extra, "x");
   assert.deepEqual({ ...(inst.env as object) }, { A: 1 });
+});
+
+// #3932: `@busyAfter(d)` lowers a class's queue wait, and a busy instance is load, not a fault.
+class SlowOp {
+  state: DurableObjectState;
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+  async hold(): Promise<string> {
+    await sleep(200);
+    return "done";
+  }
+  async fetch(): Promise<Response> {
+    return new Response(JSON.stringify(await this.hold()));
+  }
+}
+
+test("@busyAfter lowers a class's wait, where the class is wrapped", async () => {
+  class Hurried extends SlowOp {}
+  agentBusyAfter(Hurried, 30);
+  const ns = makeIntegrationDoNamespace(Hurried as never);
+  const first = call(ns, "k", "m");
+  const second = await quiet(() => call(ns, "k", "m"));
+  assert.match(await second.text(), /AgentBusy: agent Hurried busy: waited 0\.03 s/);
+  assert.equal(await text(first), '"done"');
+  // A class with no `@busyAfter` keeps the default, and an explicit wait still overrides.
+  class Patient extends SlowOp {}
+  const patient = makeIntegrationDoNamespace(Patient as never);
+  const a = call(patient, "k", "m");
+  assert.equal(await text(call(patient, "k", "m")), '"done"');
+  assert.equal(await text(a), '"done"');
+  const state = makeTestState("k");
+  const make = (): Hurried => serialiseBundleAgent(state, new Hurried(state));
+  const held = make().hold();
+  await quiet(async () => {
+    await assert.rejects(() => make().hold(), /AgentBusy: agent Hurried busy/);
+  });
+  assert.equal(await held, "done");
+});
+
+test("a busy instance answers 503 naming itself; a re-entrant call stays 500", async () => {
+  class Busy extends SlowOp {}
+  const ns = makeIntegrationDoNamespace(Busy as never, undefined, 20);
+  const first = call(ns, "k", "m");
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  let busy: Response;
+  try {
+    busy = await call(ns, "k", "m");
+  } finally {
+    globalThis.console.error = log;
+  }
+  // Logged once, as busy, with the queue depth.
+  assert.deepEqual(logged, [["AgentBusy Busy", { agent: "Busy", kind: "AgentBusy", queued: 1 }]]);
+  assert.equal(busy.status, 503);
+  assert.equal(busy.headers.get(AGENT_BUSY_HEADER), "Busy");
+  await first;
+  const id = "Busy:k";
+  const loop = await ns
+    .get(ns.idFromName("k"))
+    .fetch("https://_bynk/_bynk/agent/m", { headers: { [AGENT_CHAIN_HEADER]: id } });
+  assert.equal(loop.status, 500);
+  assert.equal(loop.headers.get(AGENT_BUSY_HEADER), null);
+});
+
+test("the caller reads a busy instance back as AgentBusy, which an entry answers 503 with Retry-After", async () => {
+  class Busy extends SlowOp {}
+  const ns = makeIntegrationDoNamespace(Busy as never, undefined, 20);
+  const stub = ns.get(ns.idFromName("k"));
+  const first = call(ns, "k", "m");
+  const err = await quiet(() =>
+    callDurableObjectMethod(stub, "m", [], {}).then(
+      () => null,
+      (e: unknown) => e,
+    ),
+  );
+  await first;
+  assert.deepEqual((err as { agentFault?: unknown }).agentFault, { kind: "AgentBusy", agent: "Busy" });
+  const answer = agentBusyResponse(err, "POST /add/:id");
+  assert.equal(answer?.status, 503);
+  assert.equal(answer?.headers.get("retry-after"), "1");
+  // A cross-context call's `503` carries no `X-Bynk-Fault`, so its caller reads it as unreachable.
+  assert.equal(agentBusyResponse(err, "call quote")?.status, 503);
+  assert.equal(agentBusyResponse(err, "call quote")?.headers.get("x-bynk-fault"), null);
+  // An event delivery, a plain fault and a re-entrant call are not mapped.
+  assert.equal(agentBusyResponse(err, "event audit"), null);
+  assert.equal(agentBusyResponse(new Error("boom"), "POST /x"), null);
+  const reentrant = Object.assign(new Error("r"), { agentFault: { kind: "ReentrantAgentCall", agent: "A" } });
+  assert.equal(agentBusyResponse(reentrant, "POST /x"), null);
+});
+
+// #3933: `Agent(key).op.outcome(args)` reports an agent call's failure as a `CallOutcome`.
+test("callAgentOutcome: an answer is Handled, nothing logged", async () => {
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    assert.deepEqual(await callAgentOutcome(Promise.resolve(3), "Basket.add"), { tag: "Handled", result: 3 });
+  } finally {
+    globalThis.console.error = log;
+  }
+  assert.deepEqual(logged, []);
+});
+
+test("callAgentOutcome: AgentBusy is Unreachable(None), a handler fault is Faulted and logged once", async () => {
+  class Slow {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async hold(): Promise<string> {
+      await sleep(200);
+      return "done";
+    }
+  }
+  const state = makeTestState("k");
+  const make = (): Slow => serialiseBundleAgent(state, new Slow(state), 20);
+  const first = make().hold();
+  const busy = await quiet(() => callAgentOutcome(make().hold(), "Slow.hold"));
+  assert.deepEqual(busy, { tag: "Unreachable", status: { tag: "None" } });
+  assert.equal(await first, "done");
+
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    assert.deepEqual(await callAgentOutcome(Promise.reject(new Error("boom")), "Basket.add"), { tag: "Faulted" });
+    // A stored state that no longer loads, and an invariant violation, are faults of the handler.
+    const rehydration = rehydrationViolation("Basket", { kind: "MalformedJson", details: "x" });
+    assert.deepEqual(await callAgentOutcome(Promise.reject(rehydration), "Basket.add"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  assert.ok(logged.some((l) => l[0] === "AgentFaulted Basket.add"));
+});
+
+test("callAgentOutcome: only the called agent's own busy queue is Unreachable, a nested agent's is Faulted", async () => {
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    // `A.op` was busy itself: it never started.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("A", 30_000, 1)), "A.op"), {
+      tag: "Unreachable",
+      status: { tag: "None" },
+    });
+    // `A.op` ran and called a busy `B`: the handler started, so a retry could repeat its effects.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("B", 30_000, 1)), "A.op"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  // The fault is logged with its error, so a handler fault stays diagnosable (#3933).
+  const faulted = logged.find((l) => l[0] === "AgentFaulted A.op");
+  assert.ok(faulted !== undefined);
+  assert.match(String(faulted[1]), /AgentBusy: agent B busy/);
+});
+
+// #4215: a unit-tier agent stub (`stub Basket.add(_) faulted | unreachable`) is a class the test
+// module emits: a method per stubbed operation that throws the outcome its clause stands for, or an
+// error marked `bynkNoStub` when no clause matches, and the real operation runs.
+class Stubbed {
+  state: DurableObjectState;
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+  async add(n: number): Promise<number> {
+    return n + 1;
+  }
+}
+const stubbedAgent = (): Stubbed => {
+  const state = makeTestState("k");
+  return serialiseBundleAgent(state, new Stubbed(state));
+};
+const stubOutcome = (tag: string, agent: string) => (): never => {
+  throw Object.assign(new Error("bynk: stubbed agent call"), { bynkCallStub: { tag, agent } });
+};
+
+test("agent stubs: unreachable and faulted are the outcomes the stubbed call stands for", async () => {
+  stubAgents([[Stubbed, { add: stubOutcome("Unreachable", "Stubbed") }]]);
+  assert.deepEqual(await callAgentOutcome(stubbedAgent().add(1), "Stubbed.add"), {
+    tag: "Unreachable",
+    status: { tag: "None" },
+  });
+  // A plain call to it faults, as a busy agent's does.
+  await assert.rejects(() => stubbedAgent().add(1), /stubbed agent call/);
+
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    assert.deepEqual(await callAgentOutcome(stubbedAgent().add(1), "Stubbed.add"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  assert.ok(logged.some((l) => l[0] === "AgentFaulted Stubbed.add"));
+});
+
+test("agent stubs: a call no clause matches, or that is not in scope, runs the real operation", async () => {
+  const noMatch = (): never => {
+    throw Object.assign(new Error("bynk: no stub clause matched"), { bynkNoStub: true });
+  };
+  stubAgents([[Stubbed, { add: noMatch }]]);
+  assert.equal(await stubbedAgent().add(1), 2);
+  // `__applies` is the stub class's own answer for the running case.
+  stubAgents([[Stubbed, { __applies: () => false, add: stubOutcome("Faulted", "Stubbed") }]]);
+  assert.equal(await stubbedAgent().add(1), 2);
+  // An operation the stub does not name is the real one.
+  stubAgents([[Stubbed, {}]]);
+  assert.equal(await stubbedAgent().add(1), 2);
+});
+
+test("agent stubs: they apply to the stubbed agent alone, and a registry reset ends them", async () => {
+  class Other {}
+  stubAgents([[Other, { add: stubOutcome("Faulted", "Other") }]]);
+  assert.equal(await stubbedAgent().add(1), 2);
+
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
+  await assert.rejects(() => stubbedAgent().add(1));
+  // A history property's driver resets a registry before each sequence: the stubs stay.
+  new StateRegistry<string>().reset(true);
+  await assert.rejects(() => stubbedAgent().add(1));
+  // A case boundary ends them.
+  new StateRegistry<string>().reset();
+  assert.equal(await stubbedAgent().add(1), 2);
+});
+
+test("agent stubs: the class is the key, so a same-named class of another context is not stubbed", async () => {
+  const make = () => {
+    class Stubbed {
+      state: DurableObjectState;
+      constructor(state: DurableObjectState) {
+        this.state = state;
+      }
+      async add(n: number): Promise<number> {
+        return n + 10;
+      }
+    }
+    const state = makeTestState("k");
+    return serialiseBundleAgent(state, new Stubbed(state));
+  };
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
+  assert.equal(await make().add(1), 11);
+  await assert.rejects(() => stubbedAgent().add(1));
+  stubAgents([]);
+});
+
+test("agent stubs: a call nothing stubs runs in the same order with a stub registered as without", async () => {
+  const run = async (): Promise<string[]> => {
+    const order: string[] = [];
+    class Order {
+      state: DurableObjectState;
+      constructor(state: DurableObjectState) {
+        this.state = state;
+      }
+      async add(n: number): Promise<number> {
+        order.push(`add${n}`);
+        return n;
+      }
+    }
+    const state = makeTestState("k");
+    const agent = serialiseBundleAgent(state, new Order(state));
+    const first = agent.add(1);
+    order.push("after-call");
+    const second = agent.add(2);
+    await Promise.all([first, second]);
+    return order;
+  };
+  stubAgents([]);
+  const baseline = await run();
+  // A stub of an operation this agent does not run, and a stub of another agent.
+  stubAgents([[Stubbed, { other: stubOutcome("Faulted", "Stubbed") }]]);
+  assert.deepEqual(await run(), baseline);
+  stubAgents([]);
+});
+
+test("agent stubs: an unreachable stub of another agent, met inside a handler, is that handler's fault", async () => {
+  // `A.op` ran and called a stubbed `B`: the call to `A` did start, so it is `Faulted`.
+  const error = (() => {
+    try {
+      return stubOutcome("Unreachable", "B")();
+    } catch (e) {
+      return e;
+    }
+  })();
+  assert.deepEqual(await quiet(() => callAgentOutcome(Promise.reject(error), "A.op")), { tag: "Faulted" });
+});
+
+test("callAgentOutcome: ReentrantAgentCall and a codec failure stay faults", async () => {
+  const quietly = <T>(f: () => Promise<T>): Promise<T> => quiet(f);
+  await quietly(async () => {
+    await assert.rejects(
+      () => callAgentOutcome(Promise.reject(reentrantAgentCall("Basket")), "Basket.add"),
+      /ReentrantAgentCall/,
+    );
+    await assert.rejects(
+      () => callAgentOutcome(Promise.reject(boundaryError({ kind: "MalformedJson", details: "x" })), "Basket.add"),
+      /BoundaryError/,
+    );
+  });
+});
+
+test("callAgentOutcome: across a Durable Object boundary, a busy instance is Unreachable and a re-entrant one still faults", async () => {
+  class Slow {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      await sleep(200);
+      return new Response(JSON.stringify("done"));
+    }
+  }
+  const ns = makeIntegrationDoNamespace(Slow as never, undefined, 20);
+  const stub = ns.get(ns.idFromName("k"));
+  const first = callDurableObjectMethod(stub, "m", [], {});
+  const busy = await quiet(() => callAgentOutcome(callDurableObjectMethod(stub, "m", [], {}), "Slow.m"));
+  assert.deepEqual(busy, { tag: "Unreachable", status: { tag: "None" } });
+  assert.equal(await first, "done");
+  // The same instance asked to re-enter itself answers a `500` naming `ReentrantAgentCall`.
+  const loop = callDurableObjectMethod(
+    { fetch: (u: string, init?: unknown) => stub.fetch(u, { ...(init as object), headers: { [AGENT_CHAIN_HEADER]: "Slow:k" } }) } as never,
+    "m",
+    [],
+    {},
+  );
+  await quiet(async () => {
+    await assert.rejects(() => callAgentOutcome(loop, "Slow.m"), /ReentrantAgentCall/);
+  });
+  // A `500` from a handler that faulted is Faulted.
+  class Broken {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  }
+  const broken = makeIntegrationDoNamespace(Broken as never);
+  const faulted = await quiet(() =>
+    callAgentOutcome(callDurableObjectMethod(broken.get(broken.idFromName("k")), "m", [], {}), "Broken.m"),
+  );
+  assert.deepEqual(faulted, { tag: "Faulted" });
 });

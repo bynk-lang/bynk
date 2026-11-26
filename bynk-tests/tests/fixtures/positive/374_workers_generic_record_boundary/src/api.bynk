@@ -8,7 +8,7 @@ type Paginated[T] = { items: List[T], cursor: Option[String] }
 type User = { id: Int, name: String }
 
 service users {
-  on call(page: Paginated[User]) -> Effect[Result[Paginated[User], ()]] {
+  on call(page: Paginated[User]) -> Effect[Result[Paginated[User], ()]] by Caller {
     Ok(page)
   }
 }

@@ -4,26 +4,31 @@
 // importing module can collide with an imported runtime name (a user
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
+import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
-import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, makeIntegrationDoNamespace, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
+import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
-import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
-import { boundaryError, callService, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
-import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
+import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
-import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./pglite.ts";
-import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
-import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
+import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
+import { admitQueueBody } from "./queue_admit.ts";
+import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
+import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
+import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { applyCache, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, httpResultToResponse, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitAllowsKey, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withDownload, withETag, withHeartbeat, withLastModified, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { currentTraceId, enterTrace, withTrace } from "./traceparent.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillHeld, fillLog, fillMap, fillSet, wireEntries, wireHeld, wireHeldOrder, wireLog, wireMap, wirePostings, wireSet } from "./store.ts";
-import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationAnalyticsSql, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeTestState, type AiSearchInstance, type AnalyticsDataset, type AnalyticsSqlBinding, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
-import { makeIntegrationVectorize, type VectorizeIndex } from "./vectorize.ts";
+import { makeTestState, type AiSearchInstance, type AnalyticsDataset, type AnalyticsSqlBinding, type D1Database, type DurableObjectState, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerVersionMetadata } from "./storage.ts";
+import { makeIntegrationAi, makeIntegrationImages, makeIntegrationAiSearch, makeIntegrationAnalyticsSql, makeIntegrationContainer, makeIntegrationAnalytics, makeIntegrationD1, makeIntegrationEmail, makeIntegrationHyperdrive, makeIntegrationKv, makeIntegrationMtls, makeIntegrationQueue, makeIntegrationR2, makeIntegrationRateLimit, makeIntegrationSecretsStoreSecret, makeIntegrationVersionMetadata, makeIntegrationDoNamespace, makeIntegrationVectorize } from "./testing/bindings.ts";
+import { type VectorizeIndex } from "./vectorize.ts";
 
 export {
   AGENT_WIRE_PASS as __AGENT_WIRE_PASS,
@@ -44,20 +49,41 @@ export {
   wirePostings as __wirePostings,
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
+  dmarcVerdictOf as __dmarcVerdictOf,
   handleEmail as __handleEmail,
+  admitQueueBody as __bynkQueueAdmit,
   mysqlExecute as __mysqlExecute,
   makeIntegrationPgliteBinding as __makeIntegrationPgliteBinding,
   makeIntegrationPostgres as __makeIntegrationPostgres,
   pgExecute as __pgExecute,
   acceptHibernatableConnection as __acceptHibernatableConnection,
+  allowUnion as __allowUnion,
   applyCache as __applyCache,
+  applyChallenge as __applyChallenge,
   applyCors as __applyCors,
   applyEdgeCache as __applyEdgeCache,
   applySecurityHeaders as __applySecurityHeaders,
   boundaryError as __boundaryError,
+  callOutcome as __callOutcome,
   callService as __callService,
+  callServiceOutcome as __callServiceOutcome,
   attachLazy as __attachLazy,
   commitStored as __commitStored,
+  eraseStored as __eraseStored,
+  markErased as __markErased,
+  newErasure as __newErasure,
+  scanAll as __scanAll,
+  scanAny as __scanAny,
+  scanFilter as __scanFilter,
+  scanFirst as __scanFirst,
+  scanFirstOrElse as __scanFirstOrElse,
+  scanFlatMap as __scanFlatMap,
+  scanMap as __scanMap,
+  scanSkip as __scanSkip,
+  scanTake as __scanTake,
+  checkUnique as __checkUnique,
+  committedSize as __committedSize,
+  storeKey as __bynkStoreKey,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
   connIdOf as __connIdOf,
@@ -66,6 +92,10 @@ export {
   decodeAgentKey as __decodeAgentKey,
   deliverEvent as __deliverEvent,
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
+  eventEnvelopeOf as __eventEnvelopeOf,
+  currentTraceId as __currentTraceId,
+  enterTrace as __enterTrace,
+  withTrace as __withTrace,
   dispatchToEventsFanout as __dispatchToEventsFanout,
   edgeCacheGuard as __edgeCacheGuard,
   encodeAgentResult as __encodeAgentResult,
@@ -74,7 +104,17 @@ export {
   formatIcuDate as __formatIcuDate,
   formatIcuNumber as __formatIcuNumber,
   headResponse as __headResponse,
+  headerPairs as __headerPairs,
+  headersObject as __headersObject,
   withPlainJson as __withPlainJson,
+  withResponseHeader as __withResponseHeader,
+  withRetryAfter as __withRetryAfter,
+  withHeartbeat as __withHeartbeat,
+  withLocation as __withLocation,
+  withDownload as __withDownload,
+  withETag as __withETag,
+  withLastModified as __withLastModified,
+  resultHeaders as __resultHeaders,
   httpResultToResponse as __httpResultToResponse,
   untilBodyTooLarge as __untilBodyTooLarge,
   invariantViolation as __invariantViolation,
@@ -100,10 +140,12 @@ export {
   makeTestState as __makeTestState,
   matchPath as __matchPath,
   noteClock as __noteClock,
+  jsonMediaTypeMatches as __jsonMediaTypeMatches,
   mediaTypeMatches as __mediaTypeMatches,
   multipartForm as __multipartForm,
   multipartMediaTypeMatches as __multipartMediaTypeMatches,
   multipartObject as __multipartObject,
+  moveRenamedEntries as __moveRenamedEntries,
   readStored as __readStored,
   readsLazily as __readsLazily,
   then as __bynkThen,
@@ -130,9 +172,16 @@ export {
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
   noStore as __noStore,
+  privateByDefault as __privateByDefault,
+  problemRejection as __problemRejection,
+  rateLimitAllows as __rateLimitAllows,
+  rateLimitAllowsKey as __rateLimitAllowsKey,
+  rateLimitedResponse as __rateLimitedResponse,
+  pathLeaf as __pathLeaf,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
   readCapped as __readBodyCapped,
+  renameStoredFields as __renameStoredFields,
   reportUnknownStoredKeys as __reportUnknownStoredKeys,
   resolveConnection as __resolveConnection,
   responseToHttpOutcome as __responseToHttpOutcome,
@@ -140,10 +189,16 @@ export {
   responseToUnauthOutcome as __responseToUnauthOutcome,
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
+  agentBusyAfter as __agentBusyAfter,
+  agentNamespace as __agentNamespace,
+  agentBusyResponse as __agentBusyResponse,
+  callAgentOutcome as __callAgentOutcome,
+  stubAgents as __stubAgents,
   serialiseAgentClass as __serialiseAgentClass,
   containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
+  currentSession as __currentSession,
   expireSessionCookie as __expireSessionCookie,
   issueSessionCookie as __issueSessionCookie,
   newSessionKey as __newSessionKey,
@@ -152,11 +207,20 @@ export {
   verifySignedCookie as __verifySignedCookie,
   verifyBearerJwtHs256 as __verifyBearerJwtHs256,
   verifyCall as __verifyCall,
+  wireRefusal as __wireRefusal,
   verifyOidcJwt as __verifyOidcJwt,
   oidcTrust as __oidcTrust,
   tokenClaims as __tokenClaims,
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
+  webSocketAdmit as __webSocketAdmit,
+  webSocketAuthExpired as __webSocketAuthExpired,
+  webSocketBearerOffer as __webSocketBearerOffer,
+  webSocketBearerProtocol as __webSocketBearerProtocol,
+  webSocketBearerRefusal as __webSocketBearerRefusal,
+  webSocketOriginAllowed as __webSocketOriginAllowed,
+  webSocketClosing as __webSocketClosing,
+  webSocketErrored as __webSocketErrored,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
   historyBefore as __historyBefore,
   historyRecord as __historyRecord,
@@ -206,4 +270,5 @@ export type {
   WorkerVersionMetadata as __WorkerVersionMetadata,
   SecurityPolicy as __SecurityPolicy,
   ServiceBinding as __ServiceBinding,
+  BynkSecret as __BynkSecret,
 };

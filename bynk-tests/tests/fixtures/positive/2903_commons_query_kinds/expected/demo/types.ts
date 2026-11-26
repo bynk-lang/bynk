@@ -10,10 +10,10 @@ export type Count = number & { readonly __brand: "Count" };
 export const Count = {
   of(value: number): Result<Count, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Count", message: "must be a safe integer", value });
+      return Err({ field: "Count", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 999)) {
-      return Err({ field: "Count", message: "must be in range [0, 999]", value });
+      return Err({ field: "Count", message: "must be in range [0, 999]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 999 } }, value });
     }
     return Ok(value as Count);
   },
@@ -55,6 +55,16 @@ export function __serialise_Speed(value: Speed): __JsonValue {
 }
 
 export function __deserialise_Speed(json: __JsonValue, path: string = "$"): Result<Speed, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Slow":
+        return Ok({ tag: "Slow" } as Speed);
+      case "Fast":
+        return Ok({ tag: "Fast" } as Speed);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

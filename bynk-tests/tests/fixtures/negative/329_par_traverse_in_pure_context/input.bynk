@@ -5,6 +5,6 @@ fn noop(x: Int) -> Effect[()] {
 }
 
 fn bad(xs: List[Int]) -> Int {
-  let n = xs.parTraverse((x: Int) => noop(x))
+  let n = xs.parForEach((x: Int) => noop(x))
   5
 }

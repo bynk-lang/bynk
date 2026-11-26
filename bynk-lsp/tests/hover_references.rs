@@ -140,6 +140,7 @@ fn hover_at(
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((text, offset)),
         path: uri.to_file_path().ok().as_deref(),
@@ -487,7 +488,7 @@ fn hover_links_a_first_party_name_to_the_book() {
     )
     .expect("hover on the `api` service declaration");
     assert!(
-        hover.contains("[Clock.now](https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        hover.contains("[Clock.now](https://bynk-lang.org/reference/bynk-capabilities/#"),
         "a first-party doc link should render as a Book link, got:\n{hover}"
     );
 }
@@ -623,6 +624,7 @@ fn the_todo_example_analyses_cleanly() {
         .files
         .iter()
         .flat_map(|f| f.diagnostics.iter())
+        .filter(|d| bynk_syntax::Severity::for_error(&d.error) != bynk_syntax::Severity::Hint)
         .map(|d| d.error.category)
         .collect();
     assert!(
@@ -1150,11 +1152,391 @@ fn question_on_an_option_hovers_as_not_found() {
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
     let h = hover_at(r, rel, text, root, at(text, "stored?", "?"))
         .expect("the `?` on an Option hovers");
-    assert!(h.contains("None → 404 NotFound"), "{h}");
+    assert!(h.contains("? : None answers 404 NotFound"), "{h}");
     assert!(h.contains("let Some(x) = e else"), "{h}");
+    assert!(
+        !h.contains("returning `Option`"),
+        "an `HttpResult` handler is not told about the `Option` rule: {h}"
+    );
     let elsewhere = hover_at(r, rel, text, root, at(text, "Ok(\"found", "Ok"));
     assert!(
         elsewhere.is_none_or(|h| !h.contains("404 NotFound")),
         "only the `?` carries the note"
     );
+}
+
+/// #4363 — a `?` on an `Option` hovers with only the propagation the enclosing
+/// declaration's return type gives: `None` returned in a body returning `Option`,
+/// both where it is not decided (inside a lambda).
+#[test]
+fn question_hover_names_only_the_propagation_that_applies() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3966_option_question",
+        "src/demo/opt.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "o.address?", "?"))
+        .expect("the `?` in an `Option` function hovers");
+    assert!(h.contains("? : None returns early"), "{h}");
+    assert!(
+        !h.contains("404"),
+        "an `Option` function is not told about `404 NotFound`: {h}"
+    );
+    // `Effect[Option[…]]` is the same rule.
+    let h = hover_at(r, rel, text, root, at(text, "fn viaEffect", "?"))
+        .expect("the `?` in an `Effect[Option]` function hovers");
+    assert!(
+        h.contains("? : None returns early") && !h.contains("404"),
+        "{h}"
+    );
+    // Inside a lambda the enclosing declaration does not decide it.
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubledFirst", "first()?") + "first()".len(),
+    )
+    .expect("the `?` in a lambda hovers");
+    assert!(
+        h.contains("404 NotFound") && h.contains("returning `Option`"),
+        "{h}"
+    );
+}
+
+/// #3982 — in a test case, `?` fails the case on any `Err` and on `None`, and the hover says
+/// so for a `Result` as well as an `Option`; a `?` in a helper `fn` is not described that way.
+#[test]
+fn question_in_a_case_hovers_as_failing_the_case() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/behaviour/question_in_case_any",
+        "tests/orders.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "parse(\"x\")?", "?"))
+        .expect("the `?` on a `Result` in a case hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    let h = hover_at(r, rel, text, root, at(text, "first_line([])?", "?"))
+        .expect("the `?` on an `Option` in a case hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    // A property's `?` is the same rule.
+    let h = hover_at(r, rel, text, root, at(text, "expect parse(\"7\")?", "?"))
+        .expect("the `?` in a property hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    // A suite's own helper `fn` follows its return type: its `?` is not the case's.
+    let helper = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubled", "parse(s)?") + "parse(s)".len(),
+    );
+    assert!(
+        helper
+            .as_deref()
+            .is_none_or(|h| !h.contains("fails the case")),
+        "a helper's `?` must not read as failing the case: {helper:?}"
+    );
+}
+
+/// #4363 — the delimiters of an interpolation hole say how its value is rendered,
+/// by its type; an identifier inside keeps its own hover.
+#[test]
+fn an_interpolation_hole_hovers_with_how_it_renders() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3977_instant_duration_text",
+        "src/demo/stamps.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "expires at ", "\\(") + 1)
+        .expect("an `Instant` hole hovers on its `\\(`");
+    assert!(h.contains("Instant") && h.contains("RFC 3339"), "{h}");
+    let h = hover_at(r, rel, text, root, at(text, "retry in ", "\\(") + 1)
+        .expect("a `Duration` hole hovers on its `\\(`");
+    assert!(h.contains("Duration") && h.contains("1h30m"), "{h}");
+    // The identifier inside the hole is not the hole's note.
+    let inner = hover_at(r, rel, text, root, at(text, "expires at \\(", "expiry"));
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
+    );
+}
+
+/// #4363 review — the closing `)` (with a call inside the hole), a refined hole
+/// (named in the header, with the sentence about refinements) and a plain scalar
+/// hole (without it), on a scratch project.
+#[test]
+fn interpolation_hole_hover_covers_the_closing_paren_refinements_and_plain_scalars() {
+    let dir = std::env::temp_dir().join(format!("bynk-hole-hover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src/demo")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"holes\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/demo/holes.bynk"),
+        "commons demo.holes\n\ntype Backoff = Duration where AtLeast(1.second)\ntype Count = Int where AtLeast(0)\n\nfn call(n: Int, b: Backoff, c: Count) -> String {\n\t\"call=\\(n.toString()) backoff=\\(b) count=\\(c) plain=\\(n)\"\n}\n",
+    )
+    .unwrap();
+    let (r, rel, text, root) = analysed(dir.to_str().unwrap(), "src/demo/holes.bynk");
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    // The closing `)` of a hole holding a call: the paren balancing must end the
+    // hole at its own `)`, not the call's.
+    let close = at(text, "call=\\(", "n.toString()") + "n.toString()".len();
+    let h = hover_at(r, rel, text, root, close).expect("the closing `)` hovers");
+    assert!(
+        h.contains("\\(…) : String") && h.contains("the text as it is"),
+        "{h}"
+    );
+    // The call's own parentheses are inside the hole, not its delimiters.
+    let inner = hover_at(r, rel, text, root, close - 1);
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
+    );
+    // A refinement is named, and says it renders as its base.
+    let h = hover_at(r, rel, text, root, at(text, "backoff=", "\\(") + 1)
+        .expect("a refined `Duration` hole hovers");
+    assert!(h.contains("\\(…) : Backoff (Duration)"), "{h}");
+    assert!(
+        h.contains("A refinement of a scalar renders as its base does."),
+        "{h}"
+    );
+    let h = hover_at(r, rel, text, root, at(text, "count=", "\\(") + 1)
+        .expect("a refined `Int` hole hovers");
+    assert!(h.contains("\\(…) : Count (Int)"), "{h}");
+    // A plain scalar names itself and has no sentence about refinements.
+    let h =
+        hover_at(r, rel, text, root, at(text, "plain=", "\\(") + 1).expect("an `Int` hole hovers");
+    assert!(
+        h.contains("\\(…) : Int") && h.contains("`toString()`"),
+        "{h}"
+    );
+    assert!(!h.contains("A refinement"), "{h}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #4045: a name a `uses` clause renames or qualifies hovers as the declaration it
+/// is, and says which one: `YStatus` and `Y.describe` are `lib.y`'s, and a bare
+/// name hovers as before.
+#[test]
+fn a_renamed_or_qualified_used_name_hovers_as_the_declaration_it_names() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4045_uses_forms/src",
+        "app/z.bynk",
+    );
+    let offset = at(&text, "fn f(", "formatMoney(m)");
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("`formatMoney` hovers");
+    assert!(
+        h.contains("fn format"),
+        "the declaration, not the alias: {h}"
+    );
+    assert!(
+        h.contains("`formatMoney` is `format` of `lib.money`"),
+        "{h}"
+    );
+    let offset = at(&text, "fn f(", "Y.describe") + 2;
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("`describe` of `Y.describe` hovers");
+    assert!(h.contains("`Y.describe` is `describe` of `lib.y`"), "{h}");
+    let offset = at(&text, "fn f(", "describe(s)");
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("a bare name hovers");
+    assert!(
+        !h.contains(" is `describe` of "),
+        "a bare name needs no note: {h}"
+    );
+}
+
+/// #4352: every spelling of one declaration hovers as that declaration, and a spelling that
+/// is not the declared name says which declaration it is.
+#[test]
+fn every_spelling_of_a_used_declaration_hovers_as_the_one_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4352_uses_every_spelling/src",
+        "app/z.bynk",
+    );
+    // `Status` (selected), `Y.Status` (alias) and `lib.y.Status` (full name).
+    for (anchor, needle, offset_in) in [
+        ("fn viaAlias(", "Status) ->", 0),
+        ("fn viaAlias(", "Y.Status", 2),
+        ("fn viaFullName(", "lib.y.Status", 6),
+    ] {
+        let offset = at(&text, anchor, needle) + offset_in;
+        let h =
+            hover_at(&r, &rel, &text, &root, offset).unwrap_or_else(|| panic!("`{needle}` hovers"));
+        assert!(h.contains("type Status"), "`{needle}` is the one type: {h}");
+    }
+    let offset = at(&text, "fn viaFullName(", "lib.y.Status") + 6;
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("the full-name spelling hovers");
+    assert!(h.contains("`lib.y.Status` is `Status` of `lib.y`"), "{h}");
+}
+
+/// #4181 — a commons names the `bynk` adapter's transparent types with no
+/// `consumes`, and hovers them like any type: the reference resolves to the
+/// adapter's declaration.
+#[test]
+fn a_prelude_type_in_a_commons_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4181_commons_prelude_types",
+        "src/ops/schedules.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "id: Uuid", "Uuid"))
+        .expect("`Uuid` hovers in a commons");
+    assert!(h.contains("Uuid"), "{h}");
+    assert!(h.contains("String where Matches"), "{h}");
+    let c = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "Nightly: CronSchedule", "CronSchedule"),
+    )
+    .expect("`CronSchedule` hovers in a commons");
+    assert!(c.contains("String where Cron"), "{c}");
+}
+
+/// #3925 — a constant named in `cors { origins: … }` hovers as its declaration
+/// (the pass records the reference as a use), and the service's header line shows
+/// the origins as written (the constant's name) and the `expose` names.
+#[test]
+fn a_cors_origins_constant_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "origins: AppOrigins", "AppOrigins"),
+    )
+    .expect("the origins constant hovers");
+    assert!(h.contains("AppOrigins"), "{h}");
+    assert!(h.contains("List[String]"), "{h}");
+    let svc = hover_at(r, rel, text, root, at(text, "service api from", "api"))
+        .expect("the service hovers");
+    assert!(
+        svc.contains("origins: AppOrigins"),
+        "the origins as written: {svc}"
+    );
+    assert!(
+        svc.contains("expose: [\"x-request-id\"]"),
+        "the expose names: {svc}"
+    );
+}
+
+/// #3925 — a constant named in `cors { origins: … }` is coloured as a constant,
+/// like any other reference to one: the pass records the reference as a use.
+#[test]
+fn a_cors_origins_constant_gets_the_constant_semantic_token() {
+    let (r, rel, text, _) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let constant = legend
+        .token_types
+        .iter()
+        .position(|t| t.as_str() == "constant")
+        .expect("`constant` is in the legend") as u32;
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let off = at(&text, "origins: [PartnerOrigin", "PartnerOrigin");
+    let want_line = text[..off].matches('\n').count() as u32;
+    let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+    let (mut line, mut col) = (0u32, 0u32);
+    let mut found = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        if (line, col) == (want_line, want_col) {
+            found.push((t.length, t.token_type));
+        }
+    }
+    assert_eq!(found, vec![("PartnerOrigin".len() as u32, constant)]);
+}
+
+/// #4393 — a handler's `by s: Authenticated`, where `Authenticated` refines the prelude `Sender`,
+/// hovers with the verdicts it admits and the refusal, and as the declaration does (ADR 0190 D2).
+/// A refinement that names two verdicts by negation reads through the checker's own evaluation.
+#[test]
+fn a_sender_refinement_reference_hovers_with_what_it_admits() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3888_sender_refinement/src",
+        "support.bynk",
+    );
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "by s: Authenticated", "Authenticated"),
+    )
+    .expect("hover on the `Authenticated` actor reference");
+    assert!(
+        hover.contains("actor Authenticated = Sender where Dmarc(DmarcPass)"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("it admits mail whose DMARC verdict is `DmarcPass`"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("refuses any other mail before the handler runs"),
+        "{hover}"
+    );
+    let decl = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "actor Authenticated", "Authenticated"),
+    )
+    .expect("hover on the declaration");
+    assert_eq!(hover, decl);
+
+    // `!Dmarc(DmarcFail)`, written by name in `by NotFailed` on the service.
+    let not_failed = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "by NotFailed", "NotFailed"),
+    )
+    .expect("hover on the `NotFailed` reference");
+    assert!(
+        not_failed.contains("is `DmarcPass` or `DmarcNone`"),
+        "{not_failed}"
+    );
+}
+
+/// #4393 — a `Producer` refinement hovers with the contexts it admits and that it requires signatures.
+#[test]
+fn a_producer_refinement_hovers_with_what_it_admits() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3899_producer_refinement_declared/src",
+        "shop.bynk",
+    );
+    let hover = hover_at(&r, &rel, &text, &root, at(&text, "actor Shop", "Shop"))
+        .expect("hover on the `Shop` actor");
+    assert!(
+        hover.contains("actor Shop = Producer where IsContext(shop)"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("requires signatures and admits only messages signed by `shop`"),
+        "{hover}"
+    );
+    assert!(hover.contains("never reaches the handler"), "{hover}");
 }

@@ -1,6 +1,7 @@
 //! #3319: the Hyperdrive deploy, against a fake of Cloudflare's API.
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 use crate::deploy::config::tests::project;
 use crate::deploy::plan::tests::plan_of;
 use bynk_project::hyperdrive::HyperdriveDeploy;
@@ -33,7 +34,7 @@ struct Fake {
 }
 
 impl HyperdriveApi for Fake {
-    fn create(&self, name: &str, origin: &Origin) -> Result<String, String> {
+    fn create(&self, name: &str, origin: &Origin) -> Result<String, CloudflareError> {
         let n = self.calls.borrow().len();
         self.calls.borrow_mut().push(format!(
             "create {name} {}:{}/{} as {}",
@@ -44,7 +45,8 @@ impl HyperdriveApi for Fake {
                 "POST /hyperdrive/configs: Cloudflare answered 400 bad origin {}@{}",
                 origin.password.expose(),
                 origin.host
-            ));
+            )
+            .into());
         }
         let id = format!("cfg-{n}");
         self.existing
@@ -53,19 +55,19 @@ impl HyperdriveApi for Fake {
         Ok(id)
     }
 
-    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), String> {
+    fn update(&self, id: &str, name: &str, origin: &Origin) -> Result<(), CloudflareError> {
         self.calls
             .borrow_mut()
             .push(format!("update {id} {name} {}", origin.host));
         Ok(())
     }
 
-    fn name_of(&self, id: &str) -> Result<Option<String>, String> {
+    fn name_of(&self, id: &str) -> Result<Option<String>, CloudflareError> {
         self.calls.borrow_mut().push(format!("get {id}"));
         Ok(self.existing.borrow().get(id).cloned())
     }
 
-    fn delete(&self, id: &str) -> Result<(), String> {
+    fn delete(&self, id: &str) -> Result<(), CloudflareError> {
         self.calls.borrow_mut().push(format!("delete {id}"));
         Ok(())
     }
@@ -344,8 +346,12 @@ fn the_plan_creates_then_syncs_from_the_variable_and_never_prints_it() {
     let mut lock = DeployLock::default();
 
     let wants = wants_of(STRING, "default");
-    let fresh =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let fresh = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     let report = plan_report(&fresh, DeployFormat::Short);
     assert!(
         report
@@ -364,8 +370,12 @@ fn the_plan_creates_then_syncs_from_the_variable_and_never_prints_it() {
     )
     .unwrap();
 
-    let same =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let same = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     let report = plan_report(&same, DeployFormat::Short);
     assert!(
         report.contains("hyperdrive sync shop-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
@@ -376,8 +386,12 @@ fn the_plan_creates_then_syncs_from_the_variable_and_never_prints_it() {
         "postgres://svc_user:Rotated-Pw-99@db-host.internal.example:6543/shopdb",
         "default",
     );
-    let changed =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &rotated);
+    let changed = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&rotated),
+    );
     let report = plan_report(&changed, DeployFormat::Short);
     assert!(
         report.contains("hyperdrive sync shop-main (HYPERDRIVE_MAIN; from `MAIN_DATABASE_URL`)\n"),
@@ -416,8 +430,12 @@ fn the_plan_adopts_a_named_config_then_reuses_it() {
         &lookup(None),
     )
     .unwrap();
-    let plan =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let plan = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     assert!(
         plan_report(&plan, DeployFormat::Short)
             .contains("hyperdrive adopt abc123 (HYPERDRIVE_MAIN)\n")
@@ -438,7 +456,9 @@ fn the_plan_adopts_a_named_config_then_reuses_it() {
         ["get abc123"],
         "adopting only looks the config up"
     );
-    let recorded = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").unwrap();
+    let recorded = lock
+        .recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+        .unwrap();
     assert!(recorded.adopted);
     assert_eq!(
         (recorded.id.as_str(), recorded.name.as_str()),
@@ -450,8 +470,12 @@ fn the_plan_adopts_a_named_config_then_reuses_it() {
             .contains("id = \"abc123\"")
     );
 
-    let again =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let again = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     assert!(plan_report(&again, DeployFormat::Short).contains("hyperdrive reuse abc123"));
 }
 
@@ -483,7 +507,10 @@ fn adopting_a_config_the_account_does_not_have_fails() {
         "{}",
         e.message
     );
-    assert!(recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").is_none());
+    assert!(
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+            .is_none()
+    );
 }
 
 // ---- provisioning ----
@@ -511,7 +538,9 @@ fn a_create_sends_the_parts_records_the_id_and_binds_it() {
             "create shop-main {FAKE_HOST}:6543/shopdb as svc_user"
         )]
     );
-    let recorded = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").unwrap();
+    let recorded = lock
+        .recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+        .unwrap();
     assert_eq!(
         (
             recorded.id.as_str(),
@@ -579,7 +608,9 @@ fn every_deploy_syncs_the_same_config_and_keeps_its_id() {
         api.calls.borrow().last().unwrap(),
         "update cfg-0 shop-main new-host.example"
     );
-    let after = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").unwrap();
+    let after = lock
+        .recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+        .unwrap();
     assert_eq!(after.id, "cfg-0", "an update keeps the id");
     assert!(after.superseded.is_empty(), "a sync leaves no orphan");
     // The ledger holds the id and the name, and nothing of the string.
@@ -620,16 +651,18 @@ fn a_named_environment_makes_its_own_config_and_copies_the_stanza() {
         "{:?}",
         api.calls.borrow()
     );
-    let staging = recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "staging").unwrap();
+    let staging = lock
+        .recorded::<Hyperdrive>("staging", "shop", "HYPERDRIVE_MAIN")
+        .unwrap();
     assert_ne!(
         staging.id,
-        recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
             .unwrap()
             .id
     );
 
     // The `[env.staging]` block carries the stanza, with staging's id.
-    let block = crate::deploy::config::synthesise_environment_block(
+    let block = crate::deploy::config::environment_block(
         &std::fs::read_to_string(&config).unwrap(),
         "staging",
         &BTreeMap::new(),
@@ -675,7 +708,12 @@ fn a_renamed_capability_plans_a_create_and_an_orphan_that_prune_deletes() {
         &lookup(Some(STRING)),
     )
     .unwrap();
-    let plan = plan_of(&order, &renamed, &lock).with_hyperdrive(&order, &renamed, &lock, &wants);
+    let plan = plan_of(&order, &renamed, &lock).with_lives(
+        &order,
+        &renamed,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     let report = plan_report(&plan, DeployFormat::Short);
     assert!(
         report.contains(
@@ -694,7 +732,10 @@ fn a_renamed_capability_plans_a_create_and_an_orphan_that_prune_deletes() {
     assert!(!api.calls.borrow().iter().any(|c| c.starts_with("delete")));
     prune(&api, &mut lock, &lock_path, "default", &orphans.hyperdrive).unwrap();
     assert_eq!(api.calls.borrow().last().unwrap(), "delete cfg-0");
-    assert!(recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").is_none());
+    assert!(
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+            .is_none()
+    );
     assert!(
         find_orphans(&lock, "default", &renamed)
             .hyperdrive
@@ -707,7 +748,7 @@ fn an_adopted_orphan_is_reported_and_never_deleted() {
     let (_root, lock_path, _config) = scratch("adopted-orphan");
     let api = Fake::default();
     let mut lock = DeployLock::default();
-    lock.record_hyperdrive(
+    lock.record::<Hyperdrive>(
         "default",
         "shop",
         "HYPERDRIVE_GONE",
@@ -727,7 +768,10 @@ fn an_adopted_orphan_is_reported_and_never_deleted() {
     assert!(!orphans.has_prunable(), "an adopted config is not prunable");
     prune(&api, &mut lock, &lock_path, "default", &orphans.hyperdrive).unwrap();
     assert!(api.calls.borrow().is_empty(), "no delete was sent");
-    assert!(recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_GONE", "default").is_some());
+    assert!(
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_GONE")
+            .is_some()
+    );
 }
 
 #[test]
@@ -830,8 +874,12 @@ fn the_string_is_in_no_ledger_no_generated_file_and_no_plan() {
         );
     }
     // The plan, both formats.
-    let plan =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let plan = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     assert_clean("the plan", &plan_report(&plan, DeployFormat::Short));
     assert_clean("the plan JSON", &plan_report(&plan, DeployFormat::Json));
     // The debug forms of everything that holds it (a stray `{:?}` or an
@@ -890,7 +938,8 @@ fn what_cloudflare_answers_is_scrubbed_before_it_is_shown() {
     assert!(e.message.contains("<redacted>"), "{}", e.message);
     assert!(!e.message.contains(PASSWORD), "{}", e.message);
     assert!(
-        recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default").is_none(),
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
+            .is_none(),
         "a failed create records nothing"
     );
 }
@@ -965,7 +1014,7 @@ fn moving_between_adopted_configs_leaves_no_orphan() {
         .unwrap();
     }
     assert_eq!(
-        recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
+        lock.recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
             .unwrap()
             .id,
         "def456"
@@ -994,7 +1043,8 @@ fn moving_between_adopted_configs_leaves_no_orphan() {
             .is_empty()
     );
     assert!(
-        !recorded_hyperdrive(&lock, "shop", "HYPERDRIVE_MAIN", "default")
+        !lock
+            .recorded::<Hyperdrive>("default", "shop", "HYPERDRIVE_MAIN")
             .unwrap()
             .adopted
     );
@@ -1152,8 +1202,12 @@ fn a_mysql_string_is_in_no_ledger_no_generated_file_and_no_plan() {
             &std::fs::read_to_string(entry.path()).unwrap(),
         );
     }
-    let plan =
-        plan_of(&order, &resources, &lock).with_hyperdrive(&order, &resources, &lock, &wants);
+    let plan = plan_of(&order, &resources, &lock).with_lives(
+        &order,
+        &resources,
+        &lock,
+        Lives::for_plan(&wants),
+    );
     assert_clean("the plan", &plan_report(&plan, DeployFormat::Short));
     assert_clean("the plan JSON", &plan_report(&plan, DeployFormat::Json));
     assert_clean("Debug of the wants", &format!("{wants:?}"));

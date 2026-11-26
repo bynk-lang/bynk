@@ -1,0 +1,12 @@
+{
+  "blurb": "A method was called with a different number of arguments from the number it declares. The count excludes `self`, which the receiver supplies, so `fn Box.adjust(self, delta: Int)` takes one argument. Pass exactly that many. The same code covers the built-in methods of `String`, `List`, `Map` and the other kernel types.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.method_arity",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "type Box = { value: Int }\n\nfn Box.adjust(self, delta: Int) -> Box {\n    Box { value: self.value + delta }\n}\n\nfn bump(b: Box) -> Box {\n    b.adjust()     // ✗ expects 1 argument\n}\n\nfn bump(b: Box) -> Box {\n    b.adjust(1)    // ✓\n}",
+  "severity": "error",
+  "summary": "A method was called with the wrong number of arguments."
+}

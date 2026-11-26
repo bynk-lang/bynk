@@ -8,7 +8,7 @@ type Tree[A] =
 type Holder = { t: Tree[Int] }
 
 service s {
-	on call(h: List[Holder]) -> Effect[Int] {
+	on call(h: List[Holder]) -> Effect[Int] by Caller {
 		Effect.pure(0)
 	}
 }

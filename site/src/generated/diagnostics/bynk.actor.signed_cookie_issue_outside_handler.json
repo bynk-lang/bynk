@@ -1,0 +1,10 @@
+{
+  "blurb": "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_issue_outside_handler",
+  "constructs": [],
+  "example": "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
+  "severity": "error",
+  "summary": "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent)."
+}

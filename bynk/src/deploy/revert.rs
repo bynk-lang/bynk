@@ -17,7 +17,7 @@
 
 use super::facts::{FACTS_VAR, Facts};
 use super::*;
-use crate::migrate::live::{Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Rest};
 use crate::migrate::sweep::{Cloudflare as DoApi, SETTLING_MARGIN};
 use bynk_driver::emsg;
 
@@ -58,15 +58,16 @@ impl Deployment {
 /// What the revert needs from the account.
 pub(crate) trait Account {
     /// The Worker's deployments, newest first, as many as Cloudflare lists.
-    fn deployments(&self, script: &str) -> Result<Vec<Deployment>, String>;
+    fn deployments(&self, script: &str) -> Result<Vec<Deployment>, CloudflareError>;
     /// The text of a version's [`FACTS_VAR`] variable, `None` when it has none.
-    fn version_facts(&self, script: &str, version: &str) -> Result<Option<String>, String>;
+    fn version_facts(&self, script: &str, version: &str)
+    -> Result<Option<String>, CloudflareError>;
     /// The migration files a D1 database has applied, in order.
-    fn applied_migrations(&self, database_id: &str) -> Result<Vec<String>, String>;
+    fn applied_migrations(&self, database_id: &str) -> Result<Vec<String>, CloudflareError>;
     /// Whether any instance of agent `class` on `script` holds stored data.
-    fn has_stored_data(&self, script: &str, class: &str) -> Result<bool, String>;
+    fn has_stored_data(&self, script: &str, class: &str) -> Result<bool, CloudflareError>;
     /// Make `version` the Worker's live deployment.
-    fn rollback(&self, script: &str, version: &str) -> Result<(), String>;
+    fn rollback(&self, script: &str, version: &str) -> Result<(), CloudflareError>;
 }
 
 /// Where the live and target versions sit in a Worker's history.
@@ -292,7 +293,6 @@ fn recorded_id(
 ) -> Option<String> {
     // 1D.1 (#3929): each converted kind's, first.
     recorded_bound_id(LedgerView::of(lock, environment), worker, binding)
-        .or_else(|| recorded_ratelimit(lock, worker, binding, environment).map(str::to_string))
 }
 
 /// Every check for one Worker. A refusal is any finding with verdict
@@ -891,7 +891,7 @@ pub(crate) fn plan(
                 let mut applied = BTreeMap::new();
                 for binding in databases_to_read(live, target) {
                     let result = match live.ids.get(&binding).or_else(|| target.ids.get(&binding)) {
-                        Some(id) => api.applied_migrations(id),
+                        Some(id) => api.applied_migrations(id).map_err(|e| e.to_string()),
                         None => Err("no database id is recorded for it".to_string()),
                     };
                     applied.insert(binding, result);
@@ -916,7 +916,7 @@ pub(crate) fn plan(
                             "the live code was deployed less than 30 minutes ago, and Cloudflare's objects listing lags a write by minutes".into(),
                         ),
                         Ok(false) => Stored::None,
-                        Err(e) => Stored::Unknown(e),
+                        Err(e) => Stored::Unknown(e.to_string()),
                     };
                     stored.insert(class, state);
                 }
@@ -1037,53 +1037,56 @@ pub(crate) fn execute(
 /// Cloudflare as the live revert sees it.
 pub(crate) struct LiveAccount<'a> {
     pub(crate) rest: Rest,
-    pub(crate) provenance: &'a probe::Provenance,
-    pub(crate) root: &'a Path,
+    /// `wrangler rollback`.
+    pub(crate) api: &'a dyn CloudflareApi,
 }
 
 impl Account for LiveAccount<'_> {
-    fn deployments(&self, script: &str) -> Result<Vec<Deployment>, String> {
+    fn deployments(&self, script: &str) -> Result<Vec<Deployment>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1..=20u64 {
-            let body = self.rest.get(&format!(
-                "/workers/scripts/{script}/deployments?per_page=50&page={page}"
-            ))?;
-            let items = body["result"]["deployments"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let n = items.len();
-            for d in items {
-                out.push(Deployment {
-                    id: d["id"].as_str().unwrap_or_default().to_string(),
-                    created_on: d["created_on"].as_str().unwrap_or_default().to_string(),
-                    trigger: d["annotations"]["workers/triggered_by"]
-                        .as_str()
-                        .map(str::to_string),
-                    versions: d["versions"]
-                        .as_array()
-                        .map(|vs| {
-                            vs.iter()
-                                .filter_map(|v| {
-                                    Some((
-                                        v["version_id"].as_str()?.to_string(),
-                                        v["percentage"].as_f64()?.round() as u32,
-                                    ))
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                });
-            }
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::capped(20).follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.rest.get(&format!(
+                    "/workers/scripts/{script}/deployments?per_page=50&page={page}"
+                ))?;
+                let items = body["result"]["deployments"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default();
+                let n = items.len();
+                for d in items {
+                    out.push(Deployment {
+                        id: d["id"].as_str().unwrap_or_default().to_string(),
+                        created_on: d["created_on"].as_str().unwrap_or_default().to_string(),
+                        trigger: d["annotations"]["workers/triggered_by"]
+                            .as_str()
+                            .map(str::to_string),
+                        versions: d["versions"]
+                            .as_array()
+                            .map(|vs| {
+                                vs.iter()
+                                    .filter_map(|v| {
+                                        Some((
+                                            v["version_id"].as_str()?.to_string(),
+                                            v["percentage"].as_f64()?.round() as u32,
+                                        ))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    });
+                }
+                Ok(crate::cloudflare::paging::Page::of(&body, n))
+            },
+        )?;
         Ok(out)
     }
 
-    fn version_facts(&self, script: &str, version: &str) -> Result<Option<String>, String> {
+    fn version_facts(
+        &self,
+        script: &str,
+        version: &str,
+    ) -> Result<Option<String>, CloudflareError> {
         let body = self
             .rest
             .get(&format!("/workers/scripts/{script}/versions/{version}"))?;
@@ -1098,18 +1101,20 @@ impl Account for LiveAccount<'_> {
             .map(str::to_string))
     }
 
-    fn applied_migrations(&self, database_id: &str) -> Result<Vec<String>, String> {
+    fn applied_migrations(&self, database_id: &str) -> Result<Vec<String>, CloudflareError> {
         let body = self
             .rest
             .post(
                 &format!("/d1/database/{database_id}/query"),
                 &serde_json::json!({ "sql": "SELECT name FROM d1_migrations ORDER BY id" }),
+                // A `SELECT`: sent again, it reads the same.
+                crate::cloudflare::Idempotent::Yes,
             )
-            .map_err(|e| {
-                if e.contains("no such table") {
-                    "the database has no `d1_migrations` table: no migration has been applied to it yet, or it records them under another name; Bynk reads the default table, so this is refused rather than assumed empty".to_string()
+            .map_err(|e| -> CloudflareError {
+                if e.message_mentions("no such table") {
+                    "the database has no `d1_migrations` table: no migration has been applied to it yet, or it records them under another name; Bynk reads the default table, so this is refused rather than assumed empty".into()
                 } else {
-                    e
+                    e.into()
                 }
             })?;
         Ok(body["result"][0]["results"]
@@ -1122,7 +1127,7 @@ impl Account for LiveAccount<'_> {
             .unwrap_or_default())
     }
 
-    fn has_stored_data(&self, script: &str, class: &str) -> Result<bool, String> {
+    fn has_stored_data(&self, script: &str, class: &str) -> Result<bool, CloudflareError> {
         let namespaces = self.rest.namespaces()?;
         match namespaces
             .iter()
@@ -1134,27 +1139,11 @@ impl Account for LiveAccount<'_> {
         }
     }
 
-    fn rollback(&self, script: &str, version: &str) -> Result<(), String> {
-        let Some(mut command) = workers::wrangler_command(self.provenance, "rollback") else {
-            return Err("wrangler not found".to_string());
-        };
-        let output = command
-            .args([
-                version,
-                "--name",
-                script,
-                "--message",
-                "bynk revert",
-                "--yes",
-            ])
-            .current_dir(self.root)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
-        }
+    fn rollback(&self, script: &str, version: &str) -> Result<(), CloudflareError> {
+        // What wrangler wrote to stderr: `rollback` reports there alone.
+        self.api
+            .rollback(script, version)
+            .map_err(|e| CloudflareError::Other(e.stderr_only()))
     }
 }
 
@@ -1221,17 +1210,13 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
         ));
     }
     let floors = schema_floors(root);
-    let credentials = Credentials::from_env().map_err(|e| {
-        format!(
-            "{}; a revert also reads D1 migrations, so the token needs D1 read access",
-            e.replace(" to sweep", " to revert")
-        )
-    })?;
-    let rest = Rest {
-        agent: crate::migrate::live::agent()?,
-        credentials,
-        base: crate::migrate::live::API.to_string(),
-    };
+    let rest = crate::cloudflare::rest::for_purpose("revert", crate::migrate::SWEEP_TOKEN_NEEDS)
+        .map_err(|e| match e {
+            CloudflareError::Credentials(missing) => format!(
+                "{missing}; a revert also reads D1 migrations, so the token needs D1 read access"
+            ),
+            other => other.to_string(),
+        })?;
     let probe = probe::detect(
         &probe::SystemToolbox,
         "wrangler",
@@ -1241,11 +1226,8 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
             manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
-    let account = LiveAccount {
-        rest,
-        provenance: &probe.provenance,
-        root,
-    };
+    let api = Wrangler::new(&probe.provenance, root);
+    let account = LiveAccount { rest, api: &api };
     let planned = plan(
         &account,
         &lock,
@@ -1647,7 +1629,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "db-1"),
+            D1Record::of("shop-orders", "db-1", None),
         );
         let r = f.run();
         let d1 = refusals(&r)
@@ -1816,6 +1798,57 @@ mod tests {
         assert!(refusals(&f.run()).is_empty());
     }
 
+    /// #3970: a version bound to a Hyperdrive config the ledger has since replaced is refused,
+    /// as a replaced KV namespace is.
+    #[test]
+    fn a_replaced_hyperdrive_config_id_is_refused() {
+        // The target version bound `id-1`, which `build_facts` recorded.
+        let target = facts(|f| {
+            f.ids.insert("HYPERDRIVE_MAIN".into(), "id-1".into());
+        });
+        let mut f = Fx::new(facts(|_| {}), target);
+        f.lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-2".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        assert!(f.run().iter().any(|x| x.check == "ids"
+            && x.code == Some("bynk.revert.id_unrecorded")
+            && x.is_refusal()
+            && x.detail.contains("id-1")
+            && x.detail.contains("id-2")));
+        // The config the ledger records now is the one the target bound: nothing to refuse.
+        let mut same = Fx::new(
+            facts(|_| {}),
+            facts(|f| {
+                f.ids.insert("HYPERDRIVE_MAIN".into(), "id-2".into());
+            }),
+        );
+        same.lock.record::<Hyperdrive>(
+            "default",
+            "shop",
+            "HYPERDRIVE_MAIN",
+            HyperdriveRecord {
+                name: "shop-main".into(),
+                id: "id-2".into(),
+                adopted: false,
+                superseded: Vec::new(),
+            },
+        );
+        assert!(
+            !same
+                .run()
+                .iter()
+                .any(|x| x.check == "ids" && x.is_refusal())
+        );
+    }
+
     #[test]
     fn a_replaced_resource_id_is_refused() {
         let target = facts(|f| {
@@ -1877,7 +1910,10 @@ mod tests {
     }
 
     impl Account for Fake {
-        fn deployments(&self, script: &str) -> Result<Vec<Deployment>, String> {
+        fn deployments(
+            &self,
+            script: &str,
+        ) -> Result<Vec<Deployment>, crate::cloudflare::CloudflareError> {
             *self.reads.borrow_mut() += 1;
             if self
                 .move_after_reads
@@ -1893,21 +1929,36 @@ mod tests {
                 .borrow()
                 .get(script)
                 .cloned()
-                .ok_or_else(|| "no such Worker".to_string())
+                .ok_or_else(|| "no such Worker".into())
         }
-        fn version_facts(&self, script: &str, version: &str) -> Result<Option<String>, String> {
+        fn version_facts(
+            &self,
+            script: &str,
+            version: &str,
+        ) -> Result<Option<String>, crate::cloudflare::CloudflareError> {
             Ok(self
                 .facts
                 .get(&(script.to_string(), version.to_string()))
                 .cloned())
         }
-        fn applied_migrations(&self, _: &str) -> Result<Vec<String>, String> {
+        fn applied_migrations(
+            &self,
+            _: &str,
+        ) -> Result<Vec<String>, crate::cloudflare::CloudflareError> {
             Ok(vec![])
         }
-        fn has_stored_data(&self, _: &str, _: &str) -> Result<bool, String> {
+        fn has_stored_data(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> Result<bool, crate::cloudflare::CloudflareError> {
             Ok(false)
         }
-        fn rollback(&self, script: &str, version: &str) -> Result<(), String> {
+        fn rollback(
+            &self,
+            script: &str,
+            version: &str,
+        ) -> Result<(), crate::cloudflare::CloudflareError> {
             self.rolled
                 .borrow_mut()
                 .push((script.into(), version.into()));

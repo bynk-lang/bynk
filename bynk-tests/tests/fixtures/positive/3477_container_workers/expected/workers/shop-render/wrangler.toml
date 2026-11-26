@@ -2,7 +2,7 @@
 name = "shop-render"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[durable_objects.bindings]]
 name = "CONTAINER_RENDERER"
@@ -35,4 +35,8 @@ scheduling_policy = "durable_object"
 [containers.images.Thumbs]
 dockerfile = "../../../containers/thumbs/Dockerfile"
 build_context = "../../../containers/thumbs"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

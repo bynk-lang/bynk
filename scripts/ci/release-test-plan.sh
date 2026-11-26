@@ -44,6 +44,9 @@
 set -uo pipefail
 
 : "${REPO:?}" "${SHA:?}" "${EVENT:?}"
+# `macos-latest` names the leg (it is ci.yml's job name, which is how a result is matched);
+# release.yml runs it on the Intel runner, so a shortage of arm64 macOS runners cannot hold
+# the gate (#4263).
 all='["ubuntu-latest","macos-latest","windows-latest"]'
 
 emit() {

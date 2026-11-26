@@ -1,0 +1,12 @@
+{
+  "blurb": "A derived capability is an instance of a platform resource, and the resource's data belongs to a context. An adapter only describes a boundary to foreign code, so it has no data to own. Declare the instance in a context that selects the base with `consumes`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.derived_outside_context",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "adapter cache {\n    binding \"./cache.binding.ts\"\n    consumes bynk.cloudflare { Kv }\n    capability Sessions = Kv    // ✗ an adapter cannot own an instance\n}\n\ncontext cache {\n    consumes bynk.cloudflare { Kv }\n    capability Sessions = Kv    // ✓ a context owns its data\n}",
+  "severity": "error",
+  "summary": "A derived capability was declared outside a context."
+}

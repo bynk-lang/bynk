@@ -29,6 +29,9 @@ service api from http {
 }
 ```
 
+A form body is capped at 1 MiB unless the route's `@limit(maxBody: …)` or the service's
+`limits { maxBody: … }` says otherwise; a public form can lower it. A larger post is a `413`.
+
 - A repeated key (`tags=a&tags=b`) fills a `List` field.
 - An unchecked checkbox sends nothing, so give a `Bool` a default
   (`remember: Bool = false`); a checked one sends `on`, which reads as `true`.
@@ -77,6 +80,6 @@ fn read(text: String) -> Result[Signup, DecodeError] {
 `Form.encode(signup)` writes the text back, for a test or an outbound request. A failure
 is a `DecodeError` whose `path` is rooted at `$` (`$.email`).
 
-**See also:** [Reference: form bodies](/book/reference/http/#form-bodies),
-[`Form.decode` and `Form.encode`](/book/reference/types/#form-codec),
-[Sending a form in a test](/book/reference/testing/#sending-a-form).
+**See also:** [Reference: form bodies](/reference/http/#form-bodies),
+[`Form.decode` and `Form.encode`](/reference/types/#form-codec),
+[Sending a form in a test](/reference/testing/#sending-a-form).

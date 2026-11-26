@@ -119,7 +119,7 @@ Wrangler prints the deployed URL — your greeting is live at
 
 ## Where to go next
 
-- [Tutorials](https://bynk-lang.org/book/tutorials/01-first-program/) — the URL
+- [Tutorials](https://bynk-lang.org/book/tutorials/first-program/) — the URL
   shortener series grows these same ideas into a stateful service.
-- [How a Bynk program is shaped](https://bynk-lang.org/book/guides/program-structure/how-a-program-is-shaped/)
+- [How a Bynk program is shaped](https://bynk-lang.org/book/concepts/program-structure/how-a-program-is-shaped/)
   — why contexts, capabilities, and boundaries look the way they do.

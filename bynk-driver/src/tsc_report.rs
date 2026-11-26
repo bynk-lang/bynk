@@ -291,17 +291,12 @@ enum Ran {
 /// fetching `typescript@<major>`), type-checking only. There is no `tsx` rung:
 /// it does not type-check.
 fn run_tsc(tsconfig: &Path, manager: PackageManager) -> Ran {
-    use std::process::{Command, Stdio};
-    let pkg = format!("typescript@{}", bynk_emit::TYPESCRIPT_MAJOR_TESTED);
-    let runners = crate::npm_install::system_tool_ladder("tsc", &pkg, manager);
+    use std::process::Stdio;
+    let runners = crate::tools::Ladder::tsc(manager);
     let mut failures = Vec::new();
-    for (prog, prefix) in &runners {
-        let Some(path) = crate::test_runner::resolve_tool(prog) else {
-            continue;
-        };
-        let mut cmd = Command::new(&path);
-        cmd.args(prefix)
-            .arg("-p")
+    for rung in runners.rungs() {
+        let mut cmd = rung.command();
+        cmd.arg("-p")
             .arg(tsconfig)
             .args(["--noEmit", "--pretty", "false"]);
         match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
@@ -315,7 +310,7 @@ fn run_tsc(tsconfig: &Path, manager: PackageManager) -> Ran {
                 }
                 return Ran::Failed(text);
             }
-            Err(e) => failures.push(crate::test_runner::start_failure(&path, &e)),
+            Err(e) => failures.push(rung.start_failure(&e)),
         }
     }
     Ran::Unavailable(failures)
@@ -352,9 +347,11 @@ fn private_temp_dir() -> std::io::Result<PathBuf> {
 /// a temporary directory and type-check it, reporting a `tsc` failure as
 /// `bynk.codegen.tsc_failed`. Run after the ordinary check has passed. `true`
 /// when the generated TypeScript type-checks.
-pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
+pub fn check_emit(prog: &str, input: &Path, short: bool, environment: &str) -> bool {
     let options = match crate::try_project_options(input) {
-        Ok(o) => o.target(crate::project::BuildTarget::Workers),
+        Ok(o) => o
+            .target(crate::project::BuildTarget::Workers)
+            .environment(environment),
         Err(e) => {
             emsg!("{prog}: error: {e}");
             return false;
@@ -398,10 +395,7 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
                 }
                 eprintln!(
                     "  Install it with `{}`.",
-                    manager.global_install(&format!(
-                        "typescript@{}",
-                        bynk_emit::TYPESCRIPT_MAJOR_TESTED
-                    ))
+                    manager.global_install(&crate::tools::pins::typescript_spec())
                 );
                 false
             }
@@ -421,15 +415,21 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
 }
 
 /// [`check_emit`] over a project or, at a workspace root, every member.
-pub fn check_emit_all(prog: &str, input: &Path, short: bool, each: bool) -> bool {
+pub fn check_emit_all(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    each: bool,
+    environment: &str,
+) -> bool {
     if let Ok(Some(Ok(ws))) = crate::workspace_at_each(input, each) {
         let mut ok = true;
         for m in &ws.members {
-            ok &= check_emit(prog, &crate::member_dir(input, m), short);
+            ok &= check_emit(prog, &crate::member_dir(input, m), short, environment);
         }
         return ok;
     }
-    check_emit(prog, input, short)
+    check_emit(prog, input, short, environment)
 }
 
 #[cfg(test)]

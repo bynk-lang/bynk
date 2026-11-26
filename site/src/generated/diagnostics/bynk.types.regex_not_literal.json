@@ -1,0 +1,12 @@
+{
+  "blurb": "A regex method checks its pattern when the program compiles, to reject one that can take catastrophic time on crafted input (ReDoS). A pattern built at run time would escape that check, so it must be a string literal. Write the pattern in place, as an ordinary or a raw string, `r\"\\d+\"`. To look for text that varies, use `contains`, which takes plain text.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.regex_not_literal",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn has(s: String, pattern: String) -> Bool {\n    s.containsRegex(pattern)              // ✗ the pattern is not a literal\n}\n\nfn has(s: String) -> Bool {\n    s.containsRegex(\"(?i)error\")          // ✓\n}",
+  "severity": "error",
+  "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
+}

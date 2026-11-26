@@ -21,6 +21,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(roomId).track(user.identity, connection)
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    ()
+  }
 }
 
 agent Room {

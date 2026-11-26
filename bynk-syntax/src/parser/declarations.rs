@@ -16,16 +16,27 @@ impl<'a> Parser<'a> {
                 let start = self.expect(TokenKind::Commons, "to start the commons declaration")?;
                 let doc = self.finalize_doc(leading_doc, start.span, &mut header_leading);
                 let name = self.parse_qualified_name()?;
+                // #3984: the contextual `for tests` marker of a test-only commons.
+                let test_only = self.peek_kind() == Some(TokenKind::Ident)
+                    && self.nth_text(0) == "for"
+                    && self.nth_kind(1) == Some(TokenKind::Ident)
+                    && self.nth_text(1) == "tests";
+                if test_only {
+                    self.bump();
+                    self.bump();
+                }
                 let mut c = match self.peek_kind() {
                     Some(TokenKind::LBrace) => {
                         self.parse_commons_body(start.span, name, doc, true)?
                     }
                     _ => self.parse_commons_body(start.span, name, doc, false)?,
                 };
+                c.test_only = test_only;
                 c.trivia = Trivia {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Commons(c))
             }
             Some(TokenKind::Context) => {
@@ -42,6 +53,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Context(c))
             }
             Some(TokenKind::Adapter) => {
@@ -58,6 +70,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut a.uses);
                 Ok(SourceUnit::Adapter(a))
             }
             Some(TokenKind::Suite) => {
@@ -84,6 +97,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut t.uses);
                 Ok(SourceUnit::Suite(t))
             }
             Some(_) => {
@@ -124,6 +138,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// A documentation block with no declaration to attach to: warn, and keep
+    /// its text as an ordinary comment so nothing is lost.
+    fn warn_orphan_doc(
+        &mut self,
+        item_doc: Option<DocLead>,
+        leading: &mut Vec<Comment>,
+        why: &str,
+    ) {
+        if let Some(doc) = item_doc {
+            self.warnings.push(CompileError::new(
+                "bynk.parse.orphan_doc_block",
+                doc.span,
+                why,
+            ));
+            keep_orphan(leading, doc);
+        }
+    }
+
     /// Parse a commons body, brace or fragment form (`brace` selects which).
     /// Unified from two near-duplicate functions (review Part 3, "the
     /// six-fold item loop") behind the same `brace: bool` parameter
@@ -146,6 +178,7 @@ impl<'a> Parser<'a> {
         self.enter_item_loop();
         let mut items = Vec::new();
         let mut uses = Vec::new();
+        let mut consumes = Vec::new();
         // Cover the header (`commons <name>`) so the unit span stays valid even
         // when every item is dropped by error recovery — the document-symbol
         // selection range (the name span) must remain contained in this span.
@@ -164,28 +197,20 @@ impl<'a> Parser<'a> {
                     // Doc not attachable; treat as orphan if present. Any
                     // leading comments at this position end up as the
                     // body's trailing comments.
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     trailing_comments = std::mem::take(&mut leading);
                     break;
                 }
                 None if !brace => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     // Comments we held as leading for the next item, plus
                     // any held in the trivia table's epilogue, become the
                     // commons body's trailing comments.
@@ -194,17 +219,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Uses) => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(
-                            CompileError::new(
-                                "bynk.parse.orphan_doc_block",
-                                doc_span,
-                                "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs",
-                            ),
-                        );
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs");
                     if !brace && seen_item {
                         let t = self.peek().unwrap();
                         return Err(CompileError::new(
@@ -226,10 +241,26 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                // #4044: `consumes U { T, … }` in a commons names types of another
+                // unit. Every form parses; the checker accepts only the braced,
+                // type-only one (`bynk.commons.consumes_not_types`).
+                Some(TokenKind::Consumes) => {
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `consumes` is not allowed; only `type` and `fn` declarations carry docs");
+                    match self.parse_consumes_decl() {
+                        Ok(mut c) => {
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            consumes.push(c);
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #3975: annotations may lead a `type` (`@discriminator("…")`).
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(true) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {
@@ -422,15 +453,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a commons contains zero or more `type`, `fn`, `messages`, or `uses` declarations"
+                        "the body of a commons contains zero or more `type`, `fn`, `messages`, `uses`, or `consumes` declarations"
                     } else {
-                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, or `uses` declarations to end of file"
+                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, `uses`, or `consumes` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `type`, `fn`, `messages`, or `uses` declaration, found {}",
+                            "expected `type`, `fn`, `messages`, `uses`, or `consumes` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -450,39 +481,99 @@ impl<'a> Parser<'a> {
         let span = if brace {
             let end = self.expect(TokenKind::RBrace, "to close the commons body")?;
             self.exit_item_loop();
-            // A comment after the closing `}` (this being the last
-            // declaration in the file) is a no-op `take_epilogue` unless it
-            // truly is the last content in the file — see the fragment-form
-            // break arm's matching call above.
+            // A comment after the closing `}` (the last declaration in the file) is a no-op
+            // `take_epilogue` unless it is the last content: see the fragment-form arm above.
             trailing_comments.extend(self.take_epilogue_trivia());
             start.merge(end.span)
         } else {
             self.exit_item_loop();
             start.merge(last_span)
         };
-        Ok(Commons {
+        Ok(Commons::parsed(
             name,
             items,
-            uses,
+            (uses, consumes),
             documentation,
-            form: if brace {
-                CommonsForm::Brace
-            } else {
-                CommonsForm::Fragment
-            },
+            brace,
             span,
-            trivia: Trivia::default(),
             trailing_comments,
-        })
+        ))
+    }
+
+    /// #4045: hand each qualified name the unit read to the `uses` clause that
+    /// introduced its qualifier, then clear the parser's record for the next unit.
+    fn distribute_qualified_refs(&mut self, uses: &mut [UsesDecl]) {
+        for (full, span) in std::mem::take(&mut self.qualified_refs) {
+            let Some((prefix, name)) = full.rsplit_once('.') else {
+                continue;
+            };
+            for u in uses.iter_mut() {
+                let by_alias = u.alias.as_ref().is_some_and(|a| a.name == prefix);
+                if (by_alias || u.target.joined() == prefix)
+                    && !u.qualified_refs.iter().any(|r| r.text == full)
+                {
+                    u.qualified_refs.push(QualifiedRef {
+                        text: full.clone(),
+                        name: name.to_string(),
+                        span,
+                    });
+                }
+            }
+        }
+        self.use_prefixes.clear();
     }
 
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
         let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
         let target = self.parse_qualified_name()?;
-        let span = kw.span.merge(target.span);
+        let mut span = kw.span.merge(target.span);
+        let mut alias = None;
+        let mut selected = None;
+        match self.peek_kind() {
+            // #4045: `uses lib.y as Y`.
+            Some(TokenKind::As) => {
+                self.bump();
+                let id = self.expect_ident("as an alias for the used commons")?;
+                span = span.merge(id.span);
+                alias = Some(id);
+            }
+            // #4045: `uses lib.y { Status as YStatus, describe }`.
+            Some(TokenKind::LBrace) => {
+                self.bump();
+                let mut names = Vec::new();
+                while self.peek_kind() != Some(TokenKind::RBrace) {
+                    let id = self.expect_ident("a name in `uses U { … }`")?;
+                    let alias = if self.eat(TokenKind::As).is_some() {
+                        Some(self.expect_ident("a name after `as` in `uses U { … }`")?)
+                    } else {
+                        None
+                    };
+                    names.push(ConsumesItem { name: id, alias });
+                    if self.eat(TokenKind::Comma).is_none() {
+                        break;
+                    }
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the `uses` list")?;
+                span = span.merge(close.span);
+                selected = Some(names);
+            }
+            _ => {}
+        }
+        // #4045: the names a qualified reference may start with from here on.
+        if let Some(a) = &alias {
+            self.use_prefixes.push(a.name.clone());
+        }
+        // A one-segment commons name (`uses keys`) is no qualifier: it is as likely a
+        // local of that name (`keys.map(…)`), which only an alias is explicit about.
+        if target.parts.len() > 1 {
+            self.use_prefixes.push(target.joined());
+        }
         Ok(UsesDecl {
             target,
+            alias,
+            selected,
+            qualified_refs: Vec::new(),
             span,
             trivia: Trivia::default(),
             blank_before,
@@ -825,10 +916,11 @@ impl<'a> Parser<'a> {
                     }
                 }
                 // #3066: a suite-local `type`.
-                Some(TokenKind::Type) => {
+                // #3975: annotations may lead a `type` (`@discriminator("…")`).
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(false) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             t.trivia.leading = leading;
@@ -970,9 +1062,23 @@ impl<'a> Parser<'a> {
     /// keyword-hygiene batch (#548); formerly a pun on `provides`.
     fn parse_stub_clause(&mut self) -> Result<StubClause, CompileError> {
         let kw = self.expect(TokenKind::Stub, "to start a `stub` clause")?;
-        let capability = self.expect_ident("the capability after `stub`")?;
+        let mut capability = self.expect_ident("the capability after `stub`")?;
         self.expect(TokenKind::Dot, "after the capability in a `stub` clause")?;
-        let method = self.expect_ident("the method name after `.`")?;
+        let mut method = self.expect_ident("the method name after `.`")?;
+        // #3892: a consumed service written by its qualified context path
+        // (`stub shop.pay.authorise(_) …`): every segment before the last is
+        // the context, kept as one dotted name.
+        while self.peek_kind() == Some(TokenKind::Dot) {
+            self.bump();
+            let next = self.expect_ident("the method name after `.`")?;
+            capability = Ident {
+                name: format!("{}.{}", capability.name, method.name),
+                span: capability.span.merge(method.span),
+            };
+            method = next;
+        }
+        // #3945: explicit type arguments of a generic operation.
+        let type_args = self.parse_stub_type_args()?;
         self.expect(
             TokenKind::LParen,
             "after the method name in a `stub` clause",
@@ -1009,6 +1115,7 @@ impl<'a> Parser<'a> {
         Ok(StubClause {
             capability,
             method,
+            type_args,
             args,
             rhs,
             after,
@@ -1016,6 +1123,23 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
         })
+    }
+
+    /// #3945: `[T, U]` after a stub target's operation name, or none. The list is a
+    /// type-argument list, as on a call (`Json.decode[T](…)`).
+    pub(super) fn parse_stub_type_args(&mut self) -> Result<Vec<TypeRef>, CompileError> {
+        let mut type_args = Vec::new();
+        if self.eat(TokenKind::LBracket).is_none() {
+            return Ok(type_args);
+        }
+        loop {
+            type_args.push(self.parse_type_ref("as a type argument")?);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBracket, "to close the type-argument list")?;
+        Ok(type_args)
     }
 
     /// #2134: whether the cursor is at an `env {` clause head. `env` is a
@@ -1101,11 +1225,18 @@ impl<'a> Parser<'a> {
     fn parse_stub_rhs(&mut self) -> Result<StubRhs, CompileError> {
         let tok = self.expect(
             TokenKind::Ident,
-            "`returns`, `fails` or `never` after the `stub` call pattern",
+            "`returns`, `fails`, `never`, `rejected`, `faulted` or `unreachable` after the `stub` call pattern",
         )?;
         match self.slice(tok.span) {
             "fails" => Ok(StubRhs::Fails(tok.span)),
             "never" => Ok(StubRhs::Never(tok.span)),
+            // #3894: the words of a consumed service's stub that are not a value.
+            "faulted" => Ok(StubRhs::Faulted(tok.span)),
+            "unreachable" => Ok(StubRhs::Unreachable(tok.span)),
+            "rejected" => {
+                let refusal = self.expect_ident("a refusal after `rejected`")?;
+                Ok(StubRhs::Rejected(refusal.clone(), tok.span.merge(refusal.span)))
+            }
             "returns" => {
                 let is_each = self.peek_kind() == Some(TokenKind::Ident)
                     && self.slice(self.peek().unwrap().span) == "each";
@@ -1132,10 +1263,10 @@ impl<'a> Parser<'a> {
             other => Err(CompileError::new(
                 "bynk.parse.expected_token",
                 tok.span,
-                format!("expected `returns`, `fails` or `never` in a `stub` clause, found `{other}`"),
+                format!("expected `returns`, `fails`, `never`, `rejected`, `faulted` or `unreachable` in a `stub` clause, found `{other}`"),
             )
             .with_note(
-                "a `stub` clause ends `returns <value>` (optionally `after <duration>`), `returns each [<outcome>, …]`, `fails`, or `never`",
+                "a `stub` clause ends `returns <value>` (optionally `after <duration>`), `returns each [<outcome>, …]`, `fails`, `never`, or, for a consumed service, `rejected <Refusal>`, `faulted` or `unreachable`",
             )),
         }
     }
@@ -1448,10 +1579,10 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(true) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {
@@ -1558,10 +1689,10 @@ impl<'a> Parser<'a> {
                     });
                     seen_item = true;
                 }
-                Some(TokenKind::Agent) => {
+                Some(TokenKind::Agent | TokenKind::At) => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_agent_decl() {
+                    match self.parse_annotated_agent_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
                             a.trivia.leading = leading;
@@ -1868,10 +1999,10 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(false) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {
@@ -2619,6 +2750,15 @@ impl<'a> Parser<'a> {
                             t.span,
                         )
                     }
+                    // #3938: a boolean flag (`sessions = true`) is carried as the identifier
+                    // `true`/`false`; the checker admits it only where a key wants a flag.
+                    Some(TokenKind::True | TokenKind::False) => {
+                        let t = self.bump().expect("peeked a boolean literal");
+                        (
+                            SchemeArgValue::Ident(self.slice(t.span).to_string()),
+                            t.span,
+                        )
+                    }
                     // #3386: a bare identifier names a variant (`sameSite = Lax`).
                     Some(TokenKind::Ident) => {
                         let id = self.expect_ident("as a scheme config value")?;
@@ -2637,21 +2777,21 @@ impl<'a> Parser<'a> {
                                 )
                             })?;
                         // #3386: `<int>.<unit>` is a duration literal (`ttl = 12.hours`).
+                        // #3947: an integer literal followed by `.<identifier>` is
+                        // always a duration attempt; the unit must agree with `n`.
                         if self.peek_kind() == Some(TokenKind::Dot)
                             && self.nth_kind(1) == Some(TokenKind::Ident)
-                            && let Some(unit) = self.nth(1).and_then(|u| {
-                                crate::ast::DurationUnit::from_name(self.slice(u.span))
-                            })
                         {
                             self.bump();
                             let u = self.expect_ident("as a duration unit")?;
+                            let unit = super::duration::resolve_duration_unit(n, &u.name, u.span)?;
                             let millis = n.checked_mul(unit.millis()).ok_or_else(|| {
                                 CompileError::new(
                                     "bynk.duration.literal_overflow",
                                     t.span.merge(u.span),
                                     format!(
                                         "the duration `{n}.{}` overflows the millisecond range",
-                                        unit.name()
+                                        unit.name_for(n)
                                     ),
                                 )
                             })?;
@@ -2749,6 +2889,9 @@ impl<'a> Parser<'a> {
         let mut security: Option<SecurityPolicy> = None;
         let mut limits: Option<LimitsPolicy> = None;
         let mut json: Option<JsonPolicy> = None;
+        let mut errors: Option<ErrorsPolicy> = None;
+        let mut delivery: Option<DeliveryPolicy> = None;
+        let mut fallback: Option<FallbackPolicy> = None;
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
         loop {
@@ -2791,6 +2934,9 @@ impl<'a> Parser<'a> {
                             ("security", security.is_some()),
                             ("limits", limits.is_some()),
                             ("json", json.is_some()),
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -2817,7 +2963,13 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "security",
                         policy.span,
-                        &[("limits", limits.is_some()), ("json", json.is_some())],
+                        &[
+                            ("limits", limits.is_some()),
+                            ("json", json.is_some()),
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     security = Some(policy);
@@ -2843,7 +2995,12 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "limits",
                         policy.span,
-                        &[("json", json.is_some())],
+                        &[
+                            ("json", json.is_some()),
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     limits = Some(policy);
@@ -2864,8 +3021,77 @@ impl<'a> Parser<'a> {
                             "a service declares at most one `json { }` policy",
                         ));
                     }
-                    self.check_policy_order("json", policy.span, &[], !handlers.is_empty())?;
+                    self.check_policy_order(
+                        "json",
+                        policy.span,
+                        &[
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
+                        ],
+                        !handlers.is_empty(),
+                    )?;
                     json = Some(policy);
+                }
+                // `errors { … }` is a contextual keyword like `json` (#3916): the
+                // identifier `errors` in service-body item position introduces
+                // the error-body policy. At most one per service.
+                Some(TokenKind::Ident) if self.peek_is_errors_kw() => {
+                    if let Some(doc) = item_doc {
+                        self.warn_orphan_before_policy(doc.span);
+                        keep_orphan(&mut leading, doc);
+                    }
+                    let policy = self.parse_errors_policy(leading)?;
+                    if errors.is_some() {
+                        return Err(CompileError::new(
+                            "bynk.parse.duplicate_errors",
+                            policy.span,
+                            "a service declares at most one `errors { }` policy",
+                        ));
+                    }
+                    self.check_policy_order(
+                        "errors",
+                        policy.span,
+                        &[
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
+                        ],
+                        !handlers.is_empty(),
+                    )?;
+                    errors = Some(policy);
+                }
+                // `delivery { … }` is a contextual keyword like `json` (#3877): the
+                // identifier `delivery` in service-body item position introduces
+                // the queue consumer's delivery policy. At most one per service.
+                Some(TokenKind::Ident) if self.peek_is_delivery_kw() => {
+                    if let Some(doc) = item_doc {
+                        self.warn_orphan_before_policy(doc.span);
+                        keep_orphan(&mut leading, doc);
+                    }
+                    let policy = self.parse_delivery_policy(leading)?;
+                    if delivery.is_some() {
+                        return Err(CompileError::new(
+                            "bynk.parse.duplicate_delivery",
+                            policy.span,
+                            "a service declares at most one `delivery { }` policy",
+                        ));
+                    }
+                    self.check_policy_order(
+                        "delivery",
+                        policy.span,
+                        &[("fallback", fallback.is_some())],
+                        !handlers.is_empty(),
+                    )?;
+                    delivery = Some(policy);
+                }
+                // `fallback { … }` is a contextual keyword like `delivery` (#3885).
+                Some(TokenKind::Ident) if self.peek_is_fallback_kw() => {
+                    self.parse_fallback_item(
+                        item_doc,
+                        leading,
+                        &mut fallback,
+                        !handlers.is_empty(),
+                    )?;
                 }
                 // A leading `@name(args)` introduces a handler-position annotation
                 // (v0.140): consume the annotation run, then the `on` handler it
@@ -2928,6 +3154,9 @@ impl<'a> Parser<'a> {
             security,
             limits,
             json,
+            errors,
+            delivery,
+            fallback,
             handlers,
             documentation: None,
             span: kw.span.merge(close.span),
@@ -2955,10 +3184,28 @@ impl<'a> Parser<'a> {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "limits")
     }
 
+    /// True when the next token is the contextual keyword `delivery` (#3877),
+    /// introducing a queue consumer's delivery policy section.
+    fn peek_is_delivery_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "delivery")
+    }
+
+    /// True when the next token is the contextual keyword `fallback` (#3885),
+    /// introducing an email service's fallback address section.
+    fn peek_is_fallback_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "fallback")
+    }
+
     /// True when the next token is the contextual keyword `json` (#2858),
     /// introducing the response-JSON policy section.
     fn peek_is_json_kw(&self) -> bool {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "json")
+    }
+
+    /// True when the next token is the contextual keyword `errors` (#3916),
+    /// introducing the error-body policy section.
+    fn peek_is_errors_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "errors")
     }
 
     /// #1756: a doc block before an adapter's `binding`/`uses`/`consumes`/
@@ -3002,7 +3249,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before the service's handlers"),
             )
             .with_note(
-                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`",
+                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`, `errors`, `delivery`, `fallback`",
             ));
         }
         if let Some((after, _)) = later.iter().find(|(_, seen)| *seen) {
@@ -3012,7 +3259,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before `{after} {{ }}`"),
             )
             .with_note(
-                "a service's policies come in the order `cors`, `security`, `limits`, `json`",
+                "a service's policies come in the order `cors`, `security`, `limits`, `json`, `errors`, `delivery`, `fallback`",
             ));
         }
         Ok(())
@@ -3110,6 +3357,90 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// Parse a `delivery { name: value, … }` policy (#3877), as
+    /// [`Self::parse_limits_policy`]; the checker validates the closed key set
+    /// and the value shapes.
+    fn parse_delivery_policy(
+        &mut self,
+        leading: Vec<Comment>,
+    ) -> Result<DeliveryPolicy, CompileError> {
+        let kw = self.expect_ident("to start a `delivery` policy")?;
+        let body = self.parse_policy_body("delivery")?;
+        Ok(DeliveryPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| DeliveryField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// The `fallback { … }` item of a service body (#3885): at most one, after the other policies
+    /// and before the handlers. `item_doc` is a doc block before it, which documents nothing.
+    fn parse_fallback_item(
+        &mut self,
+        item_doc: Option<DocLead>,
+        mut leading: Vec<Comment>,
+        fallback: &mut Option<FallbackPolicy>,
+        handlers_seen: bool,
+    ) -> Result<(), CompileError> {
+        if let Some(doc) = item_doc {
+            self.warn_orphan_before_policy(doc.span);
+            keep_orphan(&mut leading, doc);
+        }
+        let policy = self.parse_fallback_policy(leading)?;
+        if fallback.is_some() {
+            return Err(CompileError::new(
+                "bynk.parse.duplicate_fallback",
+                policy.span,
+                "a service declares at most one `fallback { }` policy",
+            ));
+        }
+        self.check_policy_order("fallback", policy.span, &[], handlers_seen)?;
+        *fallback = Some(policy);
+        Ok(())
+    }
+
+    /// Parse a `fallback { name: value, … }` policy (#3885), as
+    /// [`Self::parse_delivery_policy`]; the checker validates the closed field set
+    /// (`forward`), the value's shape and the protocol.
+    fn parse_fallback_policy(
+        &mut self,
+        leading: Vec<Comment>,
+    ) -> Result<FallbackPolicy, CompileError> {
+        let kw = self.expect_ident("to start a `fallback` policy")?;
+        let body = self.parse_policy_body("fallback")?;
+        Ok(FallbackPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| FallbackField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
     /// Parse a `json { name: value, … }` policy (#2858), as
     /// [`Self::parse_limits_policy`]; the checker validates the closed field set
     /// `options` and its `tagged`/`plain` value.
@@ -3121,6 +3452,32 @@ impl<'a> Parser<'a> {
                 .fields
                 .into_iter()
                 .map(|f| JsonField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// Parse an `errors { name: value, … }` policy (#3916), as
+    /// [`Self::parse_json_policy`]; the checker validates the closed field set
+    /// `format` and its `bynk`/`problem` value.
+    fn parse_errors_policy(&mut self, leading: Vec<Comment>) -> Result<ErrorsPolicy, CompileError> {
+        let kw = self.expect_ident("to start an `errors` policy")?;
+        let body = self.parse_policy_body("errors")?;
+        Ok(ErrorsPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| ErrorsField {
                     name: f.name,
                     value: f.value,
                     span: f.span,
@@ -3307,13 +3664,33 @@ impl<'a> Parser<'a> {
                     TokenKind::LParen,
                     "expected a recipient address `(\"support@shop.example\")` after `from email`",
                 )?;
-                let addr_tok = self.expect(
-                    TokenKind::StrLit,
-                    "expected the recipient address as a string literal",
-                )?;
-                let address = parse_string_literal(self.slice(addr_tok.span), addr_tok.span)?;
+                // #3889: a string literal, or the name of a constant that is one; a
+                // name leaves the address empty for the resolution pass to fill.
+                let (address, address_const) = if self.peek_kind() == Some(TokenKind::Ident) {
+                    let name = self.expect_ident("as the constant naming the recipient address")?;
+                    (
+                        String::new(),
+                        Some(AddressConst {
+                            name,
+                            decl_span: None,
+                            refusal: None,
+                        }),
+                    )
+                } else {
+                    let addr_tok = self.expect(
+                        TokenKind::StrLit,
+                        "expected the recipient address as a string literal or a constant name",
+                    )?;
+                    (
+                        parse_string_literal(self.slice(addr_tok.span), addr_tok.span)?,
+                        None,
+                    )
+                };
                 self.expect(TokenKind::RParen, "to close the email address binding")?;
-                Ok(ServiceProtocol::Email { address })
+                Ok(ServiceProtocol::Email {
+                    address,
+                    address_const,
+                })
             }
             _ => {
                 let (span, found) = match self.peek() {
@@ -3491,6 +3868,24 @@ impl<'a> Parser<'a> {
         let close = self.expect(TokenKind::RParen, "to close `via schema(...)`")?;
         let span = via_tok.span.merge(close.span);
         Ok(Some(SchemaDispatch { pattern, span }))
+    }
+
+    /// #3932: an agent declaration with the `@name(args)` annotations written before `agent`
+    /// (`@busyAfter(5.seconds)`). The annotations are part of the declaration: its span starts at
+    /// the first of them, and a run with no `agent` after it is the ordinary "expected `agent`"
+    /// parse error, so an annotation can never silently attach to nothing.
+    fn parse_annotated_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            annotations.push(self.parse_annotation()?);
+        }
+        let first = annotations.first().map(|a| a.span);
+        let mut agent = self.parse_agent_decl()?;
+        if let Some(first) = first {
+            agent.span = first.merge(agent.span);
+        }
+        agent.annotations = annotations;
+        Ok(agent)
     }
 
     fn parse_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {
@@ -3709,6 +4104,7 @@ impl<'a> Parser<'a> {
         }
         Ok(AgentDecl {
             trailing_comments,
+            annotations: Vec::new(),
             name,
             replaces,
             key_name,
@@ -3877,6 +4273,11 @@ impl<'a> Parser<'a> {
             end = ann.span;
             annotations.push(ann);
         }
+        // #3793: `store name: Kind[T] replaces old`, after the annotations and before `=`.
+        let replaces = self.parse_field_replaces(false)?;
+        if let Some(r) = &replaces {
+            end = r.span;
+        }
         let init = if self.eat(TokenKind::Eq).is_some() {
             let e = self.parse_expr()?;
             end = e.span;
@@ -3888,6 +4289,7 @@ impl<'a> Parser<'a> {
             name,
             kind,
             annotations,
+            replaces,
             init,
             documentation: None,
             span: kw.span.merge(end),
@@ -3987,6 +4389,7 @@ impl<'a> Parser<'a> {
             value,
             span,
             from_const: None,
+            element_consts: Vec::new(),
         })
     }
 
@@ -4279,6 +4682,7 @@ impl<'a> Parser<'a> {
         let kind_ident = self.expect_ident(
             "expected a handler form (e.g. `call`, `GET`, `schedule`, `message`) after `on`",
         )?;
+        let mut schedule_const = None;
         let kind = match kind_ident.name.as_str() {
             "call" => HandlerKind::Call,
             "message" => HandlerKind::Message,
@@ -4295,13 +4699,8 @@ impl<'a> Parser<'a> {
             // router's own rejections.
             "rejected" => HandlerKind::Rejected,
             "schedule" => {
-                self.expect(TokenKind::LParen, "before the cron schedule expression")?;
-                let expr_tok = self.expect(
-                    TokenKind::StrLit,
-                    "expected a cron expression string literal in `schedule(\"…\")`",
-                )?;
-                let expr = parse_string_literal(self.slice(expr_tok.span), expr_tok.span)?;
-                self.expect(TokenKind::RParen, "to close the schedule expression")?;
+                let (expr, named) = self.parse_schedule_header()?;
+                schedule_const = named;
                 HandlerKind::Cron { expr }
             }
             method if HttpMethod::from_ident(method).is_some() => {
@@ -4408,6 +4807,7 @@ impl<'a> Parser<'a> {
             kind,
             annotations,
             method_name,
+            schedule_const,
             by_clause,
             params,
             return_type,
@@ -4417,6 +4817,36 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
         })
+    }
+
+    /// #3875: the parenthesised schedule of `on schedule(…)`: a string literal, or
+    /// the name of a constant. A name returns an empty expression and the
+    /// reference; the resolution pass (`annotation_consts`) fills the expression
+    /// in with the literal the constant denotes.
+    fn parse_schedule_header(&mut self) -> Result<(String, Option<ScheduleConst>), CompileError> {
+        self.expect(TokenKind::LParen, "before the cron schedule expression")?;
+        let result = if self.peek_kind() == Some(TokenKind::Ident) {
+            let name = self.expect_ident("as the constant naming the cron schedule")?;
+            (
+                String::new(),
+                Some(ScheduleConst {
+                    name,
+                    decl_span: None,
+                    refusal: None,
+                }),
+            )
+        } else {
+            let expr_tok = self.expect(
+                TokenKind::StrLit,
+                "expected a cron expression string literal or a constant name in `schedule(…)`",
+            )?;
+            (
+                parse_string_literal(self.slice(expr_tok.span), expr_tok.span)?,
+                None,
+            )
+        };
+        self.expect(TokenKind::RParen, "to close the schedule expression")?;
+        Ok(result)
     }
 
     /// Parse the optional `by (<binder>:)? <Actor> (| <Actor>)*` clause (v0.45/

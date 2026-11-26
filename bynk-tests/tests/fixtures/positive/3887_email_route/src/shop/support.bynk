@@ -1,0 +1,47 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailActions,
+  EmailReply,
+}
+
+// #3887: one verdict can forward to several destinations, reply and tag the forwards. `Forward` and
+// `Reply` stay as the shorthands for a route with one action.
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "billing" {
+      Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+        tag: Map.empty().insert("X-Ticket", "T-1234"),
+      })
+    } else if mail.subject == "duplicates" {
+      Route(EmailActions { forward: ["audit@shop.example", "AUDIT@shop.example"] })
+    } else if mail.subject == "nothing" {
+      Route(EmailActions {})
+    } else {
+      Forward("billing@shop.example")
+    }
+  }
+}
+
+// #3885 with #3887: a service with a fallback. A `Route` it returns stays a `Route`: the fallback's
+// outcome header is the runtime's, not a tag the handler chose. A fault is still forwarded.
+service escalate from email("escalate@shop.example") {
+  fallback { forward: "ops@ops.example" }
+
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "boom" {
+      // Dividing by zero is a fault, not a value.
+      let share = 10 / (mail.subject.length() - 4)
+      if share > 0 { Reject("unreachable") } else { Accept }
+    } else {
+      Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        tag: Map.empty().insert("X-Ticket", "T-9"),
+      })
+    }
+  }
+}

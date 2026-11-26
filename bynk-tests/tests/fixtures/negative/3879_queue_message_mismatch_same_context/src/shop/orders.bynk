@@ -1,0 +1,19 @@
+context shop.orders
+
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+
+type Order = { id: String, qty: Int }
+type Refund = { id: String }
+
+service place {
+  on call(o: Order) -> Effect[()] by Caller given OrderEvents {
+    OrderEvents.sendValue(Refund { id: o.id })
+  }
+}
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }
+}

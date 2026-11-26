@@ -12,7 +12,7 @@ fn request(url: String) -> Request {
 }
 
 service plain {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let res <- Fetch.sendWith(request(url), FetchOptions {})
 		match res {
 			Ok(r) => Effect.pure(r.status)
@@ -22,7 +22,7 @@ service plain {
 }
 
 service bounded {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let res <- Fetch.sendWith(request(url), FetchOptions { timeout: Some(5.seconds) })
 		match res {
 			Ok(r) => Effect.pure(r.status)

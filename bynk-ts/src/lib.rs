@@ -44,6 +44,7 @@ mod await_scan;
 mod lint;
 mod name_closure;
 mod predicate;
+mod predicate_rule;
 mod printer;
 mod program;
 mod source_map;
@@ -51,13 +52,15 @@ mod source_map;
 pub use await_scan::expr_contains_await;
 pub use lint::{Violation, verbatim_violations};
 pub use name_closure::{
-    ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, type_only_value_uses,
-    unbound_names, unbound_names_in, unbound_names_providing, value_imports,
+    ModuleExports, NamespaceMemberUse, module_exports, namespace_member_uses, raw_statement_texts,
+    text_idents, type_only_value_uses, unbound_names, unbound_names_in, unbound_names_providing,
+    value_imports,
 };
 pub use predicate::{
     decimal_range_condition, decimal_signed_coef, escape_ts_literal, pred_condition_and_message,
     pred_condition_and_message_for, pred_condition_and_message_over,
 };
+pub use predicate_rule::{pred_rule_expr, well_formed_rule_expr};
 pub use printer::{
     Printed, print, print_class_method, print_class_method_and_merge, print_expr,
     print_multi_source, print_object_entry, print_stmt, print_stmt_and_merge,

@@ -11,7 +11,7 @@ fn label(s: Status) -> Int {
 }
 
 service checkout {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let s <- pay.charge(1)
     Effect.pure(label(s))
   }

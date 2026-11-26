@@ -2,6 +2,7 @@
 // context wire.auth
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -21,11 +22,11 @@ export type ClientId = string & { readonly __brand: "wire.auth.ClientId" };
 
 export const ClientId = {
   of(value: string): Result<ClientId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "ClientId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "ClientId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
-    if (!(value.length <= 20)) {
-      return Err({ field: "ClientId", message: "length must be at most 20", value });
+    if (!(__bynkCodePointLength(value) <= 20)) {
+      return Err({ field: "ClientId", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value });
     }
     return Ok(value as ClientId);
   },
@@ -35,8 +36,8 @@ export type AuthId = string & { readonly __brand: "wire.auth.AuthId" };
 
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "AuthId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "AuthId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as AuthId);
   },
@@ -121,6 +122,14 @@ export function __serialise_LoginError(value: LoginError): __JsonValue {
 }
 
 export function __deserialise_LoginError(json: __JsonValue, path: string = "$"): Result<LoginError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Invalid":
+        return Ok({ tag: "Invalid" } as LoginError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

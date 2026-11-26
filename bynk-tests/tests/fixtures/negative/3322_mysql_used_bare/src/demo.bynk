@@ -4,7 +4,7 @@ consumes bynk
 consumes bynk.cloudflare { MySql }
 
 service probe {
-  on call() -> Effect[Int] given MySql {
+  on call() -> Effect[Int] by Caller given MySql {
     Effect.pure(0)
   }
 }

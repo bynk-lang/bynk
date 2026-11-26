@@ -7,14 +7,19 @@
 use bynk_check::checker::{Callee, Ty};
 use bynk_check::kernel_op::{FormStatic, JsonStatic, StaticOp, YamlStatic};
 use bynk_ts::{
-    TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsParam, TsStmt, TsType, TsTypeMember,
-    TsUnaryOp, VerbatimOrigin,
+    TsArrowBody, TsBinaryOp, TsBindingName, TsExpr, TsLit, TsStmt, TsType, TsTypeMember, TsUnaryOp,
+    VerbatimOrigin,
 };
 
-use super::super::lower::{Pre, ident_node, member_node, str_node};
+use super::super::lower::{Pre, member_node};
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_ty_to_ts_type;
 use super::super::{BaseType, Expr, TypeBody, TypeRef, ty_to_type_ref};
+use crate::ts_build::{
+    binary, block, call, const_typed, ident, index, member, num_lit, or_expr, raw_lit, str_lit,
+    strict_eq,
+};
+use bynk_ts::TsParam;
 
 /// v0.22b: the typed JSON codec (ADR 0045). `encode` dispatches to the
 /// module-local `serialise_*` helpers + `JSON.stringify`; `decode[T]` to
@@ -130,7 +135,6 @@ pub(in super::super) fn lower_json_codec_call(
 
 /// `Form.encode(v)`: the form text a `@form` route reads.
 fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> TsExpr {
-    cx.runtime_use().note_form_codec();
     // The checker admits only a concrete record of form fields, so the wire
     // value is always available; a miss is a compiler fault, not a user error
     // (1A.34: a missing checker fact, reported at the argument).
@@ -149,7 +153,7 @@ fn lower_form_encode(arg: &Expr, cx: &mut LowerCtx, pre: &mut Pre) -> TsExpr {
         .map(form_field_specs);
     let mut args = vec![wire];
     args.extend(table);
-    call(ident_node("__formString"), args)
+    call(ident("__formString"), args)
 }
 
 /// Which text front end feeds a typed decode.
@@ -168,48 +172,6 @@ pub(in super::super) enum DecodeSource {
     Form,
 }
 
-/// `a.b`.
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
-
-/// `callee(args)`.
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// `left === right`.
-fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::StrictEq,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-/// `left || right`.
-fn or(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::Or,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-/// `object[index]`.
-fn index(object: TsExpr, index: TsExpr) -> TsExpr {
-    TsExpr::Index {
-        object: Box::new(object),
-        index: Box::new(index),
-    }
-}
-
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
     member_node("globalThis", name)
@@ -225,31 +187,9 @@ fn json_value_ty() -> TsType {
     TsType::named("__JsonValue")
 }
 
-/// A typed parameter.
-fn param(name: &str, ty: TsType) -> TsParam {
-    TsParam {
-        name: name.to_string(),
-        ty: Some(ty),
-        optional: false,
-        rest: false,
-        array_pattern: None,
-        default: None,
-    }
-}
-
-/// `{ stmts }` as a block statement.
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
-/// `const <name>[: <ty>] = <init>;`.
-fn const_(name: &str, ty: Option<TsType>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
-}
-
 /// `return Err(<value>);`.
 fn return_err(value: TsExpr) -> TsStmt {
-    TsStmt::return_stmt(Some(call(ident_node("Err"), vec![value])), None)
+    TsStmt::return_stmt(Some(call(ident("Err"), vec![value])), None)
 }
 
 /// `if (<test>) return Err(<value>);`.
@@ -300,19 +240,13 @@ pub(in super::super) fn json_decoder_fn(
     // takes — including the delegating ones, which record nothing. A
     // module that curates its import list (the test-scaffold modules)
     // otherwise emits all three unimported.
-    cx.runtime_use().note_json_codec();
     let des = if rigid {
         call(
             member(cx.codec(t), "decode"),
-            vec![ident_node("__j"), str_node("$")],
+            vec![ident("__j"), str_lit("$")],
         )
     } else {
-        super::super::serialisation::deserialise_expr(
-            &tref,
-            &ident_node("__j"),
-            "$",
-            cx.runtime_use(),
-        )
+        super::super::serialisation::deserialise_expr(&tref, &ident("__j"), "$", cx.runtime_use())
     };
     let row_pass = if sql {
         sql_bool_pass(t, cx)
@@ -321,24 +255,22 @@ pub(in super::super) fn json_decoder_fn(
     } else {
         Vec::new()
     };
-    // The parse step: `JSON.parse`, or (#3214) the YAML parser, whose failures
+    // The parse step: `JSON.parse`, or_expr (#3214) the YAML parser, whose failures
     // are already positioned `DecodeError`s.
     let parse = if source == DecodeSource::Form {
-        cx.runtime_use().note_form_codec();
         let specs = form_specs_literal(t, cx)?;
         form_parse_step(specs)
     } else if source == DecodeSource::Yaml {
-        cx.runtime_use().note_yaml();
         yaml_parse_step()
     } else {
         json_parse_step()
     };
     let mut body = parse;
     body.extend(row_pass);
-    body.push(const_("__r", None, des));
+    body.push(const_typed("__r", None, des));
     body.extend(decode_tail(&ts));
     Some(TsExpr::Arrow {
-        params: vec![param("__s", TsType::named("string"))],
+        params: vec![TsParam::new("__s", Some(TsType::named("string")))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(decoder_result_ty(&ts)),
@@ -352,20 +284,23 @@ fn decoder_result_ty(ts: &TsType) -> TsType {
 }
 
 /// `let __j: __JsonValue; try { __j = JSON.parse(__s) as __JsonValue; } catch (__e) { return
-/// Err({ kind: "Malformed", path: "$", message: String(__e) }); }`.
+/// Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) }); }`.
 fn json_parse_step() -> Vec<TsStmt> {
     let malformed = TsExpr::object(vec![
-        ("kind".to_string(), str_node("Malformed")),
-        ("path".to_string(), str_node("$")),
+        (
+            "kind".to_string(),
+            TsExpr::object(vec![("tag".to_string(), str_lit("Malformed"))]),
+        ),
+        ("path".to_string(), str_lit("$")),
         (
             "message".to_string(),
-            call(ident_node("String"), vec![ident_node("__e")]),
+            call(ident("String"), vec![ident("__e")]),
         ),
     ]);
     let parsed = TsExpr::As {
         expr: Box::new(call(
             member(member_node("globalThis", "JSON"), "parse"),
-            vec![ident_node("__s")],
+            vec![ident("__s")],
         )),
         ty: json_value_ty(),
     };
@@ -377,7 +312,7 @@ fn json_parse_step() -> Vec<TsStmt> {
             None,
         ),
         TsStmt::try_catch(
-            block(vec![TsStmt::assign(ident_node("__j"), parsed, None)]),
+            block(vec![TsStmt::assign(ident("__j"), parsed, None)]),
             Some("__e"),
             block(vec![return_err(malformed)]),
             None,
@@ -391,76 +326,80 @@ fn json_parse_step() -> Vec<TsStmt> {
 /// __p.value;`.
 fn parsed_result_step(parse: TsExpr) -> Vec<TsStmt> {
     vec![
-        const_("__p", None, parse),
+        const_typed("__p", None, parse),
         if_err(
-            strict_eq(member(ident_node("__p"), "tag"), str_node("Err")),
-            member(ident_node("__p"), "error"),
+            strict_eq(member(ident("__p"), "tag"), str_lit("Err")),
+            member(ident("__p"), "error"),
         ),
-        const_(
-            "__j",
-            Some(json_value_ty()),
-            member(ident_node("__p"), "value"),
-        ),
+        const_typed("__j", Some(json_value_ty()), member(ident("__p"), "value")),
     ]
 }
 
 /// #3214: `Yaml.decode`'s parse step.
 fn yaml_parse_step() -> Vec<TsStmt> {
-    parsed_result_step(call(ident_node("__bynkYamlParse"), vec![ident_node("__s")]))
+    parsed_result_step(call(ident("__bynkYamlParse"), vec![ident("__s")]))
 }
 
 /// #3276: `Form.decode`'s parse step: `__formDecode(__s, <field table>)`.
 fn form_parse_step(specs: TsExpr) -> Vec<TsStmt> {
-    parsed_result_step(call(
-        ident_node("__formDecode"),
-        vec![ident_node("__s"), specs],
-    ))
+    parsed_result_step(call(ident("__formDecode"), vec![ident("__s"), specs]))
 }
 
 /// What the decoder does with the codec's result: read `Ok`, else map the `BoundaryError` to the
 /// uniform `kind`/`path`/`message` record (ADR 0047).
 fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
-    let be = |property: &str| member(ident_node("__be"), property);
-    let r = |property: &str| member(ident_node("__r"), property);
-    let kind_is = |kind: &str| strict_eq(be("kind"), str_node(kind));
+    let be = |property: &str| member(ident("__be"), property);
+    let r = |property: &str| member(ident("__r"), property);
+    let kind_is = |kind: &str| strict_eq(be("kind"), str_lit(kind));
     let structural = kind_is("StructuralMismatch");
     let refinement = kind_is("RefinementViolation");
     let path = TsExpr::Conditional {
-        test: Box::new(TsExpr::Paren(Box::new(or(
+        test: Box::new(TsExpr::Paren(Box::new(or_expr(
             structural.clone(),
             refinement.clone(),
         )))),
         consequent: Box::new(be("path")),
-        alternate: Box::new(str_node("$")),
+        alternate: Box::new(str_lit("$")),
     };
     // The one message chain: a structural mismatch reads what it expected and what it found, a
     // refinement violation its own message, anything else its details.
     let message = TsExpr::Conditional {
-        test: Box::new(structural),
+        test: Box::new(structural.clone()),
         consequent: Box::new(TsExpr::template_lit(
             vec!["expected ".to_string(), ", got ".to_string(), String::new()],
-            vec![
-                be("expected"),
-                call(ident_node("String"), vec![be("actual")]),
-            ],
+            vec![be("expected"), call(ident("String"), vec![be("actual")])],
         )),
         alternate: Box::new(TsExpr::Conditional {
-            test: Box::new(refinement),
+            test: Box::new(refinement.clone()),
             consequent: Box::new(member(be("violation"), "message")),
             alternate: Box::new(be("details")),
         }),
     };
+    // #3976: the `DecodeErrorKind` variant, `{ tag }`. A boundary error that is neither a
+    // mismatch nor a violation reads as a malformed input.
+    let kind = TsExpr::object(vec![(
+        "tag".to_string(),
+        TsExpr::Conditional {
+            test: Box::new(structural.clone()),
+            consequent: Box::new(str_lit("StructuralMismatch")),
+            alternate: Box::new(TsExpr::Conditional {
+                test: Box::new(refinement.clone()),
+                consequent: Box::new(str_lit("RefinementViolation")),
+                alternate: Box::new(str_lit("Malformed")),
+            }),
+        },
+    )]);
     let mapped = TsExpr::object(vec![
-        ("kind".to_string(), be("kind")),
+        ("kind".to_string(), kind),
         ("path".to_string(), path),
         ("message".to_string(), message),
     ]);
     vec![
         TsStmt::if_stmt(
-            strict_eq(r("tag"), str_node("Ok")),
+            strict_eq(r("tag"), str_lit("Ok")),
             TsStmt::return_stmt(
                 Some(call(
-                    ident_node("Ok"),
+                    ident("Ok"),
                     vec![TsExpr::As {
                         expr: Box::new(r("value")),
                         ty: ts.clone(),
@@ -470,7 +409,7 @@ fn decode_tail(ts: &TsType) -> Vec<TsStmt> {
             ),
             None,
         ),
-        const_("__be", None, r("error")),
+        const_typed("__be", None, r("error")),
         return_err(mapped),
     ]
 }
@@ -527,24 +466,10 @@ fn json_stringify(value: TsExpr) -> TsExpr {
     call(member(global("JSON"), "stringify"), vec![value])
 }
 
-/// A literal printed exactly as given: one of the fixed pieces of the `bynk eval` line.
-fn raw(text: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Raw(text.to_string()))
-}
-
-/// `left + right`.
-fn add(left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op: TsBinaryOp::Add,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
 /// #3585: the statement that reports a `bynk eval` case's tail value: its
 /// `Json.encode` text and its type, as one NDJSON line. `None` when the value's
 /// type is unknown to the lowering, so the case runs without reporting.
-pub(in super::super) fn eval_value_line(
+pub(crate) fn eval_value_line(
     pre: &mut Pre,
     tail: &Expr,
     cx: &mut LowerCtx,
@@ -552,9 +477,10 @@ pub(in super::super) fn eval_value_line(
     let ty = cx.commons().expr_types.get(&tail.id).map(|te| te.ty)?;
     let shown = bynk_check::symbols::display_type_names_in(&cx.commons().tys().display(ty));
     // `console.log('{"type":"eval-value","valueType":' + JSON.stringify(<type>)` …
-    let head = add(
-        raw("'{\"type\":\"eval-value\",\"valueType\":'"),
-        call(member(global("JSON"), "stringify"), vec![str_node(shown)]),
+    let head = binary(
+        TsBinaryOp::Add,
+        raw_lit("'{\"type\":\"eval-value\",\"valueType\":'"),
+        call(member(global("JSON"), "stringify"), vec![str_lit(shown)]),
     );
     let log = |arg: TsExpr| {
         bynk_ts::TsStmt::expr_stmt(call(member(global("console"), "log"), vec![arg]), None)
@@ -563,15 +489,18 @@ pub(in super::super) fn eval_value_line(
     // no value.
     let Some(json) = json_encode(pre, tail, cx, false) else {
         let _ = pre.lower_node(tail, cx);
-        return Some(log(add(head, raw("'}'"))));
+        return Some(log(binary(TsBinaryOp::Add, head, raw_lit("'}'"))));
     };
     // The encoder names `JsonValue` and `BoundaryError`, whether or not the
     // value's type needs a closure of codecs of its own.
-    cx.runtime_use().note_json_codec();
-    cx.runtime_use().note_boundary_codec();
-    Some(log(add(
-        add(add(head, raw("',\"value\":'")), json),
-        raw("'}'"),
+    Some(log(binary(
+        TsBinaryOp::Add,
+        binary(
+            TsBinaryOp::Add,
+            binary(TsBinaryOp::Add, head, raw_lit("',\"value\":'")),
+            json,
+        ),
+        raw_lit("'}'"),
     )))
 }
 
@@ -628,8 +557,7 @@ pub(in super::super) fn json_encode(
 /// a temporary; any other is the default of the arrow's one parameter, which JS evaluates at call
 /// time, before the body raises the flag (its type is inferred).
 fn encode_plain(pre: &mut Pre, arg: &Expr, tref: &TypeRef, value: TsExpr, cx: &LowerCtx) -> TsExpr {
-    let ser =
-        super::super::serialisation::serialise_expr(tref, &ident_node("__pv"), cx.runtime_use());
+    let ser = super::super::serialisation::serialise_expr(tref, &ident("__pv"), cx.runtime_use());
     plain_iife(pre, arg.id.0, value, ser)
 }
 
@@ -645,32 +573,32 @@ fn plain_iife(pre: &mut Pre, id: u32, value: TsExpr, ser: TsExpr) -> TsExpr {
             value,
             None,
         ));
-        ident_node(&tmp)
+        ident(&tmp)
     } else {
         value
     };
-    let g = || ident_node("__g");
+    let g = || ident("__g");
     let flag = || member(g(), "__bynkPlainJson");
     let body = vec![
-        const_(
+        const_typed(
             "__g",
             None,
             TsExpr::As {
-                expr: Box::new(ident_node("globalThis")),
+                expr: Box::new(ident("globalThis")),
                 ty: TsType::Object(vec![TsTypeMember::optional_prop(
                     "__bynkPlainJson",
                     TsType::named("boolean"),
                 )]),
             },
         ),
-        const_("__was", None, flag()),
+        const_typed("__was", None, flag()),
         TsStmt::assign(flag(), TsExpr::Lit(TsLit::Bool(true)), None),
         TsStmt::try_finally(
             block(vec![TsStmt::return_stmt(
                 Some(call(member(global("JSON"), "stringify"), vec![ser])),
                 None,
             )]),
-            block(vec![TsStmt::assign(flag(), ident_node("__was"), None)]),
+            block(vec![TsStmt::assign(flag(), ident("__was"), None)]),
             None,
         ),
     ];
@@ -716,14 +644,13 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     if fields.is_empty() {
         return Vec::new();
     }
-    let o = || ident_node("__o");
-    let k = || ident_node("__k");
-    let row_k = || index(ident_node("__row"), k());
-    let number = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
+    let o = || ident("__o");
+    let k = || ident("__k");
+    let row_k = || index(ident("__row"), k());
     // `const __flags = (__o: __JsonValue): void => { … };`
     let skip = TsStmt::if_stmt(
-        or(
-            or(
+        or_expr(
+            or_expr(
                 strict_eq(o(), TsExpr::Lit(TsLit::Null)),
                 TsExpr::Binary {
                     op: TsBinaryOp::StrictNotEq,
@@ -731,7 +658,7 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
                         op: TsUnaryOp::Typeof,
                         expr: Box::new(o()),
                     }),
-                    right: Box::new(str_node("object")),
+                    right: Box::new(str_lit("object")),
                 },
             ),
             is_array(o()),
@@ -749,29 +676,29 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     };
     let read_flags = TsStmt::for_of(
         "__k",
-        TsExpr::array(fields.iter().map(|f| str_node(f.as_str())).collect()),
+        TsExpr::array(fields.iter().map(|f| str_lit(f.as_str())).collect()),
         block(vec![TsStmt::if_stmt(
-            or(
-                strict_eq(row_k(), number("0")),
-                strict_eq(row_k(), number("1")),
+            or_expr(
+                strict_eq(row_k(), num_lit("0")),
+                strict_eq(row_k(), num_lit("1")),
             ),
-            TsStmt::assign(row_k(), strict_eq(row_k(), number("1")), None),
+            TsStmt::assign(row_k(), strict_eq(row_k(), num_lit("1")), None),
             None,
         )]),
         None,
     );
     let flags = TsExpr::Arrow {
-        params: vec![param("__o", json_value_ty())],
+        params: vec![TsParam::new("__o", Some(json_value_ty()))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(TsType::named("void")),
         body: Box::new(TsArrowBody::Multiline(vec![
             skip,
-            const_("__row", None, as_row),
+            const_typed("__row", None, as_row),
             read_flags,
         ])),
     };
-    let mut stmts = vec![const_("__flags", None, flags)];
+    let mut stmts = vec![const_typed("__flags", None, flags)];
     stmts.push(apply_to_rows("__flags"));
     stmts
 }
@@ -780,12 +707,12 @@ fn sql_bool_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
 /// the parsed rows, or the one row.
 fn apply_to_rows(pass: &str) -> TsStmt {
     TsStmt::if_else_stmt(
-        is_array(ident_node("__j")),
+        is_array(ident("__j")),
         TsStmt::expr_stmt(
-            call(member(ident_node("__j"), "forEach"), vec![ident_node(pass)]),
+            call(member(ident("__j"), "forEach"), vec![ident(pass)]),
             None,
         ),
-        TsStmt::expr_stmt(call(ident_node(pass), vec![ident_node("__j")]), None),
+        TsStmt::expr_stmt(call(ident(pass), vec![ident("__j")]), None),
         None,
     )
 }
@@ -809,21 +736,20 @@ fn pg_row_pass(t: bynk_check::checker::TyId, cx: &LowerCtx) -> Vec<TsStmt> {
     if instants.is_empty() && ints.is_empty() {
         return Vec::new();
     }
-    cx.runtime_use().note_pg_rows();
     let names =
-        |names: &[String]| TsExpr::array(names.iter().map(|f| str_node(f.as_str())).collect());
+        |names: &[String]| TsExpr::array(names.iter().map(|f| str_lit(f.as_str())).collect());
     // `const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, [instants], [ints]);`
     let fix = TsExpr::Arrow {
-        params: vec![param("__o", json_value_ty())],
+        params: vec![TsParam::new("__o", Some(json_value_ty()))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(TsType::named("void")),
         body: Box::new(TsArrowBody::Expr(Box::new(call(
-            ident_node("__bynkPgRow"),
-            vec![ident_node("__o"), names(&instants), names(&ints)],
+            ident("__bynkPgRow"),
+            vec![ident("__o"), names(&instants), names(&ints)],
         )))),
     };
-    vec![const_("__fix", None, fix), apply_to_rows("__fix")]
+    vec![const_typed("__fix", None, fix), apply_to_rows("__fix")]
 }
 
 #[cfg(test)]
@@ -844,7 +770,7 @@ mod tests {
     }
 
     fn awaiting() -> TsExpr {
-        TsExpr::Await(Box::new(call(ident_node("f"), vec![])))
+        TsExpr::Await(Box::new(call(ident("f"), vec![])))
     }
 
     /// An awaiting argument is hoisted ahead of the IIFE, and the parameter default is the
@@ -852,7 +778,7 @@ mod tests {
     #[test]
     fn an_awaiting_plain_argument_is_hoisted() {
         let mut pre = Pre::new();
-        let iife = plain_iife(&mut pre, 7, awaiting(), ident_node("ser"));
+        let iife = plain_iife(&mut pre, 7, awaiting(), ident("ser"));
         assert_eq!(
             stmts_text(&pre),
             vec!["const __pj7 = await f();".to_string()]
@@ -864,12 +790,7 @@ mod tests {
     #[test]
     fn a_plain_argument_that_does_not_await_is_not_hoisted() {
         let mut pre = Pre::new();
-        let iife = plain_iife(
-            &mut pre,
-            7,
-            call(ident_node("g"), vec![]),
-            ident_node("ser"),
-        );
+        let iife = plain_iife(&mut pre, 7, call(ident("g"), vec![]), ident("ser"));
         assert!(stmts_text(&pre).is_empty());
         let text = bynk_ts::print_expr(&iife);
         assert!(text.starts_with("((__pv = g()): string => {"), "{text}");

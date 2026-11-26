@@ -19,7 +19,7 @@ pub(crate) fn unchecked_construct(
 ) -> bynk_ts::TsExpr {
     if is_opaque {
         bynk_ts::TsExpr::Call {
-            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            callee: Box::new(super::lower::type_member_node(name, "unsafe")),
             args: vec![value],
         }
     } else {
@@ -39,29 +39,18 @@ pub(crate) fn unchecked_construct(
 /// which is exactly the type the pre-0182 `T.unsafe(value)` already produced here
 /// (`T` being `any`) and erases to the raw value at runtime — without
 /// reintroducing a callable refined `.unsafe`.
-pub fn unchecked_construct_test(name: &str, value: &str, is_opaque: bool) -> String {
-    if is_opaque {
-        format!("{name}.unsafe({value})")
-    } else {
-        // P7.2: deferred, not narrowed — checked, not skipped. This doc comment's
-        // own explanation still holds: `name` genuinely isn't resolvable as a
-        // type at this call site (only as an `any`-typed value binding), so
-        // there is no real type to cast to here. Fixing this needs restructuring
-        // what the test scaffold imports, not a same-line text change.
-        format!("({value} as any)")
-    }
-}
-
-/// [`unchecked_construct_test`] as a node (1A.17): `Name.unsafe(value)` for an
-/// opaque type, `(value as any)` otherwise (the cast stays: see the note there).
-pub(super) fn unchecked_construct_test_node(
+///
+/// `Name.unsafe(value)` for an opaque type, `(value as any)` otherwise (1A.17; the
+/// cast stays: `name` is not resolvable as a type at this call site, only as an
+/// `any`-typed value binding, so there is no real type to cast to).
+pub(crate) fn unchecked_construct_test_node(
     name: &str,
     value: bynk_ts::TsExpr,
     is_opaque: bool,
 ) -> bynk_ts::TsExpr {
     if is_opaque {
         bynk_ts::TsExpr::Call {
-            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            callee: Box::new(super::lower::type_member_node(name, "unsafe")),
             args: vec![value],
         }
     } else {
@@ -277,6 +266,13 @@ pub(crate) fn asset_ts_type() -> TsType {
     )])
 }
 
+/// #4352: a name a `uses` qualifier reads (`lib.y.Status`, `Y.Status`) as it is written in
+/// TypeScript after a module namespace (`handlers.`): the qualifier's binding and the name
+/// (`__use_lib_y.Status`, `Y.Status`), never the dotted key, which names no member.
+fn spelled_through_qualifier(name: &str) -> String {
+    bynk_check::emitted_names::use_qualified_name(name).unwrap_or_else(|| name.to_string())
+}
+
 pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType {
     match r {
         TypeRef::Base(b, _) => TsType::named(ts_base(*b)),
@@ -284,9 +280,10 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             let name = if let Some(f) = qualify
                 && let Some(ns) = f(&id.name)
             {
-                format!("{ns}.{}", id.name)
+                format!("{ns}.{}", spelled_through_qualifier(&id.name))
             } else {
-                id.name.clone()
+                bynk_check::emitted_names::use_qualified_name(&id.name)
+                    .unwrap_or_else(|| id.name.clone())
             };
             TsType::named(name)
         }
@@ -308,8 +305,13 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 TsType::named_with_args("globalThis.Promise", vec![inner])
             }
         }
-        TypeRef::HttpResult(t, _) => {
-            TsType::named_with_args("HttpResult", vec![ts_type_ref_to_ts_type(t, qualify)])
+        // #4394: a declared streaming element is the second type argument.
+        TypeRef::HttpResult(t, e, _) => {
+            let mut args = vec![ts_type_ref_to_ts_type(t, qualify)];
+            if let Some(e) = e {
+                args.push(ts_type_ref_to_ts_type(e, qualify));
+            }
+            TsType::named_with_args("HttpResult", args)
         }
         // v0.20b: collections lower to immutable TS shapes.
         TypeRef::List(t, _) => TsType::readonly_array(ts_type_ref_to_ts_type(t, qualify)),
@@ -322,6 +324,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         // `bynk-tests/tests/fixtures/positive/302_query_annotated_let/expected/probe.ts:46`).
         TypeRef::Query(t, _) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_type_ref_to_ts_type(t, qualify))),
@@ -360,6 +363,20 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
         TypeRef::DecodeError(_) => TsType::named("DecodeError"),
         TypeRef::Unit(_) => TsType::named("void"),
+        // #4192: the prelude `MapEntry[K, V]` has no declaration to name, so a written
+        // `MapEntry[K, V]` renders as its own shape, as the checked type does below.
+        TypeRef::App { name, args, .. } if name.name == MAP_ENTRY && args.len() == 2 => {
+            TsType::Object(vec![
+                bynk_ts::TsTypeMember::readonly_prop(
+                    "key",
+                    ts_type_ref_to_ts_type(&args[0], qualify),
+                ),
+                bynk_ts::TsTypeMember::readonly_prop(
+                    "value",
+                    ts_type_ref_to_ts_type(&args[1], qualify),
+                ),
+            ])
+        }
         // v0.157 (ADR 0183): `Name[Arg, …]` lowers to the erased TS generic
         // `Name<Arg, …>` — the generic record's interface is emitted with the
         // same type parameters (like a generic function's erased `<A, B>`).
@@ -384,9 +401,10 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             let head = if let Some(f) = qualify
                 && let Some(ns) = f(&name.name)
             {
-                format!("{ns}.{}", name.name)
+                format!("{ns}.{}", spelled_through_qualifier(&name.name))
             } else {
-                name.name.clone()
+                bynk_check::emitted_names::use_qualified_name(&name.name)
+                    .unwrap_or_else(|| name.name.clone())
             };
             let rendered: Vec<TsType> = args
                 .iter()
@@ -411,6 +429,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 ret
             };
             TsType::Fn {
+                rest: false,
                 names: vec![],
                 params,
                 ret: Box::new(ret),
@@ -488,7 +507,7 @@ mod ts_type_ref_tests {
 
     #[test]
     fn http_result_type() {
-        let r = TypeRef::HttpResult(Box::new(named("Order")), sp());
+        let r = TypeRef::HttpResult(Box::new(named("Order")), None, sp());
         assert_eq!(ts_type_ref(&r), "HttpResult<Order>");
     }
 
@@ -563,6 +582,25 @@ mod ts_type_ref_tests {
             span: sp(),
         };
         assert_eq!(ts_type_ref(&r), "MyGeneric<number, Order>");
+    }
+
+    /// #4397: a generic applied through a commons' full name (`lib.x.Box[Int]`) and a
+    /// plain named type through one (`lib.x.Status`) read through the namespace import
+    /// the unit binds that commons to, and an alias qualifier (`Y.Box`) is left alone.
+    #[test]
+    fn a_full_name_qualified_type_reads_through_its_namespace_import() {
+        let app = |name: &str| TypeRef::App {
+            name: Ident {
+                name: name.to_string(),
+                span: sp(),
+            },
+            args: vec![base(BaseType::Int)],
+            span: sp(),
+        };
+        assert_eq!(ts_type_ref(&app("lib.x.Box")), "__use_lib_x.Box<number>");
+        assert_eq!(ts_type_ref(&app("Y.Box")), "Y.Box<number>");
+        assert_eq!(ts_type_ref(&named("lib.x.Status")), "__use_lib_x.Status");
+        assert_eq!(ts_type_ref(&named("Y.Status")), "Y.Status");
     }
 
     #[test]
@@ -667,11 +705,13 @@ impl<'a> TyRender<'a> {
         self.tys
     }
 
-    /// How the unit spells the type `name`: its rename, if any.
+    /// How the unit spells the type `name`: its rename, if any, or the namespace
+    /// import it is read through when written by a commons' full name (#4397).
     pub(crate) fn spelling(&self, name: &str) -> String {
         self.spellings
             .get(name)
             .cloned()
+            .or_else(|| bynk_check::emitted_names::use_qualified_name(name))
             .unwrap_or_else(|| name.to_string())
     }
 }
@@ -719,9 +759,8 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // #1977: the compiler-known `MapEntry[K, V]` (ADR 0184) has no
         // `TypeDecl`, so no module declares or imports a `MapEntry` type to
         // name. It renders as its own shape, the `{ key, value }` record the
-        // `.entries` lowering builds. (A user type of the same name, which the
-        // checker prefers for field access, interns to the same `Ty` and so
-        // renders inline too; no program declares one today.)
+        // `.entries` lowering builds. (A unit cannot declare a two-parameter
+        // `MapEntry` of its own: #4192 reserves it, so none can reach here.)
         Ty::Named {
             name,
             kind: NamedKind::Record,
@@ -749,7 +788,13 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
                 TsType::named_with_args("globalThis.Promise", vec![ts_ty_to_ts_type(*t, tys)])
             }
         }
-        Ty::HttpResult(t) => TsType::named_with_args("HttpResult", vec![ts_ty_to_ts_type(*t, tys)]),
+        Ty::HttpResult(t, element) => {
+            let mut args = vec![ts_ty_to_ts_type(*t, tys)];
+            if let Some(e) = element {
+                args.push(ts_ty_to_ts_type(*e, tys));
+            }
+            TsType::named_with_args("HttpResult", args)
+        }
         Ty::List(t) => TsType::readonly_array(ts_ty_to_ts_type(*t, tys)),
         Ty::Set(t) => TsType::named_with_args("ReadonlySet", vec![ts_ty_to_ts_type(*t, tys)]),
         // v0.91 (ADR 0119): a `Query[T]` lowers to a deferred producer of its
@@ -758,6 +803,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // the opaque-`Named` wrap this reuses, unchanged reasoning).
         Ty::Query(t) => {
             let fn_ty = TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(query_result_ty(ts_ty_to_ts_type(*t, tys))),
@@ -792,6 +838,7 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         Ty::DecodeError => TsType::named("DecodeError"),
         Ty::Unit => TsType::named("void"),
         Ty::Fn { params, ret } => TsType::Fn {
+            rest: false,
             names: vec![],
             params: params.iter().map(|p| ts_ty_to_ts_type(*p, tys)).collect(),
             ret: Box::new(ts_ty_to_ts_type(*ret, tys)),
@@ -926,7 +973,7 @@ mod ts_ty_tests {
             "globalThis.Promise<void>"
         );
 
-        let http_result = tys.intern(Ty::HttpResult(int));
+        let http_result = tys.intern(Ty::HttpResult(int, None));
         assert_eq!(
             ts_ty(http_result, TyRender::new(&tys, no_spellings())),
             "HttpResult<number>"

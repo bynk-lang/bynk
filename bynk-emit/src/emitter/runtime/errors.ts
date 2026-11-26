@@ -1,16 +1,77 @@
+// #3952: the numeric argument of a rule, of whichever base the refined type has
+// (`bynk.validation`'s `Bound`). A `Decimal` is the runtime's `{ coefficient, scale }`
+// and a `Duration` its milliseconds, as those types erase everywhere else.
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+// #3952: the predicate a refinement check enforces, with its argument
+// (`bynk.validation`'s `ValidationRule`); `WellFormed` is a value that is not a
+// valid member of its base type at all. A plain tagged object, as the compiler
+// shapes every sum, so a `match` on `e.rule` reads it with no conversion.
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
 }
 
+// #3952: a rule as a `400` body writes it: `kind` where the in-memory form has `tag`
+// (every sum is `{"kind": …}` on the wire), a `Decimal` bound as its text.
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+// #3952: a violation as the `400` body carries it: the field, the message and the rule,
+// never the value (#4278). What a client reads back from a server's refusal.
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
+}
+
+// #3976: why a decode failed (`bynk.decode`'s `DecodeErrorKind`). A plain tagged object,
+// as the compiler shapes every sum, so a `match` on `e.kind` reads it with no conversion.
+// The HTTP `400` bodies and `rejectionDetail` keep writing the name as text.
+export type DecodeErrorKind =
+  | { readonly tag: "Malformed" }
+  | { readonly tag: "StructuralMismatch" }
+  | { readonly tag: "RefinementViolation" }
+  | { readonly tag: "UnsupportedAnchor" }
+  | { readonly tag: "UnsupportedAlias" }
+  | { readonly tag: "UnsupportedMergeKey" }
+  | { readonly tag: "UnsupportedTag" }
+  | { readonly tag: "MultipleDocuments" }
+  | { readonly tag: "UnsupportedSyntax" }
+  | { readonly tag: "UnsupportedValue" }
+  | { readonly tag: "DuplicateKey" }
+  | { readonly tag: "LimitExceeded" };
+
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information
 // (the discriminating kind and the tracked field path) flattened into a
-// uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse
-// failure, else the BoundaryError kind ("StructuralMismatch",
-// "RefinementViolation").
+// uniform, Bynk-inspectable record. `kind` is `Malformed` for a JSON.parse
+// failure, else the BoundaryError kind (`StructuralMismatch`,
+// `RefinementViolation`), or one of the YAML decoder's refusals.
 export interface DecodeError {
-  readonly kind: string;
+  readonly kind: DecodeErrorKind;
   readonly path: string;
   readonly message: string;
 }
@@ -26,14 +87,14 @@ export interface InvariantViolation {
   readonly invariant: string;
   // #2272: which declaration fired, and where it is. An invariant and a transition
   // may share a name, so the name alone does not say which one it was.
-  readonly declaration: "invariant" | "transition";
+  readonly declaration: "invariant" | "transition" | "unique";
   readonly location: string;
 }
 
 export function invariantViolation(
   agent: string,
   invariant: string,
-  declaration: "invariant" | "transition",
+  declaration: "invariant" | "transition" | "unique",
   location: string,
 ): Error {
   const e = new Error(`InvariantViolation: ${agent}.${invariant}`);

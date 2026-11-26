@@ -3,7 +3,7 @@ context r
 consumes bynk
 
 fn tick(n: Int) -> Effect[()] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(())
 }
 
@@ -19,7 +19,7 @@ agent Counter {
 	store n: Cell[Int] = 0
 
 	on call run() -> Effect[()] {
-		let _ <- [1, 2].parTraverse(tick)
+		let _ <- [1, 2].parForEach(tick)
 		()
 	}
 }

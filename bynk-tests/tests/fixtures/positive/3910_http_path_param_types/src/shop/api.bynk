@@ -1,0 +1,32 @@
+context shop.api
+
+type OrderNo = Int where Positive
+type Status = enum { Open, Closed }
+
+service api from http {
+	// A refined `Int`: decoded and validated before the handler runs.
+	on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("order \(id)")
+	}
+
+	// An enum, by variant name.
+	on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[String]] by v: Visitor {
+		match s {
+			Open => Ok("open")
+			Closed => Ok("closed")
+		}
+	}
+
+	// A `Bool`, a `Decimal` and a plain `Int`.
+	on GET("/flags/:flag") (flag: Bool) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("flag \(flag)")
+	}
+
+	on GET("/prices/:p") (p: Decimal) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("price \(p)")
+	}
+
+	on GET("/refs/:r") (r: Int) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("ref \(r + 1)")
+	}
+}

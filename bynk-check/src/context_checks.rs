@@ -56,6 +56,7 @@ pub fn build_capability_op_info(
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
         codable_params: checker::codable::codable_op_params(op),
+        key_params: checker::codable::key_op_params(op),
         reply_policy: checker::codable::op_reply_policy(op),
         boundary_conflict: None,
     }
@@ -186,6 +187,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         },
         // #2865: a typed `D1` read decodes its row.
         Some(Callee::D1Select { row, .. }) => vec![*row],
+        // #4105: a typed Analytics read decodes its rows.
+        Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -445,12 +448,23 @@ fn walk_expr_for_constraints(
             if let ExprKind::Ident(id) = &receiver.kind
                 && let Some(ct) = consumed.get(&id.name)
             {
-                let is_construct = method.name == OF
-                    || method.name == UNSAFE
+                // #3948, #4213: a type its owner exports `transparent` takes every
+                // ordinary construction form from a consumer: `.of` on a refined
+                // one, a variant of a sum, as a record literal already did. An
+                // opaque export, a declared `opaque` type and `.unsafe` (an
+                // unchecked assertion, not a construction) stay the owner's.
+                let owner_only = ct.visibility == Visibility::Opaque
                     || matches!(
                         typed.types.get(&id.name).map(|d| &d.body),
-                        Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                        Some(TypeBody::Opaque { .. })
                     );
+                let is_construct = method.name == UNSAFE
+                    || (owner_only
+                        && (method.name == OF
+                            || matches!(
+                                typed.types.get(&id.name).map(|d| &d.body),
+                                Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                            )));
                 if is_construct {
                     errors.push(
                         CompileError::new(
@@ -763,11 +777,31 @@ pub fn check_context_declarations(
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
                 let mut conflict: Option<(String, String, bool)> = None;
                 let mut resolve = |tr: &TypeRef, in_param: bool| {
-                    let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
-                        .unwrap_or_else(|| tys.intern(Ty::Unit));
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
                     if conflict.is_none()
-                        && let Some(name) =
-                            checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
                     {
                         conflict = Some((unit.clone(), name, in_param));
                     }
@@ -782,6 +816,7 @@ pub fn check_context_declarations(
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
                     return_ty,
                     codable_params: op.codable_params.clone(),
+                    key_params: op.key_params.clone(),
                     reply_policy: op.reply_policy,
                     boundary_conflict: conflict,
                 }
@@ -877,6 +912,10 @@ pub fn check_context_declarations(
 
     check_event_annotations(table, &mut errors);
 
+    // #4105: every handler body is checked, so each `AnalyticsSql.select[T]` can be written from the
+    // record its instance writes.
+    checker::analytics::resolve_selects(&mut typed.callees, &typed.types, tys, &mut errors);
+
     // State-migrations S3 (#2248): `replaces` / `removed agent` on their own
     // terms; what needs the schema lock is the reconcile's.
     check_class_declarations(table, &mut errors);
@@ -893,6 +932,8 @@ fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
     let mut agents: Vec<&AgentDecl> = table.agents.values().map(|a| &**a).collect();
     agents.sort_by_key(|a| a.span.start);
     for a in agents {
+        // #3793: the source-only rules for a `store` field's `replaces`.
+        errors.extend(crate::field_renames::check_store(a));
         let Some(old) = &a.replaces else { continue };
         if table.agents.contains_key(&old.name) {
             errors.push(
@@ -1528,7 +1569,7 @@ pub(crate) fn check_service_protocols(
                             service.name.name
                         ),
                     )
-                    .with_note("a `from websocket` service holds exactly one `on open`, and optionally one `on message` (inbound) and one `on close`"),
+                    .with_note("a `from websocket` service holds exactly one `on open`, and one `on close` (the departure), and optionally one `on message` (inbound)"),
                 );
             } else if opens.len() > 1 {
                 errors.push(CompileError::new(
@@ -1605,16 +1646,7 @@ pub(crate) fn check_service_protocols(
                     ),
                 ));
             }
-            if closes.len() > 1 {
-                errors.push(CompileError::new(
-                    "bynk.service.websocket_open_arity",
-                    closes[1].span,
-                    format!(
-                        "the `from websocket` service `{}` has more than one `on close` handler — it needs at most one",
-                        service.name.name
-                    ),
-                ));
-            }
+            check_ws_close_arity(service, opens.len(), &closes, errors);
             for message in &messages {
                 let frame_params = message
                     .params
@@ -1676,7 +1708,7 @@ pub(crate) fn check_service_protocols(
                     }
                 }
                 if let [close] = closes.as_slice() {
-                    for (i, p) in close.params.iter().enumerate() {
+                    for (i, p) in close_route_params(close, visible_types).iter().enumerate() {
                         if op
                             .get(i)
                             .is_none_or(|o| resolve_ty(&p.type_ref) != resolve_ty(&o.type_ref))
@@ -2009,7 +2041,12 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         ),
         TypeRef::Option(t, _) => format!("Option[{}]", ts_type_ref_display(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", ts_type_ref_display(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
+        TypeRef::HttpResult(t, None, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
+        TypeRef::HttpResult(t, Some(e), _) => format!(
+            "HttpResult[{}, {}]",
+            ts_type_ref_display(t),
+            ts_type_ref_display(e)
+        ),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
@@ -2135,7 +2172,14 @@ fn check_by_clause_contracts(
         let local = table.actors.get(&actor_ref.name);
         // A refinement actor (`actor A = B where …`) is never a peer: every `A`
         // is a `B`, so the arm is dead (Q3/Q4).
-        if by.is_sum() && local.is_some_and(|a| a.refinement.is_some()) {
+        if by.is_sum()
+            && local.is_some_and(|a| {
+                a.refinement.is_some()
+                    && !is_caller_refinement(a, table)
+                    && !is_sender_refinement(a, table)
+                    && !is_producer_refinement(a, table)
+            })
+        {
             errors.push(
                 CompileError::new(
                     "bynk.actor.refinement_in_sum",
@@ -2152,27 +2196,10 @@ fn check_by_clause_contracts(
             );
             continue;
         }
-        let contract = if let Some(a) = local {
+        if local.is_some() {
             refs.record(actor_ref.span, SymbolKind::Actor, &actor_ref.name);
-            // v0.53: a refinement actor's contract is its base's scheme
-            // (refinement elimination — an `Admin` is-a `User`); the invariant
-            // rides the seam, not the scheme. A malformed refinement already
-            // errored at its decl (pass 1).
-            let scheme_actor = match &a.refinement {
-                Some(r) => table.actors.get(&r.base.name),
-                None => Some(a),
-            };
-            scheme_actor
-                .and_then(|sa| sa.auth.as_ref())
-                .and_then(|au| Scheme::from_name(&au.name))
-                .filter(|s| s.admitted())
-                .map(|scheme| actors::Contract {
-                    scheme,
-                    identity: actors::Identity::Unit,
-                })
-        } else {
-            actors::prelude_actor(&actor_ref.name)
-        };
+        }
+        let contract = by_actor_contract(&actor_ref.name, local, table);
         let Some(contract) = contract else {
             if local.is_none() {
                 errors.push(
@@ -2189,6 +2216,17 @@ fn check_by_clause_contracts(
             }
             continue;
         };
+        errors.extend(actor_narrowing_refusal(
+            protocol,
+            by,
+            local.map(|a| {
+                (
+                    is_producer_refinement(a, table),
+                    is_sender_refinement(a, table),
+                )
+            }),
+            by_mixes_signed(by, table, &actor_ref.name),
+        ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
                 CompileError::new(
@@ -2201,10 +2239,10 @@ fn check_by_clause_contracts(
                     ),
                 )
                 .with_note(match protocol {
-                    // I3 (#1971): a foreign caller calls a service, and only
-                    // by `call`.
+                    // I3 (#1971): a foreign caller calls a service, and (#3899) a foreign
+                    // producer sends to a queue consumer.
                     _ if contract.scheme == Scheme::Foreign => {
-                        "a `Foreign` actor is admitted only on an `on call` handler"
+                        "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"
@@ -2213,13 +2251,34 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
+        // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
+        if matches!(protocol, ServiceProtocol::WebSocket { .. })
+            && by.is_sum()
+            && matches!(contract.scheme, Scheme::Oidc | Scheme::SignedCookie)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_not_admissible",
+                    actor_ref.span,
+                    format!(
+                        "a `{}` actor is not admissible as a member of a WebSocket actor sum",
+                        contract.scheme.as_str(),
+                    ),
+                )
+                .with_note(
+                    "a `from websocket` `on open` takes a `SignedCookie` or `Oidc` actor on its own (`by user: User`); an actor sum there takes `None` and `Bearer` members",
+                ),
+            );
+        }
         // v0.54: the `Caller` prelude actor yields a `CallerId` (the calling
         // context's name), a cross-context `on call` concept — it is admissible
         // only on the `Call` protocol, even though its `Internal` scheme is
         // otherwise valid on cron/queue (those take `Scheduler`/`Producer`).
-        let is_caller = !table.actors.contains_key(&actor_ref.name)
+        let is_caller = (!table.actors.contains_key(&actor_ref.name)
             && actors::prelude_actor(&actor_ref.name).map(|c| c.identity)
-                == Some(actors::Identity::CallerId);
+                == Some(actors::Identity::CallerId))
+            || local.is_some_and(|a| is_caller_refinement(a, table));
         if is_caller && !matches!(protocol, ServiceProtocol::Call) {
             errors.push(
                 CompileError::new(
@@ -2233,44 +2292,6 @@ fn check_by_clause_contracts(
                 .with_note(
                     "`Caller` carries the calling context's identity — it is only \
                      admissible on `on call`; cron takes `Scheduler`, queue takes `Producer`",
-                ),
-            );
-        }
-        // v0.151: `Oidc` is single-actor only this slice — a multi-actor sum owns
-        // the whole boundary and reads the body once, a shape the OIDC seam (JWKS
-        // fetch + async key import) does not yet fit. Reject it as a peer.
-        if by.is_sum() && contract.scheme == actors::Scheme::Oidc {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.oidc_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `Oidc` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "OIDC is single-actor this slice — give the route a single \
-                     `by user: <OidcActor>` clause",
-                ),
-            );
-        }
-        // #3386: `SignedCookie` is single-actor only in its first slice, as
-        // `Oidc` was: the per-arm CSRF rule is the part that gets harder in a
-        // sum, so a route guarded by one takes a single `by u: <Actor>`.
-        if by.is_sum() && contract.scheme == actors::Scheme::SignedCookie {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.signed_cookie_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `SignedCookie` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "a signed cookie is single-actor in this slice — give the route a single \
-                     `by user: <SignedCookieActor>` clause",
                 ),
             );
         }
@@ -2419,7 +2440,9 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
 }
 
 /// The keys a `SignedCookie` actor's config admits (#3386).
-const SIGNED_COOKIE_KEYS: &[&str] = &["cookie", "secret", "previous", "ttl", "sameSite"];
+const SIGNED_COOKIE_KEYS: &[&str] = &[
+    "cookie", "secret", "previous", "ttl", "sameSite", "sessions",
+];
 
 /// A `ttl` above this many seconds draws `signed_cookie_ttl_long` (30 days).
 const SIGNED_COOKIE_LONG_TTL_SECS: i64 = 30 * 24 * 60 * 60;
@@ -2450,7 +2473,7 @@ fn check_signed_cookie_actor(
                 format!("a `SignedCookie` actor's `{key}` must be {want}"),
             )
             .with_note(
-                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)`; the optional keys are `cookie`, `previous` and `sameSite`",
+                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)`; the optional keys are `cookie`, `previous`, `sameSite` and `sessions`",
             ),
         );
     };
@@ -2462,7 +2485,9 @@ fn check_signed_cookie_actor(
                     arg.key.span,
                     format!("unknown `SignedCookie` config key `{}`", arg.key.name),
                 )
-                .with_note("the keys are `secret`, `ttl`, `cookie`, `previous` and `sameSite`"),
+                .with_note(
+                    "the keys are `secret`, `ttl`, `cookie`, `previous`, `sameSite` and `sessions`",
+                ),
             );
         }
     }
@@ -2621,6 +2646,11 @@ fn check_signed_cookie_actor(
             Some(_) => {}
         }
     }
+    if let Some(arg) = actor.scheme_arg("sessions")
+        && !matches!(arg.value.as_ident(), Some("true" | "false"))
+    {
+        bad_arg(arg.span, "sessions", "`true` or `false`", errors);
+    }
     if let Some(arg) = actor.scheme_arg("sameSite")
         && !matches!(
             arg.value.as_ident(),
@@ -2718,10 +2748,196 @@ fn check_signed_cookie_route(
     }
 }
 
+/// #3890: whether an actor declaration refines the prelude `Caller` (no local
+/// actor named `Caller` shadows it).
+pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
+}
+
+/// The contract a `by` clause's actor resolves to: a local declaration (a refinement's contract is
+/// its base's scheme, refinement elimination, v0.53; the invariant rides the seam, not the scheme;
+/// a malformed refinement already errored at its decl) or a prelude actor. A refinement over a
+/// prelude actor (`Caller` #3890, `Sender` #3888, `Producer` #3899) has that actor's contract.
+fn by_actor_contract(
+    name: &str,
+    local: Option<&bynk_syntax::ast::ActorDecl>,
+    table: &UnitTable,
+) -> Option<crate::actors::Contract> {
+    use crate::actors::{self, Scheme};
+    let Some(a) = local else {
+        return actors::prelude_actor(name);
+    };
+    if is_caller_refinement(a, table) {
+        return actors::prelude_actor("Caller");
+    }
+    if is_sender_refinement(a, table) {
+        return actors::prelude_actor("Sender");
+    }
+    if is_producer_refinement(a, table) {
+        return actors::prelude_actor("Producer");
+    }
+    let scheme_actor = match &a.refinement {
+        Some(r) => table.actors.get(&r.base.name),
+        None => Some(a),
+    };
+    scheme_actor
+        .and_then(|sa| sa.auth.as_ref())
+        .and_then(|au| Scheme::from_name(&au.name))
+        .filter(|s| s.admitted())
+        .map(|scheme| actors::Contract {
+            scheme,
+            identity: actors::Identity::Unit,
+        })
+}
+
+/// #3888: whether an actor declaration refines the prelude `Sender` (no local
+/// actor named `Sender` shadows it).
+pub(crate) fn is_sender_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Sender" && !table.actors.contains_key("Sender"))
+}
+
+/// #3899: whether an actor declaration refines the prelude `Producer` (no local
+/// actor named `Producer` shadows it).
+pub(crate) fn is_producer_refinement(
+    actor: &bynk_syntax::ast::ActorDecl,
+    table: &UnitTable,
+) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Producer" && !table.actors.contains_key("Producer"))
+}
+
+/// #3899: a queue consumer may name a `Producer` refinement or a `Foreign` actor, and delivery
+/// enforces either: the consumer admits only messages signed by one of them. A sum that also names
+/// an unsigned actor, or a lone signed actor with a binder, is not enforced, so it is refused rather
+/// than accepted unenforced.
+fn actor_narrowing_refusal(
+    protocol: &ServiceProtocol,
+    by: &bynk_syntax::ast::ByClause,
+    refinement: Option<(bool, bool)>,
+    mixes_signed: bool,
+) -> Option<CompileError> {
+    let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
+    // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
+    // handler can name one: elsewhere its `Dmarc(…)` is never checked.
+    if sender_refinement && !matches!(protocol, ServiceProtocol::Email { .. }) {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Sender` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Sender` refinements narrow which mail an email handler acts on — name one \
+                 only on `on message` of a `from email` service",
+            ),
+        );
+    }
+    let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
+    // A refinement over `Producer` narrows a queue's senders, and only a queue
+    // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
+    // so it is refused rather than read as narrowed.
+    if producer_refinement && !on_queue {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Producer` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Producer` refinements narrow who may send to a queue consumer — name one \
+                 only on `on message` of a `from queue` service",
+            ),
+        );
+    }
+    // #3899: a signed actor (a `Foreign` actor, or a `Producer` refinement) is enforced: the
+    // consumer admits only messages signed by one. Beside an unsigned actor, or with a binder on a
+    // lone one (nothing binds an identity for it), it is not.
+    if !on_queue || !mixes_signed {
+        return None;
+    }
+    Some(
+        CompileError::new(
+            "bynk.actor.queue_actor_not_enforced",
+            by.span,
+            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement or a `Foreign` actor beside an unsigned one, or with a binder, is not enforced on `on message`",
+        )
+        .with_note(
+            "a signed message carries no identity beyond its actor, and an unsigned one carries \
+             none to tell it from a signed one, so accepting this `by` would admit unsigned \
+             messages while reading as if it did not — write `by Producer`, or name only \
+             `Foreign` actors and `Producer` refinements, a lone one with no binder",
+        ),
+    )
+}
+
+/// #3899: whether `actor` is the first signed member (a `Foreign` actor or a `Producer` refinement)
+/// of a `by` clause that names it in a form a queue consumer cannot enforce: a sum that also names an
+/// unsigned actor (its messages carry no signature to tell them from the signed ones), or a single
+/// signed actor with a binder (it identifies no one beyond itself, so nothing binds a value for the
+/// body). A sum of only signed actors resolves by the message's signer, and a lone signed actor with
+/// no binder needs nothing. Said once, on the first signed member, not on each.
+fn by_mixes_signed(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
+    use crate::actors::Scheme;
+    let signed = |name: &str| {
+        table
+            .actors
+            .get(name)
+            .is_some_and(|a| is_producer_refinement(a, table))
+            || by_actor_contract(name, table.actors.get(name), table)
+                .is_some_and(|c| c.scheme == Scheme::Foreign)
+    };
+    let refused = if by.is_sum() {
+        !by.actors.iter().all(|a| signed(&a.name))
+    } else {
+        by.binder.is_some()
+    };
+    refused
+        && by
+            .actors
+            .iter()
+            .find(|a| signed(&a.name))
+            .is_some_and(|a| a.name == actor)
+}
+
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
 /// default actor; the internal protocols inherit one.
 fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
     if crate::actors::default_actor(protocol).is_some() {
+        return;
+    }
+    if matches!(protocol, ServiceProtocol::Call) {
+        // Only a real `on call` handler: a stray kind in a call service has its own error.
+        if handler.kind == HandlerKind::Call {
+            errors.push(missing_by_on_call(handler));
+        }
+        return;
+    }
+    // #3899: a queue consumer states who may send to it.
+    if matches!(protocol, ServiceProtocol::Queue { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_queue(handler));
+        }
+        return;
+    }
+    // #3888: inbound mail states whether it must be authenticated.
+    if matches!(protocol, ServiceProtocol::Email { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_email(handler));
+        }
         return;
     }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
@@ -2739,6 +2955,78 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     errors.push(
         CompileError::new("bynk.actor.missing_by_on_http", handler.span, msg).with_note(note),
     );
+}
+
+/// Where a handler's `given` clause sits: after its return type, and after its
+/// own `by` clause when it writes one (`-> T by A given C`). A `by` inherited
+/// from a service header lies before the handler and does not move the anchor.
+fn given_anchor_after_by(handler: &Handler) -> Span {
+    let ret = handler.return_type.span();
+    match &handler.by_clause {
+        Some(by) if by.span.start >= ret.end => by.span,
+        _ => ret,
+    }
+}
+
+/// #3891: an `on call` handler states its actor, as an HTTP route does. The
+/// fix-it inserts `by Caller` (the former silent default: any consuming
+/// context) after the return type.
+fn missing_by_on_call(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_call",
+        handler.span,
+        "an `on call` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Caller` admits any context that consumes this one; a refinement or a `Foreign` actor narrows it. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_call`",
+    )
+    .with_suggestion(
+        "add `by Caller`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3899: an `on message` handler states who may send to it. The fix-it inserts `by Producer`
+/// (the former silent default: anyone on the account) after the return type.
+fn missing_by_on_queue(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_queue",
+        handler.span,
+        "an `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Producer` admits any producer on the Cloudflare account, which is what a queue consumer did before the clause was required. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_queue`",
+    )
+    .with_suggestion(
+        "add `by Producer`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Producer".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3888: an email handler states what mail it acts on. The fix-it inserts `by Sender` (the former
+/// silent default: any mail, whatever its DMARC verdict) after the return type.
+fn missing_by_on_email(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_email",
+        handler.span,
+        "an email `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Sender` admits any mail, whatever its DMARC verdict, which is what an email handler did before the clause \
+         was required. Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_email`",
+    )
+    .with_suggestion(
+        "add `by Sender`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Sender".to_string())],
+        Applicability::MachineApplicable,
+    )
 }
 
 /// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
@@ -2790,48 +3078,105 @@ fn check_foreign_secret_dupes(table: &UnitTable, errors: &mut Vec<CompileError>)
     }
 }
 
-fn check_actor_contracts(
+/// A refinement actor's declaration (`actor Admin = <Base> where <pred>`): over
+/// the prelude `Caller` (#3890) the predicate is `IsContext(…)`; over a declared
+/// `Bearer` actor (v0.53) it is the closed claim-predicate set.
+fn check_refinement_actor(
+    actor: &bynk_syntax::ast::ActorDecl,
     table: &UnitTable,
-    resolved: &ResolvedCommons,
     refs: &mut RefSink,
     errors: &mut Vec<CompileError>,
 ) {
     use crate::actors::{self, Scheme};
-
-    // Pass 1 — actor declaration well-formedness.
-    for actor in table.actors.values() {
-        refs.set_owner(&actor.name.name);
-        // v0.53: a refinement actor (`actor Admin = User where <pred>`) carries
-        // an authorisation invariant. Its base MUST be a declared `Bearer` actor
-        // (only Bearer carries claims to authorise against), and its `where`
-        // predicate MUST be in the closed claim-predicate set.
-        if let Some(r) = &actor.refinement {
-            let base = table.actors.get(&r.base.name);
-            let base_is_bearer = base.is_some_and(|b| {
-                b.refinement.is_none()
-                    && b.auth.as_ref().and_then(|a| Scheme::from_name(&a.name))
-                        == Some(Scheme::Bearer)
-            });
-            if base_is_bearer {
-                refs.record(r.base.span, SymbolKind::Actor, &r.base.name);
-            } else {
-                errors.push(
+    // v0.53: a refinement actor (`actor Admin = User where <pred>`) carries
+    // an authorisation invariant. Its base MUST be a declared `Bearer` actor
+    // (only Bearer carries claims to authorise against), and its `where`
+    // predicate MUST be in the closed claim-predicate set.
+    if let Some(r) = &actor.refinement
+        && is_sender_refinement(actor, table)
+    {
+        // #3888: a refinement over `Sender` narrows which mail is admitted, by
+        // the closed `Dmarc(…)` vocabulary.
+        match actors::parse_sender_predicate(&r.predicate) {
+            Ok(pred) if pred.admitted().is_empty() => errors.push(
+                CompileError::new(
+                    "bynk.actor.sender_admits_nothing",
+                    r.predicate.span,
+                    format!(
+                        "the refinement `{}` admits no DMARC verdict, so every message would be refused",
+                        actor.name.name
+                    ),
+                )
+                .with_note(
+                    "the predicate is false for `DmarcPass`, `DmarcFail` and `DmarcNone` alike — \
+                     check the `&&` and `!` it combines",
+                ),
+            ),
+            Ok(_) => {}
+            Err(span) => errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_predicate_unsupported",
+                    span,
+                    "a refinement over `Sender` must be `Dmarc(<DmarcVerdict>, …)`, composed with `&&`, `||`, `!`",
+                )
+                .with_note(
+                    "the DMARC verdict is the only thing a `Sender` refinement tests: name \
+                     `DmarcPass`, `DmarcFail` or `DmarcNone`",
+                ),
+            ),
+        }
+        return;
+    }
+    if let Some(r) = &actor.refinement
+        && (is_caller_refinement(actor, table) || is_producer_refinement(actor, table))
+    {
+        // #3890: a refinement over the prelude `Caller` narrows which
+        // contexts may call, by the closed `IsContext(…)` vocabulary; #3899
+        // gives a refinement over `Producer` the same vocabulary.
+        if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
+            errors.push(
                     CompileError::new(
-                        "bynk.actor.refinement_base_unsupported",
-                        r.base.span,
+                        "bynk.actor.refinement_predicate_unsupported",
+                        span,
                         format!(
-                            "the base actor `{}` of refinement `{}` must be a declared `Bearer` actor",
-                            r.base.name, actor.name.name,
+                            "a refinement over `{}` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                            r.base.name
                         ),
                     )
                     .with_note(
-                        "authorisation invariants test JWT claims, which only a `Bearer` actor \
-                         carries — refine a `Bearer` actor, not `None`/`Internal`/`Signature`",
+                        "the context is the only thing a `Caller` or `Producer` carries; claims such as \
+                         `hasClaim` belong to a `Bearer` actor",
                     ),
                 );
-            }
-            if let Err(span) = actors::parse_claim_predicate(&r.predicate) {
-                errors.push(
+        }
+        return;
+    }
+    if let Some(r) = &actor.refinement {
+        let base = table.actors.get(&r.base.name);
+        let base_is_bearer = base.is_some_and(|b| {
+            b.refinement.is_none()
+                && b.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) == Some(Scheme::Bearer)
+        });
+        if base_is_bearer {
+            refs.record(r.base.span, SymbolKind::Actor, &r.base.name);
+        } else {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_base_unsupported",
+                    r.base.span,
+                    format!(
+                        "the base actor `{}` of refinement `{}` must be a declared `Bearer` actor",
+                        r.base.name, actor.name.name,
+                    ),
+                )
+                .with_note(
+                    "authorisation invariants test JWT claims, which only a `Bearer` actor \
+                         carries — refine a `Bearer` actor, not `None`/`Internal`/`Signature`",
+                ),
+            );
+        }
+        if let Err(span) = actors::parse_claim_predicate(&r.predicate) {
+            errors.push(
                     CompileError::new(
                         "bynk.actor.refinement_predicate_unsupported",
                         span,
@@ -2839,10 +3184,27 @@ fn check_actor_contracts(
                     )
                     .with_note(
                         "claims are untyped JSON, so the predicate vocabulary is a closed set this \
-                         slice; a general typed-claims surface is a later slice",
+                         slice; a general typed-claims surface is a later slice (`IsContext(…)` \
+                         belongs to a refinement over `Caller`)",
                     ),
                 );
-            }
+        }
+    }
+}
+
+fn check_actor_contracts(
+    table: &UnitTable,
+    resolved: &ResolvedCommons,
+    refs: &mut RefSink,
+    errors: &mut Vec<CompileError>,
+) {
+    use crate::actors::Scheme;
+
+    // Pass 1 — actor declaration well-formedness.
+    for actor in table.actors.values() {
+        refs.set_owner(&actor.name.name);
+        if actor.refinement.is_some() {
+            check_refinement_actor(actor, table, refs, errors);
             continue;
         }
         let Some(auth) = &actor.auth else {
@@ -3247,6 +3609,46 @@ fn check_actor_contracts(
     }
 }
 
+/// #3909 (decision B): a route no request can reach is an error. Within a context,
+/// every path the route matches is matched first by other routes of its method
+/// (see [`crate::route_order`]); overlap alone is not an error.
+fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut routes: Vec<(HttpMethod, &str, Span)> = Vec::new();
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            if let HandlerKind::Http { method, path } = &handler.kind {
+                routes.push((*method, path.as_str(), handler.span));
+            }
+        }
+    }
+    let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
+    for (r, covering) in crate::route_order::shadowed(&keys) {
+        let (method, path, span) = routes[r];
+        let mut err = CompileError::new(
+            "bynk.http.unreachable_route",
+            span,
+            format!(
+                "route `{} {path}` can never be reached: every path it matches is answered first by another route",
+                method.as_str()
+            ),
+        )
+        .with_note(
+            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+        );
+        for c in covering {
+            err = err.with_label(
+                routes[c].2,
+                format!(
+                    "`{} {}` answers it first",
+                    routes[c].0.as_str(),
+                    routes[c].1
+                ),
+            );
+        }
+        errors.push(err);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_service_decls(
     typed: &mut checker::TypedCommons,
@@ -3272,7 +3674,7 @@ fn check_service_decls(
     check_rejected_handlers(table, errors);
 
     // #3343: `@name("…")` on the fields of a request record.
-    validate_field_names(table, &typed.types, &typed.consts, errors);
+    validate_field_names(table, &typed.types, errors);
 
     let cf_is_std = cf_type_is_std(cross_context, table);
     // v0.9: validate HTTP handler shape and check for duplicate routes
@@ -3304,24 +3706,29 @@ fn check_service_decls(
         }
     }
 
+    check_unreachable_routes(table, errors);
+
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
     // wherever it is written, not only on well-formed HTTP routes.
     for service in table.services.values() {
         let service_cap = service.limits.as_ref().and_then(|p| p.max_body());
         for handler in &service.handlers {
-            validate_handler_annotations(handler, service_cap, errors);
+            let kinds = route_actor_kinds(handler, service, table);
+            validate_handler_annotations(handler, service_cap, kinds, errors);
         }
     }
+    crate::http_rate_limit::validate_rate_limits(table, errors);
+    note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
-        for handler in &agent.handlers {
-            validate_handler_annotations(handler, None, errors);
-        }
+        crate::agent_busy::validate_agent_annotations(agent, errors);
+        let handlers = agent.handlers.iter();
+        handlers.for_each(|h| validate_handler_annotations(h, None, (false, false), errors));
     }
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        validate_service_cors(service, errors);
+        validate_service_cors(service, table, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -3342,6 +3749,15 @@ fn check_service_decls(
         }
     }
 
+    // #3877: validate each service's `delivery { }` policy, and warn of a queue
+    // consumer with no dead-letter queue.
+    for service in table.services.values() {
+        crate::queue_delivery::validate_delivery(service, errors);
+    }
+
+    validate_error_policies(table, errors);
+    validate_consumed_headers(table, &typed.types, errors);
+
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
     for service in table.services.values() {
@@ -3360,7 +3776,7 @@ fn check_service_decls(
             let TypeRef::Effect(inner, _) = &handler.return_type else {
                 continue;
             };
-            let TypeRef::HttpResult(body, _) = inner.as_ref() else {
+            let TypeRef::HttpResult(body, _, _) = inner.as_ref() else {
                 continue;
             };
             if let Some(payload) = null_payload_option(body, &resolved.types, &mut HashSet::new()) {
@@ -3391,21 +3807,8 @@ fn check_service_decls(
             let HandlerKind::Cron { expr } = &handler.kind else {
                 continue;
             };
-            validate_cron_handler(handler, expr, errors);
-            if let Some(prev) = schedule_first_span.get(expr).copied() {
-                errors.push(
-                    CompileError::new(
-                        "bynk.cron.duplicate_schedule",
-                        handler.span,
-                        format!(
-                            "duplicate cron schedule: another handler already declares `{expr}`",
-                        ),
-                    )
-                    .with_label(prev, "previously declared here"),
-                );
-            } else {
-                schedule_first_span.insert(expr.clone(), handler.span);
-            }
+            validate_cron_handler(handler, expr, table, errors);
+            check_duplicate_schedule(handler, expr, &mut schedule_first_span, errors);
         }
     }
 
@@ -3422,7 +3825,7 @@ fn check_service_decls(
             if !matches!(handler.kind, HandlerKind::Message) {
                 continue;
             }
-            validate_queue_handler(handler, name, errors);
+            validate_queue_handler(handler, name, table, errors);
             if let Some(prev) = consumer_first_span.get(name).copied() {
                 errors.push(
                     CompileError::new(
@@ -3508,33 +3911,27 @@ fn check_service_decls(
             };
             // The firing `connection` of `on message`/`on close` is borrowed, not
             // owned — no disposal obligation (contrast `on open`, owned).
-            let borrowed_held: std::collections::HashSet<String> = if is_ws_lifecycle
-                && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close)
-            {
-                std::iter::once("connection".to_string()).collect()
-            } else {
-                std::collections::HashSet::new()
-            };
+            let borrowed_held = borrowed_connection(handler, is_ws_lifecycle);
             checker::check_handler_body(
                 resolved,
                 checker::HandlerBodyCheck {
                     capabilities: handler_caps,
                     declared_capabilities: capability_info_map.clone(),
-                    given_anchor: Some(handler.return_type.span()),
+                    given_anchor: Some(given_anchor_after_by(handler)),
                     report_unused: true,
                     actor_binding,
                     borrowed_held,
-                    oidc_binder: crate::actors::oidc_seam_for(handler, &table.actors)
-                        .and_then(|seam| seam.binder),
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
+                    http_non_get: is_non_get_http(handler),
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,
                         &params_for_check,
                         &handler.given,
                     )
+                    .with_claims_of(handler, &table.actors)
                 },
                 checker::CheckSinks {
                     tys,
@@ -3676,6 +4073,16 @@ fn actor_identity_ty_guarded<'a>(
             if let Some((key, _)) = table.actors.get_key_value(&r.base.name) {
                 return actor_identity_ty_guarded(key.as_str(), table, resolved, seen, tys);
             }
+            // #3890: a refinement over the prelude `Caller` yields a `CallerId`.
+            // #3899: and one over `Producer` the context that signed the message, as a sum member
+            // carries it.
+            if is_caller_refinement(local, table) || is_producer_refinement(local, table) {
+                return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
+            }
+            // #3888: a refinement over the prelude `Sender` yields its identity.
+            if is_sender_refinement(local, table) {
+                return actor_identity_ty_guarded("Sender", table, resolved, seen, tys);
+            }
             return tys.intern(checker::Ty::Unit);
         }
         return match &local.identity {
@@ -3735,6 +4142,12 @@ const ANNOTATIONS: &[AnnotationSpec] = &[
     },
     AnnotationSpec {
         name: "indexed",
+        kinds: &["Map"],
+        functional: true,
+    },
+    // #4038: a value may appear on at most one entry; implies `@indexed(by:)` on the same field.
+    AnnotationSpec {
+        name: "unique",
         kinds: &["Map"],
         functional: true,
     },
@@ -3810,7 +4223,7 @@ fn validate_store_annotations(
         // v0.93 (ADR 0118): `@indexed(by: k, …)` — each `by:` names a
         // **value-keyable field of the map's value type** to maintain a secondary
         // index on. Validate the keys here, now the kind/value type are known.
-        if name == "indexed" {
+        if name == "indexed" || name == "unique" {
             validate_indexed_keys(f, types, ann, errors);
         }
     }
@@ -3826,6 +4239,7 @@ fn validate_indexed_keys(
     ann: &Annotation,
     errors: &mut Vec<CompileError>,
 ) {
+    let name = ann.name.name.as_str();
     // The map's value type is the second kind argument (`Map[K, V]`).
     let value_fields: Option<&[RecordField]> = f
         .kind
@@ -3839,13 +4253,33 @@ fn validate_indexed_keys(
             TypeBody::Record(r) => Some(r.fields.as_slice()),
             _ => None,
         });
+    // #4038: `@unique` is a constraint, so a form that would silently enforce nothing, or something other
+    // than what it reads as, is refused: a bare one has no field, and a second `by:` would make each
+    // field unique alone, not the pair.
+    if name == "unique" && ann.args.is_empty() {
+        errors.push(CompileError::new(
+            "bynk.index.bad_argument",
+            ann.span,
+            "`@unique` needs a field: `@unique(by: <field>)`",
+        ));
+    }
+    if name == "unique" && ann.args.len() > 1 {
+        errors.push(
+            CompileError::new(
+                "bynk.index.bad_argument",
+                ann.args[1].span,
+                "`@unique` takes one `by:` field",
+            )
+            .with_note("each `by:` would make its field unique on its own, not the pair; a constraint over several fields is not supported"),
+        );
+    }
     for arg in &ann.args {
-        // Only `by:` labels are admitted on `@indexed`.
+        // Only `by:` labels are admitted on `@indexed` and `@unique`.
         let Some(label) = &arg.label else {
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                "`@indexed` arguments are `by: <field>` labels naming a field to index on",
+                format!("`@{name}` arguments are `by: <field>` labels naming a field to index on"),
             ));
             continue;
         };
@@ -3853,7 +4287,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                format!("`@indexed` takes `by:` arguments, not `{}:`", label.name),
+                format!("`@{name}` takes `by:` arguments, not `{}:`", label.name),
             ));
             continue;
         }
@@ -3861,7 +4295,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.value.span,
-                "`@indexed(by: …)` names a field of the map's value type",
+                format!("`@{name}(by: …)` names a field of the map's value type"),
             ));
             continue;
         };
@@ -3872,21 +4306,26 @@ fn validate_indexed_keys(
                     "bynk.index.unknown_key",
                     arg.value.span,
                     format!(
-                        "`@indexed(by: {0})` — the map's value type has no field `{0}`",
+                        "`@{name}(by: {0})` — the map's value type has no field `{0}`",
                         key.name
                     ),
                 ));
             }
-            Some(field) if !type_ref_is_keyable(&field.type_ref, types) => {
+            Some(field)
+                if !type_ref_is_scalar_store_key(&field.type_ref, types)
+                    && let Some(blocker) =
+                        crate::checker::keying::typeref_not_key(&field.type_ref, &[], types) =>
+            {
                 errors.push(
                     CompileError::new(
                         "bynk.index.unkeyable_key",
                         arg.value.span,
                         format!(
-                            "`@indexed(by: {0})` — field `{0}` is not value-keyable; an index key must be `Int`, `String`, or a refined/opaque type over them",
-                            key.name
+                            "`@{name}(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
+                            key.name, blocker.part
                         ),
-                    ),
+                    )
+                    .with_note(crate::checker::keying::key_note(&blocker)),
                 );
             }
             Some(_) => {}
@@ -3894,13 +4333,12 @@ fn validate_indexed_keys(
     }
 }
 
-/// #1680 (runtime-semantics track S13): a store `Set`'s element and a store
-/// `Map`'s or `Cache`'s key must be value-keyable, the rule value `Map` keys,
-/// `distinct`/`groupBy` keys and `@indexed` fields already follow. A store
-/// collection is a plain object keyed by its key's string form
-/// (`rec[item] = true`), so a record key failed `tsc` (TS2538), and without
-/// `tsc` every record would have keyed as `"[object Object]"`. A name that
-/// doesn't resolve is reported by the resolver, so it is skipped here.
+/// A store `Set`'s element and a store `Map`'s or `Cache`'s key must be `Key`, the rule value `Map`
+/// keys already follow (#4037). A `String`, an `Int` or a refined or opaque type over one keeps
+/// the stored form it always had (`String(k)`); any other `Key` type (a record, a sum, an
+/// `Option`, a `Decimal`, `Bytes`, `Bool`, an `Instant`) is stored under its canonical encoding
+/// (`__bynkKeyEncode`). A name that doesn't resolve is reported by the resolver, so it is skipped
+/// here.
 fn check_store_keyable(
     t: &TypeRef,
     what: &str,
@@ -3912,25 +4350,25 @@ fn check_store_keyable(
     {
         return;
     }
-    if !type_ref_is_keyable(t, types) {
+    if type_ref_is_scalar_store_key(t, types) {
+        return;
+    }
+    if let Some(blocker) = crate::checker::keying::typeref_not_key(t, &[], types) {
         errors.push(
             CompileError::new(
                 "bynk.store.unkeyable_key",
                 t.span(),
-                format!(
-                    "{what} must be value-keyable — `String`, `Int`, or a refined/opaque type over them"
-                ),
+                format!("{what} must be `Key`, and `{}` is not", blocker.part),
             )
-            .with_note(
-                "only `String` and `Int` keys (or a refined or opaque type over them) are supported, matching value `Map` keys and `@indexed` fields; key a record by one of its id fields, and an enum by its name as a `String`",
-            ),
+            .with_note(crate::checker::keying::key_note(&blocker)),
         );
     }
 }
 
-/// Whether a `TypeRef` is value-keyable (the Map-key / index-key rule, ADR 0110
-/// D5): `Int`/`String`, including a refined/opaque named type over them.
-fn type_ref_is_keyable(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+/// Whether a `TypeRef` is a *scalar* store key (ADR 0110 D5): `Int`/`String`, including a
+/// refined/opaque named type over them. Such a key persists as `String(k)`, as it always has;
+/// every other `Key` type persists under its canonical encoding (#4037).
+pub fn type_ref_is_scalar_store_key(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match t {
         TypeRef::Base(BaseType::Int | BaseType::String, _) => true,
         TypeRef::Named(id) => matches!(
@@ -3963,6 +4401,8 @@ fn validate_index_hygiene(
     let mut declared: HashMap<String, Vec<(String, Span)>> = HashMap::new();
     // map → the value type's record fields (for the keyability check)
     let mut value_fields: HashMap<String, Vec<RecordField>> = HashMap::new();
+    // #4038: the (map, field) pairs under `@unique(by:)`, which maintains its index itself.
+    let mut unique: HashSet<(String, String)> = HashSet::new();
     for f in &agent.store_fields {
         if f.kind.head.name != "Map" || f.kind.args.len() != 2 {
             continue;
@@ -3979,6 +4419,16 @@ fn validate_index_hygiene(
             .map(|d| &d.body)
         {
             value_fields.insert(f.name.name.clone(), r.fields.clone());
+        }
+        for arg in f
+            .annotations
+            .iter()
+            .filter(|a| a.name.name == "unique")
+            .flat_map(|a| &a.args)
+        {
+            if let ExprKind::Ident(k) = &arg.value.kind {
+                unique.insert((f.name.name.clone(), k.name.clone()));
+            }
         }
         for an in f.annotations.iter().filter(|a| a.name.name == "indexed") {
             for arg in &an.args {
@@ -4006,13 +4456,15 @@ fn validate_index_hygiene(
             used.insert((map.to_string(), field.to_string()));
             let is_declared = declared
                 .get(map)
-                .is_some_and(|v| v.iter().any(|(f, _)| f == field));
+                .is_some_and(|v| v.iter().any(|(f, _)| f == field))
+                || unique.contains(&(map.to_string(), field.to_string()));
             if is_declared {
                 return;
             }
             let keyable = value_fields.get(map).is_some_and(|fs| {
-                fs.iter()
-                    .any(|rf| rf.name.name == field && type_ref_is_keyable(&rf.type_ref, types))
+                fs.iter().any(|rf| {
+                    rf.name.name == field && type_ref_is_scalar_store_key(&rf.type_ref, types)
+                })
             });
             if keyable && missing_seen.insert((map.to_string(), field.to_string())) {
                 errors.push(
@@ -4031,6 +4483,19 @@ fn validate_index_hygiene(
     // A declared index no equality filter routes through is dead maintenance.
     for (map, fields) in &declared {
         for (field, span) in fields {
+            if unique.contains(&(map.clone(), field.clone())) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.store.unique_implies_indexed",
+                        *span,
+                        format!(
+                            "`@unique(by: {field})` on `{map}` already maintains the index `@indexed(by: {field})` declares"
+                        ),
+                    )
+                    .with_note("remove the `@indexed`: a unique field is indexed, and its equality filters route through the unique index"),
+                );
+                continue;
+            }
             if !used.contains(&(map.clone(), field.clone())) {
                 errors.push(
                     CompileError::new(
@@ -4131,6 +4596,42 @@ fn walk_expr_for_index_filters(
     for child in expr_children(e) {
         walk_expr_for_index_filters(child, store_maps, cb);
     }
+}
+
+/// Finding #36: `check_handler_body` takes the five kind-scopes as one
+/// `HashMap<String, StoreField>` — a field name is only ever one kind, so
+/// recombine them here rather than threading five parallel maps.
+fn combine_store_fields(
+    store_cells: &HashMap<String, TyId>,
+    store_maps: &HashMap<String, (TyId, TyId)>,
+    store_sets: &HashMap<String, TyId>,
+    store_caches: &HashMap<String, (TyId, TyId, i64)>,
+    store_logs: &HashMap<String, TyId>,
+) -> HashMap<String, checker::StoreField> {
+    store_cells
+        .iter()
+        .map(|(name, t)| (name.clone(), checker::StoreField::Cell(*t)))
+        .chain(
+            store_maps
+                .iter()
+                .map(|(name, (k, v))| (name.clone(), checker::StoreField::Map(*k, *v))),
+        )
+        .chain(
+            store_sets
+                .iter()
+                .map(|(name, t)| (name.clone(), checker::StoreField::Set(*t))),
+        )
+        .chain(
+            store_caches.iter().map(|(name, (k, v, ttl))| {
+                (name.clone(), checker::StoreField::Cache(*k, *v, *ttl))
+            }),
+        )
+        .chain(
+            store_logs
+                .iter()
+                .map(|(name, t)| (name.clone(), checker::StoreField::Log(*t))),
+        )
+        .collect()
 }
 
 /// v0.81/v0.82 (storage track): validate an agent's `store`-field kinds and build
@@ -4397,6 +4898,7 @@ fn check_agent_decls(
             .filter(|f| f.kind.head.name == "Cell" && f.kind.args.len() == 1)
             .map(|f| RecordField {
                 annotations: Vec::new(),
+                replaces: None,
                 documentation: None,
                 trivia: Default::default(),
                 name: f.name.clone(),
@@ -4409,6 +4911,7 @@ fn check_agent_decls(
         // Build a synthetic Record TypeDecl and stuff it into a *clone* of
         // the resolved types so handler bodies see it.
         let synthetic_state = TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -4508,6 +5011,7 @@ fn check_agent_decls(
         // Ident("self"), so `self` is given a one-off synthetic record type.
         let agent_self_name = format!("__{}Self", agent.name.name);
         let self_decl = TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -4519,6 +5023,7 @@ fn check_agent_decls(
                 trailing_comments: Default::default(),
                 fields: vec![RecordField {
                     annotations: Vec::new(),
+                    replaces: None,
                     documentation: None,
                     trivia: Default::default(),
                     name: Ident {
@@ -4539,6 +5044,7 @@ fn check_agent_decls(
         };
         let mut types_for_handler = resolved_for_handler.types.clone();
         types_for_handler.insert(agent_self_name.clone(), Arc::new(self_decl.clone()));
+
         // Same fix as above: `local_type_names` comes from `table.types`
         // (pre-merge), not `types_for_handler` (merged, plus the synthetic
         // `self` record type).
@@ -4580,36 +5086,22 @@ fn check_agent_decls(
         let _ = key_ty;
 
         // Finding #36: `check_handler_body` takes the five kind-scopes as one
-        // `HashMap<String, StoreField>` — a field name is only ever one kind,
-        // so recombine them here rather than threading five parallel maps.
-        let store_fields: HashMap<String, checker::StoreField> = store_cells
-            .iter()
-            .map(|(name, t)| (name.clone(), checker::StoreField::Cell(*t)))
-            .chain(
-                store_maps
-                    .iter()
-                    .map(|(name, (k, v))| (name.clone(), checker::StoreField::Map(*k, *v))),
-            )
-            .chain(
-                store_sets
-                    .iter()
-                    .map(|(name, t)| (name.clone(), checker::StoreField::Set(*t))),
-            )
-            .chain(store_caches.iter().map(|(name, (k, v, ttl))| {
-                (name.clone(), checker::StoreField::Cache(*k, *v, *ttl))
-            }))
-            .chain(
-                store_logs
-                    .iter()
-                    .map(|(name, t)| (name.clone(), checker::StoreField::Log(*t))),
-            )
-            .collect();
+        // `HashMap<String, StoreField>` — see [`combine_store_fields`].
+        let store_fields = combine_store_fields(
+            &store_cells,
+            &store_maps,
+            &store_sets,
+            &store_caches,
+            &store_logs,
+        );
 
         // v0.80/v0.81: invariant well-formedness — predicates are pure `Bool`
         // expressions over the agent's `store` cells (§14, ADR 0108 D5).
+        let collections = checker::PredicateCollections::of(&store_fields);
         checker::check_invariants(
             &agent.invariants,
             &store_cells,
+            &collections,
             &agent.name.name,
             &resolved_for_handler,
             tys,
@@ -4628,6 +5120,7 @@ fn check_agent_decls(
             &agent.transitions,
             state_ty,
             &agent.name.name,
+            &collections,
             &resolved_for_handler,
             &mut typed.expr_types,
             errors,
@@ -4791,11 +5284,96 @@ fn check_agent_decls(
 
 /// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
 /// cross-site cookie warning that depends on it.
-fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut Vec<CompileError>) {
     if let Some(policy) = &service.cors {
         validate_cors_policy(service, policy, errors);
     }
+    check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+}
+
+/// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
+/// `SignedCookie` actor must declare `cors { origins: [...], credentials: true }`. A browser sends the
+/// cookie on a cross-site upgrade by itself and WebSockets are not covered by CORS, so the upgrade
+/// checks `Origin` against exactly these origins (cross-site WebSocket hijacking); without a list
+/// there is nothing to check it against, and a wildcard would admit every site.
+fn check_ws_cookie_origins(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        return;
+    }
+    let Some(open) = service.handlers.iter().find(|h| {
+        matches!(h.kind, HandlerKind::Open)
+            && crate::actors::signed_cookie_seam_for(h, &table.actors).is_some()
+    }) else {
+        // Only a cookie upgrade checks `Origin`, so a `cors` policy on any other WebSocket service
+        // would read as an allow-list and restrict nothing: refuse it.
+        if let Some(policy) = &service.cors {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_not_http",
+                    policy.span,
+                    "a `cors { }` policy on a `from websocket` service takes effect only when its `on open` is `by` a `SignedCookie` actor",
+                )
+                .with_note(
+                    "the upgrade checks `Origin` against `origins` only for a cookie, which a browser sends from any site; a `Bearer` or `Oidc` token is offered by the page itself, so there is no origin list to apply",
+                ),
+            );
+        }
+        return;
+    };
+    // Of the policy's fields only `origins` and `credentials` apply to an upgrade.
+    for field in service.cors.iter().flat_map(|c| &c.fields) {
+        if matches!(field.name.name.as_str(), "headers" | "expose" | "maxAge") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_unknown_field",
+                    field.name.span,
+                    format!(
+                        "the `cors` field `{}` has no effect on a `from websocket` service",
+                        field.name.name
+                    ),
+                )
+                .with_note("only `origins` and `credentials` apply to a WebSocket upgrade"),
+            );
+        }
+    }
+    // The session-live check of a `sessions = true` actor is not made on an upgrade yet, so a revoked
+    // session could still open a socket: refuse the combination rather than accept it quietly.
+    if crate::actors::signed_cookie_seam_for(open, &table.actors).is_some_and(|s| s.sessions) {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                open.span,
+                "a `SignedCookie` actor with `sessions = true` is not admissible on a WebSocket `on open`",
+            )
+            .with_note(
+                "the upgrade does not check the session is still live, so a revoked session could open a socket; use a `SignedCookie` actor without `sessions`, or a `Bearer` actor",
+            ),
+        );
+    }
+    let ok = service
+        .cors
+        .as_ref()
+        .is_some_and(|c| c.credentials() && !c.is_wildcard() && !c.origins().is_empty());
+    if !ok {
+        errors.push(
+            CompileError::new(
+                "bynk.ws.cookie_needs_origins",
+                service.cors.as_ref().map_or(open.span, |c| c.span),
+                format!(
+                    "the `from websocket` service `{}` authenticates a `SignedCookie`, so it must declare `cors {{ origins: [...], credentials: true }}` with the exact origins that may open it",
+                    service.name.name
+                ),
+            )
+            .with_note(
+                "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
+            ),
+        );
+    }
 }
 
 /// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
@@ -4888,14 +5466,18 @@ fn validate_cors_policy(
 ) {
     // CORS is a browser-facing HTTP concern; it is meaningless on any other
     // protocol.
-    if !matches!(service.protocol, ServiceProtocol::Http) {
+    // #3904: a `from websocket` service takes one too, for its upgrade's `Origin` check.
+    if !matches!(
+        service.protocol,
+        ServiceProtocol::Http | ServiceProtocol::WebSocket { .. }
+    ) {
         errors.push(
             CompileError::new(
                 "bynk.http.cors_not_http",
                 policy.span,
-                "a `cors { }` policy is only valid on a `from http` service",
+                "a `cors { }` policy is only valid on a `from http` or `from websocket` service",
             )
-            .with_note("CORS governs cross-origin browser access, which only the HTTP surface has"),
+            .with_note("CORS governs cross-origin browser access, which only the HTTP and WebSocket surfaces have"),
         );
         return;
     }
@@ -4905,7 +5487,7 @@ fn validate_cors_policy(
     for field in &policy.fields {
         if !matches!(
             field.name.name.as_str(),
-            "origins" | "headers" | "credentials" | "maxAge"
+            "origins" | "headers" | "expose" | "credentials" | "maxAge"
         ) {
             errors.push(
                 CompileError::new(
@@ -4913,7 +5495,9 @@ fn validate_cors_policy(
                     field.name.span,
                     format!("unknown `cors` field `{}`", field.name.name),
                 )
-                .with_note("known fields are `origins`, `headers`, `credentials`, and `maxAge`"),
+                .with_note(
+                    "known fields are `origins`, `headers`, `expose`, `credentials`, and `maxAge`",
+                ),
             );
         }
     }
@@ -4928,19 +5512,39 @@ fn validate_cors_policy(
         Some(expr) => match &expr.kind {
             ExprKind::ListLit(items, ..) if !items.is_empty() => {
                 for item in items {
-                    if !matches!(item.kind, ExprKind::StrLit(_)) {
-                        errors.push(CompileError::new(
+                    match &item.kind {
+                        // #4504: a literal a browser can never send matches nothing.
+                        ExprKind::StrLit(origin) => validate_cors_origin_shape(origin, item.span, errors),
+                        _ => errors.push(CompileError::new(
                             "bynk.http.cors_invalid_origins",
                             item.span,
-                            "each `cors` origin must be a string literal (e.g. \"https://app.example.com\" or \"*\")",
-                        ));
+                            "each `cors` origin must be a string literal or a `String` constant (e.g. \"https://app.example.com\" or \"*\")",
+                        )),
                     }
                 }
             }
+            // A bare name that did not resolve (ADR 0826): the pass left it as
+            // written, so say what the constant must be rather than repeat the
+            // rule a reader may think it already meets.
+            ExprKind::Ident(id) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_origins",
+                    expr.span,
+                    format!(
+                        "`{}` does not name a `List[String]` constant bound to a list of string literals",
+                        id.name
+                    ),
+                )
+                .with_note(
+                    "a constant counts as its literal only when it is declared exactly `List[String]` \
+                     and bound to a list of string literals, or to another such constant (an \
+                     `env(…)` constant is, once `bynk.toml` gives it a value)",
+                ),
+            ),
             _ => errors.push(CompileError::new(
                 "bynk.http.cors_invalid_origins",
                 expr.span,
-                "`cors` `origins` must be a non-empty list of string literals",
+                "`cors` `origins` must be a non-empty list of string literals or `String` constants, or a `List[String]` constant",
             )),
         },
     }
@@ -4957,6 +5561,10 @@ fn validate_cors_policy(
             ));
         }
     }
+
+    // #3925: `expose`, when present, is a list of header names (RFC 9110 tokens),
+    // or the wildcard `["*"]` alone.
+    validate_cors_expose(policy, errors);
 
     // `credentials`, when present, is a boolean literal.
     if let Some(expr) = policy.field("credentials")
@@ -4976,7 +5584,7 @@ fn validate_cors_policy(
         errors.push(CompileError::new(
             "bynk.http.cors_invalid_field",
             expr.span,
-            "`cors` `maxAge` must be a `Duration` literal (e.g. `1.hours`)",
+            "`cors` `maxAge` must be a `Duration` literal (e.g. `1.hour`)",
         ));
     }
 
@@ -4996,6 +5604,145 @@ fn validate_cors_policy(
             ),
         );
     }
+    refuse_null_origin_with_credentials(policy, errors);
+}
+
+/// #4504: `"null"` is the `Origin` a browser sends from a sandboxed frame or a `data:` page, which
+/// any other site can create, so naming it is as open as the wildcard. Beside `credentials: true`
+/// it would let any page act with the visitor's cookies and `Authorization`, so it is refused as
+/// the wildcard is. Without credentials it is compared like any other entry.
+fn refuse_null_origin_with_credentials(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    if !policy.credentials() {
+        return;
+    }
+    let Some(ExprKind::ListLit(items, ..)) = policy.field("origins").map(|e| &e.kind) else {
+        return;
+    };
+    for item in items {
+        if matches!(&item.kind, ExprKind::StrLit(origin) if origin == "null") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_wildcard_credentials",
+                    item.span,
+                    "`cors` cannot combine `credentials: true` with the origin `\"null\"`",
+                )
+                .with_note(
+                    "a browser sends `Origin: null` from a sandboxed frame or a `data:` page, \
+                     which any other site can create, so allowing it with credentials lets any \
+                     page act with the visitor's cookies; list the exact origins instead, or \
+                     set `credentials: false`",
+                ),
+            );
+        }
+    }
+}
+
+/// #4504: one literal `origins` entry. The router compares a request's `Origin` with it
+/// exactly, so an entry that is not in the form a browser sends (`scheme://host[:port]`, lower
+/// case, no path or trailing slash) matches nothing and every cross-origin request from that
+/// site is refused. An entry that named a constant was rewritten to its value before this runs,
+/// an `env(…)` constant to the value `bynk.toml` gives the environment being built.
+fn validate_cors_origin_shape(origin: &str, span: Span, errors: &mut Vec<CompileError>) {
+    let Some(problem) = crate::cors_origin::check(origin) else {
+        return;
+    };
+    let mut error = CompileError::new(
+        "bynk.http.cors_invalid_origins",
+        span,
+        format!("`cors` origin `{origin}` {}", problem.reason),
+    )
+    .with_note(
+        "the router compares the request's `Origin` with each entry exactly, and a browser sends \
+         `scheme://host[:port]` with the scheme and host in lower case, no path, query, \
+         fragment or trailing slash, and no default port; any other entry matches nothing, so \
+         every request from that site is refused",
+    );
+    if let Some(fixed) = problem.suggestion {
+        error = error.with_note(format!("write `{fixed}`"));
+        if problem.scheme_assumed {
+            error = error.with_note(
+                "the entry has no scheme, so `https` is assumed; use the scheme the site is \
+                 served on (a browser sends `http://…` from a page served over `http`)",
+            );
+        }
+    }
+    errors.push(error);
+}
+
+/// #3925: the `expose` list: header names that are RFC 9110 tokens, or `["*"]`
+/// alone (a `*` beside names is not the wildcard the Fetch standard defines).
+fn validate_cors_expose(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    let Some(expr) = policy.field("expose") else {
+        return;
+    };
+    // The Fetch standard ignores the wildcard on a credentialed response, so a
+    // `["*"]` that looks like it exposes everything would expose nothing.
+    if policy.credentials() && policy.is_wildcard_expose() {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cors_wildcard_expose_credentials",
+                expr.span,
+                "`cors` cannot combine `credentials: true` with `expose: [\"*\"]`",
+            )
+            .with_note(
+                "on a credentialed response a browser reads `*` as a header literally named `*`, \
+                 not as every header; list the header names instead",
+            ),
+        );
+    }
+    let ExprKind::ListLit(items, ..) = &expr.kind else {
+        errors.push(CompileError::new(
+            "bynk.http.cors_invalid_field",
+            expr.span,
+            "`cors` `expose` must be a list of header names (string literals)",
+        ));
+        return;
+    };
+    let names: Vec<(&Expr, Option<&str>)> = items
+        .iter()
+        .map(|i| {
+            (
+                i,
+                match &i.kind {
+                    ExprKind::StrLit(s) => Some(s.as_str()),
+                    _ => None,
+                },
+            )
+        })
+        .collect();
+    for (item, name) in &names {
+        match name {
+            None => errors.push(CompileError::new(
+                "bynk.http.cors_invalid_field",
+                item.span,
+                "each `cors` `expose` entry must be a header name written as a string literal",
+            )),
+            Some("*") if names.len() > 1 => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    "`\"*\"` in `cors` `expose` must be the only entry",
+                )
+                .with_note("the wildcard exposes every header; list names or write `[\"*\"]`, not both"),
+            ),
+            Some(n) if *n != "*" && !is_header_token(n) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    format!("`{n}` is not a valid header name for `cors` `expose`"),
+                )
+                .with_note("a header name is letters, digits and ``!#$%&'*+-.^_`|~``, with no spaces, colons or commas"),
+            ),
+            _ => {}
+        }
+    }
+}
+
+/// RFC 9110 §5.6.2: a `token`, the grammar of a header field name.
+fn is_header_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
 }
 
 /// v0.141 (ADR 0164): validate a service's `security { }` policy. Security
@@ -5028,14 +5775,19 @@ fn validate_security_policy(
     // Field names are a closed set; flag anything else (the parser accepts any
     // name, per the CORS / annotation precedent).
     for field in &policy.fields {
-        if !matches!(field.name.name.as_str(), "hsts" | "nosniff") {
+        if !matches!(
+            field.name.name.as_str(),
+            "hsts" | "nosniff" | "frameAncestors" | "referrerPolicy" | "csp"
+        ) {
             errors.push(
                 CompileError::new(
                     "bynk.http.security_unknown_field",
                     field.name.span,
                     format!("unknown `security` field `{}`", field.name.name),
                 )
-                .with_note("known fields are `hsts` and `nosniff`"),
+                .with_note(
+                    "known fields are `hsts`, `nosniff`, `frameAncestors`, `referrerPolicy` and `csp`",
+                ),
             );
         }
     }
@@ -5062,6 +5814,109 @@ fn validate_security_policy(
             "`security` `nosniff` must be `true` or `false`",
         ));
     }
+    validate_html_security_fields(policy, errors);
+}
+
+/// #3923: whether `s` is an exact origin a `frame-ancestors` source list may carry:
+/// `http://` or `https://`, then a host (and optional port), with no path, no
+/// wildcard and nothing that could end the directive or the header.
+fn is_exact_origin(s: &str) -> bool {
+    let Some(rest) = s
+        .strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+}
+
+/// #3923: the three HTML-response fields of a `security { }` policy:
+/// `frameAncestors` (a list of exact origins, `"self"`, or `["*"]` beside a `csp`),
+/// `referrerPolicy` (one of the standard tokens, in camel case) and `csp` (a string
+/// literal with no line break). A bad value is `bynk.http.security_invalid_field`.
+fn validate_html_security_fields(policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    if let Some(expr) = policy.field("frameAncestors") {
+        validate_frame_ancestors(expr, policy, errors);
+    }
+    validate_scalar_html_fields(policy, errors);
+}
+
+/// #3923: `frameAncestors` is a list of exact origins or `"self"`; `["*"]` stands alone
+/// and needs an explicit `csp`.
+fn validate_frame_ancestors(expr: &Expr, policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    let invalid = |span, message: String| {
+        CompileError::new("bynk.http.security_invalid_field", span, message)
+    };
+    let ExprKind::ListLit(items, ..) = &expr.kind else {
+        errors.push(invalid(
+            expr.span,
+            "`security` `frameAncestors` must be a list of string literals".to_string(),
+        ));
+        return;
+    };
+    let wildcard = items
+        .iter()
+        .any(|i| matches!(&i.kind, ExprKind::StrLit(s) if s == "*"));
+    if wildcard && (items.len() != 1 || policy.csp().is_none()) {
+        errors.push(
+            invalid(
+                expr.span,
+                "`frameAncestors: [\"*\"]` must stand alone and needs an explicit `csp`".to_string(),
+            )
+            .with_note("allowing every site to frame a page is never the result of an accident: say so beside the policy you mean it for"),
+        );
+    }
+    for item in items {
+        match &item.kind {
+            ExprKind::StrLit(s) if s == "*" || s == "self" || is_exact_origin(s) => {}
+            ExprKind::StrLit(s) => errors.push(
+                invalid(
+                    item.span,
+                    format!("`frameAncestors` entry `{s}` is not an exact origin"),
+                )
+                .with_note("write an origin such as \"https://partner.example\", or \"self\"; wildcards are refused, as in `cors`"),
+            ),
+            _ => errors.push(invalid(
+                item.span,
+                "each `frameAncestors` entry must be a string literal".to_string(),
+            )),
+        }
+    }
+}
+
+/// #3923: `referrerPolicy` and `csp`, the two scalar HTML-response fields.
+fn validate_scalar_html_fields(policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    if let Some(expr) = policy.field("referrerPolicy") {
+        let ok = matches!(&expr.kind, ExprKind::Ident(id)
+            if REFERRER_POLICIES.iter().any(|(camel, _)| *camel == id.name));
+        if !ok {
+            let names: Vec<&str> = REFERRER_POLICIES.iter().map(|(c, _)| *c).collect();
+            errors.push(
+                CompileError::new(
+                    "bynk.http.security_invalid_field",
+                    expr.span,
+                    "`security` `referrerPolicy` must be one of the standard values, in camel case",
+                )
+                .with_note(format!("the values are {}", names.join(", "))),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("csp") {
+        match &expr.kind {
+            ExprKind::StrLit(s) if !s.contains(['\r', '\n']) && !s.trim().is_empty() => {}
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.security_invalid_field",
+                    expr.span,
+                    "`security` `csp` must be a non-empty string literal with no line break",
+                )
+                .with_note("the policy is sent verbatim as one header value"),
+            ),
+        }
+    }
 }
 
 /// v0.142 (ADR 0165): validate a service's `limits { }` policy. A request-body
@@ -5076,16 +5931,21 @@ fn validate_limits_policy(
 ) {
     // A request-body ceiling is an HTTP-surface concern; it is meaningless on any
     // other protocol (mirrors the `cors_not_http` / `security_not_http` gate).
+    // #3905: a `from websocket` service takes `limits { maxFrame }`, its own frame ceiling.
+    if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        validate_ws_limits_policy(policy, errors);
+        return;
+    }
     if !matches!(service.protocol, ServiceProtocol::Http) {
         errors.push(
             CompileError::new(
                 "bynk.http.limits_not_http",
                 policy.span,
-                "a `limits { }` policy is only valid on a `from http` service",
+                "a `limits { }` policy is only valid on a `from http` or `from websocket` service",
             )
             .with_note(
-                "a request-body size ceiling governs the HTTP surface, \
-                 which only a `from http` service has",
+                "a size ceiling governs the HTTP request body or a WebSocket frame, \
+                 which only a `from http` or `from websocket` service has",
             ),
         );
         return;
@@ -5101,7 +5961,7 @@ fn validate_limits_policy(
                     field.name.span,
                     format!("unknown `limits` field `{}`", field.name.name),
                 )
-                .with_note("the fields are `maxBody`, and (for `@multipart` routes) `maxFile` and `maxParts`"),
+                .with_note("the fields are `maxBody`, and (for `@multipart` routes) `maxFile` and `maxParts`; `maxFrame` bounds a `from websocket` service"),
             );
         }
     }
@@ -5123,13 +5983,53 @@ fn validate_limits_policy(
     // is no byte `Size` literal yet, so v1 takes a plain `Int` (ADR 0165
     // DECISION C).
     if let Some(expr) = policy.field("maxBody")
-        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if *n > 0)
+        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if (1..=MAX_BODY_CEILING).contains(n))
     {
-        errors.push(CompileError::new(
-            "bynk.http.limits_invalid_field",
-            expr.span,
-            "`limits` `maxBody` must be a positive `Int` literal — a byte count (e.g. `1_048_576`)",
-        ));
+        errors.push(
+            CompileError::new(
+                "bynk.http.limits_invalid_field",
+                expr.span,
+                "`limits` `maxBody` must be a positive `Int` literal — a byte count (e.g. `1_048_576`) — no larger than 524_288_000",
+            )
+            .with_note(MAX_BODY_NOTE),
+        );
+    }
+}
+
+/// #3905: a `from websocket` service's `limits { }`: the closed field set is `maxFrame`, a positive
+/// `Int` byte count no larger than Cloudflare's own 32 MiB inbound message limit. The request-body
+/// fields belong to `from http`.
+fn validate_ws_limits_policy(policy: &LimitsPolicy, errors: &mut Vec<CompileError>) {
+    for field in &policy.fields {
+        if field.name.name != "maxFrame" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.limits_unknown_field",
+                    field.name.span,
+                    format!(
+                        "unknown `limits` field `{}` on a `from websocket` service",
+                        field.name.name
+                    ),
+                )
+                .with_note(
+                    "a WebSocket service's only field is `maxFrame`; `maxBody`, `maxFile` and `maxParts` bound an HTTP request",
+                ),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("maxFrame")
+        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if (1..=MAX_FRAME_CEILING).contains(n))
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.http.limits_invalid_field",
+                expr.span,
+                "`limits` `maxFrame` must be a positive `Int` literal, a byte count (e.g. `262_144`), no larger than 33_554_432",
+            )
+            .with_note(
+                "a frame over `maxFrame` is closed with `1009` before it is parsed, and one the server sends over it faults the send; 33_554_432 (32 MiB) is Cloudflare's own limit on an inbound message, and the default is 1_048_576",
+            ),
+        );
     }
 }
 
@@ -5173,6 +6073,219 @@ fn validate_json_policy(
             expr.span,
             "`json` `options` must be `tagged` or `plain`",
         ));
+    }
+}
+
+/// #4266: what to do instead of reading a header the route's actor consumes, for the note on the
+/// diagnostic: the credential itself is never the handler's to read, only the identity it proves.
+fn consumed_header_note(wire: &str, session_cookie: bool) -> &'static str {
+    if wire == "cookie" && session_cookie {
+        "read the other cookies through a typed `cookies` record, which the session cookie is also removed from; the signed-in identity is the actor's"
+    } else if wire == "authorization" {
+        "the router verifies the credential and hands the handler the actor's identity instead; use that, or drop the field"
+    } else {
+        "the router verifies this header and the handler never sees it; drop the field"
+    }
+}
+
+/// #4266: a typed `headers` field that reads a header the route's actor seam consumes. The router
+/// hides that header from the record (`authorization` on a `Bearer`, `Oidc` or `Signature` route,
+/// the session cookie out of `cookie` on a `SignedCookie` one), so the field always sees it
+/// absent: a required field answers `400` on every request, and an `Option` or `List` one is
+/// always `None` or empty.
+fn validate_consumed_headers(
+    table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            let Some(p) = handler.params.iter().find(|p| p.name.name == "headers") else {
+                continue;
+            };
+            let TypeRef::Named(id) = &p.type_ref else {
+                continue;
+            };
+            let Some(TypeBody::Record(record)) = types.get(&id.name).map(|t| &t.body) else {
+                continue;
+            };
+            let consumed = crate::actors::consumed_credential_headers(handler, &table.actors);
+            let session = crate::actors::signed_cookie_seam_for(handler, &table.actors);
+            for f in &record.fields {
+                let wire = f
+                    .wire_name()
+                    .unwrap_or_else(|| f.name.name.clone())
+                    .to_ascii_lowercase();
+                let (actor, what) = match consumed.iter().find(|(h, _)| *h == wire) {
+                    Some((_, actor)) => (actor.clone(), format!("the `{wire}` header")),
+                    None => match &session {
+                        Some(s) if wire == "cookie" => (
+                            s.actor.clone(),
+                            format!(
+                                "the `cookie` header, less its session cookie `{}`",
+                                s.cookie
+                            ),
+                        ),
+                        _ => continue,
+                    },
+                };
+                let optional = matches!(f.type_ref, TypeRef::Option(..) | TypeRef::List(..));
+                // The session cookie is removed from `cookie`, so that field is absent unless
+                // the request carries another cookie too; the others are always absent.
+                let always = wire != "cookie" || session.is_none();
+                let (code, why) = match (optional, always) {
+                    (true, true) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is always absent here",
+                    ),
+                    (true, false) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is absent unless the request carries another cookie",
+                    ),
+                    (false, true) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is always absent and every request is answered `400`",
+                    ),
+                    (false, false) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is absent, and the request is answered `400`, unless it carries another cookie",
+                    ),
+                };
+                errors.push(
+                    CompileError::new(
+                        code,
+                        f.span,
+                        format!(
+                            "field `{}` of the `headers` record reads {what}, which `{actor}` consumes, {why}",
+                            f.name.name
+                        ),
+                    )
+                    .with_note(consumed_header_note(&wire, session.is_some())),
+                );
+            }
+        }
+    }
+}
+
+/// #3916: validate each service's `errors { }` policy.
+fn validate_error_policies(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    for service in table.services.values() {
+        if let Some(policy) = &service.errors {
+            validate_errors_policy(service, policy, errors);
+        }
+    }
+}
+
+/// #3916: validate a service's `errors { }` policy. The error-body shape is a
+/// property of the HTTP surface, so the section is only legal on a `from http`
+/// service; the closed field set is `format`, whose value is the bare
+/// identifier `bynk` or `problem`.
+fn validate_errors_policy(
+    service: &ServiceDecl,
+    policy: &ErrorsPolicy,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                policy.span,
+                "an `errors { }` policy is only valid on a `from http` service",
+            )
+            .with_note("the error-body shape governs the HTTP surface, which only a `from http` service has"),
+        );
+        return;
+    }
+    for field in &policy.fields {
+        if field.name.name != "format" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    field.name.span,
+                    format!("unknown `errors` field `{}`", field.name.name),
+                )
+                .with_note("the only field is `format`"),
+            );
+        }
+    }
+    match policy.field("format") {
+        Some(expr) if ErrorFormat::from_expr(expr).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                expr.span,
+                "`errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        _ => {}
+    }
+}
+
+/// #3916: the placement rules of `@errors`: at most one, and only on an `on http`
+/// handler. `false` when the annotation is misplaced (already reported), so its
+/// arguments are not checked.
+fn check_errors_annotation(
+    ann: &Annotation,
+    handler: &Handler,
+    seen: &mut bool,
+    errors: &mut Vec<CompileError>,
+) -> bool {
+    if *seen {
+        errors.push(CompileError::new(
+            "bynk.http.errors_duplicate",
+            ann.span,
+            "a handler carries at most one `@errors` annotation",
+        ));
+        return false;
+    }
+    *seen = true;
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                ann.span,
+                "`@errors` is only valid on an `on http` handler",
+            )
+            .with_note("it chooses the shape of an HTTP error body"),
+        );
+        return false;
+    }
+    validate_errors_args(ann, errors);
+    true
+}
+
+/// #3916: validate `@errors(format: bynk | problem)` on an HTTP handler.
+fn validate_errors_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut format: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("format") => format = Some(arg),
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    arg.span,
+                    "`@errors` accepts only the `format:` argument",
+                )
+                .with_note("write `@errors(format: problem)`"),
+            ),
+        }
+    }
+    match format {
+        None => errors.push(
+            CompileError::new(
+                "bynk.http.errors_invalid_field",
+                ann.span,
+                "`@errors` needs a `format:` argument",
+            )
+            .with_note("write `@errors(format: problem)`"),
+        ),
+        Some(arg) if ErrorFormat::from_expr(&arg.value).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                arg.span,
+                "`@errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        Some(_) => {}
     }
 }
 
@@ -5232,7 +6345,7 @@ pub(crate) fn null_payload_option(
         TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _) => null_payload_option(a, types, seen),
+        | TypeRef::HttpResult(a, _, _) => null_payload_option(a, types, seen),
         TypeRef::Map(k, v, _) | TypeRef::Result(k, v, _) => {
             null_payload_option(k, types, seen).or_else(|| null_payload_option(v, types, seen))
         }
@@ -5342,7 +6455,7 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
                 TypeRef::Effect(inner, _) => inner.as_ref(),
                 other => other,
             };
-            let unit_result = matches!(inner, TypeRef::HttpResult(t, _) if matches!(t.as_ref(), TypeRef::Unit(_)));
+            let unit_result = matches!(inner, TypeRef::HttpResult(t, _, _) if matches!(t.as_ref(), TypeRef::Unit(_)));
             if !unit_result {
                 errors.push(signature(
                     handler.return_type.span(),
@@ -5382,14 +6495,32 @@ fn reserved_route_char(
     true
 }
 
+/// The `connection` a `from websocket` `on message`/`on close` handler borrows (not owned, so no disposal obligation).
+fn borrowed_connection(
+    handler: &Handler,
+    is_ws_lifecycle: bool,
+) -> std::collections::HashSet<String> {
+    if is_ws_lifecycle && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close) {
+        std::iter::once("connection".to_string()).collect()
+    } else {
+        std::collections::HashSet::new()
+    }
+}
+
+/// #4389: whether `handler` is an `on http` handler of a method other than `GET`.
+fn is_non_get_http(handler: &Handler) -> bool {
+    matches!(&handler.kind, HandlerKind::Http { method, .. } if *method != HttpMethod::Get)
+}
+
 /// Validate an `on http METHOD "path"` handler (v0.9 §4.1):
 ///
 /// - Path must start with `/`, must not be `/_bynk/...` (reserved).
 /// - Every `:name` segment binds to a handler parameter of the same name.
 /// - Every parameter is either a path parameter or named `body`, `headers` or
 ///   `query`.
-/// - Path parameter types are constructible from `String` (`String`, refined
-///   `String`, or opaque `String`).
+/// - Path parameter types are those of a typed `query` field, less `Option` and
+///   `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined
+///   or opaque type over one of those.
 /// - GET / DELETE handlers may not have a `body` parameter.
 /// - The handler return type must be `Effect[HttpResult[T]]`.
 fn validate_http_handler(
@@ -5467,21 +6598,11 @@ fn validate_http_handler(
     for p in &handler.params {
         let is_path = path_param_names.iter().any(|n| n == &p.name.name.as_str());
         let is_body = p.name.name == "body";
-        // #2341 (decision A): `headers` is the request's headers, and must be
-        // typed `RequestHeaders`.
+        // #2341 (decision A): `headers` is the request's headers: `RequestHeaders`, or (#3911)
+        // a record `T` the router decodes and validates.
         let is_headers = !is_path && p.name.name == "headers";
-        if is_headers && !matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
-            errors.push(
-                CompileError::new(
-                    "bynk.http.headers_wrong_type",
-                    p.type_ref.span(),
-                    format!(
-                        "an HTTP handler's `headers` parameter must be typed `RequestHeaders` (got `{}`)",
-                        ts_type_ref_display(&p.type_ref),
-                    ),
-                )
-                .with_note("`headers: RequestHeaders` gives the handler the request's headers"),
-            );
+        if is_headers {
+            validate_headers_param(p, types, errors);
         }
         // #2854: `query` is the request's query string, a record `T` the router
         // decodes and validates, or the raw `RequestQuery` view.
@@ -5569,20 +6690,21 @@ fn validate_http_handler(
                 ),
             );
         }
-        // Path params must be constructible from String.
-        if is_path && !is_string_constructible(&p.type_ref, types) {
+        // #3910: a path parameter reads as a typed `query` field does, minus `Option`
+        // and `List` (a segment is always present and single-valued).
+        if is_path && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",
                     p.type_ref.span(),
                     format!(
-                        "path parameter `{}` must have a type constructible from `String` (got `{}`)",
+                        "path parameter `{}` must be a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one of those (got `{}`)",
                         p.name.name,
                         ts_type_ref_display(&p.type_ref),
                     ),
                 )
                 .with_note(
-                    "use `String`, a refined `String`, or an opaque type whose base is `String`",
+                    "a path segment is one value, so `Option` and `List` are refused; an enum is read by variant name",
                 ),
             );
         }
@@ -5602,7 +6724,7 @@ fn validate_http_handler(
     }
     // Validate return type shape.
     let return_ok = match &handler.return_type {
-        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _)),
+        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
         _ => false,
     };
     if !return_ok {
@@ -5668,6 +6790,8 @@ enum RequestSurface {
     Cookies,
     Query,
     Form,
+    /// #3911: the `headers` record, whose names compare without case.
+    Headers,
 }
 
 /// #3446: the records a handler of this unit decodes as its `cookies` parameter, in any file
@@ -5699,16 +6823,14 @@ fn is_http_token(s: &str) -> bool {
             .all(|c| c.is_ascii_graphic() && !"()<>@,;:\\\"/[]?={}".contains(c))
 }
 
-/// #3343: `@name("…")` before a record field names the key it has on the wire,
-/// where that is not an identifier (`__Host-sid`). It is legal only on a record
-/// used as the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an
-/// `on http` handler (the readers that take names off a request); it takes one
-/// string literal; and two fields may not share a wire name (nor, for cookies and
-/// query, differ only in case).
+/// #3343: what a request surface adds to a record field's `@name("…")`: a record used as the
+/// `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler
+/// is read by name, so a cookie or header name must be an RFC 9110 token, and names of a cookies
+/// or query record may not differ only in case. A wire name is legal on any record's field
+/// (#3975); the rules every wire name follows are `wire_names::validate_record`.
 pub(crate) fn validate_field_names(
     table: &UnitTable,
     types: &HashMap<String, Arc<TypeDecl>>,
-    consts: &HashMap<String, ConstDecl>,
     errors: &mut Vec<CompileError>,
 ) {
     let mut uses: HashMap<String, Vec<RequestSurface>> = HashMap::new();
@@ -5720,6 +6842,7 @@ pub(crate) fn validate_field_names(
             for p in &h.params {
                 let surface = match p.name.name.as_str() {
                     "cookies" => Some(RequestSurface::Cookies),
+                    "headers" => Some(RequestSurface::Headers),
                     "query" => Some(RequestSurface::Query),
                     "body"
                         if h.annotations
@@ -5736,150 +6859,71 @@ pub(crate) fn validate_field_names(
             }
         }
     }
-    let mut names: Vec<&String> = types.keys().collect();
+    // #3975: the wire names themselves (the argument, an empty or repeated name) are checked on
+    // the unit's own types (`wire_names::validate_record`); what is left here is what a request
+    // surface adds: a cookie or header name must be a token, and names that differ only in case.
+    let mut names: Vec<&String> = uses.keys().collect();
     names.sort();
     for name in names {
-        let TypeBody::Record(rec) = &types[name].body else {
+        let Some(TypeBody::Record(rec)) = types.get(name).map(|t| &t.body) else {
             continue;
         };
-        if rec.fields.iter().all(|f| f.annotations.is_empty()) {
-            continue;
-        }
-        let surfaces = uses.get(name).cloned().unwrap_or_default();
+        let surfaces = &uses[name];
         let mut wire: Vec<(String, Span)> = Vec::new();
-        let mut reported_not_request = false;
         for f in &rec.fields {
-            let mut external: Option<(String, Span)> = None;
-            for ann in &f.annotations {
-                if ann.name.name != "name" {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.field_annotation_unknown",
-                            ann.span,
-                            format!("unknown field annotation `@{}`", ann.name.name),
-                        )
-                        .with_note("the only field annotation is `@name(\"…\")`"),
-                    );
-                    continue;
-                }
-                let arg = match ann.args.as_slice() {
-                    [a] if a.label.is_none() => Some(a),
-                    _ => None,
+            let named = f
+                .annotations
+                .iter()
+                .find(|a| a.name.name == "name")
+                .and_then(|ann| Some((ann, f.wire_name()?)));
+            if let Some((ann, literal)) = named {
+                let arg = ann.args.first();
+                let at = match arg {
+                    Some(a) if a.from_const.is_some() => a.value.span,
+                    _ => ann.span,
                 };
-                let literal = arg.and_then(|a| match &a.value.kind {
-                    ExprKind::StrLit(s) => Some(s.clone()),
-                    _ => None,
-                });
-                let Some(literal) = literal else {
-                    let mut err = CompileError::new(
-                        "bynk.types.field_name_bad_arg",
-                        ann.span,
-                        "`@name` takes exactly one string literal, or a `String` constant bound to one",
+                let bad = if surfaces.contains(&RequestSurface::Cookies) && !is_http_token(&literal)
+                {
+                    Some(
+                        "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
                     )
-                    .with_note("write `@name(\"__Host-sid\")`, or `const SidCookie: String = \"__Host-sid\"` and `@name(SidCookie)`");
-                    // #3445: a bare name that did not resolve (pass `annotation_consts`).
-                    if let Some(a) = arg
-                        && let ExprKind::Ident(id) = &a.value.kind
-                    {
-                        err = err.with_note(match consts.get(&id.name) {
-                            Some(c) if matches!(c.ty, TypeRef::Base(BaseType::String, _)) => format!(
-                                "`{}` is declared `String`, but its value does not end at a string literal: every constant it passes through must be declared exactly `String`, and the last bound to a string literal",
-                                id.name,
-                            ),
-                            Some(c) => format!(
-                                "`{}` is declared `{}`; `@name` needs a constant declared exactly `String` and bound to a string literal (or to another such constant)",
-                                id.name,
-                                ts_type_ref_display(&c.ty),
-                            ),
-                            None => format!("`{}` is not a constant in scope", id.name),
-                        });
-                    }
-                    errors.push(err);
-                    continue;
-                };
-                // #3445: where a diagnostic about the value points: at the
-                // reference, where the author can act, when there is one.
-                let (at, origin) = match arg {
-                    Some(a) if a.from_const.is_some() => (a.value.span, Some(a)),
-                    _ => (ann.span, None),
-                };
-                if external.is_some() {
-                    errors.push(CompileError::new(
-                        "bynk.types.field_name_duplicate",
-                        ann.span,
-                        format!("field `{}` has more than one `@name`", f.name.name),
-                    ));
-                    continue;
-                }
-                if surfaces.is_empty() {
-                    // One error per record: the root cause is the record's use, not each `@name`.
-                    if reported_not_request {
-                        external = Some((literal, at));
-                        continue;
-                    }
-                    reported_not_request = true;
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.field_name_not_request_record",
-                            ann.span,
-                            format!(
-                                "`@name` is on a field of `{name}`, which is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler"
-                            ),
-                        )
-                        .with_note(
-                            "`@name` renames the key a request reader looks for; on any other record it would do nothing",
-                        ),
-                    );
+                } else if surfaces.contains(&RequestSurface::Headers) && !is_http_token(&literal) {
+                    Some(
+                        "a header name must be an RFC 9110 token (no spaces, quotes or separators)",
+                    )
                 } else {
-                    let bad = if surfaces.contains(&RequestSurface::Cookies)
-                        && !is_http_token(&literal)
-                    {
-                        Some(
-                            "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
-                        )
-                    } else if literal.is_empty() {
-                        Some("a wire name must not be empty")
-                    } else {
-                        None
-                    };
-                    if let Some(why) = bad {
-                        let shown = match origin.and_then(|a| a.from_const.as_ref()) {
-                            Some(c) => format!(
-                                "`@name({})` is not a valid name here: {why} (`{literal}`)",
-                                c.name.name
-                            ),
-                            None => {
-                                format!("`@name(\"{literal}\")` is not a valid name here: {why}")
-                            }
-                        };
-                        let err = CompileError::new("bynk.types.field_name_invalid", at, shown);
-                        errors.push(match origin {
-                            Some(a) => crate::annotation_consts::with_const_origin(err, a),
-                            None => err,
-                        });
-                    }
+                    None
+                };
+                if let Some(why) = bad {
+                    errors.push(crate::wire_names::invalid_name(
+                        "bynk.types.field_name_invalid",
+                        "name",
+                        &literal,
+                        why,
+                        at,
+                        arg,
+                    ));
                 }
-                external = Some((literal, at));
+                wire.push((literal, at));
+            } else {
+                wire.push((f.name.name.clone(), f.name.span));
             }
-            let (key, span) = external.unwrap_or_else(|| (f.name.name.clone(), f.name.span));
-            wire.push((key, span));
-        }
-        if surfaces.is_empty() {
-            // No request surface: the wire-name checks would only echo the one error above.
-            continue;
         }
         let case_matters = surfaces
             .iter()
             .any(|s| matches!(s, RequestSurface::Cookies | RequestSurface::Query));
+        let headers = surfaces.contains(&RequestSurface::Headers);
         for (i, (a, span)) in wire.iter().enumerate() {
             for (b, _) in &wire[..i] {
-                if a == b {
+                // #3911: header names compare without case, so a difference of case is the same
+                // name. An exact repeat is reported with the record's other wire-name checks.
+                if a != b && headers && a.eq_ignore_ascii_case(b) {
                     errors.push(CompileError::new(
                         "bynk.types.field_name_duplicate",
                         *span,
                         format!("two fields of `{name}` read the same wire name `{a}`"),
                     ));
-                } else if case_matters && a.eq_ignore_ascii_case(b) {
+                } else if a != b && case_matters && a.eq_ignore_ascii_case(b) {
                     errors.push(
                         CompileError::new(
                             "bynk.types.field_name_case_conflict",
@@ -5890,6 +6934,61 @@ pub(crate) fn validate_field_names(
                     );
                 }
             }
+        }
+    }
+}
+
+/// #3911: an HTTP handler's `headers` parameter is `RequestHeaders` (#2341), or a record whose
+/// fields are each a leaf a header can carry (the typed-`query` set: a `String`, `Int`, `Bool` or
+/// `Decimal`, a refined or opaque type over one, an enum), an `Option` of one, or a `List` of one
+/// (a comma-separated list).
+fn validate_headers_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    if matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
+        return;
+    }
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.headers_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `headers` parameter must be a record type or `RequestHeaders` (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`headers: UploadHeaders` decodes the request's headers into the record `UploadHeaders`, one field per header (named by the field, or by `@name(\"if-match\")`), and answers `400` when it does not fit; `headers: RequestHeaders` gives the handler the request's headers raw",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.headers_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `headers` record has type `{}`, which a header cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a header field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a comma-separated list)",
+                ),
+            );
         }
     }
 }
@@ -6011,9 +7110,26 @@ fn validate_query_param(
 /// unknown annotation name is flagged rather than silently ignored. The
 /// automatic conditional `ETag`/`304` half carries no author surface, so `@cache`
 /// is the only annotation validated here.
+/// #3922: whether `scope: public` on this route is a `bynk.http.cache_public_authenticated`,
+/// and whether the route is a `SignedCookie` one. Neither is reported where another rule
+/// already says it: a `SignedCookie` route has `bynk.actor.signed_cookie_public_cache`, and
+/// in a context that declares `EdgeCache` the edge rule
+/// `bynk.cloudflare.edge_cache_public_authenticated` covers every credentialed route.
+fn route_actor_kinds(handler: &Handler, service: &ServiceDecl, table: &UnitTable) -> (bool, bool) {
+    let edge = table.derived.values().any(|d| d.is_edge_cache());
+    let by = handler.by_clause.as_ref().or(service.default_by.as_ref());
+    by.map_or((false, false), |by| {
+        (
+            !edge && crate::actors::route_is_credentialed(by, &table.actors),
+            crate::actors::by_clause_is_signed_cookie(by, &table.actors),
+        )
+    })
+}
+
 fn validate_handler_annotations(
     handler: &Handler,
     service_cap: Option<i64>,
+    (credentialed, signed_cookie_route): (bool, bool),
     errors: &mut Vec<CompileError>,
 ) {
     let is_get = matches!(
@@ -6038,6 +7154,7 @@ fn validate_handler_annotations(
     let mut seen_raw = false;
     let mut seen_form = false;
     let mut seen_json = false;
+    let mut seen_errors = false;
     // #3276: `@raw` and `@form` each fix the body's one wire format, so a handler
     // carries at most one of them.
     let mut body_kind: Option<&str> = None;
@@ -6053,12 +7170,16 @@ fn validate_handler_annotations(
                     continue;
                 }
                 seen_cache = true;
-                if !is_get {
+                // #3922: `noStore` is allowed on any HTTP route, since data that must never
+                // be stored is not only a `GET`'s. Another protocol, or an agent, has no
+                // response to stamp, so it stays `cache_on_non_get`.
+                let is_http = matches!(handler.kind, HandlerKind::Http { .. });
+                if !(is_get || is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
                             ann.span,
-                            "`@cache` is only valid on an `on http GET` handler",
+                            "`@cache` is only valid on an `on http GET` handler (`@cache(noStore: true)` is also valid on any other HTTP route)",
                         )
                         .with_note(
                             "conditional caching applies to safe, idempotent reads — a `GET` route",
@@ -6073,7 +7194,18 @@ fn validate_handler_annotations(
                     a.label.as_ref().is_some_and(|n| n.name == "scope")
                         && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
                 });
-                if public && handler.params.iter().any(|p| p.name.name == "cookies") {
+                // #3922: a credentialed route's response is one caller's.
+                // A `SignedCookie` route's own rule is `bynk.actor.signed_cookie_public_cache`.
+                if public && credentialed && !signed_cookie_route {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_public_authenticated",
+                            ann.span,
+                            "a `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another",
+                        )
+                        .with_note("use `scope: private`, or move a response that is the same for everyone to a `Visitor` route"),
+                    );
+                } else if public && handler.params.iter().any(|p| p.name.name == "cookies") {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_public_reads_cookies",
@@ -6220,20 +7352,9 @@ fn validate_handler_annotations(
                         )),
                     );
                 }
-                // A multipart body is held in memory beside its parsed copy, so
-                // it must be bounded, as a `@raw` one is.
-                if kind == "multipart" && handler.limit_max_body().or(service_cap).is_none() {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.http.multipart_body_unbounded",
-                            ann.span,
-                            "a `@multipart` route needs a request-body cap",
-                        )
-                        .with_note(
-                            "add `@limit(maxBody: …)` to the handler or `limits { maxBody: … }` to the service; a multipart body is buffered whole, so an unbounded upload is the denial of service ADR 0165 exists to stop",
-                        ),
-                    );
-                } else if kind == "multipart"
+                // A multipart body is held in memory beside its parsed copy, so a
+                // large cap is flagged (every route has a cap: #3921 defaults it).
+                if kind == "multipart"
                     && handler
                         .limit_max_body()
                         .or(service_cap)
@@ -6274,13 +7395,20 @@ fn validate_handler_annotations(
                 }
                 validate_json_args(ann, errors);
             }
+            "errors" => {
+                if !check_errors_annotation(ann, handler, &mut seen_errors, errors) {
+                    continue;
+                }
+            }
+            // #3926: validated by `http_rate_limit`, which sees the context's limiters.
+            "rateLimit" => {}
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
@@ -6299,6 +7427,56 @@ pub(crate) fn is_byte_stream(r: &TypeRef) -> bool {
 /// #3276: the body cap above which a `@multipart` route is warned about: a quarter
 /// of a Worker's 128 MB isolate, since the body is buffered with a parsed copy.
 const MULTIPART_LARGE_CAP: i64 = 32 * 1024 * 1024;
+
+/// #3921 (DECISION D): one hint per service listing the body-taking routes that
+/// now rely on the 1 MiB default cap, so a service that took larger bodies finds
+/// out at build, not in production. A route with an explicit cap is not listed.
+fn note_defaulted_body_caps(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    // In a stable order (the table is a hash map), so an incremental re-analysis
+    // reports the same hints in the same order as a cold one.
+    let mut services: Vec<&ServiceDecl> = table.services.values().collect();
+    services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    for service in services {
+        if service.limits.as_ref().and_then(|p| p.max_body()).is_none() {
+            note_service_defaulted_body_caps(service, errors);
+        }
+    }
+}
+
+fn note_service_defaulted_body_caps(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+    let routes: Vec<String> = service
+        .handlers
+        .iter()
+        .filter(|h| h.limit_max_body().is_none() && h.raw_content_type().is_none())
+        .filter(|h| h.effective_max_body(None).is_some())
+        .filter_map(|h| match &h.kind {
+            HandlerKind::Http { method, path } => Some(format!("{} {path}", method.as_str())),
+            _ => None,
+        })
+        .collect();
+    if routes.is_empty() {
+        return;
+    }
+    errors.push(
+        CompileError::new(
+            "bynk.http.body_cap_defaulted",
+            service.name.span,
+            format!(
+                "{} on `{}` {} on the default 1 MiB request-body cap",
+                routes.join(", "),
+                service.name.name,
+                if routes.len() == 1 { "relies" } else { "rely" },
+            ),
+        )
+        .with_note(
+            "a larger body is answered `413`; raise it with `@limit(maxBody: …)` on the route or `limits { maxBody: … }` on the service",
+        ),
+    );
+}
+
+/// #3921: why a `maxBody` has an upper bound. There is no "unlimited": a larger
+/// cap is a number, up to the largest platform plan's request-body ceiling.
+const MAX_BODY_NOTE: &str = "a body cap is a number of bytes, at most 524_288_000 (500 MB, the request-body ceiling of the largest Cloudflare plan); there is no \"unlimited\" setting";
 
 /// #3276: the diagnostic for a handler that declares two request-body wire formats
 /// (`@raw` with `@form`): each fixes how the one `body` is read, so they exclude
@@ -6336,6 +7514,192 @@ pub fn is_std_bynk_type(
     types.get(name).is_some_and(|d| d.span == decl.span)
         && crate::firstparty::unit(bynk_std::BYNK_UNIT)
             .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
+/// A `from websocket` service holds exactly one `on close` (#3902: it is required). `on open` always
+/// hands its connection to an agent's state, and the runtime cannot tell which store entry holds it,
+/// so nothing else removes a departed client's connection. A second `on close` is
+/// `bynk.service.websocket_open_arity`. A missing one is only judged on a service with exactly one
+/// `on open`: one with none or several already has that error.
+fn check_ws_close_arity(
+    service: &ServiceDecl,
+    opens: usize,
+    closes: &[&Handler],
+    errors: &mut Vec<CompileError>,
+) {
+    if let Some(second) = closes.get(1) {
+        errors.push(CompileError::new(
+            "bynk.service.websocket_open_arity",
+            second.span,
+            format!(
+                "the `from websocket` service `{}` has more than one `on close` handler — it needs at most one",
+                service.name.name
+            ),
+        ));
+    }
+    if closes.is_empty() && opens == 1 {
+        errors.push(
+            CompileError::new(
+                "bynk.ws.missing_close",
+                service.name.span,
+                format!(
+                    "the `from websocket` service `{}` has no `on close` handler — it needs one, to release the connection `on open` handed over",
+                    service.name.name
+                ),
+            )
+            .with_note(
+                "`on open` transfers the connection into an agent's state, so a departed client's connection stays held, and a later broadcast to it raises; add `on close (…) -> Effect[()]` that removes it (a trailing `close: CloseInfo` parameter carries the code and reason)",
+            ),
+        );
+    }
+}
+
+/// #3902: whether `p` is the `close: CloseInfo` parameter of an `on close` handler: the `CloseInfo`
+/// record `bynk` exports, found by its first-party declaration (as `is_std_file_type` finds `File`),
+/// so a user type that happens to be called `CloseInfo` is a route value, not this.
+pub fn is_close_info_param(
+    p: &Param,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    ts_type_ref_display(&p.type_ref) == "CloseInfo"
+        && types.get("CloseInfo").is_some_and(|decl| {
+            crate::firstparty::unit(bynk_std::BYNK_UNIT).is_some_and(|unit| {
+                decl.span.file == crate::project_model::firstparty_file_id(unit)
+            })
+        })
+}
+
+/// #3902: the route parameters of an `on close`: its parameters less a trailing `close: CloseInfo`.
+pub fn close_route_params<'a>(
+    close: &'a Handler,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> &'a [Param] {
+    match close.params.split_last() {
+        Some((last, rest)) if is_close_info_param(last, types) => rest,
+        _ => &close.params,
+    }
+}
+
+/// #4111: `bynk.types.secret_at_boundary` for a `Secret` or `Authorization` (as `name` spells it) written at `span` in `what`.
+fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError {
+    CompileError::new(
+        "bynk.types.secret_at_boundary",
+        span,
+        format!(
+            "a `{name}` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
+        ),
+    )
+    .with_note(
+        "read the text with `reveal()` where it is used, or keep it in `Secrets` and read it again where it is needed",
+    )
+}
+
+/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretKind {
+    /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
+    Secret,
+    /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
+    /// `Fetch` reveals when it sends and which has no reader of its own.
+    Authorization,
+}
+
+/// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
+/// what the text there says, and never by the name it is spelled here: `consumes bynk { Secret as
+/// Token }` renames the declaration but not its source span.
+pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
+    if !matches!(decl.body, bynk_syntax::ast::TypeBody::Opaque { .. }) {
+        return None;
+    }
+    let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+    if decl.span.file != crate::project_model::firstparty_file_id(unit) {
+        return None;
+    }
+    let text = unit.source.get(decl.span.start..decl.span.end)?;
+    if text.contains("type Secret =") {
+        Some(SecretKind::Secret)
+    } else if text.contains("type Authorization =") {
+        Some(SecretKind::Authorization)
+    } else {
+        None
+    }
+}
+
+/// #4111: whether `name`, in the project's type table, is a secret-carrying `bynk` type
+/// (`Secret` or `Authorization`), whatever it is spelled here, so a user type that happens to be
+/// called `Secret` is not mistaken for it.
+pub fn is_secret_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    types.get(name).is_some_and(|decl| is_secret_carrier(decl))
+}
+
+/// #4111: whether the named type `name` is, or holds at any depth in a record field or variant
+/// payload, a `Secret` or an `Authorization`. `bynk`'s own `Request` holds one, so a `Request` has
+/// no codec, though the field itself is allowed there.
+pub fn type_carries_secret(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    fn walk(
+        name: &str,
+        types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+        seen: &mut HashSet<String>,
+    ) -> bool {
+        let Some(decl) = types.get(name) else {
+            return false;
+        };
+        if is_secret_carrier(decl) {
+            return true;
+        }
+        if !seen.insert(name.to_string()) {
+            return false;
+        }
+        let fields: Vec<&TypeRef> = match &decl.body {
+            bynk_syntax::ast::TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
+            bynk_syntax::ast::TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| v.payload.iter().map(|f| &f.type_ref))
+                .collect(),
+            _ => Vec::new(),
+        };
+        fields.into_iter().any(|f| {
+            bynk_syntax::ast::type_ref_heads(f)
+                .iter()
+                .any(|h| walk(h, types, seen))
+        })
+    }
+    walk(name, types, &mut HashSet::new())
+}
+
+/// #4111: the types the `bynk` adapter declares, by name, from its embedded source (built once).
+fn bynk_types() -> &'static HashMap<String, Arc<TypeDecl>> {
+    static TYPES: std::sync::OnceLock<HashMap<String, Arc<TypeDecl>>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        crate::checker::std_type_decls()
+            .iter()
+            .map(|t| (t.name.name.clone(), Arc::clone(t)))
+            .collect()
+    })
+}
+
+/// #4111: whether `decl` is one the `bynk` adapter itself ships.
+pub fn is_firstparty_decl(decl: &TypeDecl) -> bool {
+    crate::firstparty::unit(bynk_std::BYNK_UNIT)
+        .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
+/// #4111: whether `decl` is `Secret` or `Authorization`: the types that are never stored, sent,
+/// encoded or compared, and that the emitter builds as a runtime `BynkSecret`.
+pub fn is_secret_carrier(decl: &TypeDecl) -> bool {
+    secret_kind(decl).is_some()
+}
+
+/// #4111: whether `decl` is `Secret` itself, the one whose `of` cannot fail.
+pub fn is_secret_decl(decl: &TypeDecl) -> bool {
+    secret_kind(decl) == Some(SecretKind::Secret)
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its
@@ -6500,20 +7864,50 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     let mut max_age: Option<&AnnotationArg> = None;
     let mut scope: Option<&AnnotationArg> = None;
     let mut immutable: Option<&AnnotationArg> = None;
+    let mut no_store: Option<&AnnotationArg> = None;
     for arg in &ann.args {
         match arg.label.as_ref().map(|l| l.name.as_str()) {
             Some("maxAge") => max_age = Some(arg),
             Some("scope") => scope = Some(arg),
             Some("immutable") => immutable = Some(arg),
+            Some("noStore") => no_store = Some(arg),
             _ => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.cache_unknown_arg",
                         arg.span,
-                        "`@cache` accepts only the `maxAge:`, `scope:` and `immutable:` arguments",
+                        "`@cache` accepts only the `maxAge:`, `scope:`, `immutable:` and `noStore:` arguments",
                     )
                     .with_note("write `@cache(maxAge: 5.minutes, scope: private)`"),
                 );
+            }
+        }
+    }
+    // #3922: `noStore: true` sends `no-store`, so no freshness argument may go with it.
+    if let Some(arg) = no_store {
+        match &arg.value.kind {
+            ExprKind::BoolLit(true) => {
+                for other in [max_age, scope, immutable].into_iter().flatten() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_no_store_conflict",
+                            other.span,
+                            "`@cache(noStore: true)` stores nothing, so it takes no `maxAge`, `scope` or `immutable`",
+                        )
+                        .with_label(arg.span, "`noStore: true` is declared here")
+                        .with_note("drop `noStore: true` to cache, or drop the freshness arguments to forbid storing"),
+                    );
+                }
+                return;
+            }
+            ExprKind::BoolLit(false) => {}
+            _ => {
+                errors.push(CompileError::new(
+                    "bynk.http.cache_bad_no_store",
+                    arg.span,
+                    "`@cache` `noStore` must be `true` or `false`",
+                ));
+                return;
             }
         }
     }
@@ -6662,15 +8056,16 @@ fn validate_limit_args(ann: &Annotation, is_multipart: bool, errors: &mut Vec<Co
     }
     // `maxBody` is required and must be a *positive* `Int` literal — a byte count.
     match max_body.map(|a| &a.value.kind) {
-        Some(ExprKind::IntLit { value: n, .. }) if *n > 0 => {}
+        Some(ExprKind::IntLit { value: n, .. }) if (1..=MAX_BODY_CEILING).contains(n) => {}
         Some(_) => {
             let arg = max_body.unwrap();
             errors.push(crate::annotation_consts::with_const_origin(
                 CompileError::new(
                     "bynk.http.limit_bad_max_body",
                     arg.span,
-                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one",
-                ),
+                    "`@limit` `maxBody` must be a positive `Int` literal — a byte count (e.g. `26_214_400`), or an `Int` constant bound to one — no larger than 524_288_000",
+                )
+                .with_note(MAX_BODY_NOTE),
                 arg,
             ));
         }
@@ -6711,13 +8106,20 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
     match content_type.map(|a| &a.value.kind) {
         Some(ExprKind::StrLit(s)) if bynk_syntax::ast::is_media_type(s) => {}
+        // #3912: a non-empty list of media types; `"*/*"` cannot be one of several.
+        Some(ExprKind::ListLit(items, ..))
+            if !items.is_empty()
+                && items.iter().all(|e| {
+                    matches!(&e.kind, ExprKind::StrLit(s)
+                        if bynk_syntax::ast::is_media_type(s) && s != "*/*")
+                }) => {}
         Some(_) => {
             let arg = content_type.unwrap();
             errors.push(crate::annotation_consts::with_const_origin(
                 CompileError::new(
                     "bynk.http.raw_bad_content_type",
                     arg.span,
-                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any",
+                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any — or a non-empty list of `type/subtype` literals",
                 ),
                 arg,
             ));
@@ -6735,53 +8137,214 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
-/// Validate an `on cron "expr" (at: Int?) -> Effect[Result[(), E]]` handler
-/// (v0.10a §4.1): at most one `Int` parameter (the scheduled time, Unix epoch
-/// milliseconds), a structurally well-formed schedule, and the unit-Result
-/// return shape. The service-only rule is enforced earlier, in the parser
-/// (`bynk.parse.handler_in_agent`).
-fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
-    // A cron handler takes at most one parameter — the scheduled time, typed
-    // `Int` (epoch milliseconds). A scheduled trigger has no other payload.
-    if handler.params.len() > 1 {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                handler.params[1].span,
-                "`on cron` handlers take at most one parameter (the scheduled time)",
-            )
-            .with_note("a scheduled trigger's only input is the time it fired"),
-        );
-    } else if let Some(p) = handler.params.first()
-        && !matches!(p.type_ref, TypeRef::Base(BaseType::Int, _))
-    {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                p.type_ref.span(),
-                format!(
-                    "an `on cron` parameter must be `Int` (the scheduled time in epoch milliseconds), got `{}`",
-                    ts_type_ref_display(&p.type_ref),
+/// #3874 [DECISION A, B]: a cron handler takes up to two parameters, told apart by
+/// type, in either order: an `Instant` (the scheduled time) and exactly the
+/// prelude's `CronSchedule` (the schedule that fired the run). A second parameter
+/// of the same type, a third, or any other type is `bynk.cron.bad_params`. A
+/// `CronSchedule` the unit declares itself is not the prelude's, whatever it is
+/// spelled like: the entry hands the parameter a schedule string, which only the
+/// prelude type admits.
+fn check_cron_params(handler: &Handler, table: &UnitTable, errors: &mut Vec<CompileError>) {
+    use bynk_syntax::cron::{CronParam, cron_param};
+    let own_schedule_type = table.types.contains_key("CronSchedule");
+    let mut seen: Vec<CronParam> = Vec::new();
+    for (i, p) in handler.params.iter().enumerate() {
+        if i >= 2 {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    "an `on schedule` handler takes at most two parameters",
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
                 ),
-            )
-            .with_note("wrap it in your own time type inside the body if you want stronger typing"),
-        );
+            );
+            continue;
+        }
+        let kind = cron_param(&p.type_ref);
+        if kind == Some(CronParam::Schedule) && own_schedule_type {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    "this `CronSchedule` is a type this unit declares, not the prelude's",
+                )
+                .with_note(
+                    "a schedule parameter must be the `CronSchedule` that `consumes bynk { CronSchedule }` provides: the entry hands it the schedule string that fired the run",
+                ),
+            );
+            continue;
+        }
+        let Some(kind) = kind else {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    format!(
+                        "an `on schedule` parameter must be `Instant` (the scheduled time) or `CronSchedule` (the schedule that fired), got `{}`",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note(
+                    "declare `at: Instant`; where the body needs the number, use `at.toEpochMillis()`. `schedule: CronSchedule` is the expression that fired this run",
+                ),
+            );
+            continue;
+        };
+        if seen.contains(&kind) {
+            let what = match kind {
+                CronParam::Time => "an `Instant`",
+                CronParam::Schedule => "a `CronSchedule`",
+            };
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    format!("an `on schedule` handler takes at most one parameter of each type, but this is a second {what}"),
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
+                ),
+            );
+        }
+        seen.push(kind);
     }
-    // The schedule must be five whitespace-separated fields (light structural
-    // check; per-field validation is deferred — v0.10 §4.1, [DECISION 4]).
-    let fields = expr.split_whitespace().count();
-    if fields != 5 {
+}
+
+/// Two cron handlers of a context may not declare the same schedule: the
+/// generated `scheduled` dispatcher routes on `event.cron`. #3875: a schedule
+/// constant that was refused has no expression to compare, and is already
+/// reported.
+fn check_duplicate_schedule(
+    handler: &Handler,
+    expr: &str,
+    seen: &mut HashMap<String, Span>,
+    errors: &mut Vec<CompileError>,
+) {
+    if handler
+        .schedule_const
+        .as_ref()
+        .is_some_and(|s| s.refusal.is_some())
+    {
+        return;
+    }
+    if let Some(prev) = seen.get(expr).copied() {
         errors.push(
             CompileError::new(
+                "bynk.cron.duplicate_schedule",
+                handler.span,
+                format!("duplicate cron schedule: another handler already declares `{expr}`"),
+            )
+            .with_label(prev, "previously declared here"),
+        );
+    } else {
+        seen.insert(expr.to_string(), handler.span);
+    }
+}
+
+/// #3875 [DECISION D]: a schedule constant that does not denote a schedule. An
+/// unknown name is the ordinary unknown name (so a private constant of a used
+/// commons reads as `bynk.visibility.private_item`); a constant of another type
+/// is `bynk.cron.invalid_schedule` with a note naming the constant and its
+/// declared type.
+fn refused_schedule_const(
+    sc: &bynk_syntax::ast::ScheduleConst,
+    refusal: &bynk_syntax::ast::ScheduleRefusal,
+) -> CompileError {
+    use bynk_syntax::ast::ScheduleRefusal;
+    let name = &sc.name.name;
+    match refusal {
+        ScheduleRefusal::Unknown => CompileError::new(
+            "bynk.resolve.unknown_name",
+            sc.name.span,
+            format!("the schedule in `on schedule(…)` names an unknown constant `{name}`"),
+        )
+        .with_note("a schedule is a string literal, or a `String` or `CronSchedule` constant"),
+        ScheduleRefusal::Declared(ty) => CompileError::new(
+            "bynk.cron.invalid_schedule",
+            sc.name.span,
+            format!("`{name}` is not a cron schedule: it is declared `{ty}`"),
+        )
+        .with_note(format!(
+            "`schedule(…)` takes a string literal, or a constant declared exactly `String` or `CronSchedule` and bound to a literal; `const {name}` is declared `{ty}`"
+        )),
+    }
+}
+
+/// #3873: the schedule must be valid Cloudflare cron syntax
+/// ([`bynk_syntax::cron::is_cron_expression`]); the message names the failing
+/// field. A valid one may draw the two advisory warnings (`numeric_weekday`,
+/// `uneven_step`), both silenced by writing a name or an explicit list.
+fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
+    if let Some(sc) = &handler.schedule_const
+        && let Some(refusal) = &sc.refusal
+    {
+        errors.push(refused_schedule_const(sc, refusal));
+        return;
+    }
+    match bynk_syntax::cron::is_cron_expression(expr) {
+        Err(fault) => {
+            let mut err = CompileError::new(
                 "bynk.cron.invalid_schedule",
                 handler.span,
-                format!(
-                    "cron expression `{expr}` must have exactly five whitespace-separated fields (got {fields})",
-                ),
+                format!("cron schedule `{expr}` is invalid: {}", fault.message()),
             )
-            .with_note("the fields are: minute hour day-of-month month day-of-week"),
-        );
+            .with_note(
+                "the fields are: minute hour day-of-month month day-of-week, separated by exactly one space",
+            );
+            let single_spaced = expr.split_whitespace().collect::<Vec<_>>().join(" ");
+            if single_spaced != expr
+                && bynk_syntax::cron::is_cron_expression(&single_spaced).is_ok()
+            {
+                err = err.with_note(format!(
+                    "write it with single spaces: `{single_spaced}` (Cloudflare matches the schedule character for character)"
+                ));
+            }
+            errors.push(err);
+        }
+        Ok(()) => {
+            if bynk_syntax::cron::numeric_weekday(expr) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.cron.numeric_weekday",
+                        handler.span,
+                        format!("cron schedule `{expr}` names a day of the week by number"),
+                    )
+                    .with_note(
+                        "on Cloudflare `1` is Sunday, so a number is a day earlier than standard cron's (`5` is Thursday, not Friday); write the name (`FRI`) to be explicit",
+                    ),
+                );
+            }
+            if let Some(when) = bynk_syntax::cron::uneven_step(expr) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.cron.uneven_step",
+                        handler.span,
+                        format!("cron schedule `{expr}` has an uneven step"),
+                    )
+                    .with_note(when)
+                    .with_note(
+                        "list the times you mean, or use a step that divides the field's range",
+                    ),
+                );
+            }
+        }
     }
+}
+
+/// Validate an `on schedule("expr") (at: Instant?) -> Effect[Result[(), E]]`
+/// handler (v0.10a §4.1): at most one `Instant` parameter (the scheduled time), a structurally well-formed schedule, and the unit-Result
+/// return shape. The service-only rule is enforced earlier, in the parser
+/// (`bynk.parse.handler_in_agent`).
+fn validate_cron_handler(
+    handler: &Handler,
+    expr: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    check_cron_params(handler, table, errors);
+    check_cron_schedule(handler, expr, errors);
     // The return type must be `Effect[Result[(), E]]`.
     let return_ok = match &handler.return_type {
         TypeRef::Effect(inner, _) => match inner.as_ref() {
@@ -6808,12 +8371,17 @@ fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<Compile
 /// wire-deserialisable type), and the `Effect[QueueResult]` return — the verdict
 /// sum, where `Ack` acknowledges the message and `Retry(...)` has it redelivered. The service-only rule is
 /// enforced earlier, in the parser (`bynk.parse.handler_in_agent`).
-fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<CompileError>) {
+fn validate_queue_handler(
+    handler: &Handler,
+    name: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
     if name.is_empty() {
         errors.push(CompileError::new(
             "bynk.queue.invalid_name",
             handler.span,
-            "`on queue` requires a non-empty queue name",
+            "`from queue` requires a non-empty queue name",
         ));
     } else if !crate::project_model::is_queue_name(name) {
         errors.push(
@@ -6827,18 +8395,50 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
             ),
         );
     }
-    // Exactly one parameter — the message. (Conventionally named `message`.)
-    if handler.params.len() != 1 {
+    // #3880: the delivery parameter is the `QueueDelivery` of `bynk.cloudflare`. A type of the
+    // same name that this context declares is the author's own, not the platform's, and is
+    // refused rather than taken for it, since later stages recognise the parameter by its name.
+    if table.types.contains_key("QueueDelivery")
+        && let Some(p) = handler
+            .params
+            .iter()
+            .find(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    {
         errors.push(
             CompileError::new(
                 "bynk.queue.bad_params",
-                handler.span,
-                format!(
-                    "`on message` handlers take exactly one parameter (the message), got {}",
-                    handler.params.len(),
-                ),
+                p.type_ref.span(),
+                "this context declares its own `QueueDelivery`, which is not the delivery metadata of `bynk.cloudflare`",
             )
-            .with_note("a queue consumer processes one message per invocation"),
+            .with_note(
+                "rename your type, or `consumes bynk.cloudflare { QueueDelivery }` and use that one; the delivery parameter of an `on message` handler is the platform's",
+            ),
+        );
+    }
+    // The message, and optionally the delivery metadata (#3880): at most two
+    // parameters, the second being exactly one `QueueDelivery`, in either order.
+    let deliveries =
+        bynk_syntax::queue::delivery_positions(handler.params.iter().map(|p| &p.type_ref));
+    let messages = handler.params.len() - deliveries.len();
+    if messages != 1 || deliveries.len() > 1 {
+        let why = if deliveries.len() > 1 {
+            format!(
+                "`on message` handlers take one `QueueDelivery` at most, got {}",
+                deliveries.len()
+            )
+        } else if messages == 0 {
+            "`on message` handlers take the message as a parameter, and a `QueueDelivery` is not a message"
+                .to_string()
+        } else {
+            format!(
+                "`on message` handlers take the message and optionally a `QueueDelivery`, got {} parameters besides it",
+                messages - 1
+            )
+        };
+        errors.push(
+            CompileError::new("bynk.queue.bad_params", handler.span, why).with_note(
+                "a queue consumer processes one message per invocation; add `delivery: QueueDelivery` (`consumes bynk.cloudflare { QueueDelivery }`) to read its attempt count and send time",
+            ),
         );
     }
     // v0.44: the return type must be `Effect[QueueResult]` (the verdict sum).
@@ -7130,7 +8730,7 @@ pub fn reject_fn_types(
         }
         TypeRef::Option(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _) => reject_fn_types(a, what, types, errors),
         // v0.119: a `History[Agent]` reaching a declared position is already
@@ -7150,30 +8750,7 @@ pub fn reject_fn_types(
         // through another type (the resolver's `recursive_record_field` guard
         // only catches a direct self-edge in a non-generic record).
         TypeRef::App { name, args, span } => {
-            if !stream_passes(what)
-                && let Some(rg) = bynk_syntax::ast::recursive_generic_path(
-                    &TypeRef::App {
-                        name: name.clone(),
-                        args: Vec::new(),
-                        span: *span,
-                    },
-                    types,
-                )
-            {
-                errors.push(recursive_generic_at_boundary(&rg, *span, what));
-            }
-            for a in args {
-                reject_fn_types(a, what, types, errors);
-            }
-            // K-streams (#2623): a generic record whose own fields carry a
-            // stream (`Wrap[T] = { s: Stream[T] }`) is found through its
-            // declaration; a stream argument was reported just above.
-            if !stream_passes(what)
-                && let Some(path) =
-                    bynk_syntax::ast::stream_path(&TypeRef::Named(name.clone()), types)
-            {
-                errors.push(stream_carrying_at_boundary(&name.name, &path, *span, what));
-            }
+            crate::app_boundary::reject_app(name, args, *span, what, types, errors);
         }
         // #1883, slice 1a: an `Asset` names a file the platform serves; it
         // is not data. What crosses a boundary or is stored is its `.url`.
@@ -7221,25 +8798,12 @@ pub fn reject_fn_types(
                 ),
             );
         }
-        // #3343: a record with `@name` fields is read off an HTTP request by name,
-        // so its JSON form is not its wire form: it may not be a body, a result,
-        // a store field, an event or a call argument.
-        TypeRef::Named(id)
-            if what != REQUEST_RECORD_PARAM && record_has_field_names(&id.name, types) =>
-        {
-            errors.push(
-                CompileError::new(
-                    "bynk.types.field_name_record_not_boundary",
-                    id.span,
-                    format!(
-                        "`{}` has `@name` fields, so it can only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter, not {what}",
-                        id.name
-                    ),
-                )
-                .with_note(
-                    "a record's JSON form uses its field names, so a `@name` rename would split the two; use a separate record for this position",
-                ),
-            );
+        // #4111: a `Secret` has no codec, so it is neither storable nor boundary-crossing:
+        // it would leak the value into storage, a wire body or a log. A capability
+        // operation is where one is returned (`Secrets.get`), in-process, so its signature
+        // is exempt.
+        TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
+            errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload
@@ -7271,14 +8835,6 @@ pub fn reject_fn_types(
     }
 }
 
-/// #3343: whether `name` is a record with a `@name`-annotated field.
-fn record_has_field_names(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
-    matches!(
-        types.get(name).map(|t| &t.body),
-        Some(TypeBody::Record(r)) if r.fields.iter().any(|f| !f.annotations.is_empty())
-    )
-}
-
 /// #3276: `bynk.types.file_at_boundary` for a `File`, or a type that carries one,
 /// at a position that persists or sends it.
 fn file_at_boundary(name: &str, path: &[String], span: Span, what: &str) -> CompileError {
@@ -7308,7 +8864,7 @@ fn file_at_boundary(name: &str, path: &[String], span: Span, what: &str) -> Comp
 /// operation's provider runs in the caller's isolate, so nothing in its
 /// signature is serialised; a record field or sum payload makes its type
 /// stream-carrying, which is then checked where the type is used.
-fn stream_passes(what: &str) -> bool {
+pub(crate) fn stream_passes(what: &str) -> bool {
     [CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD].contains(&what)
 }
 
@@ -7348,7 +8904,7 @@ pub(crate) fn recursive_generic_at_boundary(
 
 /// K-streams (#2623): `bynk.types.stream_at_boundary` for a type that carries
 /// a stream in a field, naming the field chain it is reached through.
-fn stream_carrying_at_boundary(
+pub(crate) fn stream_carrying_at_boundary(
     name: &str,
     path: &[String],
     span: Span,
@@ -7418,9 +8974,11 @@ mod actor_binding_persistence_tests {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
+            consumes: Vec::new(),
             documentation: ctx.documentation,
             form: ctx.form,
             span: ctx.span,
@@ -7632,7 +9190,7 @@ service Api {
 context demo
 
 service Api {
-  on call(ping: String) -> Effect[String] {
+  on call(ping: String) -> Effect[String] by Caller {
     Effect.pure(ping)
   }
 }
@@ -7729,5 +9287,37 @@ service Api from http {
             2,
             "exactly the two `by`-bearing handlers, nothing extra persisted for the third"
         );
+    }
+}
+
+#[cfg(test)]
+mod secret_kind_tests {
+    use super::*;
+
+    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
+    /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
+    #[test]
+    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+        let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
+            .iter()
+            .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
+            .map(|t| (t.name.name.as_str(), secret_kind(t)))
+            .collect();
+        let mut names: Vec<&str> = opaque.iter().map(|(n, _)| *n).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            ["Authorization", "Secret"],
+            "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
+             secret-carrying, and extend `secret_kind` and this test"
+        );
+        for (name, kind) in opaque {
+            let want = match name {
+                "Secret" => SecretKind::Secret,
+                _ => SecretKind::Authorization,
+            };
+            assert_eq!(kind, Some(want), "{name}");
+        }
     }
 }

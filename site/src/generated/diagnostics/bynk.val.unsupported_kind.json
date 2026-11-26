@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val[T]` fabricates a value from a type declaration: a refinement, a sum, a record or an opaque type. A built-in type such as `Int` or `String`, a `List` or a function type has no declaration to draw from, so `Val` refuses it. Write the value, `20`, or declare a type for it, which `Val` can then fabricate.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.unsupported_kind",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "type Age = Int where InRange(0, 150)\n\nlet n = Val[Int]   // ✗ a built-in type\nlet a = Val[Age]   // ✓ a declared type",
+  "severity": "error",
+  "summary": "`Val[T]` cannot fabricate a value for this kind of type."
+}

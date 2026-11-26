@@ -24,7 +24,7 @@
 //! so it cannot reach the plan, the ledger, the generated config or a log.
 
 use super::*;
-use crate::migrate::live::{self, Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Rest};
 use bynk_driver::colour;
 use bynk_driver::emsg;
 
@@ -33,9 +33,9 @@ use bynk_driver::emsg;
 pub(crate) trait SecretsStores {
     /// The ids of the stores named `name` (one, when the account is
     /// well-formed; none when it has no such store).
-    fn store_ids(&self, name: &str) -> Result<Vec<String>, String>;
+    fn store_ids(&self, name: &str) -> Result<Vec<String>, CloudflareError>;
     /// Whether the store `store_id` holds a secret named `secret`.
-    fn has_secret(&self, store_id: &str, secret: &str) -> Result<bool, String>;
+    fn has_secret(&self, store_id: &str, secret: &str) -> Result<bool, CloudflareError>;
 }
 
 /// Cloudflare's REST API, for the Secrets Store listings. Wrangler's own
@@ -50,46 +50,39 @@ pub(crate) const TOKEN_SCOPE: &str = "Secrets Store: Read";
 impl RestStores {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message
     /// naming the missing variable and the permission the token needs.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
-            "link a Secrets Store secret",
-            &format!(
-                "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
-            ),
-        )?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent()?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "link a Secrets Store secret",
+                &format!(
+                    "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+                ),
+            )?,
         })
     }
 
     /// Every entry of the paginated listing at `path`, as `(id, name)`.
-    fn listing(&self, path: &str) -> Result<Vec<(String, String)>, String> {
+    fn listing(&self, path: &str) -> Result<Vec<(String, String)>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1.. {
-            let body = self.rest.get(&format!("{path}?per_page=100&page={page}"))?;
-            let entries = body["result"].as_array().cloned().unwrap_or_default();
-            let n = entries.len();
-            out.extend(entries.iter().filter_map(|e| {
-                Some((
-                    e["id"].as_str()?.to_string(),
-                    e["name"].as_str()?.to_string(),
-                ))
-            }));
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(
+            |page| -> Result<_, CloudflareError> {
+                let body = self.rest.get(&format!("{path}?per_page=100&page={page}"))?;
+                let entries = body["result"].as_array().cloned().unwrap_or_default();
+                out.extend(entries.iter().filter_map(|e| {
+                    Some((
+                        e["id"].as_str()?.to_string(),
+                        e["name"].as_str()?.to_string(),
+                    ))
+                }));
+                Ok(crate::cloudflare::paging::Page::of(&body, entries.len()))
+            },
+        )?;
         Ok(out)
     }
 }
 
 impl SecretsStores for RestStores {
-    fn store_ids(&self, name: &str) -> Result<Vec<String>, String> {
+    fn store_ids(&self, name: &str) -> Result<Vec<String>, CloudflareError> {
         Ok(self
             .listing("/secrets_store/stores")?
             .into_iter()
@@ -98,7 +91,7 @@ impl SecretsStores for RestStores {
             .collect())
     }
 
-    fn has_secret(&self, store_id: &str, secret: &str) -> Result<bool, String> {
+    fn has_secret(&self, store_id: &str, secret: &str) -> Result<bool, CloudflareError> {
         Ok(self
             .listing(&format!("/secrets_store/stores/{store_id}/secrets"))?
             .iter()
@@ -109,13 +102,13 @@ impl SecretsStores for RestStores {
 /// What the account answered about a store, for a message: Cloudflare says
 /// 401 or 403 when the token lacks the permission, which is the one thing
 /// worth naming rather than echoing.
-fn explain(said: String) -> String {
-    if said.contains("answered 401") || said.contains("answered 403") {
+fn explain(said: CloudflareError) -> String {
+    if matches!(said.status(), Some(401 | 403)) {
         format!(
             "{said} (the token needs the \"{TOKEN_SCOPE}\" permission, on this account, to find a store and its secrets)"
         )
     } else {
-        said
+        said.to_string()
     }
 }
 
@@ -203,7 +196,7 @@ pub(crate) enum InstanceState {
 /// The account's AI Search instances, as far as linking needs them. A trait so
 /// the resolution is tested against a fake and the REST client against a stub.
 pub(crate) trait AiSearchInstances {
-    fn instance(&self, name: &str) -> Result<InstanceState, String>;
+    fn instance(&self, name: &str) -> Result<InstanceState, CloudflareError>;
 }
 
 /// The permissions a token needs for the AI Search REST API. The docs name
@@ -219,19 +212,14 @@ pub(crate) struct RestAiSearch {
 impl RestAiSearch {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message
     /// naming the missing variable and the permissions the token needs.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
-            "link an AI Search instance",
-            &format!(
-                "an API token with \"{AI_SEARCH_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
-            ),
-        )?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent()?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "link an AI Search instance",
+                &format!(
+                    "an API token with \"{AI_SEARCH_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+                ),
+            )?,
         })
     }
 }
@@ -271,7 +259,7 @@ fn paused_warning(status: Option<&str>) -> String {
 }
 
 impl AiSearchInstances for RestAiSearch {
-    fn instance(&self, name: &str) -> Result<InstanceState, String> {
+    fn instance(&self, name: &str) -> Result<InstanceState, CloudflareError> {
         match self
             .rest
             .get(&format!("/ai-search/namespaces/default/instances/{name}"))
@@ -281,11 +269,12 @@ impl AiSearchInstances for RestAiSearch {
             // is code 7002 (`ai_search_not_found`). Any other 404 (a wrong
             // account id, a moved route) is not "missing", so it falls through
             // with what Cloudflare said.
-            Err(said) if said.contains("\"code\":7002") => Ok(InstanceState::Missing),
-            Err(said) if super::destinations::is_denied(&said) => Err(format!(
+            Err(said) if said.has_code(7002) => Ok(InstanceState::Missing),
+            Err(said) if said.is_denied() => Err(format!(
                 "{said} (the token needs the \"{AI_SEARCH_TOKEN_SCOPE}\" permissions, on this account, to find an instance)"
-            )),
-            Err(said) => Err(said),
+            )
+            .into()),
+            Err(said) => Err(said.into()),
         }
     }
 }
@@ -306,7 +295,7 @@ pub(crate) fn link_ai_search(
             let who = format!("`{}` of `{worker}`", decl.binding);
             let found = asked
                 .entry(decl.instance.clone())
-                .or_insert_with(|| search.instance(&decl.instance))
+                .or_insert_with(|| search.instance(&decl.instance).map_err(|e| e.to_string()))
                 .clone();
             match found {
                 Ok(InstanceState::Found { warning: None }) => {}
@@ -376,7 +365,7 @@ pub(crate) struct MtlsRecord {
 /// The account's mTLS certificates, as far as linking needs them. A trait so the resolution is
 /// tested against a fake and the REST client against a stub.
 pub(crate) trait MtlsCertificates {
-    fn list(&self) -> Result<Vec<MtlsRecord>, String>;
+    fn list(&self) -> Result<Vec<MtlsRecord>, CloudflareError>;
 }
 
 /// The permission a token needs to list mTLS certificates (Cloudflare's list endpoint accepts
@@ -391,19 +380,14 @@ pub(crate) struct RestMtls {
 impl RestMtls {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or a message naming the missing
     /// variable and the permission the token needs.
-    pub(crate) fn from_env() -> Result<Self, String> {
-        let credentials = Credentials::from_env_for(
-            "link an mTLS certificate",
-            &format!(
-                "an API token with \"{MTLS_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
-            ),
-        )?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent()?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "link an mTLS certificate",
+                &format!(
+                    "an API token with \"{MTLS_TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+                ),
+            )?,
         })
     }
 }
@@ -426,29 +410,27 @@ fn mtls_records(body: &serde_json::Value) -> Vec<MtlsRecord> {
 }
 
 impl MtlsCertificates for RestMtls {
-    fn list(&self) -> Result<Vec<MtlsRecord>, String> {
+    fn list(&self) -> Result<Vec<MtlsRecord>, CloudflareError> {
         let mut out = Vec::new();
-        for page in 1.. {
+        crate::cloudflare::paging::Numbered::TO_TOTAL.follow(|page| -> Result<_, CloudflareError> {
             let body = self
                 .rest
                 .get(&format!("/mtls_certificates?per_page=100&page={page}"))
-                .map_err(|said| {
-                    if super::destinations::is_denied(&said) {
+                .map_err(|said| -> CloudflareError {
+                    if said.is_denied() {
                         format!(
                             "{said} (the token needs the \"{MTLS_TOKEN_SCOPE}\" permission, on this account, to find a certificate)"
                         )
+                        .into()
                     } else {
-                        said
+                        said.into()
                     }
                 })?;
             let records = mtls_records(&body);
-            let n = records.len();
+            let read = crate::cloudflare::paging::Page::of(&body, records.len());
             out.extend(records);
-            let pages = body["result_info"]["total_pages"].as_u64().unwrap_or(1);
-            if n == 0 || page >= pages {
-                break;
-            }
-        }
+            Ok(read)
+        })?;
         Ok(out)
     }
 }
@@ -502,7 +484,8 @@ pub(crate) fn link_mtls(
     for worker in order {
         for decl in &resources[worker].mtls_certificates {
             let who = format!("`{}` of `{worker}`", decl.binding);
-            let records = listed.get_or_insert_with(|| certificates.list());
+            let records =
+                listed.get_or_insert_with(|| certificates.list().map_err(|e| e.to_string()));
             let records = match records {
                 Ok(records) => records,
                 Err(said) => {
@@ -584,38 +567,6 @@ pub(crate) fn link_mtls_for_run(
     links.problems.is_empty().then_some(links.linked)
 }
 
-/// Record the instances `worker`'s `AiSearch` bindings were linked to, before
-/// the push. Looked up in [`link_ai_search_for_run`], which stops the run when
-/// one is missing, so reaching here means each was found.
-pub(crate) fn record_ai_search_links(
-    worker: &str,
-    declared: &Resources,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut changed = false;
-    for decl in &declared.ai_search {
-        changed |= lock.record_ai_search(
-            environment,
-            worker,
-            &decl.binding,
-            AiSearchLink {
-                instance: decl.instance.clone(),
-            },
-        );
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s AI Search instances but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
-
 /// The account lookups a run does before it confirms: every stored secret and (#3513 A) every mTLS
 /// certificate of `order` resolved against the account, and (#3302) every `@allowedSenders` domain
 /// checked, each problem printed, `None` when any was found (the run stops there, with nothing
@@ -665,138 +616,6 @@ fn link_stored_secrets_for_run(
     }
 }
 
-/// Record what `worker`'s stored secrets were linked to and write the stores'
-/// ids into its generated config, before the push. Linked in
-/// [`link_stored_secrets`], so a binding with no id here is a bug, not a user
-/// error.
-pub(crate) fn record_links(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut store_ids = BTreeMap::new();
-    let mut changed = false;
-    for decl in &declared.stored_secrets {
-        let Some(store_id) = linked.get(&(worker.to_string(), decl.binding.clone())) else {
-            return Err(DeployFailure::driver(format!(
-                "`{}` of `{worker}` was not linked to a Secrets Store before the push",
-                decl.binding
-            )));
-        };
-        changed |= lock.record_stored_secret(
-            environment,
-            worker,
-            &decl.binding,
-            StoredSecretLink {
-                store: decl.store.clone(),
-                store_id: store_id.clone(),
-                secret: decl.secret.clone(),
-            },
-        );
-        store_ids.insert(decl.binding.clone(), store_id.clone());
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s Secrets Store secrets but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    if !store_ids.is_empty() && !materialise_stored_secret_stores(config, &store_ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the Secrets Store ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
-}
-
-/// Record what `worker`'s linked resources (stored secrets, mTLS certificates, AI Search instances)
-/// were linked to, before the push, writing the ids into its generated config. All were looked up
-/// in [`link_for_run`] and [`link_ai_search_for_run`], which stop the run when one is missing.
-pub(crate) fn record_linked_resources(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    record_links(
-        worker,
-        declared,
-        linked,
-        lock,
-        lock_path,
-        config,
-        environment,
-    )?;
-    record_mtls_links(
-        worker,
-        declared,
-        linked,
-        lock,
-        lock_path,
-        config,
-        environment,
-    )?;
-    record_ai_search_links(worker, declared, lock, lock_path, environment)
-}
-
-/// Record the certificates `worker`'s `MtlsCertificate` bindings were linked to, and write their ids
-/// into its generated config, before the push. Linked in [`link_mtls`], so a binding with no id
-/// here is a bug, not a user error. Only a certificate's name and id are recorded: no key
-/// material crossed the wire, so none can be written.
-pub(crate) fn record_mtls_links(
-    worker: &str,
-    declared: &Resources,
-    linked: &BTreeMap<(String, String), String>,
-    lock: &mut DeployLock,
-    lock_path: &Path,
-    config: &Path,
-    environment: &str,
-) -> Result<(), DeployFailure> {
-    let mut ids = BTreeMap::new();
-    let mut changed = false;
-    for decl in &declared.mtls_certificates {
-        let Some(id) = linked.get(&(worker.to_string(), decl.binding.clone())) else {
-            return Err(DeployFailure::driver(format!(
-                "`{}` of `{worker}` was not linked to an mTLS certificate before the push",
-                decl.binding
-            )));
-        };
-        changed |= lock.record_mtls_certificate(
-            environment,
-            worker,
-            &decl.binding,
-            MtlsCertificateLink {
-                certificate: decl.certificate.clone(),
-                certificate_id: id.clone(),
-            },
-        );
-        ids.insert(decl.binding.clone(), id.clone());
-    }
-    if changed {
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "linked `{worker}`'s mTLS certificates but could not record them in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
-    if !ids.is_empty() && !materialise_mtls_certificates(config, &ids) {
-        return Err(DeployFailure::driver(format!(
-            "could not materialise the mTLS certificate ids into `{worker}`'s generated configuration"
-        )));
-    }
-    Ok(())
-}
-
 /// Whether any Worker of `order` has a linked secret to look up.
 pub(crate) fn any_stored_secrets(
     order: &[String],
@@ -818,7 +637,7 @@ mod tests {
     struct Fake {
         stores: Vec<(&'static str, &'static str, Vec<&'static str>)>,
         asked: RefCell<Vec<String>>,
-        refuse: Option<&'static str>,
+        refuse: Option<crate::cloudflare::RestError>,
     }
 
     impl Fake {
@@ -832,10 +651,10 @@ mod tests {
     }
 
     impl SecretsStores for Fake {
-        fn store_ids(&self, name: &str) -> Result<Vec<String>, String> {
+        fn store_ids(&self, name: &str) -> Result<Vec<String>, crate::cloudflare::CloudflareError> {
             self.asked.borrow_mut().push(format!("store {name}"));
-            if let Some(said) = self.refuse {
-                return Err(said.to_string());
+            if let Some(said) = &self.refuse {
+                return Err(said.clone().into());
             }
             Ok(self
                 .stores
@@ -844,7 +663,11 @@ mod tests {
                 .map(|(_, id, _)| id.to_string())
                 .collect())
         }
-        fn has_secret(&self, store_id: &str, secret: &str) -> Result<bool, String> {
+        fn has_secret(
+            &self,
+            store_id: &str,
+            secret: &str,
+        ) -> Result<bool, crate::cloudflare::CloudflareError> {
             self.asked
                 .borrow_mut()
                 .push(format!("secret {store_id}/{secret}"));
@@ -960,8 +783,12 @@ mod tests {
     fn a_refused_lookup_names_the_permission_the_token_needs() {
         let (order, resources) = project(&[("shop", &[("SECRET_K", "payments", "s")])]);
         let mut account = Fake::new(Vec::new());
-        account.refuse =
-            Some("GET /secrets_store/stores: Cloudflare answered 403 [{\"code\":10000}]");
+        account.refuse = Some(crate::cloudflare::RestError::answered(
+            "GET",
+            "/secrets_store/stores",
+            403,
+            "[{\"code\":10000}]",
+        ));
         let problems = link_stored_secrets(&order, &resources, &account).unwrap_err();
         assert!(problems[0].contains(TOKEN_SCOPE), "{}", problems[0]);
     }
@@ -1018,12 +845,12 @@ mod tests {
         ));
         // A refusal of the token names the permissions; a 404 that is not 7002
         // is not "missing", and nothing else is quietly swallowed.
-        let denied = api.instance("denied").unwrap_err();
+        let denied = api.instance("denied").unwrap_err().to_string();
         assert!(
             denied.contains("AI Search: Edit and AI Search: Run"),
             "{denied}"
         );
-        let other = api.instance("elsewhere").unwrap_err();
+        let other = api.instance("elsewhere").unwrap_err().to_string();
         assert!(
             other.contains("could not") || other.contains("7003"),
             "{other}"
@@ -1044,6 +871,41 @@ mod tests {
         dir
     }
 
+    /// Record `K`'s links of `worker`, as the deploy does before the push, and write the ids they
+    /// bind into `config`.
+    fn link_kind<K: ResourceKind>(
+        worker: &str,
+        declared: &Resources,
+        linked: &BTreeMap<(String, String), String>,
+        lock: &mut DeployLock,
+        lock_path: &Path,
+        config: &Path,
+        environment: &str,
+    ) -> Result<(), DeployFailure> {
+        let provenance = Provenance::Path("/nonexistent/wrangler".into());
+        let project = BTreeMap::new();
+        let site = Site {
+            tools: Tools {
+                api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                project_root: Path::new("/nonexistent"),
+            },
+            environment,
+            worker,
+            project: &project,
+        };
+        let lives = Lives {
+            linked: Some(linked),
+            ..Lives::default()
+        };
+        let bound = provision_kind::<K>(
+            site,
+            declared,
+            &mut LedgerWriter::new(lock, lock_path),
+            lives,
+        )?;
+        K::materialise(config, worker, &bound)
+    }
+
     const CONFIG: &str = "name = \"shop\"\n\n[[secrets_store_secrets]]\nbinding = \"SECRET_STRIPE_KEY\"\nstore_id = \"payments\" # the store's name; its id is set at deploy time\nsecret_name = \"stripe-live\"\n";
 
     #[test]
@@ -1062,11 +924,13 @@ mod tests {
         )]);
         let mut lock = DeployLock::default();
         let lock_path = dir.join(LOCK_FILE);
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &linked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
-        let link = recorded_stored_secret(&lock, "shop", "SECRET_STRIPE_KEY", "staging").unwrap();
+        let link = lock
+            .recorded::<StoredSecret>("staging", "shop", "SECRET_STRIPE_KEY")
+            .unwrap();
         assert_eq!(
             (
                 link.store.as_str(),
@@ -1086,7 +950,7 @@ mod tests {
         );
         // A second run with the same link changes nothing.
         let before = std::fs::read_to_string(&lock_path).unwrap();
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &linked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
@@ -1096,12 +960,12 @@ mod tests {
             ("shop".to_string(), "SECRET_STRIPE_KEY".to_string()),
             "store-2".to_string(),
         )]);
-        record_links(
+        link_kind::<StoredSecret>(
             "shop", &declared, &relinked, &mut lock, &lock_path, &config, "staging",
         )
         .unwrap();
         assert_eq!(
-            recorded_stored_secret(&lock, "shop", "SECRET_STRIPE_KEY", "staging")
+            lock.recorded::<StoredSecret>("staging", "shop", "SECRET_STRIPE_KEY")
                 .unwrap()
                 .store_id,
             "store-2"
@@ -1119,7 +983,7 @@ mod tests {
             "payments",
             "stripe-live",
         )]);
-        let err = record_links(
+        let err = link_kind::<StoredSecret>(
             "shop",
             &declared,
             &BTreeMap::new(),
@@ -1145,7 +1009,10 @@ mod tests {
     struct FakeSearch(Vec<(&'static str, InstanceState)>, RefCell<Vec<String>>);
 
     impl AiSearchInstances for FakeSearch {
-        fn instance(&self, name: &str) -> Result<InstanceState, String> {
+        fn instance(
+            &self,
+            name: &str,
+        ) -> Result<InstanceState, crate::cloudflare::CloudflareError> {
             self.1.borrow_mut().push(name.to_string());
             Ok(self
                 .0
@@ -1268,7 +1135,10 @@ mod tests {
     fn a_failed_lookup_is_a_problem_naming_the_instance_not_a_missing_one() {
         struct Refusing;
         impl AiSearchInstances for Refusing {
-            fn instance(&self, _: &str) -> Result<InstanceState, String> {
+            fn instance(
+                &self,
+                _: &str,
+            ) -> Result<InstanceState, crate::cloudflare::CloudflareError> {
                 Err("GET /ai-search/namespaces/default/instances/support-docs: Cloudflare answered 500 []".into())
             }
         }
@@ -1295,22 +1165,39 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("bynk-ai-search-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bynk.deploy.lock");
+        let config = dir.join("wrangler.toml");
         let mut lock = DeployLock::default();
-        record_ai_search_links("shop-ask", &declared, &mut lock, &path, "production").unwrap();
+        link_kind::<AiSearch>(
+            "shop-ask",
+            &declared,
+            &BTreeMap::new(),
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
         assert_eq!(
-            recorded_ai_search(&lock, "shop-ask", "AI_SEARCH_KB", "production"),
+            lock.recorded::<AiSearch>("production", "shop-ask", "AI_SEARCH_KB"),
             Some(&AiSearchLink {
                 instance: "support-docs".into()
             })
         );
-        assert!(!lock.record_ai_search(
-            "production",
+        // A repeat is not a change: the ledger is not written again.
+        std::fs::remove_file(&path).unwrap();
+        link_kind::<AiSearch>(
             "shop-ask",
-            "AI_SEARCH_KB",
-            AiSearchLink {
-                instance: "support-docs".into()
-            }
-        ));
+            &declared,
+            &BTreeMap::new(),
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
+        assert!(!path.exists());
+        // Nothing is bound: the config names the instance already.
+        assert!(!config.exists());
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -1331,7 +1218,7 @@ mod tests {
             "c-123".to_string(),
         )]);
         let mut lock = DeployLock::default();
-        record_mtls_links(
+        link_kind::<MtlsCertificate>(
             "shop",
             &declared,
             &linked,
@@ -1346,7 +1233,7 @@ mod tests {
             certificate_id: "c-123".into(),
         };
         assert_eq!(
-            recorded_mtls_certificate(&lock, "shop", "MTLS_BACKEND", "production"),
+            lock.recorded::<MtlsCertificate>("production", "shop", "MTLS_BACKEND"),
             Some(&link)
         );
         // The id replaced the name in the config the push reads, and nothing else changed.
@@ -1355,7 +1242,6 @@ mod tests {
             text.contains("certificate_id = \"c-123\" # the certificate's name"),
             "{text}"
         );
-        assert!(!lock.record_mtls_certificate("production", "shop", "MTLS_BACKEND", link));
         // The ledger carries a name and an id, never key material, and omits the section when empty.
         let written = std::fs::read_to_string(&path).unwrap();
         assert!(written.contains("mtls_certificate_links"), "{written}");
@@ -1368,8 +1254,21 @@ mod tests {
                 .unwrap()
                 .contains("mtls_certificate_links")
         );
+        // A repeat is not a change: the ledger is not written again.
+        std::fs::remove_file(&path).unwrap();
+        link_kind::<MtlsCertificate>(
+            "shop",
+            &declared,
+            &linked,
+            &mut lock,
+            &path,
+            &config,
+            "production",
+        )
+        .unwrap();
+        assert!(!path.exists());
         // A binding the run did not link is a bug, named.
-        let err = record_mtls_links(
+        let err = link_kind::<MtlsCertificate>(
             "shop",
             &declared,
             &BTreeMap::new(),
@@ -1396,9 +1295,9 @@ mod tests {
 
     struct FakeCerts(Result<Vec<MtlsRecord>, String>, RefCell<usize>);
     impl MtlsCertificates for FakeCerts {
-        fn list(&self) -> Result<Vec<MtlsRecord>, String> {
+        fn list(&self) -> Result<Vec<MtlsRecord>, crate::cloudflare::CloudflareError> {
             *self.1.borrow_mut() += 1;
-            self.0.clone()
+            self.0.clone().map_err(Into::into)
         }
     }
 
@@ -1581,7 +1480,10 @@ mod tests {
             "/mtls_certificates?per_page=100&page=1",
             r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"result":[]}"#.into(),
         )]);
-        let said = RestMtls { rest: rest(base) }.list().unwrap_err();
+        let said = RestMtls { rest: rest(base) }
+            .list()
+            .unwrap_err()
+            .to_string();
         assert!(said.contains(MTLS_TOKEN_SCOPE), "{said}");
     }
 

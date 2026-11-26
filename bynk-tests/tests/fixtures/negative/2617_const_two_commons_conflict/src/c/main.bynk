@@ -1,5 +1,10 @@
 context c
 
-// #2617 (decision E): two used commons may not both declare a constant name.
+// #2617 (decision E), #4045: two used commons may both declare a constant name; reading it
+// bare is the ambiguity.
 uses a
 uses b
+
+fn f() -> Int {
+  Limit
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A path dependency gives the package's name twice: `package = \"acme/lib\"` in your `[dependencies]`, and `name` under `[package]` in the manifest at that path. They must agree, so that what you asked for is what you get. A mismatch usually means the path is the wrong directory, or the package was renamed. Correct whichever is wrong.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.name_mismatch",
+  "constructs": [],
+  "example": "[dependencies]\nmoney = { package = \"acme/money\", path = \"pkg/lib\" }   // ✗ `pkg/lib` is the package `acme/lib`\n\nmoney = { package = \"acme/lib\", path = \"pkg/lib\" }     // ✓ the name it declares",
+  "severity": "error",
+  "summary": "A path dependency's `package` names a different package than the directory's `[package] name`."
+}

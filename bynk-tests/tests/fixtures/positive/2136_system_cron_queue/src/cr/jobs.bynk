@@ -29,8 +29,8 @@ agent Ledger {
 }
 
 service sweeper from cron {
-	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
-		if at < 0 {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		if at < Instant.fromEpochMillis(0) {
 			Err("the scheduled time is before the epoch")
 		} else {
 			let _ <- Counter("c").bump(1)
@@ -39,14 +39,14 @@ service sweeper from cron {
 	}
 
 	// Fired at time zero, this divides by zero, so the handler faults.
-	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
-		let _ <- Counter("c").bump(100 / at)
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		let _ <- Counter("c").bump(100 / at.toEpochMillis())
 		Ok(())
 	}
 }
 
 service deliveries from queue("deliveries") {
-	on message(d: Delivery) -> Effect[QueueResult] {
+	on message(d: Delivery) -> Effect[QueueResult] by Producer {
 		if d.qty < 0 {
 			Retry("a delivery cannot be negative")
 		} else {

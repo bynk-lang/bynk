@@ -1,0 +1,12 @@
+{
+  "blurb": "A case addresses an http route by the pattern its handler declares, `\"/items\"`, not a concrete URL, and a cron or queue service by its own address. A path that no route in the service declares, for any method, is refused. To test the `405` for a wrong method, use a declared path with a method it lacks.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.service_unknown_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nservice api from http { … }\n\n// tests/api.test.bynk\nlet r <- api.POST(\"/item\", \"x\") by Visitor    // ✗ no route \"/item\"\nlet r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+  "severity": "error",
+  "summary": "A test body addresses an http route / cron schedule / queue message the service does not declare."
+}

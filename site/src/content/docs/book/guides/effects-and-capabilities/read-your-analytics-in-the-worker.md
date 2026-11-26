@@ -40,13 +40,13 @@ service join from http {
 ```
 
 The country is stored as `blob1`: blobs are numbered from 1 in the order you give them, and the
-SQL below refers to it by that name. See [Writing events: `Analytics`](/book/reference/bynk-capabilities/#writing-events-analytics)
+SQL below refers to it by that name. See [Writing events: `Analytics`](/reference/bynk-capabilities/#writing-events-analytics)
 for the limits on a data point.
 
 ## Read them back
 
 `AnalyticsSql` is bound once per Worker and used bare, as `Ai` is: there are no named instances. Its one
-operation takes the query text and its parameters, and answers a result or an error:
+operation takes the `Analytics` instance to read, the query text and its parameters, and answers a result or an error:
 
 ```bynk,fragment
 consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError }
@@ -55,9 +55,9 @@ type Row = { n: Int }
 
 service report from http {
 	on GET("/joined/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
-		let table <- Signups.dataset()
-		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
-		let res <- AnalyticsSql.query(sql, [Text(country)])
+		let res <- AnalyticsSql.query(Signups,
+			"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
+			[Text(country)])
 		match res {
 			Ok(r) => {
 				let rows = Json.decode[List[Row]](r.data)
@@ -98,32 +98,36 @@ Put a value in the query with a parameter, never by building the query text arou
 element of the parameter list, `$2` the second, and so on:
 
 ```bynk,fragment
-let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND double1 > $2 AND timestamp > NOW() - INTERVAL '7' DAY"
-let res <- AnalyticsSql.query(sql, [Text(country), Real(0.5)])
+let res <- AnalyticsSql.query(Signups,
+	"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND double1 > $2 AND timestamp > NOW() - INTERVAL '7' DAY",
+	[Text(country), Real(0.5)])
 ```
 
-Interpolating `country` into the string instead would let a caller choose part of your query. A parameter is
-always a value, never SQL. Parameters are the same `SqlValue`s `D1` takes, and Analytics SQL accepts `Null`,
+The SQL is a string literal, a `"""` block or a `String` constant: Bynk refuses a query built at run time
+(`bynk.types.sql_not_literal`), so a caller can never choose part of your query, and cannot read another dataset
+on the account or drop the time bound. A parameter is always a value, never SQL. Parameters are the same `SqlValue`s `D1` takes, and Analytics SQL accepts `Null`,
 `Integer`, `Real`, `Text` and `Boolean`: a `Blob`, an `Integer` too large to be read exactly, or a `Real` that
 is not finite comes back as `Err(SqlRejected(…))` before anything is sent.
 
-The one exception is the table name, which a parameter cannot stand for. That is what `dataset()` is for.
+The one thing a parameter cannot stand for is the table name. That is what `{dataset}` is for.
 
 ## Name the dataset for the environment you run in
 
 The dataset a Worker writes to differs by environment: `shop_signups_signups` in the default one and
 `shop_signups_signups_staging` under `--env staging`. Hard-coding either name makes the other environment read
-the wrong table. `dataset()` gives the table for the environment the Worker is running in:
-
-```bynk,fragment
-let table <- Signups.dataset()
-```
+the wrong table. Write `{dataset}` in the SQL and pass the instance (`Signups`) as the first argument: the
+Worker puts the table for the environment it is running in where the placeholder is. It may appear any number
+of times, or not at all.
 
 In the default environment that is `events.analyticsEngine.shop_signups_signups`; under `--env staging` it is
 `events.analyticsEngine.shop_signups_signups_staging`. You write neither name. The name comes from one `[vars]`
 entry in the generated configuration, `BYNK_DATASET_ANALYTICS_SIGNUPS` for `Signups`, which `bynk deploy`
 qualifies for each environment the same way it qualifies the dataset the Worker writes to. Names starting
 `BYNK_DATASET_` are reserved: a `[test.targets]` `vars` entry with one is a manifest error.
+
+If you built a query by interpolating `Signups.dataset()` into the text, which this guide used to show,
+Bynk now refuses it with `bynk.types.sql_not_literal`: replace the interpolation with `{dataset}` and pass
+`Signups` first. `Signups.dataset()` is still there for anything else that needs the name.
 
 ## Handle the two errors
 
@@ -166,25 +170,25 @@ suite shop.signups {
 	}
 
 	case "a stubbed result is what the handler sees" {
-		stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
+		stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
 		let r <- report.GET("/joined/:country", "uk") by Visitor
 		expect r is Ok(4)
 	}
 
 	case "a retryable failure is matched" {
-		stub AnalyticsSql.query(_, _) returns Err(SqlRetryable("busy"))
+		stub AnalyticsSql.query(_, _, _) returns Err(SqlRetryable("busy"))
 		let r <- report.GET("/joined/:country", "uk") by Visitor
 		expect r is ServerError("try again shortly")
 	}
 
 	case "the query reads the environment's own dataset" {
 		stub Signups.dataset() returns "events.analyticsEngine.shop_signups_signups_staging"
-		stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":0}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
+		stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":0}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
 		let r <- report.GET("/joined/:country", "uk") by Visitor
 		expect r is Ok(0)
-		expect AnalyticsSql.query called with sql == "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+		expect AnalyticsSql.query called with dataset == "events.analyticsEngine.shop_signups_signups_staging"
 	}
 }
 ```
 
-The reference is [Reading events: `AnalyticsSql`](/book/reference/bynk-capabilities/#reading-events-analyticssql).
+The reference is [Reading events: `AnalyticsSql`](/reference/bynk-capabilities/#reading-events-analyticssql).

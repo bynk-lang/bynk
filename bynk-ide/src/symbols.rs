@@ -75,6 +75,14 @@ pub fn find_declaration_span(source: &str, name: &str) -> Option<Span> {
 /// Build a Markdown summary of a named declaration suitable for an LSP
 /// hover response. Returns `None` if no declaration matches.
 pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
+    describe_symbol_with(source, name, &[])
+}
+
+/// [`describe_symbol`] with the project's other files in view (#4393): an actor that refines the
+/// prelude `Sender` / `Producer` is described as a refinement only when no file of the unit
+/// declares a shadowing actor of that name, as the checker's whole-unit actor table decides.
+/// `others` may hold files of other units; they are skipped.
+pub fn describe_symbol_with(source: &str, name: &str, others: &[&str]) -> Option<String> {
     let tokens = tokenize(source).ok()?;
     let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
     let unit = unit?;
@@ -117,11 +125,51 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
         return Some(describe_fixture(f));
     }
     for item in items {
+        // #4393: an actor is rendered with its siblings in view, to tell a refinement of the
+        // prelude `Sender` / `Producer` from one of a local actor that shadows it.
+        if let CommonsItem::Actor(a) = item
+            && a.name.name == name
+        {
+            let declares = |n: &str| {
+                crate::actor_refinement::declares_actor(items, n)
+                    || crate::documentation::unit_siblings_declare(&unit, others, n)
+            };
+            return Some(crate::actor_refinement::describe_actor_in(a, &declares));
+        }
         if let Some(summary) = describe_item(item, name) {
             return Some(summary);
         }
     }
     None
+}
+
+/// #4183: [`describe_symbol`] for an index key, from the one file given. A
+/// [`bynk_check::index::SymbolKind::Unit`] key names a whole unit, so it is
+/// described as one ([`describe_unit`]) and never matched against a declaration of
+/// the same name inside the file (`fn money` is not the unit `money`); every other
+/// kind is a declaration `describe_symbol` finds by name. Hover's first rung
+/// answers a unit with more than this (the unit's other files, which may carry its
+/// module doc, and where it is declared) and every other kind through here.
+pub fn describe_key(
+    kind: bynk_check::index::SymbolKind,
+    source: &str,
+    name: &str,
+) -> Option<String> {
+    describe_key_with(kind, source, name, &[])
+}
+
+/// [`describe_key`] with the project's other files in view, for what depends on the rest of the
+/// declaring unit ([`describe_symbol_with`]).
+pub fn describe_key_with(
+    kind: bynk_check::index::SymbolKind,
+    source: &str,
+    name: &str,
+    others: &[&str],
+) -> Option<String> {
+    match kind {
+        bynk_check::index::SymbolKind::Unit => describe_unit(std::iter::once(source), name),
+        _ => describe_symbol_with(source, name, others),
+    }
 }
 
 /// v0.121 (ADR 0156): the reserved-keyword doc for the token at `offset` in
@@ -305,10 +353,14 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "NoSubject",
         "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "Revoked",
+        "Sends a `SignedCookie` route a cookie correctly signed for a session that was issued and then revoked in the actor's session agent (`revokeAll`), so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `SignedCookie` actor declared with `sessions = true`. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`, `Revoked`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -432,7 +484,24 @@ fn store_field_hover(f: &StoreField) -> String {
         sig.push(' ');
         sig.push_str(&bynk_fmt::annotation_to_string(ann));
     }
-    render_state_hover(&sig, "store")
+    // #3793: `replaces old` shows in the signature, with a line saying what it does.
+    let Some(old) = &f.replaces else {
+        return render_state_hover(&sig, "store");
+    };
+    sig.push_str(&format!(" replaces {}", old.name));
+    format!(
+        "{}\n\n{}",
+        render_state_hover(&sig, "store"),
+        renamed_from_prose(&old.name)
+    )
+}
+
+/// #3793: the line a renamed field's hover adds: what the rename does at each place it is read.
+fn renamed_from_prose(old: &str) -> String {
+    format!(
+        "Renamed from `{old}`: stored state, a locked event and an incoming wire payload that \
+         still use `{old}` are read as this field."
+    )
 }
 
 /// #611: hover for a `store` field's operation — the `<op>` of a
@@ -499,6 +568,127 @@ pub fn describe_store_op_at(
         ));
     }
     None
+}
+
+/// #4036: hover on the terminal of a `store Map`/`Log` pipeline (`orders.filter(…).first()`) says
+/// whether the pipeline stops reading pages at its answer or reads every entry. Reads the tokens
+/// back from the terminal over balanced argument lists to the store field the chain starts at, so
+/// it needs no analysis; `None` when the cursor is not on such a terminal.
+pub fn describe_scan_reads_at(
+    source: &str,
+    offset: usize,
+    locals: &[bynk_check::locals::LocalBinding],
+) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let at = tokens
+        .iter()
+        .position(|t| t.kind == TokenKind::Ident && span_covers(t.span, offset))?;
+    let text = |i: usize| source.get(tokens[i].span.start..tokens[i].span.end);
+    let terminal = text(at)?;
+    if !matches!(
+        terminal,
+        "any" | "all" | "first" | "firstOrElse" | "collect"
+    ) {
+        return None;
+    }
+    // Back over `.name(args)` segments, outermost first, to the bare receiver.
+    let mut stages: Vec<&str> = Vec::new();
+    let mut i = at;
+    let field_at = loop {
+        if i == 0 || tokens[i - 1].kind != TokenKind::Dot {
+            return None;
+        }
+        let before = i.checked_sub(2)?;
+        if tokens[before].kind == TokenKind::Ident {
+            break before;
+        }
+        if tokens[before].kind != TokenKind::RParen {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut open = before;
+        loop {
+            match tokens[open].kind {
+                TokenKind::RParen => depth += 1,
+                TokenKind::LParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            open = open.checked_sub(1)?;
+        }
+        let name = open.checked_sub(1)?;
+        if tokens[name].kind != TokenKind::Ident {
+            return None;
+        }
+        stages.push(text(name)?);
+        i = name;
+    };
+    let field = text(field_at)?;
+    if field_at > 0 && tokens[field_at - 1].kind == TokenKind::Dot {
+        return None;
+    }
+    if bynk_check::locals::locals_at(locals, tokens[field_at].span.start)
+        .iter()
+        .any(|b| b.name == field)
+    {
+        return None;
+    }
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => return None,
+    };
+    let (kind, indexed) = items.iter().find_map(|item| match item {
+        CommonsItem::Agent(a) if in_state_scope(a, offset) => a
+            .store_fields
+            .iter()
+            .find(|f| f.name.name == field)
+            .map(|f| {
+                let indexed = f.annotations.iter().any(|an| an.name.name == "indexed");
+                (f.kind.head.name.clone(), indexed)
+            }),
+        _ => None,
+    })?;
+    let is_log = match kind.as_str() {
+        "Log" => true,
+        "Map" => false,
+        _ => return None,
+    };
+    let take_last = terminal == "collect" && stages.first() == Some(&"take");
+    if terminal == "collect" && !(is_log && take_last) {
+        return None;
+    }
+    let rest = if take_last { &stages[1..] } else { &stages[..] };
+    let blocker = rest.iter().find(|s| match **s {
+        "filter" | "map" | "flatMap" => false,
+        "skip" => !is_log,
+        _ => true,
+    });
+    let order_free = matches!(terminal, "any" | "all");
+    let note = if let Some(stage) = blocker {
+        format!("`{stage}` needs the whole input, so this reads every entry of `{field}`.")
+    } else if !order_free && !is_log {
+        format!(
+            "A `Map` is scanned in insertion order, which only reading every entry recovers, so \
+             `{terminal}` reads every entry of `{field}`. `any` and `all` stop early."
+        )
+    } else if indexed && !is_log && stages.last() == Some(&"filter") {
+        format!(
+            "Stops reading `{field}` a page at a time as soon as the answer is known. A leading \
+             `filter` that is an equality on an `@indexed` field reads that value's posting list \
+             instead, a page at a time."
+        )
+    } else {
+        format!("Stops reading `{field}` a page at a time as soon as the answer is known.")
+    };
+    Some(format!("**Reads:** {note}"))
 }
 
 /// The identifier token covering `offset` — its text and span — if the cursor is
@@ -575,7 +765,9 @@ pub fn store_field_kind_at(
         let CommonsItem::Agent(a) = item else {
             continue;
         };
-        if !in_state_scope(a, recv_end) {
+        // The receiver's last character: a predicate that ends at the receiver
+        // (`invariant bounded: lines`) still covers it.
+        if !in_state_scope(a, recv_end.saturating_sub(1)) {
             continue;
         }
         if let Some(f) = a.store_fields.iter().find(|f| f.name.name == recv) {
@@ -586,6 +778,30 @@ pub fn store_field_kind_at(
         }
     }
     None
+}
+
+/// #4034: whether the `store` field receiver ending at `recv_end` sits in an
+/// invariant or transition predicate of its agent, where a collection can be
+/// asked its `size()` and nothing else.
+pub fn store_field_in_predicate_at(source: &str, recv_end: usize) -> bool {
+    let at = recv_end.saturating_sub(1);
+    let Ok(tokens) = tokenize(source) else {
+        return false;
+    };
+    let (Some(unit), _) = parse_unit_with_recovery(&tokens, source) else {
+        return false;
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    items.iter().any(|item| {
+        matches!(item, CommonsItem::Agent(a)
+            if a.invariants.iter().any(|i| span_covers(i.predicate.span, at))
+                || a.transitions.iter().any(|t| span_covers(t.predicate.span, at)))
+    })
 }
 
 /// v0.140 (ADR 0163): hover for a handler-position annotation (`@cache`). Handler
@@ -613,9 +829,238 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         for h in handlers {
             for ann in &h.annotations {
                 if span_covers(ann.span, offset) {
+                    if ann.name.name == "rateLimit" {
+                        return Some(render_rate_limit_hover(ann, items));
+                    }
                     return Some(render_handler_annotation_hover(ann, h, service_cap));
                 }
             }
+        }
+    }
+    // #3909: otherwise a route string that overlaps another route of its method.
+    describe_route_at(source, offset)
+        .or_else(|| describe_path_param_at(source, offset))
+        .or_else(|| describe_security_field_at(source, offset))
+}
+
+/// #3923: hover for a field name inside a service's `security { }`: the header it sets and its
+/// default. `None` when the cursor is elsewhere, or on a name outside the closed set.
+pub fn describe_security_field_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        let Some(security) = &service.security else {
+            continue;
+        };
+        for field in &security.fields {
+            if !span_covers(field.name.span, offset) {
+                continue;
+            }
+            let (header, default) = match field.name.name.as_str() {
+                "nosniff" => ("`X-Content-Type-Options: nosniff`, on every response", "on"),
+                "hsts" => (
+                    "`Strict-Transport-Security: max-age=…`, on every response",
+                    "off (opt in with a `Duration`)",
+                ),
+                "frameAncestors" => (
+                    "`Content-Security-Policy: frame-ancestors …`, on an HTML (`text/html`) response",
+                    "`'none'`: no site may frame the page",
+                ),
+                "referrerPolicy" => (
+                    "`Referrer-Policy`, on an HTML (`text/html`) response",
+                    "`strictOriginWhenCrossOrigin`",
+                ),
+                "csp" => (
+                    "`Content-Security-Policy`, sent verbatim on an HTML (`text/html`) response; `frame-ancestors` is appended when it names none",
+                    "none: only `frame-ancestors 'none'` is sent",
+                ),
+                _ => return None,
+            };
+            return Some(format!(
+                "```bynk\nsecurity {{ {}: … }}\n```\n\n**`{}`** — sets {header}.\n\n- **Default** — {default}.",
+                field.name.name, field.name.name
+            ));
+        }
+    }
+    None
+}
+
+/// #3910: hover for a path parameter's name in an HTTP handler's parameter list: how the router
+/// decodes it from its `:name` segment, and the `400`s that decoding can answer. `None` when the
+/// cursor is elsewhere, or on a parameter that no `:name` segment binds.
+pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    let decls: HashMap<&str, &bynk_syntax::ast::TypeDecl> = items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Type(t) => Some((t.name.name.as_str(), t)),
+            _ => None,
+        })
+        .collect();
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        for h in &service.handlers {
+            let HandlerKind::Http { path, .. } = &h.kind else {
+                continue;
+            };
+            for p in &h.params {
+                if !span_covers(p.name.span, offset)
+                    || !path
+                        .split('/')
+                        .any(|seg| seg.strip_prefix(':') == Some(p.name.name.as_str()))
+                {
+                    continue;
+                }
+                let name = &p.name.name;
+                let ty = bynk_syntax::print::type_ref_to_string(&p.type_ref);
+                // What the segment is read as (when this file declares the type), whether it can
+                // fail to read, and whether a refinement can refuse it.
+                let known = |base: &BaseType, refined: bool| {
+                    let text = *base == BaseType::String;
+                    (Some(base_phrase(base)), !text, refined)
+                };
+                let (reads, mismatch, refined) = match &p.type_ref {
+                    TypeRef::Base(b, _) => known(b, false),
+                    TypeRef::Named(id) => match decls.get(id.name.as_str()).map(|t| &t.body) {
+                        Some(TypeBody::Refined { base, .. }) => known(base, true),
+                        Some(TypeBody::Opaque {
+                            base, refinement, ..
+                        }) => known(base, refinement.is_some()),
+                        Some(TypeBody::Sum(_)) => (Some("a variant name".to_string()), true, false),
+                        // Declared in another file, a commons or a consumed context: not known here.
+                        _ => (None, true, true),
+                    },
+                    _ => return None,
+                };
+                let mut text = match &reads {
+                    Some(r) => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, read as {r} and decoded as `{ty}` after the route matches."
+                    ),
+                    None => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, decoded as `{ty}` after the route matches."
+                    ),
+                };
+                if mismatch {
+                    let what = reads.unwrap_or_else(|| format!("`{ty}`"));
+                    text.push_str(&format!(
+                        "\n\n- `400 StructuralMismatch` at `path.{name}` when the segment does not read as {what}."
+                    ));
+                }
+                if refined {
+                    text.push_str(&format!(
+                        "\n- `400 RefinementViolation` at `path.{name}` when it breaks `{ty}`'s refinement."
+                    ));
+                }
+                if !mismatch && !refined {
+                    text.push_str("\n\nAny text binds.");
+                }
+                return Some(text);
+            }
+        }
+    }
+    None
+}
+
+/// `a `String``, `an `Int``: a base type as a noun phrase.
+fn base_phrase(b: &BaseType) -> String {
+    let word = base_word(b);
+    let article = if word.starts_with(['A', 'E', 'I', 'O', 'U']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} `{word}`")
+}
+
+fn base_word(b: &BaseType) -> &'static str {
+    match b {
+        BaseType::Int => "Int",
+        BaseType::String => "String",
+        BaseType::Bool => "Bool",
+        BaseType::Decimal => "Decimal",
+        BaseType::Float => "Float",
+        BaseType::Duration => "Duration",
+        BaseType::Instant => "Instant",
+        BaseType::Bytes => "Bytes",
+    }
+}
+
+/// #3909: hover for the route string of an `on GET("/path")` handler: the routes of
+/// the same method in this file that match a path it also matches, and which of the
+/// two a router tries first (a literal segment beats a `:name` one at the first
+/// segment where they differ). `None` when the cursor is not on a route string, and
+/// for a route that overlaps nothing, whose hover stays silent about order.
+pub fn describe_route_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let unit = unit?;
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        let routes: Vec<(&str, &str, Span)> = service
+            .handlers
+            .iter()
+            .filter_map(|h| match &h.kind {
+                HandlerKind::Http { method, path } => {
+                    Some((method.as_str(), path.as_str(), h.span))
+                }
+                _ => None,
+            })
+            .collect();
+        for &(method, path, span) in &routes {
+            let quoted = format!("\"{path}\"");
+            let head = source.get(span.start..span.end)?;
+            let at = span.start + head.find(&quoted)?;
+            if offset < at || offset >= at + quoted.len() {
+                continue;
+            }
+            let mut lines = Vec::new();
+            for &(m2, p2, _) in &routes {
+                if m2 != method || p2 == path || !bynk_check::route_order::overlap(path, p2) {
+                    continue;
+                }
+                let verdict = match bynk_check::route_order::compare(path, p2) {
+                    std::cmp::Ordering::Less => "this route is tried first",
+                    std::cmp::Ordering::Greater => "`{p2}` is tried first",
+                    std::cmp::Ordering::Equal => "the two have the same shape",
+                };
+                lines.push(format!(
+                    "- `{m2} {p2}` matches some of the same paths: {}.",
+                    verdict.replace("{p2}", p2)
+                ));
+            }
+            if lines.is_empty() {
+                return None;
+            }
+            return Some(format!(
+                "**`{method} {path}`** — routes of one method are tried segment by segment, left to right; at the first segment where two differ, a literal beats a `:name`.\n\n{}",
+                lines.join("\n")
+            ));
         }
     }
     None
@@ -689,6 +1134,17 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
         "```bynk\nadvance Clock by <Duration>\n```\n\nMoves the test harness's clock forward. Each case's clock starts at the epoch; at `unit` and `integration` the `Clock` double reads it, and at `system` every participant's first-party `Clock` does. It governs `Clock` only: JWT expiry, the `Signature` tolerance and Durable Object alarms keep wall-clock time."
             .to_string(),
     )
+}
+
+/// The hover of a contextual word that only means something in its own shape: `advance`
+/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877) and a queue verdict's `RetryAfter` (#3881).
+pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String> {
+    describe_advance_at(source, offset)
+        .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
+        .or_else(|| crate::email_fallback::describe_fallback_at(source, offset))
+        .or_else(|| crate::field_rename::describe_replaces_at(source, offset))
+        .or_else(|| crate::wire_names::describe_wire_annotation_at(source, offset))
+        .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 
 /// #3191 (ADR 0161): hover for the contextual `by` where it is a clause word —
@@ -1101,7 +1557,7 @@ pub fn describe_system_job_address_at<'s>(
         return None;
     }
     Some(if name == "schedule" {
-        "**`svc.schedule(\"<expr>\", at)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
+        "**`svc.schedule(\"<expr>\", at: Instant)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
     } else {
         "**`q.message(m)`** at `system` — delivers `m` through the Worker's `queue` entry, after a JSON round trip, and yields `Ack` or `Retry(reason)` as the consumer acknowledged or retried it.".to_string()
     })
@@ -1147,6 +1603,14 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
                 bynk_syntax::ast::TypeBody::Record(r) => {
                     for f in &r.fields {
                         push_refinement(&mut spans, &f.refinement);
+                        // #4502: a field's own annotation (`@index`, `@name("…")`).
+                        for ann in &f.annotations {
+                            spans.push(Span {
+                                file: ann.span.file,
+                                start: ann.span.start,
+                                end: ann.name.span.end,
+                            });
+                        }
                     }
                 }
                 bynk_syntax::ast::TypeBody::Sum(_) => {}
@@ -1288,6 +1752,12 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #3984: and a test-only commons' `for tests` marker.
+    if let SourceUnit::Commons(c) = &unit
+        && c.test_only
+    {
+        spans.extend(test_only_marker_spans(source, &tokens, c.name.span.end));
+    }
     // #2841: and each suite `fixture` keyword — contextual as well.
     if let SourceUnit::Suite(s) = &unit {
         spans.extend(
@@ -1297,6 +1767,48 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         );
     }
     spans
+}
+
+/// #3984: the spans of the `for` and `tests` words of a `commons x.y for tests` header, after the
+/// name that ends at `name_end`.
+fn test_only_marker_spans(
+    source: &str,
+    tokens: &[bynk_syntax::lexer::Token],
+    name_end: usize,
+) -> Vec<Span> {
+    let Some(idx) = tokens.iter().position(|t| t.span.start >= name_end) else {
+        return Vec::new();
+    };
+    tokens[idx..]
+        .iter()
+        .take(2)
+        .filter(|t| matches!(&source[t.span.start..t.span.end], "for" | "tests"))
+        .map(|t| t.span)
+        .collect()
+}
+
+/// #3984: a hover for the `tests` of a `commons x.y for tests` header: the word after `for` after a
+/// `commons` name. `None` anywhere else, where `tests` is an ordinary name.
+pub fn describe_test_only_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "tests"
+        || text(idx.checked_sub(1)?)? != "for"
+        || tokens.get(idx)?.kind != TokenKind::Ident
+        || !tokens[..idx].iter().any(|t| t.kind == TokenKind::Commons)
+    {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "tests")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nfor tests\n```\n\n{doc}"))
 }
 
 /// #2837: the span of every reserved word written as a name, with whether it
@@ -1410,6 +1922,13 @@ pub fn constraint_token_spans(source: &str) -> Vec<Span> {
 /// `None` when `maxAge` is missing or not a whole-second `Duration` literal
 /// (the checker flags those).
 fn cache_control_of(ann: &Annotation) -> Option<String> {
+    // #3922: `noStore: true` is `Cache-Control: no-store`, whatever else it carries.
+    if ann.args.iter().any(|arg| {
+        arg.label.as_ref().is_some_and(|l| l.name == "noStore")
+            && matches!(arg.value.kind, ExprKind::BoolLit(true))
+    }) {
+        return Some("no-store".to_string());
+    }
     let mut max_age_secs = None;
     let mut scope = "private";
     let mut immutable = false;
@@ -1434,6 +1953,74 @@ fn cache_control_of(ann: &Annotation) -> Option<String> {
 /// closed handler-annotation set. `@cache`, `@limit` (v0.142) and `@raw` carry prose; any
 /// other name (a typo the checker will flag) still hovers as its formatted form so
 /// the surface is never silent.
+/// #3926: hover for `@rateLimit(Limiter, key: …)`: the limiter's limit and window, read from
+/// the `capability` declaration beside it in the same unit when it is there, the key, and
+/// where in the request the router asks it.
+fn render_rate_limit_hover(ann: &Annotation, items: &[CommonsItem]) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let sig = bynk_fmt::annotation_to_string(ann);
+    let ident_of = |e: Option<&bynk_syntax::ast::AnnotationArg>| {
+        e.and_then(|a| match &a.value.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        })
+    };
+    let limiter = ident_of(ann.args.first());
+    let key = ident_of(
+        ann.args
+            .iter()
+            .find(|a| a.label.as_ref().is_some_and(|l| l.name == "key")),
+    );
+    let counts = limiter
+        .as_deref()
+        .and_then(|name| {
+            items.iter().find_map(|i| match i {
+                CommonsItem::Capability(c) if c.name.name == name => c.derived.as_ref(),
+                _ => None,
+            })
+        })
+        .filter(|d| d.base.name == "RateLimit")
+        .map(|d| {
+            let option = |name: &str| {
+                d.annotations
+                    .iter()
+                    .find(|a| a.name.name == name)
+                    .and_then(|a| a.args.first())
+                    .map(|a| match &a.value.kind {
+                        ExprKind::IntLit { value, .. } => value.to_string(),
+                        ExprKind::DurationLit { millis, .. } => format!("{}s", millis / 1_000),
+                        _ => "?".to_string(),
+                    })
+            };
+            format!(
+                "\n\n`{}` allows {} requests per {} for each key.",
+                limiter.as_deref().unwrap_or("?"),
+                option("limit").unwrap_or_else(|| "?".to_string()),
+                option("period").unwrap_or_else(|| "?".to_string()),
+            )
+        })
+        .unwrap_or_default();
+    let by = match key.as_deref() {
+        Some("clientIp") => {
+            "**`clientIp`** — the request's `CF-Connecting-IP`, reliable only behind Cloudflare's edge"
+        }
+        Some("identity") => {
+            "**`identity`** — the verified caller's `sub`, asked after the route's actor is verified and before the body is read (a `Bearer`, `Oidc` or `SignedCookie` actor; refused elsewhere, `bynk.http.rate_limit_key_unavailable`)"
+        }
+        _ => "an unknown key (`bynk.http.rate_limit_bad_args`)",
+    };
+    format!(
+        "```bynk\n{sig}\n```\n\n\
+         **`@rateLimit`** — refuse a client over its limit before this route's request body is \
+         read. With `clientIp` the router asks the limiter first of all, ahead of the media-type and \
+         body-size checks and of authentication; with `identity` it verifies the caller first (an \
+         unverified caller gets the `401`/`403` it always did and never touches the limiter), then \
+         asks. It answers `429 Too Many Requests` with `Retry-After` \
+         (the limiter's window in seconds) and the rejection `RateLimited`, which `on rejected` \
+         can render.{counts}\n\n- **key** — counts by {by}."
+    )
+}
+
 fn render_handler_annotation_hover(
     ann: &Annotation,
     handler: &Handler,
@@ -1456,7 +2043,12 @@ fn render_handler_annotation_hover(
              - **`scope`** — `public` or `private` (default `private`; a shared cache stores the \
              response only when `public`).\n\
              - **`immutable`** — `true` promises the response at this URL never changes, so \
-             caches do not revalidate it within `maxAge` (default `false`).{emitted}"
+             caches do not revalidate it within `maxAge` (default `false`).\n\
+             - **`noStore`** — `true` sends `Cache-Control: no-store` and no `ETag`, for data that \
+             must never be stored. It is allowed on any route and excludes the three above.\n\n\
+             A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, \
+             `SignedCookie`, `Signature`) sends `Cache-Control: private` on every response when it \
+             has no `@cache`, and refuses `scope: public`.{emitted}"
         );
     }
     // v0.142 (ADR 0165): `@limit` caps the request body size on a write route.
@@ -1487,16 +2079,39 @@ fn render_handler_annotation_hover(
              - **`options`** — `tagged` (the default) or `plain`. This route: {mode}."
         );
     }
+    // #3916: `@errors` picks the shape of this route's error bodies.
+    if ann.name.name == "errors" {
+        let mode = match handler.error_format() {
+            Some(ErrorFormat::Problem) => "`problem` — RFC 9457 `application/problem+json`",
+            Some(ErrorFormat::Bynk) => {
+                "`bynk` — `{ \"error\": message }` and the router's `{ \"kind\", \"details\" }`"
+            }
+            None => "not a valid format (`bynk.http.errors_invalid_field`)",
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@errors`** — choose the shape of this route's error bodies, overriding the \
+             service's `errors {{ }}` section. With `problem`, an error variant and a router \
+             rejection answer `application/problem+json` with `type`, `title`, `status` and \
+             `detail` (RFC 9457); a rejection adds its `kind` and `path`. `RawError` bodies and \
+             `on rejected` are unchanged.\n\n\
+             - **`format`** — `bynk` (the default) or `problem`. This route: {mode}."
+        );
+    }
     // `@raw` takes the request body as the octets sent, under a declared media type.
     if ann.name.name == "raw" {
         let cap = match handler.limit_max_body().or(service_cap) {
             Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
             None => "none — a `@raw` route needs one (`bynk.http.raw_body_unbounded`)".to_string(),
         };
-        let content_type = match handler.raw_content_type() {
-            Some("*/*") => "any".to_string(),
-            Some(ct) => format!("`{ct}`"),
-            None => "—".to_string(),
+        let content_type = match handler.raw_content_types().as_slice() {
+            [] => "—".to_string(),
+            ["*/*"] => "any".to_string(),
+            types => types
+                .iter()
+                .map(|ct| format!("`{ct}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
         };
         return format!(
             "```bynk\n{sig}\n```\n\n\
@@ -1504,16 +2119,13 @@ fn render_handler_annotation_hover(
              sent, with no JSON and no base64. Type it `Stream[Bytes]` instead to receive it as \
              it arrives, read once and counted against the cap as it is read. Any other \
              `Content-Type` is answered `415 Unsupported Media Type`.\n\n\
-             - **`contentType`** — the media type accepted: {content_type}.\n\
+             - **`contentType`** (`String | List[String]`) — the media type accepted, or any of the listed ones: {content_type}.\n\
              - **Effective body cap** — {cap}."
         );
     }
     // #3276: `@form` decodes the `body` record from a urlencoded form.
     if ann.name.name == "form" {
-        let cap = match handler.limit_max_body().or(service_cap) {
-            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
-            None => "none (add `@limit` or `limits { maxBody }` to bound it)".to_string(),
-        };
+        let cap = body_cap_phrase(handler, service_cap);
         return format!(
             "```bynk\n{sig}\n```\n\n\
              **`@form`** — decode this route's `body` record from an \
@@ -1530,11 +2142,7 @@ fn render_handler_annotation_hover(
     }
     // #3276: `@multipart` decodes the `body` record from `multipart/form-data`.
     if ann.name.name == "multipart" {
-        let cap = match handler.limit_max_body().or(service_cap) {
-            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
-            None => "none — a `@multipart` route needs one (`bynk.http.multipart_body_unbounded`)"
-                .to_string(),
-        };
+        let cap = body_cap_phrase(handler, service_cap);
         return format!(
             "```bynk\n{sig}\n```\n\n\
              **`@multipart`** — decode this route's `body` record from a `multipart/form-data` \
@@ -1689,10 +2297,110 @@ pub fn describe_effect_method_at(
     )
 }
 
+/// What a `?` on an `Option` does where it stands (#4363): fixed by the declared
+/// return type of the function or handler around it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Propagation {
+    /// The body returns `Option` (or `Effect[Option]`): `None` is returned as it is.
+    NoneReturns,
+    /// The handler returns `HttpResult`: `None` answers `404 NotFound` (ADR 0177).
+    NotFound,
+    /// Not decided from the declaration: a `?` inside a lambda, or a return type
+    /// the tables do not name. The hover then describes both.
+    Either,
+    /// #3982: a test `case` or `property` body, outside any lambda: `?` fails the case
+    /// on any `Err` and on `None`.
+    FailsCase,
+}
+
+/// Whether `e`, or any expression below it, is a lambda holding `offset`: a `?`
+/// there propagates out of the lambda, not out of the declaration around it.
+fn lambda_holds(e: &Expr, offset: usize) -> bool {
+    if matches!(e.kind, ExprKind::Lambda(_)) && e.span.start <= offset && offset <= e.span.end {
+        return true;
+    }
+    expr_children(e)
+        .into_iter()
+        .any(|c| lambda_holds(c, offset))
+}
+
+/// [`Propagation`] for the `?` at `offset`, from the innermost function or
+/// handler body holding it.
+fn question_propagation(text: &str, offset: usize) -> Propagation {
+    let Ok(tokens) = tokenize(text) else {
+        return Propagation::Either;
+    };
+    let (Some(unit), _) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text) else {
+        return Propagation::Either;
+    };
+    // A suite's helper `fn`s are declarations like any other (#4363).
+    let suite_items = suite_fn_items(&unit);
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &suite_items,
+    };
+    let holds =
+        |body: &bynk_syntax::ast::Block| body.span.start <= offset && offset <= body.span.end;
+    // #3982: in a case or property body, outside a lambda, `?` fails the case.
+    if let SourceUnit::Suite(suite) = &unit {
+        let bodies = suite
+            .cases
+            .iter()
+            .map(|c| &c.body)
+            .chain(suite.properties.iter().map(|p| &p.forall.body));
+        if let Some(body) = bodies.into_iter().find(|b| holds(b)) {
+            let in_lambda = body.statements.iter().any(|st| {
+                let mut exprs = Vec::new();
+                statement_exprs(st, &mut exprs);
+                exprs.into_iter().any(|e| lambda_holds(e, offset))
+            }) || lambda_holds(&body.tail, offset);
+            return if in_lambda {
+                Propagation::Either
+            } else {
+                Propagation::FailsCase
+            };
+        }
+    }
+    let classify = |ret: &TypeRef, body: &bynk_syntax::ast::Block| {
+        let inner = match ret {
+            TypeRef::Effect(inner, _) => inner,
+            other => other,
+        };
+        let is_lambda = body.statements.iter().any(|s| {
+            let mut exprs = Vec::new();
+            statement_exprs(s, &mut exprs);
+            exprs.into_iter().any(|e| lambda_holds(e, offset))
+        }) || lambda_holds(&body.tail, offset);
+        if is_lambda {
+            return Propagation::Either;
+        }
+        match type_ref_str(inner).split('[').next().unwrap_or("").trim() {
+            "Option" => Propagation::NoneReturns,
+            "HttpResult" => Propagation::NotFound,
+            _ => Propagation::Either,
+        }
+    };
+    let handler = |h: &Handler| holds(&h.body).then(|| classify(&h.return_type, &h.body));
+    items
+        .iter()
+        .find_map(|item| match item {
+            CommonsItem::Fn(f) => holds(&f.body).then(|| classify(&f.return_type, &f.body)),
+            CommonsItem::Service(s) => s.handlers.iter().find_map(handler),
+            CommonsItem::Agent(a) => a.handlers.iter().find_map(handler),
+            _ => None,
+        })
+        .unwrap_or(Propagation::Either)
+}
+
 /// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
-/// by `?` inside a handler returning `HttpResult` (ADR 0177), so an `Option`
-/// operand means `None` answers `404 NotFound`: the hover says so, and points
-/// at `let … else` for any other status. A `?` on a `Result` is not described.
+/// by `?` inside a handler returning `HttpResult` (ADR 0177), where `None` answers
+/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns
+/// early. The hover names the one that applies to the enclosing declaration's return
+/// type (#4363), both where that is not decided (a lambda), and points at
+/// `let … else` for any other status. A `?` on a `Result` is described only in a test case or
+/// property (#3982), where it fails the case.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -1703,20 +2411,136 @@ pub fn describe_question_at(
     let tok = tokens.iter().find(|t| {
         t.span.start <= offset && offset < t.span.end && &text[t.span.start..t.span.end] == "?"
     })?;
+    let propagation = question_propagation(text, tok.span.start);
+    // #3982: in a case or property, `?` fails it on an `Err` as well as on `None`. The checker
+    // accepts only a `Result` or an `Option` operand there, so no operand type is needed, and a
+    // suite file's expression types are not always retained.
+    if propagation == Propagation::FailsCase {
+        return Some(
+            "```bynk\n? : fails the case on Err or None\n```\n\n\
+             In a test `case` (or `property`) body, outside a lambda, `?` yields the value of an \
+             `Ok` or a `Some` and fails the case on an `Err` or a `None`, reporting the error \
+             value and the `?`'s location. In a `property` it fails the property for that input. \
+             A `?` inside a lambda or a helper `fn` keeps its normal meaning."
+                .to_string(),
+        );
+    }
     let before = text[..tok.span.start].trim_end();
     let operand =
         bynk_check::expr_types::type_at_offset(expr_types, before.len().checked_sub(1)?, tys)?;
     if !matches!(&*tys.get(operand), bynk_check::checker::Ty::Option(_)) {
         return None;
     }
-    Some(
-        "```bynk\n? : None → 404 NotFound\n```\n\n\
-         On an `Option` in an `HttpResult` handler, `?` yields the value for `Some` and \
-         answers `404 NotFound` for `None`. That is right for \"the thing you asked for is not \
-         there\", but a missing or malformed request input is a `400`: write \
-         `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
-            .to_string(),
-    )
+    const NOT_FOUND: &str = "In an `HttpResult` handler, `None` answers `404 NotFound`, which is right for \"the thing you asked for is not there\", but a missing or malformed request input is a `400`: write `let Some(x) = e else { BadRequest(\"…\") }` to answer another status.";
+    const RETURNS: &str = "In a function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as it is; `Option` and `Result` never convert.";
+    Some(match propagation {
+        Propagation::NoneReturns => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS}"
+        ),
+        Propagation::NotFound => format!(
+            "```bynk\n? : None answers 404 NotFound\n```\n\n\
+             On an `Option`, `?` yields the value for `Some`. {NOT_FOUND}"
+        ),
+        // A case or property is answered above, before an `Option`-only check.
+        Propagation::Either | Propagation::FailsCase => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS} {NOT_FOUND}"
+        ),
+    })
+}
+
+/// The `\( … )` hole of an interpolated string whose delimiter `offset` is on, as
+/// the span of the expression inside it (trimmed), found on the cursor's line.
+fn interpolation_hole_at(text: &str, offset: usize) -> Option<Span> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let mut from = 0;
+    while let Some(rel) = line[from..].find("\\(") {
+        let open = line_start + from + rel + 2;
+        let mut depth = 1usize;
+        let mut close = None;
+        for (i, c) in text[open..line_end].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close = close?;
+        // On the hole's own delimiters, `\(` and `)`: an identifier inside keeps
+        // its own hover.
+        if (open - 2 <= offset && offset < open) || offset == close {
+            let inner = &text[open..close];
+            let start = open + (inner.len() - inner.trim_start().len());
+            let end = close - (inner.len() - inner.trim_end().len());
+            return (start < end).then(|| Span::new(start, end));
+        }
+        from = close + 1 - line_start;
+    }
+    None
+}
+
+/// #4363: hover on an interpolation hole's `\(` or `)` (`"… \(e) …"`) says how the
+/// hole's value is rendered, from its type: the scalar bases and refinements of them
+/// (ADR 0075, #3977). `None` outside a hole, or when the type has no string form.
+pub fn describe_interpolation_hole_at(
+    text: &str,
+    offset: usize,
+    expr_types: &[(Span, bynk_check::checker::TyId)],
+    tys: &bynk_check::checker::Types,
+) -> Option<String> {
+    use bynk_check::checker::{NamedKind, Ty};
+    let hole = interpolation_hole_at(text, offset)?;
+    let ty = bynk_check::expr_types::type_at_span(expr_types, hole)?;
+    // A refinement is named in the header and renders as its base does.
+    let (base, refined_as) = match &*tys.get(ty) {
+        Ty::Base(b) => (*b, None),
+        Ty::Named {
+            name,
+            kind: NamedKind::Refined(b),
+            ..
+        } => (*b, Some(name.clone())),
+        _ => return None,
+    };
+    let rendering = match base {
+        BaseType::String => "the text as it is",
+        BaseType::Int | BaseType::Float => "its `toString()` text",
+        BaseType::Bool => "`true` or `false`",
+        BaseType::Decimal => "its canonical text",
+        BaseType::Instant => {
+            "RFC 3339 text in UTC (`2026-11-22T10:00:00.000Z`), the text `toString()` gives"
+        }
+        BaseType::Duration => "units, largest first (`1h30m`), the text `toString()` gives",
+        _ => return None,
+    };
+    let base_name = match base {
+        BaseType::String => "String",
+        BaseType::Int => "Int",
+        BaseType::Float => "Float",
+        BaseType::Bool => "Bool",
+        BaseType::Decimal => "Decimal",
+        BaseType::Instant => "Instant",
+        BaseType::Duration => "Duration",
+        _ => return None,
+    };
+    let (shown, note) = match refined_as {
+        Some(name) => (
+            format!("{name} ({base_name})"),
+            " A refinement of a scalar renders as its base does.",
+        ),
+        None => (base_name.to_string(), ""),
+    };
+    Some(format!(
+        "```bynk\n\\(…) : {shown}\n```\n\nAn interpolation hole renders its value as {rendering}.{note}"
+    ))
 }
 
 /// v0.123 (editor-currency slice 2, DECISION B): if the identifier at
@@ -2520,19 +3344,28 @@ pub(crate) fn describe_record_field(t: &TypeDecl, f: &RecordField) -> String {
     if let Some(r) = &f.refinement {
         sig.push_str(&format!(" where {}", bynk_fmt::refinement_to_string(r)));
     }
+    // #3793: `replaces old` shows in the signature.
+    if let Some(old) = &f.replaces {
+        sig.push_str(&format!(" replaces {}", old.name));
+    }
     // #972 (Events slice 3a): render a field default the same way the
     // formatter does — `= <expr>` — so a subscriber-visible default is not
     // silently dropped from hover.
     if let Some(init) = &f.init {
         sig.push_str(&format!(" = {}", bynk_fmt::expr_to_string(init)));
     }
-    format!(
+    let mut out = format!(
         "```bynk\n{sig}\n```\n\n{}",
         member_prose(&f.documentation, || format!(
             "A field of `{}`.",
             t.name.name
         ))
-    )
+    );
+    if let Some(old) = &f.replaces {
+        out.push_str("\n\n");
+        out.push_str(&renamed_from_prose(&old.name));
+    }
+    out
 }
 
 /// #1888: a member's doc, trailing whitespace trimmed, or `fallback` when it
@@ -2721,6 +3554,14 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
         out.push_str(&format!(" derives {}", names.join(" + ")));
     }
     out.push_str("\n```\n");
+    // #3956: the order a `derives Ord` type sorts by, which `bynk.schema.lock`
+    // records and a reorder must accept.
+    if let Some(order) = bynk_check::ord_order::signature(t) {
+        out.push_str(&format!(
+            "\nSorts by: {}\n",
+            bynk_check::ord_order::describe(&order)
+        ));
+    }
     if let Some(doc) = &t.documentation {
         out.push('\n');
         out.push_str(doc);
@@ -3157,7 +3998,12 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
         ServiceProtocol::Http => " from http".to_string(),
         ServiceProtocol::Cron => " from cron".to_string(),
         ServiceProtocol::Queue { name } => format!(" from queue(\"{name}\")"),
-        ServiceProtocol::Email { address } => format!(" from email(\"{address}\")"),
+        // #3889: a constant names the address; show the name, as the source writes it.
+        ServiceProtocol::Email {
+            address_const: Some(c),
+            ..
+        } => format!(" from email({})", c.name.name),
+        ServiceProtocol::Email { address, .. } => format!(" from email(\"{address}\")"),
         ServiceProtocol::WebSocket { .. } => " from websocket".to_string(),
         // Events track slice 1 (spine #936): a subscription pattern is not
         // rendered in this short suffix, matching how WebSocket's in/out
@@ -3169,12 +4015,41 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
     }
 }
 
+/// #3925: the `origins` as the source writes them. The hover's declaration is read
+/// from the source text, ahead of the pass that replaces a constant with its
+/// literal, so a name stays a name here (hover on it shows the constant); a
+/// literal list reads as before.
+fn origins_as_written(cors: &CorsPolicy) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let item = |e: &bynk_syntax::ast::Expr| match &e.kind {
+        ExprKind::StrLit(s) => format!("{s:?}"),
+        ExprKind::Ident(id) => id.name.clone(),
+        _ => "…".to_string(),
+    };
+    match cors.field("origins").map(|e| (&e.kind, e)) {
+        Some((ExprKind::ListLit(items, ..), _)) => {
+            format!(
+                "[{}]",
+                items.iter().map(item).collect::<Vec<_>>().join(", ")
+            )
+        }
+        Some((_, e)) => item(e),
+        None => "[]".to_string(),
+    }
+}
+
 /// v0.131: a one-line summary of a `cors { }` policy for hover — the origins
 /// (always present), then `credentials`/`maxAge` when set.
 fn cors_summary(cors: &CorsPolicy) -> String {
-    let mut parts = vec![format!("origins: {:?}", cors.origins())];
+    let mut parts = vec![format!("origins: {}", origins_as_written(cors))];
     if cors.credentials() {
         parts.push("credentials: true".to_string());
+    }
+    // #3925: the headers a browser script may read, beside the ones Bynk writes
+    // for a client (`WWW-Authenticate`, `Retry-After`, `Location`, `ETag`).
+    let expose = cors.expose_headers();
+    if !expose.is_empty() {
+        parts.push(format!("expose: {expose:?} + Bynk's own headers"));
     }
     if let Some(secs) = cors.max_age_secs() {
         parts.push(format!("maxAge: {secs}s"));
@@ -3192,11 +4067,34 @@ fn security_summary(security: &SecurityPolicy) -> String {
     if let Some(secs) = security.hsts_max_age_secs() {
         parts.push(format!("hsts: {secs}s"));
     }
+    // #3923: what an HTML page gets: the framing sources, the referrer policy, a `csp`.
+    if let Some(sources) = security.frame_ancestors() {
+        parts.push(format!("frameAncestors: [{}]", sources.join(", ")));
+    }
+    if let Some(policy) = security.referrer_policy() {
+        parts.push(format!("referrerPolicy: {policy}"));
+    }
+    if security.csp().is_some() {
+        parts.push("csp".to_string());
+    }
     if parts.is_empty() {
         // The default posture (nosniff on, no HSTS) with an empty block.
         "nosniff".to_string()
     } else {
         parts.join(", ")
+    }
+}
+
+/// #3921: a body-taking route's effective request-body cap and where it comes from:
+/// its `@limit`, the service's `limits`, or the 1 MiB default.
+fn body_cap_phrase(handler: &Handler, service_cap: Option<i64>) -> String {
+    match (handler.limit_max_body(), service_cap) {
+        (Some(bytes), _) => format!("{bytes} bytes (from `@limit`)"),
+        (None, Some(bytes)) => format!("{bytes} bytes (from the service `limits`)"),
+        (None, None) => format!(
+            "{} bytes (the default; `@limit(maxBody: …)` or `limits {{ maxBody }}` raises it)",
+            bynk_syntax::ast::DEFAULT_MAX_BODY
+        ),
     }
 }
 
@@ -3248,7 +4146,18 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     }
     // v0.142 (ADR 0165): the request-limits policy, if declared, renders similarly.
     if let Some(limits) = &s.limits {
-        out.push_str(&format!("\tlimits {{ {} }}\n", limits_summary(limits)));
+        // #3905: a WebSocket service's one field is `maxFrame`; the hover says its default and ceiling.
+        let summary = if matches!(s.protocol, ServiceProtocol::WebSocket { .. }) {
+            format!(
+                "maxFrame: {} bytes  // default {}, at most {}",
+                limits.max_frame(),
+                bynk_syntax::ast::DEFAULT_MAX_FRAME,
+                bynk_syntax::ast::MAX_FRAME_CEILING
+            )
+        } else {
+            limits_summary(limits)
+        };
+        out.push_str(&format!("\tlimits {{ {summary} }}\n"));
     }
     // #2858: the response-JSON policy, if declared, renders its mode.
     if let Some(json) = &s.json {
@@ -3257,6 +4166,14 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
             JsonOptions::Tagged => "tagged",
         };
         out.push_str(&format!("\tjson {{ options: {mode} }}\n"));
+    }
+    // #3916: the error-body policy, if declared, renders its format.
+    if let Some(errors) = &s.errors {
+        let format = match errors.format() {
+            ErrorFormat::Problem => "problem",
+            ErrorFormat::Bynk => "bynk",
+        };
+        out.push_str(&format!("\terrors {{ format: {format} }}\n"));
     }
     for h in &s.handlers {
         // #2858: a route whose response `Option`s are plain JSON says so.
@@ -3318,6 +4235,12 @@ pub(crate) fn describe_agent(a: &AgentDecl) -> String {
         ));
     }
     out.push_str("}\n```\n");
+    // #3819: where the agent's state is kept, when it is pinned.
+    if let Some(j) = bynk_check::agent_jurisdiction::jurisdiction_of(a) {
+        out.push_str(&format!(
+            "\nPinned to the **{j}** jurisdiction: every instance's state is kept there (`@jurisdiction(\"{j}\")`).\n"
+        ));
+    }
     if let Some(doc) = &a.documentation {
         out.push('\n');
         out.push_str(doc);
@@ -3435,7 +4358,10 @@ pub fn type_ref_str(t: &TypeRef) -> String {
         TypeRef::Result(a, b, _) => format!("Result[{}, {}]", type_ref_str(a), type_ref_str(b)),
         TypeRef::Option(t, _) => format!("Option[{}]", type_ref_str(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", type_ref_str(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", type_ref_str(t)),
+        TypeRef::HttpResult(t, None, _) => format!("HttpResult[{}]", type_ref_str(t)),
+        TypeRef::HttpResult(t, Some(e), _) => {
+            format!("HttpResult[{}, {}]", type_ref_str(t), type_ref_str(e))
+        }
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
@@ -3465,6 +4391,17 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #4363 review: a suite's helper `fn` returning `Option` narrows a `?` too.
+    #[test]
+    fn a_question_in_a_suite_helper_is_decided_by_its_return_type() {
+        let src = "suite shop.opt {\n  fn first(xs: List[Int]) -> Option[Int] {\n    let a = xs.first()?\n    Some(a)\n  }\n  case \"c\" {\n    expect first([1]) == Some(1)\n  }\n}\n";
+        let at = src.find("first()?").unwrap() + "first()".len();
+        assert_eq!(
+            super::question_propagation(src, at),
+            super::Propagation::NoneReturns
+        );
+    }
+
     /// #3458: hover on a typed read says what a reply that does not decode means,
     /// read off the operation's declared policy; any other operation says nothing.
     #[test]
@@ -3593,6 +4530,7 @@ mod tests {
     fn email_service_header_renders_its_address() {
         let p = ServiceProtocol::Email {
             address: "*@shop.example".to_string(),
+            address_const: None,
         };
         assert_eq!(
             service_protocol_suffix(&p),
@@ -3605,7 +4543,7 @@ mod tests {
     /// named `message`, and not at a lower tier.
     #[test]
     fn system_job_hover_needs_a_job_service_receiver() {
-        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] by Producer {\n    Ack\n  }\n}\n";
         let suite = |tier: &str| {
             format!(
                 "suite cr.jobs{tier} {{\n  case \"c\" {{\n    let e = Envelope {{ message: \"hi\" }}\n    let m = e.message\n    let r <- deliveries.message(e)\n    let s <- sweeper.schedule(\"*/5 * * * *\")\n    expect m == \"hi\"\n  }}\n}}\n"
@@ -4314,7 +5252,7 @@ mod tests {
     // v0.123 (slice 2): a service renders its protocol header and route lines.
     #[test]
     fn describe_service_renders_routes() {
-        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] {\n    Effect.pure(name)\n  }\n}\n";
+        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] by Caller {\n    Effect.pure(name)\n  }\n}\n";
         let out = describe_symbol(src, "greeter").unwrap();
         assert!(out.contains("service greeter {"), "{out}");
         assert!(out.contains("on call"), "{out}");
@@ -4466,6 +5404,31 @@ mod tests {
         // reference scope, both fall through to the other hover paths.
         assert!(describe_agent_state_at(src, at("next = lastSeq")).is_none());
         assert!(describe_agent_state_at(src, at("Effect.pure")).is_none());
+    }
+
+    /// #4036: a `Map`/`Log` terminal says whether its pipeline reads every entry.
+    #[test]
+    fn a_scan_terminal_hovers_with_what_it_reads() {
+        let src = "context demo.m\n\nagent A {\n  key id: String\n  store seen: Map[String, Int]\n  store trail: Log[Int] @retain(30.days)\n\n  on call a() -> Effect[Bool] {\n    seen.filter((n) => n > 1).any((n) => n == 2)\n  }\n  on call b() -> Effect[Option[Int]] {\n    trail.filter((n) => n > 1).first()\n  }\n  on call c() -> Effect[Option[Int]] {\n    trail.sortBy((n) => n).first()\n  }\n  on call d() -> Effect[Option[Int]] {\n    seen.first()\n  }\n}\n";
+        let hover = |needle: &str| {
+            describe_scan_reads_at(src, src.find(needle).unwrap() + 1, &[]).expect(needle)
+        };
+        assert!(hover("any((n) => n == 2)").contains("Stops reading `seen`"));
+        assert!(hover("first()\n  }\n  on call c").contains("Stops reading `trail`"));
+        assert!(hover("first()\n  }\n  on call d").contains("`sortBy` needs the whole input"));
+        assert!(hover("first()\n  }\n}").contains("insertion order"));
+        // An indexed `Map`'s leading `filter` may be a posting-list lookup, which the note says.
+        let indexed = src.replace(
+            "store seen: Map[String, Int]",
+            "store seen: Map[String, Int] @indexed(by: x)",
+        );
+        let note =
+            describe_scan_reads_at(&indexed, indexed.find("any((n)").unwrap() + 1, &[]).unwrap();
+        assert!(note.contains("@indexed"), "{note}");
+        // Not a terminal, and not a store field.
+        assert!(describe_scan_reads_at(src, src.find("filter(").unwrap() + 1, &[]).is_none());
+        let other = src.replace("seen.filter", "xs.filter");
+        assert!(describe_scan_reads_at(&other, other.find("any(").unwrap() + 1, &[]).is_none());
     }
 
     /// #611 (gap C): hover on a `store` field's operation renders the registry
@@ -4859,6 +5822,27 @@ mod tests {
         );
     }
 
+    /// #3926: hovering `@rateLimit` says what it counts, where it runs and the limiter's limit and window.
+    #[test]
+    fn rate_limit_annotation_hovers_the_limiter_and_where_it_runs() {
+        let src = "context api\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\nservice api from http {\n  @rateLimit(SignupLimit, key: clientIp)\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+        let at = src.find("@rateLimit").unwrap() + 3;
+        let hover = describe_handler_annotation_at(src, at).expect("the annotation hovers");
+        assert!(
+            hover.contains("@rateLimit(SignupLimit, key: clientIp)"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("`SignupLimit` allows 10 requests per 60s for each key"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("before this route's request body is read"),
+            "{hover}"
+        );
+        assert!(hover.contains("`clientIp`"), "{hover}");
+    }
+
     const CACHE_SVC: &str = "context api\nservice api from http {\n  @cache(maxAge: 5.minutes, scope: public)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
 
     #[test]
@@ -4937,7 +5921,7 @@ mod tests {
     #[test]
     fn a_rate_limiter_hovers_with_its_stanza() {
         // P3 (#2342): the emitted limit and window, and the counting caveat.
-        let src = "context a\nconsumes bynk.cloudflare { RateLimit }\ncapability LoginLimit = RateLimit @limit(20) @period(1.minutes)\n";
+        let src = "context a\nconsumes bynk.cloudflare { RateLimit }\ncapability LoginLimit = RateLimit @limit(20) @period(1.minute)\n";
         let tokens = tokenize(src).unwrap();
         let (unit, _) = parse_unit_with_recovery(&tokens, src);
         let Some(SourceUnit::Context(ctx)) = unit else {
@@ -4980,6 +5964,30 @@ mod tests {
     }
 
     #[test]
+    fn hover_on_a_security_field_names_its_header_and_default() {
+        let svc = "context api\nservice api from http {\n  security {\n    frameAncestors: [\"self\"],\n    referrerPolicy: noReferrer,\n  }\n  on GET(\"/x\") () -> Effect[HttpResult[()]] by v: Visitor {\n    Ok(())\n  }\n}\n";
+        let at = |needle: &str| describe_security_field_at(svc, svc.find(needle).unwrap() + 1);
+        let frame = at("frameAncestors").expect("hovers");
+        assert!(
+            frame.contains("frame-ancestors") && frame.contains("text/html"),
+            "{frame}"
+        );
+        assert!(frame.contains("'none'"), "names the default: {frame}");
+        let referrer = at("referrerPolicy").expect("hovers");
+        assert!(
+            referrer.contains("Referrer-Policy")
+                && referrer.contains("strictOriginWhenCrossOrigin"),
+            "{referrer}"
+        );
+        // The path of a route is not a security field.
+        assert!(at("/x").is_none());
+        // And a fully-wired hover reaches it from the annotation fallback.
+        assert!(
+            describe_handler_annotation_at(svc, svc.find("frameAncestors").unwrap() + 1).is_some()
+        );
+    }
+
+    #[test]
     fn hover_on_immutable_cache_shows_the_directive() {
         let svc = "context api\nservice api from http {\n  @cache(maxAge: 365.days, scope: public, immutable: true)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
         let hover = describe_handler_annotation_at(svc, svc.find("cache").unwrap() + 1)
@@ -4988,6 +5996,16 @@ mod tests {
             hover.contains("Emits `Cache-Control: public, max-age=31536000, immutable`."),
             "{hover}"
         );
+    }
+
+    #[test]
+    fn hover_on_a_websocket_service_shows_its_frame_limit_default_and_ceiling() {
+        // #3905
+        let src = "context a\ntype F = { t: String }\nservice live from websocket(in: Bytes, out: F) {\n  limits { maxFrame: 4096 }\n  on open (r: String) -> Effect[()] by v: Visitor { () }\n}\n";
+        let hover = describe_symbol(src, "live").expect("hovers the service");
+        assert!(hover.contains("maxFrame: 4096 bytes"), "{hover}");
+        assert!(hover.contains("default 1048576"), "{hover}");
+        assert!(hover.contains("at most 33554432"), "{hover}");
     }
 
     #[test]
@@ -5041,6 +6059,54 @@ mod tests {
     }
 
     #[test]
+    fn hover_on_a_route_string_names_the_overlapping_routes_and_which_wins() {
+        let svc = "context api\nservice api from http {\n  on GET(\"/users/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(id)\n  }\n  on GET(\"/users/me\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"me\")\n  }\n  on GET(\"/solo\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"s\")\n  }\n}\n";
+        let param = describe_route_at(svc, svc.find("/users/:id").unwrap() + 2).expect("hovers");
+        assert!(
+            param.contains("`GET /users/me`") && param.contains("is tried first"),
+            "{param}"
+        );
+        let lit = describe_route_at(svc, svc.find("/users/me").unwrap() + 2).expect("hovers");
+        assert!(lit.contains("this route is tried first"), "{lit}");
+        assert!(describe_route_at(svc, svc.find("/solo").unwrap() + 2).is_none());
+    }
+
+    #[test]
+    fn hover_on_a_path_parameter_names_its_decoding_and_its_400s() {
+        let svc = "context api\ntype OrderNo = Int where Positive\ntype Status = enum { Open, Closed }\nservice api from http {\n  on GET(\"/orders/:id/:s/:n\") (id: OrderNo, s: Status, n: Int, q: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let at = |needle: &str| describe_path_param_at(svc, svc.find(needle).unwrap());
+        let id = at("id: OrderNo").expect("hovers a refined Int");
+        assert!(
+            id.contains("read as an `Int`") && id.contains("RefinementViolation"),
+            "{id}"
+        );
+        let s = at("s: Status").expect("hovers an enum");
+        assert!(
+            s.contains("a variant name") && !s.contains("RefinementViolation"),
+            "{s}"
+        );
+        let n = at("n: Int").expect("hovers an Int");
+        assert!(
+            n.contains("StructuralMismatch") && !n.contains("RefinementViolation"),
+            "{n}"
+        );
+        assert!(at("q: String").is_none(), "q binds no segment");
+        // A plain `String` has no 400; a type declared elsewhere makes no specific claim.
+        let svc2 = "context api\nservice api from http {\n  on GET(\"/a/:s/:o\") (s: String, o: Elsewhere) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let plain = describe_path_param_at(svc2, svc2.find("s: String").unwrap()).expect("hovers");
+        assert!(
+            plain.contains("Any text binds") && !plain.contains("400"),
+            "{plain}"
+        );
+        let other =
+            describe_path_param_at(svc2, svc2.find("o: Elsewhere").unwrap()).expect("hovers");
+        assert!(
+            !other.contains("variant name") && !other.contains("read as a"),
+            "{other}"
+        );
+    }
+
+    #[test]
     fn annotation_token_spans_cover_name_and_labels() {
         let spans = handler_annotation_token_spans(CACHE_SVC);
         // `@cache` + the two argument labels `maxAge`/`scope`.
@@ -5050,6 +6116,17 @@ mod tests {
         // A service with no annotations yields nothing.
         let plain = "context api\nservice api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
         assert!(handler_annotation_token_spans(plain).is_empty());
+    }
+
+    /// #4502: a record field's own annotation (`@index`) is tokenised as a decorator.
+    #[test]
+    fn annotation_token_spans_cover_an_index_field() {
+        let src = "commons shop\n\ntype Signup = { @index plan: String, seats: Int }\n";
+        let texts: Vec<&str> = handler_annotation_token_spans(src)
+            .iter()
+            .map(|s| &src[s.start..s.end])
+            .collect();
+        assert_eq!(texts, ["@index"]);
     }
 
     #[test]

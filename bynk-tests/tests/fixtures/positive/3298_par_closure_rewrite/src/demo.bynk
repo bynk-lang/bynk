@@ -1,6 +1,6 @@
 context demo
 
-// #3298: what a `parTraverse` closure may do next to a store. It may read one,
+// #3298: what a `parForEach` closure may do next to a store. It may read one,
 // iterate one as the receiver, and call another agent; it may not write one. The
 // writes run in a sequential `forEach`, where a single-call `update` is atomic.
 
@@ -36,13 +36,13 @@ agent Tally {
       let r: Result[Int, String] = Ok(o.getOrElse(0))
       Effect.pure(r)
     })
-    let _ <- counts.values.parTraverse((v: Int) => Hits("h").bump(v))
+    let _ <- counts.values.parForEach((v: Int) => Hits("h").bump(v))
     Effect.pure([])
   }
 
   // the concurrent part stays in the closure: another agent's handler is atomic
   on call viaAgent(x: Int) -> Effect[()] {
-    let _ <- [1, 2, 3].parTraverse((i: Int) => Hits("k\(i)").bump(i))
+    let _ <- [1, 2, 3].parForEach((i: Int) => Hits("k\(i)").bump(i))
     Effect.pure(())
   }
 

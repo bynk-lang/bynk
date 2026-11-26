@@ -6,7 +6,7 @@ context app
 consumes shop
 
 service Order {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

@@ -53,6 +53,9 @@ export const EMAIL_REJECT_UNPARSEABLE = "message could not be read";
 export const EMAIL_REJECT_FAULT = "message could not be processed";
 export const EMAIL_REJECT_REPLY = "reply refused";
 export const EMAIL_REJECT_FORWARD = "forward refused";
+export const EMAIL_REJECT_UNAUTHENTICATED = "sender not authenticated";
+/** #3885: the header a fallback forward carries; its value is the outcome, never anything from the message. */
+export const EMAIL_FALLBACK_HEADER = "X-Bynk-Fallback";
 
 export type DmarcVerdict =
   | { readonly tag: "DmarcPass" }
@@ -71,16 +74,36 @@ export interface InboundAttachment {
   readonly inline: boolean;
 }
 
+/** One header occurrence (#3886): its lower-case name and decoded value. */
+export interface EmailHeader {
+  readonly name: string;
+  readonly value: string;
+}
+
 export interface InboundEmail {
   readonly from: string;
   readonly to: string;
   readonly subject: string;
   readonly messageId: string;
+  /** #3886: the message id the sender says this answers (`<id@host>`, as `messageId` is written). */
+  readonly inReplyTo: Option<string>;
+  /** The `References` ids (`<id@host>`), in the message's order. */
+  readonly references: readonly string[];
+  /** Bare `Reply-To` addresses, display names dropped. */
+  readonly replyTo: readonly string[];
+  /** Bare `Cc` addresses, display names dropped. */
+  readonly cc: readonly string[];
+  /** The sender's `Date` in epoch milliseconds: `None` when missing or unreadable. A claim, not the arrival time. */
+  readonly date: Option<number>;
   readonly headers: ReadonlyMap<string, string>;
+  /** Every header occurrence, in order, by lower-case name. */
+  readonly headerList: readonly EmailHeader[];
   readonly text: Option<string>;
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
   readonly size: number;
+  /** #3884: the text after the first `+` of the recipient's local part (RFC 5233), `None` without one. */
+  readonly subaddress: Option<string>;
 }
 
 export interface EmailReply {
@@ -89,11 +112,19 @@ export interface EmailReply {
   readonly html: Option<string>;
 }
 
+/** #3887: everything a `Route` verdict does with one message. */
+export interface EmailActions {
+  readonly forward: readonly string[];
+  readonly reply: Option<EmailReply>;
+  readonly tag: ReadonlyMap<string, string>;
+}
+
 export type EmailVerdict =
   | { readonly tag: "Accept" }
   | { readonly tag: "Reject"; readonly reason: string }
   | { readonly tag: "Forward"; readonly to: string }
-  | { readonly tag: "Reply"; readonly message: EmailReply };
+  | { readonly tag: "Reply"; readonly message: EmailReply }
+  | { readonly tag: "Route"; readonly actions: EmailActions };
 
 /** The part of `postal-mime`'s `Header` this module reads. */
 interface ParsedHeader {
@@ -110,10 +141,21 @@ interface ParsedAttachment {
   readonly content: unknown;
 }
 
+/** The part of `postal-mime`'s `Address` this module reads: a mailbox, or a group of them. */
+interface ParsedAddress {
+  readonly address?: string;
+  readonly group?: readonly { readonly address?: string }[];
+}
+
 /** The part of `postal-mime`'s `Email` this module reads. */
 interface ParsedEmail {
   readonly subject?: string;
   readonly messageId?: string;
+  readonly inReplyTo?: string;
+  readonly references?: string;
+  readonly replyTo?: readonly ParsedAddress[];
+  readonly cc?: readonly ParsedAddress[];
+  readonly date?: string;
   readonly text?: string;
   readonly html?: string;
   readonly headers: readonly ParsedHeader[];
@@ -127,13 +169,17 @@ export interface InboundMessage {
   readonly raw: ReadableStream<Uint8Array>;
   readonly rawSize: number;
   setReject(reason: string): void;
-  forward(rcptTo: string): Promise<unknown>;
+  forward(rcptTo: string, headers?: Headers): Promise<unknown>;
   reply(message: unknown): Promise<unknown>;
 }
 
 /** One `from email(…)` service: the address it claims and its handler. */
 export interface EmailRoute {
   readonly address: string;
+  /** #3888: the DMARC verdict tags the handler's `Sender` refinement admits; absent admits any mail. */
+  readonly admits?: readonly DmarcVerdict["tag"][];
+  /** #3885: the verified address mail the handler faulted on, or that could not be read, is forwarded to. */
+  readonly fallback?: string;
   handle(mail: InboundEmail, sender: SenderIdentity): Promise<EmailVerdict>;
 }
 
@@ -168,15 +214,43 @@ function domainOf(address: string): string {
 }
 
 /**
+ * The base address and the tag of a plus-addressed recipient (RFC 5233, as Cloudflare Email
+ * Routing defines it): the local part is split at its first `+`, and the base is the local
+ * part up to it, at the same domain. `undefined` when the local part has no `+`, or starts
+ * with one (nothing to be the base of). The recipient is lower-cased by the caller.
+ */
+function subaddressOf(recipient: string): { readonly base: string; readonly tag: string } | undefined {
+  const at = recipient.lastIndexOf("@");
+  const plus = recipient.indexOf("+");
+  if (at < 0 || plus <= 0 || plus > at) return undefined;
+  return { base: recipient.slice(0, plus) + recipient.slice(at), tag: recipient.slice(plus + 1, at) };
+}
+
+/**
+ * The tag of `recipient`'s plus-address as the handler reads it (`mail.subaddress`), keeping
+ * the case the sender wrote. `undefined` without a `+` in the local part.
+ */
+export function subaddressTag(recipient: string): string | undefined {
+  return subaddressOf(recipient)?.tag;
+}
+
+/**
  * The route that claims `recipient`, or `undefined`. The comparison is
  * case-insensitive throughout (Email Routing matches without regard to case,
- * ADR 0805 A), an exact address wins over the domain's catch-all, and a
- * catch-all `*@domain` matches only that domain.
+ * ADR 0805 A). The order is Email Routing's own (#3884): a claim on the exact
+ * recipient (`support+vip@shop.example`), then on its base address with the
+ * `+tag` removed (`support@shop.example`), then the domain's catch-all `*@domain`,
+ * which matches only that domain.
  */
 export function pickRoute(routes: readonly EmailRoute[], recipient: string): EmailRoute | undefined {
   const to = recipient.toLowerCase();
   const exact = routes.find((r) => r.address.toLowerCase() === to);
   if (exact !== undefined) return exact;
+  const sub = subaddressOf(to);
+  if (sub !== undefined) {
+    const base = routes.find((r) => r.address.toLowerCase() === sub.base);
+    if (base !== undefined) return base;
+  }
   const domain = domainOf(to);
   return routes.find((r) => {
     const a = r.address.toLowerCase();
@@ -276,6 +350,22 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
   return { tag: "DmarcNone" };
 }
 
+/**
+ * #3888: the verdict of a message whose headers are already a map (an `InboundEmail` in a case).
+ * The same rule as the Worker's, so a case that sets `authentication-results:
+ * mx.cloudflare.net; dmarc=pass` reads `DmarcPass` at every tier.
+ */
+export function dmarcVerdictOf(headers: ReadonlyMap<string, string>, headerList: readonly EmailHeader[] = []): DmarcVerdict {
+  // Header names are case-insensitive (RFC 5322), and the Worker's parser lower-cases them, so a case's
+  // `Authentication-Results` must read as the Worker reads it. The first spelling of a header wins.
+  // #3886: a case writes `headers` and then `headerList` into the raw message, so the first occurrence
+  // across the two is the one the Worker reads, and the unit tier reads it the same way.
+  return dmarcVerdict([
+    ...[...headers].map(([key, value]) => ({ key: key.toLowerCase(), value })),
+    ...headerList.map((h) => ({ key: h.name.toLowerCase(), value: h.value })),
+  ]);
+}
+
 // ------------------------------------------------------------------- parsing
 
 /** The raw message, or `null` when it is over `cap` bytes. Never over-reads. */
@@ -331,6 +421,21 @@ function headerMap(headers: readonly ParsedHeader[]): Map<string, string> {
   return map;
 }
 
+/** Bare addresses of a parsed list, groups unwrapped, in order. */
+function bareAddresses(list: readonly ParsedAddress[] | undefined): string[] {
+  const out: string[] = [];
+  for (const a of list ?? []) {
+    for (const m of a.group ?? [a]) if (typeof m.address === "string" && m.address !== "") out.push(m.address);
+  }
+  return out;
+}
+
+/** The sender's `Date` in epoch milliseconds, or `None` when it is missing or not a date. */
+function sentAt(date: string | undefined): Option<number> {
+  const ms = date === undefined ? Number.NaN : Date.parse(date);
+  return Number.isSafeInteger(ms) ? Some(ms) : None;
+}
+
 function attachmentBytes(content: unknown): Uint8Array {
   if (content instanceof Uint8Array) return content;
   if (content instanceof ArrayBuffer) return new Uint8Array(content);
@@ -374,11 +479,18 @@ export async function parseInbound(
     to: envelope.to,
     subject: parsed.subject ?? "",
     messageId: parsed.messageId ?? "",
+    inReplyTo: present(messageIds(parsed.inReplyTo)[0]),
+    references: messageIds(parsed.references),
+    replyTo: bareAddresses(parsed.replyTo),
+    cc: bareAddresses(parsed.cc),
+    date: sentAt(parsed.date),
     headers: headerMap(parsed.headers),
+    headerList: parsed.headers.map((h) => ({ name: h.key, value: h.value })),
     text: present(parsed.text),
     html: present(parsed.html),
     attachments,
     size: raw.byteLength,
+    subaddress: present(subaddressTag(envelope.to)),
   };
   return { ok: true, mail, dmarc: dmarcVerdict(parsed.headers) };
 }
@@ -550,7 +662,7 @@ export function replyMime(mail: InboundEmail, reply: EmailReply, receivedAt: str
     text: reply.text.tag === "Some" ? reply.text.value : undefined,
     html: reply.html.tag === "Some" ? reply.html.value : undefined,
     inReplyTo: mail.messageId,
-    references: mail.headers.get("references"),
+    references: mail.references.join(" "),
     date: now,
     messageId: `<${id}@${domainOf(receivedAt)}>`,
     boundary: `=_bynk_${id}`,
@@ -578,7 +690,119 @@ export function rejectReason(reason: string): string {
   return line === "" ? EMAIL_REJECT_FAULT : line;
 }
 
-const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
+const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply", "Route"]);
+
+/** The most destinations one `Route` forwards to (#3887): more is a handler fault. */
+export const EMAIL_MAX_ROUTE_FORWARDS = 20;
+
+/** A `tag` header name: `X-` (or `x-`, names are case-insensitive) and letters, digits and `-`, the only headers `forward()` keeps. */
+const TAG_NAME = /^[Xx]-[A-Za-z0-9-]*$/;
+
+/**
+ * The destinations of a `Route`, de-duplicated without regard to case (the first spelling stays),
+ * or a fault if the handler gave more than [`EMAIL_MAX_ROUTE_FORWARDS`] distinct ones.
+ */
+export function routeDestinations(actions: EmailActions): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const to of actions.forward) {
+    const key = String(to).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(String(to));
+  }
+  if (out.length > EMAIL_MAX_ROUTE_FORWARDS) throw new RangeError("too many destinations");
+  return out;
+}
+
+/** The tags `forward()` may carry, and the names of those it dropped (a bad name, or a value with a line break or one `Headers` refuses). */
+export function routeTags(tag: ReadonlyMap<string, string>): { readonly headers: Headers; readonly dropped: string[] } {
+  const headers = new Headers();
+  const dropped: string[] = [];
+  for (const [name, value] of tag) {
+    if (TAG_NAME.test(name) && !/[\r\n]/.test(value)) {
+      try {
+        headers.set(name, value);
+        continue;
+      } catch {
+        // #3887: a value `Headers` refuses (a NUL, a character outside Latin-1) is dropped like any other bad tag.
+      }
+    }
+    dropped.push(oneLine(String(name)).slice(0, 64));
+  }
+  return { headers, dropped };
+}
+
+/**
+ * A `Route` (#3887): the reply first, then each destination, de-duplicated. A refusal is logged by
+ * its class name and the rest still run. The message is rejected, with the reason of the first
+ * refusal, only when every action was refused; if any succeeded it is handled, because a forward
+ * cannot be taken back. A route with nothing to do is `Accept`.
+ */
+async function applyRoute(
+  message: InboundMessage,
+  actions: EmailActions,
+  mail: InboundEmail,
+  makeReply: ReplyFactory,
+  where: string,
+  log: EmailLog,
+): Promise<void> {
+  const destinations = routeDestinations(actions);
+  const { headers, dropped } = routeTags(actions.tag);
+  for (const name of dropped) log(`${where}: tag dropped (${name})`);
+  let succeeded = 0;
+  let firstRefusal: string | undefined;
+  if (actions.reply.tag === "Some") {
+    try {
+      const rawReply = replyMime(mail, actions.reply.value, message.to);
+      await message.reply(await makeReply(message.to, message.from, rawReply));
+      succeeded++;
+    } catch (e) {
+      log(`${where}: reply refused (${errorName(e)})`);
+      firstRefusal ??= EMAIL_REJECT_REPLY;
+    }
+  }
+  for (const to of destinations) {
+    try {
+      await (hasTags(headers) ? message.forward(to, headers) : message.forward(to));
+      succeeded++;
+    } catch (e) {
+      log(`${where}: forward refused (${errorName(e)})`);
+      firstRefusal ??= EMAIL_REJECT_FORWARD;
+    }
+  }
+  if (succeeded === 0 && firstRefusal !== undefined) message.setReject(firstRefusal);
+}
+
+function hasTags(headers: Headers): boolean {
+  for (const _ of headers) return true;
+  return false;
+}
+
+/**
+ * A message the service could not process: forwarded to its fallback address, labelled with the
+ * outcome, when it declares one (#3885), and otherwise, or if that forward is refused, rejected as
+ * it always was. The header holds `handler-fault` or `unreadable` and nothing from the message.
+ */
+async function fallBack(
+  message: InboundMessage,
+  route: EmailRoute,
+  outcome: "handler-fault" | "unreadable",
+  reject: string,
+  where: string,
+  log: EmailLog,
+): Promise<void> {
+  if (route.fallback !== undefined) {
+    try {
+      await message.forward(route.fallback, new Headers({ [EMAIL_FALLBACK_HEADER]: outcome }));
+      log(`${where}: ${outcome}, forwarded to the fallback`);
+      return;
+    } catch (e) {
+      log(`${where}: fallback forward refused (${errorName(e)})`);
+    }
+  }
+  message.setReject(reject);
+}
 
 /**
  * What the Worker's `email()` export runs. Every outcome is decided here: a
@@ -618,7 +842,7 @@ export async function handleEmail(
     raw = await readRaw(message.raw, EMAIL_MAX_RAW_BYTES);
   } catch (e) {
     log(`${where}: reading the message failed (${errorName(e)})`);
-    message.setReject(EMAIL_REJECT_UNPARSEABLE);
+    await fallBack(message, route, "unreadable", EMAIL_REJECT_UNPARSEABLE, where, log);
     return;
   }
   if (raw === null) {
@@ -629,7 +853,15 @@ export async function handleEmail(
   const parsed = await parseInbound({ from: message.from, to: message.to }, raw);
   if (!parsed.ok) {
     log(`${where}: parse failed (${parsed.code})`);
-    message.setReject(parsed.reason);
+    await fallBack(message, route, "unreadable", parsed.reason, where, log);
+    return;
+  }
+  // #3888: a `Sender` refinement (`actor Authenticated = Sender where Dmarc(DmarcPass)`)
+  // lists the verdicts it admits; other mail is refused before the handler runs. Logged
+  // by outcome only: the message is not a fault, so no `fallback` receives it.
+  if (route.admits !== undefined && !route.admits.includes(parsed.dmarc.tag)) {
+    log(`${where}: sender not authenticated`);
+    message.setReject(EMAIL_REJECT_UNAUTHENTICATED);
     return;
   }
   let verdict: EmailVerdict;
@@ -638,9 +870,11 @@ export async function handleEmail(
     if (verdict === null || typeof verdict !== "object" || !VERDICT_TAGS.has(verdict.tag)) {
       throw new TypeError("not an EmailVerdict");
     }
+    // #3887: a `Route` with too many destinations is a handler fault, settled as any other.
+    if (verdict.tag === "Route") routeDestinations(verdict.actions);
   } catch (e) {
     log(`${where}: handler faulted (${errorName(e)})`);
-    message.setReject(EMAIL_REJECT_FAULT);
+    await fallBack(message, route, "handler-fault", EMAIL_REJECT_FAULT, where, log);
     return;
   }
   switch (verdict.tag) {
@@ -665,6 +899,9 @@ export async function handleEmail(
         log(`${where}: reply refused (${errorName(e)})`);
         message.setReject(EMAIL_REJECT_REPLY);
       }
+      return;
+    case "Route":
+      await applyRoute(message, verdict.actions, parsed.mail, makeReply, where, log);
       return;
   }
 }

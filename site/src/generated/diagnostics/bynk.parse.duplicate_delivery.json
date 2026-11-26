@@ -1,0 +1,12 @@
+{
+  "blurb": "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_delivery",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `delivery { }` policy."
+}

@@ -448,6 +448,9 @@ fn pred_text(p: &PredKind) -> String {
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("AtLeast({})", b.lexeme()),
+        PredKind::AtMost(b) => format!("AtMost({})", b.lexeme()),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -455,6 +458,7 @@ fn pred_text(p: &PredKind) -> String {
         PredKind::Positive => "Positive".to_string(),
         PredKind::NonEmpty => "NonEmpty".to_string(),
         PredKind::IsoDate => "IsoDate".to_string(),
+        PredKind::Cron => "Cron".to_string(),
     }
 }
 
@@ -494,7 +498,7 @@ fn field_text(f: &WireField) -> String {
         .as_ref()
         .map(|(e, _)| format!(" = {}", bynk_fmt::expr_to_string(e)))
         .unwrap_or_default();
-    format!("`{}`: {}{default}", f.name, ref_text(&f.shape))
+    format!("`{}`: {}{default}", f.key, ref_text(&f.shape))
 }
 
 /// A boundary type's body: a scalar or sum leads on the type's line; a record
@@ -534,7 +538,7 @@ fn body_lines(body: &WireBody) -> Vec<String> {
                 let payload = v
                     .payload
                     .iter()
-                    .map(|f| format!("{}: {}", f.name, ref_text(&f.shape)))
+                    .map(|f| format!("{}: {}", f.key, ref_text(&f.shape)))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let payload = if payload.is_empty() {
@@ -542,7 +546,7 @@ fn body_lines(body: &WireBody) -> Vec<String> {
                 } else {
                     format!("({payload})")
                 };
-                lines.push(format!("  - `{}`{payload}", v.name));
+                lines.push(format!("  - `{}`{payload}", v.wire_name));
             }
             lines
         }

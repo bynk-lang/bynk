@@ -1,0 +1,8 @@
+context reaper
+uses schedules
+
+service sweeper from cron {
+  on schedule(Hidden) () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

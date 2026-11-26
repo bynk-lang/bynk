@@ -38,11 +38,11 @@ service api from http {
 }
 
 service audit {
-	on call(entries: List[String]) -> Effect[()] given Trail { Trail.note(entries) }
+	on call(entries: List[String]) -> Effect[()] by Caller given Trail { Trail.note(entries) }
 }
 
 service fulfilment from queue("order-events") {
-	on message(m: Placed) -> Effect[QueueResult] {
+	on message(m: Placed) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

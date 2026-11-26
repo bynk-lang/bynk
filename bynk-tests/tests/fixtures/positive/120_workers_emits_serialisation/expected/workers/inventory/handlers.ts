@@ -2,6 +2,7 @@
 // context inventory
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -9,8 +10,8 @@ export type Sku = string & { readonly __brand: "inventory.Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$").test(value))) {
-      return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", value });
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$", "u").test(value))) {
+      return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", rule: { tag: "Matches", pattern: "[A-Z]{3}-[0-9]{4}" }, value });
     }
     return Ok(value as Sku);
   },
@@ -66,6 +67,16 @@ export function __serialise_StockError(value: StockError): __JsonValue {
 }
 
 export function __deserialise_StockError(json: __JsonValue, path: string = "$"): Result<StockError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "NotFound":
+        return Ok({ tag: "NotFound" } as StockError);
+      case "OutOfStock":
+        return Ok({ tag: "OutOfStock" } as StockError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -104,7 +115,7 @@ export function __deserialise_StockItem(json: __JsonValue, path: string = "$"): 
   }
   const __quantity = obj["quantity"];
   if (!(__quantity >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", value: __quantity } });
+    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __quantity } });
   }
   return Ok({ sku: __sku, quantity: __quantity } as StockItem);
 }

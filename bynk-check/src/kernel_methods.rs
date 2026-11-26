@@ -24,9 +24,9 @@ use bynk_syntax::ast::BaseType;
 
 pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
-    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp, InstantOp,
-    IntOp, ListOp, MapOp, OptionOp, QueryOp, RequestCookiesOp, RequestHeadersOp, RequestQueryOp,
-    ResultOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
+    InstantOp, IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
+    RequestQueryOp, ResultOp, SecretOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
 };
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
@@ -43,7 +43,7 @@ pub const QUERY_METHODS: &[KernelMethod] = QueryOp::TABLE;
 pub const OPTION_METHODS: &[KernelMethod] = OptionOp::TABLE;
 /// `Result[T, E]` combinators (v0.22a).
 pub const RESULT_METHODS: &[KernelMethod] = ResultOp::TABLE;
-/// The methods of every `Effect[T]` (#2683, #2711): `within`, `race` and `detach`.
+/// The methods of every `Effect[T]` (#2683, #2711, #3965): `within`, `race`, `detach`, `map` and `andThen`.
 pub const EFFECT_METHODS: &[KernelMethod] = EffectOp::TABLE;
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176): `within` and
 /// `race` (on every `Effect`) alongside the compiler-synthesised combinators.
@@ -51,6 +51,8 @@ pub const EFFECT_RESULT_METHODS: &[KernelMethod] = &[
     EffectOp::TABLE[0],
     EffectOp::TABLE[1],
     EffectOp::TABLE[2],
+    EffectOp::TABLE[3],
+    EffectOp::TABLE[4],
     EffectResultOp::TABLE[0],
     EffectResultOp::TABLE[1],
     EffectResultOp::TABLE[2],
@@ -80,8 +82,38 @@ pub const REQUEST_QUERY_METHODS: &[KernelMethod] = RequestQueryOp::TABLE;
 pub const REQUEST_COOKIES_METHODS: &[KernelMethod] = RequestCookiesOp::TABLE;
 /// An `Oidc` binder's claims (#2380).
 pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = TokenClaimsOp::TABLE;
+/// A held `Connection[F]` (#3902): `send(frame)` and `close(code?, reason?)`, so `.`-completion
+/// offers them and signature help reads the optional close code and reason.
+pub const CONNECTION_METHODS: &[KernelMethod] = ConnectionOp::TABLE;
+/// A `bynk` `Secret` (#4111): `reveal` and `matches`, the only two readers.
+pub const SECRET_METHODS: &[KernelMethod] = SecretOp::TABLE;
 /// A case's recording `TestConnection[F]` (#3051).
 pub const TEST_CONNECTION_METHODS: &[KernelMethod] = TestConnectionOp::TABLE;
+
+/// #3955: the method every orderable type has, `compare`. Not a `*_METHODS`
+/// table: it belongs to no one receiver type, so it is offered beside the
+/// receiver's own table wherever [`is_ord_receiver`] holds.
+pub const ORD_RECEIVER_TABLE: &[KernelMethod] = OrdOp::TABLE;
+
+/// Whether a receiver of type `ty` is orderable, so `compare` applies. The
+/// built-in types decide structurally; a named type is asked through
+/// `named_is_ord` (its declaration says whether it `derives Ord`, which only the
+/// caller can look up). A type parameter is not offered it: its bound is not
+/// known here.
+pub fn is_ord_receiver(ty: TyId, tys: &Types, named_is_ord: &dyn Fn(&str) -> bool) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(b) => !matches!(b, BaseType::Bool),
+        Ty::Option(t) | Ty::List(t) => is_ord_receiver(*t, tys, named_is_ord),
+        Ty::Named { name, kind, args } => {
+            let own = match kind {
+                NamedKind::Refined(b) => !matches!(b, BaseType::Bool),
+                NamedKind::Record | NamedKind::Sum | NamedKind::Opaque(_) => named_is_ord(name),
+            };
+            own && args.iter().all(|a| is_ord_receiver(*a, tys, named_is_ord))
+        }
+        _ => false,
+    }
+}
 
 /// Every method table above, by the type a user writes. The one enumerable
 /// registry (read by the wasm `bynk_reference`); a test pins it against the
@@ -107,7 +139,9 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("RequestQuery", REQUEST_QUERY_METHODS),
     ("RequestCookies", REQUEST_COOKIES_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
+    ("Connection", CONNECTION_METHODS),
     ("TestConnection", TEST_CONNECTION_METHODS),
+    ("Secret", SECRET_METHODS),
 ];
 
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
@@ -123,10 +157,11 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Decimal) => DECIMAL_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
-        Ty::HttpResult(_) => HTTP_RESULT_METHODS,
+        Ty::HttpResult(_, _) => HTTP_RESULT_METHODS,
         Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::RequestCookies => REQUEST_COOKIES_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
+        Ty::Connection(_) => CONNECTION_METHODS,
         Ty::TestConnection(_) => TEST_CONNECTION_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,
@@ -138,6 +173,14 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         // combinators (and `within`, `race`); any other `Effect[_]` offers those two alone.
         Ty::Effect(inner) if matches!(&*tys.get(*inner), Ty::Result(_, _)) => EFFECT_RESULT_METHODS,
         Ty::Effect(_) => EFFECT_METHODS,
+        // #4111: a `Secret` offers `reveal` and `matches`. Found by name and shape, as this
+        // function has no declaration to ask, so a user's own `opaque String` called `Secret`
+        // is offered them too (completion only: the checker tells the two apart).
+        Ty::Named {
+            name,
+            kind: NamedKind::Opaque(BaseType::String),
+            ..
+        } if name == "Secret" => SECRET_METHODS,
         // #561: a refined receiver inherits its base type's read-only kernel
         // methods (after its own declared methods, which the completion layer
         // merges in), so `.`-member completion offers them. `Bool` has no
@@ -174,6 +217,18 @@ mod tests {
             declared,
             "a *_METHODS table is missing from ALL_METHODS"
         );
+    }
+
+    /// #4262: an overloaded method lists one signature per arity, never one
+    /// string with the forms joined by ", or".
+    #[test]
+    fn no_kernel_signature_joins_forms() {
+        for m in ALL_METHODS.iter().flat_map(|(_, t)| t.iter()) {
+            assert_eq!(m.signature, m.signatures[0], "{}", m.name);
+            for sig in m.signatures {
+                assert!(!sig.contains(", or "), "{}: {sig}", m.name);
+            }
+        }
     }
 
     fn refined(tys: &Types, base: BaseType) -> TyId {

@@ -2,6 +2,7 @@
 // context commerce.payment
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import { CustomerId as __CommonsCustomerId } from "./identifiers.js";
@@ -21,8 +22,8 @@ export type AuthId = string & { readonly __brand: "commerce.payment.AuthId" };
 
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "AUTH-[0-9]{8}" + ")$").test(value))) {
-      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", value });
+    if (!(__bynkRegExp("^(?:" + "AUTH-[0-9]{8}" + ")$", "u").test(value))) {
+      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", rule: { tag: "Matches", pattern: "AUTH-[0-9]{8}" }, value });
     }
     return Ok(value as AuthId);
   },

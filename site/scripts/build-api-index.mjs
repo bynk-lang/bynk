@@ -3,14 +3,14 @@
 //!
 //! `cargo doc --no-deps --workspace` produces one `target/doc/<crate>/index.html`
 //! per crate but NO workspace-level landing (documentation track follow-on). After
-//! the CI deploy copies that tree into `site/public/docs/api/`, this script writes
+//! the CI deploy copies that tree into `site/public/reference/api/`, this script writes
 //! an `index.html` there: a curated list of the workspace crates, each linking to
 //! its rustdoc, with the description read straight from its `Cargo.toml` (the single
 //! source of truth, so the landing can't drift from the crates).
 //!
 //!   node scripts/build-api-index.mjs <api-dir>
 //!
-//! <api-dir> is the directory holding the copied rustdoc (…/public/docs/api). The
+//! <api-dir> is the directory holding the copied rustdoc (…/public/reference/api). The
 //! script is a no-op-safe generator: it only reads Cargo manifests and writes the
 //! one index.html. Run in the deploy workflow, after cargo doc + copy.
 
@@ -109,9 +109,9 @@ const html = `<!doctype html>
       <h1>Bynk — Rust crate API docs</h1>
       <p class="lede">
         Generated <code>rustdoc</code> for the Bynk workspace crates — the compiler
-        internals behind the <a href="/docs/">toolchain</a>. Most users compile Bynk
+        internals behind the <a href="/reference/tooling/">toolchain</a>. Most users compile Bynk
         through the <code>bynk</code> CLI rather than depending on
-        these crates directly. Back to the <a href="/docs/">Developer Documentation</a>.
+        these crates directly. Back to <a href="/reference/tooling/">Tooling</a>.
       </p>
       <ul>
 ${cards}

@@ -5,7 +5,7 @@ import * as docs_archive from "./docs/archive.js";
 import * as docs_gateway from "./docs/gateway.js";
 
 export function composeApp() {
-  const docs_archiveDeps = {  };
+  const docs_archiveDeps = {};
   const docs_archiveSurface = docs_archive.__makeSurface(docs_archiveDeps);
   const docs_gatewayDeps = { surface: { archive: docs_archiveSurface } };
   const docs_gatewaySurface = docs_gateway.__makeSurface(docs_gatewayDeps);

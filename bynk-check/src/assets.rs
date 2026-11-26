@@ -947,8 +947,9 @@ pub fn compose_unit_assets(
             continue;
         };
         // #2618: a used commons' `private` assets stay in it.
-        for (asset_name, decl) in used_info
+        for (asset_name, decl) in info
             .table
+            .seen_through(used, &used_info.table)
             .assets
             .iter()
             .filter(|(_, d)| d.private.is_none())
@@ -1077,11 +1078,11 @@ mod tests {
         let a = analyse(&[
             (
                 "shop/payment.bynk",
-                "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n",
+                "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n",
             ),
             (
                 "shop/orders.bynk",
-                "context shop.orders\n\nconsumes shop.payment\n\nasset shop = \"assets/a.css\"\n\nservice place {\n  on call() -> Effect[Int] {\n    let n <- shop.payment.charge(1)\n    Effect.pure(n)\n  }\n}\n",
+                "context shop.orders\n\nconsumes shop.payment\n\nasset shop = \"assets/a.css\"\n\nservice place {\n  on call() -> Effect[Int] by Caller {\n    let n <- shop.payment.charge(1)\n    Effect.pure(n)\n  }\n}\n",
             ),
         ]);
         a.assert_clean();
@@ -1103,7 +1104,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nfn f() -> String {\n  style.url\n}\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     /// A unit split across files has one asset namespace: a second
@@ -1148,7 +1149,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nasset Style = \"assets/a.css\"\n\ntype Page = { s: Style }\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     #[test]
@@ -1547,7 +1548,7 @@ mod tests {
     /// Worker ships — so nothing nameable can answer `NotFound`.
     #[test]
     fn asset_fetches_are_http_only_and_target_scoped() {
-        let web = "context t.web\n\nasset style = \"assets/board.css\"\n\nservice jobs from queue(\"q\") {\n  on message(m: String) -> Effect[QueueResult] {\n    Ack\n  }\n}\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(style.url)\n  }\n}\n";
+        let web = "context t.web\n\nasset style = \"assets/board.css\"\n\nservice jobs from queue(\"q\") {\n  on message(m: String) -> Effect[QueueResult] by Producer {\n    Ack\n  }\n}\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(style.url)\n  }\n}\n";
         let a = analyse(&[
             ("t/web.bynk", web),
             (
@@ -1575,7 +1576,7 @@ mod tests {
     /// only by its own Worker) is not.
     #[test]
     fn a_consumed_contexts_hashed_asset_is_nameable_but_its_fixed_one_is_not() {
-        let other = "context t.other\n\nasset badge = \"assets/a.css\"\nasset robots = \"assets/b.css\" at \"/robots.txt\"\n\nservice fragment {\n  on call() -> Effect[String] {\n    Effect.pure(badge.url)\n  }\n}\n";
+        let other = "context t.other\n\nasset badge = \"assets/a.css\"\nasset robots = \"assets/b.css\" at \"/robots.txt\"\n\nservice fragment {\n  on call() -> Effect[String] by Caller {\n    Effect.pure(badge.url)\n  }\n}\n";
         let web = "context t.web\n\nconsumes t.other\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    let f <- t.other.fragment()\n    Ok(f)\n  }\n}\n";
         for header in ["suite t.web", "suite t.web as system"] {
             let suite = |body: &str| format!("{header} {{\n  case \"c\" {{\n{body}\n  }}\n}}\n");

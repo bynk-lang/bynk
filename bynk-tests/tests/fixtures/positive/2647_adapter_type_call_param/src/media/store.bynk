@@ -5,13 +5,13 @@ consumes bynk.cloudflare { R2, R2Upload }
 capability Videos = R2
 
 service abandon {
-	on call(upload: R2Upload) -> Effect[()] given Videos {
+	on call(upload: R2Upload) -> Effect[()] by Caller given Videos {
 		Videos.abortUpload(upload)
 	}
 }
 
 service uploads from queue("uploads") {
-	on message(m: R2Upload) -> Effect[QueueResult] {
+	on message(m: R2Upload) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

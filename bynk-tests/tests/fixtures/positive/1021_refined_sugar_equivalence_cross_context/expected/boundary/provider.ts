@@ -2,14 +2,15 @@
 // context boundary.provider
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Token = string & { readonly __brand: "boundary.provider.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Token);
   },

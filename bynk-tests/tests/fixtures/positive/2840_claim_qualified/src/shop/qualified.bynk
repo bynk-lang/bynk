@@ -6,7 +6,7 @@ consumes bynk
 
 service api from http {
 	on GET("/claim/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given bynk.Idempotency {
-		let _ <- bynk.Idempotency.claim(id, 1.hours)
+		let _ <- bynk.Idempotency.claim(id, 1.hour)
 		Ok("claimed")
 	}
 
@@ -15,7 +15,7 @@ service api from http {
 		match seen {
 			Some(v) => Ok(v),
 			None => {
-				let _ <- bynk.Idempotency.remember[String](id, "first", 1.hours)
+				let _ <- bynk.Idempotency.remember[String](id, "first", 1.hour)
 				Ok("fresh")
 			},
 		}

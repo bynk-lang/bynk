@@ -1,0 +1,12 @@
+{
+  "blurb": "A `\\u{…}` escape must name a Unicode scalar value, so a string is always valid text. A surrogate (`D800` to `DFFF`) is half of a UTF-16 pair and stands for no character on its own, and anything above `10FFFF` is outside Unicode. Write the code point of the character you mean, such as `\\u{E9}` for `é`. A `\\u` with no braces, no digits or more than six digits is `bynk.lex.bad_escape`.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.bad_unicode_escape",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": "const Mark: String = \"\\u{D800}\"    // ✗ a surrogate is not a character\nconst Mark: String = \"\\u{E9}\"      // ✓ `é`",
+  "severity": "error",
+  "summary": "A `\\u{…}` escape names a surrogate or a value above U+10FFFF."
+}

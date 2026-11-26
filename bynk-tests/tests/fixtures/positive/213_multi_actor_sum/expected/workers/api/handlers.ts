@@ -2,6 +2,7 @@
 // context api
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,8 +11,8 @@ export type UserId = string & { readonly __brand: "api.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -26,7 +27,7 @@ export const Note = {
 };
 
 export const api = {
-  async http_GET_notes_Param_id(id: string, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<Note>> {
+  async http_GET_notes_Param_id(id: string, deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<Note>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;

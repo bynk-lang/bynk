@@ -12,23 +12,50 @@ use bynk_check::checker::{Callee, HandlerAddress, Ty, WsAddress};
 use bynk_model::IrHttpMethod;
 use bynk_ts::{TsExpr, TsObjectEntry};
 
+use super::super::harness_names::{
+    SysdriveKind, route_with, sysdrive_name, wrong_method_driver_name,
+};
 use super::super::internal_fault::undefined_node;
-use super::super::lower::{Pre, settle_helper, settle_with, str_node};
+use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{any_ty, arrow, call, id, member, param, paren, take};
+use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
+use crate::ts_build::{arrow, bool_lit, call, ident, member, num_lit, paren, str_lit};
+use bynk_ts::TsParam;
+
+/// #2135, #4385: the bad-credential principal a `system` call drives: the driver's name (`"forged"`,
+/// `"expired"`, …) and, on an actor sum, the member it names (`by Forged(Session)`).
+#[derive(Clone)]
+pub(crate) struct BadDriver {
+    pub(crate) driver: &'static str,
+    pub(crate) arm: Option<String>,
+}
+
+impl BadDriver {
+    /// The driver a bad-credential principal clause (`kind`, as the checker recorded it) drives; `None`
+    /// for any other principal. `named` is the member the clause writes (`by Forged(Browser)`). A bare
+    /// principal the checker resolved to its one refusing member (#4385) drives as if that member were
+    /// named.
+    pub(crate) fn of(
+        kind: &bynk_check::actors::CallSitePrincipal,
+        named: Option<&str>,
+    ) -> Option<BadDriver> {
+        use bynk_check::actors::CallSitePrincipal as P;
+        match kind {
+            P::BadCredential(bad) => Some(BadDriver {
+                driver: bad.driver(),
+                arm: named.map(str::to_string),
+            }),
+            P::BadCredentialArm(bad, arm) => Some(BadDriver {
+                driver: bad.driver(),
+                arm: Some(arm.clone()),
+            }),
+            P::Actor(_) | P::Nobody => None,
+        }
+    }
+}
 
 // ---- Names ----
-
-/// The name of a `system`-tier driver: `<driver>_<service>_<key>`.
-fn sysdrive_name(driver: &str, service: &str, key: &str) -> String {
-    format!("{driver}_{service}_{key}")
-}
-
-/// The generic `405` driver of a service (#707).
-fn wrong_method_driver_name(service: &str) -> String {
-    format!("__sysdrive_wrongmethod_{service}")
-}
 
 /// The module's event-delivery helper for a service (#2052).
 fn event_helper_name(service: &str) -> String {
@@ -37,7 +64,7 @@ fn event_helper_name(service: &str) -> String {
 
 /// `{ ...deps, <entries> }`.
 fn deps_with(entries: Vec<TsObjectEntry>) -> TsExpr {
-    let mut all = vec![TsObjectEntry::Spread(id("deps"))];
+    let mut all = vec![TsObjectEntry::Spread(ident("deps"))];
     all.extend(entries);
     TsExpr::object_entries(all)
 }
@@ -58,29 +85,20 @@ struct DepsArg {
     plain: bool,
 }
 
-/// I3 (#1971), #2020: `{ ...deps, who: { tag, identity? } }`, a sum handler's principal.
-fn who_deps(actor: &str, identity: Option<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
-    let tag = str_node(actor);
-    let who = |tag: TsExpr, identity: Option<TsExpr>| {
-        let mut fields = vec![TsObjectEntry::prop("tag".to_string(), tag)];
-        fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
-        deps_with(vec![TsObjectEntry::prop(
-            "who".to_string(),
-            TsExpr::object_entries(fields),
-        )])
-    };
-    match identity {
-        Some(identity) => {
-            let c = vec![tag, identity];
-            let [tag, identity] = take(c);
-            who(tag, Some(identity))
-        }
-        None => {
-            let c = vec![tag];
-            let [tag] = take(c);
-            who(tag, None)
-        }
-    }
+/// I3 (#1971), #2020: `{ ...deps, who: { tag, identity?, claims? } }`, a sum handler's principal. A
+/// `Bearer` arm also carries its verified `claims` (#4344).
+fn who_deps(
+    actor: &str,
+    identity: Option<bynk_ts::TsExpr>,
+    claims: Option<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let mut fields = vec![TsObjectEntry::prop("tag".to_string(), str_lit(actor))];
+    fields.extend(identity.map(|i| TsObjectEntry::prop("identity".to_string(), i)));
+    fields.extend(claims.map(|c| TsObjectEntry::prop("claims".to_string(), c)));
+    deps_with(vec![TsObjectEntry::prop(
+        "who".to_string(),
+        TsExpr::object_entries(fields),
+    )])
 }
 
 /// `{ ...deps, identity: (identity as any), claims? }`; an `Oidc` handler also reads its token's
@@ -104,7 +122,7 @@ fn identity_deps(identity: bynk_ts::TsExpr, claims: Option<bynk_ts::TsExpr>) -> 
 }
 
 /// The key the addressed handler's principal is looked up under (a sum handler's `deps.who`).
-fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
+fn sum_handler_key(address: Option<&HandlerAddress>, service: &str) -> Option<String> {
     match address {
         Some(HandlerAddress::Http {
             verb,
@@ -116,6 +134,10 @@ fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
         Some(HandlerAddress::Call) => Some("call".to_string()),
         // #3051: a websocket `open` reads its principal as an `on call` or http handler does.
         Some(HandlerAddress::Ws(WsAddress::Open)) => Some("open".to_string()),
+        // #3899: a signed queue consumer's sum, under its handler's method key.
+        Some(HandlerAddress::Message { .. }) => {
+            Some(crate::emitter::queue_handler_method_name(service, 0))
+        }
         _ => None,
     }
 }
@@ -128,30 +150,45 @@ fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
     }
 }
 
+/// #4344: whether `actor` is a `Bearer` arm of the addressed http handler's actor sum, so an in-process
+/// call gives that arm `claims` beside its identity.
+fn is_claims_sum_arm(cx: &LowerCtx, (service, key): (&str, &str), actor: &str) -> bool {
+    matches!(&cx.mode, crate::emitter::ctx::BodyMode::TestCase { sum_handlers, .. }
+        if sum_handlers.contains(&(service.to_string(), ["claimsarm", key, actor].join(":"))))
+}
+
 /// The `deps` argument of an addressed call: the call-site principal folded in, or `deps`.
 fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
     let plain = |value| DepsArg { value, plain: true };
-    let deps = || id("deps");
+    let deps = || ident("deps");
     let is_sum = sum_key.is_some_and(|k| cx.is_sum_handler(service, k));
     match (cx.call_site_actor.clone(), cx.call_site_identity.clone()) {
-        (Some(actor), identity) if is_sum => DepsArg {
-            value: who_deps(&actor, identity),
-            plain: false,
-        },
+        (Some(actor), identity) if is_sum => {
+            // #4344: a `Bearer` arm gets the principal's claims, or none.
+            let claims = sum_key
+                .is_some_and(|k| is_claims_sum_arm(cx, (service, k), &actor))
+                .then(|| {
+                    cx.call_site_claims.clone().unwrap_or_else(|| {
+                        call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])
+                    })
+                });
+            DepsArg {
+                value: who_deps(&actor, identity, claims),
+                plain: false,
+            }
+        }
         (_, Some(_)) if sum_key.is_some_and(|k| cx.is_binderless_handler(service, k)) => {
             plain(deps())
         }
         (_, Some(identity)) => {
-            let claims = if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
-                cx.note_token_claims();
-                Some(
-                    cx.call_site_claims
-                        .clone()
-                        .unwrap_or_else(|| call(id("__tokenClaims"), vec![TsExpr::array(vec![])])),
-                )
-            } else {
-                None
-            };
+            let claims =
+                if sum_key.is_some_and(|k| cx.is_claims_handler(service, k)) {
+                    Some(cx.call_site_claims.clone().unwrap_or_else(|| {
+                        call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])
+                    }))
+                } else {
+                    None
+                };
             DepsArg {
                 value: identity_deps(identity, claims),
                 plain: false,
@@ -173,7 +210,7 @@ fn address_call(
     lowered.push(deps);
     {
         let nodes = lowered;
-        call(member(id(service), key), nodes)
+        call(member(ident(service), key), nodes)
     }
 }
 
@@ -212,27 +249,34 @@ fn handler_facts(cx: &LowerCtx, service: &str) -> Option<HandlerFacts> {
 }
 
 /// #3328: a case has no Email Routing to mint the `Sender` identity, so a handler that binds it
-/// reads the envelope sender with no DMARC verdict (`DmarcNone`) unless the case names a principal:
+/// reads the envelope sender with the verdict the case's own `authentication-results` header gives
+/// (#3888, by the Worker's rule), `DmarcNone` when there is none:
 /// `((__m: any) => svc.key(__m, { ...deps, identity: { ... } }))(mail)`.
 fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     let c = vec![mail];
     let [mail] = take(c);
     let sender = TsExpr::object(vec![
-        ("address".to_string(), member(id("__m"), "from")),
+        ("address".to_string(), member(ident("__m"), "from")),
         (
             "dmarc".to_string(),
-            TsExpr::object(vec![("tag".to_string(), str_node("DmarcNone"))]),
+            call(
+                ident("__dmarcVerdictOf"),
+                vec![
+                    member(ident("__m"), "headers"),
+                    member(ident("__m"), "headerList"),
+                ],
+            ),
         ),
     ]);
     let handler = call(
-        member(id(service), key),
+        member(ident(service), key),
         vec![
-            id("__m"),
+            ident("__m"),
             deps_with(vec![TsObjectEntry::prop("identity".to_string(), sender)]),
         ],
     );
     call(
-        paren(arrow(vec![param("__m", Some(any_ty()))], handler)),
+        paren(arrow(vec![TsParam::new("__m", Some(any_ty()))], handler)),
         vec![mail],
     )
 }
@@ -259,7 +303,7 @@ pub(in crate::emitter) fn lower_test_asset_fetch_call(
         return Some({
             let c = vec![asset];
             let [asset] = take(c);
-            call(id("__bynkAssetGet"), vec![member(asset, "url")])
+            call(ident("__bynkAssetGet"), vec![member(asset, "url")])
         });
     }
     None
@@ -278,15 +322,32 @@ pub(in crate::emitter) fn lower_system_schedule_call(
     if let ExprKind::Ident(id) = &receiver.kind {
         let address = test_address(cx, e);
         let driver = match &address {
-            Some(HandlerAddress::Schedule { expr: Some(expr) }) => {
-                cx.system_schedule_driver(&id.name, expr)
-            }
-            Some(HandlerAddress::Message) => cx.system_message_driver(&id.name),
+            Some(HandlerAddress::Schedule {
+                expr: Some(expr), ..
+            }) => cx.system_schedule_driver(&id.name, expr),
+            Some(HandlerAddress::Message { .. }) => cx.system_message_driver(&id.name),
             _ => None,
         };
         if let Some(driver) = driver {
             let skip = usize::from(matches!(address, Some(HandlerAddress::Schedule { .. })));
-            let rest = lower_args(&args[skip..], cx, pre);
+            let mut rest = lower_args(&args[skip..], cx, pre);
+            // #3899: a signed consumer's driver takes the foreign actor the case acts as, after
+            // the (optional) delivery metadata.
+            if matches!(address, Some(HandlerAddress::Message { .. }))
+                && cx.system_queue_signed(&id.name)
+                && let Some(actor) = cx.call_site_actor.clone()
+            {
+                if rest.len() < 2 {
+                    rest.push(ident("undefined"));
+                }
+                rest.push(str_lit(actor));
+                // A `Producer` refinement is acted as a Bynk context: `by Orders("shop.orders")`.
+                if let Some(identity) = cx.call_site_identity.clone() {
+                    rest.push(identity);
+                } else {
+                    rest.push(ident("undefined"));
+                }
+            }
             return Some({
                 let nodes = rest;
                 call(TsExpr::Ident(driver.clone()), nodes)
@@ -303,7 +364,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
 fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::TsExpr {
     let name = wrong_method_driver_name(service);
     {
-        let nodes = vec![str_node(verb.as_str()), str_node(path)];
+        let nodes = vec![str_lit(verb.as_str()), str_lit(path)];
         call(TsExpr::Ident(name.clone()), nodes)
     }
 }
@@ -313,17 +374,17 @@ fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::
 /// Slice C: a `Wire(…)` argument drives the *raw* driver (input sent unvalidated, result decodes
 /// to an `HttpOutcome`). #821: the two axes are independent. #2135: `by Forged` / `by Stale`
 /// drive the signing driver that sends a wrong or a stale signature.
-fn system_driver(cx: &LowerCtx, has_wire: bool) -> String {
-    let driver = match (cx.call_site_no_credential, has_wire) {
-        (true, true) => "__sysdrive_rawnoauth".to_string(),
-        (true, false) => "__sysdrive_noauth".to_string(),
-        (false, true) => "__sysdrive_raw".to_string(),
-        (false, false) => "__sysdrive".to_string(),
+fn system_driver(cx: &LowerCtx, has_wire: bool) -> SysdriveKind<'static> {
+    let kind = match (&cx.call_site_bad_signature, cx.call_site_no_credential) {
+        // #4385: a bad credential naming an actor sum's member drives the sum's bad-credential driver.
+        (Some(BadDriver { arm: Some(_), .. }), _) => "sumbad",
+        (Some(bad), _) => bad.driver,
+        (None, true) => "noauth",
+        (None, false) => "",
     };
-    match (cx.call_site_bad_signature, has_wire) {
-        (Some(v), true) => format!("__sysdrive_raw{v}"),
-        (Some(v), false) => format!("__sysdrive_{v}"),
-        (None, _) => driver,
+    SysdriveKind {
+        raw: has_wire,
+        kind,
     }
 }
 
@@ -337,11 +398,16 @@ struct RawSlots {
     form: bool,
     /// #3277: the `cookies` record's position, when the route takes one.
     cookies: Option<(usize, TypeRef)>,
+    /// #3911: the typed `headers` record's position, when the route takes one. Unlike the
+    /// others it is converted in every call, typed or raw: the driver sends its wire form.
+    headers: Option<(usize, TypeRef)>,
 }
 
 /// How a typed argument becomes its string slot.
 #[derive(Clone, Copy)]
 enum Wire {
+    /// #3911: the wire form itself, which a driver writes as headers.
+    Value,
     Cookie,
     Query,
     Form,
@@ -357,7 +423,7 @@ impl RawSlots {
             cx.system_http_route_body(&(
                 route.0.clone(),
                 route.1.clone(),
-                format!("{}{suffix}", route.2),
+                route_with(&route.2, suffix),
             ))
             .cloned()
         };
@@ -371,12 +437,27 @@ impl RawSlots {
             query: at(crate::emitter::QUERY_ROUTE_SUFFIX),
             form: at(crate::emitter::FORM_ROUTE_SUFFIX).is_some(),
             cookies: at(crate::emitter::COOKIES_ROUTE_SUFFIX),
+            headers: cx
+                .system_http_route_body(&(
+                    route.0.clone(),
+                    route.1.clone(),
+                    route_with(&route.2, crate::emitter::HEADERS_ROUTE_SUFFIX),
+                ))
+                .cloned(),
         }
     }
 
     /// Argument `i`, as the slot the driver takes. A typed argument mixed into a raw call is
     /// converted to its `string` slot; a path param coerces via `String(...)`.
     fn slot(&self, i: usize, a: &Expr, lowered: bynk_ts::TsExpr, cx: &LowerCtx) -> bynk_ts::TsExpr {
+        // #3911: a typed `headers` record reaches either driver as its wire form (a `Wire`
+        // argument is header text already).
+        if let Some((at, ty)) = &self.headers
+            && *at == i
+            && !matches!(&a.kind, ExprKind::Wire(_))
+        {
+            return serialised(lowered, ty, Wire::Value, cx);
+        }
         if !self.is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
             return lowered;
         }
@@ -392,23 +473,18 @@ impl RawSlots {
         if let Some((at, ty)) = &self.cookies
             && *at == i
         {
-            cx.note_cookie_string();
             return serialised(lowered, ty, Wire::Cookie, cx);
         }
         // #2854: a typed `query` record becomes the query string the raw driver appends to the URL.
         if let Some((at, ty)) = &self.query
             && *at == i
         {
-            cx.note_query_string();
             return serialised(lowered, ty, Wire::Query, cx);
         }
         match &self.body {
-            Some((at, ty)) if *at == i && self.form => {
-                cx.note_query_string();
-                serialised(lowered, ty, Wire::Form, cx)
-            }
+            Some((at, ty)) if *at == i && self.form => serialised(lowered, ty, Wire::Form, cx),
             Some((at, ty)) if *at == i => serialised(lowered, ty, Wire::Json, cx),
-            _ => call(id("String"), vec![lowered]),
+            _ => call(ident("String"), vec![lowered]),
         }
     }
 }
@@ -428,14 +504,15 @@ fn serialised(
     let value = lowered;
     let ser = crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
     match wire {
-        Wire::Cookie => call(id("__cookieString"), vec![ser]),
-        Wire::Query => call(id("__queryString"), vec![ser]),
+        Wire::Value => ser,
+        Wire::Cookie => call(ident("__cookieString"), vec![ser]),
+        Wire::Query => call(ident("__queryString"), vec![ser]),
         Wire::Form => call(
-            member(call(id("__queryString"), vec![ser]), "slice"),
+            member(call(ident("__queryString"), vec![ser]), "slice"),
             vec![TsExpr::Lit(bynk_ts::TsLit::Num("1".to_string()))],
         ),
         Wire::Json => call(
-            member(member(id("globalThis"), "JSON"), "stringify"),
+            member(member(ident("globalThis"), "JSON"), "stringify"),
             vec![ser],
         ),
     }
@@ -471,15 +548,12 @@ pub(in crate::emitter) fn lower_system_http_call(
     }
     let key = crate::emitter::http_handler_method_name_ir(verb, path);
     // The `sub` slot: the call-site identity, else the empty string.
-    let sub = cx
-        .call_site_identity
-        .clone()
-        .unwrap_or_else(|| str_node(""));
+    let sub = cx.call_site_identity.clone().unwrap_or_else(|| str_lit(""));
     let has_wire = args[1..]
         .iter()
         .any(|a| matches!(&a.kind, ExprKind::Wire(_)));
     let driver = system_driver(cx, has_wire);
-    let slots = RawSlots::new(cx, &route, driver.starts_with("__sysdrive_raw"));
+    let slots = RawSlots::new(cx, &route, driver.raw);
     let mut all: Vec<bynk_ts::TsExpr> = args[1..]
         .iter()
         .enumerate()
@@ -493,7 +567,7 @@ pub(in crate::emitter) fn lower_system_http_call(
     let extra = (
         route.0.clone(),
         route.1.clone(),
-        format!("{path}{}", crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
+        route_with(path, crate::emitter::EXTRA_HEADERS_ROUTE_SUFFIX),
     );
     if cx.has_system_http_route(&extra) {
         let sends_extra = matches!(
@@ -518,7 +592,14 @@ pub(in crate::emitter) fn lower_system_http_call(
         let slot = extra_arg.unwrap_or_else(undefined_node);
         all.push(slot);
     }
+    // #4385: the sum's bad-credential driver takes the credential kind before `sub`, the member after.
+    let bad_arm = cx
+        .call_site_bad_signature
+        .as_ref()
+        .and_then(|b| b.arm.as_ref().map(|a| (b.driver, a)));
+    all.extend(bad_arm.map(|(driver, _)| str_lit(driver)));
     all.push(sub);
+    all.extend(bad_arm.map(|(_, arm)| str_lit(arm)));
     // #2019: a refinement-guarded route's signing drivers take the claims the acting actor
     // presents; the no-auth drivers sign nothing. #2155: an actor-sum route's signing drivers
     // take the actor the call acts as, which picks its credential.
@@ -526,7 +607,7 @@ pub(in crate::emitter) fn lower_system_http_call(
         all.extend(cx.system_http_claims_arg(&route));
         all.extend(cx.system_http_sum_actor_arg(&route));
     }
-    let name = sysdrive_name(&driver, &svc.name, &key);
+    let name = sysdrive_name(driver, &svc.name, &key);
     Some({
         let nodes = all;
         call(TsExpr::Ident(name.clone()), nodes)
@@ -554,7 +635,7 @@ fn websocket_lifecycle_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> bynk_ts::TsExpr {
-    use bynk_ts::{TsBinaryOp, TsBindingName, TsLit, TsStmt, TsType};
+    use bynk_ts::{TsBinaryOp, TsBindingName, TsStmt, TsType};
     // An argument the checker's arity check guarantees: absent, a missing fact.
     let tc = match args.first() {
         Some(a) => pre.lower_node(a, cx),
@@ -563,12 +644,8 @@ fn websocket_lifecycle_call(
             "`TestConnection` argument of a websocket lifecycle call",
         ),
     };
-    let sig =
-        |m: &str| TsType::named_with_args("Parameters", vec![TsType::type_of(member(id(svc), m))]);
-    let num = |n: usize| TsExpr::Lit(TsLit::Num(n.to_string()));
-    let array = |items: Vec<TsExpr>| TsExpr::Array {
-        items,
-        multiline: false,
+    let sig = |m: &str| {
+        TsType::named_with_args("Parameters", vec![TsType::type_of(member(ident(svc), m))])
     };
     let const_ = |name: &str, ty: Option<TsType>, init: TsExpr| {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
@@ -589,8 +666,8 @@ fn websocket_lifecycle_call(
     let spread_call = |m: &str| {
         TsStmt::return_stmt(
             Some(call(
-                member(id(svc), m),
-                vec![TsExpr::Spread(Box::new(id("__a")))],
+                member(ident(svc), m),
+                vec![TsExpr::Spread(Box::new(ident("__a")))],
             )),
             None,
         )
@@ -598,13 +675,13 @@ fn websocket_lifecycle_call(
     // `__o.<field>[k] as <sig>[idx]`.
     let opened_cast = |field: &str, k: usize, m: &str, idx: usize| TsExpr::As {
         expr: Box::new(TsExpr::Index {
-            object: Box::new(member(id("__o"), field)),
-            index: Box::new(num(k)),
+            object: Box::new(member(ident("__o"), field)),
+            index: Box::new(num_lit(k)),
         }),
         ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
     };
     let deps_cast = |m: &str, idx: usize| TsExpr::As {
-        expr: Box::new(member(id("__o"), "deps")),
+        expr: Box::new(member(ident("__o"), "deps")),
         ty: TsType::indexed(sig(m), TsType::number_literal(idx as u32)),
     };
     match shape {
@@ -618,22 +695,25 @@ fn websocket_lifecycle_call(
                 let mut c = children;
                 let tc = c.remove(0);
                 let deps = c.pop().expect("the deps child is last");
-                let mut parts = vec![id("__c")];
+                let mut parts = vec![ident("__c")];
                 parts.extend(c.iter().cloned());
                 parts.push(deps);
                 let last = TsExpr::Index {
-                    object: Box::new(id("__a")),
+                    object: Box::new(ident("__a")),
                     index: Box::new(TsExpr::Binary {
                         op: TsBinaryOp::Sub,
-                        left: Box::new(member(id("__a"), "length")),
-                        right: Box::new(num(1)),
+                        left: Box::new(member(ident("__a"), "length")),
+                        right: Box::new(num_lit(1)),
                     }),
                 };
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__a", Some(sig("open")), array(parts)),
+                    const_("__a", Some(sig("open")), TsExpr::array(parts)),
                     TsStmt::expr_stmt(
-                        call(member(id("__c"), "remember"), vec![array(c), last]),
+                        call(
+                            member(ident("__c"), "remember"),
+                            vec![TsExpr::array(c), last, member(ident(svc), "maxFrame")],
+                        ),
                         None,
                     ),
                     spread_call("open"),
@@ -649,7 +729,7 @@ fn websocket_lifecycle_call(
             {
                 let c = vec![tc, frame];
                 let [tc, frame] = take(c);
-                let mut parts = vec![id("__c")];
+                let mut parts = vec![ident("__c")];
                 let mut k = 0usize;
                 for i in 0..n {
                     if i == frame_idx {
@@ -662,31 +742,54 @@ fn websocket_lifecycle_call(
                 parts.push(deps_cast("message", n + 1));
                 iife(vec![
                     const_("__c", None, tc),
-                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                    const_("__a", Some(sig("message")), array(parts)),
+                    const_(
+                        "__o",
+                        None,
+                        call(member(ident("__c"), "opened"), Vec::new()),
+                    ),
+                    const_("__a", Some(sig("message")), TsExpr::array(parts)),
                     spread_call("message"),
                 ])
             }
         }
-        WsAddress::Close { params } => {
-            let n = params.unwrap_or(0);
-            {
-                let c = vec![tc];
-                let [tc] = take(c);
-                let mut parts = vec![id("__c")];
-                for i in 0..n {
-                    parts.push(opened_cast("route", i, "close", i + 1));
-                }
-                parts.push(deps_cast("close", n + 1));
-                iife(vec![
-                    const_("__c", None, tc),
-                    const_("__o", None, call(member(id("__c"), "opened"), Vec::new())),
-                    const_("__a", Some(sig("close")), array(parts)),
-                    spread_call("close"),
-                ])
+        WsAddress::Close { params, info } => {
+            let total = params.unwrap_or(0);
+            let routes = total - usize::from(*info);
+            let close_info = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => default_close_info(),
+            };
+            let c = vec![tc];
+            let [tc] = take(c);
+            let mut parts = vec![ident("__c")];
+            for i in 0..routes {
+                parts.push(opened_cast("route", i, "close", i + 1));
             }
+            if *info {
+                parts.push(close_info);
+            }
+            parts.push(deps_cast("close", total + 1));
+            iife(vec![
+                const_("__c", None, tc),
+                const_(
+                    "__o",
+                    None,
+                    call(member(ident("__c"), "opened"), Vec::new()),
+                ),
+                const_("__a", Some(sig("close")), TsExpr::array(parts)),
+                spread_call("close"),
+            ])
         }
     }
+}
+
+/// #3902: what `svc.close(tc)` hands the handler's `close: CloseInfo`: a normal, clean closure.
+fn default_close_info() -> bynk_ts::TsExpr {
+    TsExpr::object(vec![
+        ("code".to_string(), num_lit(1000)),
+        ("reason".to_string(), str_lit("")),
+        ("clean".to_string(), bool_lit(true)),
+    ])
 }
 
 /// Lower a local service call inside a test `case` body, or `None` when the call is not one.
@@ -713,7 +816,7 @@ pub(in crate::emitter) fn lower_test_service_call(
     // before anything lowers.
     let helper = settle_helper(cx);
     let address = test_address(cx, e);
-    let sum_key = sum_handler_key(address.as_ref());
+    let sum_key = sum_handler_key(address.as_ref(), &svc.name);
     let DepsArg { value: deps, plain } = test_deps(cx, &svc.name, sum_key.as_deref());
     let settle = |built: bynk_ts::TsExpr| Some(settle_with(helper, built));
     // http address: the method is an HTTP verb and the first argument is the route pattern
@@ -731,24 +834,53 @@ pub(in crate::emitter) fn lower_test_service_call(
     if let Some(facts) = handler_facts(cx, &svc.name) {
         // cron address: the emitted key is position-indexed among the service's same-kind
         // handlers; cron drops the leading schedule string.
-        if let Some(HandlerAddress::Schedule { expr: Some(expr) }) = &address {
+        if let Some(HandlerAddress::Schedule {
+            expr: Some(expr),
+            param,
+        }) = &address
+        {
             let idx = facts.cron.iter().position(|c| c == expr);
             let key = crate::emitter::cron_handler_method_name(
                 &svc.name,
                 idx.unwrap_or(facts.cron.len()),
             );
-            let rest = lower_args(&args[1..], cx, pre);
+            let mut rest = lower_args(&args[1..], cx, pre);
+            // #3874: a `CronSchedule` parameter holds the address's own schedule.
+            if let Some(at) = param {
+                // The literal is a valid `CronSchedule` the checker matched to the
+                // handler; the brand is a type, so it is cast to it.
+                let schedule = crate::ts_build::as_expr(
+                    str_lit(expr.clone()),
+                    bynk_ts::TsType::named("never"),
+                );
+                rest.insert((*at).min(rest.len()), schedule);
+            }
             return settle(address_call(&svc.name, &key, rest, deps));
         }
         if let Some(HandlerAddress::Ws(shape)) = &address {
             let built = websocket_lifecycle_call(shape, &svc.name, args, e.span, &deps, cx, pre);
             return settle(built);
         }
-        if matches!(address, Some(HandlerAddress::Message)) && facts.has_message {
+        if matches!(address, Some(HandlerAddress::Message { .. })) && facts.has_message {
             // A `from queue` service binds exactly one queue and declares one `on message`
             // handler, so the position index is 0.
             let key = crate::emitter::queue_handler_method_name(&svc.name, 0);
             let mut lowered = lower_args(args, cx, pre);
+            // #3880: a handler that declares a `QueueDelivery` is given the address's
+            // second argument, or the default delivery (the first attempt, sent at the
+            // epoch, which is where each case's harness clock starts), in its position.
+            if let Some(HandlerAddress::Message { delivery: Some(at) }) = &address
+                && !lowered.is_empty()
+            {
+                let given = (lowered.len() > 1).then(|| lowered.remove(1));
+                let delivery = given.unwrap_or_else(|| {
+                    TsExpr::object(vec![
+                        ("attempts".to_string(), num_lit("1")),
+                        ("sentAt".to_string(), num_lit("0")),
+                    ])
+                });
+                lowered.insert((*at).min(lowered.len()), delivery);
+            }
             if plain && args.first().is_some_and(|a| is_inbound_email(a, cx)) && !lowered.is_empty()
             {
                 return settle(inbound_email_call(&svc.name, &key, lowered.swap_remove(0)));
@@ -795,7 +927,7 @@ mod tests {
     use super::*;
 
     fn node(text: &str) -> bynk_ts::TsExpr {
-        id(text)
+        ident(text)
     }
 
     fn printed(built: bynk_ts::TsExpr) -> String {
@@ -815,7 +947,7 @@ mod tests {
             "/日本語",
             "a'b",
         ] {
-            assert_eq!(printed(str_node(s)), format!("{s:?}"), "{s:?}");
+            assert_eq!(printed(str_lit(s)), format!("{s:?}"), "{s:?}");
         }
     }
 
@@ -823,9 +955,9 @@ mod tests {
     #[test]
     fn a_sum_principal_prints() {
         let want = r#"{ ...deps, who: { tag: "User", identity: id } }"#;
-        assert_eq!(printed(who_deps("User", Some(node("id")))), want);
+        assert_eq!(printed(who_deps("User", Some(node("id")), None)), want);
         assert_eq!(
-            printed(who_deps("Visitor", None)),
+            printed(who_deps("Visitor", None, None)),
             r#"{ ...deps, who: { tag: "Visitor" } }"#
         );
     }
@@ -842,7 +974,7 @@ mod tests {
     /// The inbound-email arrow prints as the text it replaced.
     #[test]
     fn the_inbound_email_arrow_prints_as_the_text_it_replaced() {
-        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))(mail)"#;
+        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers, __m.headerList) } }))(mail)"#;
         assert_eq!(
             printed(inbound_email_call("svc", "key", node("mail"))),
             want
@@ -860,7 +992,7 @@ mod tests {
     #[test]
     fn driver_names_are_composed_by_their_naming_functions() {
         assert_eq!(
-            sysdrive_name("__sysdrive_noauth", "api", "http_GET_open"),
+            sysdrive_name(SysdriveKind::typed("noauth"), "api", "http_GET_open"),
             "__sysdrive_noauth_api_http_GET_open"
         );
         assert_eq!(

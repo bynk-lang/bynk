@@ -2,14 +2,15 @@
 // commons commerce.identifiers
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type OrderId = string & { readonly __brand: "OrderId" };
 
 export const OrderId = {
   of(value: string): Result<OrderId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "ORD-[0-9]+" + ")$").test(value))) {
-      return Err({ field: "OrderId", message: "must match /ORD-[0-9]+/", value });
+    if (!(__bynkRegExp("^(?:" + "ORD-[0-9]+" + ")$", "u").test(value))) {
+      return Err({ field: "OrderId", message: "must match /ORD-[0-9]+/", rule: { tag: "Matches", pattern: "ORD-[0-9]+" }, value });
     }
     return Ok(value as OrderId);
   },
@@ -19,8 +20,8 @@ export type CustomerId = string & { readonly __brand: "CustomerId" };
 
 export const CustomerId = {
   of(value: string): Result<CustomerId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "CUST-[0-9]+" + ")$").test(value))) {
-      return Err({ field: "CustomerId", message: "must match /CUST-[0-9]+/", value });
+    if (!(__bynkRegExp("^(?:" + "CUST-[0-9]+" + ")$", "u").test(value))) {
+      return Err({ field: "CustomerId", message: "must match /CUST-[0-9]+/", rule: { tag: "Matches", pattern: "CUST-[0-9]+" }, value });
     }
     return Ok(value as CustomerId);
   },

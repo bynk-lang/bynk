@@ -4,9 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
+  allowUnion,
+  RESERVED_RESPONSE_HEADERS,
+  decodePath,
   matchPath,
   cfObject,
   httpResultToResponse,
+  ifRangeGuard,
+  withETag,
+  withHeartbeat,
+  withLastModified,
   headResponse,
   claimStream,
   BodyTooLarge,
@@ -14,6 +21,10 @@ import {
   requestBodyStream,
   untilBodyTooLarge,
   applyCors,
+  applyChallenge,
+  headersObject,
+  headerPairs,
+  splitHeaderList,
   corsPreflightResponse,
   applySecurityHeaders,
   weakETag,
@@ -21,11 +32,13 @@ import {
   applyEdgeCache,
   edgeCacheGuard,
   noStore,
+  privateByDefault,
   notModifiedIfMatch,
   varyAcceptLanguage,
   RAW_WEAK_ETAG_MAX_BYTES,
   responseToHttpOutcome,
   responseToUnauthOutcome,
+  jsonMediaTypeMatches,
   mediaTypeMatches,
   requestHeaders,
   requestCookies,
@@ -49,6 +62,10 @@ import {
   type CookieValue,
   queryObject,
   queryString,
+  problemRejection,
+  rateLimitAllows,
+  rateLimitAllowsKey,
+  rateLimitedResponse,
   renderRejection,
   responseToHttpResult,
   type CorsPolicy,
@@ -61,6 +78,7 @@ const listPolicy: CorsPolicy = {
   origins: ["https://app.example.com", "https://admin.example.com"],
   allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["content-type", "authorization"],
+  exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"],
   credentials: true,
   maxAgeSecs: 3600,
 };
@@ -69,6 +87,7 @@ const wildcardPolicy: CorsPolicy = {
   origins: ["*"],
   allowMethods: ["GET", "OPTIONS"],
   allowHeaders: ["content-type"],
+  exposeHeaders: ["*"],
   credentials: false,
   maxAgeSecs: null,
 };
@@ -83,7 +102,121 @@ test("matchPath: returns null on literal or length mismatch", () => {
   assert.equal(matchPath("/orders/:id", "/orders/1/extra"), null);
 });
 
+test("matchPath: empty segments are insignificant, and literals compare percent-decoded (#3909)", () => {
+  assert.deepEqual(matchPath("/items", "/items/"), { params: {} });
+  assert.deepEqual(matchPath("/items", "//items"), { params: {} });
+  assert.deepEqual(matchPath("/a/:x", "/a//b/"), { params: { x: "b" } });
+  assert.deepEqual(matchPath("/caf\u00e9", "/caf%C3%A9"), { params: {} });
+  assert.equal(matchPath("/items", "/item"), null);
+  // An undecodable segment equals no literal.
+  assert.equal(matchPath("/a/b", "/a/%E0%A4%A"), null);
+});
+
+test("allowUnion: the union is alphabetical and adds only the routes the path matches (#3909)", () => {
+  const extras: [string, string][] = [["/a/:x/c", "GET, HEAD, OPTIONS, PUT"]];
+  assert.equal(allowUnion("GET, HEAD, OPTIONS", "/a/b/c", extras), "GET, HEAD, OPTIONS, PUT");
+  assert.equal(allowUnion("DELETE, OPTIONS", "/a/b/d", extras), "DELETE, OPTIONS");
+});
+
+test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", () => {
+  const m = matchPath("/orders/:id", "/orders/%E0%A4%A");
+  assert.ok(m !== null && typeof m.malformed === "string");
+  assert.ok(!m.malformed.includes("%E0"), "names the position, never the content");
+  // Non-null, so the router's method-aware fall-through still answers `405` to a wrong method.
+  assert.equal(matchPath("/orders/:id", "/customers/%E0%A4%A"), null);
+  assert.equal(matchPath("/a/:x/c", "/a/%E0%A4%A/d"), null);
+  assert.deepEqual(matchPath("/orders/:id", "/orders/a%20b"), { params: { id: "a b" } });
+  assert.deepEqual(decodePath("//a%20b/"), ["a b"]);
+  assert.equal(decodePath("/a/%E0%A4%A"), null);
+});
+
 const id = (v: number): JsonValue => v;
+
+test("httpResultToResponse: 412 and 428 render as problem details with their reason phrase", async () => {
+  for (const [variant, status, title] of [
+    [HttpResult.PreconditionFailed("stale"), 412, "Precondition Failed"],
+    [HttpResult.PreconditionRequired("send If-Match"), 428, "Precondition Required"],
+  ] as const) {
+    const r = httpResultToResponse(variant, id, { problem: true });
+    assert.equal(r.status, status);
+    assert.equal(r.headers.get("content-type"), "application/problem+json");
+    const body = (await r.json()) as { title: string; status: number; detail: string };
+    assert.equal(body.title, title);
+    assert.equal(body.status, status);
+    assert.ok(body.detail.length > 0);
+  }
+});
+
+// #3918: a structured event is framed per the HTML event-stream format, and a value the wire
+// cannot carry faults the body at that element instead of going out as a different event.
+const noOpt = { tag: "None" } as const;
+const someOpt = <T>(value: T) => ({ tag: "Some", value }) as const;
+const sse = (e: { data: string; event?: ReturnType<typeof someOpt<string>>; id?: ReturnType<typeof someOpt<string>>; retry?: ReturnType<typeof someOpt<number>> }) =>
+  ({ data: e.data, event: e.event ?? noOpt, id: e.id ?? noOpt, retry: e.retry ?? noOpt });
+async function* events(...items: ReturnType<typeof sse>[]): AsyncGenerator<ReturnType<typeof sse>> {
+  yield* items;
+}
+const framed = (...items: ReturnType<typeof sse>[]) => httpResultToResponse(HttpResult.Streaming(events(...items)), id).text();
+
+test("SseEvent framing: event, id and retry precede data; a bare string is unchanged", async () => {
+  assert.equal(
+    await framed(sse({ data: "hi", event: someOpt("greeting"), id: someOpt("7"), retry: someOpt(1500) })),
+    "event: greeting\nid: 7\nretry: 1500\ndata: hi\n\n",
+  );
+  assert.equal(await framed(sse({ data: "hi", retry: someOpt(0) })), "retry: 0\ndata: hi\n\n");
+  assert.equal(await framed(sse({ data: "" })), "data: \n\n");
+});
+
+test("SseEvent framing: data splits on CRLF, LF and a lone CR", async () => {
+  assert.equal(await framed(sse({ data: "a\r\nb\nc\rd" })), "data: a\ndata: b\ndata: c\ndata: d\n\n");
+});
+
+test("SseEvent framing: a value the wire cannot carry errors the body at that event", async () => {
+  const bad: [string, ReturnType<typeof sse>][] = [
+    ["event with LF", sse({ data: "x", event: someOpt("a\nb") })],
+    ["event with CR", sse({ data: "x", event: someOpt("a\rb") })],
+    ["id with LF", sse({ data: "x", id: someOpt("a\nb") })],
+    ["id with CR", sse({ data: "x", id: someOpt("a\rb") })],
+    ["id with NUL", sse({ data: "x", id: someOpt("a\0b") })],
+    ["fractional retry", sse({ data: "x", retry: someOpt(1.5) })],
+    ["negative retry", sse({ data: "x", retry: someOpt(-1) })],
+    ["retry beyond a safe integer", sse({ data: "x", retry: someOpt(1e21) })],
+  ];
+  for (const [what, event] of bad) {
+    // An earlier good event is delivered; the bad one errors the body rather than being rewritten.
+    const response = httpResultToResponse(HttpResult.Streaming(events(sse({ data: "ok" }), event)), id);
+    await assert.rejects(response.text(), /bynk: an SSE/, what);
+  }
+});
+
+test("Streaming.heartbeat: an idle stream gets a comment line, a busy one none, and no event is lost", async () => {
+  async function* slow(): AsyncGenerator<string> {
+    await new Promise((r) => setTimeout(r, 1300));
+    yield "late";
+  }
+  const beat = httpResultToResponse(withHeartbeat(HttpResult.Streaming(slow()), 1000), id);
+  const text = await beat.text();
+  assert.ok(text.startsWith(":\n\n"), "a heartbeat is written while the source is idle");
+  assert.ok(text.endsWith("data: late\n\n"), "the awaited event still arrives, once");
+  assert.equal(text.split("data: late").length, 2);
+
+  async function* quick(): AsyncGenerator<string> {
+    yield "a";
+    yield "b";
+  }
+  const busy = httpResultToResponse(withHeartbeat(HttpResult.Streaming(quick()), 5000), id);
+  assert.equal(await busy.text(), "data: a\n\ndata: b\n\n");
+
+  async function* fails(): AsyncGenerator<string> {
+    await new Promise((r) => setTimeout(r, 1200));
+    throw new Error("boom");
+  }
+  const broken = httpResultToResponse(withHeartbeat(HttpResult.Streaming(fails()), 1000), id);
+  await assert.rejects(broken.text(), /boom/);
+
+  assert.throws(() => withHeartbeat(HttpResult.Streaming(quick()), 0), /at least one second/);
+  assert.throws(() => withHeartbeat(HttpResult.Streaming(quick()), 999), /at least one second/);
+});
 
 test("httpResultToResponse: status codes map per variant", async () => {
   // 2xx success.
@@ -109,6 +242,8 @@ test("httpResultToResponse: status codes map per variant", async () => {
   assert.equal(httpResultToResponse(HttpResult.Conflict("c"), id).status, 409);
   assert.equal(httpResultToResponse(HttpResult.Gone, id).status, 410);
   assert.equal(httpResultToResponse(HttpResult.LengthRequired, id).status, 411);
+  assert.equal(httpResultToResponse(HttpResult.PreconditionFailed("p"), id).status, 412);
+  assert.equal(httpResultToResponse(HttpResult.PreconditionRequired("p"), id).status, 428);
   assert.equal(httpResultToResponse(HttpResult.PayloadTooLarge("p"), id).status, 413);
   assert.equal(httpResultToResponse(HttpResult.UnsupportedMediaType("m"), id).status, 415);
   assert.equal(httpResultToResponse(HttpResult.UnprocessableEntity("u"), id).status, 422);
@@ -151,6 +286,121 @@ test("httpResultToResponse: RawStreamed writes its chunks in order, with no ETag
   assert.equal(res.headers.get("content-type"), "text/plain");
   assert.equal(res.headers.get("etag"), null);
   assert.equal(await res.text(), "hello, world");
+});
+
+// #4389: a partial answer.
+function partialBody(): AsyncIterable<Uint8Array> {
+  return (async function* () {
+    yield new TextEncoder().encode("lo, wo");
+  })();
+}
+const someRange = (value: number) => ({ tag: "Some", value }) as const;
+const noTotal = { tag: "None" } as const;
+
+test("httpResultToResponse: PartialContent answers 206 with its Content-Range and no ETag", async () => {
+  const res = httpResultToResponse(
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: someRange(12) }),
+    id,
+    { weakEtag: true },
+  );
+  assert.equal(res.status, 206);
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(res.headers.get("content-range"), "bytes 3-8/12");
+  assert.equal(res.headers.get("etag"), null);
+  assert.equal(await res.text(), "lo, wo");
+});
+
+test("httpResultToResponse: an unknown total is written *", () => {
+  const res = httpResultToResponse(
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 0, end: 5, total: noTotal }),
+    id,
+  );
+  assert.equal(res.headers.get("content-range"), "bytes 0-5/*");
+});
+
+test("httpResultToResponse: a range that is not one is a fault, never a malformed Content-Range", () => {
+  for (const [start, end, total] of [
+    [5, 4, someRange(12)], // start past end
+    [0, 12, someRange(12)], // end at the total
+    [0, 20, someRange(12)], // end past the total
+    [-1, 4, noTotal], // negative
+    [0, 4.5, noTotal], // not an integer
+    [0, 4, someRange(-3)], // negative total
+  ] as const) {
+    assert.throws(
+      () => httpResultToResponse(HttpResult.PartialContent(partialBody(), "text/plain", { start, end, total }), id),
+      /is not a byte range/,
+      `${start}-${end}`,
+    );
+  }
+});
+
+test("httpResultToResponse: a PartialContent body that does not match its range aborts the response", async () => {
+  const enc = new TextEncoder();
+  const body = (...parts: string[]) =>
+    (async function* () {
+      for (const p of parts) yield enc.encode(p);
+    })();
+  const range = { start: 0, end: 4, total: someRange(10) };
+  const ok = httpResultToResponse(HttpResult.PartialContent(body("he", "llo"), "text/plain", range), id);
+  assert.equal(await ok.text(), "hello");
+  const short = httpResultToResponse(HttpResult.PartialContent(body("hel"), "text/plain", range), id);
+  await assert.rejects(short.arrayBuffer(), /is 3 bytes, but its range covers 5/);
+  const long = httpResultToResponse(HttpResult.PartialContent(body("hello", "!"), "text/plain", range), id);
+  await assert.rejects(long.arrayBuffer(), /longer than its range/);
+});
+
+test("httpResultToResponse: a PartialContent or NotModified returned from a non-GET route is a fault", () => {
+  for (const result of [
+    HttpResult.NotModified,
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: noTotal }),
+  ]) {
+    assert.throws(() => httpResultToResponse(result, id, { notGet: "POST /orders" }), /is a GET answer, but POST \/orders returned it/);
+  }
+});
+
+test("withHeader: Content-Range is a header the router owns", () => {
+  assert.ok(RESERVED_RESPONSE_HEADERS.has("content-range"));
+});
+
+test("responseToHttpResult: a 206 with a missing or malformed Content-Range is a fault, not an invented range", async () => {
+  for (const headers of [{} as Record<string, string>, { "content-range": "bytes 0-4" }, { "content-range": "items 0-4/9" }]) {
+    await assert.rejects(
+      responseToHttpResult(new Response("hello", { status: 206, headers }), () => ({ tag: "Ok", value: null }) as never),
+      /Content-Range is missing or malformed/,
+    );
+  }
+});
+
+test("httpResultToResponse: NotModified answers a bodyless 304", async () => {
+  const res = httpResultToResponse(HttpResult.NotModified, id);
+  assert.equal(res.status, 304);
+  assert.equal(await res.text(), "");
+});
+
+test("responseToHttpResult: a 206 reads back as PartialContent with its range, and a 304 as NotModified", async () => {
+  const partial = await responseToHttpResult(
+    new Response("lo, wo", {
+      status: 206,
+      headers: { "content-type": "text/plain", "content-range": "bytes 3-8/12" },
+    }),
+    () => ({ tag: "Ok", value: null }) as never,
+  );
+  assert.equal(partial.tag, "PartialContent");
+  if (partial.tag === "PartialContent") {
+    assert.deepEqual(partial.range, { start: 3, end: 8, total: someRange(12) });
+    assert.equal(partial.contentType, "text/plain");
+    let text = "";
+    for await (const chunk of partial.body) text += new TextDecoder().decode(chunk);
+    assert.equal(text, "lo, wo");
+  }
+  const star = await responseToHttpResult(
+    new Response("x", { status: 206, headers: { "content-range": "bytes 0-0/*" } }),
+    () => ({ tag: "Ok", value: null }) as never,
+  );
+  assert.equal(star.tag === "PartialContent" && star.range.total.tag, "None");
+  const notModified = await responseToHttpResult(new Response(null, { status: 304 }), () => ({ tag: "Ok", value: null }) as never);
+  assert.equal(notModified.tag, "NotModified");
 });
 
 test("httpResultToResponse: a RawStreamed source that throws errors the body", async () => {
@@ -291,9 +541,10 @@ test("corsPreflightResponse: 204 without a grant for a non-allowlisted origin", 
 
 // v0.141 (ADR 0164): security response headers — nosniff on by default, HSTS opt-in.
 
-const defaultSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-const hstsSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000 };
-const optedOutSecurity: SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null };
+const htmlDefaults = { htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+const defaultSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, ...htmlDefaults };
+const hstsSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000, ...htmlDefaults };
+const optedOutSecurity: SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null, ...htmlDefaults };
 
 test("applySecurityHeaders: default stamps nosniff, no HSTS", () => {
   const res = applySecurityHeaders(new Response("ok"), defaultSecurity);
@@ -311,6 +562,33 @@ test("applySecurityHeaders: nosniff:false opts out of every security header", ()
   const res = applySecurityHeaders(new Response("ok"), optedOutSecurity);
   assert.equal(res.headers.get("x-content-type-options"), null);
   assert.equal(res.headers.get("strict-transport-security"), null);
+});
+
+// #3923: a text/html response gets framing and referrer protection; nothing else does.
+
+test("applySecurityHeaders: a text/html response gets frame-ancestors and a referrer policy", () => {
+  for (const type of ["text/html", "text/html; charset=utf-8", "TEXT/HTML ; charset=utf-8"]) {
+    const res = applySecurityHeaders(new Response("<p>x</p>", { headers: { "content-type": type } }), defaultSecurity);
+    assert.equal(res.headers.get("content-security-policy"), "frame-ancestors 'none'", type);
+    assert.equal(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin", type);
+  }
+});
+
+test("applySecurityHeaders: JSON, text, and a missing content type are unchanged", () => {
+  for (const type of ["application/json", "text/plain", "application/xhtml+xml", null]) {
+    const init = type === null ? undefined : { headers: { "content-type": type } };
+    const body = type === null ? null : "x";
+    const res = applySecurityHeaders(new Response(body, init), defaultSecurity);
+    assert.equal(res.headers.get("content-security-policy"), null, String(type));
+    assert.equal(res.headers.get("referrer-policy"), null, String(type));
+  }
+});
+
+test("applySecurityHeaders: nosniff:false does not turn the HTML headers off, and they overwrite the edge's", () => {
+  const html = new Response("<p>x</p>", { headers: { "content-type": "text/html", "content-security-policy": "default-src *" } });
+  const res = applySecurityHeaders(html, optedOutSecurity);
+  assert.equal(res.headers.get("x-content-type-options"), null);
+  assert.equal(res.headers.get("content-security-policy"), "frame-ancestors 'none'");
 });
 
 test("applySecurityHeaders: composes with applyCors (disjoint headers, order-independent)", () => {
@@ -564,6 +842,31 @@ test("responseToHttpOutcome classifies the router's 413 and 415 by their kind", 
   // A handler's own `PayloadTooLarge` has no `kind`: it ran, so it is `Handled`.
   const handled = await responseToHttpOutcome(httpResultToResponse(HttpResult.PayloadTooLarge("too big"), (v) => v), deser);
   assert.equal(handled.tag, "Handled");
+});
+
+const reqOf = (ct: string | null) =>
+  new Request("https://x.test/", { method: "POST", headers: ct === null ? {} : { "content-type": ct } });
+
+test("mediaTypeMatches takes a list of types (#3912)", () => {
+  const req = reqOf;
+  const png = ["image/png", "image/jpeg"];
+  assert.equal(mediaTypeMatches(req("image/png"), png), true);
+  assert.equal(mediaTypeMatches(req("IMAGE/JPEG; q=1"), png), true);
+  assert.equal(mediaTypeMatches(req("image/gif"), png), false);
+  assert.equal(mediaTypeMatches(new Request("https://x/", { method: "POST", body: "x" }), png), false);
+});
+
+test("jsonMediaTypeMatches accepts json, +json and a missing type, refuses the rest (#3912)", () => {
+  const req = reqOf;
+  const none = new Request("https://x/", { method: "POST" });
+  assert.equal(jsonMediaTypeMatches(none), true);
+  assert.equal(jsonMediaTypeMatches(req("application/json")), true);
+  assert.equal(jsonMediaTypeMatches(req("Application/JSON; charset=utf-8")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/problem+json")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/vnd.x+json")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/x-www-form-urlencoded")), false);
+  assert.equal(jsonMediaTypeMatches(req("multipart/form-data; boundary=x")), false);
+  assert.equal(jsonMediaTypeMatches(req("text/plain")), false);
 });
 
 test("mediaTypeMatches ignores parameters and case, and `*/*` takes anything", () => {
@@ -892,7 +1195,7 @@ test("queryObject: reads each declared field off the query string", () => {
   const r = queryObject(queryRequest("?repo=a%2Fb&limit=100&fresh=true&kind=Push&tag=x&tag=y&utm=1"), fields);
   assert.deepEqual(r, {
     ok: true,
-    value: { repo: "a/b", limit: 100, fresh: true, kind: { kind: "Push" }, tag: ["x", "y"] },
+    value: { repo: "a/b", limit: 100, fresh: true, kind: "Push", tag: ["x", "y"] },
   });
 });
 
@@ -936,7 +1239,7 @@ test("formObject: reads each declared field, ignoring unknown keys", () => {
   ]);
   assert.deepEqual(r, {
     ok: true,
-    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: "Pro", tags: ["x", "y z"], flag: true },
   });
 });
 
@@ -1029,7 +1332,7 @@ test("formString: the record's wire form as a body; formObject reads it back", (
   ]);
   assert.deepEqual(back, {
     ok: true,
-    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: "Pro", tags: ["x", "y z"], flag: true },
   });
 });
 
@@ -1184,7 +1487,7 @@ test("cookieValue: every leaf kind decodes back to the value written", () => {
     { kind: "int", written: 0, read: 0 },
     { kind: "bool", written: true, read: true },
     { kind: "bool", written: false, read: false },
-    { kind: "enum", written: { tag: "Dark" }, read: { kind: "Dark" } },
+    { kind: "enum", written: { tag: "Dark" }, read: "Dark" },
     { kind: "string", written: "hello", read: "hello" },
     { kind: "string", written: "", read: "" },
     // a refined or opaque string, an `Int`-based refined type: their base text
@@ -1375,7 +1678,7 @@ test("a revalidation for one query is not answered 304 for another", async () =>
 
 test("queryObject: an Option field wraps a present value, so `None` is not the envelope", () => {
   const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
-  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
+  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: "None" } } });
 });
 
 test("formDecode: reads a form as formObject does, with a $-rooted DecodeError", () => {
@@ -1384,7 +1687,7 @@ test("formDecode: reads a form as formObject does, with a $-rooted DecodeError",
   const bad = formDecode("age=1&age=2", [F("age", "int")]);
   assert.equal(bad.tag, "Err");
   assert.deepEqual(bad.tag === "Err" ? { kind: bad.error.kind, path: bad.error.path } : null, {
-    kind: "StructuralMismatch",
+    kind: { tag: "StructuralMismatch" },
     path: "$.age",
   });
 });
@@ -1452,25 +1755,27 @@ test("requestCookies: get, all and names read a Cookie header, prefixed names in
 const R = (name: string, wire: string, kind: "string" | "int" = "string", option = false) =>
   ({ name, wire, kind, list: false, option }) as const;
 
-test("a renamed field is read from its wire key, and errors still name the field", () => {
+test("a renamed field is read from its wire key, and errors name that key", () => {
   const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int")];
   const ok = formObject("page-size=20&__Host-sid=abc&sid=ignored", fields);
-  assert.deepEqual(ok, { ok: true, value: { sid: { kind: "Some", value: "abc" }, pageSize: 20 } });
+  // #3975: the object is keyed by the wire key, which is what the record's codec reads.
+  assert.deepEqual(ok, { ok: true, value: { "__Host-sid": { kind: "Some", value: "abc" }, "page-size": 20 } });
   // The field's own name is not the key once it is renamed.
   assert.deepEqual(formObject("pageSize=20", fields), { ok: true, value: {} });
   const twice = formObject("page-size=1&page-size=2", fields);
   assert.equal(twice.ok, false);
-  assert.equal(twice.ok ? "" : twice.error.kind === "StructuralMismatch" ? twice.error.path : "", "body.pageSize");
+  assert.equal(twice.ok ? "" : twice.error.kind === "StructuralMismatch" ? twice.error.path : "", "body.page-size");
 });
 
 test("cookieObject reads a __Host- cookie into its renamed field", () => {
   const req = new Request("http://x/", { headers: { cookie: "__Host-sid=abc; theme=dark" } });
-  assert.deepEqual(cookieObject(req, [R("sid", "__Host-sid")]), { ok: true, value: { sid: "abc" } });
+  assert.deepEqual(cookieObject(req, [R("sid", "__Host-sid")]), { ok: true, value: { "__Host-sid": "abc" } });
 });
 
 test("the writers emit a renamed field under its wire key", () => {
   const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int"), F("q", "string")];
-  const wire = { sid: { kind: "Some", value: "abc" }, pageSize: 20, q: "x" };
+  // The wire form is already keyed by wire key (#3975).
+  const wire = { "__Host-sid": { kind: "Some", value: "abc" }, "page-size": 20, q: "x" };
   assert.equal(queryString(wire, fields), "?__Host-sid=abc&page-size=20&q=x");
   assert.equal(cookieString(wire, fields), "__Host-sid=abc; page-size=20; q=x");
   assert.equal(formString(wire, fields), "__Host-sid=abc&page-size=20&q=x");
@@ -1480,10 +1785,10 @@ test("the writers emit a renamed field under its wire key", () => {
 
 test("formDecode honours @name and keeps the $-rooted field path", () => {
   const ok = formDecode("page-size=20", [R("pageSize", "page-size", "int")]);
-  assert.deepEqual(ok, { tag: "Ok", value: { pageSize: 20 } });
+  assert.deepEqual(ok, { tag: "Ok", value: { "page-size": 20 } });
 });
 
-test("multipartObject reads a renamed text part and file part, and rejections name the field (#3343)", async () => {
+test("multipartObject reads a renamed text part and file part, and rejections name the wire key (#3343, #3975)", async () => {
   const fields = [
     { name: "title", wire: "doc-title", kind: "string", list: false, option: false },
     { name: "photo", wire: "photo-file", kind: "file", list: false, option: false },
@@ -1496,15 +1801,15 @@ test("multipartObject reads a renamed text part and file part, and rejections na
   );
   assert.equal(ok.ok, true);
   if (ok.ok) {
-    assert.equal((ok.value as Record<string, unknown>).title, "hi");
+    assert.equal((ok.value as Record<string, unknown>)["doc-title"], "hi");
     assert.equal(new TextDecoder().decode((ok.files.photo as { bytes: Uint8Array }).bytes), "PNG");
   }
-  // Text where a file is declared: the error names `photo`, not `photo-file`.
+  // Text where a file is declared: the error names the wire key, as the codec's own paths do.
   const bad = await multipartObject(mp(textPart("photo-file", "oops")), CT, fields, lim);
   assert.equal(bad.ok, false);
-  if (!bad.ok) assert.equal((bad.error as { path: string }).path, "body.photo");
+  if (!bad.ok) assert.equal((bad.error as { path: string }).path, "body.photo-file");
   // The writer sends each part under its wire name.
-  const form = multipartForm({ title: "hi", photo: { filename: { kind: "None" }, contentType: "image/png", bytes: "UE5H" } }, fields);
+  const form = multipartForm({ "doc-title": "hi", "photo-file": { filename: { kind: "None" }, contentType: "image/png", bytes: "UE5H" } }, fields);
   assert.equal(form.get("doc-title"), "hi");
   assert.notEqual(form.get("photo-file"), null);
   assert.equal(form.get("title"), null);
@@ -1657,4 +1962,295 @@ test("cfObject: isEUCountry is \"1\" in the EU and otherwise omitted or false", 
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: "1" })), { isEuCountry: true });
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: false })), { isEuCountry: false });
   assert.deepEqual(cfObject(requestWithCf({})), {});
+});
+
+test("splitHeaderList: splits on commas outside quotes and trims", () => {
+  assert.deepEqual(splitHeaderList('a, "b,c", d'), ["a", '"b,c"', "d"]);
+  assert.deepEqual(splitHeaderList('W/"x", "y\\",z"'), ['W/"x"', '"y\\",z"']);
+  assert.deepEqual(splitHeaderList(" , a ,, b ,"), ["a", "b"]);
+  assert.deepEqual(splitHeaderList(""), []);
+});
+
+test("headersObject: names match without case, a List splits, others read whole and trimmed", () => {
+  const req = new Request("https://x.test/", {
+    headers: { "Content-Length": " 42 ", "X-Tag": 'a, "b,c", d', "Date": "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+  const r = headersObject(req, [
+    { name: "length", wire: "content-length", kind: "int", list: false, option: false },
+    { name: "tag", wire: "X-TAG", kind: "string", list: true, option: false },
+    { name: "date", kind: "string", list: false, option: false },
+    { name: "key", wire: "idempotency-key", kind: "string", list: false, option: true },
+  ]);
+  assert.deepEqual(r, {
+    ok: true,
+    value: { "content-length": 42, "X-TAG": ["a", '"b,c"', "d"], date: "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+});
+
+test("headersObject: an unreadable value passes on as text; a hidden header reads as absent", () => {
+  const req = new Request("https://x.test/", { headers: { "content-length": "abc", authorization: "Bearer t" } });
+  const spec = [
+    { name: "length", wire: "content-length", kind: "int" as const, list: false, option: false },
+    { name: "auth", wire: "authorization", kind: "string" as const, list: false, option: true },
+  ];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { "content-length": "abc", authorization: { kind: "Some", value: "Bearer t" } } });
+  assert.deepEqual(headersObject(req, spec, ["Authorization"]), { ok: true, value: { "content-length": "abc" } });
+});
+
+test("headerPairs: a record's wire form becomes header lines; a list joins; an enum is its name", () => {
+  assert.deepEqual(
+    headerPairs(
+      { "content-length": 42, tag: ["a", "b"], key: { kind: "Some", value: "k" }, none: { kind: "None" }, s: { kind: "Open" } },
+      [{ name: "length", wire: "content-length", kind: "int", list: false, option: false }],
+    ),
+    { "content-length": "42", tag: "a, b", key: "k", s: "Open" },
+  );
+  assert.deepEqual(headerPairs({}, []), {});
+});
+
+test("applyChallenge: a 401 gets one challenge line each; others are untouched", () => {
+  const req = new Request("https://x.test/");
+  const res = applyChallenge(new Response(null, { status: 401 }), req, [
+    'Bearer realm="Shop"',
+    'Bynk-Cookie realm="Shop"',
+  ]);
+  assert.deepEqual(res.headers.get("www-authenticate"), 'Bearer realm="Shop", Bynk-Cookie realm="Shop"');
+  const ok = applyChallenge(new Response("ok"), req, ['Bearer realm="Shop"']);
+  assert.equal(ok.headers.has("www-authenticate"), false);
+});
+
+test("applyChallenge: invalid_token only when a bearer token was presented", () => {
+  const bare = applyChallenge(new Response(null, { status: 401 }), new Request("https://x.test/"), [
+    'Bearer realm="Shop"',
+    'Bynk-Signature realm="Shop", header="x-sig"',
+  ]);
+  assert.match(bare.headers.get("www-authenticate")!, /^Bearer realm="Shop", Bynk-Signature/);
+  assert.doesNotMatch(bare.headers.get("www-authenticate")!, /error=/);
+  const bad = applyChallenge(
+    new Response(null, { status: 401 }),
+    new Request("https://x.test/", { headers: { authorization: "Bearer abc" } }),
+    ['Bearer realm="Shop"', 'Bynk-Cookie realm="Shop"'],
+  );
+  assert.equal(
+    bad.headers.get("www-authenticate"),
+    'Bearer realm="Shop", error="invalid_token", Bynk-Cookie realm="Shop"',
+  );
+});
+
+test("applyChallenge: keeps a challenge the response already has", () => {
+  const res = applyChallenge(
+    new Response(null, { status: 401, headers: { "www-authenticate": "Custom" } }),
+    new Request("https://x.test/"),
+    ['Bearer realm="Shop"'],
+  );
+  assert.equal(res.headers.get("www-authenticate"), "Custom");
+});
+
+test("applyCors: exposes the headers Bynk writes for a client, on every allowed response (#3925)", () => {
+  const res = applyCors(
+    applyChallenge(new Response(null, { status: 401 }), new Request("https://x.test/"), ['Bearer realm="S"']),
+    listPolicy,
+    "https://app.example.com",
+  );
+  assert.equal(res.headers.get("access-control-expose-headers"), "WWW-Authenticate, Retry-After, Location, ETag");
+  // Not only a 401: a 200 exposes the same set.
+  const ok = applyCors(new Response("x"), listPolicy, "https://app.example.com");
+  assert.equal(ok.headers.get("access-control-expose-headers"), "WWW-Authenticate, Retry-After, Location, ETag");
+});
+
+test("applyCors: the author's expose names follow the automatic set; a wildcard is `*` (#3925)", () => {
+  const named = applyCors(new Response("x"), { ...listPolicy, exposeHeaders: ["WWW-Authenticate", "X-Request-Id"] }, "https://app.example.com");
+  assert.equal(named.headers.get("access-control-expose-headers"), "WWW-Authenticate, X-Request-Id");
+  const star = applyCors(new Response("x"), wildcardPolicy, "https://anywhere.example");
+  assert.equal(star.headers.get("access-control-expose-headers"), "*");
+});
+
+test("applyCors: an origin off the list gets no expose header either (#3925)", () => {
+  const res = applyCors(new Response("x"), listPolicy, "https://evil.example");
+  assert.equal(res.headers.get("access-control-expose-headers"), null);
+});
+
+test("privateByDefault: says private unless a Cache-Control is already set", () => {
+  assert.equal(privateByDefault(httpResultToResponse(HttpResult.Ok(1), id)).headers.get("cache-control"), "private");
+  const cached = applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public");
+  assert.equal(privateByDefault(cached).headers.get("cache-control"), "public, max-age=60");
+  assert.equal(privateByDefault(noStore(httpResultToResponse(HttpResult.Ok(1), id))).headers.get("cache-control"), "no-store");
+});
+
+test("headersObject: a SignedCookie's session cookie is hidden from a cookie field", () => {
+  const req = new Request("https://x.test/", { headers: { cookie: "sid=secret; theme=dark" } });
+  const spec = [{ name: "cookie", kind: "string" as const, list: false, option: true }];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { cookie: { kind: "Some", value: "sid=secret; theme=dark" } } });
+  assert.deepEqual(headersObject(req, spec, undefined, "sid"), {
+    ok: true,
+    value: { cookie: { kind: "Some", value: "theme=dark" } },
+  });
+  const only = new Request("https://x.test/", { headers: { cookie: "sid=secret" } });
+  assert.deepEqual(headersObject(only, spec, undefined, "sid"), { ok: true, value: {} });
+});
+
+test("headerPairs: repeated Wire lines combine; a list item with a comma or quote is refused", () => {
+  assert.deepEqual(headerPairs("X-Tag: a\nx-tag: b\nno colon\nHost: h"), { "x-tag": "a, b", host: "h" });
+  assert.throws(
+    () => headerPairs({ tags: ["a,b"] }, [{ name: "tags", kind: "string", list: true, option: false }]),
+    /does not survive/,
+  );
+  assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
+  // A non-list value may hold a comma (a `Date`).
+  assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
+});
+
+test("rateLimitAllows: counts by CF-Connecting-IP, and shares `unknown` without one (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "9.9.9.9" };
+    },
+  };
+  const from = (ip?: string) => new Request("https://x.test/", ip ? { headers: { "cf-connecting-ip": ip } } : {});
+  assert.equal(await rateLimitAllows(limiter, from("1.2.3.4")), true);
+  assert.equal(await rateLimitAllows(limiter, from("9.9.9.9")), false);
+  assert.equal(await rateLimitAllows(limiter, from()), true);
+  assert.deepEqual(seen, ["1.2.3.4", "9.9.9.9", "unknown"]);
+});
+
+test("rateLimitedResponse: a 429 with Retry-After and the RateLimited rejection (#3926)", async () => {
+  const res = rateLimitedResponse(60);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  const body = (await res.json()) as { kind: string; details: string };
+  assert.equal(body.kind, "RateLimited");
+  assert.match(body.details, /60 seconds/);
+});
+
+test("responseToHttpOutcome: the router's 429 is Rejected(RateLimited); a handler's TooManyRequests stays Handled (#3926)", async () => {
+  const deser = (v: JsonValue) => ({ tag: "Ok", value: v }) as never;
+  const routed = await responseToHttpOutcome(rateLimitedResponse(10), deser);
+  assert.equal(routed.tag, "Rejected");
+  assert.equal((routed as { value: { tag: string } }).value.tag, "RateLimited");
+  const handled = await responseToHttpOutcome(
+    new Response(JSON.stringify({ error: "slow down" }), { status: 429, headers: { "content-type": "application/json" } }),
+    deser,
+  );
+  assert.equal(handled.tag, "Handled");
+});
+
+test("problemRejection: the 429 keeps Retry-After and becomes problem details of type rate-limited (#3926)", async () => {
+  const res = await problemRejection(rateLimitedResponse(60));
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "application/problem+json");
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.type, "https://bynk-lang.org/problems/rate-limited");
+  assert.equal(body.title, "Too Many Requests");
+  assert.equal(body.kind, "RateLimited");
+  assert.match(String(body.detail), /60 seconds/);
+});
+
+test("renderRejection: `on rejected` receives RateLimited(detail) and its RawError keeps Retry-After (#3926)", async () => {
+  const seen: { tag: string; detail: string }[] = [];
+  const hook = async (why: { tag: string; detail: string }) => {
+    seen.push(why);
+    return HttpResult.RawError(429, new TextEncoder().encode("slow down"), "text/plain");
+  };
+  const res = await renderRejection(rateLimitedResponse(60), hook as never);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].tag, "RateLimited");
+  assert.match(seen[0].detail, /60 seconds/);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(await res.text(), "slow down");
+});
+
+test("a rate-limited 429 stamped with the CORS policy carries the grant and Retry-After (#3926)", async () => {
+  const res = applyCors(rateLimitedResponse(10), listPolicy, "https://app.example.com");
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("access-control-allow-origin"), "https://app.example.com");
+  assert.equal(res.headers.get("retry-after"), "10");
+});
+
+test("rateLimitAllowsKey: counts by the key it is given, the verified caller (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "bob" };
+    },
+  };
+  assert.equal(await rateLimitAllowsKey(limiter, "ada"), true);
+  assert.equal(await rateLimitAllowsKey(limiter, "bob"), false);
+  assert.deepEqual(seen, ["ada", "bob"]);
+});
+
+// #4466: the handler's own validator on a 206 or 304, and the router's `If-Range` safety net.
+function partial(): ReturnType<typeof HttpResult.PartialContent> {
+  return HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: someRange(12) });
+}
+
+test("etag and lastModified reach a PartialContent and a NotModified", () => {
+  const r = httpResultToResponse(withLastModified(withETag(partial(), '"v2"'), 784111777000), id);
+  assert.equal(r.status, 206);
+  assert.equal(r.headers.get("etag"), '"v2"');
+  assert.equal(r.headers.get("last-modified"), "Sun, 06 Nov 1994 08:49:37 GMT");
+  const n = httpResultToResponse(withETag(HttpResult.NotModified, 'W/"v2"'), id);
+  assert.equal(n.status, 304);
+  assert.equal(n.headers.get("etag"), 'W/"v2"');
+});
+
+test("etag refuses a value that is not an entity tag, and lastModified a non-finite time", () => {
+  assert.throws(() => withETag(partial(), "v2"), /is not an entity tag/);
+  assert.throws(() => withETag(partial(), '"a"b"'), /is not an entity tag/);
+  assert.throws(() => withLastModified(partial(), Number.NaN), /outside the years an HTTP-date can write/);
+  assert.throws(() => withLastModified(partial(), 9e15), /outside the years/);
+  assert.throws(() => withLastModified(partial(), -62_167_219_200_001), /outside the years/);
+});
+
+function rangeRequest(ifRange?: string): Request {
+  return new Request("https://x/f", { headers: ifRange === undefined ? { range: "bytes=3-8" } : { range: "bytes=3-8", "if-range": ifRange } });
+}
+
+test("ifRangeGuard: a 206 with no If-Range passes, and a matching strong tag or date passes", () => {
+  const res = () => httpResultToResponse(withLastModified(withETag(partial(), '"v2"'), 784111777000), id);
+  assert.equal(ifRangeGuard(res(), rangeRequest()).status, 206);
+  assert.equal(ifRangeGuard(res(), rangeRequest('"v2"')).status, 206);
+  assert.equal(ifRangeGuard(res(), rangeRequest("Sun, 06 Nov 1994 08:49:37 GMT")).status, 206);
+});
+
+test("ifRangeGuard: a stale, weak or missing validator is a fault, never a 206", () => {
+  const withTag = () => httpResultToResponse(withETag(partial(), '"v2"'), id);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest('"v1"')), /PartialContent for a stale If-Range: check ifRangeHolds/);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest('W/"v2"')), /stale If-Range/);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest("Sun, 06 Nov 1994 08:49:37 GMT")), /stale If-Range/);
+  const weak = httpResultToResponse(withETag(partial(), 'W/"v2"'), id);
+  assert.throws(() => ifRangeGuard(weak, rangeRequest('W/"v2"')), /stale If-Range/);
+  assert.throws(() => ifRangeGuard(httpResultToResponse(partial(), id), rangeRequest('"v2"')), /carries no validator/);
+});
+
+test("ifRangeGuard: only a 206 is guarded", () => {
+  const ok = httpResultToResponse(HttpResult.NotModified, id);
+  assert.equal(ifRangeGuard(ok, rangeRequest('"v1"')).status, 304);
+});
+
+test("notModifiedIfMatch: a matching If-None-Match is a 304 before a stale If-Range is judged", () => {
+  const res = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const req = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v2"', "if-range": '"v1"' } });
+  assert.equal(notModifiedIfMatch(res, req).status, 304);
+  const stale = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const noMatch = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v9"', "if-range": '"v1"' } });
+  assert.throws(() => notModifiedIfMatch(stale, noMatch), /stale If-Range/);
+});
+
+// #3975: a payload-less sum's wire form names its variant under the sum's `@discriminator`, so the
+// test drivers read the name off whatever key that is.
+test("queryString: an enum's variant name is read under any discriminator", () => {
+  assert.equal(queryString({ plan: { type: "pro" } } as unknown as JsonValue), "?plan=pro");
+  assert.equal(queryString({ plan: { kind: "Pro" } } as unknown as JsonValue), "?plan=Pro");
+});
+
+test("cookieValue: an enum is written under its wire name when a variant has one", () => {
+  assert.equal(cookieValue("enum", { tag: "Dark" }, { Dark: "dark" }), "dark");
+  assert.equal(cookieValue("enum", { tag: "Light" }, { Dark: "dark" }), "Light");
+  assert.equal(cookieValue("enum", { tag: "Dark" }), "Dark");
 });

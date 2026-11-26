@@ -1,0 +1,10 @@
+{
+  "blurb": "An `on open` parameter is read from the upgrade request's query string, so it arrives as text, and the compiler builds it with the type's constructor from a `String`. A type that cannot be built from a string, such as `Int`, has no safe way in: a stray `?room=05` would name a different value from `5`. Declare the parameter as a `String`, a refined `String` or an opaque type over `String`, and parse any number in the body. HTTP path parameters follow the same rule, as `bynk.http.path_param_not_stringy`.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.websocket_param_not_stringy",
+  "constructs": [],
+  "example": "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: Int) -> Effect[()] by user: Member { … }   // ✗ a query value is a string\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: String) -> Effect[()] by user: Member { … }   // ✓ parse the number in the body\n}",
+  "severity": "error",
+  "summary": "A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657)."
+}

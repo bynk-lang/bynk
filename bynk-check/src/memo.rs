@@ -245,7 +245,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let src = |name: &str| {
             format!(
-                "context {name}\n\ntype Row = {{\n  id: String,\n  qty: Int,\n}}\n\nservice probe {{\n  on call(n: Int) -> Effect[Int] {{\n    Effect.pure(n)\n  }}\n}}\n"
+                "context {name}\n\ntype Row = {{\n  id: String,\n  qty: Int,\n}}\n\nservice probe {{\n  on call(n: Int) -> Effect[Int] by Caller {{\n    Effect.pure(n)\n  }}\n}}\n"
             )
         };
         let mut overlay = HashMap::new();

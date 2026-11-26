@@ -2,7 +2,7 @@
 name = "shop-billing"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[secrets_store_secrets]]
 binding = "SECRET_STRIPE_KEY"
@@ -13,4 +13,8 @@ secret_name = "stripe-live"
 binding = "SECRET_WEBHOOK_KEY"
 store_id = "payments" # the store's name; its id is set at deploy time
 secret_name = "stripe-webhook"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

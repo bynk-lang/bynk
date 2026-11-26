@@ -2,6 +2,7 @@
 // context app
 
 import { Ok, Err } from "./__bynk_runtime/result.js";
+import { __currentTraceId } from "./__bynk_runtime/traceparent.js";
 import { __invariantViolation } from "./__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "./__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "./__bynk_runtime/entries.js";
@@ -65,16 +66,16 @@ export class Counter {
     await __commitStored(this, this.state.storage, __encodeCounterState(s), __entryFieldsOfCounter, s);
   }
 
-  async bump(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+  async bump(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
     const __state = { ...(await this.loadState()) };
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (() => {
         __state.n = ((v: number) => v + 1)(__state.n);
         return undefined;
       })();
       return (async () => {
-        __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Bumped", payload: { n: 1 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
     })();
     await this.commitState(__state);
@@ -88,15 +89,15 @@ export function __makeCounter(key: string, env?: { COUNTER?: __DurableObjectName
 }
 
 export const api = {
-  async http_POST_bump(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<void>> {
+  async http_POST_bump(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<void>> {
     const __r0 = await __makeCounter("c").bump(deps);
     return HttpResult.Ok(undefined);
   },
-  async http_POST_note(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<void>> {
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+  async http_POST_note(deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<HttpResult<void>> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Bumped", payload: { n: 0 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Bumped", payload: { n: 0 }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "app", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return HttpResult.Ok(undefined);
     })();
@@ -112,7 +113,7 @@ export function __resetAgents(): void {
 }
 
 export interface __AppDeps {
-  readonly __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void>;
+  readonly __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void>;
 }
 
 export function __makeSurface(deps: __AppDeps) {

@@ -1,8 +1,10 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
+	exports opaque { Secret, Authorization }
 	exports transparent {
 		Uuid,
+		CronSchedule,
 		Method,
 		FetchError,
 		Request,
@@ -12,18 +14,53 @@ adapter bynk {
 		File,
 		Cookie,
 		SameSite,
+		SseEvent,
+		CloseInfo,
+		ContentRange,
 		FetchOptions,
+		ParOptions,
 		Redirect,
 		TimedOut,
+		CallOutcome,
+		CallFailure,
+		Refusal,
 		LogLevel,
 		Claim,
 		EventEnvelope,
 	}
 
 	---
+	A secret read from the platform's secret store. It cannot leak by accident: it
+	has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+	(comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+	never stored, sent, encoded or returned across a boundary
+	(`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+	text, and `matches(candidate)` the constant-time comparison.
+	---
+	type Secret = opaque String
+
+	---
+	The credential of a request's `Authorization` header: `token.bearer()` for
+	`Bearer <token>` and `password.basic(user)` for `Basic <user:password>`,
+	made from a `Secret`. It carries the secret without ever being text: it has
+	no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored or
+	sent (`bynk.types.secret_at_boundary`), and it has no reader of its own,
+	because `Fetch` is the only place it is revealed. It is set on a request as
+	`authorization: Some(token.bearer())`.
+	---
+	type Authorization = opaque String
+
+	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
 	---
 	type Uuid = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+	---
+	A valid Cloudflare cron schedule: five fields (minute hour day-of-month month
+	day-of-week) separated by exactly one space, run in UTC. A literal is checked
+	at compile time; `CronSchedule.of`, decoding and a boundary check at run time.
+	---
+	type CronSchedule = String where Cron
 
 	---
 	An HTTP request method. A `Head` response's `body` is `""`.
@@ -62,10 +99,10 @@ adapter bynk {
 	type Request = {
 		method: Method,
 		url: String,
-		contentType: Option[String],
-		authorization: Option[String],
-		headers: Map[String, String],
-		body: Option[String],
+		contentType: Option[String] = None,
+		authorization: Option[Authorization] = None,
+		headers: Map[String, String] = Map.empty(),
+		body: Option[String] = None,
 	}
 
 	---
@@ -92,6 +129,17 @@ adapter bynk {
 	}
 
 	---
+	The options of the bounded fan-out methods `parForEachWith`, `parTraverseWith`,
+	`parTraverseAllWith` and `parTraverseTryWith`. `limit` is the most steps in
+	flight at once: a whole number from 1 to 1000, with no default, so a call
+	always states it. A literal or constant outside that range is the error
+	`bynk.list.par_limit_range`; a computed one faults the call.
+	---
+	type ParOptions = {
+		limit: Int,
+	}
+
+	---
 	Why an `e.within(d)` produced no value: the deadline `after` passed first.
 	The abandoned effect is **not** cancelled. It is handed to the platform's
 	`waitUntil` and may still complete after the handler has returned, so its
@@ -100,6 +148,60 @@ adapter bynk {
 	---
 	type TimedOut = {
 		after: Duration,
+	}
+
+	---
+	What a cross-context service call came to, as `<context>.<service>.outcome(args)`
+	yields it. The variants are grouped by whether the callee's handler ran:
+	`Handled` it ran and answered with `result`; `Rejected` it was refused before it
+	ran, for the `reason`; `Faulted` it ran and faulted (a faulting handler commits
+	nothing); `Unreachable` it is not known whether it ran, with the HTTP `status`
+	when there was a response. Only `.outcome(…)` and a test `stub` make one.
+	---
+	type CallOutcome[R] =
+		| Handled(result: R)
+		| Rejected(reason: Refusal)
+		| Faulted
+		| Unreachable(status: Option[Int])
+
+	---
+	`Handled(r)` becomes `Ok(r)`; any other case becomes `Err` of the matching
+	`CallFailure`, so `outcome(…).handled()?` propagates a failed call with `?`
+	and `embeds`.
+	---
+	fn CallOutcome.handled(self) -> Result[R, CallFailure] {
+		match self {
+			Handled(r) => Ok(r),
+			Rejected(reason) => Err(Rejected(reason)),
+			Faulted => Err(Faulted),
+			Unreachable(status) => Err(Unreachable(status)),
+		}
+	}
+
+	---
+	Why a call did not come to `Handled`: `CallOutcome[R]` without its `Handled`
+	case, as `outcome(…).handled()` yields it in the `Err` of a `Result`. An
+	ordinary sum, so `embeds` can wrap it into a caller's own error type.
+	---
+	type CallFailure =
+		| Rejected(reason: Refusal)
+		| Faulted
+		| Unreachable(status: Option[Int])
+
+	---
+	Why the callee refused a call before its handler ran, one case per check the
+	wire makes: `TooLarge` (413), `NotAuthenticated` (401), `UnsupportedWire`
+	(400), `NoSuchService` (404), `NotAdmitted` (403), `StaleContract` (409) and
+	`Undecodable` (400, a body that is not the service's arguments).
+	---
+	type Refusal = enum {
+		TooLarge,
+		NotAuthenticated,
+		UnsupportedWire,
+		NoSuchService,
+		NotAdmitted,
+		StaleContract,
+		Undecodable,
 	}
 
 	---
@@ -179,6 +281,52 @@ adapter bynk {
 	}
 
 	---
+	One server-sent event, for a `Streaming(...)` response that needs more than a
+	`data:` line. `data` is the payload (a line break in it becomes several `data:`
+	lines); `event` names the event type a browser's `EventSource` listens for;
+	`id` sets its last event ID, which a reconnecting browser sends back as
+	`Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+	in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+	cannot hold NUL: an element that does faults the stream, in-band. A
+	`Stream[String]` is still framed as plain `data:` events, unchanged.
+	---
+	type SseEvent = {
+		data: String,
+		event: Option[String] = None,
+		id: Option[String] = None,
+		retry: Option[Duration] = None,
+	}
+
+	---
+	Why a WebSocket connection ended, as an `on close` handler receives it as a
+	trailing `close: CloseInfo` parameter. `code` and `reason` are the close
+	frame's: `1000` is a normal closure, `1001` a client navigating away, and
+	`1006` an abnormal disconnection with no close frame (its `reason` is `""` and
+	`clean` is `false`). `clean` is whether the close handshake completed. A
+	connection ended by a non-disconnection error is `CloseInfo { code: 1011,
+	reason: "error", clean: false }`.
+	---
+	type CloseInfo = {
+		code: Int,
+		reason: String,
+		clean: Bool,
+	}
+
+	---
+	The part of a representation a `PartialContent(...)` response carries, as the
+	`Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+	bytes in all (`None` when the total is not known, written `*`). `start` is at
+	least 0 and at most `end`, and `end` is below `total` when there is one: a
+	response whose range breaks this faults, so a malformed `Content-Range` is
+	never sent.
+	---
+	type ContentRange = {
+		start: Int,
+		end: Int,
+		total: Option[Int] = None,
+	}
+
+	---
 	An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
 	and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
 	single-pass: a second read faults. A network failure partway through the
@@ -209,12 +357,20 @@ adapter bynk {
 	non-additive change fails the build. An explicit `@schema(N)` annotation
 	(slice 3b) is checked against that computed value rather than trusted
 	outright — a mismatch is a build error, not a silent override.
+
+	`trace` is the id of the trace the emission happened in (32 lowercase hex
+	digits, the trace id of the W3C `traceparent` the delivery carries), so a
+	handler can tie what it does to the request that caused the event. It is
+	`None` when the event was emitted outside a trace, and for an envelope from a
+	publisher built before traces existed: the field is additive, defaulted, and
+	never changes whether an event is delivered.
 	---
 	type EventEnvelope = {
 		eventId: String,
 		publisherId: String,
 		emittedAt: Instant,
 		schemaVersion: Int,
+		trace: Option[String] = None,
 	}
 
 	---
@@ -296,7 +452,7 @@ adapter bynk {
 	Reads named secrets from the platform's secret store.
 	---
 	capability Secrets {
-		fn get(name: String) -> Effect[Option[String]]
+		fn get(name: String) -> Effect[Option[Secret]]
 	}
 
 	---
@@ -341,29 +497,29 @@ adapter bynk {
 	---
 	capability Idempotency {
 		---
-		Checks for a cached outcome under `key`; a miss is `None`.
+		Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn dedup[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)
+		fn dedup[T: Codable, K: Key](key: K) -> Effect[Option[T]] @onUndecodable(miss)
 		---
-		Caches `value` under `key` for `expiresAfter`.
+		Caches `value` under `key`, any `Key` type, for `expiresAfter`.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn remember[T: Codable](key: String, value: T, expiresAfter: Duration) -> Effect[()]
+		fn remember[T: Codable, K: Key](key: K, value: T, expiresAfter: Duration) -> Effect[()]
 		---
-		Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+		Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn claim(key: String, expiresAfter: Duration) -> Effect[Claim]
+		fn claim[K: Key](key: K, expiresAfter: Duration) -> Effect[Claim]
 	}
 
 	---
@@ -373,10 +529,9 @@ adapter bynk {
 	when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
 	handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
 	style write-then-flush the provider itself is responsible for, not a
-	distinct control-flow form here. The explicit `[E]` type argument follows
-	the `Idempotency.remember[T]` precedent: a generic capability operation's
-	type parameter is never inferred, even where an argument's type would
-	determine it.
+	distinct control-flow form here. The type argument `[E]` is inferred from
+	the argument, as for `Idempotency.remember[T]`: `Events.emit(e)` and
+	`Events.emit[E](e)` mean the same.
 	---
 	capability Events {
 		fn emit[E](event: E) -> Effect[()]

@@ -5,7 +5,7 @@ exports opaque { Account }
 type Account = { id: String, balance: Int }
 
 service open {
-  on call() -> Effect[Account] {
+  on call() -> Effect[Account] by Caller {
     Effect.pure(Account { id: "a", balance: 0 })
   }
 }

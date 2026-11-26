@@ -6,7 +6,7 @@ capability Orders = D1
 
 // #2628: SQL text is a literal; data goes in as bound `SqlValue`s.
 service probe {
-  on call(id: String, q: String) -> Effect[Bool] given Orders {
+  on call(id: String, q: String) -> Effect[Bool] by Caller given Orders {
     let _ <- Orders.all("SELECT * FROM t WHERE id = '\(id)'", [])
     let _ <- Orders.first(q, [])
     let _ <- Orders.run(q.trim(), [])

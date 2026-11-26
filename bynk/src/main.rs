@@ -121,6 +121,7 @@ fn run() -> ExitCode {
             env,
             dry_run,
             no_install,
+            strict_environments,
             format,
             yes,
             secrets_file,
@@ -128,6 +129,7 @@ fn run() -> ExitCode {
             force,
             prune,
             confirm_delete,
+            confirm_jurisdiction,
             accept_fresh_agent,
             accept_compatible_skew,
             wrangler_args,
@@ -143,6 +145,7 @@ fn run() -> ExitCode {
                     environment: env,
                     dry_run,
                     no_install,
+                    strict_environments,
                     format: format.into(),
                     yes,
                     secrets_file,
@@ -150,6 +153,7 @@ fn run() -> ExitCode {
                     force,
                     prune,
                     confirm_delete,
+                    confirm_jurisdiction,
                     accept_fresh_agent,
                     accept_compatible_skew,
                     wrangler_args,
@@ -163,13 +167,14 @@ fn run() -> ExitCode {
             fix,
             emit,
             each,
+            env,
             lock,
         } => {
             let prepared = prepare_each(&input, each, lock.options());
             if matches!(prepared, Prepared::Stop) {
                 return ExitCode::FAILURE;
             }
-            prepared.finish(run_check(input, format, fix, emit, each))
+            prepared.finish(run_check(input, format, fix, emit, each, env))
         }
         Command::Client {
             input,
@@ -239,6 +244,7 @@ fn run() -> ExitCode {
             platform,
             emit,
             profile,
+            env,
             lock,
         } => run_build_command(
             bynk_driver::BuildArgs {
@@ -248,6 +254,7 @@ fn run() -> ExitCode {
                 platform,
                 emit,
                 profile,
+                environment: env,
             },
             lock.options(),
         ),
@@ -258,6 +265,7 @@ fn run() -> ExitCode {
             platform,
             emit,
             sources_stdin,
+            env,
             lock,
         } => {
             if !prepare(&input, lock.options()) {
@@ -271,6 +279,7 @@ fn run() -> ExitCode {
                 emit,
                 sources_stdin,
                 contracts: false,
+                environment: env,
             })
         }
         Command::Fmt { args } => run_fmt(args),
@@ -283,18 +292,7 @@ fn run() -> ExitCode {
         }
         Command::Eval { args, lock } => run_eval(args, lock),
         Command::Fetch { path, lock, format } => run_fetch(&path, lock, format),
-        Command::Update { names, path } => {
-            let opts = bynk::fetch::FetchOptions {
-                locked: false,
-                offline: false,
-                update: Some(names),
-            };
-            if prepare_offering_approval(&path, opts) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        Command::Update { names, path } => run_update(names, &path),
         Command::Revert {
             path,
             context,
@@ -320,6 +318,7 @@ fn run() -> ExitCode {
                 accept_secret_changes,
             },
         ),
+        Command::Lock { command } => run_lock_command(command),
         Command::Migrate { command } => match command {
             bynk::cli::MigrateCommand::Status { path, lock, format } => {
                 if !prepare(&path, lock.options()) {
@@ -458,9 +457,7 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
-                != ExitCode::SUCCESS
-            {
+            if check_default(root.clone()) != ExitCode::SUCCESS {
                 emsg!("bynk: error: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
@@ -622,6 +619,36 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
         );
     }
     root
+}
+
+/// `bynk update`: re-resolve the named dependencies (all when none are named).
+fn run_update(names: Vec<String>, path: &Path) -> ExitCode {
+    let opts = bynk::fetch::FetchOptions {
+        locked: false,
+        offline: false,
+        update: Some(names),
+    };
+    if prepare_offering_approval(path, opts) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `bynk lock` (#3956).
+fn run_lock_command(command: bynk::cli::LockCommand) -> ExitCode {
+    match command {
+        bynk::cli::LockCommand::AcceptOrder {
+            type_name,
+            all,
+            path,
+        } => bynk::lock::accept_order(&path, if all { None } else { type_name.as_deref() }),
+        bynk::cli::LockCommand::AcceptAnalytics {
+            instance,
+            all,
+            path,
+        } => bynk::lock::accept_analytics(&path, if all { None } else { instance.as_deref() }),
+    }
 }
 
 /// `bynk fetch`: the lock file, as JSON when asked.
@@ -1150,8 +1177,21 @@ fn run_check(
     fix: Option<Vec<String>>,
     emit: bool,
     each: bool,
+    environment: String,
 ) -> ExitCode {
-    check::run(input, format, fix, emit, each)
+    check::run(input, format, fix, emit, each, &environment)
+}
+
+/// The short `bynk check` of the `default` environment: what publishing runs first.
+fn check_default(root: PathBuf) -> ExitCode {
+    run_check(
+        root,
+        CheckFormatArg::Short,
+        None,
+        false,
+        false,
+        bynk_driver::DEFAULT_ENVIRONMENT.to_string(),
+    )
 }
 
 /// `bynk fmt` (#487): format in-process via `bynk-fmt`.

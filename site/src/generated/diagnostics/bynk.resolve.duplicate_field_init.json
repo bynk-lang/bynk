@@ -1,0 +1,12 @@
+{
+  "blurb": "A record literal gives each field one value. A field set twice leaves it unclear which value is meant, and is nearly always a pasted line or a misspelt name for the field that was meant. Remove the repeat, or correct the name. A field declared twice in the type is `bynk.resolve.duplicate_field`; a field left out of the literal is `bynk.resolve.missing_field`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_field_init",
+  "constructs": [
+    "record_construction"
+  ],
+  "example": "type Point = { x: Int, y: Int }\n\nfn origin() -> Point { Point { x: 0, y: 0, y: 1 } }   // ✗ `y` set twice\n\nfn origin() -> Point { Point { x: 0, y: 0 } }         // ✓ each field once",
+  "severity": "error",
+  "summary": "A record construction initialises a field twice."
+}

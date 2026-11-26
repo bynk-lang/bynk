@@ -1,0 +1,1608 @@
+//! Property-test value generators and canonicalisers.
+//!
+//! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
+
+use super::*;
+use crate::emitter::internal_fault::FaultSite;
+// #1759: every namespace a test module imports, from one definition.
+use bynk_check::checker::Types;
+use bynk_check::test_suites::{self};
+use bynk_syntax::ast::{BaseType, PredBound, PredKind, Refinement, TypeBody, TypeDecl};
+use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsParam, TsStmt, TsType};
+use std::sync::Arc;
+
+/// The largest integer a `number` holds exactly.
+const MAX_SAFE_INT: i64 = 9_007_199_254_740_991;
+
+/// A `Duration` or `Instant` draws within the span of a JavaScript `Date`, in milliseconds.
+const MAX_TIME_MS: &str = "8640000000000000";
+const MIN_TIME_MS: &str = "-8640000000000000";
+
+/// Integer generation bounds `(lo, hi, floor)` derived from a refinement: `lo`
+/// and `hi` bound the random draw (and the boundary values), `floor` is the
+/// shrink target. Unrefined `Int` draws across the safe-integer range toward `0` (#4199), a
+/// refinement narrowing it.
+pub(super) fn int_bounds(refinement: Option<&Refinement>) -> (i64, i64, i64) {
+    let mut lo = -MAX_SAFE_INT;
+    let mut hi = MAX_SAFE_INT;
+    let mut floor = 0i64;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match &p.kind {
+                PredKind::Positive => {
+                    lo = lo.max(1);
+                    floor = floor.max(1);
+                }
+                PredKind::NonNegative => {
+                    lo = lo.max(0);
+                    floor = floor.max(0);
+                }
+                PredKind::InRange(a, b) => {
+                    lo = a.value;
+                    hi = b.value;
+                    floor = a.value;
+                }
+                PredKind::AtLeast(PredBound::Int(a)) => {
+                    lo = lo.max(a.value);
+                    floor = floor.max(a.value);
+                }
+                PredKind::AtMost(PredBound::Int(b)) => hi = hi.min(b.value),
+                PredKind::Matches(_)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
+            }
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    if floor < lo {
+        floor = lo;
+    }
+    (lo, hi, floor)
+}
+
+/// Float generation bounds `(lo, hi)` from a refinement (`lo` doubles as the
+/// shrink target). Unrefined `Float` draws over `[-1000, 1000]`.
+pub(super) fn float_bounds(refinement: Option<&Refinement>) -> (f64, f64) {
+    let mut lo = -1000.0f64;
+    let mut hi = 1000.0f64;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match &p.kind {
+                PredKind::Positive => lo = lo.max(1.0),
+                PredKind::NonNegative => lo = lo.max(0.0),
+                PredKind::InRangeF(a, b) => {
+                    lo = a.value;
+                    hi = b.value;
+                }
+                PredKind::AtLeast(PredBound::Float(a)) => lo = lo.max(a.value),
+                PredKind::AtMost(PredBound::Float(b)) => hi = hi.min(b.value),
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
+            }
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    (lo, hi)
+}
+
+/// Minimum string length a refinement demands (`0` if none).
+pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
+    let mut min = 0i64;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match p.kind {
+                PredKind::NonEmpty => min = min.max(1),
+                PredKind::MinLength(k) | PredKind::Length(k) => min = min.max(k),
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MaxLength(_)
+                | PredKind::NonNegative
+                | PredKind::Positive
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
+            }
+        }
+    }
+    min
+}
+
+/// Maximum string length a refinement allows, or `min + 64` when none bounds it (#4199).
+pub(super) fn str_max(refinement: Option<&Refinement>) -> i64 {
+    let min = str_min(refinement);
+    let mut max = min + 64;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            if let PredKind::MaxLength(k) | PredKind::Length(k) = p.kind {
+                max = max.min(k.max(min));
+            }
+        }
+    }
+    max
+}
+
+/// Whether nothing in `refinement` bounds a `Float`'s range, so the draw may use extreme
+/// magnitudes and signed zero (#4199).
+fn float_unbounded(refinement: Option<&Refinement>) -> bool {
+    refinement.is_none_or(|r| {
+        !r.predicates.iter().any(|p| {
+            matches!(
+                p.kind,
+                PredKind::Positive
+                    | PredKind::NonNegative
+                    | PredKind::InRangeF(..)
+                    | PredKind::AtLeast(_)
+                    | PredKind::AtMost(_)
+            )
+        })
+    })
+}
+
+/// A canonical (deterministic) TypeScript literal inhabiting a base type — used
+/// for opaque `.unsafe` wrapping of the exotic bases (`Duration`, `Bytes`, …).
+pub(super) fn base_canon_node(base: BaseType) -> TsExpr {
+    match base {
+        BaseType::Int => TsExpr::bigint(0),
+        BaseType::String => str_lit(""),
+        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        BaseType::Float | BaseType::Duration | BaseType::Instant => num_lit("0"),
+        BaseType::Bytes => new(member(ident("globalThis"), "Uint8Array"), Vec::new()),
+        BaseType::Decimal => decimal_node(TsExpr::bigint(0), 0),
+    }
+}
+
+/// A `Decimal` value: the frozen `{ coefficient, scale }` over `bigint`.
+fn decimal_node(coefficient: TsExpr, scale: u32) -> TsExpr {
+    TsExpr::object(vec![
+        ("coefficient".to_string(), coefficient),
+        ("scale".to_string(), num_lit(scale.to_string())),
+    ])
+}
+
+/// #3948: `Duration` generation bounds in milliseconds `(lo, hi)` from a
+/// refinement, or `None` for an unrefined `Duration` (which draws `0`, as
+/// before). A one-sided bound leaves a day of room above or below it.
+pub(super) fn duration_bounds(refinement: Option<&Refinement>) -> Option<(i64, i64)> {
+    const DAY: i64 = 86_400_000;
+    let r = refinement.filter(|r| !r.predicates.is_empty())?;
+    let (mut lo, mut hi) = (0i64, DAY);
+    for p in &r.predicates {
+        match &p.kind {
+            PredKind::Positive => lo = lo.max(1),
+            PredKind::NonNegative => lo = lo.max(0),
+            PredKind::InRangeDur(a, b) => {
+                lo = a.millis;
+                hi = b.millis;
+            }
+            PredKind::AtLeast(PredBound::Duration(a)) => {
+                lo = lo.max(a.millis);
+                hi = hi.max(lo.saturating_add(DAY));
+            }
+            PredKind::AtMost(PredBound::Duration(b)) => hi = hi.min(b.millis),
+            PredKind::InRangeD(..)
+            | PredKind::Matches(..)
+            | PredKind::InRange(..)
+            | PredKind::InRangeF(..)
+            | PredKind::AtLeast(_)
+            | PredKind::AtMost(_)
+            | PredKind::MinLength(..)
+            | PredKind::MaxLength(..)
+            | PredKind::Length(..)
+            | PredKind::NonEmpty
+            | PredKind::IsoDate
+            | PredKind::Cron => {}
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    Some((lo, hi))
+}
+
+/// `Decimal` generation bounds `(lo, hi, scale)` as coefficients at `scale`,
+/// from a refinement (#2622). Unrefined draws over `[-1000.00, 1000.00]`.
+pub(super) fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u32) {
+    let mut scale = 2u32;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match &p.kind {
+                PredKind::InRangeD(a, b) => scale = scale.max(a.scale).max(b.scale),
+                PredKind::AtLeast(PredBound::Decimal(a))
+                | PredKind::AtMost(PredBound::Decimal(a)) => scale = scale.max(a.scale),
+                PredKind::InRangeDur(..)
+                | PredKind::NonNegative
+                | PredKind::Positive
+                | PredKind::Matches(..)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MinLength(..)
+                | PredKind::MaxLength(..)
+                | PredKind::Length(..)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
+            }
+        }
+    }
+    let at = |coef: &str, from: u32| -> Option<i128> {
+        coef.parse::<i128>()
+            .ok()?
+            .checked_mul(10i128.checked_pow(scale - from)?)
+    };
+    let (mut lo, mut hi) = (-100_000i128, 100_000i128);
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            match &p.kind {
+                PredKind::Positive => lo = lo.max(1),
+                PredKind::NonNegative => lo = lo.max(0),
+                PredKind::InRangeD(a, b) => {
+                    if let (Some(x), Some(y)) = (at(&a.coef, a.scale), at(&b.coef, b.scale)) {
+                        lo = x;
+                        hi = y;
+                    }
+                }
+                PredKind::AtLeast(PredBound::Decimal(a)) => {
+                    if let Some(x) = at(&a.coef, a.scale) {
+                        lo = lo.max(x);
+                    }
+                }
+                PredKind::AtMost(PredBound::Decimal(b)) => {
+                    if let Some(y) = at(&b.coef, b.scale) {
+                        hi = hi.min(y);
+                    }
+                }
+                PredKind::Matches(_)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MinLength(_)
+                | PredKind::MaxLength(_)
+                | PredKind::Length(_)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
+            }
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    (lo, hi, scale)
+}
+
+/// A TypeScript expression drawing a random inhabitant of `base` within
+/// `refinement`'s domain, unbranded — the draw [`refined_gen_ts`] brands, and
+/// the draw a record field with an inline `where` uses as is.
+pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
+        BaseType::Int => {
+            let (lo, hi, _) = int_bounds(refinement);
+            method_call(
+                ident("rng"),
+                "intWide",
+                vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
+            )
+        }
+        BaseType::Float => {
+            let (lo, hi) = float_bounds(refinement);
+            method_call(
+                ident("rng"),
+                "floatWide",
+                vec![
+                    num_lit(lo.to_string()),
+                    num_lit(hi.to_string()),
+                    TsExpr::Lit(TsLit::Bool(float_unbounded(refinement))),
+                ],
+            )
+        }
+        // #4121: a `Matches` or `IsoDate` draws members of the pattern or real dates.
+        BaseType::String if string_gen_spec(refinement).is_some() => method_call(
+            ident("rng"),
+            "matches",
+            vec![str_lit(string_gen_spec(refinement).unwrap_or_default())],
+        ),
+        BaseType::String => {
+            let min = str_min(refinement);
+            method_call(
+                ident("rng"),
+                "strWide",
+                vec![
+                    num_lit(min.to_string()),
+                    num_lit(str_max(refinement).to_string()),
+                ],
+            )
+        }
+        BaseType::Bool => method_call(ident("rng"), "bool", vec![]),
+        // #4199: an unrefined `Decimal` draws across scales and signs.
+        BaseType::Decimal if refinement.is_none() => {
+            method_call(ident("rng"), "decimalWide", vec![])
+        }
+        // #2622: a random coefficient at a fixed scale.
+        BaseType::Decimal => {
+            let (lo, hi, scale) = decimal_bounds(refinement);
+            decimal_node(
+                method_call(
+                    ident("rng"),
+                    "intWide",
+                    vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
+                ),
+                scale,
+            )
+        }
+        // #4199: a span or instant across signs and magnitudes, within a `Date`'s reach; a
+        // refined `Duration` draws within its bounds.
+        BaseType::Duration => match duration_bounds(refinement) {
+            Some((lo, hi)) => call(
+                ident("globalThis.Number"),
+                vec![method_call(
+                    ident("rng"),
+                    "int",
+                    vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
+                )],
+            ),
+            None => method_call(
+                ident("rng"),
+                "numWide",
+                vec![num_lit(MIN_TIME_MS), num_lit(MAX_TIME_MS)],
+            ),
+        },
+        BaseType::Instant => method_call(
+            ident("rng"),
+            "numWide",
+            vec![num_lit(MIN_TIME_MS), num_lit(MAX_TIME_MS)],
+        ),
+        BaseType::Bytes => method_call(ident("rng"), "bytes", vec![num_lit("0"), num_lit("64")]),
+    }
+}
+
+/// #4121: `__bynkMatchBoundary(<spec>, which)`: the shortest (`0`) or longest (`1`) member of a
+/// `Matches` or `IsoDate` string.
+fn match_boundary_ts(refinement: Option<&Refinement>, which: u32) -> TsExpr {
+    call(
+        ident("__bynkMatchBoundary"),
+        vec![
+            str_lit(string_gen_spec(refinement).unwrap_or_default()),
+            num_lit(which.to_string()),
+        ],
+    )
+}
+
+/// The canonical (boundary) inhabitant of `base` within `refinement`'s domain,
+/// unbranded: the refinement's floor, or a string of its minimum length.
+pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
+    match base {
+        BaseType::Int => {
+            let (lo, _, _) = int_bounds(refinement);
+            TsExpr::bigint(lo)
+        }
+        BaseType::Float => {
+            let (lo, _) = float_bounds(refinement);
+            num_lit(lo.to_string())
+        }
+        BaseType::String if string_gen_spec(refinement).is_some() => {
+            match_boundary_ts(refinement, 0)
+        }
+        BaseType::String => {
+            let min = str_min(refinement);
+            str_lit("x".repeat(min.max(0) as usize))
+        }
+        BaseType::Bool => TsExpr::Lit(TsLit::Bool(true)),
+        BaseType::Decimal => {
+            let (lo, hi, scale) = decimal_bounds(refinement);
+            // The value closest to zero the refinement admits.
+            let c = 0i128.clamp(lo, hi);
+            decimal_node(TsExpr::bigint(c), scale)
+        }
+        BaseType::Duration => match duration_bounds(refinement) {
+            Some((lo, _)) => num_lit(lo.to_string()),
+            None => base_canon_node(base),
+        },
+        BaseType::Instant | BaseType::Bytes => base_canon_node(base),
+    }
+}
+
+/// A TypeScript expression that draws a random inhabitant of `base` (refined by
+/// `refinement`), branded to `<name>` — via `<name>.unsafe(...)` for an opaque
+/// type, or an inline `as` cast for a refined/alias type (ADR 0182).
+pub(super) fn refined_gen_ts(
+    name: &str,
+    base: BaseType,
+    refinement: Option<&Refinement>,
+    is_opaque: bool,
+) -> TsExpr {
+    let draw = base_draw_ts(base, refinement);
+    emitter::ts_types::unchecked_construct_test_node(name, draw, is_opaque)
+}
+
+/// Coerce a Sum-variant-payload/Record-field value to `number` when its own
+/// resolved type draws/emits as `bigint` — a bare `Int`, or a refined/opaque
+/// `Int` (#1398). `gen_ts_for_ty`'s/`canon_ts_for_ty`'s own top-level
+/// `Base(Int)` arm draws/emits `bigint` — correct there, since a top-level
+/// `for all` binding's own boundaries/shrink machinery is bigint-typed
+/// throughout (the "P7.2: deferred, not narrowed" representation gap, #1426
+/// tracks its own further consequences). But a Sum variant's real compiled
+/// constructor and a Record's real compiled object shape both type an `Int`
+/// field `number` (`ts_type_ref_to_ts_type`'s own mapping) — including a
+/// refined/opaque one, which erases to `number & { __brand }`, not `bigint`
+/// — so a bigint-drawing payload/field value recursed into from *inside* a
+/// Sum/Record arm needs this coercion the top-level arm itself must not
+/// have. A refined/opaque `Int` (`Percent`, etc.) routes through
+/// `refined_gen_ts`'s/its `canon_ts_for_ty` sibling's own
+/// `unchecked_construct_test_node`-wrapped cast (`(rng.int(...) as any)` /
+/// `Pct.unsafe(rng.int(...))`) — that cast is compile-time only and does
+/// nothing to the runtime value, so it still needs this same coercion
+/// (review of #1428): confirmed the exact `TypeError: Cannot mix BigInt and
+/// other types` this issue names still reproduces for a refined-Int record
+/// field without it. `Number(...)` around either wrapper form is safe:
+/// `.unsafe`/`as any` are both identity at runtime, never anything more than
+/// a re-tag. Every other type's own recursive result is already
+/// number/string/bool/object-shaped, so this stays a no-op there. And the
+/// depth-exhaustion `undefined` sentinel (`canon_ts_for_ty`'s own `depth ==
+/// 0` early return, reachable through a self-recursive Sum whose *first*
+/// variant carries an `Int` payload — `prop_binding_generable` validates only
+/// that variant, `bynk-check/src/test_suites.rs`) is passed through
+/// unwrapped rather than turned into a silent `Number(undefined)` (`NaN`) —
+/// also review of #1428.
+pub(super) fn coerce_int_field(
+    t: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Arc<Types>,
+    value: TsExpr,
+) -> TsExpr {
+    if matches!(&value, TsExpr::Ident(s) if s == "undefined") {
+        return value;
+    }
+    if ty_draws_bigint(t, types, tys) {
+        call(ident("globalThis.Number"), vec![value])
+    } else {
+        value
+    }
+}
+
+/// Does `t` draw/emit as a JS `bigint` — a bare `Int`, or a refined/opaque
+/// type over one? The shared predicate behind [`coerce_int_field`]'s own
+/// `Number(…)`-wrap decision and [`destructure_vals`]'s "does this binding
+/// set need coercion at all" check (#1426).
+pub(super) fn ty_draws_bigint(
+    t: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Arc<Types>,
+) -> bool {
+    match &*tys.get(t) {
+        checker::Ty::Base(base) => matches!(base, BaseType::Int),
+        checker::Ty::Named { name, .. } => matches!(
+            types.get(name).map(|d| &d.body),
+            Some(TypeBody::Refined {
+                base: BaseType::Int,
+                ..
+            }) | Some(TypeBody::Opaque {
+                base: BaseType::Int,
+                ..
+            })
+        ),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Option(_)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_, _)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::List(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Set(_)
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => false,
+    }
+}
+
+/// Coerce a top-level `for all`/attack-parameter binding's own drawn value to
+/// `number` (#1426) — like [`coerce_int_field`], but for the bind site rather
+/// than a nested Sum/Record field, which needs a genuinely different result
+/// shape for a *named* refined/opaque `Int`, not just the same `Number(…)`
+/// wrap. Review of #1432, finding 1: a bare `Int` really does compile to
+/// plain `number` everywhere, so `Number(value)` alone is correct and
+/// sufficient there. But a refined/opaque `Int` (`Percent`, etc.) compiles to
+/// a *branded* type (`number & { readonly __brand: "Percent" }`,
+/// `emit_refined_type`) — a plain `Number(value)` local's own inferred type
+/// is bare `number`, not the brand, so passing it to a real function
+/// expecting the named type is a genuine new `tsc --strict` `TS2345` error
+/// this fix would otherwise introduce (confirmed: reverting to a bare
+/// `Number(…)` wrap here reproduces it for a minimal `fn label(p: Percent)`
+/// repro, which compiled and ran fine pre-#1426 since the pre-fix local was
+/// `any`, not a concrete type). Closed the same way `refined_gen_ts` already
+/// keeps a branded draw compiling — wrap the coerced `Number(…)` in `(… as
+/// any)`, restoring the escape hatch a plain array-destructured `any[]`
+/// element always had for this shape, while still fixing the *runtime* value
+/// (`as any` is compile-time only; the `Number(…)` underneath still runs).
+/// Every other type's own value (including a bare `Int`) is unaffected —
+/// only a *named* refined/opaque `Int` binding gets the extra wrap.
+pub(super) fn coerce_top_level_int_binding(
+    t: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Arc<Types>,
+    value: TsExpr,
+) -> TsExpr {
+    let is_named_int = matches!(
+        &*tys.get(t),
+        checker::Ty::Named { .. } if ty_draws_bigint(t, types, tys)
+    );
+    let coerced = coerce_int_field(t, types, tys, value);
+    if is_named_int {
+        TsExpr::As {
+            expr: Box::new(coerced),
+            ty: TsType::named("any"),
+        }
+    } else {
+        coerced
+    }
+}
+
+/// Destructure `__vals` into its named locals, coercing each `Int`-drawing
+/// (bare, refined, or opaque) binding's own runtime value to `number` at the
+/// bind site (#1426) via [`coerce_top_level_int_binding`]. `binding_gen`'s
+/// own boundaries/shrink machinery for a top-level `for all`/attack-parameter
+/// `Int` binding is deliberately `bigint`-typed throughout —
+/// `coerce_int_field`'s own doc comment names this as correct, since the
+/// shrink loop's `current[i]`/`vals[i]` elements must keep matching what
+/// `gens[i].shrink(v)` expects — but the *local* a predicate/attacked-function
+/// body evaluates ordinary Bynk `Int` arithmetic against must not stay
+/// `bigint`, or `n + 1` throws `TypeError: Cannot mix BigInt and other types`
+/// the instant it meets a `number` literal.  Never previously hit: every
+/// existing fixture's predicate either avoided arithmetic on a drawn `Int`
+/// entirely, or routed through a refined type's own compile-time-only `as
+/// any` cast (`refined_gen_ts`), which suppresses the *static* `tsc` error,
+/// not the *runtime* one. Reuses `coerce_int_field`'s own "does this type
+/// draw bigint" check — the same representation gap #1398/#1428 already
+/// closed for record/sum-field values, just at the binding site itself
+/// rather than a nested field; `binding_types[i]` is `None` when the
+/// binding's own type didn't resolve (mirrors `gens`' own
+/// `unwrap_or`/`undefined`-sentinel fallback above — `__vals[i]` is
+/// `undefined` there regardless of what type it "should" have been, so it
+/// passes through unwrapped either way).
+///
+/// Falls back to the original plain `const [a, b, ...] = __vals;` array
+/// destructure when *no* binding actually needs coercion — a record/sum/
+/// string/bool binding (the common case) draws its own top-level value
+/// already `number`/`string`/`boolean`/object-shaped, only a bare or
+/// refined/opaque `Int` binding draws `bigint` — so the common case emits
+/// byte-identical text to before this fix, and only a fixture with a real
+/// top-level `Int`-drawing binding sees its own destructure change shape.
+pub(super) fn destructure_vals(
+    names: &[String],
+    binding_types: &[Option<checker::TyId>],
+    types: Option<&HashMap<String, Arc<TypeDecl>>>,
+    tys: &Arc<Types>,
+) -> Vec<TsStmt> {
+    let needs_coercion = binding_types
+        .iter()
+        .any(|ty| matches!((ty, types), (Some(t), Some(types)) if ty_draws_bigint(*t, types, tys)));
+    if !needs_coercion {
+        return vec![TsStmt::const_stmt(
+            bynk_ts::TsBindingName::ArrayPattern(names.to_vec()),
+            None,
+            ident("__vals"),
+            None,
+        )];
+    }
+    names
+        .iter()
+        .zip(binding_types)
+        .enumerate()
+        .map(|(i, (name, ty))| {
+            let raw = TsExpr::Index {
+                object: Box::new(ident("__vals")),
+                index: Box::new(num_lit(i.to_string())),
+            };
+            let value = match (ty, types) {
+                (Some(t), Some(types)) => coerce_top_level_int_binding(*t, types, tys, raw),
+                _ => raw,
+            };
+            crate::ts_build::const_(name.clone(), value)
+        })
+        .collect()
+}
+
+/// A missing checker fact about the named `name`, reported at `site` (1B.5e, Decision G). The
+/// description is built with `concat`, not `format!`: a `format!` line reads as a TypeScript
+/// write to `ts_writes`' text scanner, and this one writes an error message.
+pub(super) fn missing_fact_named(site: FaultSite<'_>, what: &str, name: &str) -> TsExpr {
+    site.missing_fact([what, " `", name, "`"].concat())
+}
+
+/// A TypeScript expression drawing a random inhabitant of a resolved type using
+/// the in-scope `rng` — the property generator (DECISION P: a type is its own
+/// inhabitant space). Sums pick a random variant; records generate every field.
+pub(super) fn gen_ts_for_ty(
+    ty: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    depth: u32,
+    tys: &Arc<Types>,
+    site: FaultSite<'_>,
+) -> TsExpr {
+    if depth == 0 {
+        // #1429: a bare `1` here starved `canon_ts_for_ty`'s own recursion
+        // one level short of what `prop_binding_generable` (`bynk-check`)
+        // already promised was reachable *for the top-level bound type*.
+        // Both functions share the same recursion shape — `depth == 0`
+        // checked unconditionally at entry, one unit spent per `Sum`/
+        // `Record` step down into a field's own type, `Ty::Base` never
+        // itself gating on `depth` — so a type `prop_binding_generable`
+        // accepts within `PROP_GEN_DEPTH` is guaranteed to bottom out in
+        // `canon_ts_for_ty` within that same budget: a self-recursive type
+        // like `T = Base(n: Int) | Cons(tail: T)` previously exhausted
+        // this fallback's own budget one field short of `Base`'s terminal
+        // `n: Int`, landing a bare `undefined` inside a real, `number`-
+        // typed constructor argument (`T.Base(undefined)`, `tsc TS2345`).
+        //
+        // Review of #1434, finding 1: `prop_binding_generable` only ever
+        // descends a `Sum`'s *first* variant, but this function's own Sum
+        // branch (below) builds a thunk for *every* variant — so `ty` here
+        // can be a type the checker never validated at all (reached only
+        // through a non-first variant, e.g. `Nope(b: Bad)` on
+        // `T = Plain(n: Int) | Nope(b: Bad)`, where `Bad = Node(l: Bad, r:
+        // Bad) | Leaf(n: Int)` is itself first-variant-unterminating). For
+        // such a type hand it the full `PROP_GEN_DEPTH` budget regardless,
+        // and `canon_ts_for_ty`'s own "always expand the first variant"
+        // strategy walks a full branching tree before ever reaching the
+        // `Leaf` escape — confirmed to reproduce a real multi-second,
+        // 170MB+ emit for exactly this shape (a plausible emit-time
+        // hang/OOM, not merely an invalid file) once this fallback started
+        // handing out 12 levels of budget instead of 1.
+        //
+        // So: only spend the full budget when the checker actually
+        // promised `ty` itself bottoms out within it: that's exactly what
+        // `prop_binding_generable` decides, and — same "first variant
+        // only, `.all` short-circuits on the first failing field" shape as
+        // `canon_ts_for_ty` — costs at most `PROP_GEN_DEPTH` recursive
+        // calls to answer, not a tree walk. Any other type falls back to
+        // the original, deliberately conservative `1` — the same "produces
+        // a small invalid file fast" behaviour this fallback always had
+        // for a type the checker never vouched for, not a regression.
+        if test_suites::prop_binding_generable(ty, types, test_suites::PROP_GEN_DEPTH, tys) {
+            return canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
+        }
+        return canon_ts_for_ty(ty, types, 1, tys, site);
+    }
+    match &*tys.get(ty) {
+        checker::Ty::Base(b) => base_draw_ts(*b, None),
+        checker::Ty::Named { name, .. } => {
+            let Some(decl) = types.get(name) else {
+                return missing_fact_named(site, "a declaration of the type", name);
+            };
+            match &decl.body {
+                TypeBody::Refined {
+                    base, refinement, ..
+                }
+                | TypeBody::Opaque {
+                    base, refinement, ..
+                } => refined_gen_ts(
+                    name,
+                    *base,
+                    refinement.as_ref(),
+                    matches!(decl.body, TypeBody::Opaque { .. }),
+                ),
+                TypeBody::Sum(s) => {
+                    let thunks: Vec<TsExpr> = s
+                        .variants
+                        .iter()
+                        .map(|v| {
+                            let body = if v.payload.is_empty() {
+                                member(ident(name), &v.name.name)
+                            } else {
+                                let args: Vec<TsExpr> = v
+                                    .payload
+                                    .iter()
+                                    .map(|f| {
+                                        checker::resolve_type_ref(&f.type_ref, types, tys)
+                                            .map(|t| {
+                                                coerce_int_field(
+                                                    t,
+                                                    types,
+                                                    tys,
+                                                    gen_ts_for_ty(t, types, depth - 1, tys, site),
+                                                )
+                                            })
+                                            .unwrap_or_else(|| {
+                                                site.missing_fact(
+                                                    "a resolved type for a sum variant's field",
+                                                )
+                                            })
+                                    })
+                                    .collect();
+                                call(member(ident(name), &v.name.name), args)
+                            };
+                            TsExpr::Arrow {
+                                params: Vec::new(),
+                                is_async: false,
+                                generics: Vec::new(),
+                                return_type: None,
+                                body: Box::new(TsArrowBody::Expr(Box::new(body))),
+                            }
+                        })
+                        .collect();
+                    if thunks.is_empty() {
+                        missing_fact_named(site, "a variant of the sum", name)
+                    } else {
+                        method_call(ident("rng"), "pick", vec![TsExpr::array(thunks)])
+                    }
+                }
+                TypeBody::Record(r) => {
+                    let fields: Vec<(String, TsExpr)> = r
+                        .fields
+                        .iter()
+                        .map(|f| {
+                            let g = checker::resolve_type_ref(&f.type_ref, types, tys)
+                                .map(|t| {
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_draw_ts(*b, Some(r))
+                                        }
+                                        _ => gen_ts_for_ty(t, types, depth - 1, tys, site),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
+                                })
+                                .unwrap_or_else(|| {
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
+                                });
+                            (f.name.name.clone(), g)
+                        })
+                        .collect();
+                    TsExpr::object(fields)
+                }
+            }
+        }
+        // #4120: a collection or an option draws from its element's generator.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_gen_ts(ty, types, depth, tys, site)
+            .unwrap_or_else(|| site.missing_fact("a generator for a collection")),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_, _)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => site.missing_fact(
+            "a generable type for this property binding (the checker refuses one it cannot \
+             generate, `bynk.val.needs_pin`)",
+        ),
+    }
+}
+
+/// A canonical (deterministic, boundary) inhabitant of a resolved type — the
+/// boundary value the runner draws first (refinement floor / minimum length /
+/// first variant), and the shrink target for sums.
+pub(super) fn canon_ts_for_ty(
+    ty: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    depth: u32,
+    tys: &Arc<Types>,
+    site: FaultSite<'_>,
+) -> TsExpr {
+    if depth == 0 {
+        return ident("undefined");
+    }
+    match &*tys.get(ty) {
+        checker::Ty::Base(BaseType::Int) => num_lit("0n"),
+        checker::Ty::Base(BaseType::String) => str_lit(""),
+        checker::Ty::Base(BaseType::Bool) => TsExpr::Lit(TsLit::Bool(true)),
+        checker::Ty::Base(BaseType::Float) => num_lit("0"),
+        checker::Ty::Base(b) => base_canon_node(*b),
+        checker::Ty::Named { name, .. } => {
+            let Some(decl) = types.get(name) else {
+                return missing_fact_named(site, "a declaration of the type", name);
+            };
+            match &decl.body {
+                TypeBody::Refined {
+                    base, refinement, ..
+                }
+                | TypeBody::Opaque {
+                    base, refinement, ..
+                } => {
+                    let lit = base_canon_ts(*base, refinement.as_ref());
+                    emitter::ts_types::unchecked_construct_test_node(
+                        name,
+                        lit,
+                        matches!(decl.body, TypeBody::Opaque { .. }),
+                    )
+                }
+                TypeBody::Sum(s) => match s.variants.first() {
+                    None => missing_fact_named(site, "a body for the type", name),
+                    Some(v) if v.payload.is_empty() => member(ident(name), &v.name.name),
+                    Some(v) => {
+                        let args: Vec<TsExpr> = v
+                            .payload
+                            .iter()
+                            .map(|f| {
+                                checker::resolve_type_ref(&f.type_ref, types, tys)
+                                    .map(|t| {
+                                        coerce_int_field(
+                                            t,
+                                            types,
+                                            tys,
+                                            canon_ts_for_ty(t, types, depth - 1, tys, site),
+                                        )
+                                    })
+                                    .unwrap_or_else(|| {
+                                        site.missing_fact(
+                                            "a resolved type for a sum variant's field",
+                                        )
+                                    })
+                            })
+                            .collect();
+                        call(member(ident(name), &v.name.name), args)
+                    }
+                },
+                TypeBody::Record(r) => {
+                    let fields: Vec<(String, TsExpr)> = r
+                        .fields
+                        .iter()
+                        .map(|f| {
+                            let g = checker::resolve_type_ref(&f.type_ref, types, tys)
+                                .map(|t| {
+                                    let v = match (&*tys.get(t), f.refinement.as_ref()) {
+                                        // #2667: an inline `where` on a base-typed
+                                        // field draws from its own domain, as a
+                                        // declared refined type over that base does.
+                                        (checker::Ty::Base(b), Some(r)) => {
+                                            base_canon_ts(*b, Some(r))
+                                        }
+                                        _ => canon_ts_for_ty(t, types, depth - 1, tys, site),
+                                    };
+                                    coerce_int_field(t, types, tys, v)
+                                })
+                                .unwrap_or_else(|| {
+                                    missing_fact_named(
+                                        site,
+                                        "a resolved type for the field",
+                                        &f.name.name,
+                                    )
+                                });
+                            (f.name.name.clone(), g)
+                        })
+                        .collect();
+                    TsExpr::object(fields)
+                }
+            }
+        }
+        // #4120: its canonical value is the empty collection, or `None`.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_canon_ts(ty, tys)
+            .unwrap_or_else(|| site.missing_fact("a canonical value for a collection")),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_, _)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => site.missing_fact(
+            "a generable type for this property binding (the checker refuses one it cannot \
+             generate, `bynk.val.needs_pin`)",
+        ),
+    }
+}
+
+/// The generator descriptor for one `for all` binding: boundary values, a random
+/// generator, and a shrinker (all real TypeScript expressions, evaluated in the
+/// runner's scope where the type constructors are in scope).
+pub(super) struct BindingGen {
+    pub(super) boundaries: Vec<TsExpr>,
+    pub(super) gen_ts: TsExpr,
+    pub(super) shrink: TsExpr,
+    /// #4229: where a `Duration` or `Instant` sits in the type, for the printer. `None` when the
+    /// type holds neither (the type-blind printer is then enough).
+    pub(super) show_shape: Option<TsExpr>,
+}
+
+/// Build the generator descriptor for a binding whose resolved type is `ty`.
+pub(super) fn binding_gen(
+    ty: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Arc<Types>,
+    site: FaultSite<'_>,
+) -> BindingGen {
+    let gen_ts = gen_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
+    let (boundaries, shrink) = match &*tys.get(ty) {
+        checker::Ty::Base(BaseType::Int) => {
+            let (lo, hi, floor) = int_bounds(None);
+            (
+                vec![
+                    TsExpr::bigint(floor),
+                    TsExpr::bigint(hi),
+                    TsExpr::bigint(lo),
+                    TsExpr::bigint(1),
+                    TsExpr::bigint(-1),
+                ],
+                call(
+                    ident("__bynkShrinkInt"),
+                    vec![ident("v"), TsExpr::bigint(floor)],
+                ),
+            )
+        }
+        // #4199: the boundaries that commonly break code, per plain type.
+        checker::Ty::Base(BaseType::String) => (
+            ["", " ", "A", "\n", "é", "😀"]
+                .into_iter()
+                .map(str_lit)
+                .collect(),
+            call(ident("__bynkShrinkString"), vec![ident("v"), num_lit("0")]),
+        ),
+        checker::Ty::Base(BaseType::Float) => (
+            ["0", "-0", "1", "-1", "1e300", "-1e300", "5e-324"]
+                .into_iter()
+                .map(num_lit)
+                .collect(),
+            call(ident("__bynkShrinkNum"), vec![ident("v"), num_lit("0")]),
+        ),
+        checker::Ty::Base(BaseType::Duration | BaseType::Instant) => (
+            ["0", "1", "-1", "86400000", MIN_TIME_MS, MAX_TIME_MS]
+                .into_iter()
+                .map(num_lit)
+                .collect(),
+            call(ident("__bynkShrinkMillis"), vec![ident("v")]),
+        ),
+        checker::Ty::Base(BaseType::Decimal) => (
+            [(0i64, 0u32), (1, 0), (-1, 0), (5, 2), (-5, 2), (12345, 3)]
+                .into_iter()
+                .map(|(c, sc)| decimal_node(TsExpr::bigint(c as i128), sc))
+                .collect(),
+            call(ident("__bynkShrinkDecimal"), vec![ident("v")]),
+        ),
+        checker::Ty::Base(BaseType::Bytes) => (
+            [vec![], vec!["0"], vec!["255"], vec!["0", "255"]]
+                .into_iter()
+                .map(|bytes| {
+                    new(
+                        member(ident("globalThis"), "Uint8Array"),
+                        vec![TsExpr::array(bytes.into_iter().map(num_lit).collect())],
+                    )
+                })
+                .collect(),
+            call(ident("__bynkShrinkBytes"), vec![ident("v")]),
+        ),
+        checker::Ty::Base(BaseType::Bool) => (
+            vec![
+                TsExpr::Lit(TsLit::Bool(true)),
+                TsExpr::Lit(TsLit::Bool(false)),
+            ],
+            TsExpr::Paren(Box::new(cond_expr(
+                ident("v"),
+                TsExpr::array(vec![TsExpr::Lit(TsLit::Bool(false))]),
+                TsExpr::array(vec![]),
+            ))),
+        ),
+        checker::Ty::Named { name, .. } => match types.get(name).map(|d| &d.body) {
+            Some(TypeBody::Refined {
+                base, refinement, ..
+            })
+            | Some(TypeBody::Opaque {
+                base, refinement, ..
+            }) => {
+                // ADR 0182: brand via `.unsafe` for opaque, inline `as` cast for
+                // refined/alias. The or-pattern can't capture which variant, so
+                // re-derive it by name.
+                let is_opaque = matches!(
+                    types.get(name).map(|d| &d.body),
+                    Some(TypeBody::Opaque { .. })
+                );
+                match base {
+                    BaseType::Int => {
+                        let (lo, hi, floor) = int_bounds(refinement.as_ref());
+                        let brand = |value: TsExpr| {
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
+                        };
+                        (
+                            vec![brand(TsExpr::bigint(lo)), brand(TsExpr::bigint(hi))],
+                            method_call(
+                                call(
+                                    ident("__bynkShrinkInt"),
+                                    vec![ident("v"), TsExpr::bigint(floor)],
+                                ),
+                                "map",
+                                vec![TsExpr::Arrow {
+                                    params: vec![TsParam::new(
+                                        "__n".to_string(),
+                                        Some(TsType::named("bigint")),
+                                    )],
+                                    is_async: false,
+                                    generics: Vec::new(),
+                                    return_type: None,
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__n",
+                                    ))))),
+                                }],
+                            ),
+                        )
+                    }
+                    BaseType::String => {
+                        let min = str_min(refinement.as_ref());
+                        let brand = |value: TsExpr| {
+                            emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
+                        };
+                        // #4121: the shortest and the longest member, and a shrink that keeps
+                        // every candidate a member.
+                        let spec = string_gen_spec(refinement.as_ref());
+                        let (boundaries, shrunk) = match &spec {
+                            Some(spec) => (
+                                vec![
+                                    brand(match_boundary_ts(refinement.as_ref(), 0)),
+                                    brand(match_boundary_ts(refinement.as_ref(), 1)),
+                                ],
+                                call(
+                                    ident("__bynkShrinkMatch"),
+                                    vec![ident("v"), str_lit(spec.clone())],
+                                ),
+                            ),
+                            None => (
+                                vec![brand(str_lit("x".repeat(min.max(0) as usize)))],
+                                call(
+                                    ident("__bynkShrinkString"),
+                                    vec![ident("v"), num_lit(min.to_string())],
+                                ),
+                            ),
+                        };
+                        (
+                            boundaries,
+                            method_call(
+                                shrunk,
+                                "map",
+                                vec![TsExpr::Arrow {
+                                    params: vec![TsParam::new(
+                                        "__s".to_string(),
+                                        Some(TsType::named("string")),
+                                    )],
+                                    is_async: false,
+                                    generics: Vec::new(),
+                                    return_type: None,
+                                    body: Box::new(TsArrowBody::Expr(Box::new(brand(ident(
+                                        "__s",
+                                    ))))),
+                                }],
+                            ),
+                        )
+                    }
+                    BaseType::Float
+                    | BaseType::Bool
+                    | BaseType::Duration
+                    | BaseType::Instant
+                    | BaseType::Bytes
+                    | BaseType::Decimal => (
+                        vec![canon_ts_for_ty(
+                            ty,
+                            types,
+                            test_suites::PROP_GEN_DEPTH,
+                            tys,
+                            site,
+                        )],
+                        TsExpr::array(vec![]),
+                    ),
+                }
+            }
+            Some(TypeBody::Sum(_)) => {
+                let canon = canon_ts_for_ty(ty, types, test_suites::PROP_GEN_DEPTH, tys, site);
+                (vec![canon.clone()], TsExpr::array(vec![canon]))
+            }
+            Some(TypeBody::Record(_)) | None => (
+                vec![canon_ts_for_ty(
+                    ty,
+                    types,
+                    test_suites::PROP_GEN_DEPTH,
+                    tys,
+                    site,
+                )],
+                TsExpr::array(vec![]),
+            ),
+        },
+        // #4120: the empty collection and a one-element one; shrinks by dropping, then shrinking.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_boundaries_shrink(ty, types, tys, site)
+            .unwrap_or_else(|| (Vec::new(), TsExpr::array(vec![]))),
+        checker::Ty::Error
+        | checker::Ty::Never
+        | checker::Ty::Result(..)
+        | checker::Ty::Effect(_)
+        | checker::Ty::HttpResult(_, _)
+        | checker::Ty::QueueResult
+        | checker::Ty::HttpOutcome(_)
+        | checker::Ty::BoundaryRejection
+        | checker::Ty::Asset
+        | checker::Ty::RequestHeaders
+        | checker::Ty::RequestQuery
+        | checker::Ty::RequestCookies
+        | checker::Ty::TokenClaims
+        | checker::Ty::Query(_)
+        | checker::Ty::Stream(_)
+        | checker::Ty::Connection(_)
+        | checker::Ty::TestConnection(_)
+        | checker::Ty::ValidationError
+        | checker::Ty::DecodeError
+        | checker::Ty::Unit
+        | checker::Ty::Actor(_)
+        | checker::Ty::ActorSum(_)
+        | checker::Ty::Fn { .. }
+        | checker::Ty::Var(_) => (Vec::new(), TsExpr::array(vec![])),
+    };
+    BindingGen {
+        boundaries,
+        gen_ts,
+        shrink,
+        show_shape: super::show_shape::show_shape(ty, types, tys),
+    }
+}
+
+/// `{ [name: "…",] boundaries: […], gen: (rng: any) => …, shrink: (v: any) => …,
+/// show: (v: any) => __bynkShow(v) }` — the one generator-descriptor object
+/// shape [`emit_test_property_function`]/[`emit_test_history_property_function`]/
+/// [`emit_contract_attack_function`] each build once per binding/param, now
+/// directly from `binding_gen`'s own real `TsExpr` fields (Arc C slice A,
+/// #1395) instead of printing them back to text and re-embedding via
+/// `format!` — the seam those three functions' own doc comments named as
+/// "not yet converted" is closed here. `name` is absent for a history
+/// handler's own per-param generator (no `name` key at all in that shape).
+pub(super) fn gen_descriptor_entry(name: Option<TsExpr>, bg: &BindingGen) -> TsExpr {
+    let mut entries: Vec<(String, TsExpr)> = Vec::new();
+    if let Some(n) = name {
+        entries.push(("name".to_string(), n));
+    }
+    entries.push((
+        "boundaries".to_string(),
+        TsExpr::array(bg.boundaries.clone()),
+    ));
+    entries.push((
+        "gen".to_string(),
+        TsExpr::Arrow {
+            params: vec![TsParam::new("rng".to_string(), Some(TsType::named("any")))],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            // #1397: an unparenthesised object-literal arrow body parses as
+            // a block (`{ a: … }` reads `a:` as a statement label, and a
+            // bare `{}` reads as an empty block), so a record-typed binding's
+            // `TsExpr::Object` is wrapped in `TsExpr::Paren` here, the one
+            // choke point all three call sites share.
+            body: Box::new(TsArrowBody::Expr(Box::new(
+                if matches!(&bg.gen_ts, TsExpr::Object { .. }) {
+                    TsExpr::Paren(Box::new(bg.gen_ts.clone()))
+                } else {
+                    bg.gen_ts.clone()
+                },
+            ))),
+        },
+    ));
+    entries.push((
+        "shrink".to_string(),
+        TsExpr::Arrow {
+            params: vec![TsParam::new("v".to_string(), Some(TsType::named("any")))],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(bg.shrink.clone()))),
+        },
+    ));
+    entries.push((
+        "show".to_string(),
+        TsExpr::Arrow {
+            params: vec![TsParam::new("v".to_string(), Some(TsType::named("any")))],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            // #4229: a type holding a `Duration` or `Instant` prints through its shape.
+            body: Box::new(TsArrowBody::Expr(Box::new(match &bg.show_shape {
+                Some(shape) => call(ident("__bynkShowTyped"), vec![ident("v"), shape.clone()]),
+                None => call(ident("__bynkShow"), vec![ident("v")]),
+            }))),
+        },
+    ));
+    TsExpr::object(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    /// A fault site over a throwaway sink: these tests assert what the draw builds, and a
+    /// recorded fault would be the unit's own failure, not theirs.
+    fn fault_site(sink: &crate::emitter::RuntimeUse) -> FaultSite<'_> {
+        FaultSite {
+            sink,
+            span: bynk_syntax::span::Span::default(),
+        }
+    }
+
+    use super::super::test_support::{base, named};
+    use super::*;
+    use bynk_syntax::ast::Trivia;
+    use bynk_syntax::ast::{BaseType, Ident, TypeRef};
+    use bynk_syntax::span::Span;
+
+    fn refined_int_decl(name: &str) -> TypeDecl {
+        TypeDecl {
+            annotations: Vec::new(),
+            derives: Vec::new(),
+            derives_kw: None,
+            name: Ident {
+                name: name.to_string(),
+                span: Span::default(),
+            },
+            type_params: Vec::new(),
+            body: TypeBody::Refined {
+                base: BaseType::Int,
+                base_span: Span::default(),
+                refinement: None,
+            },
+            documentation: None,
+            span: Span::default(),
+            trivia: Trivia::default(),
+            private: None,
+        }
+    }
+
+    fn opaque_int_decl(name: &str) -> TypeDecl {
+        TypeDecl {
+            annotations: Vec::new(),
+            derives: Vec::new(),
+            derives_kw: None,
+            name: Ident {
+                name: name.to_string(),
+                span: Span::default(),
+            },
+            type_params: Vec::new(),
+            body: TypeBody::Opaque {
+                base: BaseType::Int,
+                base_span: Span::default(),
+                refinement: None,
+            },
+            documentation: None,
+            span: Span::default(),
+            trivia: Trivia::default(),
+            private: None,
+        }
+    }
+
+    #[test]
+    fn coerce_int_field_wraps_a_bare_int_draw_in_number() {
+        let tys = Arc::new(Types::new());
+        let int_ty = tys.intern(checker::Ty::Base(BaseType::Int));
+        let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        let draw = method_call(
+            ident("rng"),
+            "int",
+            vec![TsExpr::bigint("-1000"), TsExpr::bigint("1000")],
+        );
+
+        let coerced = coerce_int_field(int_ty, &types, &tys, draw);
+        assert_eq!(
+            bynk_ts::print_expr(&coerced),
+            "globalThis.Number(rng.int(-1000n, 1000n))"
+        );
+    }
+
+    #[test]
+    fn coerce_int_field_wraps_a_refined_int_field_too() {
+        // Review of #1428: `refined_gen_ts`'s own `(value as any)` cast is
+        // compile-time only — the runtime value underneath is still a real
+        // bigint, so a refined-Int payload/field needs the same coercion a
+        // bare Int does, or the exact `TypeError: Cannot mix BigInt and
+        // other types` #1398 names still reproduces one type-alias away.
+        let tys = Arc::new(Types::new());
+        let mut types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        types.insert("Pct".to_string(), Arc::new(refined_int_decl("Pct")));
+        let pct_ty = tys.intern(checker::Ty::Named {
+            name: "Pct".to_string(),
+            kind: checker::NamedKind::Refined(BaseType::Int),
+            args: Vec::new(),
+        });
+        let draw = TsExpr::Paren(Box::new(as_expr(
+            method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            ),
+            any_type(),
+        )));
+
+        let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
+        assert_eq!(
+            bynk_ts::print_expr(&coerced),
+            "globalThis.Number((rng.int(0n, 100n) as any))"
+        );
+    }
+
+    #[test]
+    fn coerce_int_field_wraps_an_opaque_int_field_too() {
+        let tys = Arc::new(Types::new());
+        let mut types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        types.insert("Pct".to_string(), Arc::new(opaque_int_decl("Pct")));
+        let pct_ty = tys.intern(checker::Ty::Named {
+            name: "Pct".to_string(),
+            kind: checker::NamedKind::Opaque(BaseType::Int),
+            args: Vec::new(),
+        });
+        let draw = call(
+            ident("Pct.unsafe"),
+            vec![method_call(
+                ident("rng"),
+                "int",
+                vec![TsExpr::bigint("0"), TsExpr::bigint("100")],
+            )],
+        );
+
+        let coerced = coerce_int_field(pct_ty, &types, &tys, draw);
+        assert_eq!(
+            bynk_ts::print_expr(&coerced),
+            "globalThis.Number(Pct.unsafe(rng.int(0n, 100n)))"
+        );
+    }
+
+    #[test]
+    fn coerce_int_field_passes_the_undefined_sentinel_through_unwrapped() {
+        // Review of #1428: the depth-exhaustion `undefined` sentinel
+        // (`canon_ts_for_ty`'s own `depth == 0` early return) must not
+        // become `Number(undefined)` — a silent `NaN` where the unwrapped
+        // sentinel at least fails loudly (a separate, pre-existing gap
+        // tracked as #1429, not fixed here).
+        let tys = Arc::new(Types::new());
+        let int_ty = tys.intern(checker::Ty::Base(BaseType::Int));
+        let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+
+        let coerced = coerce_int_field(int_ty, &types, &tys, ident("undefined"));
+        assert_eq!(bynk_ts::print_expr(&coerced), "undefined");
+    }
+
+    #[test]
+    fn coerce_int_field_leaves_a_non_int_value_untouched() {
+        let tys = Arc::new(Types::new());
+        let string_ty = tys.intern(checker::Ty::Base(BaseType::String));
+        let types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        let draw = method_call(ident("rng"), "str", vec![num_lit("0"), num_lit("8")]);
+
+        let coerced = coerce_int_field(string_ty, &types, &tys, draw);
+        assert_eq!(bynk_ts::print_expr(&coerced), "rng.str(0, 8)");
+    }
+
+    // -- gen_ts_for_ty's depth-exhaustion fallback (#1429, review of #1434) --
+
+    fn sum_decl(name: &str, variants: Vec<(&str, Vec<(&str, TypeRef)>)>) -> TypeDecl {
+        TypeDecl {
+            annotations: Vec::new(),
+            derives: Vec::new(),
+            derives_kw: None,
+            name: Ident {
+                name: name.to_string(),
+                span: Span::default(),
+            },
+            type_params: Vec::new(),
+            body: TypeBody::Sum(bynk_syntax::ast::SumBody {
+                variants: variants
+                    .into_iter()
+                    .map(|(vname, fields)| bynk_syntax::ast::Variant {
+                        annotations: Vec::new(),
+                        documentation: None,
+                        name: Ident {
+                            name: vname.to_string(),
+                            span: Span::default(),
+                        },
+                        payload: fields
+                            .into_iter()
+                            .map(|(fname, type_ref)| bynk_syntax::ast::VariantField {
+                                annotations: Vec::new(),
+                                documentation: None,
+                                name: Ident {
+                                    name: fname.to_string(),
+                                    span: Span::default(),
+                                },
+                                type_ref,
+                                span: Span::default(),
+                            })
+                            .collect(),
+                        span: Span::default(),
+                        trivia: Default::default(),
+                    })
+                    .collect(),
+                embeds: Vec::new(),
+                span: Span::default(),
+                trailing_comments: Default::default(),
+            }),
+            documentation: None,
+            span: Span::default(),
+            trivia: Trivia::default(),
+            private: None,
+        }
+    }
+
+    #[test]
+    fn gen_ts_for_ty_bottoms_out_a_first_variant_recursive_sum_the_checker_validated() {
+        // #1429's own repro: `T = Base(n: Int) | Cons(tail: T)`. The checker
+        // accepts `T` as a `for all` binding (`prop_binding_generable` only
+        // needs the first variant, `Base`, to be generable) — the fallback
+        // must be able to actually build a `Base(n: Int)` once generation
+        // depth is exhausted deep inside a `Cons` chain, not `undefined`.
+        let tys = Arc::new(Types::new());
+        let mut types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        types.insert(
+            "T".to_string(),
+            Arc::new(sum_decl(
+                "T",
+                vec![
+                    ("Base", vec![("n", base(BaseType::Int))]),
+                    ("Cons", vec![("tail", named("T"))]),
+                ],
+            )),
+        );
+        let t_ty = tys.intern(checker::Ty::Named {
+            name: "T".to_string(),
+            kind: checker::NamedKind::Sum,
+            args: Vec::new(),
+        });
+
+        // depth: 0 forces the fallback immediately, the same state
+        // `gen_ts_for_ty`'s own recursion reaches once its budget runs out.
+        let sink = crate::emitter::RuntimeUse::default();
+        let generated = gen_ts_for_ty(t_ty, &types, 0, &tys, fault_site(&sink));
+        let printed = bynk_ts::print_expr(&generated);
+        assert!(
+            !printed.contains("undefined"),
+            "a checker-validated recursive sum must not fall back to `undefined`, got: {printed}"
+        );
+        assert!(
+            printed.contains("T.Base("),
+            "expected the fallback to build T's own first (validated) variant, got: {printed}"
+        );
+    }
+
+    #[test]
+    fn gen_ts_for_ty_stays_bounded_for_a_branching_variant_the_checker_never_validated() {
+        // Review of #1434, finding 1: `prop_binding_generable` only ever
+        // descends a sum's *first* variant, but `gen_ts_for_ty`'s own Sum
+        // branch builds a thunk for *every* variant — so a non-first
+        // variant's field type can reach the depth-0 fallback fully
+        // unvalidated. `Bad`'s own first variant (`Node`) is branching and
+        // never bottoms out on its own; handing the fallback the full
+        // `PROP_GEN_DEPTH` budget for `Bad` (not just `T`, the type the
+        // checker actually validated) would walk a full binary tree before
+        // ever reaching `Leaf`'s escape — confirmed to reproduce a real
+        // ~176MB, 50+ second emit for this exact shape before the guard
+        // below. The fallback must recognise `Bad` itself was never
+        // validated and fall back to the original, small budget for it.
+        let tys = Arc::new(Types::new());
+        let mut types: HashMap<String, Arc<TypeDecl>> = HashMap::new();
+        types.insert(
+            "Bad".to_string(),
+            Arc::new(sum_decl(
+                "Bad",
+                vec![
+                    ("Node", vec![("l", named("Bad")), ("r", named("Bad"))]),
+                    ("Leaf", vec![("n", base(BaseType::Int))]),
+                ],
+            )),
+        );
+        types.insert(
+            "T".to_string(),
+            Arc::new(sum_decl(
+                "T",
+                vec![
+                    ("Plain", vec![("n", base(BaseType::Int))]),
+                    ("Nope", vec![("b", named("Bad"))]),
+                ],
+            )),
+        );
+        let t_ty = tys.intern(checker::Ty::Named {
+            name: "T".to_string(),
+            kind: checker::NamedKind::Sum,
+            args: Vec::new(),
+        });
+
+        // depth: 1 reaches `Nope`'s own `b: Bad` field at depth 0 — `T`
+        // itself is still checker-validated (via `Plain`), so this isn't
+        // testing the depth-0-at-the-top-level case above, only what
+        // happens once the *nested*, unvalidated `Bad` field is reached.
+        let sink = crate::emitter::RuntimeUse::default();
+        let generated = gen_ts_for_ty(t_ty, &types, 1, &tys, fault_site(&sink));
+        let printed = bynk_ts::print_expr(&generated);
+        // A full `PROP_GEN_DEPTH`-deep expansion of `Bad`'s own branching
+        // first variant is tens of thousands of characters at minimum
+        // (confirmed empirically: ~200KB unguarded vs. ~200 bytes guarded,
+        // for the equivalent whole-fixture emit); a generous bound well
+        // below that catches a regression without pinning an exact byte
+        // count against unrelated formatting changes.
+        assert!(
+            printed.len() < 2_000,
+            "expected a bounded fallback for Bad's own unvalidated branching \
+             variant, got {} chars (a regression here likely means the depth-0 \
+             fallback stopped checking prop_binding_generable before spending \
+             the full PROP_GEN_DEPTH budget): {printed}",
+            printed.len()
+        );
+    }
+}

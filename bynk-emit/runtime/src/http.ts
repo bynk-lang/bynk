@@ -1,27 +1,72 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
-import type { DecodeError } from "./errors.ts";
+import type { DecodeError, DecodeErrorKind } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
-import type { HttpResult } from "./httpresult.ts";
+import type { ContentRange, HttpResult, SseEvent } from "./httpresult.ts";
+
+// #3908: the path's segments, percent-decoded once (empty segments dropped, so
+// `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
+// percent-encoding: no route can match such a path, and it is the client's
+// error, not a fault.
+export function decodePath(path: string): string[] | null {
+  const out: string[] = [];
+  for (const raw of path.split("/")) {
+    if (raw === "") continue;
+    try {
+      out.push(decodeURIComponent(raw));
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
 
 // Match a path pattern (e.g., "/orders/:id") against a request path.
-// Returns the captured parameter map, or null on no match.
+// Returns the captured parameter map, or null on no match. Empty segments are
+// insignificant (#3909: `/items`, `/items/` and `//items` are one path), and
+// every segment is compared percent-decoded, a literal as much as a parameter,
+// so `/caf%C3%A9` reaches `GET /café`. #3908: a path with malformed
+// percent-encoding whose shape the pattern would match answers `malformed` (a
+// description naming the segment's position) instead of throwing, so the route
+// answers a `400 MalformedPath` before its handler, actor or body is touched.
 export function matchPath(
   pattern: string,
   path: string,
-): { params: Record<string, string> } | null {
+): { params: Record<string, string>; malformed?: string } | null {
   const patternSegments = pattern.split("/").filter(Boolean);
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
   const params: Record<string, string> = {};
+  let malformedAt = 0;
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i];
-    if (p.startsWith(":")) {
-      params[p.slice(1)] = decodeURIComponent(pathSegments[i]);
-    } else if (p !== pathSegments[i]) {
-      return null;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(pathSegments[i]);
+    } catch {
+      // No literal equals undecodable text; a parameter takes the 400 below.
+      if (!p.startsWith(":")) return null;
+      if (malformedAt === 0) malformedAt = i + 1;
+      continue;
     }
+    if (p.startsWith(":")) params[p.slice(1)] = decoded;
+    else if (p !== decoded) return null;
+  }
+  if (malformedAt !== 0) {
+    return { params: {}, malformed: `path segment ${malformedAt} is not valid percent-encoding` };
   }
   return { params };
+}
+
+// #3909: the `Allow` of a path whose routes overlap. `base` is the `Allow` of the
+// routes that match every request to the matched pattern; `extras` are routes that
+// match only some of them, each with its own `Allow`, added when `path` is one of
+// theirs. The union is alphabetical, as the compiler derives a single route's.
+export function allowUnion(base: string, path: string, extras: readonly (readonly [string, string])[]): string {
+  const methods = new Set(base.split(", "));
+  for (const [pattern, allow] of extras) {
+    if (matchPath(pattern, path) !== null) for (const m of allow.split(", ")) methods.add(m);
+  }
+  return [...methods].sort().join(", ");
 }
 
 // The HTTP status code each HttpResult variant maps to. Kept in sync with
@@ -37,9 +82,11 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Created: 201,
   Accepted: 202,
   NoContent: 204,
+  PartialContent: 206,
   MovedPermanently: 301,
   Found: 302,
   SeeOther: 303,
+  NotModified: 304,
   TemporaryRedirect: 307,
   PermanentRedirect: 308,
   BadRequest: 400,
@@ -52,9 +99,11 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Conflict: 409,
   Gone: 410,
   LengthRequired: 411,
+  PreconditionFailed: 412,
   PayloadTooLarge: 413,
   UnsupportedMediaType: 415,
   UnprocessableEntity: 422,
+  PreconditionRequired: 428,
   TooManyRequests: 429,
   UnavailableForLegalReasons: 451,
   ServerError: 500,
@@ -72,16 +121,50 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // Each stream element is one SSE event; a multi-line element becomes multiple
 // `data:` lines, terminated by a blank line. The body is a ReadableStream, so
 // this is a Web standard that runs unchanged on Workers and Node.
-function sseResponse(stream: AsyncIterable<string>): Response {
+function sseResponse(stream: AsyncIterable<string | SseEvent>, heartbeatMs?: number): Response {
   const encoder = new TextEncoder();
-  const body = pullBody(stream, (value) => [
-    ...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)),
-    encoder.encode("\n"),
-  ]);
+  const body = pullBody(
+    stream,
+    (value) => {
+      if (typeof value === "string") {
+        return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
+      }
+      return sseEventChunks(value).map((line) => encoder.encode(line));
+    },
+    // A comment line (`:`) is ignored by every `EventSource`, so it only keeps the connection warm.
+    heartbeatMs === undefined ? undefined : { everyMs: heartbeatMs, chunk: encoder.encode(":\n\n") },
+  );
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
   });
+}
+
+// #3918: one structured event as the lines of the HTML event-stream format, `event:`, `id:` and
+// `retry:` before the `data:` lines, and a blank line to end it. `data` splits on any line break
+// (CRLF, LF or CR) into one `data:` line each, so an embedded break can never end the event early.
+// An `event` or `id` with a line break, an `id` with NUL, or a `retry` that is not a whole
+// number of milliseconds throws, which errors the body at this element, in-band, as a throw from
+// the source does: a value the wire cannot carry is never written as a different one.
+function sseEventChunks(e: SseEvent): string[] {
+  const out: string[] = [];
+  if (e.event.tag === "Some") {
+    if (/[\r\n]/.test(e.event.value)) throw new Error("bynk: an SSE `event` name cannot contain a line break");
+    out.push(`event: ${e.event.value}\n`);
+  }
+  if (e.id.tag === "Some") {
+    if (/[\r\n]/.test(e.id.value)) throw new Error("bynk: an SSE `id` cannot contain a line break");
+    if (e.id.value.includes("\0")) throw new Error("bynk: an SSE `id` cannot contain NUL");
+    out.push(`id: ${e.id.value}\n`);
+  }
+  if (e.retry.tag === "Some") {
+    const ms = e.retry.value;
+    if (!Number.isSafeInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
+    out.push(`retry: ${ms}\n`);
+  }
+  for (const line of e.data.split(/\r\n|\r|\n/)) out.push(`data: ${line}\n`);
+  out.push("\n");
+  return out;
 }
 
 // K-streams (#2623): mark `stream` as read, or throw if it already was. A
@@ -110,19 +193,51 @@ export function claimStream(stream: object): void {
 // returns the iterator so an abandoned read releases the source promptly. A
 // throw from the source errors the body, aborting a response whose status is
 // already sent.
+// One read of a source stream: `done` once it has ended, else the next `value`.
+type Step<T> = { readonly done?: boolean; readonly value: T };
+
+// #3918: with a `heartbeat`, a pull that finds the source idle for `everyMs` writes `chunk`
+// and returns, keeping the pending read for the next pull, so the source is never advanced twice.
 function pullBody<T>(
   stream: AsyncIterable<T>,
   encode: (value: T) => readonly Uint8Array[],
+  heartbeat?: { readonly everyMs: number; readonly chunk: Uint8Array },
 ): ReadableStream<Uint8Array> {
   claimStream(stream);
   const iterator = stream[Symbol.asyncIterator]();
+  let pending: Promise<Step<T>> | undefined;
+  const nextOrIdle = async (): Promise<Step<T> | "idle"> => {
+    pending ??= iterator.next();
+    const read = pending;
+    if (heartbeat === undefined) {
+      pending = undefined;
+      return read;
+    }
+    read.catch(() => {}); // a rejection is surfaced when the read is awaited, not as unhandled
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const idle = new Promise<"idle">((resolve) => {
+      timer = setTimeout(() => resolve("idle"), heartbeat.everyMs);
+    });
+    try {
+      const got = await Promise.race([read, idle]);
+      if (got !== "idle") pending = undefined;
+      return got;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   return new ReadableStream<Uint8Array>(
     {
       // An element that encodes to nothing (an empty chunk) is skipped
       // here: a `pull` that enqueues nothing isn't called again.
       async pull(controller) {
         for (;;) {
-          const { value, done } = await iterator.next();
+          const got = await nextOrIdle();
+          if (got === "idle") {
+            controller.enqueue(heartbeat!.chunk);
+            return;
+          }
+          const { value, done } = got;
           if (done) {
             controller.close();
             return;
@@ -250,10 +365,89 @@ export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => Json
   };
 }
 
+// #3916: `errors { format: problem }`. An error response as RFC 9457 problem details: `type`,
+// `title`, `status` and `detail` (when there is one), and a router rejection's `kind` and
+// `path` as extension members. A problem with no more to say than its status has `type`
+// `about:blank` (RFC 9457 §4.2.1); a router rejection has a stable
+// `https://bynk-lang.org/problems/<kind>` URI.
+const REASON_PHRASES: Readonly<Record<number, string>> = {
+  400: "Bad Request",
+  401: "Unauthorized",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  406: "Not Acceptable",
+  408: "Request Timeout",
+  409: "Conflict",
+  412: "Precondition Failed",
+  413: "Payload Too Large",
+  415: "Unsupported Media Type",
+  422: "Unprocessable Entity",
+  428: "Precondition Required",
+  429: "Too Many Requests",
+  451: "Unavailable For Legal Reasons",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+};
+
+function problemResponse(
+  status: number,
+  fields: { readonly detail?: string; readonly kind?: string; readonly extra?: Record<string, unknown> },
+  headers?: Headers,
+): Response {
+  // A rejection's own structured members (`path`, `expected`, `actual`, a refinement's `violation`)
+  // ride as extension members; the members RFC 9457 defines are written after, so they always win.
+  const body: Record<string, unknown> = {
+    ...fields.extra,
+    type:
+      fields.kind === undefined
+        ? "about:blank"
+        : `https://bynk-lang.org/problems/${fields.kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
+    title: REASON_PHRASES[status] ?? "Error",
+    status,
+  };
+  if (fields.detail !== undefined && fields.detail !== "") body.detail = fields.detail;
+  if (fields.kind !== undefined) body.kind = fields.kind;
+  const out = new Headers(headers);
+  out.delete("content-length");
+  out.set("content-type", "application/problem+json");
+  return new Response(JSON.stringify(body), { status, headers: out });
+}
+
+/**
+ * A router rejection as problem details. Only a JSON rejection (`400`, `413`, `415`, with the
+ * `kind` the router writes) is rewritten; a body-less `401` or `405`, and anything else, passes
+ * through, since RFC 9457 does not require a body. Applied before `on rejected`, which still
+ * sees the `kind` and `detail` and may replace the whole response with a `RawError`.
+ */
+export async function problemRejection(response: Response): Promise<Response> {
+  if (response.status < 400 || !(response.headers.get("content-type") ?? "").startsWith("application/json")) {
+    return response;
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    return response;
+  }
+  if (typeof body.kind !== "string") return response;
+  // `details` becomes `detail`, and `kind` is written by the writer; everything else the router put in
+  // the body (`path`, `expected`, `actual`, a refinement's `violation`) is carried as it was written.
+  const { kind: _kind, details: _details, error: _error, type: _type, title: _title, status: _status, detail: _detail, ...extra } = body;
+  return problemResponse(
+    response.status,
+    { detail: rejectionDetail(body), kind: body.kind, extra },
+    response.headers,
+  );
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: string },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -267,13 +461,250 @@ export function httpResultToResponse<T>(
     // route is `@cache` (which also forces `private`, below).
     if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
   }
+  appendResultHeaders(response, result);
   return response;
+}
+
+// #3915: response headers a handler adds to an `HttpResult` with `withHeader`,
+// `retryAfter`, `at` and `download`. A result carries them as `[name, value, own?]`
+// triples in a `headers` list (the way it carries `cookies`), and the router appends
+// one header line per triple when it builds the response. `own` marks one of the
+// typed helpers, which may write a header `withHeader` may not (`Location`,
+// `Content-Disposition`).
+type HeaderTriple = readonly [name: string, value: string, own?: boolean];
+
+// The headers the router owns, which `withHeader` may not set, lower case. The
+// checker holds the same list for a literal name (`RESERVED` in
+// `response_headers.rs`); `access-control-*` is a prefix.
+export const RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "age",
+  "allow",
+  "cache-control",
+  "cdn-cache-control",
+  "cloudflare-cdn-cache-control",
+  "connection",
+  "content-disposition",
+  "content-length",
+  "content-range",
+  "content-security-policy",
+  "content-type",
+  "etag",
+  "expires",
+  "keep-alive",
+  "last-modified",
+  "location",
+  "pragma",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "referrer-policy",
+  "retry-after",
+  "set-cookie",
+  "strict-transport-security",
+  "surrogate-control",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "vary",
+  "www-authenticate",
+  "x-content-type-options",
+]);
+
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function headersOf(result: object): readonly HeaderTriple[] {
+  return (result as { readonly headers?: readonly HeaderTriple[] }).headers ?? [];
+}
+
+function withHeaderTriple<R extends object>(result: R, triple: HeaderTriple): R {
+  // A typed helper sets one header, so a later call replaces an earlier one rather than
+  // sending a second value of a header that is not a list.
+  const held = triple[2] === true ? headersOf(result).filter(([n]) => n.toLowerCase() !== triple[0]) : headersOf(result);
+  return { ...result, headers: [...held, triple] };
+}
+
+/** `result.withHeader(name, value)`: one more header line on the response. */
+export function withResponseHeader<R extends object>(result: R, name: string, value: string): R {
+  return withHeaderTriple(result, [name, value]);
+}
+
+/** `result.retryAfter(delay)`: `Retry-After` in whole seconds, rounded up. */
+export function withRetryAfter<R extends object>(result: R, delayMillis: number): R {
+  return withHeaderTriple(result, ["retry-after", String(Math.max(0, Math.ceil(delayMillis / 1000))), true]);
+}
+
+/** #3918: `Streaming(…).heartbeat(every)`: a comment line whenever the event stream is idle this long. */
+export function withHeartbeat<R extends object>(result: R, everyMillis: number): R {
+  if (!(everyMillis >= 1000)) throw new Error("heartbeat: the interval must be at least one second");
+  return { ...result, heartbeatMs: everyMillis };
+}
+
+/** `result.at(url)`: the `Location` of a created resource. */
+export function withLocation<R extends object>(result: R, url: string): R {
+  return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
+}
+
+/**
+ * `result.etag(tag)` (#4466): the handler's own validator on a `PartialContent` or `NotModified`, an
+ * entity tag it took from the representation (an R2 object's `etag`). The router owns `ETag` on every
+ * other answer, so only these two variants take one from the handler.
+ */
+export function withETag<R extends object>(result: R, tag: string): R {
+  if (!isEntityTag(tag)) {
+    throw new Error(
+      `etag: ${JSON.stringify(tag)} is not an entity tag (RFC 9110 §8.8.3: quoted, optionally W/-prefixed, e.g. "v1" or W/"v1")`,
+    );
+  }
+  return withHeaderTriple(result, ["etag", tag, true]);
+}
+
+/** `result.lastModified(at)` (#4466): `Last-Modified` for a `PartialContent` or `NotModified`, in IMF-fixdate. */
+export function withLastModified<R extends object>(result: R, epochMillis: number): R {
+  const at = new Date(Math.floor(epochMillis / 1000) * 1000);
+  // An IMF-fixdate has a four-digit year, so an instant outside `Date`'s range or before year 0 or after
+  // 9999 is a fault, not a malformed `Last-Modified`.
+  if (Number.isNaN(at.getTime()) || at.getUTCFullYear() < 0 || at.getUTCFullYear() > 9999) {
+    throw new Error("lastModified: the instant is outside the years an HTTP-date can write (0 to 9999)");
+  }
+  // `toUTCString` is the IMF-fixdate form (`Sun, 06 Nov 1994 08:49:37 GMT`), at whole seconds.
+  return withHeaderTriple(result, ["last-modified", at.toUTCString(), true]);
+}
+
+/**
+ * #4466: the router's safety net for `If-Range` (RFC 9110 §13.1.5). A `206` answers a `Range` request,
+ * and a client that sent `If-Range` wants the range only if its validator still names the current
+ * representation, otherwise the whole body. The router cannot build the whole body from a part, so a
+ * handler decides with `ifRangeHolds`; this guard makes a handler that forgot to fail closed instead of
+ * sending bytes of a changed representation. A `206` to an `If-Range` request whose validator the
+ * handler did not attach, or does not match, is a fault (`500`, logged), never sent. The comparison is
+ * the strong one: a weak entity tag never matches, and a date matches `Last-Modified` exactly.
+ */
+export function ifRangeGuard<R extends Response>(response: R, request: Request): R {
+  if (response.status !== 206) return response;
+  const ifRange = request.headers.get("if-range");
+  if (ifRange === null) return response;
+  const held = ifRange.trim();
+  const etag = response.headers.get("etag");
+  const lastModified = response.headers.get("last-modified");
+  const holds = held.startsWith('"')
+    ? etag !== null && !etag.startsWith("W/") && held === etag
+    : !held.startsWith("W/") && lastModified !== null && held === lastModified;
+  if (holds) return response;
+  response.body?.cancel().catch(() => {});
+  throw new Error(
+    "PartialContent for a stale If-Range: check ifRangeHolds before answering 206 " +
+      (etag === null && lastModified === null
+        ? "(the 206 carries no validator: attach one with .etag(...) or .lastModified(...))"
+        : "(the request's If-Range does not match the validator the 206 carries)"),
+  );
+}
+
+/** `result.download(filename)`: `Content-Disposition: attachment` for `filename`. */
+export function withDownload<R extends object>(result: R, filename: string): R {
+  return withHeaderTriple(result, ["content-disposition", contentDisposition(filename), true]);
+}
+
+// A URL with every character outside printable ASCII percent-encoded as UTF-8, so a slug with an
+// accent is a valid `Location` (a header value is bytes, and `Headers.append` refuses a code
+// point above U+00FF).
+function encodeNonAscii(url: string): string {
+  return url.replace(/[^\x20-\x7e]/gu, (c) => encodeURIComponent(c));
+}
+
+// An RFC 8187 `value-chars` encoding: every octet outside `attr-char` is `%XX`.
+function encodeExtValue(text: string): string {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
+ * RFC 6266 `Content-Disposition: attachment` for a download: an ASCII `filename` fallback
+ * for old clients (each character outside printable ASCII, and `"`, `\`, `%` and path
+ * separators, becomes `_`) and the exact name as an RFC 8187 `filename*`. A name with a
+ * control character, or an empty one, is refused.
+ */
+export function contentDisposition(filename: string): string {
+  if (filename === "") throw new Error("download: the filename is empty");
+  if (/[\x00-\x1f\x7f]/.test(filename)) {
+    throw new Error(`download: ${JSON.stringify(filename)} contains a control character`);
+  }
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\%/]/g, "_");
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeExtValue(filename)}`;
+}
+
+/**
+ * The headers a result carries, as a test reads them: lower-case names, each with its
+ * values in the order they were added. The headers the router owns are not here.
+ */
+export function resultHeaders(result: object): ReadonlyMap<string, readonly string[]> {
+  const out = new Map<string, string[]>();
+  for (const [name, value] of headersOf(result)) {
+    const key = name.toLowerCase();
+    const held = out.get(key);
+    if (held === undefined) out.set(key, [value]);
+    else held.push(value);
+  }
+  return out;
+}
+
+// Append a result's headers to its response. A name that is not a token, a router-owned
+// one set with `withHeader`, or a value with a control character throws, so the
+// dispatch answers `500` and logs the route: a malformed header never reaches the wire.
+function appendResultHeaders(response: Response, result: object): void {
+  for (const [name, value, own] of headersOf(result)) {
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`withHeader: ${JSON.stringify(name)} is not a valid header name (an RFC 9110 token)`);
+    }
+    const lower = name.toLowerCase();
+    if (own !== true && (RESERVED_RESPONSE_HEADERS.has(lower) || lower.startsWith("access-control-"))) {
+      throw new Error(`withHeader: ${lower} is a header the router owns`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} contains a control character`);
+    }
+    if (/[^\x00-\xff]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} has a character outside Latin-1; a header value is bytes`);
+    }
+    response.headers.append(name, value);
+  }
+}
+
+// #4389: the body of a `PartialContent` answer, held to its range: a stream that yields more or fewer
+// bytes than `end - start + 1` errors, which aborts the response (as a fault mid-body does), so a client
+// stitching parts together never gets bytes the `Content-Range` does not describe.
+async function* rangeBody(body: AsyncIterable<Uint8Array>, range: ContentRange): AsyncGenerator<Uint8Array> {
+  const expected = range.end - range.start + 1;
+  let seen = 0;
+  for await (const chunk of body) {
+    seen += chunk.byteLength;
+    if (seen > expected) {
+      throw new Error(`PartialContent: the body is longer than its range (${expected} bytes)`);
+    }
+    yield chunk;
+  }
+  if (seen !== expected) {
+    throw new Error(`PartialContent: the body is ${seen} bytes, but its range covers ${expected}`);
+  }
+}
+
+// #4389: the `Content-Range` value of a `PartialContent` answer: `bytes first-last/total`, with
+// `*` for an unknown total (RFC 9110 §14.4).
+function contentRangeHeader(range: ContentRange): string {
+  const { start, end } = range;
+  const total = range.total.tag === "Some" ? range.total.value : undefined;
+  const whole = (n: number): boolean => Number.isSafeInteger(n) && n >= 0;
+  if (!whole(start) || !whole(end) || start > end || (total !== undefined && (!whole(total) || end >= total))) {
+    throw new Error(
+      `PartialContent: ${start}-${end}${total === undefined ? "" : `/${total}`} is not a byte range ` +
+        `(RFC 9110 §14.4: 0 <= start <= end, and end below the total when it is known)`,
+    );
+  }
+  return `bytes ${start}-${end}/${total === undefined ? "*" : total}`;
 }
 
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: string },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -283,6 +714,17 @@ function baseHttpResultToResponse<T>(
     });
   }
   const status = HTTP_STATUS[result.tag];
+  // #4389: a range or conditional answer belongs to a `GET`. The compiler refuses one named in a
+  // non-`GET` handler's own body; one built in a helper `fn` and returned from such a route is
+  // caught here, as a fault (`500`, logged), never sent. `notGet` is the route it was returned
+  // from, `POST /orders`, so the log line names the route to fix (#4467).
+  if (opts?.notGet !== undefined && (result.tag === "PartialContent" || result.tag === "NotModified")) {
+    throw new Error(
+      `${result.tag} (${status}) is a GET answer, but ${opts.notGet} returned it: ` +
+        `a range or conditional read is only served by a GET route, so build it in a GET handler ` +
+        `(a helper fn cannot be checked at compile time)`,
+    );
+  }
   switch (result.tag) {
     // 2xx with a body — the serialised value as JSON.
     case "Ok":
@@ -303,7 +745,7 @@ function baseHttpResultToResponse<T>(
     }
     // 200 with a streamed body — each stream element is one SSE event.
     case "Streaming":
-      return sseResponse(result.stream);
+      return sseResponse(result.stream, result.heartbeatMs);
     // 200 with a raw body — author-owned bytes with an explicit content-type.
     // No codec runs; the Uint8Array is written straight into the Response. The
     // `as BodyInit` cast satisfies TS 5.7, whose `Uint8Array<ArrayBufferLike>`
@@ -344,6 +786,15 @@ function baseHttpResultToResponse<T>(
         status: 200,
         headers: { "content-type": result.contentType },
       });
+    // #4389: 206 with a streamed body and the `Content-Range` its range states. A range
+    // that is not one (`start` past `end`, `end` at or past a known total, a negative or
+    // non-integer end) throws, so the dispatch's fault path answers `500` and logs the
+    // route: a malformed `Content-Range` is never sent.
+    case "PartialContent":
+      return new Response(byteStreamBody(rangeBody(result.body, result.range)), {
+        status: 206,
+        headers: { "content-type": result.contentType, "content-range": contentRangeHeader(result.range) },
+      });
     // 201 with a raw body — `Raw`'s writer at the creation status (#2403, L6).
     // It answers a write, so it carries no validator, whatever `weakEtag` says.
     case "RawCreated":
@@ -361,9 +812,11 @@ function baseHttpResultToResponse<T>(
     // Error variants carrying an explanatory message — `{ error }` JSON body.
     case "BadRequest":
     case "Conflict":
+    case "PreconditionFailed":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
     case "UnprocessableEntity":
+    case "PreconditionRequired":
     case "TooManyRequests":
     case "UnavailableForLegalReasons":
     case "ServerError":
@@ -371,11 +824,13 @@ function baseHttpResultToResponse<T>(
     case "BadGateway":
     case "ServiceUnavailable":
     case "GatewayTimeout":
+      if (opts?.problem === true) return problemResponse(status, { detail: result.message });
       return new Response(JSON.stringify({ error: result.message }), {
         status,
         headers: { "content-type": "application/json" },
       });
     // Self-describing statuses — bodyless.
+    case "NotModified":
     case "NoContent":
     case "Unauthorized":
     case "Forbidden":
@@ -419,9 +874,11 @@ const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   201: "Created",
   202: "Accepted",
   204: "NoContent",
+  206: "PartialContent",
   301: "MovedPermanently",
   302: "Found",
   303: "SeeOther",
+  304: "NotModified",
   307: "TemporaryRedirect",
   308: "PermanentRedirect",
   400: "BadRequest",
@@ -434,9 +891,11 @@ const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   409: "Conflict",
   410: "Gone",
   411: "LengthRequired",
+  412: "PreconditionFailed",
   413: "PayloadTooLarge",
   415: "UnsupportedMediaType",
   422: "UnprocessableEntity",
+  428: "PreconditionRequired",
   429: "TooManyRequests",
   451: "UnavailableForLegalReasons",
   500: "ServerError",
@@ -580,6 +1039,33 @@ async function decodeHttpResult<T>(
       const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
       return { tag, value };
     }
+    // #4389: a 206 reads back as `PartialContent`, its range from `Content-Range`.
+    case "PartialContent": {
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const m = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(response.headers.get("content-range") ?? "");
+      // The router always sends a valid `Content-Range` with a 206, so a missing or malformed one is
+      // the answer's fault, not a range to invent.
+      if (m === null) {
+        throw new globalThis.Error(
+          `the 206 answer's Content-Range is missing or malformed: ${JSON.stringify(response.headers.get("content-range"))}`,
+        );
+      }
+      const total = m[3] === "*" ? undefined : Number(m[3]);
+      const range = {
+        start: Number(m[1]),
+        end: Number(m[2]),
+        total: total === undefined ? ({ tag: "None" } as const) : ({ tag: "Some", value: total } as const),
+      };
+      const body = (async function* () {
+        yield bytes;
+      })();
+      return {
+        tag: "PartialContent",
+        body,
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+        range,
+      } as unknown as HttpResult<T>;
+    }
     case "MovedPermanently":
     case "Found":
     case "SeeOther":
@@ -588,9 +1074,11 @@ async function decodeHttpResult<T>(
       return { tag, location: response.headers.get("location") ?? "" };
     case "BadRequest":
     case "Conflict":
+    case "PreconditionFailed":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
     case "UnprocessableEntity":
+    case "PreconditionRequired":
     case "TooManyRequests":
     case "UnavailableForLegalReasons":
     case "ServerError":
@@ -639,8 +1127,10 @@ function rejectionDetail(body: Record<string, unknown>): string {
   switch (body.kind) {
     case "MalformedJson":
     case "MalformedForm":
+    case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
+    case "RateLimited":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -663,7 +1153,14 @@ async function rejectionOf(
 ): Promise<{ readonly tag: string; readonly detail: string } | null> {
   if (response.status === 401) return { tag: "Unauthorized", detail: "" };
   if (response.status === 405) return { tag: "MethodNotAllowed", detail: "" };
-  if (response.status !== 400 && response.status !== 413 && response.status !== 415) return null;
+  if (
+    response.status !== 400 &&
+    response.status !== 413 &&
+    response.status !== 415 &&
+    response.status !== 429
+  ) {
+    return null;
+  }
   let body: Record<string, unknown> | null = null;
   try {
     body = (await response.clone().json()) as Record<string, unknown>;
@@ -709,17 +1206,31 @@ export async function renderRejection(
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
-const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
+const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "MalformedPath", "StructuralMismatch"]);
 
-// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
-// parameters (`; charset=…`) are not part of the match, the comparison is
-// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
-// that wildcard.
-export function mediaTypeMatches(request: Request, declared: string): boolean {
-  if (declared === "*/*") return true;
+// Whether `request`'s `Content-Type` is a media type a `@raw` route declares (#3912:
+// one, or any of a list): parameters (`; charset=…`) are not part of the match,
+// the comparison is case-insensitive, `"*/*"` accepts anything, and a missing
+// header matches only that wildcard.
+export function mediaTypeMatches(request: Request, declared: string | readonly string[]): boolean {
+  const types = typeof declared === "string" ? [declared] : declared;
+  if (types.includes("*/*")) return true;
   const given = request.headers.get("content-type");
   if (given === null) return false;
-  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return types.some((t) => mediaType === t.toLowerCase());
+}
+
+// #3912: whether `request`'s `Content-Type` is one a JSON `body` route can mean:
+// absent (a client that sends no type, such as a bare `curl --data-binary`),
+// `application/json`, or a `+json` type (`application/problem+json`). A form,
+// multipart or any other type is refused with `415`. Parameters are ignored and
+// the comparison is case-insensitive.
+export function jsonMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null || given.trim() === "") return true;
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return mediaType === "application/json" || mediaType.endsWith("+json");
 }
 
 // #2341 (decision A): an HTTP handler's `headers: RequestHeaders` — a read-only
@@ -736,7 +1247,11 @@ export interface RequestHeaders {
 
 /** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
  *  (`RequestHeaders.of`); a line without a colon is ignored. */
-export function requestHeaders(source: Request | readonly string[], hideCookie?: string): RequestHeaders {
+export function requestHeaders(
+  source: Request | readonly string[],
+  hideCookie?: string,
+  hideHeaders?: readonly string[],
+): RequestHeaders {
   let headers: Headers;
   if (source instanceof Request) {
     headers = source.headers;
@@ -747,6 +1262,12 @@ export function requestHeaders(source: Request | readonly string[], hideCookie?:
       const rest = cookiePairs(headers.get("cookie")).filter(([n]) => n !== hideCookie);
       if (rest.length === 0) headers.delete("cookie");
       else headers.set("cookie", rest.map(([n, v]) => `${n}=${v}`).join("; "));
+    }
+    // #3994: a `Bearer`, `Oidc` or `Signature` actor's credential header is consumed at the seam
+    // as well (`Authorization`, or the signature header); the handler's view omits it.
+    if (hideHeaders !== undefined && hideHeaders.some((n) => headers.has(n))) {
+      headers = new Headers(headers);
+      for (const n of hideHeaders) headers.delete(n);
     }
   } else {
     headers = new Headers();
@@ -870,14 +1391,13 @@ export function requestQuerySearch(view: RequestQuery): string {
  *  when every field is absent. A list repeats its key, an `Option` is its value
  *  or nothing, and an enum is its variant's name. Test drivers use it. */
 export function queryString(wire: JsonValue, fields?: readonly QueryField[]): string {
-  wire = renamedWire(wire, fields);
   const params = new URLSearchParams();
   const leaf = (v: JsonValue): string | undefined => {
     if (v === null) return undefined;
     if (typeof v === "object" && !Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      return variantWireName(v);
     }
     return String(v);
   };
@@ -910,8 +1430,8 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
     return v;
   };
   for (const f of fields) {
-    const value = wire[f.name];
     const key = wireName(f);
+    const value = wire[key];
     if (value === undefined || value === null) continue;
     for (const item of f.list && Array.isArray(value) ? value : [value]) {
       const v = some(item);
@@ -923,7 +1443,8 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         form.append(key, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
       } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-        if (typeof v.kind === "string") form.append(key, v.kind);
+        const name = variantWireName(v);
+        if (name !== undefined) form.append(key, name);
       } else {
         form.append(key, String(v));
       }
@@ -932,24 +1453,16 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
   return form;
 }
 
+/** #3975: the variant name in a payload-less sum's wire form, `{ "<discriminator>": "Name" }`: the
+ *  object's one value, whatever key the sum's `@discriminator` gave it (`kind` by default). */
+function variantWireName(v: { readonly [key: string]: JsonValue | undefined }): string | undefined {
+  const first = Object.values(v)[0];
+  return typeof first === "string" ? first : undefined;
+}
+
 /** #3343: the key a field is read from and written to on the wire. */
 function wireName(f: QueryField): string {
   return f.wire ?? f.name;
-}
-
-/** #3343: `wire` (a record's JSON form, keyed by field name) with each renamed
- *  field's key replaced by its `@name`, so the writers below emit what the readers
- *  look for. Fields without a rename, and a `fields` that is absent, pass through. */
-function renamedWire(wire: JsonValue, fields?: readonly QueryField[]): JsonValue {
-  if (fields === undefined || typeof wire !== "object" || wire === null || Array.isArray(wire)) {
-    return wire;
-  }
-  const renames = new Map<string, string>();
-  for (const f of fields) if (f.wire !== undefined) renames.set(f.name, f.wire);
-  if (renames.size === 0) return wire;
-  const out: { [key: string]: JsonValue } = {};
-  for (const [name, value] of Object.entries(wire)) out[renames.get(name) ?? name] = value;
-  return out;
 }
 
 /** #2854: how one field of a handler's typed `query` record reads off the wire. */
@@ -1186,6 +1699,62 @@ export function cookieObject(
   return fieldsObject(search, fields, "cookies", false);
 }
 
+/** #3911 (decision B): the items of a header's list value (RFC 9110 §5.6.1): comma-separated,
+ *  commas inside a quoted string do not split, and each item is trimmed. Empty items are dropped,
+ *  as the RFC's list syntax allows them. `a, "b,c", d` is `a`, `"b,c"`, `d` (the quotes stay: values
+ *  are not otherwise decoded). */
+export function splitHeaderList(value: string): string[] {
+  const items: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (quoted && c === "\\" && i + 1 < value.length) {
+      current += c + value[++i];
+      continue;
+    }
+    if (c === '"') quoted = !quoted;
+    if (c === "," && !quoted) {
+      items.push(current);
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+  items.push(current);
+  return items.map((i) => i.trim()).filter((i) => i !== "");
+}
+
+/** #3911 (decisions A-C): decode the request's headers into the JSON object a record's codec reads,
+ *  field by field, by the typed `query` rules. Names compare without case (`wire` or the field's
+ *  name, lowercased); repeated lines are one value, as `Headers` combines them; a `List` field
+ *  splits it ([`splitHeaderList`]) and any other reads it whole, trimmed. Values are not otherwise
+ *  decoded. A header the route's auth seam consumed (`hidden`) reads as absent. A rejection names
+ *  `headers.<field>`. This is the one "header text to typed value" step; a later use (an actor's
+ *  envelope, #918) calls it rather than adding a second decoder. */
+export function headersObject(
+  request: Request,
+  fields: readonly QueryField[],
+  hidden?: readonly string[],
+  hideCookie?: string,
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  const hide = new Set((hidden ?? []).map((h) => h.toLowerCase()));
+  const lowered = fields.map((f) => ({ ...f, key: wireName(f), wire: wireName(f).toLowerCase() }));
+  const search = new URLSearchParams();
+  for (const f of lowered) {
+    let raw = hide.has(f.wire) ? null : request.headers.get(f.wire);
+    // A `SignedCookie` actor's credential is consumed at the seam: the `Cookie` a field reads omits it,
+    // as the raw view and the `cookies` forms do (#3386).
+    if (raw !== null && f.wire === "cookie" && hideCookie !== undefined) {
+      const rest = cookiePairs(raw).filter(([n]) => n !== hideCookie);
+      raw = rest.length === 0 ? null : rest.map(([n, v]) => `${n}=${v}`).join("; ");
+    }
+    if (raw === null) continue;
+    for (const v of f.list ? splitHeaderList(raw) : [raw.trim()]) search.append(f.wire, v);
+  }
+  return fieldsObject(search, lowered, "headers", false);
+}
+
 // #3277 (decision A, second form): an HTTP handler's `cookies: RequestCookies` — a
 // read-only view of the request's cookies, for a name a record field cannot spell
 // (`__Host-sid`). `get` is the first cookie of a name, `all` every one in header
@@ -1228,16 +1797,23 @@ export function requestCookiesHeader(view: RequestCookies): string {
 
 /** #3446: the text a typed cookie write gives `value` — the inverse of `fieldsObject`'s leaf
  *  rules, so a cookie the write produces decodes back to the value written: an `Int` its
- *  digits, a `Bool` `true`/`false`, an enum (in memory `{ tag }`) its variant's name, and
+ *  digits, a `Bool` `true`/`false`, an enum (in memory `{ tag }`) its variant's wire name, and
  *  anything else (a `String`, a refined or opaque type over one, a `Decimal` already
  *  rendered) its text. `kind` is the field's `QueryField` kind. */
-export function cookieValue(kind: QueryField["kind"], value: unknown): string {
+export function cookieValue(
+  kind: QueryField["kind"],
+  value: unknown,
+  names?: Readonly<Record<string, string>>,
+): string {
   switch (kind) {
     case "int":
     case "bool":
       return String(value);
-    case "enum":
-      return (value as { readonly tag: string }).tag;
+    case "enum": {
+      // #3975: `names` maps a variant to its `@name` on the wire, when any variant has one.
+      const tag = (value as { readonly tag: string }).tag;
+      return names?.[tag] ?? tag;
+    }
     default:
       return value as string;
   }
@@ -1253,6 +1829,47 @@ export function cookieString(wire: JsonValue, fields?: readonly QueryField[]): s
   const pairs: string[] = [];
   new URLSearchParams(query.slice(1)).forEach((value, name) => pairs.push(`${name}=${value}`));
   return pairs.join("; ");
+}
+
+/** #3911: the headers a system-tier driver sends for a handler's `headers` argument: header text
+ *  (`Wire`), a typed
+ *  record's wire form (what the record's `serialise_*` makes) as `name -> value` (a list's items
+ *  joined with `, `, a name written as its `@name`), or a `RequestHeaders` view's own headers. */
+export function headerPairs(source: unknown, fields?: readonly QueryField[]): Record<string, string> {
+  // A raw case sends header text: `name: value` lines, one per line (a line without a colon is ignored).
+  if (typeof source === "string") {
+    const lines: Record<string, string> = {};
+    for (const line of source.split("\n")) {
+      const i = line.indexOf(":");
+      if (i <= 0) continue;
+      const name = line.slice(0, i).trim().toLowerCase();
+      const value = line.slice(i + 1).trim();
+      // A repeated line is one combined value, as on the wire.
+      lines[name] = name in lines ? `${lines[name]}, ${value}` : value;
+    }
+    return lines;
+  }
+  if (source !== null && typeof source === "object" && REQUEST_HEADER_PAIRS in (source as object)) {
+    return requestHeaderPairs(source as RequestHeaders);
+  }
+  const out: Record<string, string> = {};
+  const query = queryString(source as JsonValue, fields);
+  if (query === "") return out;
+  const lists = new Set((fields ?? []).filter((f) => f.list).map((f) => wireName(f)));
+  const listNames = new Set(
+    Object.keys((source ?? {}) as Record<string, JsonValue>).filter(
+      (k) => Array.isArray((source as Record<string, JsonValue>)[k]),
+    ),
+  );
+  new URLSearchParams(query.slice(1)).forEach((value, name) => {
+    // A list's items are joined with `, ` and split again by the router, so an item holding a comma or
+    // a quote would not arrive as one: the driver refuses it rather than send a different list.
+    if ((lists.has(name) || listNames.has(name)) && /[,"]/.test(value)) {
+      throw new Error(`headers.${name}: a list item with a comma or a quote does not survive a header (${JSON.stringify(value)})`);
+    }
+    out[name] = name in out ? `${out[name]}, ${value}` : value;
+  });
+  return out;
 }
 
 /** #3276 (decisions B-D): decode a form body (`application/x-www-form-urlencoded`)
@@ -1287,54 +1904,79 @@ export function formDecode(
       : e.kind === "RefinementViolation"
         ? e.violation.message
         : e.details;
-  return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
+  const kind: DecodeErrorKind =
+    e.kind === "StructuralMismatch"
+      ? { tag: "StructuralMismatch" }
+      : e.kind === "RefinementViolation"
+        ? { tag: "RefinementViolation" }
+        : { tag: "Malformed" };
+  return { tag: "Err", error: { kind, path, message } } as Result<JsonValue, DecodeError>;
+}
+
+/** The JSON a text value of `kind` reads as: an `Int` that is plain digits within the safe-integer
+ *  range is a number, a `Bool` is `true`/`false` (a form also takes `on`/`off`), an enum is its
+ *  variant's `{ kind }` envelope, and anything else, or a value that does not read as its kind, is
+ *  passed on as text so the type's own codec reports it. */
+function leafValue(kind: QueryField["kind"], raw: string, form: boolean): JsonValue {
+  switch (kind) {
+    case "int":
+      return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
+    case "bool":
+      if (form) {
+        if (raw === "true" || raw === "on") return true;
+        if (raw === "false" || raw === "off") return false;
+        return raw;
+      }
+      return raw === "true" ? true : raw === "false" ? false : raw;
+    case "enum":
+      // #3975: the text is the variant's wire name, which is how a payload-less sum's codec reads
+      // a bare string (whatever its `@discriminator`); the object form would hard-code the key.
+      return raw;
+    default:
+      return raw;
+  }
+}
+
+/** #3910: a path parameter's text, read as its type's wire JSON by the same rules as a typed
+ *  `query` field (`Int` digits, `Bool` `true`/`false`, an enum by variant name). The type's codec
+ *  then answers a value that does not read, or breaks a refinement, with a `400` at `path.<name>`. */
+export function pathLeaf(kind: QueryField["kind"], raw: string): JsonValue {
+  return leafValue(kind, raw, false);
 }
 
 function fieldsObject(
   search: URLSearchParams,
-  fields: readonly QueryField[],
+  fields: readonly (QueryField & { readonly key?: string })[],
   prefix: string,
   form: boolean,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const out: Record<string, JsonValue> = {};
-  const leaf = (kind: QueryField["kind"], raw: string): JsonValue => {
-    switch (kind) {
-      case "int":
-        return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
-      case "bool":
-        if (form) {
-          if (raw === "true" || raw === "on") return true;
-          if (raw === "false" || raw === "off") return false;
-          return raw;
-        }
-        return raw === "true" ? true : raw === "false" ? false : raw;
-      case "enum":
-        return { kind: raw };
-      default:
-        return raw;
-    }
-  };
+  const leaf = (kind: QueryField["kind"], raw: string): JsonValue => leafValue(kind, raw, form);
   for (const f of fields) {
+    // #3975: the record's codec reads each field under its wire key, so that is the key the object
+    // is built under; `key` is the declared spelling where the request is matched another way (a
+    // header's name is matched without case).
+    const key = f.key ?? wireName(f);
     // A browser sends an unfilled input as `name=`: absent, except for a plain
     // `String`, whose `""` the field's own refinements judge.
     const skipEmpty = form && (f.option || f.kind !== "string");
     const values = search.getAll(wireName(f)).filter((v) => !(skipEmpty && v === ""));
     if (values.length === 0) continue;
     if (f.list) {
-      out[f.name] = values.map((v) => leaf(f.kind, v));
+      out[key] = values.map((v) => leaf(f.kind, v));
     } else if (values.length > 1) {
       return {
         ok: false,
         error: {
           kind: "StructuralMismatch",
-          path: `${prefix}.${f.name}`,
+          path: `${prefix}.${key}`,
           expected: "a single value",
           actual: `${values.length} values`,
         },
       };
     } else {
       const v = leaf(f.kind, values[0]);
-      out[f.name] = f.option ? { kind: "Some", value: v } : v;
+      out[key] = f.option ? { kind: "Some", value: v } : v;
     }
   }
   return { ok: true, value: out };
@@ -1416,12 +2058,11 @@ export async function multipartObject(
     if (list === undefined) uploaded.set(name, [value]);
     else list.push(value);
   }
-  // #3343: a rejection names the field the author wrote, not its `@name` wire key.
-  const fieldOf = new Map(fields.map((f) => [wireName(f), f.name] as const));
+  // #3975: a rejection names the field's wire key, as the codec's own error paths do.
   const mismatch = (name: string, expected: string, actual: string): MultipartRead => ({
     ok: false,
     status: 400,
-    error: { kind: "StructuralMismatch", path: `body.${fieldOf.get(name) ?? name}`, expected, actual },
+    error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
   });
   const textFields = fields.filter((f) => f.kind !== "file");
   const fileNames = new Set(fields.filter((f) => f.kind === "file").map(wireName));
@@ -1450,10 +2091,10 @@ export async function multipartObject(
       })),
     );
     if (f.list) {
-      value[f.name] = read.map(() => FILE_PLACEHOLDER);
+      value[wireName(f)] = read.map(() => FILE_PLACEHOLDER);
       files[f.name] = read;
     } else if (read.length === 1) {
-      value[f.name] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
+      value[wireName(f)] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
       files[f.name] = f.option ? { tag: "Some", value: read[0] } : read[0];
     } else if (f.option) {
       files[f.name] = { tag: "None" };
@@ -1520,14 +2161,21 @@ export async function responseToHttpOutcome<T>(
   // A capped route's `413` and a raw route's `415` are the router's own
   // synthesised refusals, told from a handler's `PayloadTooLarge`/
   // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
-  if (response.status === 413 || response.status === 415) {
+  // #3926: and a `@rateLimit` route's `429`, told from a handler's `TooManyRequests`
+  // (whose body is `{ error }`) the same way.
+  if (response.status === 413 || response.status === 415 || response.status === 429) {
     let body: { kind?: unknown } | null = null;
     try {
       body = (await response.clone().json()) as { kind?: unknown };
     } catch {
       body = null;
     }
-    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+    if (
+      body &&
+      (body.kind === "PayloadTooLarge" ||
+        body.kind === "UnsupportedMediaType" ||
+        body.kind === "RateLimited")
+    ) {
       const fields = body as Record<string, unknown>;
       return {
         tag: "Rejected",
@@ -1573,11 +2221,14 @@ export async function responseToUnauthOutcome<T>(
 // derived from the service's routes at emit time (never restated by the author);
 // `allowHeaders` carries the resolved list (the `content-type`/`Authorization`
 // default, or the author's override). `maxAgeSecs` is the `Access-Control-Max-Age`
-// in whole seconds, absent when the author gave no `maxAge`.
+// in whole seconds, absent when the author gave no `maxAge`. #3925: `exposeHeaders`
+// is the `Access-Control-Expose-Headers` list: the headers Bynk writes for a client to
+// read plus the author's `expose` names (or `["*"]`).
 export interface CorsPolicy {
   readonly origins: readonly string[];
   readonly allowMethods: readonly string[];
   readonly allowHeaders: readonly string[];
+  readonly exposeHeaders: readonly string[];
   readonly credentials: boolean;
   readonly maxAgeSecs: number | null;
 }
@@ -1592,6 +2243,44 @@ function corsResolveOrigin(policy: CorsPolicy, requestOrigin: string | null): st
   if (policy.origins.length === 1 && policy.origins[0] === "*") return "*";
   if (requestOrigin !== null && policy.origins.includes(requestOrigin)) return requestOrigin;
   return null;
+}
+
+// #3926: `@rateLimit(Limiter, key: clientIp)`. The router asks the limiter, before it reads
+// the request body, whether this client may have another request in the window.
+// Cloudflare's `CF-Connecting-IP` is the client's address and is reliable only behind
+// Cloudflare's edge; a request without it (`bynk dev`, a test that sets none) shares the
+// one `unknown` key rather than going uncounted.
+export async function rateLimitAllows(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  request: Request,
+): Promise<boolean> {
+  return rateLimitAllowsKey(limiter, request.headers.get("cf-connecting-ip") ?? "unknown");
+}
+
+// #3926: `@rateLimit(Limiter, key: identity)`. The same question for the verified caller's
+// `sub`, asked after the route's actor has been verified and before the body is read, so a
+// forged or expired credential never reaches it.
+export async function rateLimitAllowsKey(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  key: string,
+): Promise<boolean> {
+  return (await limiter.limit({ key })).success;
+}
+
+// #3926: the router's `429` to a client over its limit: `Retry-After` is the limiter's window
+// in seconds, and the body is the `RateLimited` rejection, so `on rejected` can render it and
+// a system test can assert `Rejected(RateLimited)`.
+export function rateLimitedResponse(periodSecs: number): Response {
+  return new Response(
+    JSON.stringify({
+      kind: "RateLimited",
+      details: `too many requests: try again in ${periodSecs} seconds`,
+    }),
+    {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": String(periodSecs) },
+    },
+  );
 }
 
 // Stamp the CORS response headers onto an already-built `Response`, in place.
@@ -1611,6 +2300,30 @@ export function applyCors<R extends Response>(
   response.headers.set("access-control-allow-origin", allowOrigin);
   if (allowOrigin !== "*") response.headers.append("vary", "Origin");
   if (policy.credentials) response.headers.set("access-control-allow-credentials", "true");
+  // #3925: the headers a browser script may read from a cross-origin response: the ones Bynk
+  // writes for a client (a `401`'s challenge, #3914; `Retry-After`; `Location`; `ETag`) and the
+  // author's `expose` names. Naming a header the response does not carry is harmless.
+  if (policy.exposeHeaders.length > 0) {
+    response.headers.set("access-control-expose-headers", policy.exposeHeaders.join(", "));
+  }
+  return response;
+}
+
+// #3914 (RFC 9110 §15.5.2): every `401` carries a `WWW-Authenticate` challenge derived from
+// the route's actor(s), in the order given (one header line per challenge). A response that
+// already carries one is left alone. A `Bearer` challenge gains `error="invalid_token"` (RFC
+// 6750 §3) only when the request presented a bearer token, and never an `error_description`.
+export function applyChallenge<R extends Response>(
+  response: R,
+  request: Request,
+  challenges: readonly string[],
+): R {
+  if (response.status !== 401 || response.headers.has("www-authenticate")) return response;
+  const presented = /^\s*bearer\s+\S/i.test(request.headers.get("authorization") ?? "");
+  for (const c of challenges) {
+    const withError = presented && c.startsWith("Bearer ") ? `${c}, error="invalid_token"` : c;
+    response.headers.append("www-authenticate", withError);
+  }
   return response;
 }
 
@@ -1647,6 +2360,10 @@ export function corsPreflightResponse(policy: CorsPolicy, requestOrigin: string 
 export interface SecurityPolicy {
   readonly nosniff: boolean;
   readonly hstsMaxAgeSecs: number | null;
+  // #3923: the `Content-Security-Policy` and `Referrer-Policy` an HTML response gets,
+  // both resolved at compile time (the `security { }` fields or their defaults).
+  readonly htmlCsp: string;
+  readonly htmlReferrerPolicy: string;
 }
 
 // Stamp the security response headers onto an already-built `Response`, in place
@@ -1665,14 +2382,21 @@ export function applySecurityHeaders<R extends Response>(
   if (policy.hstsMaxAgeSecs !== null) {
     response.headers.set("strict-transport-security", `max-age=${policy.hstsMaxAgeSecs}`);
   }
+  // #3923: framing and referrer protection for a page. It is decided by the response's
+  // own media type (parameters stripped), so a JSON API is unchanged.
+  const mediaType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (mediaType === "text/html") {
+    response.headers.set("content-security-policy", policy.htmlCsp);
+    response.headers.set("referrer-policy", policy.htmlReferrerPolicy);
+  }
   return response;
 }
 
 // v0.140 (ADR 0163): a **weak** validator over a response's serialised body, from
 // a fast non-cryptographic hash (FNV-1a, 32-bit). Weak (`W/"…"`) is correct here —
 // the guarantee is *semantic* equivalence of the representation, which weak
-// validators exist for, and Bynk serves no byte-range requests (the one place a
-// strong validator is required). Synchronous, so `httpResultToResponse` stays sync
+// validators exist for, and a byte range (the one place a strong validator is
+// required) is answered only by a handler's own `PartialContent`, which carries its own strong tag (#4466). Synchronous, so `httpResultToResponse` stays sync
 // (no `await crypto.subtle`); a stronger hash (SHA-256) is a drop-in swap behind
 // this name if ever needed.
 export function weakETag(body: string): string {
@@ -1777,6 +2501,15 @@ export function noStore<R extends Response>(response: R): R {
   return response;
 }
 
+// #3922: a route guarded by an actor that carries a credential answers one caller's data, so
+// every response of it says `private` unless the route already set a `Cache-Control` (an
+// `@cache`, `noStore`, or a response that sets a cookie). `private` still lets the caller's own
+// browser keep and revalidate it; only a shared cache is told not to store it.
+export function privateByDefault<R extends Response>(response: R): R {
+  if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
+  return response;
+}
+
 export function edgeCacheGuard(request: Request, response: Response): Response {
   if (request.method !== "GET" && request.method !== "HEAD") return response;
   if (response.status === 101 || response.headers.has("cache-control")) return response;
@@ -1803,11 +2536,14 @@ export function notModifiedIfMatch<R extends Response>(
   response: R,
   request: Request,
 ): R | Response {
+  // #4466: RFC 9110 §13.2.2 evaluates `If-None-Match` (step 3) before `If-Range` (step 5), so a
+  // matching `If-None-Match` is answered `304` first: a bodyless answer cannot leak stale bytes. A
+  // `206` that does not short-circuit is checked against `If-Range` before it is sent.
   const etag = response.headers.get("etag");
-  if (etag === null) return response;
   const ifNoneMatch = request.headers.get("if-none-match");
-  if (ifNoneMatch === null) return response;
-  if (!ifNoneMatchMatches(ifNoneMatch, etag)) return response;
+  if (etag === null || ifNoneMatch === null || !ifNoneMatchMatches(ifNoneMatch, etag)) {
+    return ifRangeGuard(response, request);
+  }
   const headers = new Headers();
   headers.set("etag", etag);
   const cacheControl = response.headers.get("cache-control");

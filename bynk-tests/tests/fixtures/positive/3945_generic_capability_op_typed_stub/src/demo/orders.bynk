@@ -1,0 +1,35 @@
+context demo.orders
+
+consumes demo.slots { Slot as Item }
+consumes idempotency { Idempotency }
+
+service slot {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    let found <- Idempotency.dedup[Item]("slot-key")
+    match found {
+      Some(s) => s.id
+      None => 0
+    }
+  }
+}
+
+service reserve {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    let count <- Idempotency.dedup[Int]("order-key-1")
+    let label <- Idempotency.dedup[String]("order-key-2")
+    match count {
+      Some(n) => match label {
+        Some(_) => n
+        None => n + 100
+      }
+      None => 0
+    }
+  }
+}
+
+// #4382: `stamp` has no `Codable` parameter and its `T` is inferred from the argument.
+service stamped {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    Idempotency.stamp(5)
+  }
+}

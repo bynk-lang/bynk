@@ -2,7 +2,7 @@
 name = "shop-gate"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[d1_databases]]
 binding = "D1_IDEMPOTENCY"
@@ -17,4 +17,8 @@ class_name = "Gate"
 [exports.Gate]
 type = "durable-object"
 storage = "sqlite"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

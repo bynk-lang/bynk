@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64 } from "../../__bynk_runtime/bytes.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -10,8 +11,8 @@ export type UserId = string & { readonly __brand: "store.uploads.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -27,7 +28,7 @@ export const uploads = {
   async http_POST_signed(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__bynkBytesToBase64(body));
   },
-  async http_POST_either(body: globalThis.Uint8Array, deps: { who: { tag: "Sender" } | { tag: "User", identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_either(body: globalThis.Uint8Array, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "Sender": {
         return HttpResult.Ok(`sender ${String(__bynkBytesToBase64(body))}`);

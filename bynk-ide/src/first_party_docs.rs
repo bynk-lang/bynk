@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 /// The Book page every entry below lives on.
-const CAPABILITIES_PAGE: &str = "https://bynk-lang.org/book/reference/bynk-capabilities/";
+const CAPABILITIES_PAGE: &str = "https://bynk-lang.org/reference/bynk-capabilities/";
 
 /// `(first-party unit, capability, anchor on `CAPABILITIES_PAGE`, operations)`.
 /// A capability documented only as a table row links to its unit's surface
@@ -256,7 +256,7 @@ mod tests {
             return; // published crate: the site is not packaged
         }
         let text = std::fs::read_to_string(
-            site.join("src/content/docs/book/reference/bynk-capabilities.md"),
+            site.join("src/content/docs/reference/bynk-capabilities.md"),
         )
         .expect("the first-party capabilities page moved: update CAPABILITIES_PAGE and this test");
         let mut in_fence = false;
@@ -292,9 +292,7 @@ mod tests {
             resolve_first_party_doc_link(&scope(&["ratelimit", "bynk"]), "ratelimit", "Clock.now");
         assert_eq!(
             url.as_deref(),
-            Some(
-                "https://bynk-lang.org/book/reference/bynk-capabilities/#the-portable-surface--bynk"
-            )
+            Some("https://bynk-lang.org/reference/bynk-capabilities/#the-portable-surface--bynk")
         );
     }
 

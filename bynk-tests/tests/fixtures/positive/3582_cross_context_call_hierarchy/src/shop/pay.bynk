@@ -1,7 +1,7 @@
 context shop.pay
 
 service charge {
-  on call(amount: Int) -> Effect[Result[Int, Int]] {
+  on call(amount: Int) -> Effect[Result[Int, Int]] by Caller {
     Ok(amount)
   }
 }

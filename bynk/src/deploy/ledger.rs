@@ -165,7 +165,7 @@ pub(crate) struct Environment {
     /// out-of-band comes back rather than being skipped on this set's word.
     /// Additive and `default`ed, so a slice-0 or slice-2 ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    queues: BTreeSet<String>,
+    pub(crate) queues: BTreeSet<String>,
     /// #2579: the subset of [`Environment::queues`] this project only found
     /// already on the account, never created. `--prune` leaves them alone: a
     /// queue another Worker owns must not be deleted, with its undelivered
@@ -177,7 +177,7 @@ pub(crate) struct Environment {
     /// stays here, harmlessly: `--prune` never reaches it. Additive and
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    reused_queues: BTreeSet<String>,
+    pub(crate) reused_queues: BTreeSet<String>,
     /// State-migrations S3 (#2248, #2253 review): per Worker, the agent classes
     /// whose `deleted` tombstone a successful push carried in this
     /// environment. A `removed agent` declaration stays in source (and its
@@ -197,6 +197,17 @@ pub(crate) struct Environment {
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     renamed_classes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3819: per Worker, each agent class its last successful push hosted, with the
+    /// `@jurisdiction` its Durable Object ids were minted under (`"none"` for an agent with
+    /// none: the unrestricted namespace). An id minted under another jurisdiction is a
+    /// different id for the same name, so a changed value would orphan every instance, and the
+    /// next plan compares against this record and asks to confirm the change. Replaced on every
+    /// push of the Worker, so a class that is later removed leaves nothing behind. A record of
+    /// what was pushed, never a claim about the namespace, which Cloudflare owns. Additive and
+    /// `default`ed, so an older ledger still reads (a class it does not list reads as
+    /// unrestricted, which is what every agent was before `@jurisdiction`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    agent_jurisdictions: BTreeMap<String, BTreeMap<String, String>>,
     /// #3328: per Worker, the Email Routing `addresses` its last successful push
     /// carried in this environment. Wrangler deletes the rule of an address no
     /// longer listed, so mail to it would bounce: the next deploy compares the
@@ -207,6 +218,10 @@ pub(crate) struct Environment {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     email_addresses: BTreeMap<String, BTreeSet<String>>,
 }
+
+/// #3819: what the ledger records for an agent class whose ids come from the unrestricted
+/// namespace. Not a jurisdiction name, so it cannot be mistaken for one.
+pub(crate) const UNRESTRICTED_AGENT: &str = "none";
 
 /// P3 (#2342): the `namespace_id` this project allocated for one rate limiter.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,6 +274,10 @@ pub(crate) struct D1Record {
     pub(crate) name: String,
     /// Cloudflare's `database_id` for it.
     pub(crate) id: String,
+    /// #3820: the jurisdiction it was created in, if any. A database's jurisdiction is fixed when
+    /// it is made, so a source that now names another is refused, not recreated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
     /// Databases this binding used to have, under a name it no longer
     /// derives. They hold data, so they stay recorded (and are reported as
     /// orphans) until their entry is removed by hand, as R2's are.
@@ -578,6 +597,50 @@ impl DeployLock {
             .is_some_and(|recorded| recorded == to)
     }
 
+    /// #3819: the jurisdiction `class` of `worker` was last pushed under in `environment`:
+    /// [`UNRESTRICTED_AGENT`] for an agent with none. `None` when the ledger does not record the
+    /// class (a ledger from before `@jurisdiction`, or a class never pushed), which callers read
+    /// as unrestricted for a Worker that has been deployed, and as new otherwise.
+    pub(crate) fn recorded_agent_jurisdiction(
+        &self,
+        environment: &str,
+        worker: &str,
+        class: &str,
+    ) -> Option<&str> {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.agent_jurisdictions.get(worker))
+            .and_then(|classes| classes.get(class))
+            .map(String::as_str)
+    }
+
+    /// #3819: whether the ledger holds a record of `worker`'s classes at all, which a push after
+    /// `@jurisdiction` writes. A Worker deployed without one was last pushed by an older toolchain.
+    pub(crate) fn has_agent_jurisdictions(&self, environment: &str, worker: &str) -> bool {
+        self.environments
+            .get(environment)
+            .is_some_and(|env| env.agent_jurisdictions.contains_key(worker))
+    }
+
+    /// #3819: record the classes a successful push of `worker` hosted, and the jurisdiction each
+    /// one's ids were minted under, replacing what was recorded for it.
+    pub(crate) fn record_agent_jurisdictions(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        classes: BTreeMap<String, String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if classes.is_empty() {
+            env.agent_jurisdictions.remove(worker);
+        } else {
+            env.agent_jurisdictions.insert(worker.to_string(), classes);
+        }
+    }
+
     /// #2276 Decision D: record the `renamed` tombstones a successful push of
     /// `worker` carried, replacing what was recorded for it.
     pub(crate) fn record_renamed_classes(
@@ -884,342 +947,6 @@ impl DeployLock {
             .and_then(|env| env.workers.get(worker))
             .and_then(|record| record.contracts.as_ref())
     }
-
-    /// #3479: record the index `worker`'s `Vectorize` `binding` is bound to.
-    /// An index this replaces under another name is not forgotten: its vectors
-    /// are still there (unless it was adopted, which was never the project's).
-    pub(crate) fn record_vectorize(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-        adopted: bool,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .vectorize_instances
-            .entry(worker.to_string())
-            .or_default();
-        let mut superseded = Vec::new();
-        if let Some(old) = instances.remove(binding) {
-            superseded = old.superseded;
-            // A binding that moves back to an index it left (A, B, A) must
-            // not list the live index as an orphan: `--prune` would delete it.
-            superseded.retain(|past| past.name != name);
-            if old.name != name && !old.adopted {
-                superseded.push(VectorizePast {
-                    name: old.name,
-                    adopted: old.adopted,
-                });
-            }
-        }
-        instances.insert(
-            binding.to_string(),
-            VectorizeRecord {
-                name: name.to_string(),
-                adopted,
-                superseded,
-            },
-        );
-    }
-
-    /// #3477: record that `worker`'s `Container` `capability` runs the adopted
-    /// `image` in `environment`, or, with `None`, that it is built again (the
-    /// adoption was dropped).
-    pub(crate) fn record_container_image(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        capability: &str,
-        image: Option<&str>,
-    ) {
-        match image {
-            Some(image) => {
-                self.environments
-                    .entry(environment.to_string())
-                    .or_default()
-                    .container_images
-                    .entry(worker.to_string())
-                    .or_default()
-                    .insert(capability.to_string(), image.to_string());
-            }
-            None => {
-                let Some(env) = self.environments.get_mut(environment) else {
-                    return;
-                };
-                if let Some(images) = env.container_images.get_mut(worker) {
-                    images.remove(capability);
-                    if images.is_empty() {
-                        env.container_images.remove(worker);
-                    }
-                }
-            }
-        }
-    }
-
-    /// #3479: drop an index from the ledger once `--prune` deleted it, whether
-    /// it was the live one (its Worker or capability is gone) or a superseded
-    /// one.
-    pub(crate) fn forget_vectorize(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        name: &str,
-    ) {
-        let Some(instances) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.vectorize_instances.get_mut(worker))
-        else {
-            return;
-        };
-        if instances.get(binding).is_some_and(|r| r.name == name) {
-            instances.remove(binding);
-        } else if let Some(record) = instances.get_mut(binding) {
-            record.superseded.retain(|past| past.name != name);
-        }
-        if instances.is_empty() {
-            let env = self.environments.get_mut(environment).expect("present");
-            env.vectorize_instances.remove(worker);
-        }
-    }
-
-    /// #3319: record the Hyperdrive config made (or adopted) for `worker`'s
-    /// `Postgres` `binding`. A config this replaces is not forgotten: it
-    /// stays as a superseded one, reported as an orphan.
-    pub(crate) fn record_hyperdrive(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        record: HyperdriveRecord,
-    ) {
-        let instances = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .hyperdrive_instances
-            .entry(worker.to_string())
-            .or_default();
-        let mut record = record;
-        if let Some(old) = instances.remove(binding) {
-            record.superseded = old.superseded;
-            // A config the project adopted was never its own to delete, so
-            // moving off it leaves nothing to report.
-            if old.id != record.id && !old.adopted {
-                record.superseded.push(HyperdrivePast {
-                    name: old.name,
-                    id: old.id,
-                    adopted: old.adopted,
-                });
-            }
-        }
-        instances.insert(binding.to_string(), record);
-    }
-
-    /// #3319: drop a config from the ledger once `--prune` deleted it, whether
-    /// it was the live one (its Worker or capability is gone) or a superseded
-    /// one.
-    pub(crate) fn forget_hyperdrive(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        id: &str,
-    ) {
-        let Some(instances) = self
-            .environments
-            .get_mut(environment)
-            .and_then(|env| env.hyperdrive_instances.get_mut(worker))
-        else {
-            return;
-        };
-        if instances.get(binding).is_some_and(|r| r.id == id) {
-            instances.remove(binding);
-        } else if let Some(record) = instances.get_mut(binding) {
-            record.superseded.retain(|past| past.id != id);
-        }
-        if instances.is_empty() {
-            let env = self.environments.get_mut(environment).expect("present");
-            env.hyperdrive_instances.remove(worker);
-        }
-    }
-
-    /// #3301: record the store `worker`'s `StoredSecret` `binding` was linked
-    /// to. `true` when that changed the ledger.
-    pub(crate) fn record_stored_secret(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: StoredSecretLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .stored_secret_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
-
-    /// #3480: record the instance `worker`'s `AiSearch` `binding` was linked
-    /// to. `true` when that changed the ledger.
-    pub(crate) fn record_ai_search(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: AiSearchLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .ai_search_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
-
-    /// #3513 A: record the certificate `worker`'s `MtlsCertificate` `binding` was linked to.
-    /// `true` when that changed the ledger.
-    pub(crate) fn record_mtls_certificate(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-        link: MtlsCertificateLink,
-    ) -> bool {
-        let links = self
-            .environments
-            .entry(environment.to_string())
-            .or_default()
-            .mtls_certificate_links
-            .entry(worker.to_string())
-            .or_default();
-        if links.get(binding) == Some(&link) {
-            return false;
-        }
-        links.insert(binding.to_string(), link);
-        true
-    }
-
-    /// P3 (#2342): the `namespace_id` for `worker`'s rate limiter `binding`
-    /// in `environment`: the recorded one, else a new one — the first id from
-    /// its [`ratelimit_seed`] upward (wrapping within the span) that no rate
-    /// limiter in any environment of this ledger holds — recorded now. `true`
-    /// when it was allocated.
-    pub(crate) fn allocate_ratelimit(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        binding: &str,
-    ) -> (String, bool) {
-        if let Some(id) = recorded_ratelimit(self, worker, binding, environment) {
-            return (id.to_string(), false);
-        }
-        let taken: BTreeSet<&str> = self
-            .environments
-            .values()
-            .flat_map(|env| env.ratelimit_instances.values())
-            .flat_map(|instances| instances.values())
-            .map(|r| r.namespace_id.as_str())
-            .collect();
-        let seed = ratelimit_seed(environment, worker, binding) - FIRST_RATELIMIT_NAMESPACE;
-        let id = (0..RATELIMIT_NAMESPACE_SPAN)
-            .map(|k| {
-                (FIRST_RATELIMIT_NAMESPACE + (seed + k) % RATELIMIT_NAMESPACE_SPAN).to_string()
-            })
-            .find(|n| !taken.contains(n.as_str()))
-            .expect("an unused id");
-        self.environments
-            .entry(environment.to_string())
-            .or_default()
-            .ratelimit_instances
-            .entry(worker.to_string())
-            .or_default()
-            .insert(
-                binding.to_string(),
-                RateLimitNamespace {
-                    namespace_id: id.clone(),
-                },
-            );
-        (id, true)
-    }
-
-    /// P3 (#2342): forget `worker`'s rate limiters that `declared` no longer
-    /// names. A limiter holds no data and has no account resource, so a
-    /// removed instance needs nothing deleted, only its row dropped (its id
-    /// is then free again). `true` when anything was forgotten.
-    pub(crate) fn forget_undeclared_ratelimits(
-        &mut self,
-        environment: &str,
-        worker: &str,
-        declared: &[String],
-    ) -> bool {
-        let Some(env) = self.environments.get_mut(environment) else {
-            return false;
-        };
-        let Some(instances) = env.ratelimit_instances.get_mut(worker) else {
-            return false;
-        };
-        let before = instances.len();
-        instances.retain(|binding, _| declared.contains(binding));
-        let changed = instances.len() != before;
-        if instances.is_empty() {
-            env.ratelimit_instances.remove(worker);
-        }
-        changed
-    }
-
-    pub(crate) fn has_queue(&self, environment: &str, queue: &str) -> bool {
-        self.environments
-            .get(environment)
-            .is_some_and(|env| env.queues.contains(queue))
-    }
-
-    /// Note that this project has created `queue`. Returns whether the ledger
-    /// changed, so a re-run that provisions nothing also writes nothing.
-    pub(crate) fn record_queue(&mut self, environment: &str, queue: &str) -> bool {
-        let env = self
-            .environments
-            .entry(environment.to_string())
-            .or_default();
-        // Created by this run, so whatever the ledger held before it is
-        // stale: the queue is Bynk's to prune now.
-        let was_reused = env.reused_queues.remove(queue);
-        env.queues.insert(queue.to_string()) || was_reused
-    }
-
-    /// Note that `queue` was already on the account when this project met it
-    /// (#2579): confirmed to exist, so the plan says `reuse`, but not Bynk's to
-    /// prune. A queue the ledger already holds is left as it was, whichever
-    /// way. Returns whether the ledger changed.
-    pub(crate) fn record_reused_queue(&mut self, environment: &str, queue: &str) -> bool {
-        let env = self
-            .environments
-            .entry(environment.to_string())
-            .or_default();
-        if !env.queues.insert(queue.to_string()) {
-            return false;
-        }
-        env.reused_queues.insert(queue.to_string());
-        true
-    }
 }
 
 /// Slice 5: every ledger entry for this environment that the current build no
@@ -1272,34 +999,6 @@ pub(crate) struct Orphans {
     pub(crate) queues: Vec<String>,
 }
 
-/// One recorded Vectorize index the build no longer declares (#3479): a
-/// capability removed or renamed, an index replaced, or a whole Worker gone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanVectorize {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The index's name on the account.
-    pub(crate) index: String,
-    /// An adopted index is not the project's to delete.
-    pub(crate) adopted: bool,
-}
-
-/// One recorded Hyperdrive config the build no longer declares (#3319): a
-/// capability removed or renamed, a config replaced, or a whole Worker gone.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct OrphanHyperdrive {
-    pub(crate) worker: String,
-    pub(crate) binding: String,
-    /// The config's name on the account.
-    pub(crate) config: String,
-    /// Its id, which `--prune` deletes it by. Not serialised: the plan names
-    /// the config, and an id is not for the reader.
-    #[serde(skip)]
-    pub(crate) id: String,
-    /// An adopted config is reported and never deleted.
-    pub(crate) adopted: bool,
-}
-
 impl Orphans {
     /// Whether `--prune` would actually delete anything. **Not** the same as
     /// checking whether every field is empty (review, #840): `workers`
@@ -1309,9 +1008,6 @@ impl Orphans {
     /// not a valid state.
     pub(crate) fn has_prunable(&self) -> bool {
         kinds_have_prunable(self)
-            || !self.queues.is_empty()
-            || self.hyperdrive.iter().any(|h| !h.adopted)
-            || self.vectorize.iter().any(|v| !v.adopted)
     }
 
     /// These orphans as the account names them under `environment`, for the
@@ -1335,8 +1031,8 @@ impl Orphans {
             kv: Vec::new(),
             r2: Vec::new(),
             d1: Vec::new(),
-            hyperdrive: self.hyperdrive.clone(),
-            vectorize: self.vectorize.clone(),
+            hyperdrive: Vec::new(),
+            vectorize: Vec::new(),
             workers: self
                 .workers
                 .iter()
@@ -1355,11 +1051,7 @@ impl Orphans {
                 .iter()
                 .map(|(worker, state)| (self.shown_worker(environment, worker), state.clone()))
                 .collect(),
-            queues: self
-                .queues
-                .iter()
-                .map(|queue| env_qualify(environment, queue))
-                .collect(),
+            queues: Vec::new(),
         };
         show_kind_orphans(self, environment, &mut shown);
         shown
@@ -1386,76 +1078,11 @@ pub(crate) fn find_orphans(
     let Some(env) = lock.environments.get(environment) else {
         return Orphans::default();
     };
-    // P2 (#2578): a queue a context only sends to is as live as a consumed one.
-    let live_queues: BTreeSet<&str> = resources
-        .values()
-        .flat_map(|r| {
-            r.queues
-                .iter()
-                .chain(&r.producer_queues)
-                .map(String::as_str)
-        })
-        .collect();
-    // #3479: an index likewise, with its Worker or on its own; one a changed
-    // name left behind is an orphan while its binding is live, too.
-    let vectorize_orphans = env
-        .vectorize_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances.iter().flat_map(move |(binding, record)| {
-                let live = resources
-                    .get(worker)
-                    .is_some_and(|r| r.vectorize_indexes.iter().any(|v| &v.binding == binding));
-                let main = (!live).then(|| OrphanVectorize {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    index: record.name.clone(),
-                    adopted: record.adopted,
-                });
-                main.into_iter()
-                    .chain(record.superseded.iter().map(move |past| OrphanVectorize {
-                        worker: worker.clone(),
-                        binding: binding.clone(),
-                        index: past.name.clone(),
-                        adopted: past.adopted,
-                    }))
-            })
-        })
-        .collect();
-    // #3319: a Hyperdrive config likewise, with its Worker or on its own.
-    let hyperdrive_orphans = env
-        .hyperdrive_instances
-        .iter()
-        .flat_map(|(worker, instances)| {
-            instances.iter().flat_map(move |(binding, record)| {
-                let live = resources
-                    .get(worker)
-                    .is_some_and(|r| r.hyperdrive.iter().any(|h| &h.binding == binding));
-                let own = (!live).then(|| OrphanHyperdrive {
-                    worker: worker.clone(),
-                    binding: binding.clone(),
-                    config: record.name.clone(),
-                    id: record.id.clone(),
-                    adopted: record.adopted,
-                });
-                // A config a replacement left behind is an orphan while its
-                // binding is live, too.
-                own.into_iter()
-                    .chain(record.superseded.iter().map(move |past| OrphanHyperdrive {
-                        worker: worker.clone(),
-                        binding: binding.clone(),
-                        config: past.name.clone(),
-                        id: past.id.clone(),
-                        adopted: past.adopted,
-                    }))
-            })
-        })
-        .collect();
     let mut orphans = Orphans {
         r2: Vec::new(),
-        vectorize: vectorize_orphans,
+        vectorize: Vec::new(),
         d1: Vec::new(),
-        hyperdrive: hyperdrive_orphans,
+        hyperdrive: Vec::new(),
         kv: Vec::new(),
         workers: env
             .workers
@@ -1485,113 +1112,11 @@ pub(crate) fn find_orphans(
             })
             .map(|(worker, record)| (worker.clone(), record.fresh_agents.clone()))
             .collect(),
-        queues: env
-            .queues
-            .iter()
-            .filter(|queue| !live_queues.contains(queue.as_str()))
-            .filter(|queue| !env.reused_queues.contains(queue.as_str()))
-            .cloned()
-            .collect(),
+        queues: Vec::new(),
     };
     // 1D.1 (#3929): each converted kind's orphans.
     find_kind_orphans(&OrphanCx { env, resources }, &mut orphans);
     orphans
-}
-
-/// The adopted image recorded for `worker`'s `Container` `capability` in
-/// `environment` (#3477).
-pub(crate) fn recorded_container_image<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    capability: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.container_images.get(worker))
-        .and_then(|images| images.get(capability))
-        .map(String::as_str)
-}
-
-/// The index recorded for `worker`'s `Vectorize` `binding` (#3479).
-pub(crate) fn recorded_vectorize<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a VectorizeRecord> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.vectorize_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-}
-
-/// The Hyperdrive config recorded for `worker`'s `Postgres` `binding` (#3319).
-pub(crate) fn recorded_hyperdrive<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a HyperdriveRecord> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.hyperdrive_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-}
-
-/// The store recorded for `worker`'s `StoredSecret` `binding` (#3301).
-pub(crate) fn recorded_stored_secret<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a StoredSecretLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.stored_secret_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
-/// The certificate recorded for `worker`'s `MtlsCertificate` `binding` (#3513 A).
-pub(crate) fn recorded_mtls_certificate<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a MtlsCertificateLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.mtls_certificate_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
-/// The instance recorded for `worker`'s `AiSearch` `binding` (#3480).
-#[cfg(test)]
-pub(crate) fn recorded_ai_search<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a AiSearchLink> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.ai_search_links.get(worker))
-        .and_then(|links| links.get(binding))
-}
-
-/// The `namespace_id` recorded for `worker`'s rate limiter `binding` (P3,
-/// #2342).
-pub(crate) fn recorded_ratelimit<'a>(
-    lock: &'a DeployLock,
-    worker: &str,
-    binding: &str,
-    environment: &str,
-) -> Option<&'a str> {
-    lock.environments
-        .get(environment)
-        .and_then(|env| env.ratelimit_instances.get(worker))
-        .and_then(|instances| instances.get(binding))
-        .map(|r| r.namespace_id.as_str())
 }
 
 pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
@@ -1634,6 +1159,8 @@ pub(crate) fn read_lock(path: &Path) -> Result<DeployLock, String> {
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
+    #[cfg(test)]
+    write_watch::observe(path, lock)?;
     let body = toml::to_string_pretty(lock).map_err(|e| e.to_string())?;
     // Atomic, durable replace: write a sibling temp file, fsync it, then rename
     // it over the ledger. A power loss or kill can then only leave the intact old
@@ -1696,6 +1223,37 @@ pub(crate) fn write_lock(path: &Path, lock: &DeployLock) -> Result<(), String> {
     Ok(())
 }
 
+/// 1D.2 (#4001): a test's view of every [`write_lock`] on its thread, which may also refuse
+/// one, so the apply fixtures (`apply_tests.rs`) can pin the ledger after each write and the
+/// message when a write fails. Nothing watches outside a test.
+#[cfg(test)]
+pub(crate) mod write_watch {
+    use super::*;
+    use std::cell::RefCell;
+
+    /// Called with each ledger about to be written; an `Err` is the write's failure.
+    pub(crate) type Watch = Box<dyn FnMut(&Path, &DeployLock) -> Result<(), String>>;
+
+    thread_local! {
+        static WATCH: RefCell<Option<Watch>> = const { RefCell::new(None) };
+    }
+
+    /// Run `f` with `watch` seeing every ledger write on this thread.
+    pub(crate) fn watching<T>(watch: Watch, f: impl FnOnce() -> T) -> T {
+        WATCH.with(|w| *w.borrow_mut() = Some(watch));
+        let result = f();
+        WATCH.with(|w| *w.borrow_mut() = None);
+        result
+    }
+
+    pub(super) fn observe(path: &Path, lock: &DeployLock) -> Result<(), String> {
+        WATCH.with(|w| match w.borrow_mut().as_mut() {
+            Some(watch) => watch(path, lock),
+            None => Ok(()),
+        })
+    }
+}
+
 /// #3513 A: bind a served Worker's `[[mtls_certificates]]` by the ids the last deploy of
 /// `environment` recorded, for `bynk dev`. An mTLS binding has no local simulation, so the
 /// development copy runs it on Cloudflare and needs the certificate's real id, which only a deploy
@@ -1717,7 +1275,7 @@ pub fn materialise_mtls_for_dev(
     let mut ids = BTreeMap::new();
     let mut unlinked = Vec::new();
     for binding in bindings {
-        match recorded_mtls_certificate(&lock, worker, &binding, environment) {
+        match lock.recorded::<MtlsCertificate>(environment, worker, &binding) {
             Some(link) => {
                 ids.insert(binding, link.certificate_id.clone());
             }
@@ -1794,7 +1352,10 @@ pub fn materialise_deploy_state(
     let lock = read_lock(&project_root.join(LOCK_FILE))?;
     let mut limiter_ids = BTreeMap::new();
     for binding in limiters {
-        let Some(id) = recorded_ratelimit(&lock, worker, &binding, environment) else {
+        let Some(id) = lock
+            .recorded::<RateLimit>(environment, worker, &binding)
+            .map(|r| r.namespace_id.as_str())
+        else {
             return Err(format!(
                 "remote rate limiter `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -1829,7 +1390,7 @@ pub fn materialise_deploy_state(
     }
     let mut store_ids = BTreeMap::new();
     for (binding, _, _) in &stored {
-        let Some(link) = recorded_stored_secret(&lock, worker, binding, environment) else {
+        let Some(link) = lock.recorded::<StoredSecret>(environment, worker, binding) else {
             return Err(format!(
                 "remote Secrets Store secret `{binding}` for `{worker}` has not been linked under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -1838,7 +1399,7 @@ pub fn materialise_deploy_state(
     }
     let mut hyperdrive_ids = BTreeMap::new();
     for (binding, _) in &hyperdrive {
-        let Some(recorded) = recorded_hyperdrive(&lock, worker, binding, environment) else {
+        let Some(recorded) = lock.recorded::<Hyperdrive>(environment, worker, binding) else {
             return Err(format!(
                 "remote Hyperdrive config `{binding}` for `{worker}` has not been provisioned under environment `{environment}`; run `bynk deploy --env {environment}` first"
             ));
@@ -1917,37 +1478,9 @@ pub fn materialise_deploy_state(
 /// [`confirm`] already uses, just with its own prompt so a script that only
 /// meant to authorise *creation* cannot accidentally also authorise deletion.
 pub(crate) fn confirm_prune(yes: bool, orphans: &Orphans, environment: &str) -> bool {
-    // 1D.1 (#3929): each converted kind's, first.
+    // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
     let kinds = announce_prunable_kinds(orphans, environment);
-    for queue in &orphans.queues {
-        // The name `prune_orphans` deletes, not the ledger key (#2028).
-        emsg!(
-            "bynk: will delete queue `{}`",
-            env_qualify(environment, queue)
-        );
-    }
-    // #3319: a Hyperdrive config the deploy made, by the name it has on the
-    // account. An adopted one is not the project's to delete.
-    let hyperdrive: Vec<_> = orphans.hyperdrive.iter().filter(|h| !h.adopted).collect();
-    for h in &hyperdrive {
-        eprintln!(
-            "bynk: will delete Hyperdrive config `{}` of `{}`'s `{}`",
-            h.config, h.worker, h.binding
-        );
-    }
-    // #3479: an index the deploy made, with its vectors; an adopted one is not
-    // the project's to delete.
-    let vectorize: Vec<_> = orphans.vectorize.iter().filter(|v| !v.adopted).collect();
-    for v in &vectorize {
-        eprintln!(
-            "bynk: will delete Vectorize index `{}` of `{}`'s `{}`, and every vector in it",
-            v.index, v.worker, v.binding
-        );
-    }
-    confirm_deletion_prompt(
-        yes,
-        kinds + orphans.queues.len() + hyperdrive.len() + vectorize.len(),
-    )
+    confirm_deletion_prompt(yes, kinds)
 }
 
 /// The `--yes`-or-ask tail of [`confirm_prune`], shared with the Email Routing
@@ -1967,7 +1500,8 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
         && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
-/// Delete every KV and queue orphan `confirm_prune` just named — never a
+/// Delete every orphan `confirm_prune` just named: each converted kind's (1D.1),
+/// then each queue — never a
 /// worker (DECISION C: `wrangler delete`'s blast radius, routes/domains/crons
 /// along with the script, is categorically larger than a namespace or a
 /// queue, and pruning a whole Worker is explicitly out of this slice).
@@ -1979,60 +1513,14 @@ pub(crate) fn confirm_deletion_prompt(yes: bool, count: usize) -> bool {
 /// ledger write, and the next run would re-report the same orphan and
 /// re-issue a delete Cloudflare now rejects as not-found.
 pub(crate) fn prune_orphans(
-    provenance: &Provenance,
-    project_root: &Path,
-    lock: &mut DeployLock,
-    lock_path: &Path,
+    tools: Tools<'_>,
+    writer: &mut LedgerWriter<'_>,
     environment: &str,
     orphans: &Orphans,
+    lives: Lives<'_>,
 ) -> Result<(), DeployFailure> {
-    // 1D.1 (#3929): each converted kind's, first.
-    prune_kind_orphans(
-        Tools {
-            provenance,
-            project_root,
-        },
-        lock,
-        lock_path,
-        environment,
-        orphans,
-    )?;
-    // #3479: each orphaned index the deploy made (never an adopted one), named
-    // as the account has it; gone already is success, as for a queue.
-    for orphan in orphans.vectorize.iter().filter(|o| !o.adopted) {
-        delete_vectorize_index(provenance, &orphan.index, project_root).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not delete the orphaned Vectorize index `{}` of `{}`'s `{}`: {e}",
-                orphan.index, orphan.worker, orphan.binding
-            ))
-        })?;
-        lock.forget_vectorize(environment, &orphan.worker, &orphan.binding, &orphan.index);
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted the orphaned Vectorize index `{}` but could not record it in {}: {e}",
-                orphan.index,
-                lock_path.display()
-            ))
-        })?;
-    }
-    for queue in &orphans.queues {
-        let physical = env_qualify(environment, queue);
-        delete_queue(provenance, &physical, project_root).map_err(|e| {
-            DeployFailure::driver(format!(
-                "could not delete the orphaned queue `{physical}`: {e}"
-            ))
-        })?;
-        if let Some(env) = lock.environments.get_mut(environment) {
-            env.queues.remove(queue);
-            env.reused_queues.remove(queue);
-        }
-        write_lock(lock_path, lock).map_err(|e| {
-            DeployFailure::driver(format!(
-                "deleted the orphaned queue `{physical}` but could not record it in {}: {e}",
-                lock_path.display()
-            ))
-        })?;
-    }
+    // 1D.1 (#3929): each converted kind's, in the list's order (ruled for 1D.1c), first.
+    prune_kind_orphans(tools, writer, environment, orphans, lives)?;
     Ok(())
 }
 
@@ -2094,7 +1582,12 @@ pub(crate) mod tests {
 
     /// Mark `queue` as one this project has already created.
     pub(crate) fn with_queue(mut lock: DeployLock, queue: &str) -> DeployLock {
-        lock.record_queue("default", queue);
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            queue,
+        );
         lock
     }
 
@@ -2136,14 +1629,14 @@ pub(crate) mod tests {
         let mut lock = DeployLock::default();
         let api = ratelimit_seed("default", "api", "RATELIMIT_A");
         assert_eq!(
-            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            allocate_in(&mut lock, "default", "api", "RATELIMIT_A"),
             (api.to_string(), true)
         );
         assert_eq!(
-            lock.allocate_ratelimit("default", "api", "RATELIMIT_A"),
+            allocate_in(&mut lock, "default", "api", "RATELIMIT_A"),
             (api.to_string(), false)
         );
-        let staging = lock.allocate_ratelimit("staging", "api", "RATELIMIT_A").0;
+        let staging = allocate_in(&mut lock, "staging", "api", "RATELIMIT_A").0;
         assert_ne!(staging, api.to_string(), "each environment its own");
         // A seed another limiter in the ledger already holds probes upward.
         let mut crowded = DeployLock::default();
@@ -2163,11 +1656,14 @@ pub(crate) mod tests {
                 )]),
             );
         assert_eq!(
-            crowded.allocate_ratelimit("default", "web", "RATELIMIT_B"),
+            allocate_in(&mut crowded, "default", "web", "RATELIMIT_B"),
             ((seed + 1).to_string(), true)
         );
-        assert!(lock.forget_undeclared_ratelimits("default", "api", &[]));
-        assert!(!lock.forget_undeclared_ratelimits("default", "api", &[]));
+        // Forgotten after the push once the source declares none: twice is harmless.
+        let none = Resources::default();
+        for _ in 0..2 {
+            RateLimit::after_push(lock.environments.get_mut("default").unwrap(), "api", &none);
+        }
         assert!(
             !lock.environments["default"]
                 .ratelimit_instances
@@ -2183,12 +1679,14 @@ pub(crate) mod tests {
     fn two_projects_ledgers_do_not_start_their_limiters_at_one_id() {
         let mut shop = DeployLock::default();
         let mut registry = DeployLock::default();
-        let a = shop
-            .allocate_ratelimit("default", "shop-cart", "RATELIMIT_LOGIN")
-            .0;
-        let b = registry
-            .allocate_ratelimit("default", "registry-publish", "RATELIMIT_LOGIN")
-            .0;
+        let a = allocate_in(&mut shop, "default", "shop-cart", "RATELIMIT_LOGIN").0;
+        let b = allocate_in(
+            &mut registry,
+            "default",
+            "registry-publish",
+            "RATELIMIT_LOGIN",
+        )
+        .0;
         assert_ne!(a, b);
         for id in [&a, &b] {
             let n: u64 = id.parse().unwrap();
@@ -2208,6 +1706,7 @@ pub(crate) mod tests {
                 Environment {
                     deleted_classes: BTreeMap::new(),
                     renamed_classes: BTreeMap::new(),
+                    agent_jurisdictions: BTreeMap::new(),
                     email_addresses: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
@@ -2246,6 +1745,7 @@ pub(crate) mod tests {
                             D1Record {
                                 name: "api-orders".into(),
                                 id: "0d1d0000-0000-4000-8000-000000000001".into(),
+                                jurisdiction: None,
                                 superseded: vec![D1Past {
                                     name: "api-orders-old".into(),
                                     id: "0d1d0000-0000-4000-8000-000000000000".into(),
@@ -2319,7 +1819,7 @@ pub(crate) mod tests {
             Some("abc")
         );
         assert!(!lock.is_deployed("default", "api"));
-        assert!(!lock.has_queue("default", "intake"));
+        assert!(lock.recorded::<Queue>("default", "", "intake").is_none());
     }
 
     #[test]
@@ -2331,8 +1831,18 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "job-intake");
-        lock.record_queue("default", "job-retry");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "job-intake",
+        );
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "job-retry",
+        );
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(
             text.contains("[environments.default]") && text.contains("queues = ["),
@@ -2708,7 +2218,12 @@ pub(crate) mod tests {
             ..Default::default()
         };
         lock.record_deployed("staging", "api", None);
-        lock.record_queue("staging", "jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("staging"))
+                .or_default(),
+            "jobs",
+        );
         lock.environments
             .entry("staging".into())
             .or_default()
@@ -2723,7 +2238,7 @@ pub(crate) mod tests {
         // "default" was never touched — a `--env staging` run must not
         // fabricate or leak into the section a plain `bynk deploy` reads.
         assert!(!lock.is_deployed("default", "api"));
-        assert!(!lock.has_queue("default", "jobs"));
+        assert!(lock.recorded::<Queue>("default", "", "jobs").is_none());
         assert_eq!(
             lock.recorded::<Kv>("default", "api", "KV")
                 .map(|kv| kv.id.as_str()),
@@ -2731,7 +2246,7 @@ pub(crate) mod tests {
         );
 
         assert!(lock.is_deployed("staging", "api"));
-        assert!(lock.has_queue("staging", "jobs"));
+        assert!(lock.recorded::<Queue>("staging", "", "jobs").is_some());
         assert_eq!(
             lock.recorded::<Kv>("staging", "api", "KV")
                 .map(|kv| kv.id.as_str()),
@@ -2835,7 +2350,7 @@ pub(crate) mod tests {
             err.contains("`RATELIMIT_LOGIN`") && err.contains("bynk deploy"),
             "{err}"
         );
-        lock.allocate_ratelimit("default", "shop", "RATELIMIT_LOGIN");
+        allocate_in(&mut lock, "default", "shop", "RATELIMIT_LOGIN");
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         assert!(materialise_deploy_state(&dir, "shop", &config, "default").unwrap());
         let text = std::fs::read_to_string(&config).unwrap();
@@ -2923,7 +2438,7 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_mtls_certificate(
+        lock.record::<MtlsCertificate>(
             "default",
             "shop",
             "MTLS_BACKEND",
@@ -2978,7 +2493,7 @@ pub(crate) mod tests {
             secret: "stripe-live".into(),
         };
         // Linked only under `staging`: the default environment is refused.
-        lock.record_stored_secret("staging", "shop-cart", "SECRET_STRIPE_KEY", link("store-s"));
+        lock.record::<StoredSecret>("staging", "shop-cart", "SECRET_STRIPE_KEY", link("store-s"));
         std::fs::write(dir.join(LOCK_FILE), toml::to_string_pretty(&lock).unwrap()).unwrap();
         let err = materialise_deploy_state(&dir, "shop-cart", &config, "default")
             .expect_err("an unlinked stored secret must not pass");
@@ -3182,13 +2697,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_OLD",
-            D1Record::of("shop-old", "id-2"),
+            D1Record::of("shop-old", "id-2", None),
         );
         let resources = BTreeMap::from([(
             "shop".to_string(),
@@ -3213,13 +2728,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-3"),
+            D1Record::of("shop-orders-v2", "id-3", None),
         );
         let orphans = find_orphans(&lock, "default", &resources);
         assert!(
@@ -3369,7 +2884,7 @@ pub(crate) mod tests {
             "staging",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-staging", "id-7"),
+            D1Record::of("shop-orders-staging", "id-7", None),
         );
         let (root, config) = r2_project("d1-staging", D1_CONFIG, &lock);
         assert_eq!(
@@ -3509,7 +3024,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "jobs",
+        );
         let resources = BTreeMap::from([
             ("orders".into(), Resources::default().consumes(&["jobs"])),
             ("billing".into(), Resources::default().consumes(&["jobs"])),
@@ -3529,7 +3049,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "order-events");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "order-events",
+        );
         let resources = BTreeMap::from([(
             "shop".into(),
             Resources::default().produces(&["order-events"]),
@@ -3543,7 +3068,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_queue("default", "stale-jobs");
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "stale-jobs",
+        );
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
 
         let orphans = find_orphans(&lock, "default", &resources);
@@ -3558,20 +3088,40 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        assert!(lock.record_reused_queue("default", "theirs"));
-        assert!(!lock.record_reused_queue("default", "theirs"));
-        lock.record_queue("default", "ours");
+        assert!(QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
+        assert!(!QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
+        QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "ours",
+        );
         let resources = BTreeMap::from([("orders".into(), Resources::default())]);
 
         assert!(
-            lock.has_queue("default", "theirs"),
+            lock.recorded::<Queue>("default", "", "theirs").is_some(),
             "the plan still says reuse"
         );
         let orphans = find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, names(&["ours"]));
 
         // Recreated by a later run (deleted out-of-band), it becomes Bynk's.
-        assert!(lock.record_queue("default", "theirs"));
+        assert!(QueueTable::created(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs"
+        ));
         let orphans = find_orphans(&lock, "default", &resources);
         assert_eq!(orphans.queues, names(&["ours", "theirs"]));
     }
@@ -3582,7 +3132,12 @@ pub(crate) mod tests {
             version: 1,
             ..Default::default()
         };
-        lock.record_reused_queue("default", "theirs");
+        QueueTable::reused(
+            lock.environments
+                .entry(String::from("default"))
+                .or_default(),
+            "theirs",
+        );
         let text = toml::to_string_pretty(&lock).unwrap();
         assert!(text.contains("reused_queues"));
         assert_eq!(toml::from_str::<DeployLock>(&text).unwrap(), lock);

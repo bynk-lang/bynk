@@ -99,12 +99,12 @@ export function indexRoundTrips(i: Index): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Index(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Index);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Index(i)));
   switch (__r0.tag) {
     case "Ok": {
@@ -124,12 +124,12 @@ export function exprRoundTrips(e: Expr): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Expr(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Expr);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Expr(e)));
   switch (__r0.tag) {
     case "Ok": {
@@ -149,12 +149,12 @@ export function chainRoundTrips(c: Chain): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Chain(c)));
   switch (__r0.tag) {
     case "Ok": {
@@ -174,12 +174,12 @@ export function treeRoundTrips(t: Tree): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Tree(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Tree);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Tree(t)));
   switch (__r0.tag) {
     case "Ok": {
@@ -199,12 +199,12 @@ export function decodesChain(s: string): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(s);
   switch (__r0.tag) {
     case "Ok": {
@@ -223,12 +223,12 @@ export function chainError(s: string): string {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Chain(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Chain);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(s);
   switch (__r0.tag) {
     case "Ok": {
@@ -236,7 +236,7 @@ export function chainError(s: string): string {
     }
     case "Err": {
       const e = __r0.error;
-      return e.kind.concat(" at ").concat(e.path).concat(": ").concat(e.message);
+      return `${String(e.kind.tag)} at ${String(e.path)}: ${String(e.message)}`;
     }
   }
   throw new globalThis.Error("non-exhaustive match");
@@ -478,6 +478,9 @@ export function __serialise_Map_String_Index(value: ReadonlyMap<string, Index>, 
 }
 
 export function __deserialise_Map_String_Index(json: __JsonValue, path: string = "$", depth: number = 0): Result<ReadonlyMap<string, Index>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Index(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path, depth);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

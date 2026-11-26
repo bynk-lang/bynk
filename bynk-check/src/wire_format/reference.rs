@@ -54,13 +54,13 @@ type Line = {
 type Price = Decimal where Positive
 
 service cost {
-  on call(unit: Price) -> Effect[Result[Price, String]] {
+  on call(unit: Price) -> Effect[Result[Price, String]] by Caller {
     Ok(unit)
   }
 }
 
 service quote {
-  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] {
+  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] by Caller {
     Ok(Dot)
   }
 }
@@ -77,7 +77,7 @@ service who {
 }
 
 service ping {
-  on call() -> Effect[Result[(), String]] {
+  on call() -> Effect[Result[(), String]] by Caller {
     Ok(())
   }
 }
@@ -197,11 +197,10 @@ pub const EXAMPLES: &[Example] = &[
         ty: "Line",
         codec: "Line",
         json: r#"{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"","tags":[],"stock":{"lon":3},"rush":true}"#,
-        outcome: Outcome::Rejected {
-            kind: "StructuralMismatch",
-            path: "$.stock",
+        outcome: Outcome::Accepted {
+            encodes_as: r#"{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"None"},"at":1767225600000,"blob":"","note":{"kind":"None"},"tags":[],"stock":[["lon",3]],"rush":true}"#,
         },
-        note: "A `Map` is an array of pairs, never an object.",
+        note: "A `Map` with a `String` key is also read from an object; it is written as an array of pairs.",
     },
     Example {
         ty: "Qty",
@@ -407,6 +406,11 @@ fn base_type_rows(out: &mut String) {
                     }
                 });
             }
+            if base == BaseType::Instant {
+                rule.push_str(
+                    ". A string is also read, when it is an RFC 3339 date-time with an explicit offset (`Z` or `±hh:mm`, as `Instant.fromIso` reads it): a fraction past milliseconds is truncated, and a timestamp with no offset, an impossible date or a leap second is `StructuralMismatch` (`expected: \"number\"`)",
+                );
+            }
             rule
         };
         let encode = match base {
@@ -437,6 +441,104 @@ fn status_rows(out: &mut String) {
         );
     }
 }
+
+/// #3894: what a Bynk caller makes of each way a call can fail, with `.outcome(…)`.
+const CALLER_OUTCOME: &str = r#"### What a caller makes of a failure
+
+A Bynk caller that writes `<context>.<service>.outcome(args)` gets the call's
+failure as a value, a `CallOutcome[R]` (`bynk`), instead of a fault. The
+variants are grouped by whether the callee's handler ran:
+
+| The callee answered | The caller's outcome | The handler ran? |
+|---|---|---|
+| `200` | `Handled(result)` | yes, and answered |
+| `413` (check 2) | `Rejected(TooLarge)` | no |
+| `401` (check 3) | `Rejected(NotAuthenticated)` | no |
+| `400` `UnsupportedWireVersion` (check 4) | `Rejected(UnsupportedWire)` | no |
+| `404` (check 5) | `Rejected(NoSuchService)` | no |
+| `403` (check 6) | `Rejected(NotAdmitted)` | no |
+| `409` `ContractMismatch` (check 7) | `Rejected(StaleContract)` | no |
+| any other `400` (checks 8 and 9) | `Rejected(Undecodable)` | no |
+| a marked `500` | `Faulted` | yes, and committed nothing |
+| any other status | `Unreachable(Some(status))` | unknown |
+| no response (the `fetch` threw) | `Unreachable(None)` | unknown |
+
+A `200` the caller cannot decode stays a fault: the contract hash makes it a
+toolchain bug rather than an outcome. A callee whose handler found an agent busy
+(`AgentBusy`) answers `503`, unmarked, so it reads as `Unreachable(Some(503))`. A
+failure turned into a value is still logged once, as it would have been as a fault. On the `bundle` target
+there is no wire: only `Handled` and `Faulted` occur.
+
+"#;
+
+/// The responses once every check passes, and what a Bynk caller makes of a failure.
+fn write_responses(out: &mut String) {
+    let _ = write!(
+        out,
+        r#"
+If every check passes, the handler runs:
+
+- **`200`**, `content-type: application/json`, with the handler's return value
+  encoded as below. A domain error is a `200` too: `Result[T, E]`'s `Err` is a
+  value, not a status.
+- **`500`**, text `Internal Server Error`, if the handler faults (including
+  encoding a value the format cannot carry, such as an unsafe `Int`). The
+  callee logs the fault; the body says nothing more. The response carries
+  `X-Bynk-Fault: <context>`, the callee's qualified name, so the caller can
+  say which Worker faulted. Only a `/_bynk/call/` fault is marked.
+
+A status not listed here (a platform error between the Workers, for example)
+is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
+marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
+`Transport`, with the status.
+
+"#
+    );
+    out.push_str(CALLER_OUTCOME);
+}
+
+/// The signed-queue-message section of the page (#3899), kept apart so `render_reference` stays
+/// under its length ceiling.
+const SIGNED_QUEUE_SECTION: &str = r#"
+## Signed queue messages
+
+> **In effect.** A queue consumer whose `by` names only `Foreign` actors and `Producer` refinements (#3899) admits only messages in this format. A Bynk producer in a context such a consumer admits signs what it sends, without the author writing anything.
+
+A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Foreign` actor or a `Producer` refinement, see [Queue](/reference/queue/)) receives bodies in this form. A producer that is not Bynk follows it to be admitted, under the secret the actor declares (`actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }`): `bynk deploy` mints it, sets it on the consumer's Worker and prints it once for the producer's operator. A Bynk producer signs under the key of its edge to the consumer's context (the key `bynk deploy` sets for a call between the two, one per ordered pair of contexts, which the consumer reads under the producer's name), with its own context's qualified name as `from`. The signing input starts with a different line from a call's, so one key never signs both a call and a queue message the other would accept.
+
+```json
+{
+  "bynk": { "v": 1, "from": "shop.orders", "id": "m-8f2c", "ts": 1700000000, "sig": "9c1e…" },
+  "body": { "id": "o-1", "total": 42 }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | The format's version. This page describes `1`; a message with another version is refused. |
+| `from` | The sender: a Bynk context's qualified name, or a `Foreign` actor's name. The consumer looks up the keys it admits for it, and refuses a sender it does not know. |
+| `id` | A unique message id, minted by the producer. The consumer claims it once, so a replay is recognised (below). |
+| `ts` | When the producer signed it, as an integer number of seconds since the epoch, written in decimal. Anything else is refused as malformed. It is covered by the signature. A consumer refuses a message signed more than 15 days ago (the longest a queued message can wait, with its replay window) or more than 5 minutes ahead of its own clock, as stale; within that range a message can still wait for days. |
+| `sig` | The lower-case hex HMAC-SHA256 of the signing input, keyed by the secret shared between the producer and the consumer. |
+| `body` | The message itself, exactly as an unsigned producer would send it. |
+
+The signing input is these lines joined by a line feed, with no trailing line feed:
+
+```text
+bynk-queue-v1
+<from>
+<id>
+<ts>
+<source queue name>
+<canonical body>
+```
+
+The **source queue name** is the queue the producer sent to, not the queue the message was delivered from. Naming it stops a message being moved from one queue to another, and it lets a dead-letter consumer verify a message the platform moved. The **canonical body** is the body in the JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785): object keys sorted by UTF-16 code unit at every depth, no whitespace, strings escaped as ECMAScript's `JSON.stringify` does, numbers written as ECMAScript does, and arrays in their given order. A producer that is not written in JavaScript should use a JCS library rather than its language's default JSON writer, which differs for non-ASCII text, for numbers such as `1.0` and `1e2`, and for keys outside the Basic Multilingual Plane. `from` and `id` must not contain a line feed.
+
+A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation, a consumer that also has the previous key in `<SECRET>_PREVIOUS` (for `LEGACY_QUEUE_KEY`, `LEGACY_QUEUE_KEY_PREVIOUS`) admits it as well as the current one, so messages queued before the rotation still verify. A consumer whose secret is missing or empty admits nothing from that sender. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
+
+This provides **authenticity** of the sender and **integrity** of the body. It does not provide confidentiality, because anyone with access to the account can read a queued body through the dashboard or by pulling, and it does not provide availability, because an account member can still flood or drain a queue. Keep secrets out of message bodies.
+"#;
 
 /// The whole page, in mdBook form (`# H1` title, relative `.md` links).
 pub fn render_reference() -> String {
@@ -540,26 +642,10 @@ request.
 "#
     );
     status_rows(&mut out);
+    write_responses(&mut out);
     let _ = write!(
         out,
-        r#"
-If every check passes, the handler runs:
-
-- **`200`**, `content-type: application/json`, with the handler's return value
-  encoded as below. A domain error is a `200` too: `Result[T, E]`'s `Err` is a
-  value, not a status.
-- **`500`**, text `Internal Server Error`, if the handler faults (including
-  encoding a value the format cannot carry, such as an unsafe `Int`). The
-  callee logs the fault; the body says nothing more. The response carries
-  `X-Bynk-Fault: <context>`, the callee's qualified name, so the caller can
-  say which Worker faulted. Only a `/_bynk/call/` fault is marked.
-
-A status not listed here (a platform error between the Workers, for example)
-is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
-marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
-`Transport`, with the status.
-
-### Error bodies
+        r#"### Error bodies
 
 Every JSON error body is an object with a `kind`:
 
@@ -569,7 +655,7 @@ Every JSON error body is an object with a `kind`:
 | `ContractMismatch` | `409` | `service`, `expected` (the callee's hash), `actual` (the header as received) |
 | `MalformedJson` | `400` | `details` |
 | `StructuralMismatch` | `400` | `path`, `expected`, `actual`: the value had the wrong shape |
-| `RefinementViolation` | `400` | `path`, `violation`: `{{"field", "message", "value"}}`, a value of the right shape broke a predicate |
+| `RefinementViolation` | `400` | `path`, `violation`: `{{"field", "message", "rule"}}`, a value of the right shape broke a predicate. `rule` is the predicate with its argument, written as a sum (`{{"{WIRE_DISCRIMINANT}":"MaxLength","limit":280}}`); the rejected value is never echoed |
 
 `path` is a JSONPath-like location in the body: `$` is the whole body (one
 parameter), `$.<param>` a parameter (several), then `.<field>` or `[<index>]`
@@ -595,23 +681,27 @@ decoded by checking its shape, then any predicates.
 `Int`, `Duration` and `Instant` are limited to JavaScript's safe-integer range
 on the wire, so every JSON parser reads them exactly.
 
+A plain-JSON route and `Json.encodePlain` write an `Instant` as an RFC 3339 string in UTC with exactly three fraction digits (`"2026-11-22T10:00:00.000Z"`); `Duration` and `Decimal` are written as above.
+
 ### Composite types
 
 | Type | JSON |
 |---|---|
-| record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. |
-| sum (`enum` included) | an object with `"{WIRE_DISCRIMINANT}"`: the variant's name, beside the variant's payload fields: `{{"{WIRE_DISCRIMINANT}":"Circle","radius":0.5}}`, `{{"{WIRE_DISCRIMINANT}":"Dot"}}` |
+| record | an object keyed by wire name: a field's `@name`, or else its own name (`@name("amount_captured") captured: Int` is `"amount_captured"`). A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. A field declared `replaces old` (`name: T replaces old`) also reads the key `old` when its own key is absent, and its own key wins when both arrive; it is written under its own name only. |
+| sum (`enum` included) | an object with `"{WIRE_DISCRIMINANT}"`: the variant's name, beside the variant's payload fields: `{{"{WIRE_DISCRIMINANT}":"Circle","radius":0.5}}`, `{{"{WIRE_DISCRIMINANT}":"Dot"}}`. A sum may name the key with `@discriminator("type")` before its `type`, and a variant, or a payload field, may take a wire name with `@name("charge.succeeded")`: `{{"type":"charge.succeeded","data":{{…}}}}`. A sum with no payload variant (an `enum`) is also read from a bare string, the variant's wire name (`"Dot"`; matched exactly, case-sensitively), and a plain-JSON route and `Json.encodePlain` write it that way. The object form is tried first. |
 | `Result[T, E]` | `{{"{WIRE_DISCRIMINANT}":"Ok","value":<T>}}` or `{{"{WIRE_DISCRIMINANT}":"Err","error":<E>}}` |
 | `Option[T]` | `{{"{WIRE_DISCRIMINANT}":"Some","value":<T>}}` or `{{"{WIRE_DISCRIMINANT}":"None"}}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk encodes the tagged form, except in a plain HTTP route and for `Json.encodePlain`, which write `v` / `null` (`Option[Option[T]]` is refused there) |
 | `List[T]` | an array |
-| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order |
+| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order. A map whose key is a `String`, or a refined or opaque `String`, is also read from a JSON object (`{{"bug":"red"}}`), each key checked as the key type; a plain-JSON route and `Json.encodePlain` write it that way. The object's keys are read in the order `JSON.parse` lists them, which puts integer-like keys (`"2"`, `"10"`) first in ascending order, and a key repeated in the text keeps its last value. Any other key type keeps the pair array |
 | refined type (`type Qty = Int where NonNegative`) | its base type's encoding. The decoder checks the predicates, refusing with `RefinementViolation` |
 | opaque type | its base type's encoding. A caller cannot see the predicate, so only the owning context checks it |
 | inline field refinement (`qty: Int where Positive`) | the field's encoding. The decoder checks the predicates, like a refined type's |
 | generic instantiation (`Page[Line]`) | the declaration's encoding with the arguments substituted |
 
 The in-memory discriminant of a Bynk sum is `tag`; on the wire it is
-`"{WIRE_DISCRIMINANT}"`. The encoding never depends on the in-memory layout.
+`"{WIRE_DISCRIMINANT}"`, or the sum's `@discriminator`. The encoding never depends on the in-memory
+layout, and a wire name changes only the encoding: Bynk code, and the in-memory `tag`, keep the Bynk
+names.
 
 **Recursive types.** A type that contains itself, directly or through other
 types, `Option`, `List` or `Map` (`type Tree = | Leaf | Node(left: Tree,
@@ -653,7 +743,7 @@ below, then encoded again. Rejections show the error's `kind` and `path`.
     let contracts = example_contracts();
     let _ = write!(
         out,
-        r#"
+        r#"{SIGNED_QUEUE_SECTION}
 ## Contract hash
 
 `X-Bynk-Contract` carries a hash of the service's signature, so a callee can
@@ -807,14 +897,14 @@ foreign caller is checked under its own secret and can never pass for a Bynk
 context, nor a context for it.
 
 A verified caller still has to be one the service's handler admits. A Bynk
-context is admitted by `Caller` (the default, with no `by`), a foreign caller
+context is admitted by `Caller` (the explicit "any consuming context"), a foreign caller
 only by its own actor; `by who: Caller | Legacy` admits both and tells them
-apart. Anyone else gets a bare `403`.
+apart. Anyone else gets a bare `403`. A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) narrows which contexts that is: the handler admits the proven caller only if the refinement's predicate holds for it, and a context it does not name gets the same bare `403` even though its signature verifies. The compiler also refuses such a call where it is written, but this check stays, because the keys are per pair of contexts and a caller from before the restriction may still be deployed.
 
 A TypeScript Worker need not speak any of this by hand. For each context with
 a foreign caller the build emits a typed client, `bynk-client.ts`, which
 signs, stamps the contract hash and encodes exactly as this page describes;
-see [TypeScript client](/book/reference/typescript-client/).
+see [TypeScript client](/reference/typescript-client/).
 "#
     );
     out

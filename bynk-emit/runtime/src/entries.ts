@@ -1,5 +1,7 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { invariantViolation } from "./errors.ts";
+import { __bynkKeyEncode } from "./keys.ts";
 import { entriesOf, noteOrder } from "./store.ts";
 
 // Per-entry agent storage: the runtime half (#3189, track #3195,
@@ -90,8 +92,19 @@ export function parseLogKey(key: string): { t: number; seq: number } {
 }
 
 /** One posting of a secondary index: `by` is the indexed value, `pk` the primary key. */
-export const postingKey = (field: string, index: string, by: string, pk: string): string =>
-  `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+export function postingKey(field: string, index: string, by: string, pk: string): string {
+  const key = `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+  // The indexed value and the entry key sit in one storage key (#4037): fault here, naming the
+  // field and the index, rather than at the commit flush with the platform's error.
+  if (key.length * 3 > MAX_STORAGE_KEY_BYTES && new TextEncoder().encode(key).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(
+      `store \`${field}\`: an index \`${index}\` key, its value and the entry's key together, is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`,
+    );
+  }
+  return key;
+}
+/** Every posting of every index of a map field. */
+export const postingFieldPrefix = (field: string): string => `i/${encodeKeyPart(field)}/`;
 /** Every posting of one indexed value; with `by` omitted, every posting of the index. */
 export const postingPrefix = (field: string, index: string, by?: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${by === undefined ? "" : `${encodeKeyPart(by)}/`}`;
@@ -113,6 +126,40 @@ export function expiredRange(field: string, now: number): DurableObjectListOptio
 
 /** Per-collection metadata: the entry count for `size()` and a `Log`'s counter. */
 export const metaKey = (field: string): string => `c/${encodeKeyPart(field)}`;
+
+/** The longest a Durable Object storage key may be, in bytes. */
+export const MAX_STORAGE_KEY_BYTES = 2048;
+
+/**
+ * The entry key of a store collection's non-scalar key (#4037): its canonical encoding, the one
+ * a value `Map` indexes by, so two keys are one entry exactly when they are `==`. The encoding
+ * counts towards the platform's key size, and the longest key it appears in is a `Cache`'s expiry
+ * entry, so a key over the limit faults here, naming the field and never the key's value.
+ */
+export function storeKey(field: string, key: unknown): string {
+  const enc = __bynkKeyEncode(key);
+  if (new TextEncoder().encode(expiryKey(field, 0, enc)).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(`store \`${field}\`: a key's encoding is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`);
+  }
+  return enc;
+}
+
+
+/**
+ * The committed entry count of a collection field, for `old.<field>.size()` in a
+ * `transition`: the stored count, or for a record still in the wholesale layout
+ * the entries its inline collection holds. A collection with neither is empty.
+ */
+export async function committedSize(
+  storage: DurableObjectStorage,
+  field: string,
+  prior: object,
+): Promise<number> {
+  const meta = await storage.get<{ size?: number }>(metaKey(field));
+  if (meta !== undefined) return meta.size ?? 0;
+  const inline = (prior as Readonly<Record<string, unknown>>)[field];
+  return inline === undefined || inline === null ? 0 : Object.keys(inline as object).length;
+}
 
 /** The entry key a listed storage key carries, given the prefix it was listed under. */
 export function entryKeyOf(prefix: string, storageKey: string): string {
@@ -264,7 +311,26 @@ export type WholesaleField =
 export interface WholesaleIndex {
   readonly index: string;
   readonly recordField: string;
+  /** A `@unique` index (#4038): its postings key an `Option` by its payload, not the whole option. */
+  readonly unique?: boolean;
 }
+
+/**
+ * The index set a map's metadata records (#4038): each index and its key scheme, sorted. A handle
+ * whose declared set differs from the recorded one rebuilds the field's postings before writing.
+ */
+export function indexSignature(indexes: ReadonlyArray<{ readonly index: string; readonly unique?: boolean }>): string {
+  return indexes
+    .map((ix) => `${ix.index}:${ix.unique === true ? "u" : "i"}`)
+    .sort()
+    .join(",");
+}
+
+/** A map's metadata record: its size and sequence, and its index set when it has one. */
+const mapMeta = (size: number, seq: number | undefined, indexes: ReadonlyArray<WholesaleIndex> | undefined): Record<string, unknown> => {
+  const ix = indexSignature(indexes ?? []);
+  return { size, ...(seq === undefined ? {} : { seq }), ...(ix === "" ? {} : { ix }) };
+};
 
 /** What splitting a wholesale record produces. */
 export interface SplitRecord {
@@ -310,7 +376,7 @@ export function splitWholesale(stored: Readonly<Record<string, unknown>>, fields
             for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
           }
         }
-        entries[metaKey(f.name)] = { size: Object.keys(inline as object).length };
+        entries[metaKey(f.name)] = mapMeta(Object.keys(inline as object).length, undefined, f.indexes);
         break;
       }
       case "set": {
@@ -501,6 +567,140 @@ export async function readStored<S extends object>(
   for (const [k, v] of all) if (isEntryKey(k)) entries.set(k, v);
   bases.set(self, { entries });
   return joinStored(stored, entries) as S;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A collection `store` field renamed with `replaces` (#4482).
+//
+// A `Map`, `Set`, `Cache` or `Log` keeps each entry (and a `Cache`'s expiry, and a `Map`'s index
+// postings) under a key that carries the field's name, so a rename moves keys; reading the old name
+// is not enough. `moveRenamedEntries` moves them in bounded batches, each
+// a transaction that writes the entries under the new name and deletes them from the old one, so
+// an entry is always under exactly one name and a crash between batches leaves a state the next
+// load continues from. An entry already under the new name wins and the old one is dropped. The
+// field's metadata (`c/`) moves last. There is no "done" marker: a rolled-back deploy writes under
+// the old name again, so the check (one bounded `list` per rename, once per isolate) has to repeat.
+//
+// A record a `migrate` step covers is not moved here. The step reads the record as the stored version
+// shaped it (the old name, which the join below gives it), and the commit that follows writes the
+// entries under the new name and deletes the old keys.
+
+/** One collection rename: `from` is the field's earlier name, `to` its name now, `kind` its storage kind. */
+export interface CollectionRename {
+  readonly kind: "map" | "set" | "cache" | "log";
+  readonly from: string;
+  readonly to: string;
+}
+
+/** How many entries one batch moves: Cloudflare's limit on keys per batched write. */
+export const RENAME_BATCH = 128;
+
+// Instances whose renames this isolate has finished, so only the first load pays for the check.
+const renamesDone = new WeakMap<object, true>();
+
+/**
+ * Move every entry of each renamed collection from under its old name to its new one. Called from a
+ * load, which an instance runs one handler at a time, before anything reads the collection. The
+ * first load after a deploy does the whole move, and its cost grows with the collection. `stored`
+ * and `steps` are what `readStored` takes: a record in the wholesale layout, or one a step covers,
+ * keeps its entries where they are.
+ */
+export async function moveRenamedEntries(
+  self: object,
+  storage: DurableObjectStorage,
+  stored: Readonly<Record<string, unknown>>,
+  steps: ReadonlyArray<readonly [number, number]>,
+  renames: readonly CollectionRename[],
+  batch: number = RENAME_BATCH,
+): Promise<void> {
+  if (renamesDone.has(self) || !canReadLazily(stored, steps)) return;
+  for (const rename of renames) await moveOneRename(storage, rename, batch);
+  renamesDone.set(self, true);
+}
+
+type Meta = { size?: number; seq?: number; skew?: number; ix?: string } & Record<string, unknown>;
+
+// Delete every key under `prefix`, a batch at a time.
+async function deletePrefix(storage: DurableObjectStorage, prefix: string, batch: number): Promise<void> {
+  for (;;) {
+    const page = await storage.list<unknown>({ prefix, limit: batch });
+    if (page.size === 0) return;
+    await storage.delete([...page.keys()]);
+  }
+}
+
+async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename, batch: number): Promise<void> {
+  const oldMeta = await storage.get<Meta>(metaKey(r.from));
+  const newMeta = await storage.get<Meta>(metaKey(r.to));
+  // Entries under both names (a rolled-back deploy wrote under the old one): the old entries take
+  // insertion sequences after the new field's, so none collides with one the new field hands out.
+  const offset = newMeta === undefined ? 0 : (newMeta.seq ?? 0);
+  const tag = r.kind === "set" ? "s" : r.kind === "log" ? "l" : "m";
+  const oldPrefix = `${tag}/${encodeKeyPart(r.from)}/`;
+  const newPrefix = `${tag}/${encodeKeyPart(r.to)}/`;
+  // The entries moved so far, kept in the old metadata as each batch commits (when both names hold
+  // metadata), so a crash and a resume count the batches that already went.
+  let movedEntries = typeof oldMeta?.["renameMoved"] === "number" ? oldMeta["renameMoved"] : 0;
+  for (;;) {
+    const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
+    if (page.size === 0) break;
+    const oldKeys = [...page.keys()];
+    const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
+    const present = await storage.get<unknown>(newKeys);
+    const moved: Record<string, unknown> = {};
+    oldKeys.forEach((k, at) => {
+      if (present.has(newKeys[at]!)) return;
+      const value = page.get(k) as { i?: number; exp?: unknown };
+      moved[newKeys[at]!] =
+        offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
+      movedEntries += 1;
+      // A `Cache`'s expiry entry is derived from the entry that moved, in the same transaction, never
+      // copied: an expiry left under the old name for an entry the new name already held would reap
+      // the live one at the old entry's time.
+      if (r.kind === "cache" && typeof value.exp === "number") {
+        moved[expiryKey(r.to, value.exp, decodeKeyPart(k.slice(oldPrefix.length)))] = 1;
+      }
+    });
+    await storage.transaction(async (txn) => {
+      if (Object.keys(moved).length > 0) await txn.put(moved);
+      await txn.delete(oldKeys);
+      if (oldMeta !== undefined && newMeta !== undefined) {
+        await txn.put(metaKey(r.from), { ...oldMeta, renameMoved: movedEntries });
+      }
+    });
+  }
+  // What the old name leaves behind is deleted, never moved: an expiry is derived from its entry
+  // above, and an index posting is rebuilt from the entries by the handle (the moved metadata drops
+  // its index signature), so a posting for an entry the merge dropped cannot survive. Postings are
+  // swept whatever the field declares now, since the old field may have been indexed when this one is
+  // not.
+  if (r.kind !== "set" && r.kind !== "log") {
+    await deletePrefix(storage, `x/${encodeKeyPart(r.from)}/`, batch);
+    await deletePrefix(storage, `i/${encodeKeyPart(r.from)}/`, batch);
+  }
+  if (oldMeta === undefined) return;
+  // The metadata (the entry count and the next insertion sequence) moves with the entries. When the
+  // new name has its own, it counts the entries that moved in, and the next sequence clears both. A
+  // `Log`'s skew (how far a key's time is above its entry's) is the larger of the two, or unknown
+  // when either is, so a window or a prune cannot miss the older entries.
+  const { ix: _oldIx, renameMoved: _moved, ...rest } = oldMeta;
+  await storage.transaction(async (txn) => {
+    if (newMeta === undefined) {
+      await txn.put(metaKey(r.to), rest);
+    } else {
+      const { ix: _newIx, skew: newSkew, ...own } = newMeta;
+      const merged: Record<string, unknown> = {
+        ...own,
+        size: (newMeta.size ?? 0) + movedEntries,
+        seq: offset + (oldMeta.seq ?? 0),
+      };
+      if (r.kind === "log" && typeof newSkew === "number" && typeof oldMeta.skew === "number") {
+        merged["skew"] = Math.max(newSkew, oldMeta.skew);
+      }
+      await txn.put(metaKey(r.to), merged);
+    }
+    await txn.delete(metaKey(r.from));
+  });
 }
 
 // Join every per-entry key found in storage back into a wholesale-shaped record. It is
@@ -698,7 +898,7 @@ function planEntries(
       }
     }
     const size = collection.length;
-    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
+    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = f.kind === "map" ? mapMeta(size, seq, f.indexes) : { size, seq };
   }
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
   return { record, entries };
@@ -782,6 +982,36 @@ export async function commitStored(
 // A handler that never touched a `Cache` notes nothing, and its commit reaps nothing.
 const clocks = new WeakMap<object, number>();
 
+/**
+ * #3931: `self.erase()`. A handler that calls it carries an `Erasure`, marked by the call, and its commit
+ * deletes the instance's storage instead of writing the handler's state.
+ */
+export interface Erasure {
+  erased: boolean;
+}
+
+export function newErasure(): Erasure {
+  return { erased: false };
+}
+
+/** The erasure `self.erase()` marks: an effect, so `do self.erase()` and a tail `self.erase()` read as any other. */
+export function markErased(erasure: Erasure): Promise<void> {
+  erasure.erased = true;
+  return Promise.resolve();
+}
+
+/**
+ * The commit of a handler that erased: delete every key of the instance's storage (the `"state"` record, the
+ * layout and schema markers, each per-entry key and index posting), and forget what was read of it, so the next
+ * call finds a key it has never seen. Nothing of the handler's own writes is kept, and no invariant is checked
+ * against the initial state the instance returns to.
+ */
+export async function eraseStored(self: object, storage: DurableObjectStorage): Promise<void> {
+  await storage.deleteAll();
+  bases.delete(self);
+  lazyReads.delete(self);
+}
+
 /** The most expired entries one commit deletes, across all of an agent's `Cache` fields. */
 export const CACHE_REAP_LIMIT = 64;
 
@@ -804,4 +1034,40 @@ function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
 
 export function then<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R>): R | Promise<R> {
   return isThenable(value) ? value.then(f) : f(value);
+}
+
+/**
+ * The commit-time check of `@unique(by:)` (#4038): for each `[field, index, location]`, no value of the
+ * index may be held by two entries of the staged map. A duplicate refuses the commit, as an invariant
+ * violation does, naming the agent and `field.index`, never the value.
+ */
+export async function checkUnique(
+  agent: string,
+  state: object,
+  declared: ReadonlyArray<readonly [string, string, string]>,
+): Promise<void> {
+  const handles = state as Readonly<Record<string, { hasDuplicate(index: string): boolean | Promise<boolean> }>>;
+  for (const [field, index, location] of declared) {
+    if (await (handles[field] as { hasDuplicate(index: string): boolean | Promise<boolean> }).hasDuplicate(index)) {
+      throw invariantViolation(agent, `${field}.${index}`, "unique", location);
+    }
+  }
+}
+
+/**
+ * The `@unique(by:)` values that more than one entry already holds (#4390), for `bynk migrate sweep`: for each
+ * `[field, index]` the staged map has, the holders of each such value (`[2, 2, 4]`: three values). A map with none
+ * is left out. A value is never named: the count of holders is all a report may carry.
+ */
+export async function uniqueDuplicates(
+  state: object,
+  declared: ReadonlyArray<readonly [string, string]>,
+): Promise<Array<{ map: string; by: string; holders: number[] }>> {
+  const handles = state as Readonly<Record<string, { duplicateHolders(index: string): number[] | Promise<number[]> }>>;
+  const out: Array<{ map: string; by: string; holders: number[] }> = [];
+  for (const [field, index] of declared) {
+    const holders = [...(await (handles[field] as { duplicateHolders(index: string): number[] | Promise<number[]> }).duplicateHolders(index))].sort((a, b) => a - b);
+    if (holders.length > 0) out.push({ map: field, by: index, holders });
+  }
+  return out;
 }

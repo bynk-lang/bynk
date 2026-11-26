@@ -1,21 +1,61 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::checker::CapabilityInfo;
-use crate::index::{IndexBuilder, ProjectIndex, RefSink, SiteRef, SymbolKind};
+use crate::index::{IndexBuilder, ProjectIndex, RefEdge, RefSink, SiteRef, SymbolKind};
 use crate::project_model::UnitInfo;
 use crate::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::ast::{
     ActorDecl, AgentDecl, AssetDecl, BaseType, Block, CapRef, CapabilityDecl, CommonsItem,
-    ConstDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName,
-    HandlerKind, Ident, Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody,
-    TypeDecl, TypeRef, Visibility,
+    ConstDecl, ConsumesDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl,
+    FnName, HandlerKind, Ident, Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia,
+    TypeBody, TypeDecl, TypeRef, UsesDecl, Visibility,
 };
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
+
+/// #4045: per unit, a name a `uses` clause renames or qualifies, to the commons it
+/// comes from and the name that commons declares it as.
+fn use_renames_of(
+    unit_tables: &HashMap<String, UnitTable>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_tables
+        .iter()
+        .map(|(unit, t)| {
+            let renames = t
+                .use_views
+                .iter()
+                .flat_map(|(target, view)| {
+                    view.use_origin
+                        .iter()
+                        .map(move |(key, orig)| (key.clone(), (target.clone(), orig.clone())))
+                })
+                .collect::<HashMap<_, _>>();
+            (unit.clone(), renames)
+        })
+        .filter(|(_, r)| !r.is_empty())
+        .collect()
+}
+
+/// #2887: only the aliases `phase_resolve_consumes` accepted, per unit, as
+/// alias -> (consumed unit, declared name).
+fn type_aliases_of(
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_type_aliases
+        .iter()
+        .map(|(unit, aliases)| {
+            let aliases = aliases
+                .iter()
+                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
+                .collect();
+            (unit.clone(), aliases)
+        })
+        .collect()
+}
 
 /// v0.25 (ADR 0053): walk every parsed file's top-level declarations into
 /// the def table (synthetic first-party units and test files excluded —
@@ -27,25 +67,16 @@ pub fn assemble_index(
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+    unit_tables: &HashMap<String, UnitTable>,
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
+    builder.set_use_renames(use_renames_of(unit_tables));
     let mut uses = unit_uses.clone();
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
-    // #2887: only the aliases `phase_resolve_consumes` accepted.
-    let type_aliases = unit_type_aliases
-        .iter()
-        .map(|(unit, aliases)| {
-            let aliases = aliases
-                .iter()
-                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
-                .collect();
-            (unit.clone(), aliases)
-        })
-        .collect();
-    builder.set_type_aliases(type_aliases);
+    builder.set_type_aliases(type_aliases_of(unit_type_aliases));
     for pf in parsed {
         // #2834: a suite's helper `fn`s are definitions in the suite's own
         // namespace (`test_suites::suite_helper_namespace`); its cases are
@@ -405,7 +436,96 @@ pub fn assemble_index(
             }
         }
     }
-    builder.build(refs.edges)
+    let unit_edges = index_units(&mut builder, parsed);
+    let mut edges = refs.edges;
+    edges.extend(unit_edges);
+    builder.build(edges)
+}
+
+/// #4183 (decision A): index every unit as a [`SymbolKind::Unit`] symbol.
+///
+/// A unit's definition is the name in its header; a unit split across files has
+/// one header per file, the first of which (in project order) is the definition
+/// and the rest references, so find-references and rename reach every header. The
+/// other references are a `consumes` or `uses` target, a suite's target and each
+/// context an `IsContext(…)` names. Every site spans the whole dotted name.
+///
+/// This is a syntactic pass over the parsed units: a name resolves to a unit
+/// only if some file declares it, and an edge to any other name is dropped when
+/// the index is built, as an unresolved edge is for every kind. Synthetic
+/// first-party units (`bynk.*`) are not on disk, so they are neither defined nor
+/// referenced here.
+fn index_units(builder: &mut IndexBuilder, parsed: &[ParsedFile]) -> Vec<RefEdge> {
+    let mut defined: HashSet<String> = HashSet::new();
+    let mut edges: Vec<RefEdge> = Vec::new();
+    let edge = |pf: &ParsedFile, name: &str, span: Span| RefEdge {
+        span,
+        kind: SymbolKind::Unit,
+        name: name.to_string(),
+        unit: Some(name.to_string()),
+        file: pf.identity_path(),
+        namespace: None,
+        owner: None,
+        provides: false,
+    };
+    for pf in parsed {
+        if pf.is_synthetic() {
+            continue;
+        }
+        // A suite is not a unit: its own name is its target, a reference. An
+        // adapter is a unit of another kind (the issue's decision A covers
+        // contexts and commons): it is neither defined nor referenced here, so a
+        // `consumes` of one resolves as it did before, lexically. Its own `uses`
+        // and `consumes` clauses are references all the same.
+        let is_suite = matches!(pf.unit(), SourceUnit::Suite(_));
+        let is_adapter = matches!(pf.unit(), SourceUnit::Adapter(_));
+        let name = pf.unit().name();
+        let joined = name.joined();
+        if is_adapter {
+            // No header symbol.
+        } else if is_suite {
+            edges.push(edge(pf, &joined, name.span));
+        } else if defined.insert(joined.clone()) {
+            builder.add_leaf_def(
+                &joined,
+                SymbolKind::Unit,
+                &joined,
+                SiteRef {
+                    path: pf.identity_path(),
+                    span: name.span,
+                },
+                symbol_modifiers(&joined, None),
+            );
+        } else {
+            edges.push(edge(pf, &joined, name.span));
+        }
+        let (uses, consumes): (&[UsesDecl], &[ConsumesDecl]) = match pf.unit() {
+            SourceUnit::Commons(c) => (&c.uses, &[]),
+            SourceUnit::Context(c) => (&c.uses, &c.consumes),
+            SourceUnit::Adapter(a) => (&a.uses, &a.consumes),
+            SourceUnit::Suite(s) => (&s.uses, &[]),
+        };
+        for u in uses {
+            edges.push(edge(pf, &u.target.joined(), u.target.span));
+        }
+        for c in consumes {
+            edges.push(edge(pf, &c.target.joined(), c.target.span));
+        }
+        for item in pf.items() {
+            let CommonsItem::Actor(actor) = item else {
+                continue;
+            };
+            let Some(refinement) = &actor.refinement else {
+                continue;
+            };
+            let mut names = Vec::new();
+            crate::caller_admission::mentioned_names(&refinement.predicate, &mut names);
+            for (context, span) in names {
+                edges.push(edge(pf, &context, span));
+            }
+        }
+    }
+    edges
 }
 
 /// A service's definition, and (#3582) its callable handlers — `on call` and each `on http` route —
@@ -504,6 +624,8 @@ pub struct UnitTable {
     /// already holds.
     pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
     pub kind: Option<UnitKind>,
+    /// #4348: a `commons … for tests`, which only suites reach.
+    pub test_only: bool,
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub fns: HashMap<String, Arc<FnDecl>>,
     pub methods: HashMap<String, ResolverMethodTable>,
@@ -575,6 +697,21 @@ pub struct UnitTable {
     /// [`UnitTable::capabilities`], with its base's operations, so `given`,
     /// calls and test views treat it as an ordinary capability.
     pub derived: HashMap<String, DerivedInstance>,
+    /// #4045: for each commons this unit `uses` through a braced list, an alias,
+    /// a qualified name or a name another used commons also declares, the table
+    /// as this unit sees it: public names only, selected and renamed as the
+    /// clauses say, and each type's references renamed to match
+    /// ([`crate::uses_view`]). A commons not listed is seen as its own table.
+    /// Filled by [`crate::uses_view::attach_use_views`].
+    pub use_views: std::collections::BTreeMap<String, UnitTable>,
+    /// #4045: a bare name two used commons both bring in, with the qualified
+    /// spelling of each, for `bynk.uses.ambiguous_name` where it is referenced.
+    pub ambiguous_uses:
+        std::collections::BTreeMap<String, Vec<crate::uses_view::AmbiguousProvider>>,
+    /// #4045: on a [`UnitTable::use_views`] entry, each name the view files
+    /// under a spelling other than the declared one, by its declared name, for
+    /// the emitter's import.
+    pub use_origin: HashMap<String, String>,
 }
 
 /// One type's methods: its name, then its instance and static methods in key order.
@@ -604,9 +741,35 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #4045: the table of used commons `target` as this unit sees it: its
+    /// [`UnitTable::use_views`] entry when the clauses select, rename or qualify
+    /// its names, else `plain` (the commons' own table, whose `private`
+    /// declarations the caller still leaves out).
+    pub fn seen_through<'a>(&'a self, target: &str, plain: &'a UnitTable) -> &'a UnitTable {
+        self.use_views.get(target).unwrap_or(plain)
+    }
+
     /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
     pub fn unselected_names(&self) -> std::collections::HashSet<String> {
         self.unselected_consumed_types.iter().cloned().collect()
+    }
+
+    /// #4270: [`UnitTable::unselected_names`] less the names a selected type of a
+    /// user unit took (`imported_from` says whose each name now is): a consumed
+    /// `Refusal` is in scope, whatever `bynk` exports under that name.
+    pub fn unselected_names_in(
+        &self,
+        imported_from: &std::collections::HashMap<String, String>,
+    ) -> std::collections::HashSet<String> {
+        self.unselected_consumed_types
+            .iter()
+            .filter(|n| {
+                imported_from
+                    .get(*n)
+                    .is_none_or(|owner| is_first_party_name(owner))
+            })
+            .cloned()
+            .collect()
     }
 
     /// The parts of this table that are **not** a function of the unit's own
@@ -627,6 +790,8 @@ impl UnitTable {
             // Stamped after every unit is checked.
             exec_plan: _,
             kind,
+            // Set by `build_unit_table` from the unit's own files.
+            test_only: _,
             // Built by `phase_symbol_tables` from the unit's own files.
             types: _,
             fns: _,
@@ -648,6 +813,9 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             derived,
+            use_views,
+            ambiguous_uses,
+            use_origin: _,
         } = self;
         (
             *kind,
@@ -656,6 +824,16 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             sorted(derived),
+            // A view is a function of the used commons' public surface and of
+            // this unit's clauses: its names are what a change to either shows.
+            use_views
+                .iter()
+                .map(|(t, v)| (t, v.types.keys().collect::<std::collections::BTreeSet<_>>()))
+                .collect::<Vec<_>>(),
+            ambiguous_uses
+                .iter()
+                .map(|(k, ps)| (k, ps.iter().map(|p| &p.form).collect::<Vec<_>>()))
+                .collect::<Vec<_>>(),
         )
     }
 
@@ -847,12 +1025,18 @@ impl DerivedInstance {
         ))
     }
 
-    /// The jurisdiction an `R2` instance's bucket is pinned to (P5, #2323), or
-    /// `None` for an unpinned one or any other kind.
+    /// The jurisdiction an `R2` instance's bucket (P5, #2323) or a `D1`
+    /// instance's database (#3820) is pinned to, or `None` for an unpinned one
+    /// or any other kind.
     pub fn jurisdiction(&self) -> Option<&str> {
-        self.is_r2()
-            .then(|| self.option(crate::firstparty::R2_JURISDICTION_OPTION))
+        (self.is_r2() || self.is_d1())
+            .then(|| self.option(crate::firstparty::JURISDICTION_OPTION))
             .flatten()
+    }
+
+    /// Whether this is a `D1` instance.
+    pub fn is_d1(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "D1"
     }
 
     /// Whether this is an `R2` instance.
@@ -1135,13 +1319,18 @@ fn signature_types(
             }
             TypeRef::Option(t, _)
             | TypeRef::Effect(t, _)
-            | TypeRef::HttpResult(t, _)
             | TypeRef::List(t, _)
             | TypeRef::Set(t, _)
             | TypeRef::Query(t, _)
             | TypeRef::Stream(t, _)
             | TypeRef::Connection(t, _)
             | TypeRef::History(t, _) => names(t, out),
+            TypeRef::HttpResult(t, e, _) => {
+                names(t, out);
+                if let Some(e) = e {
+                    names(e, out);
+                }
+            }
             TypeRef::Fn(params, ret, _) => {
                 params.iter().for_each(|p| names(p, out));
                 names(ret, out);
@@ -1197,8 +1386,12 @@ pub fn build_unit_table(
     parsed: &[ParsedFile],
     out: &mut Vec<(PathBuf, CompileError)>,
 ) -> UnitTable {
+    let test_only = indices
+        .iter()
+        .any(|&i| matches!(parsed[i].unit(), SourceUnit::Commons(c) if c.test_only));
     let mut table = UnitTable {
         kind: Some(kind),
+        test_only,
         ..UnitTable::default()
     };
     for &i in indices {
@@ -1230,14 +1423,10 @@ pub fn build_unit_table(
             };
             if let Some((name, decl, is_event)) = as_type {
                 if let Some(prev) = table.types.get(&name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            name.span,
-                            format!("type `{}` is already declared", name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(name, prev));
+                } else if crate::prelude_record::is_reserved(&decl) {
+                    // #4192: `MapEntry[A, B]` is the prelude record, already declared.
+                    errors.push(crate::prelude_record::reserved_error(name));
                 } else {
                     table.methods.entry(name.name.clone()).or_default();
                     if is_event {
@@ -2182,6 +2371,7 @@ pub fn build_cross_context_info(
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
+                    key_params: crate::checker::codable::key_op_params(op),
                     reply_policy: crate::checker::codable::op_reply_policy(op),
                 })
                 .collect();
@@ -2336,6 +2526,71 @@ pub fn discover_event_subscribers(
 /// queue names (`from queue("name")`), sorted and deduped — the two `wrangler.toml`
 /// binding lists a context's own compose entry needs. `v0.44`: one queue binding
 /// per service, on the `from queue(...)` header.
+/// #3877: a queue consumer's `delivery { }` settings, as `[[queues.consumers]]`
+/// carries them. A key the author left out is `None` and is not written, so
+/// Cloudflare's default stands (`max_batch_size` stays 10 when unset).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QueueDelivery {
+    /// The consumer's queue, as written (not environment-qualified).
+    pub queue: String,
+    pub retries: Option<i64>,
+    pub retry_delay_secs: Option<i64>,
+    /// The dead-letter queue, as written; `None` for `deadLetter: None` too.
+    pub dead_letter: Option<String>,
+    pub batch_size: Option<i64>,
+    pub batch_wait_secs: Option<i64>,
+    pub concurrency: Option<i64>,
+}
+
+/// #3877: the `delivery { }` settings of every queue consumer in `table`, sorted
+/// by queue name (the services are a `HashMap`, so unsorted input would make
+/// `wrangler.toml` differ between runs). A consumer with no section, or an
+/// empty one, has no entry.
+pub fn queue_deliveries(table: &UnitTable) -> Vec<QueueDelivery> {
+    let mut out: Vec<QueueDelivery> = table
+        .services
+        .values()
+        .filter_map(|service| {
+            let ServiceProtocol::Queue { name } = &service.protocol else {
+                return None;
+            };
+            let policy = service.delivery.as_ref()?;
+            let delivery = QueueDelivery {
+                queue: name.clone(),
+                retries: policy.retries(),
+                retry_delay_secs: policy.retry_delay_secs(),
+                dead_letter: match policy.dead_letter() {
+                    Some(bynk_syntax::ast::DeadLetter::Queue(q)) => Some(q.to_string()),
+                    Some(bynk_syntax::ast::DeadLetter::Deleted) | None => None,
+                },
+                batch_size: policy.batch_size(),
+                batch_wait_secs: policy.batch_wait_secs(),
+                concurrency: policy.concurrency(),
+            };
+            let blank = QueueDelivery {
+                queue: name.clone(),
+                ..QueueDelivery::default()
+            };
+            (delivery != blank).then_some(delivery)
+        })
+        .collect();
+    out.sort_by(|a, b| a.queue.cmp(&b.queue));
+    out
+}
+
+/// #3872: the variant names of the sum type `name` declared in `table`, in
+/// declaration order; empty when `name` is not a sum declared here (a record, a
+/// base type, or a type of another unit). A cron run's failure record may name
+/// the variant of a sum error and nothing of any other error.
+pub fn sum_variant_names(table: &UnitTable, name: &str) -> Vec<String> {
+    match table.types.get(name).map(|t| &t.body) {
+        Some(bynk_syntax::ast::TypeBody::Sum(sum)) => {
+            sum.variants.iter().map(|v| v.name.name.clone()).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 pub fn cron_and_queue_triggers(table: &UnitTable) -> (Vec<String>, Vec<String>) {
     let mut crons: Vec<String> = Vec::new();
     let mut queues: Vec<String> = Vec::new();
@@ -2471,6 +2726,13 @@ pub fn resolve_given_cap_ref(
         .consumed_capabilities
         .get(&ctx_name)
         .is_some_and(|m| m.contains_key(cap_ref.key()));
+    // #4183: the context's own dotted name written as the prefix is a reference to the unit
+    // (an alias is the consuming unit's own spelling, and is not one).
+    if let Some(q) = &cap_ref.context
+        && q.joined() == ctx_name
+    {
+        refs.record_in_unit(q.span, SymbolKind::Unit, &ctx_name, &ctx_name);
+    }
     if exports_it {
         // v0.25: dotted `given B.Cap` — the name segment, in the consumed
         // unit's namespace.
@@ -2794,6 +3056,11 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
                     rename_type_ref(&mut f.type_ref, subst);
                 }
             }
+            // #4397: an `embeds E as V` clause names a type too, and a `?` that
+            // converts an `E` error reads it under the spelling the unit uses.
+            for e in &mut sum.embeds {
+                rename_type_ref(&mut e.source_type, subst);
+            }
         }
         TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
     }
@@ -2823,13 +3090,18 @@ pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => rename_type_ref(t, subst),
+        TypeRef::HttpResult(t, e, _) => {
+            rename_type_ref(t, subst);
+            if let Some(e) = e {
+                rename_type_ref(e, subst);
+            }
+        }
         TypeRef::Fn(params, ret, _) => {
             for p in params {
                 rename_type_ref(p, subst);
@@ -2871,6 +3143,34 @@ pub fn combined_types_for(
         }
     }
     out
+}
+
+/// The types a context's Worker entry resolves a request's types against (#3910): its own and
+/// those of the commons it `uses` ([`combined_types_for`]), and each type it takes from a context
+/// it consumes (`consumed.1`, the names; `consumed.0`, the contexts each unit consumes), which a
+/// path parameter of that type is decoded by.
+pub fn entry_types_for(
+    unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    consumed: (
+        &HashMap<String, Vec<String>>,
+        &std::collections::HashSet<String>,
+    ),
+) -> HashMap<String, Arc<TypeDecl>> {
+    let (unit_consumes, consumed_types) = consumed;
+    let mut types = combined_types_for(unit, unit_tables, unit_uses);
+    for dep in unit_consumes.get(unit).into_iter().flatten() {
+        let Some(table) = unit_tables.get(dep) else {
+            continue;
+        };
+        for (name, decl) in &table.types {
+            if consumed_types.contains(name) {
+                types.entry(name.clone()).or_insert_with(|| decl.clone());
+            }
+        }
+    }
+    types
 }
 
 /// P6.18: a `uses`-imported type's own combined visible types (one level,
@@ -3031,9 +3331,11 @@ mod detect_context_message_bundle_tests {
             None,
             String::new(),
             SourceUnit::Commons(Commons {
+                test_only: false,
                 name: qualified(name),
                 items: vec![CommonsItem::Messages(messages)],
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Brace,
                 span: Span::default(),
@@ -3059,6 +3361,9 @@ mod detect_context_message_bundle_tests {
                 uses: targets
                     .iter()
                     .map(|t| UsesDecl {
+                        alias: None,
+                        selected: None,
+                        qualified_refs: Vec::new(),
                         target: qualified(t),
                         span: Span::default(),
                         trivia: Trivia::default(),
@@ -3353,7 +3658,7 @@ mod value_namespace_tests {
             Kind::Const => format!("const {n}: Int = 1\n"),
             Kind::Service => {
                 format!(
-                    "service {n} {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n"
+                    "service {n} {{\n  on call() -> Effect[Int] by Caller {{\n    Effect.pure(1)\n  }}\n}}\n"
                 )
             }
             Kind::Agent => format!(
@@ -3469,7 +3774,7 @@ mod contract_types_tests {
 
     const ORDER: &str = "context shop.order\n\nexports transparent { Order }\n\ntype Region = enum { Domestic, International }\n\ntype Order = { id: String, region: Region }\n";
     const POST: &str = "context shop.post\n\nexports transparent { Parcel }\n\ntype Region = enum { North, South }\n\ntype Parcel = { ref: String, region: Region }\n";
-    const LEDGER: &str = "context shop.ledger\n\nconsumes shop.order\nconsumes shop.post\n\ntype Region = enum { Here, There }\n\nservice orderId {\n  on call(o: Order) -> Effect[String] {\n    o.id\n  }\n}\n\nservice parcelRef {\n  on call(p: Parcel) -> Effect[String] {\n    p.ref\n  }\n}\n";
+    const LEDGER: &str = "context shop.ledger\n\nconsumes shop.order\nconsumes shop.post\n\ntype Region = enum { Here, There }\n\nservice orderId {\n  on call(o: Order) -> Effect[String] by Caller {\n    o.id\n  }\n}\n\nservice parcelRef {\n  on call(p: Parcel) -> Effect[String] by Caller {\n    p.ref\n  }\n}\n";
 
     fn normal_form(service: &str) -> String {
         let a = analyse(&[

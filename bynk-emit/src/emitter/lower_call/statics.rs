@@ -15,52 +15,20 @@ use bynk_ts::{
 };
 
 use super::super::lower::{
-    Pre, call_built, ident_node, lower_http_variant_args, member_node, runtime_ctor_call,
-    settle_built,
+    Pre, lower_http_variant_args, member_node, runtime_ctor_call, settle_built, type_member_node,
 };
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{id, key_is_plain, take};
+use super::super::lower_list::{key_is_plain, take};
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
-use super::super::{Expr, ExprKind, Ident, TypeRef};
+use super::super::{Expr, ExprKind, Ident, TypeBody, TypeDecl, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
-
-/// `a.b`.
-fn member(object: TsExpr, property: &str) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.to_string(),
-    }
-}
+use crate::ts_build::{call, ident, member, new, type_app};
 
 /// `globalThis.<name>`.
 fn global(name: &str) -> TsExpr {
     member_node("globalThis", name)
-}
-
-/// `callee<A, B>`.
-fn type_app(callee: TsExpr, type_args: Vec<TsType>) -> TsExpr {
-    TsExpr::TypeApp {
-        callee: Box::new(callee),
-        type_args,
-    }
-}
-
-/// `new callee(args)`.
-fn new(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-/// A call to a runtime helper's genuine identifier.
-fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(ident_node(helper)),
-        args,
-    }
 }
 
 /// The type arguments written at a call (`Box.empty[Int]()`), as nodes: the same
@@ -97,6 +65,28 @@ pub(in crate::emitter) fn lower_type_static_call(
         )
     {
         let mut all: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        // #4213: on `workers` a consumed context's type is another Worker's and is
+        // named in type position only, so this module builds its values itself:
+        // a sum variant as a literal, and `.of` through its own copy of the guards.
+        if cx.is_consumed_context_type(&id.name) {
+            match cx.commons().callees.get(&e.id) {
+                Some(Callee::Ctor { sum, tag }) => {
+                    match crate::emitter::consumed_variant_literal(e, &sum.name.name, tag, all, cx)
+                    {
+                        Ok(built) => return Some(built),
+                        Err(args) => all = args,
+                    }
+                }
+                Some(Callee::Refine(decl)) if all.len() == 1 => {
+                    let decl = decl.clone();
+                    if let Some(built) = lower_consumed_refine(&decl, all.remove(0), cx) {
+                        return Some(built);
+                    }
+                    unreachable!("a refined type's `of` has a body");
+                }
+                _ => {}
+            }
+        }
         // #2719: a static method in the needs-context set takes the context last.
         let mut needs_exec = false;
         if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
@@ -110,11 +100,11 @@ pub(in crate::emitter) fn lower_type_static_call(
         }
         // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
         // kept, so a call with no argument of type `T` still types as written.
-        let mut callee = member_node(&id.name, &method.name);
+        let mut callee = type_member_node(&id.name, &method.name);
         if !type_args.is_empty() {
             callee = type_app(callee, explicit_type_args(type_args));
         }
-        let built = call_built(callee, all);
+        let built = call(callee, all);
         return Some(if needs_exec {
             settle_built(built, cx)
         } else {
@@ -122,6 +112,45 @@ pub(in crate::emitter) fn lower_type_static_call(
         });
     }
     None
+}
+
+/// #4213: `T.of(x)` for a refined type a consumed context owns: an immediately
+/// invoked copy of the owner's `of`, so the guards run in this Worker and no value
+/// import crosses to the owner's. `None` for a type that is not refined or opaque.
+fn lower_consumed_refine(
+    decl: &TypeDecl,
+    arg: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
+    let (base, refinement, is_opaque) = match &decl.body {
+        TypeBody::Refined {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), false),
+        TypeBody::Opaque {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), true),
+        TypeBody::Record(_) | TypeBody::Sum(_) => return None,
+    };
+    // The guards report the type as its owner declares it, so a violation reads
+    // the same on every target; the brand cast keeps this module's own name.
+    let declared = cx
+        .consumed_declared_name(&decl.name.name)
+        .map(str::to_string);
+    let mut owner_view = decl.clone();
+    if let Some(declared) = declared {
+        owner_view.name.name = declared;
+    }
+    let body = crate::emitter::refined_of_body(
+        &owner_view,
+        &decl.name.name,
+        crate::emitter::shape_parts(base, refinement, is_opaque),
+        cx.runtime_use(),
+    );
+    let value_ty = bynk_ts::TsType::named(super::super::ts_types::ts_base(base));
+    Some(call(
+        crate::ts_build::block_arrow(vec![TsParam::new("value", Some(value_ty))], false, body),
+        vec![arg],
+    ))
 }
 
 /// The `[+-]?digits` grammar `Int.parse` accepts (#1657), a fixed literal.
@@ -147,7 +176,7 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
                 op: TsBinaryOp::Add,
                 left: Box::new(TsExpr::Call {
                     callee: Box::new(global("Number")),
-                    args: vec![ident_node("__s")],
+                    args: vec![ident("__s")],
                 }),
                 right: Box::new(TsExpr::Lit(TsLit::Num("0".to_string()))),
             },
@@ -158,7 +187,7 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
             FLOAT_GRAMMAR,
             TsExpr::Call {
                 callee: Box::new(global("Number")),
-                args: vec![ident_node("__s")],
+                args: vec![ident("__s")],
             },
             "isFinite",
         )
@@ -168,11 +197,11 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
         let s = c.into_iter().next().expect("one child");
         let matches = TsExpr::Call {
             callee: Box::new(member(TsExpr::Lit(TsLit::Raw(grammar.to_string())), "test")),
-            args: vec![ident_node("__s")],
+            args: vec![ident("__s")],
         };
         let guard = TsExpr::Call {
             callee: Box::new(member(member_node("globalThis", "Number"), guard_fn)),
-            args: vec![ident_node("__n")],
+            args: vec![ident("__n")],
         };
         let body = vec![
             TsStmt::if_stmt(
@@ -180,15 +209,15 @@ fn parse_iife(is_int: bool, s: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
                     op: TsUnaryOp::Not,
                     expr: Box::new(matches),
                 },
-                TsStmt::return_stmt(Some(ident_node("None")), None),
+                TsStmt::return_stmt(Some(ident("None")), None),
                 None,
             ),
             TsStmt::const_stmt(TsBindingName::Ident("__n".to_string()), None, value, None),
             TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
                     test: Box::new(guard),
-                    consequent: Box::new(call("Some", vec![ident_node("__n")])),
-                    alternate: Box::new(ident_node("None")),
+                    consequent: Box::new(call(ident("Some"), vec![ident("__n")])),
+                    alternate: Box::new(ident("None")),
                 }),
                 None,
             ),
@@ -217,7 +246,7 @@ fn set_of(plain: bool, elem: TsType, xs: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
         new(type_app(global("Set"), vec![elem]), vec![xs])
     } else {
         TsExpr::Call {
-            callee: Box::new(type_app(ident_node("__bynkSetOf"), vec![elem])),
+            callee: Box::new(type_app(ident("__bynkSetOf"), vec![elem])),
             args: vec![xs],
         }
     }
@@ -252,12 +281,8 @@ pub(in crate::emitter) fn lower_scalar_static_call(
             })
         )
     {
-        cx.note_http_result();
         let args_lowered = lower_http_variant_args(e, args, pre, cx);
-        return Some(call_built(
-            member_node("HttpResult", &method.name),
-            args_lowered,
-        ));
+        return Some(call(member_node("HttpResult", &method.name), args_lowered));
     }
     // v0.20b: built-in collection statics — `List.empty()` /
     // `Map.empty()`. The checker recorded the instantiated type;
@@ -337,6 +362,19 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         }
         return Some(set_of(plain, ts_ty_to_ts_type(t, tys), xs));
     }
+    // #3961: `Map.of(entries)`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic {
+                op: StaticOp::Map(MapStatic::Of),
+                ..
+            })
+        )
+        && args.len() == 1
+    {
+        return Some(super::kernel_collections::lower_map_of(args, cx, pre));
+    }
     // v0.22b: the typed JSON codec (ADR 0045).
     // The codec's decoders and encoders are their own family (1A.21), and a node they return
     // passes through.
@@ -410,7 +448,6 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         && args.len() == 1
     {
         let s = pre.lower_node(&args[0], cx);
-        cx.note_time_ops();
         return Some(runtime_ctor_call(None, "__bynkInstantFromIso", s));
     }
     // v0.90 (ADR 0114): `Instant.fromEpochMillis(n)` — an `Instant` lowers to
@@ -472,12 +509,10 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // #2016: the guarded hex and base64url decodes, `None` on bad input.
         (StaticOp::Bytes(BytesStatic::FromHex), 1) => {
             let s = pre.lower_node(&args[0], cx);
-            cx.note_bytes_ops();
             Some(runtime_ctor_call(None, "__bynkBytesFromHex", s))
         }
         (StaticOp::Bytes(BytesStatic::FromBase64Url), 1) => {
             let s = pre.lower_node(&args[0], cx);
-            cx.note_bytes_ops();
             Some(runtime_ctor_call(None, "__bynkBytesFromBase64Url", s))
         }
         (StaticOp::Bytes(BytesStatic::Empty), 0) => Some(new(global("Uint8Array"), vec![])),
@@ -495,41 +530,34 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
         // #2380 (L5): `TokenClaims.of(lines)` builds the runtime's claims view.
         (StaticOp::TokenClaims(TokenClaimsStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_token_claims();
             Some(runtime_ctor_call(None, "__tokenClaims", xs))
         }
         // #2341 (L4): `RequestHeaders.of(lines)` / `RequestHeaders.empty()` build
         // the runtime's headers view from `"name: value"` lines.
         (StaticOp::RequestHeaders(RequestHeadersStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_headers();
             Some(runtime_ctor_call(None, "__requestHeaders", xs))
         }
         (StaticOp::RequestHeaders(RequestHeadersStatic::Empty), 0) => {
-            cx.note_request_headers();
-            Some(call("__requestHeaders", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestHeaders"), vec![TsExpr::array(vec![])]))
         }
         // #2854: `RequestQuery.of(pairs)` / `RequestQuery.empty()` build the
         // runtime's query view from `"name=value"` pairs.
         (StaticOp::RequestQuery(RequestQueryStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_query();
             Some(runtime_ctor_call(None, "__requestQuery", xs))
         }
         (StaticOp::RequestQuery(RequestQueryStatic::Empty), 0) => {
-            cx.note_request_query();
-            Some(call("__requestQuery", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestQuery"), vec![TsExpr::array(vec![])]))
         }
         // #3277: `RequestCookies.of(pairs)` / `RequestCookies.empty()` build the
         // runtime's cookies view from `"name=value"` pairs.
         (StaticOp::RequestCookies(RequestCookiesStatic::Of), 1) => {
             let xs = pre.lower_node(&args[0], cx);
-            cx.note_request_cookies();
             Some(runtime_ctor_call(None, "__requestCookies", xs))
         }
         (StaticOp::RequestCookies(RequestCookiesStatic::Empty), 0) => {
-            cx.note_request_cookies();
-            Some(call("__requestCookies", vec![TsExpr::array(vec![])]))
+            Some(call(ident("__requestCookies"), vec![TsExpr::array(vec![])]))
         }
         // v0.100: `Stream.of(xs)` — the deterministic in-memory source. A `Stream`
         // lowers to a host async iterable; `of` wraps a list as an async generator.
@@ -544,7 +572,10 @@ pub(in crate::emitter) fn lower_runtime_value_static_call(
                     "__e",
                     xs,
                     TsStmt::block(
-                        vec![TsStmt::expr_stmt(TsExpr::Yield(Box::new(id("__e"))), None)],
+                        vec![TsStmt::expr_stmt(
+                            TsExpr::Yield(Box::new(ident("__e"))),
+                            None,
+                        )],
                         None,
                     ),
                     None,

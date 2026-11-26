@@ -171,22 +171,24 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
 }
 
 /// The default actor a handler inherits when it omits `by`, by protocol (ADR
-/// Q5). HTTP has no safe default — `by` is required there.
+/// Q5). HTTP and WebSocket have no safe default — `by` is required there — and
+/// neither has `call` (#3891, superseding ADR 0082's `Caller` default) nor `queue`
+/// (#3899: who may send to a consumer is an access decision) nor email (#3888:
+/// whether to act on mail that failed DMARC is a written decision).
 pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
     match protocol {
-        ServiceProtocol::Call => Some("Caller"),
         ServiceProtocol::Cron => Some("Scheduler"),
-        ServiceProtocol::Queue { .. } => Some("Producer"),
-        // #3328 (DECISION E): inbound mail's default actor is the envelope
-        // sender, carrying its address and the platform's DMARC verdict.
-        ServiceProtocol::Email { .. } => Some("Sender"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
         ServiceProtocol::Events { .. } => Some("Publisher"),
         // v0.103: like HTTP, a WebSocket upgrade has no safe default actor —
         // `by` is mandatory on `on open` (edge auth before accept, D-A).
-        ServiceProtocol::Http | ServiceProtocol::WebSocket { .. } => None,
+        ServiceProtocol::Call
+        | ServiceProtocol::Http
+        | ServiceProtocol::Queue { .. }
+        | ServiceProtocol::WebSocket { .. }
+        | ServiceProtocol::Email { .. } => None,
     }
 }
 
@@ -268,6 +270,16 @@ pub fn by_clause_is_signed_cookie(by: &ByClause, actors: &HashMap<String, ActorD
             == Some(Scheme::SignedCookie)
 }
 
+/// #3938: whether a `by` clause names a single local `SignedCookie` actor with `sessions = true`
+/// (never a sum member), whose seam can refuse a cookie for a revoked session.
+pub fn by_clause_has_sessions(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by_clause_is_signed_cookie(by, actors)
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| signed_cookie_seam_of(a, None))
+            .is_some_and(|s| s.sessions)
+}
+
 pub fn bearer_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -295,6 +307,33 @@ pub fn bearer_seam_for(
         secret,
         identity_type: id.name.clone(),
         authorization,
+    })
+}
+
+/// #3904: what a hosting Durable Object needs of a lone `from websocket` credential seam: the binder
+/// and the identity type, carried in a [`BearerSeam`] whatever the scheme (`Bearer`, `Oidc` or
+/// `SignedCookie`). The Worker verified the credential, so the Durable Object reads none of the
+/// seam's trust roots: `secret` is empty and there is no authorisation predicate for the other two.
+pub fn ws_principal_seam_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<BearerSeam> {
+    if let Some(seam) = bearer_seam_for(handler, actors) {
+        return Some(seam);
+    }
+    let (binder, identity_type) = match (
+        oidc_seam_for(handler, actors),
+        signed_cookie_seam_for(handler, actors),
+    ) {
+        (Some(o), _) => (o.binder, o.identity_type),
+        (None, Some(c)) => (c.binder, c.identity_type),
+        (None, None) => return None,
+    };
+    Some(BearerSeam {
+        binder,
+        secret: String::new(),
+        identity_type,
+        authorization: None,
     })
 }
 
@@ -326,6 +365,14 @@ pub struct SignedCookieSeam {
     pub identity_type: String,
     /// The cookie's `SameSite`: `Lax` (the default), `Strict` or `Unrestricted`.
     pub same_site: String,
+    /// #3938: `sessions = true`: the cookie carries a session id the seam checks against the
+    /// generated `<Actor>Sessions` agent.
+    pub sessions: bool,
+}
+
+/// The name of the compiler-generated session agent of `SignedCookie` actor `actor` (#3938).
+pub fn sessions_agent_name(actor: &str) -> String {
+    format!("{actor}Sessions")
 }
 
 /// Resolve a handler's `SignedCookie` seam, if its `by` clause names a single
@@ -376,6 +423,10 @@ pub fn signed_cookie_seam_of(
             .and_then(|a| a.value.as_ident())
             .unwrap_or("Lax")
             .to_string(),
+        sessions: actor
+            .scheme_arg("sessions")
+            .and_then(|a| a.value.as_ident())
+            == Some("true"),
     })
 }
 
@@ -417,8 +468,13 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     }
     let actor = actors.get(&by.primary().name)?;
-    // A refinement's `auth` is `None`; it falls through here and follows the
-    // Bearer refinement path (or is rejected). An Oidc base is not narrowed.
+    oidc_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
+}
+
+/// The seam of one `Oidc` actor declaration (a handler's single actor, or a member of a sum, #3936).
+/// A refinement's `auth` is `None`, so it follows the Bearer refinement path; an `Oidc` base is not
+/// narrowed.
+pub fn oidc_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<OidcSeam> {
     if Scheme::from_name(actor.auth.as_ref()?.name.as_str()) != Some(Scheme::Oidc) {
         return None;
     }
@@ -429,7 +485,7 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     };
     Some(OidcSeam {
-        binder: by.binder.as_ref().map(|b| b.name.clone()),
+        binder,
         issuer,
         audience,
         jwks,
@@ -439,6 +495,60 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
     })
+}
+
+/// #3937: the binder of an HTTP handler whose `by` clause names one actor that reads a verified
+/// JWT, so the binder's `.claims` is the token's claims: an `Oidc` actor, or a `Bearer` actor or a
+/// refinement of one. `None` for a sum (the binder there is the resolved arm), a handler of any
+/// other protocol, and a `by` with no binder.
+pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    // The verified claims reach a handler only on the HTTP path (a WebSocket upgrade forwards the
+    // identity and expiry alone), so a `from websocket` binder has no `.claims` (#3904).
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return None;
+    }
+    if let Some(seam) = oidc_seam_for(handler, actors) {
+        return seam.binder;
+    }
+    if handler.by_clause.as_ref()?.is_sum() {
+        return None;
+    }
+    bearer_seam_for(handler, actors)?.binder
+}
+
+impl crate::checker::HandlerBodyCheck<'_> {
+    /// What the handler's `by` clause lets its body read of a verified token: the binder whose
+    /// `.claims` is the token's (#2380, #3937), and the `Bearer` arms of an actor sum, whose pattern
+    /// binds the claims beside the identity (#4344).
+    pub fn with_claims_of(
+        mut self,
+        handler: &Handler,
+        actors: &HashMap<String, ActorDecl>,
+    ) -> Self {
+        self.claims_binder = claims_binder_for(handler, actors);
+        self.claims_sum_arms = claims_sum_arms_for(handler, actors);
+        self
+    }
+}
+
+/// #4344: the arms of an HTTP handler's actor sum (`by who: User | Visitor`) that read a verified token,
+/// a `Bearer` or an `Oidc` arm, whose pattern may bind the token's claims beside the identity,
+/// `User(u, c)`. Empty for every other handler.
+pub fn claims_sum_arms_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return Vec::new();
+    }
+    sum_members_for(handler, actors)
+        .into_iter()
+        .flatten()
+        .filter(|m| {
+            matches!(
+                m.seam,
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_)
+            )
+        })
+        .map(|m| m.actor_name)
+        .collect()
 }
 
 /// v0.54: the binder of a cross-context `on call … by c: Caller` handler that
@@ -466,8 +576,12 @@ pub fn caller_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     // `CallerId` is yielded only by the `Caller` prelude actor; a local actor
     // never declares it. A binder that collides with a param is suppressed
     // upstream, mirroring the other seams.
-    let is_caller = !actors.contains_key(name)
+    // #3890: a refinement over `Caller` yields the same `CallerId`.
+    let is_caller = (!actors.contains_key(name)
         && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+        || actors
+            .get(name)
+            .is_some_and(|d| caller_refinement(d, actors).is_some()))
         && !handler.params.iter().any(|p| p.name.name == binder.name);
     is_caller.then(|| binder.name.clone())
 }
@@ -485,12 +599,36 @@ pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     if by.is_sum() {
         return None;
     }
-    let binder = by.binder.as_ref()?;
     let name = &by.primary().name;
-    (name == "Sender"
-        && !actors.contains_key(name)
-        && !handler.params.iter().any(|p| p.name.name == binder.name))
-    .then(|| binder.name.clone())
+    let refined = actors
+        .get(name)
+        .is_some_and(|decl| sender_refinement(decl, actors).is_some());
+    // #3888: the prelude `Sender`, or a local refinement over it, mints the same `SenderIdentity`.
+    let is_sender = (name == "Sender" && !actors.contains_key(name)) || refined;
+    // A refinement checks the identity's verdict before the handler runs, so a binder-less
+    // handler still receives it, under a name no source can write.
+    let binder = match by.binder.as_ref() {
+        Some(b) => b.name.clone(),
+        None if refined => SENDER_REFINEMENT_BINDER.to_string(),
+        None => return None,
+    };
+    (is_sender && !handler.params.iter().any(|p| p.name.name == binder)).then_some(binder)
+}
+
+/// The synthetic binder a binder-less `by <Sender refinement>` handler receives its identity under.
+pub const SENDER_REFINEMENT_BINDER: &str = "__sender";
+
+/// The DMARC verdicts the handler's `Sender` refinement admits, or `None` when its actor is not
+/// one (a plain `by Sender` admits all mail).
+pub fn sender_admits_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<Vec<&'static str>> {
+    // The check reads the identity, so it exists only where the identity is passed.
+    sender_binder_for(handler, actors)?;
+    let by = handler.by_clause.as_ref()?;
+    let decl = actors.get(&by.primary().name)?;
+    sender_refinement(decl, actors).map(|p| p.admitted())
 }
 
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the
@@ -503,6 +641,9 @@ pub struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one
     /// (`worker = "ledger-svc"`), so `bynk deploy`'s hand-off can name it.
     pub worker: Option<String>,
+    /// #3899: whether this sender signs queue messages to a `from queue` consumer, not calls
+    /// (an actor admitted on both is listed as a caller).
+    pub queue: bool,
 }
 
 /// I3 (#1971): the foreign caller an actor declaration describes, if it is a
@@ -516,6 +657,7 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
             .scheme_arg("worker")
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
+        queue: false,
     })
 }
 
@@ -528,6 +670,11 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
 pub struct CallAdmission {
     /// Whether a Bynk context is admitted.
     pub contexts: bool,
+    /// #3890: when contexts are admitted only by a refinement over `Caller`
+    /// (`actor Admin = Caller where IsContext(…)`), its predicate. `None` with
+    /// `contexts` set admits every context. A handler has at most one
+    /// `Internal` member, so one predicate is enough.
+    pub caller_predicate: Option<CallerPredicate>,
     /// The foreign callers admitted, in `by` order.
     pub foreign: Vec<ForeignCaller>,
     /// For a sum, the members in `by` order: `None` for the member that
@@ -543,6 +690,9 @@ pub enum CallSumMember {
     Caller,
     /// A declared foreign caller, with no identity beyond its actor.
     Foreign(ForeignCaller),
+    /// #3890: a refinement over `Caller`: a Bynk context the predicate admits,
+    /// with its name as the identity, tagged by the refinement's name.
+    Refined(String, CallerPredicate),
 }
 
 impl CallSumMember {
@@ -551,7 +701,23 @@ impl CallSumMember {
         match self {
             CallSumMember::Caller => "Caller",
             CallSumMember::Foreign(f) => &f.actor,
+            CallSumMember::Refined(name, _) => name,
         }
+    }
+}
+
+impl CallAdmission {
+    /// #3890: the tag the resolved `Internal` member carries in a sum: the
+    /// refinement's name, or `Caller`.
+    pub fn internal_tag(&self) -> &str {
+        self.sum
+            .iter()
+            .flatten()
+            .find_map(|m| match m {
+                CallSumMember::Refined(name, _) => Some(name.as_str()),
+                _ => None,
+            })
+            .unwrap_or("Caller")
     }
 }
 
@@ -566,12 +732,14 @@ pub fn call_admission_for(
     let Some(by) = handler.by_clause.as_ref() else {
         return Some(CallAdmission {
             contexts: true,
+            caller_predicate: None,
             foreign: Vec::new(),
             sum: None,
         });
     };
     let mut admission = CallAdmission {
         contexts: false,
+        caller_predicate: None,
         foreign: Vec::new(),
         sum: None,
     };
@@ -590,6 +758,14 @@ pub fn call_admission_for(
                     members.push(CallSumMember::Foreign(f));
                 }
             }
+            // #3890: a refinement over `Caller` admits the contexts its
+            // predicate admits.
+            Some(decl) if caller_refinement(decl, actors).is_some() => {
+                let pred = caller_refinement(decl, actors).expect("checked above");
+                admission.contexts = true;
+                admission.caller_predicate = Some(pred.clone());
+                members.push(CallSumMember::Refined(actor.name.clone(), pred));
+            }
             Some(_) => {
                 admission.contexts = true;
                 members.push(CallSumMember::Caller);
@@ -604,6 +780,96 @@ pub fn call_admission_for(
         admission.sum = Some(members);
     }
     Some(admission)
+}
+
+/// #3899: who a `from queue` consumer that admits only signed messages admits. Each message must
+/// come from one of the foreign senders, signed under that actor's secret, or from a Bynk context a
+/// `Producer` refinement's predicate admits, signed under the pair's edge key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueAdmission {
+    /// The foreign senders admitted, in `by` order.
+    pub foreign: Vec<ForeignCaller>,
+    /// The `Producer` refinements admitted, in `by` order: the actor's name and the contexts its
+    /// predicate admits.
+    pub producers: Vec<(String, CallerPredicate)>,
+    /// For a sum (`by who: Legacy | Orders`), the members in `by` order: the handler's `match`
+    /// reads which one signed the message.
+    pub sum: Option<Vec<CallSumMember>>,
+}
+
+impl QueueAdmission {
+    /// Whether a Bynk context may send to the consumer: some `Producer` refinement is admitted.
+    pub fn admits_contexts(&self) -> bool {
+        !self.producers.is_empty()
+    }
+
+    /// Whether the Bynk context `context` is one a refinement admits.
+    pub fn admits_context(&self, context: &str) -> bool {
+        self.producers.iter().any(|(_, p)| p.admits(context))
+    }
+}
+
+/// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
+/// messages (`by Producer`, today's behaviour). A consumer whose `by` names only `Foreign` actors
+/// and `Producer` refinements admits only signed messages; the checker refuses a `by` that mixes
+/// them with an unsigned actor, so a signed consumer's every member is a signed sender here.
+pub fn queue_admission_for(
+    handler: &Handler,
+    protocol: &ServiceProtocol,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(protocol, ServiceProtocol::Queue { .. }) {
+        return None;
+    }
+    queue_admission_of(handler, actors)
+}
+
+/// [`queue_admission_for`] without the protocol, for a caller that has only the handler (the seam
+/// lowering): an `on message` whose `by` names `Foreign` actors or `Producer` refinements is a queue
+/// consumer's, because the checker admits neither on any other handler but `call`.
+pub fn queue_admission_of(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(handler.kind, HandlerKind::Message) {
+        return None;
+    }
+    let by = handler.by_clause.as_ref()?;
+    let mut foreign = Vec::new();
+    let mut producers = Vec::new();
+    let mut members = Vec::new();
+    for actor in &by.actors {
+        // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
+        let decl = actors.get(&actor.name)?;
+        if let Some(pred) = producer_refinement(decl, actors) {
+            producers.push((actor.name.clone(), pred.clone()));
+            members.push(CallSumMember::Refined(actor.name.clone(), pred));
+            continue;
+        }
+        if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
+            return None;
+        }
+        // Classified by scheme, not by whether the declaration is whole, as `call_admission_for`
+        // does: a malformed `Foreign` actor (the checker reports it) is still a signed sender, with
+        // an empty secret that no environment supplies, so the consumer refuses every message.
+        let f = ForeignCaller {
+            queue: true,
+            ..foreign_caller_of(decl).unwrap_or_else(|| ForeignCaller {
+                actor: decl.name.name.clone(),
+                secret: String::new(),
+                worker: None,
+                queue: true,
+            })
+        };
+        members.push(CallSumMember::Foreign(f.clone()));
+        foreign.push(f);
+    }
+    let sum = by.is_sum().then_some(members);
+    (!foreign.is_empty() || !producers.is_empty()).then_some(QueueAdmission {
+        foreign,
+        producers,
+        sum,
+    })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —
@@ -689,7 +955,39 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
             .get(&a.name)
             .and_then(|d| d.auth.as_ref())
             .and_then(|auth| Scheme::from_name(auth.name.as_str()))
-            .is_some_and(|s| matches!(s, Scheme::Bearer | Scheme::Signature))
+            .is_some_and(|s| {
+                // #3936: an `Oidc` or `SignedCookie` member refuses a missing credential too.
+                matches!(
+                    s,
+                    Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie
+                )
+            })
+    })
+}
+
+/// #3922: whether a route's responses carry one caller's data, so a shared cache must not
+/// store them: its `by` clause names a `Bearer`, `Oidc`, `SignedCookie` or `Signature`
+/// actor (a refinement takes its base's scheme), or is a sum with such a member. A
+/// `Visitor` route, and a sum of open actors, are not.
+pub fn route_is_credentialed(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by.actors.iter().any(|a| {
+        let Some(decl) = actors.get(&a.name) else {
+            return false;
+        };
+        let base = decl
+            .refinement
+            .as_ref()
+            .and_then(|r| actors.get(&r.base.name))
+            .unwrap_or(decl);
+        base.auth
+            .as_ref()
+            .and_then(|auth| Scheme::from_name(auth.name.as_str()))
+            .is_some_and(|s| {
+                matches!(
+                    s,
+                    Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie | Scheme::Signature
+                )
+            })
     })
 }
 
@@ -757,6 +1055,12 @@ pub enum SumMemberSeam {
         identity_type: String,
     },
     Signature(SignatureSeam),
+    /// #3936: an `Oidc` member, verified by the same JWKS seam as a single-actor route (no binder:
+    /// the sum's `who` carries the identity).
+    Oidc(OidcSeam),
+    /// #3936: a `SignedCookie` member. Its CSRF check belongs to this arm: it runs when the arm is
+    /// tried and a session cookie is present.
+    SignedCookie(SignedCookieSeam),
 }
 
 impl SumMember {
@@ -769,7 +1073,9 @@ impl SumMember {
     pub fn identity_type(&self) -> Option<&str> {
         match &self.seam {
             SumMemberSeam::Bearer { identity_type, .. } => Some(identity_type),
-            _ => None,
+            SumMemberSeam::Oidc(seam) => Some(&seam.identity_type),
+            SumMemberSeam::SignedCookie(seam) => Some(&seam.identity_type),
+            SumMemberSeam::None | SumMemberSeam::Signature(_) => None,
         }
     }
 }
@@ -802,17 +1108,12 @@ pub fn sum_members_for(
                     }
                 }
                 Scheme::Signature => SumMemberSeam::Signature(signature_seam_from_decl(decl)?),
-                // v0.151: `Oidc` is single-actor only this slice — the checker
-                // rejects it as a sum member (`bynk.actor.oidc_not_in_sum`), so
-                // a well-formed program never reaches here with an Oidc peer.
-                // Return `None` (fail closed → no sum emission) defensively.
-                Scheme::Oidc => return None,
+                Scheme::Oidc => SumMemberSeam::Oidc(oidc_seam_of(decl, None)?),
+                Scheme::SignedCookie => {
+                    SumMemberSeam::SignedCookie(signed_cookie_seam_of(decl, None)?)
+                }
                 // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
                 Scheme::Internal | Scheme::Foreign => return None,
-                // #3386: `SignedCookie` is single-actor only in its first slice
-                // (`bynk.actor.signed_cookie_not_in_sum`), so a well-formed
-                // program never reaches here with one; fail closed.
-                Scheme::SignedCookie => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.
@@ -827,6 +1128,48 @@ pub fn sum_members_for(
         });
     }
     Some(members)
+}
+
+/// #3994, #4266: the credential headers a route's seam consumes, each with the actor that consumes
+/// it, in a stable order and each header once: `authorization` for a `Bearer` or `Oidc` actor, the
+/// signature header for a `Signature` one. An actor sum hides what any member reads, because the
+/// entry builds the request's header view before the sum's wrapper resolves which member matched.
+pub fn consumed_credential_headers(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut hide = |name: &str, actor: &str| {
+        let name = name.to_ascii_lowercase();
+        if !out.iter().any(|(h, _)| *h == name) {
+            out.push((name, actor.to_string()));
+        }
+    };
+    if let Some(members) = sum_members_for(handler, actors) {
+        for m in &members {
+            match &m.seam {
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_) => {
+                    hide("authorization", &m.actor_name)
+                }
+                SumMemberSeam::Signature(s) => hide(&s.header, &m.actor_name),
+                // #3936: the cookie arm's cookie is hidden by name, not by header.
+                SumMemberSeam::SignedCookie(_) | SumMemberSeam::None => {}
+            }
+        }
+        return out;
+    }
+    let primary = handler
+        .by_clause
+        .as_ref()
+        .map(|by| by.primary().name.clone())
+        .unwrap_or_default();
+    if bearer_seam_for(handler, actors).is_some() || oidc_seam_for(handler, actors).is_some() {
+        hide("authorization", &primary);
+    }
+    if let Some(s) = signature_seam_for(handler, actors) {
+        hide(&s.header, &primary);
+    }
+    out
 }
 
 /// Whether `scheme` is admissible on `protocol` (the admissible-scheme-per-
@@ -850,15 +1193,26 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // subprotocol, since a browser `WebSocket` cannot set an `Authorization`
         // header. `Signature` is rejected at the WS boundary: HMAC-over-body has
         // no body on a handshake.
+        // #3904: a browser also authenticates an upgrade with a session cookie it sends by itself
+        // (`SignedCookie`, behind an `Origin` check) or a provider's token through the
+        // `bynk.oidc` subprotocol pair (`Oidc`), each a single actor; a sum takes only `None`
+        // and `Bearer` members.
         ServiceProtocol::WebSocket { .. } => {
-            matches!(scheme, Scheme::None | Scheme::Bearer)
+            matches!(
+                scheme,
+                Scheme::None | Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie
+            )
         }
         // Events track, slice 0 (spine #936): delivery is an internal,
         // runtime-triggered invocation, like `Call`/`Cron`/`Queue` — no
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        ServiceProtocol::Cron | ServiceProtocol::Queue { .. } | ServiceProtocol::Events { .. } => {
+        // #3899: a queue consumer may name a `Foreign` producer, whose messages it admits only when
+        // signed under its secret; the checker refuses the forms not yet enforced
+        // (`queue_actor_not_enforced`).
+        ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
+        ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)
         }
         // #3328: the platform delivers inbound mail, so the only admitted
@@ -926,36 +1280,205 @@ pub fn parse_claim_predicate(e: &Expr) -> Result<ClaimPredicate, Span> {
     }
 }
 
-/// Lower a claim predicate to a JavaScript boolean expression over `claims_var`
-/// (the verified claims object, `Record<string, unknown>`). Used by the emitter
-/// for the refinement seam's 403 check.
-pub fn claim_predicate_to_js(pred: &ClaimPredicate, claims_var: &str) -> String {
-    match pred {
-        ClaimPredicate::HasClaim(name) => {
-            format!(
-                "globalThis.Boolean({claims_var}[\"{}\"])",
-                js_str_escape(name)
-            )
-        }
-        ClaimPredicate::ClaimEquals(name, value) => format!(
-            "({claims_var}[\"{}\"] === \"{}\")",
-            js_str_escape(name),
-            js_str_escape(value)
-        ),
-        ClaimPredicate::And(l, r) => format!(
-            "({} && {})",
-            claim_predicate_to_js(l, claims_var),
-            claim_predicate_to_js(r, claims_var)
-        ),
-        ClaimPredicate::Or(l, r) => format!(
-            "({} || {})",
-            claim_predicate_to_js(l, claims_var),
-            claim_predicate_to_js(r, claims_var)
-        ),
-        ClaimPredicate::Not(inner) => {
-            format!("(!{})", claim_predicate_to_js(inner, claims_var))
+/// #3890: the closed predicate vocabulary for a refinement over `Caller`
+/// (`actor Admin = Caller where IsContext(shop.admin)`). `IsContext` is a
+/// fixed, compiler-known check (capitalised, as `Matches` and `NonEmpty` are),
+/// decided at compile time against the project's call graph, and again at run
+/// time on the caller the signature proved. The combinators are the claim
+/// predicates', so `!IsContext(shop.legacy)` reads as a deny-list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallerPredicate {
+    /// `IsContext(a.b, c.d)` — the calling context is one of the named ones.
+    IsContext(Vec<String>),
+    And(Box<CallerPredicate>, Box<CallerPredicate>),
+    Or(Box<CallerPredicate>, Box<CallerPredicate>),
+    Not(Box<CallerPredicate>),
+}
+
+impl CallerPredicate {
+    /// Whether the named calling context passes the predicate.
+    pub fn admits(&self, context: &str) -> bool {
+        match self {
+            CallerPredicate::IsContext(names) => names.iter().any(|n| n == context),
+            CallerPredicate::And(l, r) => l.admits(context) && r.admits(context),
+            CallerPredicate::Or(l, r) => l.admits(context) || r.admits(context),
+            CallerPredicate::Not(inner) => !inner.admits(context),
         }
     }
+
+    /// Every context name the predicate mentions, in source order.
+    pub fn mentioned(&self) -> Vec<&str> {
+        match self {
+            CallerPredicate::IsContext(names) => names.iter().map(String::as_str).collect(),
+            CallerPredicate::And(l, r) | CallerPredicate::Or(l, r) => {
+                let mut out = l.mentioned();
+                out.extend(r.mentioned());
+                out
+            }
+            CallerPredicate::Not(inner) => inner.mentioned(),
+        }
+    }
+}
+
+/// #3888: the closed predicate vocabulary for a refinement over `Sender`
+/// (`actor Authenticated = Sender where Dmarc(DmarcPass)`). `Dmarc` is a fixed,
+/// compiler-known check (capitalised, as `IsContext` is). The DMARC verdict
+/// has three values, so a predicate is decided by evaluating it against each
+/// one: the emitted route carries the verdicts it admits, and the Worker
+/// refuses other mail before the handler runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SenderPredicate {
+    /// `Dmarc(DmarcPass, …)` — the verdict is one of those listed.
+    Dmarc(Vec<String>),
+    And(Box<SenderPredicate>, Box<SenderPredicate>),
+    Or(Box<SenderPredicate>, Box<SenderPredicate>),
+    Not(Box<SenderPredicate>),
+}
+
+/// The `DmarcVerdict` variants, as a handler's `s.identity.dmarc` reads them.
+pub const DMARC_VERDICTS: [&str; 3] = ["DmarcPass", "DmarcFail", "DmarcNone"];
+
+impl SenderPredicate {
+    /// Whether mail with the named verdict passes the predicate.
+    pub fn admits(&self, verdict: &str) -> bool {
+        match self {
+            SenderPredicate::Dmarc(names) => names.iter().any(|n| n == verdict),
+            SenderPredicate::And(l, r) => l.admits(verdict) && r.admits(verdict),
+            SenderPredicate::Or(l, r) => l.admits(verdict) || r.admits(verdict),
+            SenderPredicate::Not(inner) => !inner.admits(verdict),
+        }
+    }
+
+    /// The verdicts the predicate admits, in `DMARC_VERDICTS` order.
+    pub fn admitted(&self) -> Vec<&'static str> {
+        DMARC_VERDICTS
+            .into_iter()
+            .filter(|v| self.admits(v))
+            .collect()
+    }
+}
+
+/// Recognise the `Sender` predicate vocabulary in a refinement `where`
+/// expression. `Err(span)` points at the first sub-expression outside it,
+/// including a `Dmarc` argument that is not a `DmarcVerdict` variant.
+pub fn parse_sender_predicate(e: &Expr) -> Result<SenderPredicate, Span> {
+    match &e.kind {
+        ExprKind::Paren(inner) => parse_sender_predicate(inner),
+        ExprKind::BinOp(BinOp::And, l, r) => Ok(SenderPredicate::And(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::BinOp(BinOp::Or, l, r) => Ok(SenderPredicate::Or(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::UnaryOp(UnaryOp::Not, inner) => Ok(SenderPredicate::Not(Box::new(
+            parse_sender_predicate(inner)?,
+        ))),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+            ..
+        } if type_args.is_empty() && name.name == "Dmarc" && !args.is_empty() => args
+            .iter()
+            .map(|a| match &a.kind {
+                ExprKind::Ident(id) if DMARC_VERDICTS.contains(&id.name.as_str()) => {
+                    Ok(id.name.clone())
+                }
+                _ => Err(a.span),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(SenderPredicate::Dmarc),
+        ExprKind::Call { name, .. } => Err(name.span),
+        _ => Err(e.span),
+    }
+}
+
+/// #3888: the predicate of a refinement over the prelude `Sender` actor, or
+/// `None` for any other actor (a malformed predicate reads as `None` too: the
+/// checker reports it).
+pub fn sender_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SenderPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Sender" || actors.contains_key("Sender") {
+        return None;
+    }
+    parse_sender_predicate(&r.predicate).ok()
+}
+
+/// A qualified name written as an expression: `shop.admin` is a field access
+/// on an identifier.
+pub fn dotted_name(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        ExprKind::FieldAccess { receiver, field } => {
+            Some(format!("{}.{}", dotted_name(receiver)?, field.name))
+        }
+        _ => None,
+    }
+}
+
+/// Recognise the `Caller` predicate vocabulary in a refinement `where`
+/// expression. `Err(span)` points at the first sub-expression outside it (for
+/// `bynk.actor.refinement_predicate_unsupported`).
+pub fn parse_caller_predicate(e: &Expr) -> Result<CallerPredicate, Span> {
+    match &e.kind {
+        ExprKind::Paren(inner) => parse_caller_predicate(inner),
+        ExprKind::BinOp(BinOp::And, l, r) => Ok(CallerPredicate::And(
+            Box::new(parse_caller_predicate(l)?),
+            Box::new(parse_caller_predicate(r)?),
+        )),
+        ExprKind::BinOp(BinOp::Or, l, r) => Ok(CallerPredicate::Or(
+            Box::new(parse_caller_predicate(l)?),
+            Box::new(parse_caller_predicate(r)?),
+        )),
+        ExprKind::UnaryOp(UnaryOp::Not, inner) => Ok(CallerPredicate::Not(Box::new(
+            parse_caller_predicate(inner)?,
+        ))),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+            ..
+        } if type_args.is_empty() && name.name == "IsContext" && !args.is_empty() => args
+            .iter()
+            .map(|a| dotted_name(a).ok_or(a.span))
+            .collect::<Result<Vec<_>, _>>()
+            .map(CallerPredicate::IsContext),
+        ExprKind::Call { name, .. } => Err(name.span),
+        _ => Err(e.span),
+    }
+}
+
+/// #3890: the predicate of a refinement over the prelude `Caller` actor, or
+/// `None` for any other actor (a malformed predicate reads as `None` too: the
+/// checker reports it).
+pub fn caller_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<CallerPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Caller" || actors.contains_key("Caller") {
+        return None;
+    }
+    parse_caller_predicate(&r.predicate).ok()
+}
+
+/// #3899: the predicate of a refinement over the prelude `Producer` actor, or `None` for any
+/// other actor (a malformed predicate reads as `None` too: the checker reports it). It uses the
+/// same `IsContext(…)` vocabulary as a `Caller` refinement, over the context that signed the message.
+pub fn producer_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<CallerPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Producer" || actors.contains_key("Producer") {
+        return None;
+    }
+    parse_caller_predicate(&r.predicate).ok()
 }
 
 fn js_str_escape(s: &str) -> String {
@@ -1236,11 +1759,14 @@ pub enum BadCredential {
     WrongAudience,
     WrongAlgorithm,
     NoSubject,
+    /// #3938: a cookie correctly signed for a session that was then revoked (`revokeAll`), so
+    /// only a `SignedCookie` actor with `sessions = true` can refuse it.
+    Revoked,
 }
 
 impl BadCredential {
     /// Every bad-credential principal.
-    pub const ALL: [BadCredential; 7] = [
+    pub const ALL: [BadCredential; 8] = [
         BadCredential::Forged,
         BadCredential::Stale,
         BadCredential::Expired,
@@ -1248,6 +1774,7 @@ impl BadCredential {
         BadCredential::WrongAudience,
         BadCredential::WrongAlgorithm,
         BadCredential::NoSubject,
+        BadCredential::Revoked,
     ];
 
     /// The name written after `by`.
@@ -1260,6 +1787,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "WrongAudience",
             BadCredential::WrongAlgorithm => "WrongAlgorithm",
             BadCredential::NoSubject => "NoSubject",
+            BadCredential::Revoked => "Revoked",
         }
     }
 
@@ -1273,6 +1801,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "wrongaudience",
             BadCredential::WrongAlgorithm => "wrongalgorithm",
             BadCredential::NoSubject => "nosubject",
+            BadCredential::Revoked => "revoked",
         }
     }
 
@@ -1288,6 +1817,63 @@ impl BadCredential {
     }
 }
 
+/// #4385: the member a bad-credential principal names on an actor sum, `Session` in
+/// `by Forged(Session)`: its argument when that is a bare identifier. A value (`by User("ada")`) is
+/// an identity, never an arm.
+pub fn bad_principal_arm(p: &bynk_syntax::ast::CallSiteActor) -> Option<&str> {
+    match p.identity.as_deref().map(|e| &e.kind) {
+        Some(ExprKind::Ident(id)) if p.claims.is_none() => Some(id.name.as_str()),
+        _ => None,
+    }
+}
+
+impl BadCredential {
+    /// #4385: whether a member declared as `decl` has a seam that refuses this credential, for the
+    /// principals a sum's arm can be named for. `Forged` reaches any of `Bearer`, `Signature`,
+    /// `Oidc` and `SignedCookie`; `Expired` any but `Signature`; `Stale` a `Signature` declaring a
+    /// `timestamp` and a `tolerance`; `Revoked` a `SignedCookie` with `sessions = true`. The
+    /// `Oidc`-only principals are not offered on a sum.
+    pub fn refused_by(self, decl: &ActorDecl) -> bool {
+        let Some(scheme) = decl
+            .auth
+            .as_ref()
+            .and_then(|a| Scheme::from_name(a.name.as_str()))
+        else {
+            return false;
+        };
+        match (self, scheme) {
+            (
+                BadCredential::Forged,
+                Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie,
+            ) => true,
+            (BadCredential::Expired, Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie) => true,
+            (BadCredential::Stale, Scheme::Signature) => signature_seam_from_decl(decl)
+                .is_some_and(|s| s.timestamp_header.is_some() && s.tolerance_secs.is_some()),
+            (BadCredential::Revoked, Scheme::SignedCookie) => {
+                signed_cookie_seam_of(decl, None).is_some_and(|s| s.sessions)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// #4385: the members of the sum `by` whose seam refuses `bad`, in declared order. Empty when the
+/// sum admits an open member (`Visitor`), whose catch-all means no credential is ever refused.
+pub fn sum_refusing_arms(
+    by: &ByClause,
+    bad: BadCredential,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<String> {
+    if sum_has_open_member(by, actors) {
+        return Vec::new();
+    }
+    by.actors
+        .iter()
+        .filter(|a| actors.get(&a.name).is_some_and(|d| bad.refused_by(d)))
+        .map(|a| a.name.clone())
+        .collect()
+}
+
 /// What a call-site principal (`by <Name>[(<identity>)]`) is: an actor, the reserved
 /// no-credential principal `Nobody` (#706), or a reserved bad credential. The one
 /// classification of those reserved names; the checker records it on the clause
@@ -1299,6 +1885,10 @@ pub enum CallSitePrincipal {
     /// `by Nobody`: no credential at all, so the auth seam answers `401`.
     Nobody,
     BadCredential(BadCredential),
+    /// #4385: a bare bad credential on an actor sum whose one refusing member is not a `Bearer` or
+    /// `Signature` seam, so the checker names that member: what the emitter drives as
+    /// `by <Bad>(<member>)`. Only ever recorded on a clause, never classified from a name.
+    BadCredentialArm(BadCredential, String),
 }
 
 impl CallSitePrincipal {
@@ -1343,6 +1933,7 @@ mod call_site_principal_tests {
             ("WrongAudience", "wrongaudience"),
             ("WrongAlgorithm", "wrongalgorithm"),
             ("NoSubject", "nosubject"),
+            ("Revoked", "revoked"),
         ];
         assert_eq!(drivers.len(), BadCredential::ALL.len());
         for (name, driver) in drivers {

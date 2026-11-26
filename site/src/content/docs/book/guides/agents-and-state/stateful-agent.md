@@ -63,7 +63,7 @@ Why a separate operation rather than `count := count + 1`? Because the latter
 hides a *read* of the prior value inside what looks like a plain write. Making it
 `update` keeps that prior-value dependency visible (and the combiner retry-safe).
 A self-referencing `:=` is therefore rejected with
-[`bynk.cell.self_reference`](/book/reference/diagnostics/), steering you to
+[`bynk.cell.self_reference`](/reference/diagnostics/), steering you to
 `update`.
 
 `update` mutates the cell; it does not return the new value. To read-modify-write
@@ -83,7 +83,7 @@ initialises automatically. Either the type has a zero (`Int`→`0`, `Bool`→`fa
 `=`. A field whose type excludes its zero (for example a refined
 `type Limit = Int where Positive`, which excludes `0`) and which has no
 initialiser is rejected with
-[`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/).
+[`bynk.agents.non_zeroable_state_field`](/reference/diagnostics/bynk.agents.non_zeroable_state_field/).
 
 When you need "not set yet", use `Option`:
 
@@ -137,7 +137,7 @@ on call touch(id: SessionId, s: Session) -> Effect[()] given Clock {
 
 A **`Log`** is an append-only, time-indexed sequence. `append` stamps the current
 time (so it needs `given Clock`), but the window reads take explicit `Instant`s and
-so need no clock — they return a lazy [`Query`](/book/reference/types/#query):
+so need no clock — they return a lazy [`Query`](/reference/types/#query):
 
 ```bynk,fragment
 store events: Log[Event] @retain(7.days)
@@ -154,7 +154,7 @@ on call recent_count(since: Instant) -> Effect[Int] {
 ```
 
 A map query yields values by default, but `map.entries` exposes each entry as a
-[`MapEntry[K, V]`](/book/reference/types/#map-key-accessors) record — read the key
+[`MapEntry[K, V]`](/reference/types/#map-key-accessors) record — read the key
 with `.key` and the value with `.value`, so a stored value need not carry a
 denormalised copy of its own key (`map.keys` and `map.values` give the keys and
 values alone):
@@ -168,7 +168,7 @@ on call all() -> Effect[List[TodoItem]] {
 ```
 
 To route an equality filter through a maintained index, annotate the map with
-[`@indexed`](/book/reference/agents/#indexed-routing).
+[`@indexed`](/reference/agents/#indexed-routing).
 
 ### Keep an agent's state small
 
@@ -186,7 +186,7 @@ keep the collections an agent scans small and bounded:
   done with;
 - keep a large or unbounded table in D1 rather than in a `Map`.
 
-The [reference](/book/reference/agents/#size-and-cost-of-an-agents-state) has the
+The [reference](/reference/agents/#size-and-cost-of-an-agents-state) has the
 detail.
 
 ## Change stored state safely
@@ -358,6 +358,6 @@ let n <- c.increment()
 
 ## Related
 
-- Tutorial: [Add a stateful agent](/book/tutorials/05-stateful-agent/).
-- Reference: [agents](/book/reference/agents/).
-- Diagnostics: [`bynk.agents.non_zeroable_state_field`](/book/reference/diagnostics/bynk.agents.non_zeroable_state_field/).
+- Tutorial: [Add a stateful agent](/book/tutorials/stateful-agent/).
+- Reference: [agents](/reference/agents/).
+- Diagnostics: [`bynk.agents.non_zeroable_state_field`](/reference/diagnostics/bynk.agents.non_zeroable_state_field/).

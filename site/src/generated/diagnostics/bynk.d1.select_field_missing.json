@@ -1,0 +1,10 @@
+{
+  "blurb": "`select[T]` and `firstAs[T]` read each row into the record `T`, matching columns to fields by name, so every field needs a column of that name. `Json.decodeSql` reads a literal `all` or `first` the same way, for each required field. Rename the field, or alias the column in the SQL (`… AS price`) so the names agree.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.select_field_missing",
+  "constructs": [],
+  "example": "type Order = { id: String, price: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `orders` has no column `price`\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
+  "severity": "error",
+  "summary": "A record read from a literal D1 statement has a field with no column of that name. For a `select[T]` / `firstAs[T]` row type, the column list the compiler writes from `T` does not prepare against the schema the binding's migrations build; for a `Json.decodeSql[T]` of the rows of a literal `all` / `first`, a required (non-`Option`) field of `T` has no result column."
+}

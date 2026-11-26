@@ -28,7 +28,7 @@ fn middle(what: String) -> Effect[()] {
 }
 
 service api {
-	on call(sku: String) -> Effect[()] given Logger {
+	on call(sku: String) -> Effect[()] by Caller given Logger {
 		middle(sku)
 	}
 }

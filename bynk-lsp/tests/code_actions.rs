@@ -52,7 +52,7 @@ provides Clock = FixedClock {
 }
 
 service charge {
-  on call(cents: Int) -> Effect[Int] given Clock {
+  on call(cents: Int) -> Effect[Int] by Caller given Clock {
     cents
   }
 }
@@ -352,10 +352,11 @@ fn auto_uses_offers_one_action_per_ambiguous_candidate() {
 
 #[test]
 fn add_consumes_repairs_an_unconsumed_cross_context_call() {
-    let prov =
-        canon("context svc.prov\n\nservice thing {\n  on call() -> Effect[Int] {\n    1\n  }\n}\n");
+    let prov = canon(
+        "context svc.prov\n\nservice thing {\n  on call() -> Effect[Int] by Caller {\n    1\n  }\n}\n",
+    );
     let call = canon(
-        "context app.call\n\nservice caller {\n  on call() -> Effect[Int] {\n    let x <- svc.prov.thing()\n    x\n  }\n}\n",
+        "context app.call\n\nservice caller {\n  on call() -> Effect[Int] by Caller {\n    let x <- svc.prov.thing()\n    x\n  }\n}\n",
     );
     let root = setup_project(
         "consumes",
@@ -391,7 +392,7 @@ fn add_consumes_builtin_capability_then_given_reaches_clean() {
     // `Logger` used with neither `consumes bynk` nor `given` → the auto-consumes
     // fix resolves the name; the existing add-`given` fix then reaches clean.
     let relay = canon(
-        "context app.relay\n\nservice relay {\n  on call() -> Effect[Int] {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
+        "context app.relay\n\nservice relay {\n  on call() -> Effect[Int] by Caller {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
     );
     let root = setup_project("builtincap", &[("app/relay.bynk", relay.as_str())]);
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
@@ -459,7 +460,7 @@ fn add_consumes_capability_extends_an_existing_braced_clause() {
         "extendbrace",
         &[(
             "app/relay.bynk",
-            "context app.relay\n\nconsumes bynk { Logger }\n\nservice relay {\n  on call() -> Effect[Int] given Logger {\n    let r <- Fetch.send(\"u\")\n    1\n  }\n}\n",
+            "context app.relay\n\nconsumes bynk { Logger }\n\nservice relay {\n  on call() -> Effect[Int] by Caller given Logger {\n    let r <- Fetch.send(\"u\")\n    1\n  }\n}\n",
         )],
     );
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
@@ -495,7 +496,7 @@ fn add_consumes_into_an_empty_braced_clause_is_canonical() {
         "emptybrace",
         &[(
             "app/relay.bynk",
-            "context app.relay\n\nconsumes bynk {  }\n\nservice relay {\n  on call() -> Effect[Int] given Logger {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
+            "context app.relay\n\nconsumes bynk {  }\n\nservice relay {\n  on call() -> Effect[Int] by Caller given Logger {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
         )],
     );
     // Content-ownership track (#1086) slice 4: bynk-testkit's complete
@@ -572,7 +573,7 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
         "map fix yields the method form; got:\n{fixed}"
     );
 
-    // The `find(xs, p)` fix rewrites to `xs.filter(p).first()`.
+    // The `find(xs, p)` fix rewrites to `xs.find(p)`.
     let find_diag = depr
         .iter()
         .find(|d| d.error.message.contains("bynk.list.find"))
@@ -593,8 +594,8 @@ fn bynk_list_deprecation_quick_fix_rewrites_to_method() {
     };
     let fixed = apply_text_edits(&file.text, &doc_edits[0].edits);
     assert!(
-        fixed.contains("xs.filter((x) => x > 10).first()"),
-        "find fix yields filter(...).first(); got:\n{fixed}"
+        fixed.contains("xs.find((x) => x > 10)"),
+        "find fix yields find(...); got:\n{fixed}"
     );
 }
 
@@ -638,6 +639,73 @@ fn header_question_quick_fix_answers_bad_request() {
             "let Some(event) = headers.get(\"X-Event\") else { BadRequest(\"missing X-Event\") }"
         ),
         "the fix answers 400; got:\n{fixed}"
+    );
+}
+
+/// #3966: `?` on an `Option` in a `Result`-returning body offers `.okOr(todo(..))` after the whole
+/// operand (a parenthesised one included), and nothing in a body that returns no `Result`.
+#[test]
+fn option_question_in_a_result_body_offers_okor() {
+    let fix_for = |name: &str, body: &str| -> Option<String> {
+        let src =
+            format!("commons demo\n\nfn lookup(id: Int) -> Option[Int] {{ Some(id) }}\n\n{body}\n");
+        let root = setup_project(name, &[("demo.bynk", &src)]);
+        let sources =
+            bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+        let result = bynk_ide::diagnose_project(&root, &sources);
+        let file = result
+            .files
+            .iter()
+            .find(|f| f.source_path == Path::new("demo.bynk"))
+            .expect("file analysed");
+        let uri = Url::from_file_path(root.join("demo.bynk")).unwrap();
+        let diag = file
+            .diagnostics
+            .iter()
+            .find(|d| d.error.category == "bynk.types.question_option_outside_http")
+            .expect("the `?` on an Option is refused");
+        let actions = code_actions::quick_fixes(
+            &file.text,
+            &file.diagnostics,
+            diag.error.span,
+            &uri,
+            Some(1),
+        );
+        let CodeActionOrCommand::CodeAction(action) = actions.first()? else {
+            panic!("expected a CodeAction");
+        };
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &action.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        Some(apply_text_edits(&file.text, &doc_edits[0].edits))
+    };
+    let plain = fix_for(
+        "okor_plain",
+        "fn double(id: Int) -> Result[Int, String] {\n  let n = lookup(id)?\n  Ok(n * 2)\n}",
+    )
+    .expect("a Result body offers the fix");
+    assert!(
+        plain.contains("let n = lookup(id).okOr(todo(\"the error for None\"))?"),
+        "{plain}"
+    );
+    let wrapped = fix_for(
+        "okor_paren",
+        "fn double(id: Int) -> Result[Int, String] {\n  let n = (lookup(id))?\n  Ok(n * 2)\n}",
+    )
+    .expect("a parenthesised operand takes the fix too");
+    assert!(
+        wrapped.contains("let n = (lookup(id)).okOr(todo(\"the error for None\"))?"),
+        "{wrapped}"
+    );
+    let none = fix_for(
+        "okor_int",
+        "fn double(id: Int) -> Int {\n  let n = lookup(id)?\n  n * 2\n}",
+    );
+    assert!(
+        none.is_none(),
+        "a body that returns no Result offers no fix: {none:?}"
     );
 }
 

@@ -277,8 +277,8 @@ fn a_typescript_worker_calls_a_bynk_context_through_the_generated_client() {
         let out_log = fs::File::create(log)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            tools::base_command("npx")
-                .args(["-y", wrangler::SPEC, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 .args(vars)
                 .args([
                     "--port",

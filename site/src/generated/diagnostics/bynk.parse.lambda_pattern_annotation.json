@@ -1,0 +1,12 @@
+{
+  "blurb": "A lambda parameter written as a record pattern already names its type, in `Item { … }`, and its names take their types from that record, so a `: Type` after the pattern is refused. Remove the annotation; the fix is machine-applicable, so `bynk check --fix` applies it.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.lambda_pattern_annotation",
+  "constructs": [
+    "lambda_param"
+  ],
+  "example": "items.map((Item { qty, .. }: Item) => qty)    // ✗ the pattern names the type\nitems.map((Item { qty, .. }) => qty)          // ✓",
+  "severity": "error",
+  "summary": "A lambda parameter with a record pattern carries a type annotation; the pattern's type name already gives the parameter's type."
+}

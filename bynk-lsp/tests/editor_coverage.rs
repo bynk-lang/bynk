@@ -60,7 +60,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     // `removed` before `agent` at item position.
     let source = "context Scaffold\n\nagent A replaces Z {\n  key id: String\n  store items: Cell[Int] = 0\n  migrate from 1 {\n    drop gone\n  }\n  on call read() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n\nremoved agent Y\n";
     // #2137: `advance` is a keyword only in a test case's statement position.
-    let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minutes\n  }\n}\n";
+    let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minute\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "advance") {
         let offset = case.find(kw.word).expect("`advance` is in the fixture");
         assert!(
@@ -86,7 +86,7 @@ fn every_contextual_keyword_has_a_hover_path() {
         assert!(symbols::describe_by_at(name, name.rfind("by").unwrap()).is_none());
     }
     // #2640: `par` is a keyword only before `{` of a `par { … }` block.
-    let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
+    let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "par") {
         let offset = block.find(kw.word).expect("`par` is in the fixture");
         assert!(
@@ -112,6 +112,15 @@ fn every_contextual_keyword_has_a_hover_path() {
             "fixture: no hover path — describe_fixture_at returned None"
         );
     }
+    // #3984: `tests` is a keyword only after `for` in a commons header.
+    let marker = "commons Scaffold for tests\n\nconst Start: Int = 1\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "tests") {
+        let offset = marker.find(kw.word).expect("`tests` is in the fixture");
+        assert!(
+            symbols::describe_test_only_at(marker, offset).is_some(),
+            "tests: no hover path — describe_test_only_at returned None"
+        );
+    }
     // Constrained generics slice 1: `derives` is a keyword only in a type
     // declaration's trailing `derives Ord` clause.
     let derives = "context Scaffold\n\ntype Priority = enum { Low, High } derives Ord\n";
@@ -125,7 +134,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| {
         !matches!(
             k.word,
-            "advance" | "by" | "par" | "derives" | "private" | "fixture"
+            "advance" | "by" | "par" | "derives" | "private" | "fixture" | "tests"
         )
     }) {
         let offset = source

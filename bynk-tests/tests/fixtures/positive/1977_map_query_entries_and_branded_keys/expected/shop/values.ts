@@ -2,14 +2,15 @@
 // commons shop.values
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Sku = string & { readonly __brand: "Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Sku", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Sku", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Sku);
   },
@@ -23,10 +24,10 @@ export type Acct = number & { readonly __brand: "Acct" };
 export const Acct = {
   of(value: number): Result<Acct, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Acct", message: "must be a safe integer", value });
+      return Err({ field: "Acct", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Acct", message: "must be non-negative", value });
+      return Err({ field: "Acct", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Acct);
   },

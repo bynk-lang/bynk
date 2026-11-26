@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.needs_project",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A single-file build met an `asset` declaration; assets need a project build."
+}

@@ -34,6 +34,9 @@ pub mod containers;
 pub mod contracts_lock;
 pub mod dev_ack;
 pub mod discovery;
+pub mod email_deploy;
+pub mod env_protocol;
+pub mod environment;
 pub mod graph;
 pub mod hyperdrive;
 pub mod json;
@@ -41,16 +44,21 @@ pub mod lock;
 pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;
+pub mod observability;
 pub mod packages;
 pub mod parse_cache;
 pub mod paths;
 pub mod roots;
 pub mod schema_registry;
+pub mod session_agents;
 pub mod snapshots;
+pub mod vars;
 pub mod vectorize;
 pub mod worker_groups;
 pub mod worker_layout;
+pub mod worker_tuning;
 pub mod workspace;
+pub mod wrangler_keys;
 
 mod diagnostics;
 
@@ -65,7 +73,9 @@ pub use discovery::{
     nested_projects, parse_sources, parse_sources_recovering, read_adapter_binding,
     read_adapter_include, read_source, suite_effective_tier_is_system,
 };
-pub use graph::{detect_consumes_cycles, detect_provider_dependency_cycles};
+pub use graph::{
+    detect_consumes_cycles, detect_dependency_cycles, detect_provider_dependency_cycles,
+};
 pub use json::json_string;
 pub use manifest::{
     DependencySource, DependencySpec, PackageConfig, RegistryConfig, WorkspaceConfig,

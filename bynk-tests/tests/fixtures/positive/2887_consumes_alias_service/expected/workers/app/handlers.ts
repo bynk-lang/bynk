@@ -59,6 +59,16 @@ export function __serialise_LibCode(value: lib.Code): __JsonValue {
 }
 
 export function __deserialise_LibCode(json: __JsonValue, path: string = "$"): Result<lib.Code, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Alpha":
+        return Ok({ tag: "Alpha" } as lib.Code);
+      case "Beta":
+        return Ok({ tag: "Beta" } as lib.Code);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -83,10 +93,10 @@ export function __deserialise_LibLevel(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Level", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Level", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Level", message: "must be non-negative", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Level", message: "must be non-negative", rule: { tag: "NonNegative" }, value: json } });
   }
   return Ok(json as unknown as lib.Level);
 }

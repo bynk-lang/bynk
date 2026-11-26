@@ -8,7 +8,7 @@ agent Index {
 	key id: String
 	store t: Cell[Option[Tree[Int]]]
 
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		Effect.pure(0)
 	}
 }

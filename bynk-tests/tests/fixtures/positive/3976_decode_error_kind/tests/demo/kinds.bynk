@@ -1,0 +1,52 @@
+---
+#3976: `DecodeError.kind` is a closed `DecodeErrorKind` sum for every decoder.
+---
+suite demo.kinds
+
+case "every decoder answers with the same sum" {
+  expect kindOf(fromJson("{")) == "Malformed"
+  expect kindOf(fromJson("{\"sku\":1,\"qty\":1}")) == "StructuralMismatch"
+  expect kindOf(fromJson("{\"sku\":\"a\",\"qty\":0}")) == "RefinementViolation"
+  expect kindOf(fromForm("sku=a&qty=0")) == "RefinementViolation"
+  expect yamlKindOf("a: &x 1\n") == "UnsupportedAnchor"
+  expect yamlKindOf("a: *x\n") == "UnsupportedAlias"
+  expect yamlKindOf("<<: {a: x}\n") == "UnsupportedMergeKey"
+  expect yamlKindOf("a: !!str x\n") == "UnsupportedTag"
+  expect yamlKindOf("a: x\n---\na: y\n") == "MultipleDocuments"
+  expect yamlKindOf("a: [x: 1]\n") == "UnsupportedSyntax"
+  expect yamlKindOf("a: .inf\n") == "UnsupportedValue"
+  expect yamlKindOf("a: x\na: y\n") == "DuplicateKey"
+}
+
+case "a match on the kind is checked and reads the variant" {
+  match fromJson("{") {
+    Ok(_) => expect false
+    Err(e) => {
+      expect explain(e) == "not JSON"
+      expect e.kind == Malformed
+      expect e.kind != StructuralMismatch
+      expect rank(e.kind) == 0
+    }
+  }
+}
+
+case "a refinement failure names its path" {
+  match fromJson("{\"sku\":\"a\",\"qty\":0}") {
+    Ok(_) => expect false
+    Err(e) => expect explain(e) == "invalid value at $.qty"
+  }
+}
+
+case "a mismatch reads what it expected" {
+  match fromJson("{\"sku\":1,\"qty\":1}") {
+    Ok(_) => expect false
+    Err(e) => expect explain(e) == "$.sku: expected string, got number"
+  }
+}
+
+case "the kind prints as its name" {
+  match fromJson("{") {
+    Ok(_) => expect false
+    Err(e) => expect "\(e.kind) at \(e.path)" == "Malformed at $"
+  }
+}

@@ -518,14 +518,14 @@ const SERVICE_FIXTURE: &str = "context reps {
   }
 
   service pinger {
-    on call(n: Int) -> Effect[()] given Events {
+    on call(n: Int) -> Effect[()] by Caller given Events {
       let doubled = n * 2
       Events.emit[Pinged](Pinged { n: doubled })
     }
   }
 
   service tripler {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       let tripled = n * 3
       tripled
     }
@@ -537,8 +537,8 @@ const CLAIM_FIXTURE: &str = "context reps {
   consumes bynk { Idempotency, Claim }
 
   service ledger {
-    on call(id: String) -> Effect[Result[String, String]] given Idempotency {
-      let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+    on call(id: String) -> Effect[Result[String, String]] by Caller given Idempotency {
+      let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok(\"duplicate\") }
       let tagged = \"\\(id)!\"
       if id == \"bad\" { Err(tagged) } else { Ok(tagged) }
     }
@@ -774,7 +774,7 @@ agent Room {
   }
 
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }
@@ -958,12 +958,12 @@ const CRON_QUEUE_FIXTURE: &str = "context reps {
   }
 
   service sweeper from cron {
-    on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"c\").bump(1)
       Ok(())
     }
 
-    on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"0 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"d\").bump(2)
       Ok(())
     }
@@ -972,7 +972,7 @@ const CRON_QUEUE_FIXTURE: &str = "context reps {
   type Delivery = { id: String, qty: Int }
 
   service deliveries from queue(\"deliveries\") {
-    on message(d: Delivery) -> Effect[QueueResult] {
+    on message(d: Delivery) -> Effect[QueueResult] by Producer {
       let _ <- Counter(\"q\").bump(d.qty)
       Ack
     }
@@ -1081,6 +1081,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(roomId).join(user.identity, connection)
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    ()
+  }
 }
 
 agent Room {
@@ -1117,15 +1121,15 @@ agent Room {
         sources(types_map)
     );
 
-    // Source (0-based) in room.bynk: line 3 = `on open`, line 9 = `agent Room`,
-    // line 13 = `on call join`. In types.bynk: line 2 = `type RoomId`.
+    // Source (0-based) in room.bynk: line 3 = `on open`, line 13 = `agent Room`,
+    // line 17 = `on call join`. In types.bynk: line 2 = `type RoomId`.
     let room_lines = decode(extract_field(room_map, "mappings"));
     let at_room =
         |g: usize| room_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{room_ts}"));
-    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 9);
+    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 13);
     assert_eq!(
         at_room(gen_line_of(room_ts, "async join(")),
-        13,
+        17,
         "the agent handler header maps to its own `on call` line in room.bynk"
     );
     assert_eq!(

@@ -1,10 +1,10 @@
 import type { DurableObjectState } from "./storage.ts";
 import { makeTestState } from "./storage.ts";
-import type { BoundaryError, JsonValue } from "./boundary.ts";
+import type { BoundaryError, CallOutcome, JsonValue } from "./boundary.ts";
 import { boundaryError } from "./boundary.ts";
-import { LAYOUT_PER_ENTRY } from "./entries.ts";
+import { LAYOUT_PER_ENTRY, uniqueDuplicates } from "./entries.ts";
 import type { Result } from "./result.ts";
-import { Ok } from "./result.ts";
+import { None, Ok } from "./result.ts";
 
 // v0.9.2: agent instantiation + per-key state lifecycle.
 //
@@ -25,6 +25,37 @@ export interface DurableObjectStub {
 export interface DurableObjectNamespace {
   idFromName(name: string): unknown;
   get(id: unknown): DurableObjectStub;
+  /** Cloudflare's jurisdiction-restricted view of the namespace (#3819); workerd throws "not implemented". */
+  jurisdiction?(jurisdiction: string): DurableObjectNamespace;
+}
+
+// #3819 (DECISION B): `@jurisdiction("eu")` mints an agent's ids through `namespace.jurisdiction("eu")`, a
+// *different* id from the unrestricted namespace's for the same name. Local `wrangler dev` (workerd)
+// does not implement jurisdictions and throws `Jurisdiction restrictions are not implemented in workerd`,
+// so locally, and only on that message,
+// the unscoped namespace is used, with one warning per isolate. Any other failure throws, so a deployed
+// Worker can never silently lose the restriction.
+let warnedJurisdictionFallback = false;
+const WORKERD_JURISDICTION_UNSUPPORTED = "Jurisdiction restrictions are not implemented in workerd";
+
+export function agentNamespace(binding: DurableObjectNamespace, jurisdiction?: string): DurableObjectNamespace {
+  if (jurisdiction === undefined) return binding;
+  try {
+    if (typeof binding.jurisdiction !== "function") {
+      throw new Error(`the Durable Object namespace has no jurisdiction(): cannot pin it to "${jurisdiction}"`);
+    }
+    return binding.jurisdiction(jurisdiction);
+  } catch (e) {
+    const notImplemented = e instanceof Error && e.message.includes(WORKERD_JURISDICTION_UNSUPPORTED);
+    if (!notImplemented) throw e;
+    if (!warnedJurisdictionFallback) {
+      warnedJurisdictionFallback = true;
+      globalThis.console.warn(
+        `bynk: warning: this runtime does not implement Durable Object jurisdictions, so an agent pinned to "${jurisdiction}" uses the unrestricted namespace here; a deployed Worker is restricted`,
+      );
+    }
+    return binding;
+  }
 }
 
 // Serialise an agent key to a stable string. Two semantically-equal keys must
@@ -62,8 +93,47 @@ export class StateRegistry<K> {
     return state;
   }
 
-  reset(): void {
+  // `keepStubs`: a history property's driver resets a registry before each driven sequence, which
+  // is no case boundary, so its stubs (registered once, by the property's `deps`) stay (#4215).
+  reset(keepStubs = false): void {
     this.states.clear();
+    // #4215: a case's agent stubs end with it, as its agents' state does.
+    if (!keepStubs) agentStubs.clear();
+  }
+}
+
+// #4215: the unit tier's agent stubs (`stub Basket.add(_) faulted | unreachable`), by agent class.
+// The class itself is the key, so an agent of the same name in another context, or a bundler's
+// renamed copy of the class, never picks up a stub meant for this one. A stub is the class the test module emits for the clauses: a method per stubbed operation,
+// which throws the outcome its matched clause stands for, or, when no clause matches the call,
+// an error marked `bynkNoStub`, and the real operation runs. The unit tier's deps factory
+// registers them each case, after the registries are reset, and the integration tier's clears them.
+const agentStubs = new Map<unknown, object>();
+
+export function stubAgents(stubs: ReadonlyArray<readonly [unknown, object]>): void {
+  agentStubs.clear();
+  for (const [agent, stub] of stubs) agentStubs.set(agent, stub);
+}
+
+type AgentStub = Record<string, unknown> & { __applies?: (op: string) => boolean };
+
+// The stub of an agent's operation, if one is registered. Synchronous, so a call nothing stubs
+// enqueues at call time, in the order it was made, as it does with no stub registered.
+function agentStubOf(agent: unknown, op: string): AgentStub | undefined {
+  if (agentStubs.size === 0) return undefined;
+  const stub = agentStubs.get(agent) as AgentStub | undefined;
+  return typeof stub?.[op] === "function" ? stub : undefined;
+}
+
+// Asks the agent's stub about a call before the real operation runs.
+async function applyAgentStub(stub: AgentStub, op: string, args: unknown[]): Promise<void> {
+  const stubbed = stub[op];
+  if (typeof stubbed !== "function") return;
+  if (stub.__applies !== undefined && !stub.__applies(op)) return;
+  try {
+    await Reflect.apply(stubbed, stub, args);
+  } catch (e) {
+    if ((e as { bynkNoStub?: unknown } | null)?.bynkNoStub !== true) throw e;
   }
 }
 
@@ -164,7 +234,12 @@ export async function callDurableObjectMethod(
     // #1818: the key rides along only for an agent that reads it.
     body: JSON.stringify(key === undefined ? { args, deps: wireDeps } : { args, deps: wireDeps, key }),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const message = await response.text();
+    // #3932: an instance whose queue gave up on this call.
+    const busy = response.status === 503 ? response.headers.get(AGENT_BUSY_HEADER) : null;
+    throw busy === null ? new Error(message) : agentBusyError(busy, message);
+  }
   return (await response.json()) as JsonValue;
 }
 
@@ -178,8 +253,10 @@ export function makeWorkersAgent<C>(
   key: unknown,
   wire?: AgentWire,
   keyCodec?: WireCodec,
+  jurisdiction?: string,
 ): C {
-  const stub = binding.get(binding.idFromName(serialiseAgentKey(key)));
+  const scoped = agentNamespace(binding, jurisdiction);
+  const stub = scoped.get(scoped.idFromName(serialiseAgentKey(key)));
   // Encoded per call, not here, so a key that cannot encode fails at the call,
   // as an argument that cannot encode does.
   const sentKey = (): JsonValue | undefined =>
@@ -216,9 +293,10 @@ export function makeAgent<C>(
   constructBundle: (state: DurableObjectState) => C,
   wire?: AgentWire,
   keyCodec?: WireCodec,
+  jurisdiction?: string,
 ): C {
   if (binding !== undefined) {
-    return makeWorkersAgent<C>(binding, key, wire, keyCodec);
+    return makeWorkersAgent<C>(binding, key, wire, keyCodec, jurisdiction);
   }
   const state = registry.getOrCreate(key);
   return serialiseBundleAgent(state, constructBundle(state));
@@ -238,7 +316,7 @@ export async function dispatchToEventsFanout(
   events: Array<{
     type: string;
     payload: unknown;
-    envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number };
+    envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string };
   }>,
 ): Promise<void> {
   // The whole round trip is wrapped, not just the status check: a rejected
@@ -260,45 +338,6 @@ export async function dispatchToEventsFanout(
   } catch (e) {
     console.error("EventsFanout dispatch failed", { error: String(e) });
   }
-}
-
-// v0.16: an in-process Durable-Object namespace for multi-Worker integration
-// tests. `cls` is the emitted DO class, built from a fresh in-memory state;
-// one instance is kept per key (so state accumulates within a test case). The
-// returned stub bridges the stub-side `fetch(url, init)` the agent runtime
-// speaks to the DO class's server-side `fetch(request)`.
-//
-// #1959: the class is constructed with `(state, env)` as workerd does, so an
-// agent that rebuilds `given` deps or emits events from `env`, and the events
-// fan-out, see the participant's bindings. A class whose constructor takes
-// only `state` still fits this type: a constructor with fewer parameters is
-// assignable to one with more.
-export function makeIntegrationDoNamespace(
-  cls: new (state: DurableObjectState, env?: unknown) => {
-    fetch(request: Request): Promise<Response>;
-  },
-  env?: unknown,
-  queueWaitMs: number = AGENT_QUEUE_WAIT_MS,
-): DurableObjectNamespace {
-  const instances = new Map<string, { fetch(request: Request): Promise<Response> }>();
-  return {
-    idFromName(name: string): unknown {
-      return name;
-    },
-    get(id: unknown): DurableObjectStub {
-      const k = String(id);
-      let inst = instances.get(k);
-      if (inst === undefined) {
-        inst = new (serialiseAgentClass(cls, { waitMs: queueWaitMs }))(makeTestState(k), env);
-        instances.set(k, inst);
-      }
-      const target = inst;
-      return {
-        fetch: (input: string, init?: unknown): Promise<Response> =>
-          target.fetch(new Request(input, init as RequestInit)),
-      };
-    },
-  };
 }
 
 // State-migrations S4 (#2259 Decision D): `bynk migrate sweep`'s wake.
@@ -379,6 +418,9 @@ export async function wakeForMigration<S>(
   // The storage layout this build writes. `load` upgrades an older record to it
   // (the lazy upgrade), so a record that woke without a fault is in it afterwards.
   layout: number = LAYOUT_PER_ENTRY,
+  // The class's `@unique(by:)` indexes, as `[map, index]` (#4390): a woken instance reports the values more than one
+  // key holds, which a constraint added to a populated `Map` leaves behind.
+  unique: ReadonlyArray<readonly [string, string]> = [],
 ): Promise<Response> {
   const json = (value: object) =>
     new Response(JSON.stringify(value), {
@@ -406,7 +448,22 @@ export async function wakeForMigration<S>(
     // with no collections has nothing for `load` to write, and the marker is stamped by
     // its commit).
     if (before === null || before < current || layoutBefore !== layout) await commit(state);
-    return json({ before, after: current, layoutBefore, layoutAfter: layout });
+    let duplicates: Awaited<ReturnType<typeof uniqueDuplicates>> = [];
+    if (unique.length > 0) {
+      // Information only (#4390): a report that cannot be read never turns a woken instance into a fault.
+      try {
+        duplicates = await uniqueDuplicates(state as object, unique);
+      } catch {
+        duplicates = [];
+      }
+    }
+    return json({
+      before,
+      after: current,
+      layoutBefore,
+      layoutAfter: layout,
+      ...(duplicates.length > 0 ? { unique: duplicates } : {}),
+    });
   } catch (e) {
     return json({ before, layoutBefore, fault: migrationFaultKind(e) });
   }
@@ -467,15 +524,112 @@ export interface AgentContentionFault {
   readonly agent: string;
 }
 
-function contentionFault(kind: AgentContentionFault["kind"], agent: string, message: string): Error {
-  // Logged by kind and agent only, never an id or an argument (ADR 0107).
-  globalThis.console.error(`${kind} ${agent}`, { agent, kind });
+// #3932: `@busyAfter(d)` lowers an agent class's queue wait. The emitted module records it on
+// the class right after its declaration, and the queue reads it where the class is wrapped
+// (`serialiseAgentClass`, `serialiseBundleAgent`), so every tier and target sees the same wait.
+const busyAfterByClass = new globalThis.WeakMap<object, number>();
+
+export function agentBusyAfter(cls: object, ms: number): void {
+  busyAfterByClass.set(cls, ms);
+}
+
+function busyAfterOf(cls: unknown): number | undefined {
+  return typeof cls === "function" ? busyAfterByClass.get(cls) : undefined;
+}
+
+/// #3932: the header a Durable Object's `503` carries when its queue gave up on a call, naming
+/// the agent: the calling Worker reads it back as an `AgentBusy` fault, not a bare failure.
+export const AGENT_BUSY_HEADER = "x-bynk-agent-busy";
+
+/// #3932: `AgentBusy` as the calling Worker sees it, rebuilt from the Durable Object's `503`.
+/// Not logged: the instance logged it where it was raised.
+function agentBusyError(agent: string, message: string): Error {
+  const e = new Error(message);
+  globalThis.Object.defineProperty(e, "agentFault", {
+    value: { kind: "AgentBusy", agent } satisfies AgentContentionFault,
+    enumerable: false,
+  });
+  return e;
+}
+
+/// #3932: what a Worker entry answers for a caught fault that is `AgentBusy`: `503 Service
+/// Unavailable` with `Retry-After: 1`, a transient condition the client may retry, not a fault
+/// (so it is not reported as one). `null` for any other fault, and for an event delivery
+/// (`event <service>`), where a busy subscriber stays a fault. A `ReentrantAgentCall` is a bug
+/// and stays a `500`. The body is plain text until the service error format (#3916) lands.
+export function agentBusyResponse(e: unknown, route: string): Response | null {
+  const fault = (e as { agentFault?: AgentContentionFault } | null)?.agentFault;
+  if (fault?.kind !== "AgentBusy" || route.startsWith("event ")) return null;
+  return new globalThis.Response("Service Unavailable", {
+    status: 503,
+    headers: { "retry-after": "1" },
+  });
+}
+
+function contentionFault(
+  kind: AgentContentionFault["kind"],
+  agent: string,
+  message: string,
+  queued?: number,
+): Error {
+  // Logged by kind and agent only, never an id or an argument (ADR 0107); #3932: and, for a
+  // busy instance, how many calls were queued ahead, so the load is visible in the log.
+  globalThis.console.error(`${kind} ${agent}`, queued === undefined ? { agent, kind } : { agent, kind, queued });
   const e = new Error(`${kind}: ${message}`);
   globalThis.Object.defineProperty(e, "agentFault", {
     value: { kind, agent } satisfies AgentContentionFault,
     enumerable: false,
   });
   return e;
+}
+
+// #3933: which contention fault an error is, and the agent it names. In the instance's own
+// process it carries `agentFault`; across a Durable Object boundary the caller has only the
+// fault's message, which begins with its kind (`contentionFault`).
+function contentionOf(e: unknown): { kind: AgentContentionFault["kind"]; agent?: string } | undefined {
+  const fault = (e as { agentFault?: AgentContentionFault } | null)?.agentFault;
+  if (fault !== undefined) return { kind: fault.kind, agent: fault.agent };
+  const message = (e as { message?: unknown } | null)?.message;
+  if (typeof message !== "string") return undefined;
+  if (message.startsWith("AgentBusy: ")) return { kind: "AgentBusy" };
+  if (message.startsWith("ReentrantAgentCall: ")) return { kind: "ReentrantAgentCall" };
+  return undefined;
+}
+
+/// #3933: `Agent(key).op.outcome(args)`: the agent call's failure as a value, a `CallOutcome` (the
+/// same type a cross-context call yields). An agent call that waited past its queue limit
+/// (`AgentBusy`) never started its handler: `Unreachable(None)`. That holds only for the
+/// called agent's own queue: an `AgentBusy` that names another agent came from a call the
+/// handler made after it started, so the handler ran and it is `Faulted` like any other fault in
+/// it. A fault in the handler, an invariant violation and a rehydration violation are
+/// `Faulted`: the handler ran, and committed nothing. `ReentrantAgentCall` stays a fault (a call
+/// cycle is a bug, and a value would invite retrying it), as does a failure to encode the call
+/// or decode its answer (a toolchain bug). There is no wire to refuse an agent call, so
+/// `Rejected` never occurs. A fault turned into a value is logged once here as
+/// `AgentFaulted <Agent>.<op>` with the error's stack, as the Worker entry logs a fault;
+/// `AgentBusy` was logged where the queue gave up.
+export async function callAgentOutcome<R>(call: Promise<R>, target: string): Promise<CallOutcome<R>> {
+  try {
+    return { tag: "Handled", result: await call };
+  } catch (e) {
+    const contention = contentionOf(e);
+    if (contention?.kind === "AgentBusy" && (contention.agent === undefined || contention.agent === target.split(".")[0])) {
+      return { tag: "Unreachable", status: None };
+    }
+    // #4215: a stubbed operation of the called agent stands for the outcome its clause names; one
+    // of another agent, met inside a handler that ran, is a fault of that handler. The agent is
+    // compared by name, as `AgentBusy` is above, so another instance of the called agent, met
+    // inside a handler of it, reads as the called one.
+    const stubbed = (e as { bynkCallStub?: { tag: string; agent?: string } } | null)?.bynkCallStub;
+    if (stubbed?.tag === "Unreachable" && stubbed.agent === target.split(".")[0]) {
+      return { tag: "Unreachable", status: None };
+    }
+    if (contention?.kind === "ReentrantAgentCall" || (e as { boundaryError?: unknown } | null)?.boundaryError !== undefined) {
+      throw e;
+    }
+    globalThis.console.error(`AgentFaulted ${target}`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+    return { tag: "Faulted" };
+  }
 }
 
 export function reentrantAgentCall(agent: string): Error {
@@ -491,6 +645,7 @@ export function agentBusy(agent: string, waitMs: number, queued: number): Error 
     "AgentBusy",
     agent,
     `agent ${agent} busy: waited ${waitMs / 1000} s behind ${queued} queued call${queued === 1 ? "" : "s"}`,
+    queued,
   );
 }
 
@@ -557,7 +712,7 @@ const bundleQueues = new globalThis.WeakMap<object, AgentQueue>();
 export function serialiseBundleAgent<C>(
   state: DurableObjectState,
   instance: C,
-  waitMs: number = AGENT_QUEUE_WAIT_MS,
+  waitMsOverride?: number,
 ): C {
   let queue = bundleQueues.get(state);
   if (queue === undefined) {
@@ -565,13 +720,19 @@ export function serialiseBundleAgent<C>(
     bundleQueues.set(state, queue);
   }
   const q = queue;
-  const agent = (instance as { constructor: { name: string } }).constructor.name;
+  const ctor = (instance as { constructor: { name: string } }).constructor;
+  const agent = ctor.name;
+  const waitMs =
+    waitMsOverride ?? busyAfterOf((instance as { constructor: unknown }).constructor) ?? AGENT_QUEUE_WAIT_MS;
   return new Proxy(instance as object, {
     get(target, prop, receiver) {
       const v = Reflect.get(target, prop, receiver) as unknown;
       if (typeof v !== "function" || typeof prop !== "string") return v;
-      return (...args: unknown[]): Promise<unknown> =>
-        q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
+      return async (...args: unknown[]): Promise<unknown> => {
+        const stub = agentStubOf(ctor, prop);
+        if (stub !== undefined) await applyAgentStub(stub, prop, args);
+        return q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
+      };
     },
   }) as C;
 }
@@ -680,7 +841,7 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
         id: `${Base.name}:${stateIdOf(state)}`,
         agent: Base.name,
         queue: new AgentQueue(),
-        waitMs: options.waitMs ?? AGENT_QUEUE_WAIT_MS,
+        waitMs: options.waitMs ?? busyAfterOf(Base) ?? AGENT_QUEUE_WAIT_MS,
         chain: [],
       };
       super(state, chainEnv(args[1], gate), ...args.slice(2));
@@ -733,7 +894,16 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
       // fault, so the caller's `callDurableObjectMethod` throws its message.
       if (name !== "fetch") return run;
       return run.catch((e: unknown) => {
-        if ((e as { agentFault?: unknown }).agentFault === undefined) throw e;
+        const fault = (e as { agentFault?: AgentContentionFault }).agentFault;
+        if (fault === undefined) throw e;
+        // #3932: a busy instance answers `503`, naming itself, so the caller reads `AgentBusy`;
+        // a re-entrant call stays a `500`.
+        if (fault.kind === "AgentBusy") {
+          return new globalThis.Response((e as Error).message, {
+            status: 503,
+            headers: { [AGENT_BUSY_HEADER]: fault.agent },
+          });
+        }
         return new globalThis.Response((e as Error).message, { status: 500 });
       });
     };
@@ -742,5 +912,5 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, makeIntegrationDoNamespace as __makeIntegrationDoNamespace, serialiseAgentKey as __serialiseAgentKey, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
+export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, agentBusyAfter as __agentBusyAfter, agentNamespace as __agentNamespace, agentBusyResponse as __agentBusyResponse, callAgentOutcome as __callAgentOutcome, stubAgents as __stubAgents, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
 export type { AgentWire as __AgentWire, DurableObjectNamespace as __DurableObjectNamespace };

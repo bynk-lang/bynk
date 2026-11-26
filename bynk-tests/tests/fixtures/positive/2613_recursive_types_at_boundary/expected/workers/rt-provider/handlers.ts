@@ -2,6 +2,7 @@
 // context rt.provider
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
@@ -29,12 +30,12 @@ export function roundTrip(t: Tree): Result<Tree, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Tree(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Tree);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(globalThis.JSON.stringify(__serialise_Tree(t)));
 }
 
@@ -45,11 +46,11 @@ export const trees = {
 };
 
 export const gardener = {
-  async call(t: Tree, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+  async call(t: Tree, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Planted", payload: { tree: t }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "rt.provider", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return undefined;
     })();

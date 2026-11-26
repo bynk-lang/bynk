@@ -58,6 +58,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Embed => 14,
         // #2617: constant names append `constant` at 16.
         SymbolKind::Const => 16,
+        // #4183: a unit's name is a namespace, as the qualifier of a `uses` name is.
+        SymbolKind::Unit => TOK_NAMESPACE,
     }
 }
 
@@ -88,6 +90,10 @@ pub const TOK_ESCAPE: u32 = 18;
 /// Legend index of the `string` token type (#2619: a raw string's delimiters).
 pub const TOK_STRING: u32 = 19;
 
+/// Legend index of the `namespace` token type (#4045: the qualifier of a name read
+/// through a `uses` clause, `Y` in `Y.Status`).
+pub const TOK_NAMESPACE: u32 = 20;
+
 const MOD_DECLARATION: u32 = 1 << 0;
 const MOD_REFINED: u32 = 1 << 1;
 const MOD_OPAQUE: u32 = 1 << 2;
@@ -101,6 +107,49 @@ fn modifier_bits(m: bynk_check::index::SymbolModifiers) -> u32 {
         } else {
             0
         })
+}
+
+/// A reference site as tokens: the name as `ty`, except that a name written
+/// qualified (`Y.Status`, #4045) is the qualifier as a `namespace` and the name
+/// after the last `.` as `ty`.
+fn push_site(raw: &mut Vec<(Span, u32, u32)>, text: &str, span: Span, ty: u32, mods: u32) {
+    let written = text.get(span.range()).unwrap_or_default();
+    match written.rfind('.') {
+        Some(dot)
+            if written
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '.') =>
+        {
+            let at = span.start + dot;
+            raw.push((Span::new_in(span.file, span.start, at), TOK_NAMESPACE, 0));
+            raw.push((Span::new_in(span.file, at + 1, span.end), ty, mods));
+        }
+        _ => raw.push((span, ty, mods)),
+    }
+}
+
+/// #4183: a unit name as tokens, one `namespace` per segment, so `shop.pay` is
+/// `shop` and `pay` with the `.` left to the grammar. `mods` rides on every
+/// segment. A name that is not segments of word characters joined by `.` stays
+/// one token over `span`.
+fn push_unit_site(raw: &mut Vec<(Span, u32, u32)>, text: &str, span: Span, mods: u32) {
+    let written = text.get(span.range()).unwrap_or_default();
+    if written.is_empty()
+        || !written
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    {
+        raw.push((span, TOK_NAMESPACE, mods));
+        return;
+    }
+    let mut at = span.start;
+    for segment in written.split('.') {
+        let end = at + segment.len();
+        if !segment.is_empty() {
+            raw.push((Span::new_in(span.file, at, end), TOK_NAMESPACE, mods));
+        }
+        at = end + 1;
+    }
 }
 
 /// Semantic tokens for `path`, delta-encoded over the frozen legend —
@@ -129,15 +178,24 @@ pub fn semantic_tokens(
         }
         let ty = token_type_index(key.kind);
         let mods = modifier_bits(entry.modifiers);
+        let is_unit = key.kind == SymbolKind::Unit;
         if let Some(def) = &entry.def
             && def.path == path
             && in_scope(def.span)
         {
-            raw.push((def.span, ty, mods | MOD_DECLARATION));
+            if is_unit {
+                push_unit_site(&mut raw, text, def.span, mods | MOD_DECLARATION);
+            } else {
+                raw.push((def.span, ty, mods | MOD_DECLARATION));
+            }
         }
         for site in &entry.refs {
             if site.path == path && in_scope(site.span) {
-                raw.push((site.span, ty, mods));
+                if is_unit {
+                    push_unit_site(&mut raw, text, site.span, mods);
+                } else {
+                    push_site(&mut raw, text, site.span, ty, mods);
+                }
             }
         }
     }
@@ -275,6 +333,7 @@ mod tests {
                 "keyword",   // #2618: contextual `private` modifier — appended
                 "escape",    // #2619: escape sequences in string literals — appended
                 "string",    // #2619: raw string delimiters — appended
+                "namespace", // #4045: a `uses` qualifier — appended
             ]
         );
         let modifiers: Vec<&str> = legend.token_modifiers.iter().map(|m| m.as_str()).collect();

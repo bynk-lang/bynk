@@ -2,6 +2,7 @@
 // context shop.orders
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
@@ -16,8 +17,8 @@ export type UserId = string & { readonly __brand: "shop.orders.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -123,11 +124,11 @@ export function __makeCart(key: UserId, env?: { CART?: __DurableObjectNamespace 
 }
 
 export const api = {
-  async http_POST_cart_Param_sku(sku: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<Item>> {
+  async http_POST_cart_Param_sku(sku: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Item>> {
     const item = await __makeCart(deps.identity).add(sku, deps);
     return HttpResult.Created(item);
   },
-  async http_GET_cart_size(deps: { identity: UserId }): globalThis.Promise<HttpResult<number>> {
+  async http_GET_cart_size(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<number>> {
     const n = await __makeCart(deps.identity).size(deps);
     return HttpResult.Ok(n);
   },

@@ -14,7 +14,7 @@
 //! - **a lambda written in the handler** closes over its `deps`.
 //!
 //! A second test runs the harness's own virtual-time runtime
-//! (`project/test_runtime/virtual_time.ts`) the same way, to pin what a Bynk
+//! (`testgen/test_runtime/virtual_time.ts`) the same way, to pin what a Bynk
 //! case cannot reach: a real provider call is not timed out by auto-advance,
 //! `advance Clock by` fires the timers that fall due, and a tie goes to the
 //! effect.
@@ -45,7 +45,7 @@ capability Audit {
 }
 
 service bounded {
-  on call(id: Int) -> Effect[String] given Pricing {
+  on call(id: Int) -> Effect[String] by Caller given Pricing {
     let r <- Pricing.quote(id).within(50.milliseconds)
     match r {
       Ok(q) => Effect.pure("quoted \(q)")
@@ -55,7 +55,7 @@ service bounded {
 }
 
 service both {
-  on call(id: Int) -> Effect[String] given Pricing, Audit {
+  on call(id: Int) -> Effect[String] by Caller given Pricing, Audit {
     par {
       let a <- Pricing.quote(id).within(50.milliseconds)
       let b <- Pricing.quote(id + 1).within(50.milliseconds)
@@ -66,7 +66,7 @@ service both {
 }
 
 service many {
-  on call(ids: List[Int]) -> Effect[Int] given Pricing {
+  on call(ids: List[Int]) -> Effect[Int] by Caller given Pricing {
     let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(50.milliseconds))
     Effect.pure(rs.length())
   }
@@ -387,11 +387,17 @@ fn the_virtual_time_runtime_advances_only_virtual_time() {
     let tmp = std::env::temp_dir().join(format!("bynk-virtual-time-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
-    let runtime = include_str!("../../../bynk-driver/src/project/test_runtime/virtual_time.ts");
+    let runtime = include_str!("../../../bynk-emit/src/testgen/test_runtime/virtual_time.ts");
     // The real helper, reading the harness timers from `exec.timers`.
     fs::write(
         tmp.join("result.ts"),
         include_str!("../../../bynk-emit/runtime/src/result.ts"),
+    )
+    .unwrap();
+    // `settle.ts` reads the request's trace for the lines it logs (#3895).
+    fs::write(
+        tmp.join("traceparent.ts"),
+        include_str!("../../../bynk-emit/runtime/src/traceparent.ts"),
     )
     .unwrap();
     fs::write(

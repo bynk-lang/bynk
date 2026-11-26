@@ -18,9 +18,9 @@ service api from http {
     let chosen <- Secrets.get(which)
     let known <- Secrets.get("WELL_KNOWN")
     match chosen {
-      Some(s) => Ok(s),
+      Some(s) => Ok(s.reveal()),
       None => match known {
-        Some(k) => Ok(k),
+        Some(k) => Ok(k.reveal()),
         None => Ok("none"),
       },
     }

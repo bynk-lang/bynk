@@ -10,8 +10,13 @@ version = "0.1.0"
 [paths]
 include = ["src", "tests"]
 --- .gitignore ---
+# Generated output: the compiled TypeScript `bynk check`, `bynk test` and `bynk build` write.
+/out
 # Build output `bynk dev` writes (compiled workers + local wrangler state).
 /.bynk
+# Local state and dependencies of the Cloudflare tooling.
+.wrangler/
+node_modules/
 --- .gitattributes ---
 # `bynk fmt` writes `.bynk` files with LF line endings. Keep them LF in the
 # working tree on every platform (Git for Windows checks out CRLF by default).
@@ -25,5 +30,13 @@ service api from http {
 	on GET("/") () -> Effect[HttpResult[String]] by v: Visitor given Logger {
 		let _ <- Logger.info("hello from hello")
 		Ok("Hello from hello!")
+	}
+}
+--- tests/hello.test.bynk ---
+suite hello {
+	case "the home page greets the visitor" {
+		let r <- api.GET("/") by Visitor
+		expect r is Ok("Hello from hello!")
+		expect Logger.info called once
 	}
 }

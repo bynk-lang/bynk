@@ -2,6 +2,7 @@
 // context commerce.payment
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -13,8 +14,8 @@ export type Token = string & { readonly __brand: "commerce.payment.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "T-[0-9]+" + ")$").test(value))) {
-      return Err({ field: "Token", message: "must match /T-[0-9]+/", value });
+    if (!(__bynkRegExp("^(?:" + "T-[0-9]+" + ")$", "u").test(value))) {
+      return Err({ field: "Token", message: "must match /T-[0-9]+/", rule: { tag: "Matches", pattern: "T-[0-9]+" }, value });
     }
     return Ok(value as Token);
   },
@@ -29,12 +30,12 @@ export function parse(raw: string): Result<Token, DecodeError> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Token(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Token);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(raw);
 }
 

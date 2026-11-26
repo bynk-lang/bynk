@@ -1,0 +1,10 @@
+{
+  "blurb": "The queue name is a string both sides write, so the compiler is the only party that sees a producer and its consumer and can say they disagree. When a context in the project consumes the queue a `Queue @name(\"…\")` instance sends to, `sendValue`, `sendValueWith` and `sendValueBatch` (its elements) must send a type the consumer's `on message` accepts, by the comparison a cross-context call gets: the same fields and variants, and a stronger refinement is admitted where the consumer expects a weaker one. Otherwise the consumer could not decode the message, which would be retried and then dead-lettered or dropped at run time. Send the consumer's type, or change the consumer. A queue no context in the project consumes (a foreign Worker, or nobody yet) has nothing to compare with and is not checked; nor is a send whose type is still a type parameter.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.message_type_mismatch",
+  "constructs": [],
+  "example": "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] by Producer { … }\n}",
+  "severity": "error",
+  "summary": "A `sendValue`, `sendValueWith` or `sendValueBatch` sends a type the queue's consumer in the project does not accept."
+}

@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -11,8 +12,8 @@ export type Email = string & { readonly __brand: "signup.api.Email" };
 
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "^[^@]+@[^@]+$" + ")$").test(value))) {
-      return Err({ field: "Email", message: "must match /^[^@]+@[^@]+$/", value });
+    if (!(__bynkRegExp("^(?:" + "^[^@]+@[^@]+$" + ")$", "u").test(value))) {
+      return Err({ field: "Email", message: "must match /^[^@]+@[^@]+$/", rule: { tag: "Matches", pattern: "^[^@]+@[^@]+$" }, value });
     }
     return Ok(value as Email);
   },
@@ -23,10 +24,10 @@ export type Age = number & { readonly __brand: "signup.api.Age" };
 export const Age = {
   of(value: number): Result<Age, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Age", message: "must be a safe integer", value });
+      return Err({ field: "Age", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 150)) {
-      return Err({ field: "Age", message: "must be in range [0, 150]", value });
+      return Err({ field: "Age", message: "must be in range [0, 150]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 150 } }, value });
     }
     return Ok(value as Age);
   },
@@ -169,6 +170,16 @@ export function __serialise_Plan(value: Plan): __JsonValue {
 }
 
 export function __deserialise_Plan(json: __JsonValue, path: string = "$"): Result<Plan, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Free":
+        return Ok({ tag: "Free" } as Plan);
+      case "Pro":
+        return Ok({ tag: "Pro" } as Plan);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

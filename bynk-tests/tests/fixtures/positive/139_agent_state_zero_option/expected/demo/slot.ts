@@ -2,6 +2,7 @@
 // context demo.slot
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
@@ -16,8 +17,8 @@ export type Label = string & { readonly __brand: "demo.slot.Label" };
 
 export const Label = {
   of(value: string): Result<Label, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{1,16}" + ")$").test(value))) {
-      return Err({ field: "Label", message: "must match /[a-z0-9]{1,16}/", value });
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
+      return Err({ field: "Label", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value });
     }
     return Ok(value as Label);
   },

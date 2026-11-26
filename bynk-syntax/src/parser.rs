@@ -14,6 +14,7 @@ use crate::lexer::{
 };
 use crate::span::Span;
 mod declarations;
+mod duration;
 mod expressions;
 mod staircase;
 mod statements;
@@ -601,6 +602,18 @@ enum SignedNumLit {
     Int(IntBound),
     Float(FloatBound),
     Decimal(DecimalBound),
+    Duration(DurationBound),
+}
+
+impl SignedNumLit {
+    fn into_pred_bound(self) -> PredBound {
+        match self {
+            SignedNumLit::Int(b) => PredBound::Int(b),
+            SignedNumLit::Float(b) => PredBound::Float(b),
+            SignedNumLit::Decimal(b) => PredBound::Decimal(b),
+            SignedNumLit::Duration(b) => PredBound::Duration(b),
+        }
+    }
 }
 
 struct Parser<'a> {
@@ -691,6 +704,13 @@ struct Parser<'a> {
     /// block's content. It skips the code check on doc blocks inside that
     /// content, so the probe stays a plain parse.
     doc_probe: bool,
+    /// #4045: the dotted prefixes a `uses` clause so far makes a qualifier —
+    /// each clause's alias (`Y`) and its full commons name (`lib.y`).
+    use_prefixes: Vec<String>,
+    /// #4045: every qualified name (`Y.Status`, `lib.y.describe`) read so far,
+    /// as written; handed to the matching `uses` clauses at the end of the unit
+    /// by `distribute_qualified_refs`.
+    qualified_refs: std::collections::BTreeMap<String, Span>,
 }
 
 impl<'a> Parser<'a> {
@@ -720,6 +740,8 @@ impl<'a> Parser<'a> {
             next_expr_id: 0,
             doc_errors,
             doc_probe: false,
+            use_prefixes: Vec::new(),
+            qualified_refs: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1080,6 +1102,78 @@ impl<'a> Parser<'a> {
         self.nth(n).map(|t| t.kind)
     }
 
+    /// #4045: with the cursor on an identifier, the number of identifiers in
+    /// the qualified name that starts here (`Y.Status` is 2, `lib.y.f` is 3):
+    /// a dotted path whose all-but-last segments are a qualifier a `uses` clause
+    /// introduced. `None` for any other identifier, which stays plain.
+    fn qualified_name_len(&self) -> Option<usize> {
+        if self.use_prefixes.is_empty() {
+            return None;
+        }
+        let mut segs: Vec<&str> = Vec::new();
+        let mut i = 0;
+        loop {
+            if self.nth_kind(i) != Some(TokenKind::Ident) {
+                break;
+            }
+            segs.push(self.nth_text(i));
+            if self.nth_kind(i + 1) == Some(TokenKind::Dot)
+                && self.nth_kind(i + 2) == Some(TokenKind::Ident)
+            {
+                i += 2;
+            } else {
+                break;
+            }
+        }
+        (2..=segs.len()).rev().find(|k| {
+            let prefix = segs[..k - 1].join(".");
+            self.use_prefixes.contains(&prefix)
+        })
+    }
+
+    /// #4045: consume the qualified name [`Self::qualified_name_len`] found, as
+    /// one identifier named by its written dotted text and spanning all of it.
+    fn bump_qualified_name(&mut self, len: usize) -> Ident {
+        let first = self.bump().unwrap();
+        let mut span = first.span;
+        let mut name = self.slice(first.span).to_string();
+        for _ in 1..len {
+            self.bump(); // `.`
+            let seg = self.bump().unwrap();
+            name.push('.');
+            name.push_str(self.slice(seg.span));
+            span = span.merge(seg.span);
+        }
+        self.qualified_refs.entry(name.clone()).or_insert(span);
+        Ident { name, span }
+    }
+
+    /// #4045: the identifier token `t` (the cursor is on it) as an [`Ident`], or,
+    /// when it begins a name qualified by a `uses` clause (`Y.f`, `lib.y.f`), the
+    /// whole of that name as one identifier.
+    fn bump_ident_maybe_qualified(&mut self, t: Token) -> Ident {
+        match self
+            .qualified_name_len()
+            .filter(|_| t.kind == TokenKind::Ident)
+        {
+            Some(len) => self.bump_qualified_name(len),
+            None => {
+                self.bump();
+                Ident {
+                    name: self.slice(t.span).to_string(),
+                    span: t.span,
+                }
+            }
+        }
+    }
+
+    /// #4045: [`Self::bump_ident_maybe_qualified`] for a type name, with the token
+    /// as it spans the whole name.
+    fn bump_type_name(&mut self, t: Token) -> (String, Token) {
+        let id = self.bump_ident_maybe_qualified(t);
+        (id.name, Token { span: id.span, ..t })
+    }
+
     /// The source text of the token `n` positions ahead, or `""` if none.
     fn nth_text(&self, n: usize) -> &'a str {
         self.nth(n).map(|t| self.slice(t.span)).unwrap_or("")
@@ -1247,6 +1341,27 @@ impl<'a> Parser<'a> {
             });
         }
         self.expect_ident(ctx)
+    }
+
+    /// #3793: the optional `replaces old` clause after a field's type — the field was renamed
+    /// from `old`. `replaces` is contextual, so a field, a type or a value named `replaces`
+    /// elsewhere is unaffected. `label` reads `old` as a record field's label (a keyword
+    /// is a field name there); a `store` field's name is a plain identifier.
+    pub(crate) fn parse_field_replaces(
+        &mut self,
+        label: bool,
+    ) -> Result<Option<Ident>, CompileError> {
+        if !matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "replaces")
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let ctx = "as the field name `replaces` renames";
+        Ok(Some(if label {
+            self.expect_label(ctx)?
+        } else {
+            self.expect_ident(ctx)?
+        }))
     }
 
     /// The targeted refusal for a keyword written as field shorthand (#2837):
@@ -3226,7 +3341,7 @@ mod tests {
     #[test]
     fn advance_still_reads_its_by_and_admits_a_variable_amount() {
         for stmt in ["advance Clock by 15.minutes", "advance Clock by by"] {
-            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minutes\n  {stmt}\n}}\n");
+            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minute\n  {stmt}\n}}\n");
             let toks = tokenize(&src).unwrap();
             let unit = parse_unit_with_recovery(&toks, &src);
             assert!(unit.1.is_empty(), "{stmt}: {:?}", unit.1);
@@ -3243,6 +3358,41 @@ mod tests {
         let src = "context x\n\nservice api from http {\n  on GET(\"/\") (by: Int) -> Effect[HttpResult[String]] by by: Visitor {\n    Ok(\"x\")\n  }\n}\n";
         let (_, errors) = parse_recover_str(src);
         assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    /// #4394: `HttpResult[T]` or `HttpResult[T, E]`: the second argument names what a `Streaming` body
+    /// carries. It parses into the type, prints back as written, and a third argument is refused.
+    #[test]
+    fn an_http_result_takes_an_optional_streaming_element() {
+        let return_of = |ty: &str| {
+            let c =
+                parse_str(&format!("commons x {{ fn f() -> {ty} {{ todo(\"x\") }} }}")).unwrap();
+            let CommonsItem::Fn(f) = &c.items[0] else {
+                panic!()
+            };
+            f.return_type.clone()
+        };
+        for (ty, has_element) in [
+            ("HttpResult[String]", false),
+            ("HttpResult[(), SseEvent]", true),
+            ("HttpResult[String, String]", true),
+        ] {
+            let t = return_of(ty);
+            let TypeRef::HttpResult(_, element, _) = &t else {
+                panic!("{ty}: {t:?}")
+            };
+            assert_eq!(element.is_some(), has_element, "{ty}");
+            assert_eq!(crate::print::type_ref_to_string(&t), ty);
+        }
+        // The element is a type the type walkers see, so `SseEvent` is a name this type mentions.
+        let mut names = Vec::new();
+        crate::ast::collect_type_heads(&return_of("HttpResult[(), SseEvent]"), &mut names);
+        assert_eq!(names, vec!["SseEvent".to_string()]);
+        // More than two arguments close nothing.
+        assert!(
+            parse_str("commons x { fn f() -> HttpResult[String, String, Int] { todo(\"x\") } }")
+                .is_err()
+        );
     }
 
     #[test]
@@ -4538,6 +4688,44 @@ mod tests {
         assert!(!c.items[2].is_private());
     }
 
+    /// #3975: `@name("…")` before a variant (both forms) and a payload field, and
+    /// `@discriminator("…")` before a sum's `type`, with a doc above it and `private` after it.
+    #[test]
+    fn wire_name_annotations_attach_to_their_declarations() {
+        let src = "commons m\n\n--- An event.\n@discriminator(\"type\")\nprivate type Hook =\n\t| @name(\"a.b\") A(@name(\"k\") x: Int)\n\t| B\n\ntype Action = enum { @name(\"opened\") Opened, Closed }\n";
+        let c = parse_str(src).unwrap();
+        let hook = type_at(&c, 0);
+        assert_eq!(hook.discriminator().as_deref(), Some("type"));
+        assert!(hook.private.is_some());
+        assert_eq!(
+            doc_of(&hook.documentation),
+            Some(("An event.", DocForm::Lines))
+        );
+        assert_eq!(hook.span.start, src.find("@discriminator").unwrap());
+        let TypeBody::Sum(sum) = &hook.body else {
+            panic!("a sum");
+        };
+        assert_eq!(sum.variants[0].wire_name().as_deref(), Some("a.b"));
+        assert_eq!(sum.variants[0].payload[0].wire_name().as_deref(), Some("k"));
+        assert_eq!(sum.variants[1].wire_name(), None);
+        let TypeBody::Sum(action) = &type_at(&c, 1).body else {
+            panic!("an enum");
+        };
+        assert_eq!(action.variants[0].wire_name().as_deref(), Some("opened"));
+        assert_eq!(action.variants[1].wire_name(), None);
+    }
+
+    /// #3975: an annotation at item position that does not lead a `type` is a parse error.
+    #[test]
+    fn an_annotation_before_something_other_than_a_type_is_refused() {
+        let src = "commons m\n\n@discriminator(\"type\")\nfn f() -> Int { 1 }\n";
+        let err = parse_str(src).unwrap_err();
+        assert!(
+            err.iter().any(|e| e.category == "bynk.parse.expected_item"),
+            "{err:?}"
+        );
+    }
+
     /// `private` before `const` is the modifier too, its span folded into the
     /// constant's.
     #[test]
@@ -4559,7 +4747,8 @@ mod tests {
     /// #2618: `private` on a declaration it does not apply to is rejected.
     #[test]
     fn private_on_a_service_is_rejected() {
-        let src = "context m\n\nprivate service s {\n  on call() -> Effect[Int] { 1 }\n}\n";
+        let src =
+            "context m\n\nprivate service s {\n  on call() -> Effect[Int] by Caller { 1 }\n}\n";
         let tokens = crate::lexer::tokenize(src).unwrap();
         let errs = parse_units(&tokens, src).unwrap_err();
         assert_eq!(errs[0].category, "bynk.visibility.private_not_allowed");
@@ -4788,5 +4977,42 @@ mod paren_guard_2721 {
     #[test]
     fn lambda_still_parses_when_parenthesised_in_guard() {
         ok(&wrap("pred(((x: Int) => x > 0))"));
+    }
+}
+
+#[cfg(test)]
+mod qualified_uses_4045 {
+    use super::*;
+    use crate::lexer::tokenize;
+
+    fn commons(src: &str) -> Commons {
+        let toks = tokenize(src).unwrap();
+        parse(&toks, src).unwrap_or_else(|e| panic!("{src}\n{e:?}"))
+    }
+
+    fn names(u: &UsesDecl) -> Vec<&str> {
+        u.qualified_refs.iter().map(|r| r.name.as_str()).collect()
+    }
+
+    /// #4045: a name qualified by a `uses` alias or a full commons name is one
+    /// identifier, and the clause records which names it was read for.
+    #[test]
+    fn qualified_names_are_one_identifier_and_recorded() {
+        let c = commons(
+            "commons app.z\n\nuses lib.y as Y\nuses lib.x\n\n\
+             fn f(s: Y.Status, t: lib.x.Status) -> String {\n  Y.describe(s) + lib.x.describe(t)\n}\n",
+        );
+        let by_alias = c.uses.iter().find(|u| u.alias.is_some()).unwrap();
+        assert_eq!(names(by_alias), vec!["Status", "describe"]);
+        let whole = c.uses.iter().find(|u| u.alias.is_none()).unwrap();
+        assert_eq!(names(whole), vec!["Status", "describe"]);
+    }
+
+    /// Without a `uses` clause introducing the qualifier, a dotted name is the
+    /// plain field access or method call it always was.
+    #[test]
+    fn an_unrelated_dotted_name_stays_a_field_access() {
+        let c = commons("commons m\n\nfn f(p: P) -> Int {\n  p.x\n}\n");
+        assert!(c.uses.is_empty());
     }
 }

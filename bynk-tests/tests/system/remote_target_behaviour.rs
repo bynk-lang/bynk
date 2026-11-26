@@ -33,6 +33,8 @@ use std::process::{Child, Command, Stdio};
 
 #[path = "../require/mod.rs"]
 mod require;
+#[path = "../support/runtime_js.rs"]
+mod runtime_js;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -195,7 +197,7 @@ const STAND_IN: &str = r#"import http from "node:http";
 const [out, secret] = process.argv.slice(2);
 const worker = (await import(`${out}/workers/shop-api/index.js`)).default;
 const handlers = await import(`${out}/workers/shop-api/handlers.js`);
-const runtime = await import(`${out}/__bynk_runtime/agent.js`);
+const runtime = await import(`${out}/__bynk_runtime/testing/bindings.js`);
 const env = { AUTH_SECRET: secret };
 env.CART = runtime.__makeIntegrationDoNamespace(handlers.Cart, env);
 env.TICKS = runtime.__makeIntegrationDoNamespace(handlers.Ticks, env);
@@ -262,6 +264,8 @@ impl Drop for StandIn {
 }
 
 fn start_stand_in(dir: &Path, out_js: &Path, secret: &str) -> (StandIn, u16) {
+    // The doubles are imported by a test build only, not by this production compile.
+    runtime_js::stage_test_doubles(out_js);
     let script = dir.join("stand-in.mjs");
     fs::write(&script, STAND_IN).unwrap();
     let mut cmd = Command::new("node");
@@ -337,7 +341,7 @@ fn system_suites_run_against_a_named_target() {
         )
     };
     // An in-process run first: it writes the compiled Worker the stand-in
-    // serves (`out-js/workers/shop-api`).
+    // serves (`out/out-js/workers/shop-api`).
     let proj = project(&dir, &[SUITE, RUN_ID_LOCAL], "");
     let (ok, stdout, stderr) = bynk_test(
         &proj,
@@ -347,7 +351,7 @@ fn system_suites_run_against_a_named_target() {
     );
     assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
     assert_eq!(json(&stdout, &stderr)["passed"], 3, "{stdout}");
-    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
+    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out/out-js"), "deployed-secret");
     let proj = project(&dir, &[SUITE, RUN_ID], &target(port));
 
     // Against the stand-in, signing with the secret from the environment.
@@ -551,7 +555,7 @@ fn a_case_that_peeks_is_refused_or_skipped_against_a_target() {
     assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
     assert_eq!(json(&stdout, &stderr)["passed"], 2, "{stdout}");
 
-    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
+    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out/out-js"), "deployed-secret");
     let proj = project(&dir, &[suite], &target(port));
     fs::write(proj.join("src/shop/api.bynk"), &source).unwrap();
     let (ok, stdout, stderr) = bynk_test(

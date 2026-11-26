@@ -29,6 +29,7 @@ pub mod approve;
 pub mod book;
 pub mod check;
 pub mod cli;
+pub(crate) mod cloudflare;
 pub mod compile;
 pub mod deploy;
 pub mod dev;
@@ -45,6 +46,7 @@ pub mod fmt;
 pub mod http_client;
 #[cfg(windows)]
 pub mod job;
+pub mod lock;
 pub mod logs;
 pub mod mcp;
 pub mod migrate;
@@ -66,8 +68,6 @@ pub mod stop;
 pub mod sweep;
 pub mod tail;
 pub mod test;
-#[cfg(test)]
-mod test_support;
 pub mod trace;
 pub mod workers;
 

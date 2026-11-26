@@ -1,0 +1,5 @@
+commons shapes
+
+type Shape =
+    | @name("round") Circle(r: Int)
+    | Square(side: Int)

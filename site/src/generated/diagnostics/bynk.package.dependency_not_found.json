@@ -1,0 +1,10 @@
+{
+  "blurb": "A path dependency points at a directory that is a package: it has its own `bynk.toml` with a `[package]` table. The path is read from the manifest that names it. The entry is refused when there is no readable `bynk.toml` there, when it is not valid, or when it has no `[package]`. Correct the path, or add the manifest to the package.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.dependency_not_found",
+  "constructs": [],
+  "example": "[dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/libs\" }   // ✗ no `bynk.toml` at `pkg/libs`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ the package's directory",
+  "severity": "error",
+  "summary": "A path dependency's directory has no readable `bynk.toml`, its `bynk.toml` is invalid, or it has no `[package]`."
+}

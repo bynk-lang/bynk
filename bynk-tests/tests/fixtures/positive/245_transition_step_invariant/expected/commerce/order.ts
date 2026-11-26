@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
@@ -13,8 +14,8 @@ export type AuthId = string & { readonly __brand: "commerce.order.AuthId" };
 
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "AuthId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "AuthId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as AuthId);
   },
@@ -153,6 +154,18 @@ export function __serialise_OrderStatus(value: OrderStatus): __JsonValue {
 }
 
 export function __deserialise_OrderStatus(json: __JsonValue, path: string = "$"): Result<OrderStatus, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Pending":
+        return Ok({ tag: "Pending" } as OrderStatus);
+      case "Placed":
+        return Ok({ tag: "Placed" } as OrderStatus);
+      case "Paid":
+        return Ok({ tag: "Paid" } as OrderStatus);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

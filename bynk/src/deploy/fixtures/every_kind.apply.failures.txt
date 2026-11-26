@@ -1,0 +1,3713 @@
+== default ==
+-- call 1 fails: kv namespace create shop-cart-sessions
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: ✘ [ERROR] the stand-in failed call 1
+  (unchanged)
+-- call 3 fails: deploy --secrets-file <secrets-file>
+stopped: exit 1: wrangler deploy failed for `shop-cart` (exit 1)
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
++106 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++107 namespace_id = "958303813"
++108 
+-- call 4 fails: kv namespace create shop-cart
+stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: ✘ [ERROR] the stand-in failed call 4
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
++106 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++107 namespace_id = "958303813"
++108 
++120 [environments.default.workers.shop-cart]
++121 deployed = true
++122 
++123 [environments.default.workers.shop-cart.contracts]
++124 
++125 [environments.default.workers.shop-cart.expects]
++126 
+-- call 5 fails: r2 bucket create shop-archive --jurisdiction eu
+stopped: exit 1: could not create the R2 bucket `shop-archive` for `shop`'s `R2_ARCHIVE`: ✘ [ERROR] the stand-in failed call 5
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++109 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++110 namespace_id = "958303813"
++111 
++123 [environments.default.workers.shop-cart]
++124 deployed = true
++125 
++126 [environments.default.workers.shop-cart.contracts]
++127 
++128 [environments.default.workers.shop-cart.expects]
++129 
+-- call 6 fails: r2 bucket create shop-new
+stopped: exit 1: could not create the R2 bucket `shop-new` for `shop`'s `R2_NEW`: ✘ [ERROR] the stand-in failed call 6
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++113 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++114 namespace_id = "958303813"
++115 
++127 [environments.default.workers.shop-cart]
++128 deployed = true
++129 
++130 [environments.default.workers.shop-cart.contracts]
++131 
++132 [environments.default.workers.shop-cart.expects]
++133 
+-- call 10 fails: vectorize create-metadata-index shop-docs --propertyName category --type string
+stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs` for `shop`'s `VECTORIZE_DOCS`: ✘ [ERROR] the stand-in failed call 10
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++116 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++117 namespace_id = "958303813"
++118 
++130 [environments.default.workers.shop-cart]
++131 deployed = true
++132 
++133 [environments.default.workers.shop-cart.contracts]
++134 
++135 [environments.default.workers.shop-cart.expects]
++136 
+-- call 13 fails: vectorize create shop-new --dimensions 384 --metric euclidean
+stopped: exit 1: could not create the Vectorize index `shop-new` for `shop`'s `VECTORIZE_NEW`: ✘ [ERROR] the stand-in failed call 13
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++116 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++117 namespace_id = "958303813"
++118 
++130 [environments.default.workers.shop-cart]
++131 deployed = true
++132 
++133 [environments.default.workers.shop-cart.contracts]
++134 
++135 [environments.default.workers.shop-cart.expects]
++136 
+-- call 15 fails: d1 create shop-new
+stopped: exit 1: could not create the D1 database `shop-new` for `shop`'s `D1_NEW`: ✘ [ERROR] the stand-in failed call 15
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++119 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++120 namespace_id = "958303813"
++121 
++133 [environments.default.workers.shop-cart]
++134 deployed = true
++135 
++136 [environments.default.workers.shop-cart.contracts]
++137 
++138 [environments.default.workers.shop-cart.expects]
++139 
+-- call 17 fails: hyperdrive update hd-shop-main shop-main db.example
+stopped: exit 1: could not sync the Hyperdrive config `shop-main` for `shop`'s `HYPERDRIVE_MAIN`: Cloudflare answered 500 to call 17
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++128 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++129 namespace_id = "958303813"
++130 
++142 [environments.default.workers.shop-cart]
++143 deployed = true
++144 
++145 [environments.default.workers.shop-cart.contracts]
++146 
++147 [environments.default.workers.shop-cart.expects]
++148 
+-- call 18 fails: hyperdrive create shop-new db.example
+stopped: exit 1: could not create the Hyperdrive config `shop-new` for `shop`'s `HYPERDRIVE_NEW`: Cloudflare answered 500 to call 18
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++128 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++129 namespace_id = "958303813"
++130 
++142 [environments.default.workers.shop-cart]
++143 deployed = true
++144 
++145 [environments.default.workers.shop-cart.contracts]
++146 
++147 [environments.default.workers.shop-cart.expects]
++148 
+-- call 21 fails: queues create outbound
+stopped: exit 1: could not create the queue `outbound`: ✘ [ERROR] the stand-in failed call 21
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++105 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++106 name = "shop-new"
++107 id = "hd-shop-new"
++108 
++124 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++132 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++133 namespace_id = "301720278"
++134 
++135 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++136 namespace_id = "958303813"
++137 
++149 [environments.default.workers.shop-cart]
++150 deployed = true
++151 
++152 [environments.default.workers.shop-cart.contracts]
++153 
++154 [environments.default.workers.shop-cart.expects]
++155 
+-- call 22 fails: d1 migrations apply D1_ORDERS --remote
+stopped: exit 1: could not apply the migrations of the D1 database `shop-orders` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 22
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++133 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++134 namespace_id = "301720278"
++135 
++136 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++137 namespace_id = "958303813"
++138 
++150 [environments.default.workers.shop-cart]
++151 deployed = true
++152 
++153 [environments.default.workers.shop-cart.contracts]
++154 
++155 [environments.default.workers.shop-cart.expects]
++156 
+-- call 23 fails: secret put API_TOKEN
+stopped: exit 1: could not set the secret `API_TOKEN` on `shop`: ✘ [ERROR] the stand-in failed call 23
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++133 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++134 namespace_id = "301720278"
++135 
++136 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++137 namespace_id = "958303813"
++138 
++150 [environments.default.workers.shop-cart]
++151 deployed = true
++152 
++153 [environments.default.workers.shop-cart.contracts]
++154 
++155 [environments.default.workers.shop-cart.expects]
++156 
+-- call 24 fails: deploy
+stopped: exit 1: wrangler deploy failed for `shop` (exit 1)
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++133 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++134 namespace_id = "301720278"
++135 
++136 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++137 namespace_id = "958303813"
++138 
++150 [environments.default.workers.shop-cart]
++151 deployed = true
++152 
++153 [environments.default.workers.shop-cart.contracts]
++154 
++155 [environments.default.workers.shop-cart.expects]
++156 
+-- call 25 fails: kv namespace delete --namespace-id kv-gone-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace for `gone`: ✘ [ERROR] the stand-in failed call 25
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++130 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++131 namespace_id = "301720278"
++132 
++133 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++134 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++147 [environments.default.workers.shop.contracts]
++148 
++149 [environments.default.workers.shop.expects]
++150 
++151 [environments.default.workers.shop-cart]
++152 deployed = true
++153 
++154 [environments.default.workers.shop-cart.contracts]
++155 
++156 [environments.default.workers.shop-cart.expects]
++157 
++164 [environments.default.agent_jurisdictions.shop]
++165 Cart = "none"
++166 
++168 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- call 26 fails: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone`: ✘ [ERROR] the stand-in failed call 26
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 18 [environments.default.kv_instances.shop.KV_CART]
++ 19 id = "kv-shop-cart"
++ 20 
++ 27 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 28 id = "kv-shop-cart-sessions"
++ 29 
++ 32 jurisdiction = "eu"
++ 38 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 39 name = "shop-archive"
++ 40 
++ 44 [environments.default.r2_instances.shop.R2_NEW]
++ 45 name = "shop-new"
++ 46 
++ 60 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 61 name = "shop-new"
++ 62 
++ 68 Renderer = "registry.example/renderer@sha256:bbbb"
++ 69 
++ 70 [environments.default.d1_instances.shop.D1_NEW]
++ 71 name = "shop-new"
++ 72 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 90 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 91 name = "hd-adopted-on-account"
++ 92 id = "hd-adopted"
++ 93 adopted = true
++ 94 
++103 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++104 name = "shop-new"
++105 id = "hd-shop-new"
++106 
++122 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++127 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++128 namespace_id = "301720278"
++129 
++130 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++131 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++144 [environments.default.workers.shop.contracts]
++145 
++146 [environments.default.workers.shop.expects]
++147 
++148 [environments.default.workers.shop-cart]
++149 deployed = true
++150 
++151 [environments.default.workers.shop-cart.contracts]
++152 
++153 [environments.default.workers.shop-cart.expects]
++154 
++161 [environments.default.agent_jurisdictions.shop]
++162 Cart = "none"
++163 
++165 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- call 27 fails: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
+stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`: ✘ [ERROR] the stand-in failed call 27
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
++ 24 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 25 id = "kv-shop-cart-sessions"
++ 26 
++ 29 jurisdiction = "eu"
++ 35 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 36 name = "shop-archive"
++ 37 
++ 41 [environments.default.r2_instances.shop.R2_NEW]
++ 42 name = "shop-new"
++ 43 
++ 57 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 58 name = "shop-new"
++ 59 
++ 65 Renderer = "registry.example/renderer@sha256:bbbb"
++ 66 
++ 67 [environments.default.d1_instances.shop.D1_NEW]
++ 68 name = "shop-new"
++ 69 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 87 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 88 name = "hd-adopted-on-account"
++ 89 id = "hd-adopted"
++ 90 adopted = true
++ 91 
++100 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++101 name = "shop-new"
++102 id = "hd-shop-new"
++103 
++119 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++124 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++125 namespace_id = "301720278"
++126 
++127 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++128 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++141 [environments.default.workers.shop.contracts]
++142 
++143 [environments.default.workers.shop.expects]
++144 
++145 [environments.default.workers.shop-cart]
++146 deployed = true
++147 
++148 [environments.default.workers.shop-cart.contracts]
++149 
++150 [environments.default.workers.shop-cart.expects]
++151 
++158 [environments.default.agent_jurisdictions.shop]
++159 Cart = "none"
++160 
++162 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- call 30 fails: hyperdrive delete hd-gone
+stopped: exit 1: could not delete the orphaned Hyperdrive config `gone-main` of `gone`'s `HYPERDRIVE_GONE`: Cloudflare answered 500 to call 30
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 78 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 79 name = "hd-adopted-on-account"
++ 80 id = "hd-adopted"
++ 81 adopted = true
++ 82 
++ 91 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 92 name = "shop-new"
++ 93 id = "hd-shop-new"
++ 94 
++110 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++115 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++116 namespace_id = "301720278"
++117 
++118 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++119 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++132 [environments.default.workers.shop.contracts]
++133 
++134 [environments.default.workers.shop.expects]
++135 
++136 [environments.default.workers.shop-cart]
++137 deployed = true
++138 
++139 [environments.default.workers.shop-cart.contracts]
++140 
++141 [environments.default.workers.shop-cart.expects]
++142 
++149 [environments.default.agent_jurisdictions.shop]
++150 Cart = "none"
++151 
++153 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- call 31 fails: hyperdrive delete hd-shop-main-was
+stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was` of `shop`'s `HYPERDRIVE_MAIN`: Cloudflare answered 500 to call 31
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 74 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 75 name = "hd-adopted-on-account"
++ 76 id = "hd-adopted"
++ 77 adopted = true
+- 68 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+- 69 name = "gone-main"
+- 70 id = "hd-gone"
++ 87 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 88 name = "shop-new"
++ 89 id = "hd-shop-new"
++ 90 
++106 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++111 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++112 namespace_id = "301720278"
++113 
++114 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++115 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++128 [environments.default.workers.shop.contracts]
++129 
++130 [environments.default.workers.shop.expects]
++131 
++132 [environments.default.workers.shop-cart]
++133 deployed = true
++134 
++135 [environments.default.workers.shop-cart.contracts]
++136 
++137 [environments.default.workers.shop-cart.expects]
++138 
++145 [environments.default.agent_jurisdictions.shop]
++146 Cart = "none"
++147 
++149 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- call 32 fails: queues delete old-jobs
+stopped: exit 1: could not delete the orphaned queue `old-jobs`: ✘ [ERROR] the stand-in failed call 32
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 74 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 75 name = "hd-adopted-on-account"
++ 76 id = "hd-adopted"
++ 77 adopted = true
+- 68 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+- 69 name = "gone-main"
+- 70 id = "hd-gone"
++ 83 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 84 name = "shop-new"
++ 85 id = "hd-shop-new"
+- 76 [[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN.superseded]]
+- 77 name = "shop-main-was"
+- 78 id = "hd-shop-main-was"
++102 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++107 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++108 namespace_id = "301720278"
++109 
++110 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++111 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++124 [environments.default.workers.shop.contracts]
++125 
++126 [environments.default.workers.shop.expects]
++127 
++128 [environments.default.workers.shop-cart]
++129 deployed = true
++130 
++131 [environments.default.workers.shop-cart.contracts]
++132 
++133 [environments.default.workers.shop-cart.expects]
++134 
++141 [environments.default.agent_jurisdictions.shop]
++142 Cart = "none"
++143 
++145 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 1 fails
+stopped: exit 1: created KV namespace `KV_SESSIONS` for `shop-cart` but could not record it in <root>/bynk.deploy.lock: the disk is full
+  (unchanged)
+-- write 2 fails
+stopped: exit 1: allocated `shop-cart`'s rate limiter ids but could not record them in <root>/bynk.deploy.lock: the disk is full
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
+-- write 3 fails
+stopped: bynk: error: deployed `shop-cart` but could not record it in <root>/bynk.deploy.lock: the disk is full
+
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
++106 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++107 namespace_id = "958303813"
++108 
+-- write 4 fails
+stopped: exit 1: created KV namespace `KV_CART` for `shop` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 27 id = "kv-shop-cart-sessions"
++ 28 
++106 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++107 namespace_id = "958303813"
++108 
++120 [environments.default.workers.shop-cart]
++121 deployed = true
++122 
++123 [environments.default.workers.shop-cart.contracts]
++124 
++125 [environments.default.workers.shop-cart.expects]
++126 
+-- write 5 fails
+stopped: exit 1: created the R2 bucket `shop-archive` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++109 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++110 namespace_id = "958303813"
++111 
++123 [environments.default.workers.shop-cart]
++124 deployed = true
++125 
++126 [environments.default.workers.shop-cart.contracts]
++127 
++128 [environments.default.workers.shop-cart.expects]
++129 
+-- write 6 fails
+stopped: exit 1: created the R2 bucket `shop-new` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++113 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++114 namespace_id = "958303813"
++115 
++127 [environments.default.workers.shop-cart]
++128 deployed = true
++129 
++130 [environments.default.workers.shop-cart.contracts]
++131 
++132 [environments.default.workers.shop-cart.expects]
++133 
+-- write 7 fails
+stopped: exit 1: provisioned the Vectorize index `shop-new` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++116 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++117 namespace_id = "958303813"
++118 
++130 [environments.default.workers.shop-cart]
++131 deployed = true
++132 
++133 [environments.default.workers.shop-cart.contracts]
++134 
++135 [environments.default.workers.shop-cart.expects]
++136 
+-- write 8 fails
+stopped: exit 1: created the D1 database `shop-new` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++119 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++120 namespace_id = "958303813"
++121 
++133 [environments.default.workers.shop-cart]
++134 deployed = true
++135 
++136 [environments.default.workers.shop-cart.contracts]
++137 
++138 [environments.default.workers.shop-cart.expects]
++139 
+-- write 9 fails
+stopped: exit 1: changed the Hyperdrive config `hd-adopted-on-account` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++123 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++124 namespace_id = "958303813"
++125 
++137 [environments.default.workers.shop-cart]
++138 deployed = true
++139 
++140 [environments.default.workers.shop-cart.contracts]
++141 
++142 [environments.default.workers.shop-cart.expects]
++143 
+-- write 10 fails
+stopped: exit 1: changed the Hyperdrive config `shop-main` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++128 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++129 namespace_id = "958303813"
++130 
++142 [environments.default.workers.shop-cart]
++143 deployed = true
++144 
++145 [environments.default.workers.shop-cart.contracts]
++146 
++147 [environments.default.workers.shop-cart.expects]
++148 
+-- write 11 fails
+stopped: exit 1: changed the Hyperdrive config `shop-new` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++128 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++129 namespace_id = "958303813"
++130 
++142 [environments.default.workers.shop-cart]
++143 deployed = true
++144 
++145 [environments.default.workers.shop-cart.contracts]
++146 
++147 [environments.default.workers.shop-cart.expects]
++148 
+-- write 12 fails
+stopped: exit 1: linked `shop`'s mTLS certificates but could not record them in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++105 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++106 name = "shop-new"
++107 id = "hd-shop-new"
++108 
++132 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++133 namespace_id = "958303813"
++134 
++146 [environments.default.workers.shop-cart]
++147 deployed = true
++148 
++149 [environments.default.workers.shop-cart.contracts]
++150 
++151 [environments.default.workers.shop-cart.expects]
++152 
+-- write 13 fails
+stopped: exit 1: allocated `shop`'s rate limiter ids but could not record them in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++105 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++106 name = "shop-new"
++107 id = "hd-shop-new"
++108 
++124 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++132 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++133 namespace_id = "958303813"
++134 
++146 [environments.default.workers.shop-cart]
++147 deployed = true
++148 
++149 [environments.default.workers.shop-cart.contracts]
++150 
++151 [environments.default.workers.shop-cart.expects]
++152 
+-- write 14 fails
+stopped: exit 1: provisioned the queue `outbound` but could not record it in <root>/bynk.deploy.lock: the disk is full
++ 20 [environments.default.kv_instances.shop.KV_CART]
++ 21 id = "kv-shop-cart"
++ 22 
++ 29 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 30 id = "kv-shop-cart-sessions"
++ 31 
++ 34 jurisdiction = "eu"
++ 40 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 41 name = "shop-archive"
++ 42 
++ 46 [environments.default.r2_instances.shop.R2_NEW]
++ 47 name = "shop-new"
++ 48 
++ 62 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 63 name = "shop-new"
++ 64 
++ 72 [environments.default.d1_instances.shop.D1_NEW]
++ 73 name = "shop-new"
++ 74 id = "0d1d0000-0000-4000-8000-000000000008"
++ 75 
++ 92 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 93 name = "hd-adopted-on-account"
++ 94 id = "hd-adopted"
++ 95 adopted = true
++ 96 
++105 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++106 name = "shop-new"
++107 id = "hd-shop-new"
++108 
++124 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++132 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++133 namespace_id = "301720278"
++134 
++135 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++136 namespace_id = "958303813"
++137 
++149 [environments.default.workers.shop-cart]
++150 deployed = true
++151 
++152 [environments.default.workers.shop-cart.contracts]
++153 
++154 [environments.default.workers.shop-cart.expects]
++155 
+-- write 15 fails
+stopped: exit 1: could not record the container images of `shop` in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
++ 76 
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++133 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++134 namespace_id = "301720278"
++135 
++136 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++137 namespace_id = "958303813"
++138 
++150 [environments.default.workers.shop-cart]
++151 deployed = true
++152 
++153 [environments.default.workers.shop-cart.contracts]
++154 
++155 [environments.default.workers.shop-cart.expects]
++156 
+-- write 16 fails
+stopped: bynk: error: deployed `shop` but could not record it in <root>/bynk.deploy.lock: the disk is full
+
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++133 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++134 namespace_id = "301720278"
++135 
++136 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++137 namespace_id = "958303813"
++138 
++150 [environments.default.workers.shop-cart]
++151 deployed = true
++152 
++153 [environments.default.workers.shop-cart.contracts]
++154 
++155 [environments.default.workers.shop-cart.expects]
++156 
+-- write 17 fails
+stopped: exit 1: deleted the orphaned KV namespace for `gone` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
++ 21 [environments.default.kv_instances.shop.KV_CART]
++ 22 id = "kv-shop-cart"
++ 23 
++ 30 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 31 id = "kv-shop-cart-sessions"
++ 32 
++ 35 jurisdiction = "eu"
++ 41 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 42 name = "shop-archive"
++ 43 
++ 47 [environments.default.r2_instances.shop.R2_NEW]
++ 48 name = "shop-new"
++ 49 
++ 63 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 64 name = "shop-new"
++ 65 
++ 71 Renderer = "registry.example/renderer@sha256:bbbb"
++ 72 
++ 73 [environments.default.d1_instances.shop.D1_NEW]
++ 74 name = "shop-new"
++ 75 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 93 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 94 name = "hd-adopted-on-account"
++ 95 id = "hd-adopted"
++ 96 adopted = true
++ 97 
++106 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++107 name = "shop-new"
++108 id = "hd-shop-new"
++109 
++125 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++130 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++131 namespace_id = "301720278"
++132 
++133 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++134 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++147 [environments.default.workers.shop.contracts]
++148 
++149 [environments.default.workers.shop.expects]
++150 
++151 [environments.default.workers.shop-cart]
++152 deployed = true
++153 
++154 [environments.default.workers.shop-cart.contracts]
++155 
++156 [environments.default.workers.shop-cart.expects]
++157 
++164 [environments.default.agent_jurisdictions.shop]
++165 Cart = "none"
++166 
++168 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 18 fails
+stopped: exit 1: deleted the orphaned KV namespace `KV_CACHE` for `gone` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 18 [environments.default.kv_instances.shop.KV_CART]
++ 19 id = "kv-shop-cart"
++ 20 
++ 27 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 28 id = "kv-shop-cart-sessions"
++ 29 
++ 32 jurisdiction = "eu"
++ 38 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 39 name = "shop-archive"
++ 40 
++ 44 [environments.default.r2_instances.shop.R2_NEW]
++ 45 name = "shop-new"
++ 46 
++ 60 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 61 name = "shop-new"
++ 62 
++ 68 Renderer = "registry.example/renderer@sha256:bbbb"
++ 69 
++ 70 [environments.default.d1_instances.shop.D1_NEW]
++ 71 name = "shop-new"
++ 72 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 90 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 91 name = "hd-adopted-on-account"
++ 92 id = "hd-adopted"
++ 93 adopted = true
++ 94 
++103 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++104 name = "shop-new"
++105 id = "hd-shop-new"
++106 
++122 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++127 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++128 namespace_id = "301720278"
++129 
++130 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++131 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++144 [environments.default.workers.shop.contracts]
++145 
++146 [environments.default.workers.shop.expects]
++147 
++148 [environments.default.workers.shop-cart]
++149 deployed = true
++150 
++151 [environments.default.workers.shop-cart.contracts]
++152 
++153 [environments.default.workers.shop-cart.expects]
++154 
++161 [environments.default.agent_jurisdictions.shop]
++162 Cart = "none"
++163 
++165 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 19 fails
+stopped: exit 1: deleted the orphaned KV namespace `KV_OLD` for `shop` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
++ 24 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 25 id = "kv-shop-cart-sessions"
++ 26 
++ 29 jurisdiction = "eu"
++ 35 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 36 name = "shop-archive"
++ 37 
++ 41 [environments.default.r2_instances.shop.R2_NEW]
++ 42 name = "shop-new"
++ 43 
++ 57 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 58 name = "shop-new"
++ 59 
++ 65 Renderer = "registry.example/renderer@sha256:bbbb"
++ 66 
++ 67 [environments.default.d1_instances.shop.D1_NEW]
++ 68 name = "shop-new"
++ 69 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 87 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 88 name = "hd-adopted-on-account"
++ 89 id = "hd-adopted"
++ 90 adopted = true
++ 91 
++100 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++101 name = "shop-new"
++102 id = "hd-shop-new"
++103 
++119 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++124 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++125 namespace_id = "301720278"
++126 
++127 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++128 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++141 [environments.default.workers.shop.contracts]
++142 
++143 [environments.default.workers.shop.expects]
++144 
++145 [environments.default.workers.shop-cart]
++146 deployed = true
++147 
++148 [environments.default.workers.shop-cart.contracts]
++149 
++150 [environments.default.workers.shop-cart.expects]
++151 
++158 [environments.default.agent_jurisdictions.shop]
++159 Cart = "none"
++160 
++162 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 20 fails
+stopped: exit 1: deleted the orphaned Vectorize index `gone-index` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
++ 54 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 55 name = "shop-new"
++ 56 
++ 62 Renderer = "registry.example/renderer@sha256:bbbb"
++ 63 
++ 64 [environments.default.d1_instances.shop.D1_NEW]
++ 65 name = "shop-new"
++ 66 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 84 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 85 name = "hd-adopted-on-account"
++ 86 id = "hd-adopted"
++ 87 adopted = true
++ 88 
++ 97 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 98 name = "shop-new"
++ 99 id = "hd-shop-new"
++100 
++116 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++121 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++122 namespace_id = "301720278"
++123 
++124 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++125 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++138 [environments.default.workers.shop.contracts]
++139 
++140 [environments.default.workers.shop.expects]
++141 
++142 [environments.default.workers.shop-cart]
++143 deployed = true
++144 
++145 [environments.default.workers.shop-cart.contracts]
++146 
++147 [environments.default.workers.shop-cart.expects]
++148 
++155 [environments.default.agent_jurisdictions.shop]
++156 Cart = "none"
++157 
++159 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 21 fails
+stopped: exit 1: deleted the orphaned Vectorize index `shop-docs-v0` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 51 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 52 name = "shop-new"
++ 53 
++ 59 Renderer = "registry.example/renderer@sha256:bbbb"
++ 60 
++ 61 [environments.default.d1_instances.shop.D1_NEW]
++ 62 name = "shop-new"
++ 63 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 81 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 82 name = "hd-adopted-on-account"
++ 83 id = "hd-adopted"
++ 84 adopted = true
++ 85 
++ 94 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 95 name = "shop-new"
++ 96 id = "hd-shop-new"
++ 97 
++113 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++118 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++119 namespace_id = "301720278"
++120 
++121 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++122 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++135 [environments.default.workers.shop.contracts]
++136 
++137 [environments.default.workers.shop.expects]
++138 
++139 [environments.default.workers.shop-cart]
++140 deployed = true
++141 
++142 [environments.default.workers.shop-cart.contracts]
++143 
++144 [environments.default.workers.shop-cart.expects]
++145 
++152 [environments.default.agent_jurisdictions.shop]
++153 Cart = "none"
++154 
++156 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 22 fails
+stopped: exit 1: deleted the orphaned Hyperdrive config `gone-main` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 78 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 79 name = "hd-adopted-on-account"
++ 80 id = "hd-adopted"
++ 81 adopted = true
++ 82 
++ 91 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 92 name = "shop-new"
++ 93 id = "hd-shop-new"
++ 94 
++110 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++115 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++116 namespace_id = "301720278"
++117 
++118 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++119 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++132 [environments.default.workers.shop.contracts]
++133 
++134 [environments.default.workers.shop.expects]
++135 
++136 [environments.default.workers.shop-cart]
++137 deployed = true
++138 
++139 [environments.default.workers.shop-cart.contracts]
++140 
++141 [environments.default.workers.shop-cart.expects]
++142 
++149 [environments.default.agent_jurisdictions.shop]
++150 Cart = "none"
++151 
++153 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 23 fails
+stopped: exit 1: deleted the orphaned Hyperdrive config `shop-main-was` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 74 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 75 name = "hd-adopted-on-account"
++ 76 id = "hd-adopted"
++ 77 adopted = true
+- 68 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+- 69 name = "gone-main"
+- 70 id = "hd-gone"
++ 87 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 88 name = "shop-new"
++ 89 id = "hd-shop-new"
++ 90 
++106 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++111 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++112 namespace_id = "301720278"
++113 
++114 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++115 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++128 [environments.default.workers.shop.contracts]
++129 
++130 [environments.default.workers.shop.expects]
++131 
++132 [environments.default.workers.shop-cart]
++133 deployed = true
++134 
++135 [environments.default.workers.shop-cart.contracts]
++136 
++137 [environments.default.workers.shop-cart.expects]
++138 
++145 [environments.default.agent_jurisdictions.shop]
++146 Cart = "none"
++147 
++149 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+-- write 24 fails
+stopped: exit 1: deleted the orphaned queue `old-jobs` but could not record it in <root>/bynk.deploy.lock: the disk is full
++  7     "outbound",
+- 11 [environments.default.kv.gone]
+- 12 id = "kv-gone-default"
+- 13 
++ 15 [environments.default.kv_instances.shop.KV_CART]
++ 16 id = "kv-shop-cart"
+- 17 [environments.default.kv_instances.gone.KV_CACHE]
+- 18 id = "kv-gone-cache-default"
+- 20 [environments.default.kv_instances.shop.KV_OLD]
+- 21 id = "kv-shop-old-default"
+- 22 
++ 21 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
++ 22 id = "kv-shop-cart-sessions"
++ 23 
++ 26 jurisdiction = "eu"
++ 32 [[environments.default.r2_instances.shop.R2_ARCHIVE.superseded]]
++ 33 name = "shop-archive"
++ 34 
++ 38 [environments.default.r2_instances.shop.R2_NEW]
++ 39 name = "shop-new"
++ 40 
+- 40 [environments.default.vectorize_instances.gone.VECTORIZE_GONE]
+- 41 name = "gone-index"
+- 42 
++ 48 [environments.default.vectorize_instances.shop.VECTORIZE_NEW]
++ 49 name = "shop-new"
+- 46 [[environments.default.vectorize_instances.shop.VECTORIZE_DOCS.superseded]]
+- 47 name = "shop-docs-v0"
++ 56 Renderer = "registry.example/renderer@sha256:bbbb"
++ 57 
++ 58 [environments.default.d1_instances.shop.D1_NEW]
++ 59 name = "shop-new"
++ 60 id = "0d1d0000-0000-4000-8000-000000000008"
+- 54 Renderer = "registry.example/renderer@sha256:aaaa"
++ 74 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++ 75 name = "hd-adopted-on-account"
++ 76 id = "hd-adopted"
++ 77 adopted = true
+- 68 [environments.default.hyperdrive_instances.gone.HYPERDRIVE_GONE]
+- 69 name = "gone-main"
+- 70 id = "hd-gone"
++ 83 [environments.default.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++ 84 name = "shop-new"
++ 85 id = "hd-shop-new"
+- 76 [[environments.default.hyperdrive_instances.shop.HYPERDRIVE_MAIN.superseded]]
+- 77 name = "shop-main-was"
+- 78 id = "hd-shop-main-was"
++102 certificate_id = "cert-2"
+- 95 certificate_id = "cert-1"
++107 [environments.default.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++108 namespace_id = "301720278"
++109 
++110 [environments.default.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++111 namespace_id = "958303813"
+-100 [environments.default.ratelimit_instances.shop.RATELIMIT_OLD]
+-101 namespace_id = "1002"
++124 [environments.default.workers.shop.contracts]
++125 
++126 [environments.default.workers.shop.expects]
++127 
++128 [environments.default.workers.shop-cart]
++129 deployed = true
++130 
++131 [environments.default.workers.shop-cart.contracts]
++132 
++133 [environments.default.workers.shop-cart.expects]
++134 
++141 [environments.default.agent_jurisdictions.shop]
++142 Cart = "none"
++143 
++145 shop = ["orders@example.com"]
+-121 shop = [
+-122     "orders@example.com",
+-123     "returns@example.com",
+-124 ]
+== staging ==
+-- call 1 fails: kv namespace create shop-cart-sessions-staging
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: ✘ [ERROR] the stand-in failed call 1
+  (unchanged)
+-- call 3 fails: deploy --secrets-file <secrets-file> --env staging
+stopped: exit 1: wrangler deploy failed for `shop-cart-staging` (exit 1)
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++139 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++140 id = "kv-shop-cart-sessions-staging"
++141 
++149 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++150 namespace_id = "338888791"
++151 
+-- call 4 fails: kv namespace create shop-cart-staging
+stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: ✘ [ERROR] the stand-in failed call 4
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++139 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++140 id = "kv-shop-cart-sessions-staging"
++141 
++149 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++150 namespace_id = "338888791"
++151 
++154 
++155 [environments.staging.workers.shop-cart]
++156 deployed = true
++157 
++158 [environments.staging.workers.shop-cart.contracts]
++159 
++160 [environments.staging.workers.shop-cart.expects]
+-- call 5 fails: kv namespace create shop-sessions-staging
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop`: ✘ [ERROR] the stand-in failed call 5
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++152 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++153 namespace_id = "338888791"
++154 
++157 
++158 [environments.staging.workers.shop-cart]
++159 deployed = true
++160 
++161 [environments.staging.workers.shop-cart.contracts]
++162 
++163 [environments.staging.workers.shop-cart.expects]
+-- call 6 fails: r2 bucket create shop-archive-staging --jurisdiction eu
+stopped: exit 1: could not create the R2 bucket `shop-archive-staging` for `shop`'s `R2_ARCHIVE`: ✘ [ERROR] the stand-in failed call 6
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++152 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++153 namespace_id = "338888791"
++154 
++157 
++158 [environments.staging.workers.shop-cart]
++159 deployed = true
++160 
++161 [environments.staging.workers.shop-cart.contracts]
++162 
++163 [environments.staging.workers.shop-cart.expects]
+-- call 7 fails: r2 bucket create shop-files-staging
+stopped: exit 1: could not create the R2 bucket `shop-files-staging` for `shop`'s `R2_FILES`: ✘ [ERROR] the stand-in failed call 7
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++156 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++157 namespace_id = "338888791"
++158 
++161 
++162 [environments.staging.workers.shop-cart]
++163 deployed = true
++164 
++165 [environments.staging.workers.shop-cart.contracts]
++166 
++167 [environments.staging.workers.shop-cart.expects]
+-- call 8 fails: r2 bucket create shop-new-staging
+stopped: exit 1: could not create the R2 bucket `shop-new-staging` for `shop`'s `R2_NEW`: ✘ [ERROR] the stand-in failed call 8
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++159 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++160 namespace_id = "338888791"
++161 
++164 
++165 [environments.staging.workers.shop-cart]
++166 deployed = true
++167 
++168 [environments.staging.workers.shop-cart.contracts]
++169 
++170 [environments.staging.workers.shop-cart.expects]
+-- call 12 fails: vectorize create-metadata-index shop-docs-staging --propertyName category --type string
+stopped: exit 1: could not create the metadata index `category:string` on the Vectorize index `shop-docs-staging` for `shop`'s `VECTORIZE_DOCS`: ✘ [ERROR] the stand-in failed call 12
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++166 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++167 namespace_id = "338888791"
++168 
++171 
++172 [environments.staging.workers.shop-cart]
++173 deployed = true
++174 
++175 [environments.staging.workers.shop-cart.contracts]
++176 
++177 [environments.staging.workers.shop-cart.expects]
+-- call 15 fails: vectorize create shop-new-staging --dimensions 384 --metric euclidean
+stopped: exit 1: could not create the Vectorize index `shop-new-staging` for `shop`'s `VECTORIZE_NEW`: ✘ [ERROR] the stand-in failed call 15
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++166 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++167 namespace_id = "338888791"
++168 
++171 
++172 [environments.staging.workers.shop-cart]
++173 deployed = true
++174 
++175 [environments.staging.workers.shop-cart.contracts]
++176 
++177 [environments.staging.workers.shop-cart.expects]
+-- call 17 fails: d1 create shop-new-staging
+stopped: exit 1: could not create the D1 database `shop-new-staging` for `shop`'s `D1_NEW`: ✘ [ERROR] the stand-in failed call 17
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++169 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++170 namespace_id = "338888791"
++171 
++174 
++175 [environments.staging.workers.shop-cart]
++176 deployed = true
++177 
++178 [environments.staging.workers.shop-cart.contracts]
++179 
++180 [environments.staging.workers.shop-cart.expects]
+-- call 19 fails: hyperdrive create shop-main-staging db.example
+stopped: exit 1: could not create the Hyperdrive config `shop-main-staging` for `shop`'s `HYPERDRIVE_MAIN`: Cloudflare answered 500 to call 19
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++178 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++179 namespace_id = "338888791"
++180 
++183 
++184 [environments.staging.workers.shop-cart]
++185 deployed = true
++186 
++187 [environments.staging.workers.shop-cart.contracts]
++188 
++189 [environments.staging.workers.shop-cart.expects]
+-- call 20 fails: hyperdrive create shop-new-staging db.example
+stopped: exit 1: could not create the Hyperdrive config `shop-new-staging` for `shop`'s `HYPERDRIVE_NEW`: Cloudflare answered 500 to call 20
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++182 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++183 namespace_id = "338888791"
++184 
++187 
++188 [environments.staging.workers.shop-cart]
++189 deployed = true
++190 
++191 [environments.staging.workers.shop-cart.contracts]
++192 
++193 [environments.staging.workers.shop-cart.expects]
+-- call 23 fails: queues create outbound-staging
+stopped: exit 1: could not create the queue `outbound-staging`: ✘ [ERROR] the stand-in failed call 23
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
++188 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++189 instance = "kb"
++190 
++191 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++192 certificate = "backend-client"
++193 certificate_id = "cert-2"
++194 
++198 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++199 namespace_id = "856287038"
++200 
++201 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++202 namespace_id = "338888791"
++203 
++206 
++207 [environments.staging.workers.shop-cart]
++208 deployed = true
++209 
++210 [environments.staging.workers.shop-cart.contracts]
++211 
++212 [environments.staging.workers.shop-cart.expects]
+-- call 24 fails: d1 migrations apply D1_ORDERS --remote --env staging
+stopped: exit 1: could not apply the migrations of the D1 database `shop-orders-staging` for `shop`'s `D1_ORDERS`, so nothing was pushed: ✘ [ERROR] the stand-in failed call 24
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop-cart]
++216 deployed = true
++217 
++218 [environments.staging.workers.shop-cart.contracts]
++219 
++220 [environments.staging.workers.shop-cart.expects]
+-- call 25 fails: secret put API_TOKEN --env staging
+stopped: exit 1: could not set the secret `API_TOKEN` on `shop-staging`: ✘ [ERROR] the stand-in failed call 25
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop-cart]
++216 deployed = true
++217 
++218 [environments.staging.workers.shop-cart.contracts]
++219 
++220 [environments.staging.workers.shop-cart.expects]
+-- call 26 fails: deploy --env staging
+stopped: exit 1: wrangler deploy failed for `shop-staging` (exit 1)
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop-cart]
++216 deployed = true
++217 
++218 [environments.staging.workers.shop-cart.contracts]
++219 
++220 [environments.staging.workers.shop-cart.expects]
+-- call 27 fails: queues delete old-jobs-staging
+stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: ✘ [ERROR] the stand-in failed call 27
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop.contracts]
++216 
++217 [environments.staging.workers.shop.expects]
++218 
++219 [environments.staging.workers.shop-cart]
++220 deployed = true
++221 
++222 [environments.staging.workers.shop-cart.contracts]
++223 
++224 [environments.staging.workers.shop-cart.expects]
++225 
++226 [environments.staging.deleted_classes]
++227 shop = ["Legacy"]
++228 
++229 [environments.staging.renamed_classes.shop]
++230 Basket = "Cart"
++231 
++232 [environments.staging.agent_jurisdictions.shop]
++233 Cart = "none"
++234 
++235 [environments.staging.email_addresses]
++236 shop = ["orders@example.com"]
+-- write 1 fails
+stopped: exit 1: created KV namespace `KV_SESSIONS` for `shop-cart` but could not record it in <root>/bynk.deploy.lock: the disk is full
+  (unchanged)
+-- write 2 fails
+stopped: exit 1: allocated `shop-cart`'s rate limiter ids but could not record them in <root>/bynk.deploy.lock: the disk is full
++135 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++136 id = "kv-shop-cart-sessions-staging"
++137 
+-- write 3 fails
+stopped: exit 1: provisioned the queue `shared-feed-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++135 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++136 id = "kv-shop-cart-sessions-staging"
++137 
++145 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++146 namespace_id = "338888791"
++147 
+-- write 4 fails
+stopped: bynk: error: deployed `shop-cart-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
+
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++139 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++140 id = "kv-shop-cart-sessions-staging"
++141 
++149 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++150 namespace_id = "338888791"
++151 
+-- write 5 fails
+stopped: exit 1: created KV namespace `KV_CART` for `shop` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++139 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++140 id = "kv-shop-cart-sessions-staging"
++141 
++149 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++150 namespace_id = "338888791"
++151 
++154 
++155 [environments.staging.workers.shop-cart]
++156 deployed = true
++157 
++158 [environments.staging.workers.shop-cart.contracts]
++159 
++160 [environments.staging.workers.shop-cart.expects]
+-- write 6 fails
+stopped: exit 1: created KV namespace `KV_SESSIONS` for `shop` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++152 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++153 namespace_id = "338888791"
++154 
++157 
++158 [environments.staging.workers.shop-cart]
++159 deployed = true
++160 
++161 [environments.staging.workers.shop-cart.contracts]
++162 
++163 [environments.staging.workers.shop-cart.expects]
+-- write 7 fails
+stopped: exit 1: created the R2 bucket `shop-archive-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++152 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++153 namespace_id = "338888791"
++154 
++157 
++158 [environments.staging.workers.shop-cart]
++159 deployed = true
++160 
++161 [environments.staging.workers.shop-cart.contracts]
++162 
++163 [environments.staging.workers.shop-cart.expects]
+-- write 8 fails
+stopped: exit 1: created the R2 bucket `shop-files-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++156 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++157 namespace_id = "338888791"
++158 
++161 
++162 [environments.staging.workers.shop-cart]
++163 deployed = true
++164 
++165 [environments.staging.workers.shop-cart.contracts]
++166 
++167 [environments.staging.workers.shop-cart.expects]
+-- write 9 fails
+stopped: exit 1: created the R2 bucket `shop-new-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++159 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++160 namespace_id = "338888791"
++161 
++164 
++165 [environments.staging.workers.shop-cart]
++166 deployed = true
++167 
++168 [environments.staging.workers.shop-cart.contracts]
++169 
++170 [environments.staging.workers.shop-cart.expects]
+-- write 10 fails
+stopped: exit 1: provisioned the Vectorize index `shop-docs-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++162 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++163 namespace_id = "338888791"
++164 
++167 
++168 [environments.staging.workers.shop-cart]
++169 deployed = true
++170 
++171 [environments.staging.workers.shop-cart.contracts]
++172 
++173 [environments.staging.workers.shop-cart.expects]
+-- write 11 fails
+stopped: exit 1: provisioned the Vectorize index `shop-new-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++166 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++167 namespace_id = "338888791"
++168 
++171 
++172 [environments.staging.workers.shop-cart]
++173 deployed = true
++174 
++175 [environments.staging.workers.shop-cart.contracts]
++176 
++177 [environments.staging.workers.shop-cart.expects]
+-- write 12 fails
+stopped: exit 1: created the D1 database `shop-new-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++169 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++170 namespace_id = "338888791"
++171 
++174 
++175 [environments.staging.workers.shop-cart]
++176 deployed = true
++177 
++178 [environments.staging.workers.shop-cart.contracts]
++179 
++180 [environments.staging.workers.shop-cart.expects]
+-- write 13 fails
+stopped: exit 1: changed the Hyperdrive config `hd-adopted-on-account` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++173 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++174 namespace_id = "338888791"
++175 
++178 
++179 [environments.staging.workers.shop-cart]
++180 deployed = true
++181 
++182 [environments.staging.workers.shop-cart.contracts]
++183 
++184 [environments.staging.workers.shop-cart.expects]
+-- write 14 fails
+stopped: exit 1: changed the Hyperdrive config `shop-main-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++178 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++179 namespace_id = "338888791"
++180 
++183 
++184 [environments.staging.workers.shop-cart]
++185 deployed = true
++186 
++187 [environments.staging.workers.shop-cart.contracts]
++188 
++189 [environments.staging.workers.shop-cart.expects]
+-- write 15 fails
+stopped: exit 1: changed the Hyperdrive config `shop-new-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++182 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++183 namespace_id = "338888791"
++184 
++187 
++188 [environments.staging.workers.shop-cart]
++189 deployed = true
++190 
++191 [environments.staging.workers.shop-cart.contracts]
++192 
++193 [environments.staging.workers.shop-cart.expects]
+-- write 16 fails
+stopped: exit 1: linked `shop`'s Secrets Store secrets but could not record them in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++186 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++187 namespace_id = "338888791"
++188 
++191 
++192 [environments.staging.workers.shop-cart]
++193 deployed = true
++194 
++195 [environments.staging.workers.shop-cart.contracts]
++196 
++197 [environments.staging.workers.shop-cart.expects]
+-- write 17 fails
+stopped: exit 1: linked `shop`'s mTLS certificates but could not record them in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
++191 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++192 namespace_id = "338888791"
++193 
++196 
++197 [environments.staging.workers.shop-cart]
++198 deployed = true
++199 
++200 [environments.staging.workers.shop-cart.contracts]
++201 
++202 [environments.staging.workers.shop-cart.expects]
+-- write 18 fails
+stopped: exit 1: linked `shop`'s AI Search instances but could not record them in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
++188 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++189 certificate = "backend-client"
++190 certificate_id = "cert-2"
++191 
++195 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++196 namespace_id = "338888791"
++197 
++200 
++201 [environments.staging.workers.shop-cart]
++202 deployed = true
++203 
++204 [environments.staging.workers.shop-cart.contracts]
++205 
++206 [environments.staging.workers.shop-cart.expects]
+-- write 19 fails
+stopped: exit 1: allocated `shop`'s rate limiter ids but could not record them in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
++188 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++189 instance = "kb"
++190 
++191 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++192 certificate = "backend-client"
++193 certificate_id = "cert-2"
++194 
++198 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++199 namespace_id = "338888791"
++200 
++203 
++204 [environments.staging.workers.shop-cart]
++205 deployed = true
++206 
++207 [environments.staging.workers.shop-cart.contracts]
++208 
++209 [environments.staging.workers.shop-cart.expects]
+-- write 20 fails
+stopped: exit 1: provisioned the queue `intake-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "old-jobs",
++129     "shared-feed",
++130 ]
++131 reused_queues = ["shared-feed"]
+-127 queues = ["old-jobs"]
++136 [environments.staging.kv_instances.shop.KV_CART]
++137 id = "kv-shop-cart-staging"
++138 
++142 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++143 id = "kv-shop-cart-sessions-staging"
++144 
++145 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++146 name = "shop-archive-staging"
++147 jurisdiction = "eu"
++148 
++149 [environments.staging.r2_instances.shop.R2_FILES]
++150 name = "shop-files-staging"
++151 
++152 [environments.staging.r2_instances.shop.R2_NEW]
++153 name = "shop-new-staging"
++154 
++155 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++156 name = "shop-docs-staging"
++157 adopted = true
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++160 name = "shop-new-staging"
++161 
++162 [environments.staging.d1_instances.shop.D1_NEW]
++163 name = "shop-new-staging"
++164 id = "0d1d0000-0000-4000-8000-000000000016"
++165 
++170 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++171 name = "hd-adopted-on-account"
++172 id = "hd-adopted"
++173 adopted = true
++174 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++176 name = "shop-main-staging"
++177 id = "hd-shop-main-staging"
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++180 name = "shop-new-staging"
++181 id = "hd-shop-new-staging"
++182 
++183 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++184 store = "default_secrets_store"
++185 store_id = "store-1"
++186 secret = "stripe_key"
++187 
++188 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++189 instance = "kb"
++190 
++191 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++192 certificate = "backend-client"
++193 certificate_id = "cert-2"
++194 
++198 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++199 namespace_id = "856287038"
++200 
++201 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++202 namespace_id = "338888791"
++203 
++206 
++207 [environments.staging.workers.shop-cart]
++208 deployed = true
++209 
++210 [environments.staging.workers.shop-cart.contracts]
++211 
++212 [environments.staging.workers.shop-cart.expects]
+-- write 21 fails
+stopped: exit 1: provisioned the queue `outbound-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "shared-feed",
++131 ]
++132 reused_queues = [
++133     "intake",
++134     "shared-feed",
++135 ]
+-127 queues = ["old-jobs"]
++140 [environments.staging.kv_instances.shop.KV_CART]
++141 id = "kv-shop-cart-staging"
++142 
++146 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++147 id = "kv-shop-cart-sessions-staging"
++148 
++149 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++150 name = "shop-archive-staging"
++151 jurisdiction = "eu"
++152 
++153 [environments.staging.r2_instances.shop.R2_FILES]
++154 name = "shop-files-staging"
++155 
++156 [environments.staging.r2_instances.shop.R2_NEW]
++157 name = "shop-new-staging"
++158 
++159 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++160 name = "shop-docs-staging"
++161 adopted = true
++162 
++163 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++164 name = "shop-new-staging"
++165 
++166 [environments.staging.d1_instances.shop.D1_NEW]
++167 name = "shop-new-staging"
++168 id = "0d1d0000-0000-4000-8000-000000000016"
++169 
++174 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++175 name = "hd-adopted-on-account"
++176 id = "hd-adopted"
++177 adopted = true
++178 
++179 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++180 name = "shop-main-staging"
++181 id = "hd-shop-main-staging"
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++184 name = "shop-new-staging"
++185 id = "hd-shop-new-staging"
++186 
++187 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++188 store = "default_secrets_store"
++189 store_id = "store-1"
++190 secret = "stripe_key"
++191 
++192 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++193 instance = "kb"
++194 
++195 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++196 certificate = "backend-client"
++197 certificate_id = "cert-2"
++198 
++202 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++203 namespace_id = "856287038"
++204 
++205 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++206 namespace_id = "338888791"
++207 
++210 
++211 [environments.staging.workers.shop-cart]
++212 deployed = true
++213 
++214 [environments.staging.workers.shop-cart.contracts]
++215 
++216 [environments.staging.workers.shop-cart.expects]
+-- write 22 fails
+stopped: exit 1: could not record the container images of `shop` in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.d1_instances.shop.D1_NEW]
++168 name = "shop-new-staging"
++169 id = "0d1d0000-0000-4000-8000-000000000016"
++170 
++175 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++176 name = "hd-adopted-on-account"
++177 id = "hd-adopted"
++178 adopted = true
++179 
++180 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++181 name = "shop-main-staging"
++182 id = "hd-shop-main-staging"
++183 
++184 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++185 name = "shop-new-staging"
++186 id = "hd-shop-new-staging"
++187 
++188 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++189 store = "default_secrets_store"
++190 store_id = "store-1"
++191 secret = "stripe_key"
++192 
++193 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++194 instance = "kb"
++195 
++196 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++197 certificate = "backend-client"
++198 certificate_id = "cert-2"
++199 
++203 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++204 namespace_id = "856287038"
++205 
++206 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++207 namespace_id = "338888791"
++208 
++211 
++212 [environments.staging.workers.shop-cart]
++213 deployed = true
++214 
++215 [environments.staging.workers.shop-cart.contracts]
++216 
++217 [environments.staging.workers.shop-cart.expects]
+-- write 23 fails
+stopped: bynk: error: deployed `shop-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
+
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop-cart]
++216 deployed = true
++217 
++218 [environments.staging.workers.shop-cart.contracts]
++219 
++220 [environments.staging.workers.shop-cart.expects]
+-- write 24 fails
+stopped: exit 1: deleted the orphaned queue `old-jobs-staging` but could not record it in <root>/bynk.deploy.lock: the disk is full
++127 queues = [
++128     "intake",
++129     "old-jobs",
++130     "outbound",
++131     "shared-feed",
++132 ]
++133 reused_queues = [
++134     "intake",
++135     "shared-feed",
++136 ]
+-127 queues = ["old-jobs"]
++141 [environments.staging.kv_instances.shop.KV_CART]
++142 id = "kv-shop-cart-staging"
++143 
++147 [environments.staging.kv_instances.shop-cart.KV_SESSIONS]
++148 id = "kv-shop-cart-sessions-staging"
++149 
++150 [environments.staging.r2_instances.shop.R2_ARCHIVE]
++151 name = "shop-archive-staging"
++152 jurisdiction = "eu"
++153 
++154 [environments.staging.r2_instances.shop.R2_FILES]
++155 name = "shop-files-staging"
++156 
++157 [environments.staging.r2_instances.shop.R2_NEW]
++158 name = "shop-new-staging"
++159 
++160 [environments.staging.vectorize_instances.shop.VECTORIZE_DOCS]
++161 name = "shop-docs-staging"
++162 adopted = true
++163 
++164 [environments.staging.vectorize_instances.shop.VECTORIZE_NEW]
++165 name = "shop-new-staging"
++166 
++167 [environments.staging.container_images.shop]
++168 Renderer = "registry.example/renderer@sha256:bbbb"
++169 
++170 [environments.staging.d1_instances.shop.D1_NEW]
++171 name = "shop-new-staging"
++172 id = "0d1d0000-0000-4000-8000-000000000016"
++173 
++178 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_ADOPTED]
++179 name = "hd-adopted-on-account"
++180 id = "hd-adopted"
++181 adopted = true
++182 
++183 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_MAIN]
++184 name = "shop-main-staging"
++185 id = "hd-shop-main-staging"
++186 
++187 [environments.staging.hyperdrive_instances.shop.HYPERDRIVE_NEW]
++188 name = "shop-new-staging"
++189 id = "hd-shop-new-staging"
++190 
++191 [environments.staging.stored_secret_links.shop.SECRET_STRIPE_KEY]
++192 store = "default_secrets_store"
++193 store_id = "store-1"
++194 secret = "stripe_key"
++195 
++196 [environments.staging.ai_search_links.shop.AI_SEARCH_KB]
++197 instance = "kb"
++198 
++199 [environments.staging.mtls_certificate_links.shop.MTLS_BACKEND]
++200 certificate = "backend-client"
++201 certificate_id = "cert-2"
++202 
++206 [environments.staging.ratelimit_instances.shop.RATELIMIT_SIGNUP]
++207 namespace_id = "856287038"
++208 
++209 [environments.staging.ratelimit_instances.shop-cart.RATELIMIT_CHECKOUT]
++210 namespace_id = "338888791"
++211 
++214 
++215 [environments.staging.workers.shop.contracts]
++216 
++217 [environments.staging.workers.shop.expects]
++218 
++219 [environments.staging.workers.shop-cart]
++220 deployed = true
++221 
++222 [environments.staging.workers.shop-cart.contracts]
++223 
++224 [environments.staging.workers.shop-cart.expects]
++225 
++226 [environments.staging.deleted_classes]
++227 shop = ["Legacy"]
++228 
++229 [environments.staging.renamed_classes.shop]
++230 Basket = "Cart"
++231 
++232 [environments.staging.agent_jurisdictions.shop]
++233 Cart = "none"
++234 
++235 [environments.staging.email_addresses]
++236 shop = ["orders@example.com"]

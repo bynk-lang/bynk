@@ -2,6 +2,7 @@
 // context auth.api
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -9,11 +10,11 @@ export type Token = string & { readonly __brand: "auth.api.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
-    if (!(value.length <= 64)) {
-      return Err({ field: "Token", message: "length must be at most 64", value });
+    if (!(__bynkCodePointLength(value) <= 64)) {
+      return Err({ field: "Token", message: "length must be at most 64", rule: { tag: "MaxLength", limit: 64 }, value });
     }
     return Ok(value as Token);
   },

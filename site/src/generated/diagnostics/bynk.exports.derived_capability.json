@@ -1,0 +1,12 @@
+{
+  "blurb": "A derived capability is an instance of a platform resource, such as a KV namespace, and its data belongs to the context that declares it. Exporting it would let another context read and write that data directly. Keep it out of `exports capability`; another context reaches the data through this context's services.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.derived_capability",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports capability { Sessions }\n\ncapability Sessions = Kv   // ✗ an instance cannot be exported\n\ncapability Sessions = Kv   // ✓ private to this context",
+  "severity": "error",
+  "summary": "`exports capability` names a derived capability, whose instance stays with its context."
+}

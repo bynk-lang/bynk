@@ -4,7 +4,7 @@
 > services. The shape of a program — its contexts, services, agents, and the types
 > that flow between them — is part of the language, not a convention layered on top.
 > Bynk compiles to typed TypeScript and targets Cloudflare Workers. It is pre-1.0
-> and evolves in small, spec-first increments (currently v0.640).
+> and evolves in small, spec-first increments (currently v0.794).
 
 This file is a self-contained primer for an LLM agent. The first half teaches
 enough Bynk to read and write it; the second half links to the canonical [Bynk
@@ -225,13 +225,13 @@ service api from http {
 }
 
 service checks from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+  on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
     Ok(())
   }
 }
 
 service worker from queue("orders") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -240,7 +240,7 @@ service worker from queue("orders") {
 - HTTP result constructors map to status codes: `Ok` (200), `Created` (201),
   `NoContent` (204), `BadRequest`, `NotFound`, `ServerError`, and more. The
   handler return type is `Effect[HttpResult[T]]`.
-- Cron has no ambient clock — the scheduled time `at` is passed in.
+- The scheduled time `at` is an `Instant`, passed in (schedules run in UTC).
 - A queue handler returns `Effect[QueueResult]`: `Ack`, or `Retry(reason)`.
 - A `websocket` service has exactly one `on open` (which must name its actor with
   `by` and transfer the connection it receives into an agent), plus `on message`
@@ -312,7 +312,7 @@ Reserved only in their own position (ordinary names elsewhere): `asset` `case`
 `const` `embed` `event` `messages` `on` `suite`.
 
 Contextual words (keywords in one place only): `advance` `by` `derives` `drop` `fixture` `key`
-`migrate` `par` `private` `removed` `replaces` `store`.
+`migrate` `par` `private` `removed` `replaces` `store` `tests`.
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 `Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`
@@ -338,12 +338,16 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 - [Install](/book/introduction/install/): build from source with a recent Rust toolchain.
 
 ### Tutorials (learn by building)
-- [1. Compile your first program](/book/tutorials/01-first-program/)
-- [2. Build a small HTTP service](/book/tutorials/02-http-service/)
-- [3. Model your data with types](/book/tutorials/03-modelling-data/)
-- [4. Make illegal states unrepresentable](/book/tutorials/04-refined-types/)
-- [5. Add a stateful agent](/book/tutorials/05-stateful-agent/)
-- [6. Test it](/book/tutorials/06-testing/)
+- [1. Compile your first program](/book/tutorials/first-program/)
+- [2. Build a small HTTP service](/book/tutorials/http-service/)
+- [3. Model your data with types](/book/tutorials/modelling-data/)
+- [4. Make illegal states unrepresentable](/book/tutorials/refined-types/)
+- [5. Handle failure with `Result`](/book/tutorials/failure-and-result/)
+- [6. Reach out with capabilities](/book/tutorials/capabilities/)
+- [7. Add a stateful agent](/book/tutorials/stateful-agent/)
+- [8. Split into contexts](/book/tutorials/contexts/)
+- [9. Test it](/book/tutorials/testing/)
+- [10. Deploy it](/book/tutorials/deploy/)
 
 ### Guides (task-focused)
 - [The type system](/book/guides/type-system/): refined/sum/opaque types, `match`, `is`, `Result`/`Option`, JSON decode.
@@ -360,25 +364,25 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 ### By Example (problem-first)
 - [Bynk by Example](/by-example/): a gallery of single-file snippets (openable in the playground) and complete example projects, each cut from the real `examples/` and verified by the compiler.
 
-### Developer documentation (toolchain)
-- [Developer Documentation](/docs/): operating the toolchain, distinct from the language reference.
-- [CLI (`bynk`)](/docs/bynk-cli/): every subcommand, its flags and exit codes.
-- [`bynk.toml` manifest](/docs/manifest/) · [Emission](/docs/emission/): project configuration and the TypeScript each construct emits.
-- [Editor & tooling](/docs/editor-and-tooling/): `bynk doctor`, the formatter, editor support, debugging.
-- [Tool reference](/docs/tooling/): `bynk-fmt`, `bynk-lsp`, `tree-sitter-bynk`, `vscode-bynk`.
-- [Crate API docs](/docs/api/): generated rustdoc for every workspace crate (contributors/embedders).
+### Tooling (Reference)
+- [Tooling](/reference/tooling/): operating the toolchain, the Tooling section of the Reference.
+- [CLI (`bynk`)](/reference/tooling/bynk-cli/): every subcommand, its flags and exit codes.
+- [`bynk.toml` manifest](/reference/tooling/manifest/) · [Emission](/reference/tooling/emission/): project configuration and the TypeScript each construct emits.
+- [Editor & tooling](/reference/tooling/editor-and-tooling/): `bynk doctor`, the formatter, editor support, debugging.
+- [Tool reference](/reference/tooling/#tool-reference): `bynk-fmt`, `bynk-lsp`, `tree-sitter-bynk`, `vscode-bynk`.
+- [Crate API docs](/reference/api/): generated rustdoc for every workspace crate (contributors/embedders).
 
 ### Reference (exact behaviour)
-- [Syntax & grammar](/book/reference/grammar/) and [complete grammar appendix](/book/reference/grammar-appendix/)
-- [Keywords](/book/reference/keywords/) · [Glossary](/book/reference/glossary/)
-- [Type system](/book/reference/types/) · [Refined-type API](/book/reference/refined-types/) · [Operators & built-ins](/book/reference/operators/)
-- [Agents](/book/reference/agents/) · [Agent invariants](/book/reference/agent-invariants/)
-- [Capabilities & providers](/book/reference/capabilities/) · [First-party `bynk` capabilities](/book/reference/bynk-capabilities/) · [Adapters](/book/reference/adapters/)
-- [HTTP](/book/reference/http/) · [Cron](/book/reference/cron/) · [Queue](/book/reference/queue/) · [WebSocket](/book/reference/websocket/) · [Actors](/book/reference/actors/)
-- [Testing](/book/reference/testing/) · [Diagnostic index](/book/reference/diagnostics/)
+- [Syntax & grammar](/reference/grammar/) and [complete grammar appendix](/reference/grammar-appendix/)
+- [Keywords](/reference/keywords/) · [Glossary](/reference/glossary/)
+- [Type system](/reference/types/) · [Refined-type API](/reference/refined-types/) · [Operators & built-ins](/reference/operators/)
+- [Agents](/reference/agents/) · [Agent invariants](/reference/agent-invariants/)
+- [Capabilities & providers](/reference/capabilities/) · [First-party `bynk` capabilities](/reference/bynk-capabilities/) · [Adapters](/reference/adapters/)
+- [HTTP](/reference/http/) · [Cron](/reference/cron/) · [Queue](/reference/queue/) · [WebSocket](/reference/websocket/) · [Actors](/reference/actors/)
+- [Testing](/reference/testing/) · [Diagnostic index](/reference/diagnostics/)
 
 ### Specification (normative)
-- [The Bynk Language Specification](/book/spec/): §1 scope, §3 lexical grammar, §4 syntactic grammar, §5 static semantics, §6 type system, §7 meaning by translation, §8 compilation model, §9 diagnostics, §10 conformance.
+- [The Bynk Language Specification](/reference/spec/): §1 scope, §3 lexical grammar, §4 syntactic grammar, §5 static semantics, §6 type system, §7 meaning by translation, §8 compilation model, §9 diagnostics, §10 conformance.
 
 ### Examples (complete projects under examples/)
 - `hello-world` (minimal multi-file), `todo` (auth + per-user agent), `orders`
@@ -389,8 +393,8 @@ Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 
 ## Optional
 
-- [Why Bynk exists](/book/about/why-bynk-exists/) and [Bynk compared to TypeScript](/book/about/bynk-compared-to-typescript/): motivation and contrasts.
-- [Versioning & roadmap](/book/about/versioning-and-roadmap/): what is shipped vs deferred to v1.
-- [Planned features (non-normative)](/book/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
-- [Diagnostic index](/book/reference/diagnostics/): every diagnostic code, each with a page saying what it means and how to fix it (`https://bynk-lang.org/d/<code>`).
-- [Contributing](/book/contributing/): compiler architecture (lex → parse → resolve → check → emit), testing, docs.
+- [Why Bynk exists](/book/introduction/what-is-bynk/#why-bynk-exists) and [Bynk compared to TypeScript](/book/concepts/about/bynk-compared-to-typescript/): motivation and contrasts.
+- [Versioning & roadmap](/project/versioning-and-roadmap/): what is shipped vs deferred to v1.
+- [Planned features (non-normative)](/reference/spec/appendix-planned/): sagas and event replay are designed but not yet implemented.
+- [Diagnostic index](/reference/diagnostics/): every diagnostic code, each with a page saying what it means and how to fix it (`https://bynk-lang.org/d/<code>`).
+- [Contributing](/project/contributing/): compiler architecture (lex → parse → resolve → check → emit), testing, docs.

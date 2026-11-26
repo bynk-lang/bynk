@@ -2,10 +2,12 @@
 // context shop.inventory
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkCmpString } from "../__bynk_runtime/compare.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
 import { __readStored, __commitStored, __bynkThen, __readsLazily } from "../__bynk_runtime/entries.js";
 import { __attachLazy } from "../__bynk_runtime/lazy.js";
+import { __scanAny } from "../__bynk_runtime/scan.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
@@ -92,11 +94,7 @@ export class Inventory {
 
   async pageById(deps: {}): globalThis.Promise<readonly Reservation[]> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => [...__q].sort((__a, __b) => {
-      const __ka = ((r: Reservation) => r.id)(__a);
-      const __kb = ((r: Reservation) => r.id)(__b);
-      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
-    }))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.reservations.values(), (__q) => [...__q].sort((__a, __b) => __bynkCmpString(((r: Reservation) => r.id)(__a), ((r: Reservation) => r.id)(__b))))))(), (__q) => __q.slice(globalThis.Math.max(0, 1)))))(), (__q) => __q.slice(0, globalThis.Math.max(0, 10)))))(), (__q) => __q);
   }
 
   async total(deps: {}): globalThis.Promise<number> {
@@ -125,7 +123,7 @@ export class Inventory {
 
   async anyBig(deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return __bynkThen(__state.reservations.values(), (__q) => __q.some((__x) => ((r: Reservation) => r.qty > 100)(__x)));
+    return __scanAny(__state.reservations.lazyValues(), (__x) => ((r: Reservation) => r.qty > 100)(__x));
   }
 
   async pending(deps: {}): globalThis.Promise<readonly Reservation[]> {

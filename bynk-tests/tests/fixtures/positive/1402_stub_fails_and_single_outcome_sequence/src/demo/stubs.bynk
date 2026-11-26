@@ -15,7 +15,7 @@ provides Vault = RealVault {
 }
 
 service box {
-  on call() -> Effect[Int] given Vault {
+  on call() -> Effect[Int] by Caller given Vault {
     let a <- Vault.open()
     let b <- Vault.peek()
     a + b

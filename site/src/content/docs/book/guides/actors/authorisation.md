@@ -35,6 +35,26 @@ service api from http {
 The two failures are distinct response channels: the runtime never answers "who
 are you" (`401`) when it means "you may not" (`403`).
 
+## Read the claims in the handler
+
+The claim predicate decides whether a request is admitted; it does not hand the handler the claims.
+For that, the binder reads the verified token's claims as a `TokenClaims`, for a `Bearer` actor and
+for a refinement of one:
+
+```bynk,fragment
+on GET("/reports") () -> Effect[HttpResult[String]] by a: Admin {
+	let tenant = a.claims.get("tenant").getOrElse("default")
+	Ok("\(a.identity) \(tenant)")
+}
+```
+
+`get(name)` reads a claim that is a JSON string (`None` for any other type, or none at all), and
+`has(name)` whether the claim is present. In a test, pass them in the principal:
+`by Admin("root", TokenClaims.of(["tenant: acme"]))`. A claim says what the token asserts, so an
+object-level check (is this report this tenant's?) stays in the handler. See
+[Reading claims](/reference/actors/#reading-claims). In an actor sum, a `Bearer` or `Oidc` arm reads them with a
+second binder, `User(u, c)`; see [Several kinds of caller](/book/guides/actors/multiple-callers/).
+
 ## The predicate vocabulary
 
 Token claims are untyped, so the `where` predicate is a closed set:
@@ -53,11 +73,24 @@ so you use an `Admin` anywhere a `User` fits.
 
 ## The rules
 
-- The **base must be a `Bearer` actor** — only a token carries claims to test.
-- The **predicate must be in the closed set** above.
-- A refinement is a handler's sole `by` contract; it is **never a sum member**
-  (use it as the whole contract, or narrow inside a
+A refinement narrows a base actor by a predicate drawn from a closed set for
+that base:
+
+| Base | Predicate | Narrows by | In a sum |
+|---|---|---|---|
+| a `Bearer` actor | `hasClaim("n")`, `claimEquals("n", "v")` | the verified token's claims | never a member |
+| `Caller` | `IsContext(a.b, …)` | the calling context | the sum's one `Internal` member |
+
+Both compose with `&&`, `||` and `!`, and a predicate from the other base is
+`bynk.actor.refinement_predicate_unsupported`. Any other base is
+`bynk.actor.refinement_base_unsupported`.
+
+- A `Bearer` refinement is a handler's sole `by` contract; it is **never a sum
+  member** (use it as the whole contract, or narrow inside a
   [resolved arm](/book/guides/actors/multiple-callers/)).
+- A refinement over `Caller` restricts which contexts may call a service. It is
+  decided at compile time against the project's calls; see
+  [Know which context called you](/book/guides/actors/cross-context-callers/#restrict-who-may-call).
 
 ## Testing it
 
@@ -73,7 +106,7 @@ case "an admin is answered" {
 Below the `system` tier the claim is given, not checked. In a `system` suite
 the signed token carries claims that satisfy the predicate, so the Worker
 admits `by Admin("root")` and answers `by User("root")` with `403`. See
-[acting as an actor](/book/reference/testing/#call-site-by).
+[acting as an actor](/reference/testing/#call-site-by).
 
-**See also:** [Reference — Actors](/book/reference/actors/),
-[Diagnostic index (`bynk.actor.refinement_*`)](/book/reference/diagnostics/).
+**See also:** [Reference — Actors](/reference/actors/),
+[Diagnostic index (`bynk.actor.refinement_*`)](/reference/diagnostics/).

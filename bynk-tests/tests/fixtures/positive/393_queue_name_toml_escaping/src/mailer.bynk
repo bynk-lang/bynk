@@ -3,14 +3,16 @@ context mailer
 // #722: a queue name used to be able to carry a quote + newline and break out
 // of the `queue = "…"` string in wrangler.toml. #2580 refuses such a name at
 // check time (see negative/2580_queue_name_injection); the TOML escaping stays
-// as defence in depth, and the cron site in `reaper` still exercises it.
+// as defence in depth. The cron site's escaping can no longer be reached from
+// source: #3873 refuses a schedule with a quote or backslash in a field (see
+// negative/393_cron_toml_injection_refused).
 type EmailJob = {
   to:      String,
   subject: String,
 }
 
 service outbox from queue("outbox") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

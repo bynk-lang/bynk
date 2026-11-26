@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.remote_unsupported_peek",
+  "constructs": [
+    "case"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A `system` case reads a participant's test database with `D1.peek`, which a run against a real runtime (`bynk test --against`) can't honour: a deployment has no in-process database."
+}

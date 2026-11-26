@@ -129,13 +129,13 @@ const CALLEE: &str = r#"context app.b
 actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
 
 service ok {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n + 1)
   }
 }
 
 service boom {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n / 0)
   }
 }
@@ -157,7 +157,7 @@ event Placed = {
 }
 
 service place {
-  on call(n: Int) -> Effect[()] given Events {
+  on call(n: Int) -> Effect[()] by Caller given Events {
     Events.emit[Placed](Placed { n: n })
   }
 }
@@ -183,7 +183,7 @@ service OnPlaced from Events(Placed) {
 /// (`client` when under none), and cut at its stack.
 const DRIVER: &str = r#"import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
-import { signedHeaders } from "./out-js/__bynk_runtime/boundary.js";
+import { signedHeaders } from "./out/out-js/__bynk_runtime/boundary.js";
 
 const grouped = process.argv[2] === "grouped";
 const KEY = "edge-key";
@@ -214,12 +214,12 @@ const dir = (c) => c.replace(".", "-");
 let Fanout;
 const entries = {};
 if (grouped) {
-  const core = await import("./out-js/workers/core/index.js");
+  const core = await import("./out/out-js/workers/core/index.js");
   for (const c of CONTEXTS) entries[c] = core.default;
   Fanout = core.__EventsFanout;
 } else {
-  for (const c of CONTEXTS) entries[c] = (await import(`./out-js/workers/${dir(c)}/index.js`)).default;
-  Fanout = (await import("./out-js/workers/app-pub/index.js")).__EventsFanout;
+  for (const c of CONTEXTS) entries[c] = (await import(`./out/out-js/workers/${dir(c)}/index.js`)).default;
+  Fanout = (await import("./out/out-js/workers/app-pub/index.js")).__EventsFanout;
 }
 
 // A Worker holds only the keys `bynk deploy` would provision for it, read from the
@@ -429,7 +429,11 @@ fn observe(topology: &Topology) -> Option<(PathBuf, Vec<Value>)> {
         topology.name,
         text(&emitted)
     );
-    fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(
+        root.join("out/out-js/package.json"),
+        "{\"type\":\"module\"}",
+    )
+    .unwrap();
     fs::write(root.join("provisioned.json"), provisioned_keys(&root)?).unwrap();
     fs::write(root.join("run.mjs"), DRIVER).unwrap();
     let ran = Command::new("node")
@@ -477,13 +481,29 @@ fn scenario<'a>(results: &'a [Value], label: &str) -> &'a Value {
 }
 
 /// The log lines written under `owner` (`client` for the caller's own).
+/// `text` without the ` trace=<32 hex digits>` a line written inside a request ends with or
+/// carries (#3895): the trace is a fresh id on every run, and what these scenarios compare is
+/// the line's own words.
+fn without_trace(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(" trace=") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + " trace=".len()..];
+        let id = after.chars().take_while(|c| c.is_ascii_hexdigit()).count();
+        rest = &after[id..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn logs_of(result: &Value, owner: &str) -> Vec<String> {
     result["logs"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|l| l["owner"] == owner)
-        .map(|l| l["text"].as_str().unwrap().to_string())
+        .map(|l| without_trace(l["text"].as_str().unwrap()))
         .collect()
 }
 
@@ -696,7 +716,13 @@ fn assert_topologies_agree(all: &[(&str, Vec<Value>)]) {
                 let mut r = r.clone();
                 r.as_object_mut().unwrap().remove("wire");
                 for line in r["logs"].as_array_mut().unwrap() {
-                    line.as_object_mut().unwrap().remove("raw");
+                    let line = line.as_object_mut().unwrap();
+                    line.remove("raw");
+                    // Each run has its own trace ids (#3895).
+                    if let Some(text) = line.get("text").and_then(|t| t.as_str()) {
+                        let plain = without_trace(text);
+                        line.insert("text".to_string(), Value::String(plain));
+                    }
                 }
                 r
             };

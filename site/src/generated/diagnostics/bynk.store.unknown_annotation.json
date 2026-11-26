@@ -1,0 +1,10 @@
+{
+  "blurb": "A `store` field takes one of five annotations: `@indexed`, `@unique`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.unknown_annotation",
+  "constructs": [],
+  "example": "store audit: Log[String] @keep(7.days)     // ✗ not a storage annotation\n\nstore audit: Log[String] @retain(7.days)   // ✓ how long a `Log` keeps entries",
+  "severity": "error",
+  "summary": "A `store` field carries an annotation outside the closed `@indexed`/`@unique`/`@ttl`/`@retain`/`@bounded` set."
+}

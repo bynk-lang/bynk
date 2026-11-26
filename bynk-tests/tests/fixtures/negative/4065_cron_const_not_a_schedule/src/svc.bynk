@@ -1,0 +1,9 @@
+context svc
+
+const Bad: String = "61 * * * *"
+
+service sweeper from cron {
+  on schedule(Bad) () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

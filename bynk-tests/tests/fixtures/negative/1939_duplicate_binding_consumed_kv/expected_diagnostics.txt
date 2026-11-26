@@ -1,3 +1,4 @@
 # At `consumes kv`, not the `bynk.cloudflare` clause the author cannot rename.
 # exact
 bynk.context.duplicate_binding	ops/hub.bynk:4:1
+bynk.queue.no_dead_letter	ops/hub.bynk:6:9

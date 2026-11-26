@@ -29,8 +29,8 @@ type Target = {
 
 ---
 Every five minutes, probe each target and record its status. `at` is the
-schedule-aligned instant in epoch-ms — cron has no ambient clock, so the time is
-handed in.
+schedule-aligned `Instant`, so it stays the same when a run starts late; the
+record stores it as epoch-ms.
 
 `targets.forEach` runs the fetch/store step once per target, in order, awaiting
 each — the loop the language could not express before (`List.forEach`, v0.146).
@@ -43,7 +43,7 @@ unit effect without a discard binder. The platform-typed `match` (over
 (from `commons status`) classifies it.
 ---
 service checks from cron {
-	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] given Fetch, Kv, Logger {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] given Fetch, Kv, Logger {
 		let targets = [
 			Target {
 				name: "example",
@@ -55,14 +55,7 @@ service checks from cron {
 			},
 		]
 		do targets.forEach((t: Target) => {
-			let res <- Fetch.send(Request {
-				method: Get,
-				url: t.url,
-				contentType: None,
-				authorization: None,
-				headers: Map.empty(),
-				body: None,
-			})
+			let res <- Fetch.send(Request { method: Get, url: t.url })
 			let code = match res {
 				Ok(r) => r.status,
 				Err(_) => 0,
@@ -71,7 +64,7 @@ service checks from cron {
 				name: t.name,
 				ok: isHealthy(code),
 				code: code,
-				at: at,
+				at: at.toEpochMillis(),
 			}
 			do Kv.put(statusKey(t.name), Json.encode(status))
 			do Logger.info("checked \(t.name): \(status.code)")

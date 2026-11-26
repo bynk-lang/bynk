@@ -2,6 +2,7 @@
 // context web.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,11 +11,11 @@ export type Token = string & { readonly __brand: "web.api.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
-    if (!(value.length <= 8)) {
-      return Err({ field: "Token", message: "length must be at most 8", value });
+    if (!(__bynkCodePointLength(value) <= 8)) {
+      return Err({ field: "Token", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Token);
   },
@@ -117,6 +118,16 @@ export function __serialise_Theme(value: Theme): __JsonValue {
 }
 
 export function __deserialise_Theme(json: __JsonValue, path: string = "$"): Result<Theme, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Light":
+        return Ok({ tag: "Light" } as Theme);
+      case "Dark":
+        return Ok({ tag: "Dark" } as Theme);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

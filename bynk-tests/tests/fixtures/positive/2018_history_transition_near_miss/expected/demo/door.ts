@@ -86,7 +86,7 @@ export function __makeDoor(key: string, env?: { DOOR?: __DurableObjectNamespace 
 }
 
 export async function __bynkDriveHistory_Door(seq: globalThis.Array<{ h: number; args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any; accepted: boolean; old: DoorState; new: DoorState; refusal?: unknown }>> {
-  __DoorRegistry.reset();
+  __DoorRegistry.reset(true);
   const __inst = __makeDoor("") as any;
   const __load = async (): globalThis.Promise<DoorState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfDoorState(); __checkStoredLayout("Door", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfDoorState(), ...__s }; __rehydrateDoorState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;
@@ -144,6 +144,16 @@ export function __serialise_Status(value: Status): __JsonValue {
 }
 
 export function __deserialise_Status(json: __JsonValue, path: string = "$"): Result<Status, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as Status);
+      case "Closed":
+        return Ok({ tag: "Closed" } as Status);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

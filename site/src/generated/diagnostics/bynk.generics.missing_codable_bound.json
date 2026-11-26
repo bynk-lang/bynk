@@ -1,0 +1,12 @@
+{
+  "blurb": "`Json.encode` and `Json.decode` work only on types that cross the JSON boundary, and a type parameter might be a function, an `Effect` or another type that does not. So a type parameter that is encoded or decoded, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, must be declared `T: Codable` (or `where A: Codable` for a receiver type's parameter), and a call must instantiate it with a type that is `Codable`. At run time the bound costs a hidden codec argument, so a refined type is still revalidated on decode. `Codable` does not imply `Eq`, so the diagnostic's fix writes `T: Eq + Codable` beside an existing `Eq`, and `bynk check --fix` applies it across a project. It is the `Json` counterpart of `bynk.generics.missing_eq_bound`, `bynk.generics.missing_ord_bound` and `bynk.generics.missing_key_bound`.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.missing_codable_bound",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "fn encode[T](v: T) -> String {\n    Json.encode(v)                  // ✗ `T` could be a function\n}\n\nfn encode[T: Codable](v: T) -> String {\n    Json.encode(v)                  // ✓ the bound is in the signature\n}",
+  "severity": "error",
+  "summary": "A type parameter is encoded or decoded with `Json.encode`/`Json.decode`, or passed to a `Codable`-bounded parameter of another generic or of a capability operation, but is not declared `Codable` (`[T: Codable]`, or `where A: Codable` for a receiver type's parameter). The diagnostic carries a machine-applicable fix that declares `Codable`, beside an existing `Eq`, which `Codable` does not imply (constrained-generics slice 3)."
+}

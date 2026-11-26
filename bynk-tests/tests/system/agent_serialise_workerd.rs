@@ -29,7 +29,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -42,18 +42,6 @@ const WRANGLER: &str = wrangler::SPEC;
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves
-/// (Rust's CreateProcess refuses batch scripts directly — BatBadBut).
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 /// Is this run required to actually reach workerd?
@@ -180,7 +168,7 @@ agent Tally {
 }
 
 service poke {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     let _ <- Tally("t").bump()
     Effect.pure(())
   }
@@ -286,14 +274,10 @@ fn a_subscriber_mutating_the_publisher_during_the_fanout_loses_no_write_on_worke
         "expected workers/ser-subscriber — context dasherisation changed?"
     );
 
-    // Its own port band, clear of the other workerd tests'. Two ports for the
-    // Workers and two for their V8 inspectors, as `events_ordering_workerd.rs`
-    // explains.
-    let base = 6_000 + 4 * (std::process::id() % 1_000) as u16;
-    let pub_port = base;
-    let sub_port = base + 1;
-    let pub_inspector_port = base + 2;
-    let sub_inspector_port = base + 3;
+    // Two ports for the Workers and two for their V8 inspectors, as
+    // `events_ordering_workerd.rs` explains.
+    let [pub_port, sub_port, pub_inspector_port, sub_inspector_port] =
+        wrangler::ports::free_ports();
 
     let pub_log = tmp.join("pub-wrangler.log");
     let sub_log = tmp.join("sub-wrangler.log");
@@ -305,8 +289,8 @@ fn a_subscriber_mutating_the_publisher_during_the_fanout_loses_no_write_on_worke
         let out_log = fs::File::create(log_path)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 // The publisher signs each event delivery to the subscriber, and
                 // the subscriber signs its call back to the publisher: a key for
                 // each edge, on both ends.

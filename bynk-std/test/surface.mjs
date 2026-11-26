@@ -160,6 +160,8 @@ async function withProcessEnv(name, value, body) {
  */
 export function surfaceSuite(name, b, rt, bynk, shape) {
   const { Some, None } = rt;
+  // #4111: a `Secret` option read back as text, for comparing with what the env held.
+  const revealed = (opt) => (opt.tag === "Some" ? Some(opt.value.reveal()) : opt);
   const t = (claim, fn) => test(`${name} ${claim}`, fn);
 
   // --- Clock -------------------------------------------------------------
@@ -286,6 +288,46 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
           assert.equal(calls[0].init.body, "payload");
         },
       );
+    });
+
+    t("FetchProvider.send: an Authorization built from a Secret goes out as Bearer or Basic, and never shows its text", async () => {
+      await withFetch(
+        () => new Response("ok", { status: 200 }),
+        async (calls) => {
+          const token = bynk.Secret.unsafe("tok-123");
+          const bearer = token.bearer();
+          // The credential is itself a secret: no string form shows its text.
+          assert.equal(String(bearer), "<secret>");
+          assert.ok(!JSON.stringify({ bearer }).includes("tok-123"));
+          const sent = await new b.FetchProvider().send(request({ authorization: Some(bearer) }));
+          assert.equal(sent.tag, "Ok");
+          assert.equal(new Headers(calls[0].init.headers).get("authorization"), "Bearer tok-123");
+
+          // RFC 7617: `Basic base64(user:password)`, here with a non-ASCII password.
+          const password = bynk.Secret.unsafe("pässword");
+          await new b.FetchProvider().send(request({ authorization: Some(password.basic("alice")) }));
+          const expected = Buffer.from("alice:pässword", "utf8").toString("base64");
+          assert.equal(new Headers(calls[1].init.headers).get("authorization"), `Basic ${expected}`);
+        },
+      );
+    });
+
+    t("FetchProvider.send: a Secret with a stray newline is InvalidHeader and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("ok", { status: 200 }),
+        async (calls) => {
+          const smuggled = bynk.Secret.unsafe("tok\r\nx-injected: 1").bearer();
+          const res = await new b.FetchProvider().send(request({ authorization: Some(smuggled) }));
+          assert.equal(res.tag, "Err");
+          assert.equal(res.error.tag, "InvalidHeader");
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
+
+    t("FetchProvider.send: a Basic user that holds a colon is refused before it reaches the header", async () => {
+      assert.throws(() => bynk.Secret.unsafe("pw").basic("a:b"), /Basic `Authorization` user/);
+      assert.throws(() => bynk.Secret.unsafe("pw").basic("a\nb"), /Basic `Authorization` user/);
     });
 
     t("FetchProvider.send: a failed request is Err(Network)", async () => {
@@ -836,17 +878,20 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     t("SecretsProvider.get: reads the explicit env before process.env", async () => {
       await withProcessEnv("BYNK_S2_SECRET", "from-process", async () => {
         const got = await new b.SecretsProvider({ BYNK_S2_SECRET: "from-env" }).get("BYNK_S2_SECRET");
-        assert.deepEqual(got, Some("from-env"));
+        assert.deepEqual(revealed(got), Some("from-env"));
+        // #4111: what the provider returns is a `Secret`, which never shows its text.
+        assert.equal(String(got.value), "<secret>");
+        assert.ok(!JSON.stringify(got).includes("from-env"));
       });
     });
 
     t("SecretsProvider.get: falls back to process.env when the env lacks the name", async () => {
       await withProcessEnv("BYNK_S2_SECRET", "from-process", async () => {
-        assert.deepEqual(await new b.SecretsProvider({}).get("BYNK_S2_SECRET"), Some("from-process"));
-        assert.deepEqual(await new b.SecretsProvider().get("BYNK_S2_SECRET"), Some("from-process"));
+        assert.deepEqual(revealed(await new b.SecretsProvider({}).get("BYNK_S2_SECRET")), Some("from-process"));
+        assert.deepEqual(revealed(await new b.SecretsProvider().get("BYNK_S2_SECRET")), Some("from-process"));
         // A non-string env value is not a secret; the lookup falls through.
         assert.deepEqual(
-          await new b.SecretsProvider({ BYNK_S2_SECRET: 42 }).get("BYNK_S2_SECRET"),
+          revealed(await new b.SecretsProvider({ BYNK_S2_SECRET: 42 }).get("BYNK_S2_SECRET")),
           Some("from-process"),
         );
       });

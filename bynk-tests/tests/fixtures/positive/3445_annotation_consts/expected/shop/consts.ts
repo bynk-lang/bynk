@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkBytesToBase64 } from "../__bynk_runtime/bytes.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreCache, __StoreLog, __fillLog, __fillMap, __wireLog, __wireMap } from "../__bynk_runtime/store.js";
@@ -18,8 +19,8 @@ export type Code = string & { readonly __brand: "shop.consts.Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}" + ")$").test(value))) {
-      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Code);
   },

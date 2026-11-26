@@ -2,6 +2,7 @@
 // context qrepro
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,8 +11,8 @@ export type ReaderId = string & { readonly __brand: "qrepro.ReaderId" };
 
 export const ReaderId = {
   of(value: string): Result<ReaderId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "ReaderId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "ReaderId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as ReaderId);
   },
@@ -25,7 +26,7 @@ export const Window = {
 };
 
 export const api = {
-  async http_GET_report(query: Window, deps: { identity: ReaderId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_report(query: Window, deps: { identity: ReaderId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`${String(query.days)} days for ${String(deps.identity)}`);
   },
 };

@@ -6,8 +6,6 @@ import { __bynkMapInsert } from "../__bynk_runtime/keys.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
-import { sort } from "../bynk/list.js";
-
 /**
  * #2766: static methods on generic types. A static's generic parameters are the type's
  * own, then its own; they come from the arguments, then the expected type, or an
@@ -48,7 +46,7 @@ export const Sorted = {
     return { items: [] };
   },
   fromList<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Sorted<T> {
-    return { items: sort(xs, __cmp_T) };
+    return { items: [...xs].sort((__a: T, __b: T) => __cmp_T(((__v: T) => __v)(__a), ((__v: T) => __v)(__b))) };
   },
   rebuilt<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Sorted<T> {
     return Sorted.fromList(xs, __cmp_T);
@@ -86,12 +84,12 @@ export const Packed = {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __codec_T.decode(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as T);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(w.json);
   },
 };

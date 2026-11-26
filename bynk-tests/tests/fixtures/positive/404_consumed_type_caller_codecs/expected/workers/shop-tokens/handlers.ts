@@ -2,6 +2,7 @@
 // context shop.tokens
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -16,8 +17,8 @@ export type Token = string & { readonly __brand: "shop.tokens.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Token);
   },
@@ -31,10 +32,10 @@ export type Score = number & { readonly __brand: "shop.tokens.Score" };
 export const Score = {
   of(value: number): Result<Score, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Score", message: "must be a safe integer", value });
+      return Err({ field: "Score", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 100)) {
-      return Err({ field: "Score", message: "must be in range [0, 100]", value });
+      return Err({ field: "Score", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Score);
   },
@@ -141,6 +142,16 @@ export function __serialise_TokenError(value: TokenError): __JsonValue {
 }
 
 export function __deserialise_TokenError(json: __JsonValue, path: string = "$"): Result<TokenError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Denied":
+        return Ok({ tag: "Denied" } as TokenError);
+      case "Expired":
+        return Ok({ tag: "Expired" } as TokenError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

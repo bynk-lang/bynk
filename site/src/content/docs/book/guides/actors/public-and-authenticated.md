@@ -86,7 +86,7 @@ suite api.activity as system {
 only the signature or the `exp` is wrong. If the seam ever admitted one, the
 call would read as `Handled(_)` and the case would fail. They are `system`-tier
 only: below it the seam is skipped. See
-[the failure principals](/book/reference/testing/#failure-principals) for the
+[the failure principals](/reference/testing/#failure-principals) for the
 full table.
 
 ## Verify a token without capturing the identity
@@ -112,7 +112,7 @@ The token is still verified fail-closed; no identity is minted.
 ## Call a Bearer route by hand
 
 To try a `Bearer` route with `curl`, or smoke-test a deployment, mint a token for
-the actor with [`bynk token`](/docs/bynk-cli/#bynk-token). It signs with the
+the actor with [`bynk token`](/reference/tooling/bynk-cli/#bynk-token). It signs with the
 secret the actor names, read from the environment, so you never write a signing
 script that could drift from the actor:
 

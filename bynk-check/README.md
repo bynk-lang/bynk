@@ -39,16 +39,15 @@ It holds:
 `bynk-check` is the layer between the syntax leaf and everything that emits or
 analyses; besides [`bynk-syntax`](https://crates.io/crates/bynk-syntax) it
 depends only on [`bynk-project`](https://crates.io/crates/bynk-project) (the
-project model), [`bynk-std`](https://crates.io/crates/bynk-std) (the
-first-party sources, as data) and [`bynk-ts`](https://crates.io/crates/bynk-ts)
-(the one TypeScript string escaper):
+project model) and [`bynk-std`](https://crates.io/crates/bynk-std) (the
+first-party sources, as data); it writes no TypeScript:
 
 ```text
 bynk-syntax                lexer, parser, AST, CompileError, diagnostic codes
 ├── bynk-project           project model: discovery, unit graph, paths
 ├── bynk-ts                the TypeScript tree and its printer
 ├── bynk-fmt               the formatter
-└── bynk-check             name resolution and type checking   + project, std, ts
+└── bynk-check             name resolution and type checking   + project, std
     ├── bynk-model         the system model and its builder
     ├── bynk-emit          TS emission from a checked program + ts, model, project
     │   └── bynk-driver    shared CLI command bodies, build sequencing + fmt, project, ts, model, strip
@@ -73,8 +72,8 @@ directly.
 
 ```toml
 [dependencies]
-bynk-check = "0.640"
-bynk-syntax = "0.640"
+bynk-check = "0.794"
+bynk-syntax = "0.794"
 ```
 
 ```rust

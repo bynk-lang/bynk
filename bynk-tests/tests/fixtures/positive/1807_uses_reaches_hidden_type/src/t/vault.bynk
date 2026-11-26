@@ -9,7 +9,7 @@ type Code = Int where NonNegative
 type Ticket = { repo: Repo, code: Code }
 
 service fetch {
-  on call() -> Effect[Ticket] {
+  on call() -> Effect[Ticket] by Caller {
     Effect.pure(Ticket { repo: "vault", code: 7 })
   }
 }

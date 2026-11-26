@@ -1,0 +1,13 @@
+context shop.stock
+
+service reserve {
+  on call(sku: String) -> Effect[Result[(), String]] by Caller {
+    Effect.pure(Ok(()))
+  }
+}
+
+service release {
+  on call(sku: String) -> Effect[Result[(), String]] by Caller {
+    Effect.pure(Ok(()))
+  }
+}

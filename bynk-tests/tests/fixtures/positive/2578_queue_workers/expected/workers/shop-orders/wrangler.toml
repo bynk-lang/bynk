@@ -2,7 +2,7 @@
 name = "shop-orders"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[queues.producers]]
 binding = "QUEUE_AUDIT"
@@ -15,4 +15,8 @@ queue = "order-events"
 [[queues.consumers]]
 queue = "order-events"
 max_batch_size = 10
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

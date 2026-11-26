@@ -11,8 +11,9 @@ validated as for [a form](/book/guides/entry-points/accept-a-form/). `File` is a
 
 ## Declare the limits and the route
 
-A multipart route **must** bound its upload: a `@limit(maxBody: …)` on the handler, or a
-`limits { maxBody: … }` on the service, is required (`bynk.http.multipart_body_unbounded`).
+A multipart route is capped like every body-taking route, at 1 MiB unless you say otherwise.
+Uploads are usually larger, so raise it deliberately: a `@limit(maxBody: …)` on the handler, or
+a `limits { maxBody: … }` on the service. A `413` tells the client the cap and how to raise it.
 
 ```bynk,fragment
 consumes bynk { File }
@@ -63,5 +64,5 @@ suite upload.api as system {
 }
 ```
 
-**See also:** [Reference: multipart bodies](/book/reference/http/#multipart-bodies),
-[the `File` type](/book/reference/types/#file).
+**See also:** [Reference: multipart bodies](/reference/http/#multipart-bodies),
+[the `File` type](/reference/types/#file).

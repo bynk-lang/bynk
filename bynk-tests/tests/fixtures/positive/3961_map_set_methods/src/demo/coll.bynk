@@ -1,0 +1,30 @@
+---
+#3961: the `Map` and `Set` methods that bring them level with `List`.
+---
+commons demo.coll
+
+type Region = { zone: String, n: Int }
+
+fn region(zone: String, n: Int) -> Region {
+	Region { zone, n }
+}
+
+fn withoutExpired(sessions: Map[String, Int], now: Int) -> Map[String, Int] {
+	sessions.filter((id, expires) => expires > now)
+}
+
+fn tagsOf(posts: List[List[String]]) -> Set[String] {
+	let none: Set[String] = Set.empty()
+	posts.fold(none, (acc, tags) => acc.union(Set.of(tags)))
+}
+
+fn regionsByZone() -> Map[Region, Int] {
+	let none: Map[Region, Int] = Map.empty()
+	let first = none.insert(region("eu", 1), 10).insert(region("us", 2), 20)
+	let later = none.insert(region("eu", 1), 30)
+	Map.of(first.entries().concat(later.entries()))
+}
+
+fn base() -> Map[String, Int] {
+	Map.empty()
+}

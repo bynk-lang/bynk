@@ -1,0 +1,10 @@
+{
+  "blurb": "`scope` says who may store a cached response: `private` means the user's own browser only, and `public` also lets a shared cache, such as a CDN, keep it. Those are the only two values, written bare rather than as strings, so `shared` or `\"public\"` is refused. Choose one, or omit `scope` for `private`. Use `public` only for a response that is the same for everyone: `bynk.http.cache_public_reads_cookies`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_bad_scope",
+  "constructs": [],
+  "example": "@cache(maxAge: 5.minutes, scope: shared)   // ✗ `public` or `private`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: public)   // ✓",
+  "severity": "error",
+  "summary": "A `@cache` annotation's `scope` is not `public` or `private`."
+}

@@ -59,7 +59,7 @@ matches.
 
 ```bynk,fragment
 service find {
-	on call(id: String) -> Effect[Result[Option[Activity], SqlReadError]] given Deliveries {
+	on call(id: String) -> Effect[Result[Option[Activity], SqlReadError]] by Caller given Deliveries {
 		Deliveries.firstAs[Activity]("FROM deliveries WHERE id = ?1", [Text(id)])
 	}
 }
@@ -82,5 +82,5 @@ fn describe(rows: Result[List[Activity], SqlReadError]) -> String {
 }
 ```
 
-**See also:** [Reference, SQL databases: `D1`](/book/reference/bynk-capabilities/#sql-databases-d1),
+**See also:** [Reference, SQL databases: `D1`](/reference/bynk-capabilities/#sql-databases-d1),
 [Apply webhook events that arrive late, twice or out of order](/book/guides/effects-and-capabilities/apply-webhook-events-out-of-order/).

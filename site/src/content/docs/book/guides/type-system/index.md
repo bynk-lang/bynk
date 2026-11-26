@@ -5,9 +5,9 @@ Bynk makes illegal states unrepresentable: refined and opaque types, sums and
 records, and `Result`/`Option` errors-as-values, all checked before emission.
 
 **Understand**
-- [The type-system philosophy](/book/guides/type-system/philosophy/)
-- [The refined-literal admission model](/book/guides/type-system/refined-literal-admission/)
-- [Recursion and iteration](/book/guides/type-system/recursion-and-iteration/)
+- [The type-system philosophy](/book/concepts/type-system/philosophy/)
+- [The refined-literal admission model](/book/concepts/type-system/refined-literal-admission/)
+- [Recursion and iteration](/book/concepts/type-system/recursion-and-iteration/)
 - [Choosing `Int`, `Float` or `Decimal`](/book/guides/type-system/handle-money-correctly/#choosing-int-float-or-decimal)
 
 **Do**
@@ -27,10 +27,12 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Declare `Eq` on a generic that compares](/book/guides/type-system/declare-eq-bounds/)
 - [Recursive generic types](/book/guides/type-system/recursive-generic-types/)
 - [Handle money correctly](/book/guides/type-system/handle-money-correctly/)
-- [Understand ordering your own types](/book/guides/type-system/ordering-your-own-types/)
+- [Rename a field safely](/book/guides/type-system/rename-a-field-safely/)
+- [Decode a third-party webhook into typed values](/book/guides/type-system/decode-a-third-party-webhook/)
+- [Understand ordering your own types](/book/concepts/type-system/ordering-your-own-types/)
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)
 - [Constructors for generic types](/book/guides/type-system/constructors-for-generic-types/)
 
-**See also:** [Reference — Type system](/book/reference/types/),
-[Refined-type API](/book/reference/refined-types/),
-[Spec §6 — The type system](/book/spec/type-system/).
+**See also:** [Reference — Type system](/reference/types/),
+[Refined-type API](/reference/refined-types/),
+[Spec §6 — The type system](/reference/spec/type-system/).

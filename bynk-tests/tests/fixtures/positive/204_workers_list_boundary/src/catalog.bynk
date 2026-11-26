@@ -7,7 +7,7 @@ type Order = {
 }
 
 service orders {
-  on call(ids: List[String]) -> Effect[Result[List[Order], ()]] {
+  on call(ids: List[String]) -> Effect[Result[List[Order], ()]] by Caller {
     let none: Map[String, Int] = Map.empty()
     Ok([Order { id: "a", total: 1, tags: none }, Order { id: "b", total: 2, tags: none }])
   }

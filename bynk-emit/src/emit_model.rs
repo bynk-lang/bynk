@@ -25,7 +25,6 @@ use bynk_model::lower_provider_given_ir;
 use bynk_project::discovery::*;
 use bynk_project::paths::*;
 use bynk_project::{AttributedError, UnitKind};
-use bynk_ts::{TsBindingName, TsExpr, TsLit, TsStmt};
 /// A project's output, as a keyed set of typed documents (R7.8, #1309) —
 /// replaces the old `ProjectOutput.files: Vec<CompiledFile>` outright, not
 /// alongside it ("Done when": `CompiledFile`/`ProjectOutput::files` are
@@ -329,6 +328,25 @@ pub struct ProjectOutput {
     /// `service`s, described from the checker's resolved types, in unit then
     /// service order. Empty for a project with none.
     pub entry_handlers: Vec<bynk_model::entry::EntryHandler>,
+    /// 1C.3a (#4040): what a Workers build decided about its Workers'
+    /// bindings, for the commands that act on them to read instead of reading
+    /// them back out of the files the build wrote. `None` for a Bundle build,
+    /// which has no Workers.
+    pub workers: Option<WorkersBuild>,
+}
+
+/// 1C.3a (#4040): the binding model of a Workers build, with what the model
+/// is read against. `bindings` is the one [`WorkerBindings`] the build's
+/// `wrangler.toml` files were rendered from, so a reader of it sees exactly the
+/// bindings written.
+///
+/// [`WorkerBindings`]: crate::emitter::WorkerBindings
+#[derive(Debug, Clone)]
+pub struct WorkersBuild {
+    /// Every Worker's bindings.
+    pub bindings: crate::emitter::WorkerBindings,
+    /// Where each context's Worker is, and what it is called.
+    pub layout: bynk_project::worker_layout::WorkerLayout,
 }
 
 /// v0.67: a discovered test suite — one `test <target>` group (unit) or
@@ -621,6 +639,22 @@ pub fn instantiate_provider_ts_expr(
             args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
                 inst.binding.clone(),
             )));
+            // #3899: a producer whose queue has a signed consumer admitting this context signs
+            // what it sends: the sender, the consumer's context (whose edge key signs) and the
+            // queue's name (which the signature covers).
+            if inst.base_cap == "Queue"
+                && matches!(namespaces, ProviderNamespaces::Workers { .. })
+                && let Some(queue) = inst.queue()
+                && let Some(consumer) = bynk_check::queue_producers::signed_consumer_of(
+                    queue,
+                    provider_ctx,
+                    unit_tables,
+                )
+            {
+                for text in [provider_ctx, consumer.as_str(), queue] {
+                    args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text.to_string())));
+                }
+            }
         } else if !(matches!(expr, bynk_ts::TsExpr::As { .. })
             && matches!(namespaces, ProviderNamespaces::Test { .. }))
         {
@@ -890,7 +924,8 @@ fn first_party_of(cap: &str, provider_ctx: &str) -> Option<FirstPartyCap> {
 }
 
 /// W30 (#2840): does any body in this unit call the first-party `Idempotency`
-/// (`claim`, `dedup` or `remember`)? A Worker that does declares the implicit
+/// (`claim`, `dedup` or `remember`), or (#3899) does it have a queue consumer that admits only
+/// signed messages, whose entry claims each message id? A Worker that does declares the implicit
 /// database that holds its claims and remembered values. The checker resolved each call's
 /// first-party identity (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
 /// `bynk` capability), so a same-named capability from another unit does not
@@ -899,6 +934,14 @@ pub fn unit_table_uses_idempotency(
     table: &UnitTable,
     callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
 ) -> bool {
+    let signed_consumer = table.services.values().any(|s| {
+        s.handlers.iter().any(|h| {
+            bynk_check::actors::queue_admission_for(h, &s.protocol, &table.actors).is_some()
+        })
+    });
+    if signed_consumer {
+        return true;
+    }
     let Some(callees) = callees else {
         return false;
     };
@@ -924,42 +967,6 @@ pub fn unit_table_uses_idempotency(
         }
     });
     found
-}
-
-// -- Small tree-construction helpers (#1327) ------------------------------
-//
-// Mirrors `workers.rs`'s/`workers_entry.rs`'s/`tests_emit.rs`'s own local
-// helper sets (#1321/#1323/#1325) — this file's own private set, not
-// shared, matching this track's own established per-file scoping.
-
-pub fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-pub fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-pub fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
-
-pub fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-pub fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-pub fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
 }
 
 /// Context passed to the emitter so it can resolve cross-file and
@@ -1023,6 +1030,11 @@ pub enum ExtraImport {
         from: String,
         type_only: bool,
     },
+    /// #4045: the qualifier a `uses` clause introduces, so `Y.Status` and
+    /// `Y.describe(x)` (or `lib.y.Status` by the full commons name) read as written
+    /// in TypeScript. `qualifier` is `Y` or `lib.y`: the first imports the module as
+    /// a namespace, the second also declares `namespace lib { export import y = … }`.
+    Qualifier { qualifier: String, from: String },
 }
 
 pub struct EmitProjectCtx {
@@ -1115,6 +1127,9 @@ pub struct EmitProjectCtx {
     /// v0.115 (testing track slice 3): emit the function-contract call-site guard
     /// (dev/test profile). Stripped in the deploy build for zero runtime cost.
     pub contracts: bool,
+    /// #3945: `bynk test` only (`CompileOptions::typed_capability_calls`): a call to a generic
+    /// capability operation passes its type arguments' identity as a trailing argument.
+    pub typed_capability_calls: bool,
     /// #3580: `Some` emits the per-request trace recording (`bynk dev
     /// --trace-events`): the cross-context, agent and capability sites wrapped in
     /// `__traceStep`, and the Worker's `fetch` in `__traceFetch`. Never set by a
@@ -1259,6 +1274,29 @@ pub struct RemoteSkip {
     pub code: String,
     /// The reason, as the refusal would have worded it.
     pub reason: String,
+}
+
+/// #2138: how a remote test build treats a `system` case it can't run
+/// against a real runtime (`CompileOptions::remote_tests` in the driver).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RemoteTests {
+    /// `--skip-unsupported`: skip such a case, recording why
+    /// ([`DiscoveredSuite::skipped`]), instead of refusing it.
+    pub skip_unsupported: bool,
+    /// The named target's declared `vars`, which each case's `env` must agree
+    /// with (`bynk_check::test_env::remote_env_disagreement`).
+    pub vars: BTreeMap<String, String>,
+    /// The names of the named target's secrets, which a case's `env` may not
+    /// set.
+    pub secrets: Vec<String>,
+    /// `--against dev`: the runner starts the Workers itself and applies each
+    /// case's `env` to them, so `env` is not checked against `vars`; each
+    /// suite instead reports the distinct `env` maps its cases run with
+    /// ([`DiscoveredSuite::envs`]), one `bynk dev` per map.
+    pub dev: bool,
+    /// Under `dev`, build only the cases whose `env` is exactly this map: the
+    /// group one `bynk dev` serves.
+    pub only_env: Option<BTreeMap<String, String>>,
 }
 
 /// `<name>.<suffix>`, matching `bynk-driver::output.rs`'s own sibling-name

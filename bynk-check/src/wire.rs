@@ -14,9 +14,9 @@
 //! `TypeRef`, `Expr`, `TypeDecl` (all `bynk-syntax`) — the vocabulary a
 //! boundary type is built from. It is **not** legal for any TS-token string,
 //! `pred_condition_and_message` (`bynk-emit/src/emitter.rs`, stays put),
-//! `lower_field_default_wire` (`bynk-emit/src/emitter/serialisation.rs`,
-//! stays put — a default's *wire literal* is a rendering, not a boundary
-//! fact), or the `Qual` type-name→TS-namespace-prefix map (`bynk-emit`'s
+//! `wire_default_node` (`bynk-emit/src/emitter/default_value.rs`, stays
+//! put — a default's *wire literal* is a rendering, not a boundary fact),
+//! or the `Qual` type-name→TS-namespace-prefix map (`bynk-emit`'s
 //! `serialisation.rs`; see the [`Provenance`] doc for why it cannot move
 //! here). `bynk-emit` renders this IR into TypeScript; it does not re-derive
 //! it.
@@ -215,28 +215,37 @@ pub struct WireScalar {
 /// JSON key order).
 #[derive(Debug, Clone)]
 pub struct WireField {
+    /// The field's Bynk name: the property of the in-memory value, and what every Bynk-side
+    /// reference uses.
     pub name: String,
+    /// #3975: the key the field has on the wire, its `@name` or else its own name. The JSON key
+    /// a codec reads and writes, in OpenAPI and in the generated client.
+    pub key: String,
     pub shape: WireRef,
     /// The JSON path segment this field contributes to a validation error's
-    /// `path` (`` `${path}.<segment>` ``) — equal to `name` today; kept
-    /// distinct because a future field-rename annotation would move the wire
-    /// key without moving the path segment a hover/error should still name.
+    /// `path` (`` `${path}.<segment>` ``): the wire key, so an error names the key the
+    /// sender wrote (`$.amount_captured`).
     pub path_segment: String,
     /// The field's default initialiser, if any, carried as raw AST — its
-    /// *wire-JSON literal* rendering is `lower_field_default_wire`
-    /// (`bynk-emit`), which stays in `bynk-emit` per the module doc: a
-    /// default's lowered literal is a rendering, not a boundary fact.
+    /// *wire-JSON literal* rendering is `wire_default_node` (`bynk-emit`,
+    /// over `field_default_value`'s tree), which stays in `bynk-emit` per the
+    /// module doc: a default's lowered literal is a rendering, not a boundary
+    /// fact.
     pub default: Option<(Expr, TypeRef)>,
     /// #1969: the field's inline refinement (`qty: Int where Positive`), in
     /// declaration order, checked on decode after the field's own codec. Empty
     /// for an unrefined field and for every sum-variant payload field (the
     /// grammar gives those no `where`).
     pub predicates: Vec<PredKind>,
+    /// #3793: the key this field was renamed from (`new: T replaces old`), read on input when
+    /// the field's own key is absent. Empty for a field never renamed and for every sum-variant
+    /// payload field. The value is written under `key` only.
+    pub renamed_from: Vec<String>,
 }
 
 /// #1969: the JSON key a sum value's variant name travels under (`{"kind":
-/// "Circle", …}`). Part of the published wire format, version 1
-/// ([`crate::wire_format`]); the in-memory discriminant is `tag`.
+/// "Circle", …}`) when the sum declares no `@discriminator`. Part of the published wire format,
+/// version 1 ([`crate::wire_format`]); the in-memory discriminant is `tag`.
 pub const WIRE_DISCRIMINANT: &str = "kind";
 
 /// A boundary sum type. The wire and in-memory discriminants are carried
@@ -246,8 +255,9 @@ pub const WIRE_DISCRIMINANT: &str = "kind";
 /// alone is a one-field change if a reviewer objects.
 #[derive(Debug, Clone)]
 pub struct WireSum {
-    /// Always [`WIRE_DISCRIMINANT`].
-    pub wire_discriminant: &'static str,
+    /// The JSON key the variant's name travels under: the sum's `@discriminator` (#3975), else
+    /// [`WIRE_DISCRIMINANT`].
+    pub wire_discriminant: String,
     pub memory_discriminant: &'static str,
     pub variants: Vec<WireVariant>,
 }
@@ -256,7 +266,11 @@ pub struct WireSum {
 /// `switch` arm order).
 #[derive(Debug, Clone)]
 pub struct WireVariant {
+    /// The variant's Bynk name, which the in-memory value's tag carries.
     pub name: String,
+    /// #3975: the value the discriminator takes on the wire, the variant's `@name` or else its
+    /// own name.
+    pub wire_name: String,
     pub payload: Vec<WireField>,
 }
 
@@ -504,7 +518,12 @@ fn collect_type_names(
         }
         TypeRef::Option(a, _) => collect_type_names(a, stack, types, recursive),
         TypeRef::Effect(a, _) => collect_type_names(a, stack, types, recursive),
-        TypeRef::HttpResult(a, _) => collect_type_names(a, stack, types, recursive),
+        TypeRef::HttpResult(a, e, _) => {
+            collect_type_names(a, stack, types, recursive);
+            if let Some(e) = e {
+                collect_type_names(e, stack, types, recursive);
+            }
+        }
         // v0.20b: collections serialise element-/entry-wise; their inner
         // named types need helpers.
         TypeRef::List(a, _) | TypeRef::Set(a, _) => collect_type_names(a, stack, types, recursive),
@@ -530,7 +549,7 @@ fn collect_type_names(
 /// each type-parameter name with the concrete argument type-ref — so a
 /// per-instantiation codec sees fully concrete field types.
 /// `Paginated[User]`'s `items: List[T]` becomes `items: List[User]`.
-fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
+pub fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
     match t {
         TypeRef::Named(id) => match subst.get(&id.name) {
             Some(replacement) => replacement.clone(),
@@ -548,7 +567,11 @@ fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
         ),
         TypeRef::Option(a, s) => TypeRef::Option(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(subst_type_ref(a, subst)), *s),
-        TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(subst_type_ref(a, subst)), *s),
+        TypeRef::HttpResult(a, e, s) => TypeRef::HttpResult(
+            Box::new(subst_type_ref(a, subst)),
+            e.as_ref().map(|e| Box::new(subst_type_ref(e, subst))),
+            *s,
+        ),
         TypeRef::List(a, s) => TypeRef::List(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Set(a, s) => TypeRef::Set(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
@@ -610,7 +633,11 @@ pub fn rename_type_ref(t: &TypeRef, renames: &HashMap<String, String>) -> TypeRe
         ),
         TypeRef::Option(a, s) => TypeRef::Option(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(rename_type_ref(a, renames)), *s),
-        TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(rename_type_ref(a, renames)), *s),
+        TypeRef::HttpResult(a, e, s) => TypeRef::HttpResult(
+            Box::new(rename_type_ref(a, renames)),
+            e.as_ref().map(|e| Box::new(rename_type_ref(e, renames))),
+            *s,
+        ),
         TypeRef::List(a, s) => TypeRef::List(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Set(a, s) => TypeRef::Set(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
@@ -717,7 +744,7 @@ pub fn sum_inst_variants(
 /// `Pair[User, String]` → `Pair_User_String`. #593: shared with generic sums.
 /// Renamed from `app_ts_name` in the move from `bynk-emit`.
 pub fn inst_codec_suffix(name: &str, args: &[TypeRef]) -> String {
-    let mut s = name.to_string();
+    let mut s = crate::emitted_names::codec_key(name);
     for a in args {
         s.push('_');
         s.push_str(&codec_suffix(a));
@@ -745,11 +772,11 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         // v0.174 (#592): the codec suffix for a generic-record instantiation —
         // `Paginated[User]` → `Paginated_User`.
         TypeRef::App { name, args, .. } => inst_codec_suffix(&name.name, args),
-        TypeRef::Named(id) => id.name.clone(),
+        TypeRef::Named(id) => crate::emitted_names::codec_key(&id.name),
         TypeRef::Result(a, b, _) => format!("Result_{}_{}", codec_suffix(a), codec_suffix(b)),
         TypeRef::Option(a, _) => format!("Option_{}", codec_suffix(a)),
         TypeRef::Effect(a, _) => format!("Effect_{}", codec_suffix(a)),
-        TypeRef::HttpResult(a, _) => format!("HttpResult_{}", codec_suffix(a)),
+        TypeRef::HttpResult(a, _, _) => format!("HttpResult_{}", codec_suffix(a)),
         TypeRef::List(a, _) => format!("List_{}", codec_suffix(a)),
         TypeRef::Set(a, _) => format!("Set_{}", codec_suffix(a)),
         TypeRef::Map(k, v, _) => format!("Map_{}_{}", codec_suffix(k), codec_suffix(v)),
@@ -905,7 +932,7 @@ fn has_codec(t: &TypeRef) -> bool {
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _) => encodable(a),
+            | TypeRef::HttpResult(a, _, _) => encodable(a),
             TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => encodable(a) && encodable(b),
             TypeRef::App { args, .. } => args.iter().all(encodable),
             _ => true,
@@ -1317,7 +1344,12 @@ fn walk_generic_inst(
             walk_generic_inst(a, out, seen, types, recursive);
         }
         TypeRef::Effect(a, _) => walk_generic_inst(a, out, seen, types, recursive),
-        TypeRef::HttpResult(a, _) => walk_generic_inst(a, out, seen, types, recursive),
+        TypeRef::HttpResult(a, e, _) => {
+            walk_generic_inst(a, out, seen, types, recursive);
+            if let Some(e) = e {
+                walk_generic_inst(e, out, seen, types, recursive);
+            }
+        }
         TypeRef::List(a, _) => {
             let inst = WireInst::ListInst {
                 elem: (**a).clone(),
@@ -1493,12 +1525,19 @@ fn wire_fields(fields: &[RecordField], types: &HashMap<String, Arc<TypeDecl>>) -
         .iter()
         .map(|f| WireField {
             name: f.name.name.clone(),
+            key: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             shape: wire_ref(&f.type_ref, types),
-            path_segment: f.name.name.clone(),
+            path_segment: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             default: f.init.as_ref().map(|e| (e.clone(), f.type_ref.clone())),
             predicates: field_predicates(f),
+            renamed_from: field_renamed_from(f),
         })
         .collect()
+}
+
+/// #3793: the key a record field was renamed from, if it declares `replaces`.
+pub fn field_renamed_from(f: &RecordField) -> Vec<String> {
+    f.replaces.iter().map(|old| old.name.clone()).collect()
 }
 
 /// #1969: a record field's inline refinement predicates, in declaration order
@@ -1512,26 +1551,33 @@ pub fn field_predicates(f: &RecordField) -> Vec<PredKind> {
         .unwrap_or_default()
 }
 
-fn wire_sum(body: &SumBody, types: &HashMap<String, Arc<TypeDecl>>) -> WireSum {
+fn wire_sum(
+    body: &SumBody,
+    discriminator: Option<String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> WireSum {
     WireSum {
-        wire_discriminant: WIRE_DISCRIMINANT,
+        wire_discriminant: discriminator.unwrap_or_else(|| WIRE_DISCRIMINANT.to_string()),
         memory_discriminant: "tag",
         variants: body
             .variants
             .iter()
             .map(|v| WireVariant {
                 name: v.name.name.clone(),
+                wire_name: v.wire_name().unwrap_or_else(|| v.name.name.clone()),
                 payload: v
                     .payload
                     .iter()
                     .map(|f| WireField {
                         name: f.name.name.clone(),
+                        key: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                         shape: wire_ref(&f.type_ref, types),
-                        path_segment: f.name.name.clone(),
+                        path_segment: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                         // Sum-variant payload fields carry no default in the
                         // surface grammar (`VariantField` has no `init`).
                         default: None,
                         predicates: Vec::new(),
+                        renamed_from: Vec::new(),
                     })
                     .collect(),
             })
@@ -1601,7 +1647,7 @@ pub fn wire_type(
         TypeBody::Record(r) => WireBody::Record {
             fields: wire_fields(&r.fields, types),
         },
-        TypeBody::Sum(s) => WireBody::Sum(wire_sum(s, types)),
+        TypeBody::Sum(s) => WireBody::Sum(wire_sum(s, decl.discriminator(), types)),
     };
     Some(WireType {
         name: name.to_string(),
@@ -1737,7 +1783,7 @@ type ClientId = String where NonEmpty
 type Rate = { count: Int, limit: Int }
 
 service Api {
-  on call(client: ClientId) -> Effect[Rate] {
+  on call(client: ClientId) -> Effect[Rate] by Caller {
     client
   }
 }
@@ -1757,7 +1803,7 @@ type Used = String where NonEmpty
 type Unused = { n: Int }
 
 service Api {
-  on call(x: Used) -> Effect[Used] {
+  on call(x: Used) -> Effect[Used] by Caller {
     x
   }
 }
@@ -1894,7 +1940,7 @@ type Profile = { id: ClientId, home: Address }
 type Unrelated = { n: Int }
 
 service Api {
-  on call(client: ClientId) -> Effect[Profile] {
+  on call(client: ClientId) -> Effect[Profile] by Caller {
     Profile { id: client, home: Address { street: "x", city: "y" } }
   }
 }
@@ -2039,7 +2085,7 @@ service Api {
         ));
         assert!(matches!(
             wire_ref(
-                &TypeRef::HttpResult(Box::new(base(BaseType::Int)), sp()),
+                &TypeRef::HttpResult(Box::new(base(BaseType::Int)), None, sp()),
                 &types
             ),
             WireRef::Unchecked {

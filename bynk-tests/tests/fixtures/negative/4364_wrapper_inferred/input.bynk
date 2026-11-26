@@ -1,0 +1,12 @@
+commons demo.wrapperinferred
+
+type Wrap[T] = { v: Effect[T] }
+
+fn make[T](x: T) -> Wrap[T] {
+	unreachable("a signature only")
+}
+
+fn use(e: Effect[Int]) -> Int {
+	let w = make(e)
+	0
+}

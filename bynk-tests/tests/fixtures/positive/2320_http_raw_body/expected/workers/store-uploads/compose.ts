@@ -3,14 +3,14 @@
 
 import { __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256, __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __verifySignatureHmacSha256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_PUT_api_Param_org_Param_package(org: string, __id_package: string, body: globalThis.Uint8Array) {
       return handlers.uploads.http_PUT_api_Param_org_Param_package(org, __id_package, body, deps);
@@ -28,7 +28,7 @@ export function compose(env: Env) {
       } catch {
         return HttpResult.BadRequest("Invalid request body");
       }
-      if (__bytes === undefined) return HttpResult.PayloadTooLarge("request body exceeds 64 bytes");
+      if (__bytes === undefined) return HttpResult.PayloadTooLarge("request body exceeds 64 bytes; `@limit(maxBody: …)` raises it");
       let __who: any = undefined;
       if (__who === undefined) {
         const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
@@ -46,7 +46,7 @@ export function compose(env: Env) {
             const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
             if (__claims.tag === "Ok") {
               const __id = handlers.UserId.of(__claims.value.sub);
-              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
             }
           }
         }

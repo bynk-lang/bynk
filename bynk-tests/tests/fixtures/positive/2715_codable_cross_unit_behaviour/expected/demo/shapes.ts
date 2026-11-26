@@ -2,6 +2,7 @@
 // commons demo.shapes
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
@@ -31,8 +32,8 @@ export type Slug = string & { readonly __brand: "Slug" };
 
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
-    if (!(value.length >= 2)) {
-      return Err({ field: "Slug", message: "length must be at least 2", value });
+    if (!(__bynkCodePointLength(value) >= 2)) {
+      return Err({ field: "Slug", message: "length must be at least 2", rule: { tag: "MinLength", limit: 2 }, value });
     }
     return Ok(value as Slug);
   },

@@ -7,7 +7,7 @@ consumes shop.wraps
 consumes shop.depot
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.quotes.quote()
     let taken <- shop.quotes.take(b)
     let p <- shop.wraps.wrap()

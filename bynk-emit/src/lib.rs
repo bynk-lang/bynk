@@ -12,6 +12,10 @@
 //! plus diagnostics — this crate originates none of its own (P5.5,
 //! `design/tracks/semantics-in-the-checker.md` §3.5, R10.1).
 //!
+//! `testgen` generates the test harness: each suite's test module, the test entry and the
+//! discovery manifest, with the test-runtime fragments they embed. The driver calls it, and
+//! keeps orchestration, file I/O and process spawning (1B.2a, #4028).
+//!
 //! Extracted from `bynkc` as slice 4 of the crate-decomposition track over
 //! `bynk-syntax` + `bynk-check`. Behaviour is unchanged; `bynk` depends on this
 //! crate and re-exports its modules so its public API (`compile_project`,
@@ -26,6 +30,8 @@ struct ReadmeDoctests;
 
 pub mod emit_model;
 pub mod emitter;
+pub mod testgen;
+pub(crate) mod ts_build;
 
 #[cfg(test)]
 pub(crate) mod testkit;
@@ -138,6 +144,9 @@ fn check_single_typed(
             ));
         }
     };
+    // #4475: a single file has no other unit to reach, so the first-party units behind the prelude
+    // types it names (`Ordering`, `ValidationRule`, `DecodeErrorKind`) are merged into it.
+    bynk_check::inline_prelude_units(&mut commons, source);
     // #3445: a constant named by a literal-only annotation argument is replaced
     // by the literal it denotes, as the project path does.
     bynk_check::annotation_consts::resolve_single_file(&mut commons);
@@ -240,7 +249,7 @@ pub const LOCAL_CALL_KEY: &str = "bynk-local-call-key";
 /// Worker the local key for it (`BYNK_CALL_FROM_` plus the caller's edge suffix). The
 /// runtime's `INSPECT_CALLER` is the same name.
 pub const INSPECT_CALLER: &str = "bynk.dev";
-pub const INSPECT_CALLER_KEY_VAR: &str = "BYNK_CALL_FROM_BYNK__DEV";
+pub use bynk_project::env_protocol::CALL_FROM_BYNK_DEV as INSPECT_CALLER_KEY_VAR;
 
 /// #3562 (G6): the file a `bynk dev` group build stages beside its entry, naming each
 /// member that hosts an agent and its classes, so `bynk dev inspect` can sign a request

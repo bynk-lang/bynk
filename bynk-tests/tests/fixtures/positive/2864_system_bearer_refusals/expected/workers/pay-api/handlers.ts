@@ -2,6 +2,7 @@
 // context pay.api
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -9,15 +10,15 @@ export type UserId = string & { readonly __brand: "pay.api.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
 };
 
 export const api = {
-  async http_GET_activity(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_activity(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`activity for ${String(deps.identity)}`);
   },
   async http_POST_notes(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {

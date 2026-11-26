@@ -13,7 +13,7 @@ agent Tally {
 }
 
 service inbox from queue("jobs") {
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     if job.attempt > 3 {
       Retry("too many attempts")
     } else {

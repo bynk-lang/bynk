@@ -94,7 +94,7 @@ const SOURCE_A: &str = r#"context app.a
 consumes app.b as B
 
 service ask {
-  on call(ping: String) -> Effect[Result[String, String]] {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
     let r <- B.whoami(ping)
     r
   }
@@ -109,7 +109,7 @@ const SOURCE_D: &str = r#"context app.d
 consumes app.b as B
 
 service probe {
-  on call(ping: String) -> Effect[Result[String, String]] {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
     let r <- B.whoami(ping)
     r
   }
@@ -270,7 +270,7 @@ type Ticket = {
 }
 
 service issue {
-  on call(seat: Int) -> Effect[Result[Ticket, String]] {
+  on call(seat: Int) -> Effect[Result[Ticket, String]] by Caller {
     Ok(Ticket { seat: seat, label: "vip" })
   }
 }
@@ -281,7 +281,7 @@ const SOURCE_CODEC_A: &str = r#"context app.a
 consumes app.b as B
 
 service forward {
-  on call(seat: Int) -> Effect[Result[Int, String]] {
+  on call(seat: Int) -> Effect[Result[Int, String]] by Caller {
     let r <- B.issue(seat)
     match r {
       Ok(t)  => Ok(t.seat)
@@ -451,6 +451,168 @@ fn cross_context_caller_reads_live_id_and_fails_closed() {
 /// only tsc-checks: each consumer reads its own qualified name, and the top-level
 /// entry self-attributes — including the multiple-consumer path the compose root's
 /// per-consumer surfaces exist to serve.
+// #3890: a refinement over `Caller` admits named calling contexts. `app.b` admits
+// only `app.a`; `app.c` is a context of the project that holds a valid edge key
+// but is not named, so it is refused at the callee even though its signature
+// verifies (signing keys are per context pair, not per service).
+const SOURCE_REFINED_B: &str = r#"context app.b
+
+actor OnlyA = Caller where IsContext(app.a)
+
+service whoami {
+  on call(ping: String) -> Effect[Result[String, String]] by c: OnlyA {
+    Ok(c.identity)
+  }
+}
+"#;
+
+const SOURCE_REFINED_A: &str = r#"context app.a
+
+consumes app.b as B
+
+service ask {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
+    let r <- B.whoami(ping)
+    r
+  }
+}
+"#;
+
+const SOURCE_REFINED_C: &str = r#"context app.c
+
+service idle {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
+    Ok(ping)
+  }
+}
+"#;
+
+const REFINED_DRIVER_TS: &str = r#"import worker from "./workers/app-b/index.js";
+import { EDGE_TO_PREFIX, signedHeaders } from "./__bynk_runtime/boundary.js";
+
+const CONTRACT = "__CONTRACT_HASH__";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) throw new Error("FAIL: " + msg);
+}
+
+// `app.b` holds the edge key for both `app.a` and `app.c`, so both signatures
+// verify; only `app.a` is named by the actor.
+const KEY = "edge-key";
+const env: any = { BYNK_CALL_FROM_APP__A: KEY, BYNK_CALL_FROM_APP__C: KEY };
+
+async function callAs(caller: string): Promise<Request> {
+  const body = JSON.stringify("hello");
+  const signed = await signedHeaders(
+    { [EDGE_TO_PREFIX + "APP__B"]: KEY },
+    caller,
+    "app.b",
+    "/_bynk/call/whoami",
+    CONTRACT,
+    "1",
+    body,
+    "test",
+  );
+  return new Request("http://internal/_bynk/call/whoami", {
+    method: "POST",
+    headers: { "content-type": "application/json", "X-Bynk-Contract": CONTRACT, ...signed, "X-Bynk-Caller": caller },
+    body,
+  });
+}
+
+// The named context is admitted and the body reads its name.
+let res = await worker.fetch(await callAs("app.a"), env);
+assert(res.status === 200, "the admitted context → 200, got " + res.status);
+const ok: any = await res.json();
+assert(ok.kind === "Ok" && ok.value === "app.a", "body returns the caller id");
+
+// A context with a valid key that the predicate does not name is refused: 403,
+// authenticated but not admitted, a bare word.
+res = await worker.fetch(await callAs("app.c"), env);
+assert(res.status === 403, "an unadmitted context → 403, got " + res.status);
+assert((await res.text()) === "Forbidden", "403 carries no detail");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn cross_context_caller_refinement_admits_only_the_named_contexts() {
+    let runner = match discover_tsc() {
+        Some(r) => r,
+        None => {
+            eprintln!("\n!!! CALLER REFINEMENT VERIFICATION SKIPPED !!!\nno tsc runner.\n");
+            if std::env::var(REQUIRE_ENV).is_ok() {
+                panic!("{REQUIRE_ENV} is set but no tsc runner was found");
+            }
+            return;
+        }
+    };
+    if !tool_exists("node") {
+        eprintln!("\n!!! CALLER REFINEMENT VERIFICATION SKIPPED !!!\n`node` not on PATH.\n");
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("{REQUIRE_ENV} is set but `node` was not found");
+        }
+        return;
+    }
+
+    let tmp = std::env::temp_dir().join(format!("bynk-caller-refined-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&tmp);
+    let proj = tmp.join("proj/app");
+    fs::create_dir_all(&proj).unwrap();
+    fs::write(proj.join("a.bynk"), SOURCE_REFINED_A).unwrap();
+    fs::write(proj.join("b.bynk"), SOURCE_REFINED_B).unwrap();
+    fs::write(proj.join("c.bynk"), SOURCE_REFINED_C).unwrap();
+
+    let out = match bynk_driver::project::compile_project(
+        &bynk_testkit::compile_options_single(tmp.join("proj")).target(BuildTarget::Workers),
+    ) {
+        Ok(o) => o,
+        Err(failure) => panic!(
+            "compile the refined-caller project to Workers:\n{}",
+            bynk_driver::render::render_project_errors(&failure.flatten())
+        ),
+    };
+
+    let run_dir = tmp.join("run");
+    for (path, doc) in &out.artefacts.docs {
+        let target = run_dir.join(path);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, doc.text()).unwrap();
+    }
+    bynk_testkit::write_runtime_modules(&run_dir).unwrap();
+    let callee_text = out
+        .artefacts
+        .docs
+        .iter()
+        .find(|(p, _)| p.ends_with("workers/app-b/index.ts"))
+        .expect("app-b entry emitted")
+        .1
+        .text();
+    let hash = regex::Regex::new(r#"expected: "([0-9a-f]{16})""#)
+        .unwrap()
+        .captures(&callee_text)
+        .map(|c| c[1].to_string())
+        .expect("app-b's entry stamps a contract hash");
+    fs::write(
+        run_dir.join("driver.ts"),
+        REFINED_DRIVER_TS.replace("__CONTRACT_HASH__", &hash),
+    )
+    .unwrap();
+    fs::write(run_dir.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
+    fs::write(run_dir.join("package.json"), "{ \"type\": \"module\" }").unwrap();
+
+    let (program, prefix) = &runner;
+    let (ok, msg) = run(program, prefix, &["-p", "tsconfig.json"], &run_dir);
+    assert!(ok, "tsc failed on the refined-caller workers:\n{msg}");
+
+    let (ok, msg) = run("node", &[], &["js/driver.js"], &run_dir);
+    assert!(
+        ok && msg.contains("ALL OK"),
+        "refined-caller driver did not pass:\n{msg}"
+    );
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn bundle_cross_context_caller_reads_the_consuming_context_name() {
     let runner = match discover_tsc() {

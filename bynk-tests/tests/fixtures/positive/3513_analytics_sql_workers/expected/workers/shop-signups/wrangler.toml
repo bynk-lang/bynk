@@ -2,7 +2,7 @@
 name = "shop-signups"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[analytics_engine_datasets]]
 binding = "ANALYTICS_SIGNUPS"
@@ -13,4 +13,8 @@ binding = "CF_ANALYTICS_SQL"
 
 [vars]
 BYNK_DATASET_ANALYTICS_SIGNUPS = "shop_signups_signups"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

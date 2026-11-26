@@ -1,0 +1,12 @@
+{
+  "blurb": "A range pattern `lo..hi` matches every `Int` from `lo` to `hi`, both inclusive, so the low bound comes first. With `lo > hi` no value can match, so the arm is dead and almost certainly a typo, and the same goes for a range in a `via schema(...)` clause. Swap the bounds. A refinement written `InRange(150, 0)` is the separate `bynk.types.inverted_range`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.empty_range_pattern",
+  "constructs": [
+    "int_range"
+  ],
+  "example": "fn band(n: Int) -> String {\n    match n {\n        9..3 => \"mid\"    // ✗ the low bound is above the high bound\n        _ => \"other\"\n    }\n}\n\nfn band(n: Int) -> String {\n    match n {\n        3..9 => \"mid\"    // ✓\n        _ => \"other\"\n    }\n}",
+  "severity": "error",
+  "summary": "A range pattern or `via schema(...)` range has its bounds inverted (`lo > hi`), so it can never match."
+}

@@ -11,7 +11,7 @@ provides Clock = FixedClock {
 }
 
 service probe {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     Clock.now()
   }
 }

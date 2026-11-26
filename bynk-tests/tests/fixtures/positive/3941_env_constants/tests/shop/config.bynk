@@ -1,0 +1,15 @@
+---
+#3941: the resolved values, proved at run time in the default environment.
+---
+suite shop.config
+
+case "a variable in [vars] sets the constant" {
+  expect AppOrigin == "https://app.shop.example"
+  expect Flags == ["alpha", "beta"]
+}
+
+case "a variable only staging sets leaves the default environment its default" {
+  expect BillingWorker == "legacy-billing"
+  expect MaxLines == 100
+  expect Verbose == false
+}

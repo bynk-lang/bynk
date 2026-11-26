@@ -61,7 +61,7 @@ service api from http {
 	// minus a Duration is an Instant), then run a clock-free window read.
 	on GET("/events/last-hour") () -> Effect[HttpResult[List[KindCount]]] by Visitor given Clock {
 		let now <- Clock.now()
-		let rows <- Activity("main").breakdown(now - 1.hours)
+		let rows <- Activity("main").breakdown(now - 1.hour)
 		Ok(rows)
 	}
 

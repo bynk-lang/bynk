@@ -9,14 +9,14 @@ uses demo.shapes
 consumes demo.vault as Vault
 
 service check {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let e <- Vault.open(n)
     e.item
   }
 }
 
 service pairUp {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let p = pairOf(n, "x")
     p.first
   }

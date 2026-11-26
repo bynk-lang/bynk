@@ -70,7 +70,7 @@ provides Clock = FixedClock {
 }
 
 service charge {
-  on call(cents: Int) -> Effect[Result[Int, ()]] given Clock {
+  on call(cents: Int) -> Effect[Result[Int, ()]] by Caller given Clock {
     let t <- Clock.now()
     Ok(cents + t)
   }
@@ -277,6 +277,11 @@ fn partial_parse_checks_surviving_declarations_without_echoes() {
             "demo/app.bynk",
             "bynk.resolve.unknown_type",
             "unknown type `Ghost`",
+        ),
+        (
+            "demo/guard.bynk",
+            "bynk.http.body_cap_defaulted",
+            "POST /a on `s` relies on the default 1 MiB request-body cap",
         ),
         (
             "demo/guard.bynk",

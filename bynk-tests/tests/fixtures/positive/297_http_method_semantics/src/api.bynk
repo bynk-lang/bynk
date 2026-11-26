@@ -1,5 +1,7 @@
 context api
 
+consumes bynk { SseEvent }
+
 // v0.139 (ADR 0162): method correctness for a `from http` service. The route
 // table below declares GET+POST on `/notes`, GET on `/notes/:id`, and a
 // streamed GET on `/ticks`; the router synthesises `405 + Allow`, a plain
@@ -20,6 +22,25 @@ service routes from http {
 
   on GET("/ticks") () -> Effect[HttpResult[()]] by v: Visitor {
     Streaming(Stream.of(["tick-1", "tick-2"]).take(2))
+  }
+
+  // #3918: structured events — `event`, `id` and `retry` before `data`, a multi-line
+  // `data` split into one `data:` line each, and a bare event with only `data`.
+  on GET("/events") () -> Effect[HttpResult[()]] by v: Visitor {
+    Streaming(Stream.of([
+      SseEvent { data: "hello", event: Some("greeting"), id: Some("7"), retry: Some(1500.milliseconds) },
+      SseEvent { data: "a\r\nb\nc" },
+    ]))
+  }
+
+  // #3918: a heartbeat only fires while the stream is idle; a prompt stream is unchanged.
+  on GET("/beat") () -> Effect[HttpResult[()]] by v: Visitor {
+    Streaming(Stream.of(["x"])).heartbeat(15.seconds)
+  }
+
+  // #3918: an `event` name with a line break cannot be framed; the body errors in-band.
+  on GET("/bad-event") () -> Effect[HttpResult[()]] by v: Visitor {
+    Streaming(Stream.of([SseEvent { data: "x", event: Some("a\nb") }]))
   }
 
   on GET("/logo") () -> Effect[HttpResult[()]] by v: Visitor {

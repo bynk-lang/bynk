@@ -1,0 +1,27 @@
+context cr.jobs
+
+type Refused = | Overdue | Stale
+
+type Delivery = { id: String }
+
+// #3872: a cron run that returns `Err`, one that returns `Ok`, and one that throws.
+service sweeper from cron {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), Refused]] {
+		Err(Overdue)
+	}
+
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), Refused]] {
+		Ok(())
+	}
+
+	on schedule("30 * * * *") (at: Instant) -> Effect[Result[(), Refused]] {
+		unreachable("sweep boom")
+	}
+}
+
+// The `system` tier needs a serialisation edge to cross.
+service deliveries from queue("deliveries") {
+	on message(d: Delivery) -> Effect[QueueResult] by Producer {
+		Ack
+	}
+}

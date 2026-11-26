@@ -10,10 +10,10 @@ export type Price = number & { readonly __brand: "Price" };
 export const Price = {
   of(value: number): Result<Price, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Price", message: "must be a finite number", value });
+      return Err({ field: "Price", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Price", message: "must be positive", value });
+      return Err({ field: "Price", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Price);
   },
@@ -24,10 +24,10 @@ export type Ratio = number & { readonly __brand: "Ratio" };
 export const Ratio = {
   of(value: number): Result<Ratio, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Ratio", message: "must be a finite number", value });
+      return Err({ field: "Ratio", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0.0 && value <= 1.0)) {
-      return Err({ field: "Ratio", message: "must be in range [0.0, 1.0]", value });
+      return Err({ field: "Ratio", message: "must be in range [0.0, 1.0]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.0 }, hi: { tag: "FloatBound", value: 1.0 } }, value });
     }
     return Ok(value as Ratio);
   },

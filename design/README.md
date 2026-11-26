@@ -164,6 +164,6 @@ Name branches `<kind>/<slug>`, where `<kind>` is one of `feat`, `fix`, `track`,
 
 The per-increment grammar instalments (`grammar-increments/`,
 `bynk-adapters-spec.md`) have been **removed**: the normative spec in
-`site/src/content/docs/book/spec/` is the single source of truth for the shipped language, updated
+`site/src/content/docs/reference/spec/` is the single source of truth for the shipped language, updated
 in place per increment. The instalments' history lives in version control; the
 design decisions they recorded live on in [`decisions/`](decisions/README.md).

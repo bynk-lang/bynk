@@ -11,7 +11,7 @@ consumes bynk.cloudflare {
 }
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     // Each bare variant below belongs to exactly one type in scope: the
     // verdict's own four, beside SqlError's `Failed`, EmailError's
     // `SendFailed`, KvExpiration's `Never` and DmarcVerdict's `DmarcNone`.

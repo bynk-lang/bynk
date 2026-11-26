@@ -1,0 +1,111 @@
+---
+// "From the blog" (web presence slice 8): the newest three posts, read at
+// build time from the blog's /blog/posts.json (see src/lib/blog-posts.mjs).
+// When the list can't be read, the section shows only its link to the blog.
+//
+// Each card is an <article> whose title is a heading and the only link, so a
+// screen reader hears the title alone as the link's name; the link's ::after
+// covers the card, so the whole card is still clickable.
+import { latestPosts } from "../../lib/blog-posts.mjs";
+
+const posts = await latestPosts(3);
+const date = (iso: string) =>
+  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(
+    new Date(iso),
+  );
+---
+
+<section class="home-section not-content" aria-labelledby="from-the-blog">
+  <div class="head">
+    <h2 id="from-the-blog">From the blog</h2>
+    <a href="/blog/">All posts and series</a>
+  </div>
+  {
+    posts.length > 0 && (
+      <div class="posts">
+        {posts.map((p) => (
+          <article class="post">
+            {(p.series || p.level) && (
+              <p class="eyebrow">{[p.series, p.level].filter(Boolean).join(" · ")}</p>
+            )}
+            <h3 class="title">
+              <a href={p.url}>{p.title}</a>
+            </h3>
+            {p.summary && <p class="summary">{p.summary}</p>}
+            <p class="meta">
+              <time datetime={p.date}>{date(p.date)}</time>
+              {p.bynkVersion && <> · Bynk {p.bynkVersion.replace(/^v/, "")}</>}
+            </p>
+          </article>
+        ))}
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+  }
+  .posts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+  }
+  .post {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.25rem;
+    background: var(--bynk-surface-panel);
+    border: 1px solid var(--bynk-line);
+    border-radius: 0.5rem;
+    color: var(--bynk-ink);
+  }
+  .post p {
+    margin: 0;
+  }
+  .post:hover {
+    border-color: var(--bynk-line-strong);
+  }
+  .post:has(a:focus-visible) {
+    outline: 2px solid var(--sl-color-text-accent);
+    outline-offset: 2px;
+  }
+  .title {
+    margin: 0;
+    font-size: var(--sl-text-lg);
+    font-weight: 650;
+    line-height: 1.3;
+  }
+  .title a {
+    text-decoration: none;
+  }
+  .title a:focus-visible {
+    outline: none;
+  }
+  /* The title's link covers the card. */
+  .title a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .post:hover .title a {
+    color: var(--bynk-accent);
+  }
+  .summary {
+    color: var(--bynk-ink-muted);
+    font-size: var(--sl-text-sm);
+  }
+  .post .meta {
+    margin-top: auto;
+    color: var(--bynk-ink-muted);
+    font-size: var(--sl-text-xs);
+  }
+</style>

@@ -1,0 +1,29 @@
+suite shop.support {
+  consumes bynk.cloudflare { EmailVerdict, InboundEmail }
+  // A refined handler reads the verdict from the case's own headers, by the Worker's rule, and
+  // refuses other mail before its body runs, as the Worker does.
+  case "mail with no verdict is refused" {
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example" })
+    expect r == Reject("sender not authenticated")
+  }
+  case "mail that passed DMARC is admitted" {
+    let headers: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=pass")
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })
+    expect r is Accept
+  }
+  case "a capitalised header name reads as the Worker reads it" {
+    let headers: Map[String, String] = Map.empty().insert("Authentication-Results", "mx.cloudflare.net; dmarc=pass")
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })
+    expect r is Accept
+  }
+
+  case "mail that failed DMARC is refused" {
+    let headers: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=fail")
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })
+    expect r == Reject("sender not authenticated")
+  }
+  case "a lenient refinement admits mail with no verdict" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
+    expect r is Accept
+  }
+}

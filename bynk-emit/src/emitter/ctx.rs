@@ -34,7 +34,7 @@ pub(crate) struct ModuleCtx<'a> {
     pub(super) runtime_use: &'a RuntimeUse,
     /// v0.8 build target. In workers mode cross-context calls lower to
     /// `callService(...)` instead of `deps.surface.<key>.<method>(...)`.
-    pub(super) target: BuildTarget,
+    pub(crate) target: BuildTarget,
     /// #527: agent → method → the method's `given` caps (mirrors
     /// [`crate::emit_model::EmitProjectCtx::agent_method_givens`]). Consulted by
     /// the agent-call lowering to record capability requirements.
@@ -68,6 +68,8 @@ pub(crate) struct ModuleCtx<'a> {
     /// #3580: [`crate::emit_model::EmitProjectCtx::trace`]. `None` (the default)
     /// emits no trace recording.
     pub(super) trace: Option<crate::emit_model::TraceLoc>,
+    /// #3945: [`crate::emit_model::EmitProjectCtx::typed_capability_calls`].
+    pub(crate) typed_capability_calls: bool,
     /// The per-unit facts a lowering reads but the body does not carry: the
     /// `.bynk` source of the unit (#2620) and its hidden-type spellings (#1927).
     pub(super) unit: UnitFacts<'a>,
@@ -82,6 +84,9 @@ pub(crate) struct ModuleCtx<'a> {
 pub(crate) struct UnitFacts<'a> {
     source: Option<&'a crate::emit_model::UnitSource>,
     spellings: &'a HashMap<String, String>,
+    /// #4213: the project facts the unit is emitted under, read for the types it
+    /// imports from a consumed context (see [`EmitProjectCtx::consumed_context_types`]).
+    project: Option<&'a EmitProjectCtx>,
 }
 
 impl<'a> UnitFacts<'a> {
@@ -90,6 +95,7 @@ impl<'a> UnitFacts<'a> {
         Self {
             source: ctx.unit_source.as_ref(),
             spellings: &ctx.type_spellings,
+            project: Some(ctx),
         }
     }
 
@@ -104,6 +110,7 @@ impl<'a> UnitFacts<'a> {
         Self {
             source: None,
             spellings: ts_types::no_spellings(),
+            project: None,
         }
     }
 }
@@ -114,6 +121,7 @@ impl<'a> ModuleCtx<'a> {
     pub(super) fn note_unit(&mut self, ctx: &EmitProjectCtx) {
         self.unit_name = ctx.commons_name.clone();
         self.trace = ctx.trace.clone();
+        self.typed_capability_calls = ctx.typed_capability_calls;
     }
 
     /// #2620: the `path:line:col` of a byte offset in the unit being emitted,
@@ -138,7 +146,7 @@ impl<'a> ModuleCtx<'a> {
         )
     }
 
-    pub(super) fn new(
+    pub(crate) fn new(
         commons: &'a TypedCommons,
         cross_context: &'a bynk_check::resolver::CrossContextInfo,
         runtime_use: &'a RuntimeUse,
@@ -153,11 +161,22 @@ impl<'a> ModuleCtx<'a> {
             agent_method_givens: HashMap::new(),
             event_schema_versions: HashMap::new(),
             consumed_type_ns: HashMap::new(),
-            consumed_type_declared: HashMap::new(),
+            // #4213: a free function or method reads the same renames a handler does.
+            consumed_type_declared: unit
+                .project
+                .map(|p| p.consumed_type_aliases.clone())
+                .unwrap_or_default(),
             unit_name: String::new(),
             agent_called_contexts: Vec::new(),
-            consumed_context_types: HashSet::new(),
+            // #4213: a free function or method of a context is lowered through
+            // this context too, and builds a consumed sum's variant inline just as
+            // a handler does.
+            consumed_context_types: unit
+                .project
+                .map(EmitProjectCtx::consumed_context_types)
+                .unwrap_or_default(),
             trace: None,
+            typed_capability_calls: false,
         }
     }
 }
@@ -225,12 +244,12 @@ pub(crate) struct TestShared {
     /// field (Locale capability track, slice 1, #844 review) rather than
     /// overloading `assert_loc.is_some()`, since that conflated "has a location"
     /// with "is test scaffolding" for a caller that has no location to give.
-    pub(super) test_scaffold: bool,
+    pub(crate) test_scaffold: bool,
     /// v0.59: the source text and project-relative path of the file the body
     /// came from, so an `assert` can emit a real `path:line:col` location (for
     /// `--format json` click-through) rather than a bare byte offset. Stays
     /// `None` for a predicate scaffold, which emits no `assert`.
-    pub(super) assert_loc: Option<AssertLoc>,
+    pub(crate) assert_loc: Option<AssertLoc>,
 }
 
 /// The `store`-agent sub-state of an [`BodyMode::AgentHandler`] body: present
@@ -287,6 +306,13 @@ pub(crate) struct AgentStoreState {
     /// that drops one close it (#3261, #3224). Decided on the model type, not on the text of
     /// the rendered value type.
     pub(super) connection_maps: HashSet<String>,
+    /// #4037: the `Map`, `Set` and `Cache` fields whose key is not a scalar (`String`, `Int` or a
+    /// refined or opaque type over one): their entries are keyed by `__bynkStoreKey`, the canonical
+    /// encoding, not `String(k)`.
+    pub(super) composite_keys: HashSet<String>,
+    /// #4037: the `@indexed(by:)` fields (as `(map, field)`) whose type is not a scalar key, so a
+    /// posting is keyed by the canonical encoding as well.
+    pub(super) composite_indexes: HashSet<(String, String)>,
     /// Review of #1460: a `store Log[T]` field's own element type `T` (name →
     /// its rendered TS type), for the identical reason `map_values` exists —
     /// a Log's value scan is also lifted into the general query vocabulary.
@@ -315,13 +341,22 @@ pub(crate) enum BodyMode {
     Invariant {
         name: String,
         fields: HashSet<String>,
+        /// #4034: the `Map`, `Set` and `Cache` fields, whose `size()` reads the
+        /// count `commitState` binds beforehand (`__size_new_<field>`).
+        collections: HashSet<String>,
     },
     /// v0.116 (testing track slice 4): a `transition` predicate. Carries the JS
     /// names bound to the contextual `old` and `new` state records. The Bynk
     /// identifiers `old`/`new` lower to these (`new` is a JS reserved word, so
     /// both are renamed), and field access `old.<field>` reads off the `old`
     /// record.
-    Transition { old: String, new: String },
+    Transition {
+        old: String,
+        new: String,
+        /// #4034: the `Map`, `Set` and `Cache` fields: `old.<field>.size()` reads
+        /// `__size_old_<field>`, `new.<field>.size()` reads `__size_new_<field>`.
+        collections: HashSet<String>,
+    },
     /// A service handler body (`emit_service`).
     ServiceHandler {
         handler: HandlerShared,
@@ -455,6 +490,9 @@ pub struct SystemJobServices {
     pub cron: HashMap<String, Vec<String>>,
     /// The queue services.
     pub queue: HashSet<String>,
+    /// #3899: the queue services whose consumer admits only signed messages: their driver takes
+    /// the foreign actor a case acts as, as its last argument.
+    pub signed_queue: HashSet<String>,
     /// #3328: the email services, driven as raw MIME through the Worker's
     /// `email()` entry (`__sysdrive_message_<svc>(mail)`).
     pub email: HashSet<String>,
@@ -482,6 +520,42 @@ pub struct SystemHttpClaims {
     /// claims to mint into the token, from the call-site principal's
     /// `TokenClaims.of` lines (else none).
     pub oidc_routes: HashSet<(String, String, String)>,
+    /// #3937: the `Bearer` routes whose binder reads `.claims`. Their valid-token drivers take the
+    /// claims too: the principal's `TokenClaims.of` lines when it gives some, beside a refinement's
+    /// witness claims (else just those, as before).
+    pub bearer_claim_routes: HashSet<(String, String, String)>,
+}
+
+impl SystemHttpClaims {
+    /// The witness claims `actor` presents on `route`, when it is refinement-guarded (#2019).
+    pub(crate) fn witness_on(
+        &self,
+        route: &(String, String, String),
+        actor: Option<&String>,
+    ) -> Option<&[(String, bynk_check::actors::WitnessValue)]> {
+        self.routes
+            .contains(route)
+            .then(|| actor.and_then(|a| self.actors.get(a)).map(Vec::as_slice))
+            .flatten()
+    }
+
+    /// Record a `Bearer` route (#2019, #3937) and say whether its drivers sign claims into the token:
+    /// a refinement-guarded route signs its witness claims, and one whose binder reads `.claims`
+    /// signs the principal's own.
+    pub(crate) fn register_bearer(
+        &mut self,
+        route: (String, String, String),
+        refined: bool,
+        reads_claims: bool,
+    ) -> bool {
+        if refined {
+            self.routes.insert(route.clone());
+        }
+        if reads_claims {
+            self.bearer_claim_routes.insert(route);
+        }
+        refined || reads_claims
+    }
 }
 
 /// #1750: the slot and label a statement-form value expression's tails assign

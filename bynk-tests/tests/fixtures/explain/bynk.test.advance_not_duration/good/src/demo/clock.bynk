@@ -3,7 +3,7 @@ context demo.clock
 consumes bynk { Clock }
 
 service now {
-	on call() -> Effect[Instant] given Clock {
+	on call() -> Effect[Instant] by Caller given Clock {
 		Clock.now()
 	}
 }

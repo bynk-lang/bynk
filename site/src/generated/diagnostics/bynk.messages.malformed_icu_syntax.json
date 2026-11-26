@@ -1,0 +1,10 @@
+{
+  "blurb": "A message template is checked as ICU MessageFormat at compile time, because a malformed one would otherwise fail only when a request rendered it. A `plural` or `select` must close its arm braces, use a known format keyword, give each arm a distinct key and have an `other` arm, which is used when no other arm matches; `#` stands for the number only inside a `plural` arm. Fix the template. Constructs the compiler does not support, such as `selectordinal` and `offset:`, are reported here too.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.malformed_icu_syntax",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n  \"cart.count\" => \"{n, plural, one {# item}}\"  // ✗ no `other` arm\n  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"  // ✓\n}",
+  "severity": "error",
+  "summary": "A message template's ICU placeholder syntax is invalid — unbalanced arm braces, an unknown format keyword, `#` outside a plural arm, a missing mandatory `other` arm, or an explicitly out-of-scope construct (`selectordinal`, `offset:`/`=N`, a CLDR skeleton)."
+}

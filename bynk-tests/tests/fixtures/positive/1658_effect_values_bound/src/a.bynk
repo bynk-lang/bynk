@@ -20,7 +20,7 @@ fn twice(e: Effect[Int]) -> Effect[Int] {
 }
 
 service s {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     do Counter("k").bump()
     let a <- Counter("k").get()
     let b <- twice(Counter("k").get())

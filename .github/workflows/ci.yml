@@ -12,8 +12,9 @@ name: CI
 #                  on the head SHA would let the PR merge without it.
 #   ready          A ready PR (including the push that makes it ready, and a
 #                  draft that `promote` marks ready in this same run): the
-#                  draft set plus the ready set (`ready-gate`): the Windows +
-#                  macOS legs (`test-os`), the Linux system tier, the
+#                  draft set plus the ready set (`ready-gate`): the Windows
+#                  leg, plus macOS when the repository variable
+#                  MACOS_ON_PRS is 'true' (`test-os`), the Linux system tier, the
 #                  Node floor and MSRV (on a global change). Off Linux the
 #                  legs run `ci-os`: the whole suite minus the corpus-wide
 #                  tsc/node passes, which are OS-independent and run on Linux
@@ -83,12 +84,21 @@ on:
 # completed a run, and validation was silently deferred to the stamp commit and
 # made conditional on the stamp firing and succeeding. It does not always: a
 # stamp run went red on Windows on 2026-07-28, leaving neither commit validated.
-# Every commit on `main` now completes its own run. The cost is that an increment
-# merge completes two runs (the merge and the stamp) rather than one-and-a-stub;
-# that is what validating every commit costs, and it is the intended trade.
+# No run on `main` is now cancelled once it has STARTED. Not every commit on
+# `main` gets a run of its own, though: the group still runs `main`'s pushes
+# one at a time, and GitHub keeps only one PENDING run per group, so a newer
+# push cancels the run still waiting. When merges and stamps arrive faster than
+# a run takes, most commits' runs are cancelled before they start (on 22
+# November 2026, every push from 14:48 to 15:40 UTC). The newest commit is still
+# validated, and it contains the ones cancelled. Letting `main`'s runs go in
+# parallel instead (a group per SHA) was weighed and rejected: it runs a
+# backstop for every commit, two per merge, in parallel on a hosted pool the
+# queue already waits on.
 #
-# The deploy pipeline (deploy-site.yml) has its own non-cancelling concurrency
-# group.
+# Nothing downstream waits on a particular commit's push run: deploy-site.yml
+# deploys a queue merge from its `merge_group` run, and anything else from
+# whichever push run on `main` passes next. It has its own non-cancelling
+# concurrency group.
 #
 # The nightly gets a group of its own. A concurrency group keeps only one
 # PENDING run, so sharing `main`'s group would let the next push to `main`
@@ -101,6 +111,12 @@ concurrency:
 # pull-requests:read for the PR file list; dependency-review reads the diff).
 permissions:
   contents: read
+
+# #4456: no job sends Wrangler's usage telemetry. The system-test harness sets this for every
+# Wrangler it starts; this is the backstop for any it does not (a test that runs `bynk dev`,
+# a step that calls `npx wrangler` itself).
+env:
+  WRANGLER_SEND_METRICS: "false"
 
 # The toolchain version lives in rust-toolchain.toml; the dtolnay ref below is
 # pinned to match so the runner installs exactly one toolchain (with the
@@ -171,6 +187,7 @@ jobs:
       features: ${{ steps.filter.outputs.features }}
       installers: ${{ steps.filter.outputs.installers }}
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
+      release_workflow: ${{ steps.filter.outputs.release_workflow }}
       all: ${{ steps.all.outputs.value }}
       # The CI stage of this run: draft | ready | queue | main | nightly (see
       # the stage table at the top). A draft that `promote` marks ready keeps
@@ -189,8 +206,9 @@ jobs:
       # legs are dropped from `test_os` instead.
       queue_passed: ${{ steps.queue.outputs.passed }}
       # JSON array of OSes for the test legs this run may need. The merge
-      # queue runs Linux only; every other event (PRs, push to main, the
-      # nightly) lists all three, except a stamp commit whose parent already
+      # queue runs Linux only; a PR lists Linux and Windows, plus macOS when
+      # the repository variable MACOS_ON_PRS is 'true'; a push to main and the
+      # nightly list all three, except a stamp commit whose parent already
       # passed macOS (see the step). On a push, an OS whose leg the queue
       # passed on this commit is dropped, so the array can be empty.
       # `test_linux` and `test_other` split it: the `test` job runs the Linux
@@ -208,7 +226,14 @@ jobs:
       # of defect that was actually reaching `main`.
       #
       # macOS stays post-merge: it has caught nothing in that window, and macOS
-      # runner concurrency is materially tighter than Linux/Windows.
+      # runner concurrency is materially tighter than Linux/Windows. A pull
+      # request's ready set therefore runs Windows only, unless the repository
+      # variable MACOS_ON_PRS is 'true'. The variable is the switch: the PR leg
+      # was on until November 2026, when ready PRs, the merge queue and pushes
+      # to `main` together left macOS jobs waiting 15+ min for a runner and then
+      # cancelled, blocking `CI green` on PRs that had passed everything else.
+      # Pushes to `main` and the nightly still run macOS, so a macOS-only break
+      # is caught within hours and the nightly opens its failure issue.
       #
       # The cost, measured rather than guessed: across the last five green
       # three-OS runs the Windows leg took 463-500s against Linux's 156-212s, so
@@ -316,7 +341,9 @@ jobs:
               # The doc gates (doc_examples, doc_diagnostics, doc_version,
               # grammar_coverage, the generated-page drift guards) read the Book
               # and its fixtures, so a content edit must run the Rust test job.
+              # The Reference has its own tree since web presence slice 5.
               - 'site/src/content/docs/book/**'
+              - 'site/src/content/docs/reference/**'
               - 'site/src/diagnostics/**'
               # #2096: xtask's manifest_schema test diffs the committed
               # `bynk.toml` schema (and reads the manifest reference page's
@@ -328,7 +355,6 @@ jobs:
               # golden-only edit must re-run the snapshot test.
               - 'bynk/tests/golden/doctor.json'
               - 'bynk/tests/golden/migrate-status.json'
-              - 'site/src/content/docs/docs/manifest.md'
               - 'scripts/build-registry-core.sh'
               - 'scripts/registry-core-parity.mjs'
               # the textmate_keywords test reads the site's copy of the
@@ -358,11 +384,17 @@ jobs:
               # embeds via include_str!. The generated files are `.ts`, so they are
               # invisible to the `rust` filter — name it explicitly so a one-sided
               # edit still runs the package's typecheck/tests and the drift guard.
+              # 1B.3a (#4047): the spliced test-runtime artifacts and the client
+              # runtime artifact are generated from `runtime/src/testing/` and
+              # `runtime/src/client/`, and are guarded the same way.
               - *global
               - 'bynk-emit/runtime/**'
               - 'bynk-emit/wire-client/**'
               - 'bynk-emit/src/emitter/runtime/**'
               - 'bynk-emit/src/emitter/runtime_modules.rs'
+              - 'bynk-emit/src/testgen/test_runtime/**'
+              - 'bynk-emit/src/testgen/test_runtime_modules.rs'
+              - 'bynk-emit/src/emitter/http_client_runtime.ts'
             web_assets:
               # The release's bynk-web tarball (release.yml `web-assets`), which
               # bynk-lang/playground builds from. It gates the GitHub Release, so
@@ -401,6 +433,11 @@ jobs:
               # that renames assets with the scripts can't pass until released.
               - 'scripts/install.sh'
               - 'scripts/install.ps1'
+            release_workflow:
+              # The release's binary matrix. Deliberately NOT `*global`: the cross-build
+              # check below is slow and macOS-only, so only an edit to the workflow that
+              # defines the legs (or the nightly schedule) runs it.
+              - '.github/workflows/release.yml'
             installers:
               # The prebuilt-binary installers (#2558) and the release packaging
               # and binstall metadata they must stay in step with.
@@ -526,8 +563,8 @@ jobs:
           fi
           echo "passed=$passed" >> "$GITHUB_OUTPUT"
       # Decide the test legs' OSes from the event: Linux only in the merge
-      # queue, all three OSes on everything else (PRs, push/main, schedule) —
-      # except a stamp commit whose parent already passed macOS (the step checks
+      # queue, Linux and Windows on a PR (plus macOS when MACOS_ON_PRS is
+      # 'true'), all three OSes on push/main and schedule, except a stamp commit whose parent already passed macOS (the step checks
       # the macOS leg only, and off the nightly that leg runs `ci-os`).
       #
       # The stamp commit changes no code: it rewrites version strings, the
@@ -567,8 +604,14 @@ jobs:
           HEAD_AUTHOR: ${{ github.event.head_commit.author.name }}
           PARENT_SHA: ${{ github.event.before }}
           QUEUE_PASSED: ${{ steps.queue.outputs.passed }}
+          MACOS_ON_PRS: ${{ vars.MACOS_ON_PRS }}
         run: |
           three='["ubuntu-latest","macos-latest","windows-latest"]'
+          # A pull request runs macOS only when MACOS_ON_PRS is 'true' (see the
+          # `test_os` comment above).
+          if [ "$EVENT" = "pull_request" ] && [ "$MACOS_ON_PRS" != "true" ]; then
+            three='["ubuntu-latest","windows-latest"]'
+          fi
           # Every exit goes through here: drop the legs the queue passed.
           emit() {
             value="$(jq -c --argjson passed "$QUEUE_PASSED" \
@@ -669,7 +712,7 @@ jobs:
         run: cargo audit
       - name: Supply chain (cargo-deny)
         if: ${{ !cancelled() && steps.checkout.outcome == 'success' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.all == 'true') }}
-        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        uses: EmbarkStudios/cargo-deny-action@70f81531115945ba6eb6b941ec9d39d063438eb9 # v2
         with:
           command: check
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -775,7 +818,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   api-docs:
-    # Guards the /docs/api/ rustdoc the deploy publishes (documentation track
+    # Guards the /reference/api/ rustdoc the deploy publishes (documentation track
     # follow-on). -D warnings makes a broken intra-doc link fail the build, so the
     # published API docs can't rot; the deploy regenerates the same tree leniently.
     name: API docs (cargo doc)
@@ -900,7 +943,7 @@ jobs:
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
       # run rustdoc doctests; the only ones in the tree are the crate READMEs'
-      # examples, which the `README examples` step below runs. The corpus's includes:
+      # examples, which `test-system`'s `README examples` step runs. The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
       #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
@@ -946,27 +989,18 @@ jobs:
           # workerd smokes may skip if wrangler cannot boot. Linux requires them
           # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
           # for the one implementation of the "non-empty means required" contract).
-      # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
-      # (`cargo readme-doctests`, a `.cargo/config.toml` alias naming only the
-      # crates whose README has one). Linux only: the examples are
-      # OS-independent. A README-only change runs it in the `drift` job instead.
-      - name: README examples (doctests)
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo readme-doctests
-      # C4b (#2940): every test is in exactly one tier (unit, integration,
-      # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
-      # partition is OS-independent. `--profile test` reuses the test build
-      # above (a plain `cargo run` would rebuild xtask's dependencies in the dev
-      # profile); the four `nextest list` calls run no test and take seconds.
-      - name: Test tier partition
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo run --locked --profile test -p xtask -- tier-probe
+      # The README examples and the tier partition used to run here, after the
+      # suite. They moved to `test-system` (see there), off the merge queue's
+      # critical path.
       # #3679: the growth probes (ts_writes, ts_any, emit_abi_shapes,
       # verbatim_sites, span_keyed_maps) may only fall unless a pending file
       # `raises:` them. `growth_probes_never_rise` checks the working-tree
       # table; this repeats the check against the table at the BASE revision, so
       # a hand-edited gated row cannot launder a rise. A rise needs Rust source
-      # to change, so this job's `rust` gate covers it. Checkouts are shallow,
+      # to change, so this job's `rust` gate covers it. #4428: the same step also
+      # attributes each gated probe the PR moved to the PR's OWN pending files (it
+      # runs the probes on a checkout of the base commit), so another increment's
+      # `probes:`/`raises:` no longer excuses it. Checkouts are shallow,
       # so the base commit is fetched first. On `main` the stamp is the writer
       # of the rows, so there is nothing to compare there. Event values go
       # through `env:`, never into the script.
@@ -1109,16 +1143,57 @@ jobs:
       # before the suite. Mandatory on Linux (BYNK_REQUIRE_WORKERD).
       - name: Pre-warm the npx cache for wrangler
         run: npx -y wrangler@4 --version
+      # #3918: the browser test (system/sse_browser.rs) drives a real Chromium's
+      # `EventSource` at a compiled handler. Playwright is installed from its own
+      # pinned lockfile, and the action serves Chromium's apt packages from the
+      # Actions cache (see it for why). Cost: about 1 to 2 minutes of this job's
+      # runner time on a cold cache, well under one when the apt cache hits (the
+      # test itself runs in about a second).
+      - name: Install Playwright
+        working-directory: bynk-tests/tests/system/browser
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Chromium (SSE browser test)
+        uses: ./.github/actions/playwright-chromium
+        with:
+          lockfile: bynk-tests/tests/system/browser/package-lock.json
+          working-directory: bynk-tests/tests/system/browser
+          save: ${{ github.event_name != 'merge_group' }}
       - name: Run tests (system tier)
         run: >-
           scripts/ci/run-unless-sibling-fails.sh "Test suite (ubuntu-latest)"
           cargo nextest run --workspace --locked --profile ci-system
         env:
           BYNK_REQUIRE_TSC: "1"
+          BYNK_REQUIRE_BROWSER: "1"
+          NODE_PATH: ${{ github.workspace }}/bynk-tests/tests/system/browser/node_modules
           BYNK_REQUIRE_WORKERD: "1"
           BYNK_REQUIRE_MYSQL: "1"
           BYNK_MYSQL_SMOKE_PORT: ${{ job.services.mariadb.ports['3306'] }}
           GH_TOKEN: ${{ github.token }}
+      # Two checks that used to follow the suite in the `test` job, serially,
+      # where they put ~2 min on every merge-queue entry's critical path. They
+      # run here instead: in every ready PR's run and every push to `main`
+      # (the queue never passes this job, so `main` never skips it), and in the
+      # nightly. Not in the merge queue: each entry already passed both on its
+      # own PR. A break that only stacking reveals (an API rename in one entry,
+      # a README example using the old name in another) is caught by this job's
+      # run on the merged tree in the push run on `main`, as for the system
+      # tier. This job builds every test binary, so the tier probe's
+      # `nextest list` calls compile nothing.
+      #
+      # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
+      # (`cargo readme-doctests`, a `.cargo/config.toml` alias naming only the
+      # crates whose README has one). Linux only: the examples are
+      # OS-independent. A README-only change runs it in the `drift` job instead.
+      - name: README examples (doctests)
+        run: cargo readme-doctests
+      # C4b (#2940): every test is in exactly one tier (unit, integration,
+      # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
+      # partition is OS-independent. `--profile test` reuses the test build
+      # above (a plain `cargo run` would rebuild xtask's dependencies in the dev
+      # profile).
+      - name: Test tier partition
+        run: cargo run --locked --profile test -p xtask -- tier-probe
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1477,6 +1552,12 @@ jobs:
       && !contains(fromJSON(needs.changes.outputs.queue_passed), 'Docs site (astro build)')
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # `packages: read` lets `npm ci` fetch the site theme
+    # (@bynk-lang/site-theme) from GitHub Packages, which needs a token even
+    # to read (web presence slice 6).
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: site
@@ -1487,16 +1568,38 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+          registry-url: https://npm.pkg.github.com
+          scope: "@bynk-lang"
       - name: Install deps
         run: npm ci
-      # The sidebar is generated from site/src/SUMMARY.md; fail if the committed
-      # sidebar.json drifts from it.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The site registers its own copy of the Bynk grammar (the one the
+      # `textmate_keywords` test holds to the keywords); the theme ships one
+      # too. Fail if they differ, so the docs site and the blog never
+      # highlight Bynk differently.
+      - name: Check the grammar matches the theme's
+        run: cmp src/grammars/bynk.tmLanguage.json node_modules/@bynk-lang/site-theme/grammars/bynk.tmLanguage.json
+      # The diagnostic index is assembled from the per-code files, not committed
+      # (#4286), and the sidebar check below needs the page to exist.
+      - name: Assemble the diagnostic index
+        run: node scripts/build-diagnostics-index.mjs
+      # The sidebars are generated from site/src/SUMMARY.md (the Book) and
+      # site/src/REFERENCE.md (the Reference); fail if either committed sidebar
+      # drifts, or if a page is in no contents.
       - name: Check the generated sidebar is current
         run: node scripts/generate-sidebar.mjs --check
       # The generator's own tests: its contents checks, on small in-memory
       # Books (web presence track, slice 3).
       - name: Test the sidebar generator
         run: node --test scripts/generate-sidebar.test.mjs
+      # The index assembler's own tests (#4286).
+      - name: Test the diagnostic index assembler
+        run: node --test scripts/build-diagnostics-index.test.mjs
+      # The _redirects checker's own tests: the first-match rule matcher and
+      # each check, on small in-memory sites.
+      - name: Test the redirects checker
+        run: node --test scripts/check-redirects.test.mjs
       # llms.txt is hand-authored; verify its /book/ links still resolve.
       - name: Check llms.txt links resolve
         run: node scripts/check-llms-links.mjs
@@ -1520,6 +1623,42 @@ jobs:
           save: ${{ github.event_name != 'merge_group' }}
       - name: Build (astro build — render + Pagefind + link-check)
         run: npm run build
+        # Build the deploy's search config (the blog's index merged, web
+        # presence slice 7), so a config Starlight rejects fails here rather
+        # than on main. The output isn't served, so the blog's index needn't
+        # exist.
+        env:
+          BYNK_MERGE_SEARCH: "1"
+      # The header, the site map and the home page draw their links from
+      # components, which the link validator above doesn't see (web presence
+      # slice 8): check them against the built pages.
+      - name: Check the shell's and home page's links resolve
+        run: node scripts/check-shell-links.mjs
+      # Search merges the blog's Pagefind index (web presence slice 7), and
+      # Pagefind loads it with this site's code, so the two should share a
+      # minor version. A warning, not a failure: the blog deploys on its own.
+      - name: Pagefind matches the blog's (warning only)
+        run: |
+          # Pagefind comes in through Starlight, so it is only here because npm
+          # hoists it; a missing copy warns rather than failing the step.
+          here=$(node -p "require('./node_modules/pagefind/package.json').version" 2>/dev/null || echo unknown)
+          if [ "$here" = unknown ]; then
+            echo "::warning::Pagefind isn't in node_modules (npm didn't hoist Starlight's copy), so its version can't be compared."
+          elif ! there=$(curl -fsS --max-time 20 https://bynk-lang.org/blog/pagefind/pagefind-entry.json | node -pe "JSON.parse(require('fs').readFileSync(0)).version"); then
+            echo "::warning::Could not read the blog's Pagefind version from https://bynk-lang.org/blog/pagefind/pagefind-entry.json"
+          elif [ "$(echo "$here" | cut -d. -f1,2)" != "$(echo "$there" | cut -d. -f1,2)" ]; then
+            echo "::warning::Pagefind here is $here, the blog's is $there. Merged search needs the same minor version: update the older site's Starlight (or npm update pagefind)."
+          else
+            echo "Pagefind $here here, $there on the blog."
+          fi
+      # public/_redirects (Cloudflare Pages) against the built dist/: no rule
+      # shadows a live page or never applies, and every target (each page under
+      # a splat's folder, sample :code values) lands on a built page. Every
+      # route in src/data/published-routes.txt (each page the site has ever
+      # published) must still be a page or redirect to one, and every built
+      # page must be listed there (#4010).
+      - name: Check _redirects against the build
+        run: node scripts/check-redirects.mjs
 
   grammar:
     # Run the tree-sitter corpus so grammar drift fails a PR. Without this the
@@ -1633,7 +1772,7 @@ jobs:
     #     `readmes` input) and asserts the crate-layering diagram matches the manifests.
     #   - `cargo readme-doctests` compiles and runs the `rust` examples in
     #     bynk-*/README.md (a `readmes` input) as doctests (#1645), which the
-    #     `test` job runs in its own `README examples` step;
+    #     `test-system` job runs in its own `README examples` step;
     #     xtask/tests/docs_consistency/readme_doctests.rs keeps the alias's crate
     #     list in step with the READMEs that have a `rust` block.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
@@ -1693,7 +1832,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5
 
   devcontainer-feature:
     # #2103: build each scenario in features/test/bynk/scenarios.json with the
@@ -1767,7 +1906,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Intel macOS, not macos-latest: arm64 macOS runners have gone unallocated
+        # for whole runs (#4263), and install.sh's Darwin path is the same on both
+        # (it picks the archive by `uname -m`).
+        os: [ubuntu-latest, macos-15-intel, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1776,6 +1918,10 @@ jobs:
         if: runner.os != 'Windows'
         env:
           BYNK_INSTALL_DIR: ${{ runner.temp }}/b
+          # Pinned on macOS until a published release carries the darwin archives this change
+          # restores: the latest could be one that has none (#4263). Drop the pin with the
+          # first release built after it.
+          BYNK_VERSION: ${{ runner.os == 'macOS' && 'v0.655.0' || '' }}
         # Seed the copies an older release left behind: the latest release
         # ships neither bynkc nor bynkc-lsp, so an upgrade must remove both.
         run: |
@@ -1813,6 +1959,46 @@ jobs:
           if (-not (Test-Path "$env:BYNK_INSTALL_DIR\bynk-lsp.exe")) { throw "bynk-lsp.exe was not installed" }
           & "$env:BYNK_INSTALL_DIR\bynk.exe" --version
           if ($LASTEXITCODE -ne 0) { throw "bynk --version failed" }
+
+  apple-cross-build:
+    # The release builds `aarch64-apple-darwin` on the Intel macOS runner, because arm64
+    # macOS runners have gone unallocated for whole runs (#4263). This builds that target
+    # the same way and checks each binary's Mach-O slice, so the cross-build is proven on
+    # the PR that edits the release matrix, not at the next tag. Debug, not release: it
+    # proves the link and the architecture, which is all the leg needs.
+    name: Apple targets (cross-build)
+    needs: changes
+    if: >-
+      needs.changes.outputs.release_workflow == 'true' || github.event_name == 'schedule'
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: aarch64-apple-darwin
+      # No rust-cache: a job that saves one must be named in the `queue` step's RUST_CACHES, and
+      # this one runs only when release.yml changes, so a cold build is the right trade.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
+      # `bynk book` embeds the Book (bynk/build.rs), as in release.yml's binaries job.
+      - name: Assemble the diagnostic index
+        run: node site/scripts/build-diagnostics-index.mjs
+      - name: Generate the Book bundle `bynk book` embeds
+        run: node site/scripts/build-llms-full.mjs
+      - name: Build bynk + bynk-lsp for aarch64-apple-darwin
+        run: cargo build --locked --target aarch64-apple-darwin -p bynk -p bynk-lsp
+      - name: The binaries are arm64 Mach-O
+        run: |
+          for b in bynk bynk-lsp; do
+            f="target/aarch64-apple-darwin/debug/$b"
+            lipo -info "$f"
+            file "$f"
+            [ "$(lipo -archs "$f")" = "arm64" ] || { echo "::error::$f is not an arm64 Mach-O"; exit 1; }
+          done
 
   # ---------------------------------------------------------------------------
   # Early signal, so a PR can be marked ready for review without waiting on the
@@ -1909,7 +2095,8 @@ jobs:
   #   - this is a `pull_request` run and every fast gate passed;
   #   - the head branch lives in THIS repo. A fork's draft state is not ours to
   #     change, and a fork's `pull_request` token is read-only anyway;
-  #   - it is not a Dependabot PR (the review workflow never reviews those);
+  #   - it is not a Dependabot PR (the bynk-lang GitHub App doesn't review a
+  #     bot's PR, and a Dependabot PR has no need of the ready set early);
   #   - checked live when the step runs, not taken from the event payload: the
   #     PR is still open, still a draft, its head is still the SHA this run
   #     tested, and it has no `keep-draft` label. That label is the opt-out for
@@ -1922,17 +2109,17 @@ jobs:
   # write` marks the PR ready (`gh pr ready`, a GraphQL mutation), but the
   # `markPullRequestReadyForReview` mutation also demands `contents: write`
   # from integration tokens (cli/cli#6924). Without it the call fails with
-  # "Resource not accessible by integration". `actions: write` dispatches the
-  # review. A same-repo PR's author can already push to this repo, and a fork
+  # "Resource not accessible by integration". A same-repo PR's author can
+  # already push to this repo, and a fork
   # PR's token stays read-only whatever a job asks for, so a PR that edited
   # this job would gain nothing.
   #
-  # The GITHUB_TOKEN no-retrigger rule: events caused by the default token do
-  # NOT start new workflow runs, so the `ready_for_review` event `gh pr ready`
-  # fires never reaches claude-pr-review.yml. `workflow_dispatch` is the
-  # documented exception to that rule, so the step dispatches the review
-  # explicitly after flipping the PR. Do not "simplify" this to rely on the
-  # event.
+  # The review. Pull requests are reviewed by the bynk-lang GitHub App
+  # (bynk-lang/github-hooks), which `.github/bynk-hooks.yml` turns on: Claude
+  # reviews a member's PR each time it becomes ready, and the App posts the
+  # review. Events caused by the default token start no workflow runs, but
+  # GitHub still delivers them to Apps, so the `ready_for_review` event
+  # `gh pr ready` fires reaches the App, and this job dispatches nothing.
   #
   # Promotion also starts the ready set, in this run: `ready-gate` reads
   # `promoted`. No new run starts (the GITHUB_TOKEN rule below), so without
@@ -1968,7 +2155,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      actions: write
     outputs:
       # `true` when this job marked the draft ready, so `ready-gate` runs the
       # ready set in this same run (the ready_for_review event this job
@@ -1984,7 +2170,6 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           # Fetch first, then filter: piped straight into jq, a failed `gh api`
           # (a 5xx, a rate limit) would be masked, since a step with no
@@ -2003,14 +2188,7 @@ jobs:
 
           echo "Fast gates are green at $HEAD_SHA - marking PR #$PR ready for review."
           gh pr ready "$PR" --repo "$REPO"
-          # Set as soon as the PR is ready, before the dispatch below, so a
-          # failed dispatch cannot leave a ready PR without its ready set.
           echo "promoted=true" >> "$GITHUB_OUTPUT"
-          # See the header: the GITHUB_TOKEN-caused ready_for_review event
-          # cannot start the review workflow, so dispatch it explicitly.
-          gh workflow run claude-pr-review.yml \
-            --repo "$REPO" --ref "$DEFAULT_BRANCH" -f pr_number="$PR"
-          echo "Dispatched claude-pr-review.yml for PR #$PR."
 
   # ---------------------------------------------------------------------------
   # Whether this run runs the ready set (see the stage table at the top): the
@@ -2087,6 +2265,7 @@ jobs:
       - devcontainer-feature
       - installers-lint-ps
       - installers-smoke
+      - apple-cross-build
       # Needed rather than exempted: it makes `ci-green` subsume the fast tier
       # (so a `ci-fast` that fails on its own — a broken expression, say — still
       # goes red on the required check), and it satisfies the audit below with
@@ -2161,7 +2340,7 @@ jobs:
           READY_SET: ${{ needs.ready-gate.outputs.run }}
         run: |
           if [ "$STAGE" = draft ] && [ "$READY_SET" != true ]; then
-            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS, the Linux system tier, the Node floor); 'CI green' passes once it has."
+            echo "::error::Draft PR: only the draft-stage checks ran. Mark the PR ready for review to run the full check (Windows, macOS when MACOS_ON_PRS is 'true', the Linux system tier, the Node floor); 'CI green' passes once it has."
             exit 1
           fi
           echo "Stage $STAGE: the checks this stage requires have run."

@@ -2,6 +2,7 @@
 // commons ev.values
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -10,10 +11,10 @@ export type Qty = number & { readonly __brand: "Qty" };
 export const Qty = {
   of(value: number): Result<Qty, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Qty", message: "must be a safe integer", value });
+      return Err({ field: "Qty", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 100)) {
-      return Err({ field: "Qty", message: "must be in range [1, 100]", value });
+      return Err({ field: "Qty", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Qty);
   },
@@ -23,8 +24,8 @@ export type Tag = string & { readonly __brand: "Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Tag", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Tag", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Tag);
   },

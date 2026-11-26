@@ -1,0 +1,2 @@
+bynk.types.annotation_unknown
+unknown annotation `@label` on type `Event`

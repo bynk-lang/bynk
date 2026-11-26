@@ -111,8 +111,7 @@ impl<'a> Parser<'a> {
         if self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_kind(1) == Some(TokenKind::Dot)
             && self.nth_kind(2) == Some(TokenKind::Ident)
-            && self.nth_kind(3) == Some(TokenKind::Ident)
-            && matches!(self.nth_text(3), "called" | "never" | "before")
+            && self.observation_matcher_ahead(3)
         {
             return self.parse_observation();
         }
@@ -133,6 +132,22 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Faults(Box::new(FaultsExpr {
                     call: subject,
                     principal,
+                    violates: None,
+                })),
+                span,
+            });
+        }
+        // #4035: `expect <call> violates <name>`, `violates` contextual as `faults` is.
+        if self.peek_kind() == Some(TokenKind::Ident) && self.nth_text(0) == "violates" {
+            self.bump(); // `violates`
+            let violates = self.parse_violates_name()?;
+            let span = subject.span.merge(self.prev_span());
+            return Ok(Expr {
+                id: self.alloc_expr_id(),
+                kind: ExprKind::Faults(Box::new(FaultsExpr {
+                    call: subject,
+                    principal,
+                    violates: Some(violates),
                 })),
                 span,
             });
@@ -143,16 +158,55 @@ impl<'a> Parser<'a> {
                 Some(t) => CompileError::new(
                     "bynk.parse.expected_token",
                     t.span,
-                    format!("expected `faults` {ctx}, found {}", t.kind.describe()),
+                    format!(
+                        "expected `faults` or `violates` {ctx}, found {}",
+                        t.kind.describe()
+                    ),
                 ),
                 None => CompileError::new(
                     "bynk.parse.unexpected_eof",
                     self.eof_span(),
-                    format!("expected `faults` {ctx}, found end of file"),
+                    format!("expected `faults` or `violates` {ctx}, found end of file"),
                 ),
             });
         }
         Ok(subject)
+    }
+
+    /// #4035: the dotted name after `violates`: `name`, `Agent.name` or `field.index`.
+    fn parse_violates_name(&mut self) -> Result<Vec<Ident>, CompileError> {
+        let mut path = vec![self.expect_ident("after `violates`")?];
+        while self.peek_kind() == Some(TokenKind::Dot) {
+            self.bump();
+            path.push(self.expect_ident("after `violates`")?);
+        }
+        Ok(path)
+    }
+
+    /// #3945: whether an observation matcher word (`called` / `never` / `before`) is at `at`,
+    /// after the optional bracketed type arguments of the operation (`Cap.op[T] called`).
+    fn observation_matcher_ahead(&self, at: usize) -> bool {
+        let mut i = at;
+        if self.nth_kind(i) == Some(TokenKind::LBracket) {
+            let mut depth = 0usize;
+            loop {
+                match self.nth_kind(i) {
+                    Some(TokenKind::LBracket) => depth += 1,
+                    Some(TokenKind::RBracket) => {
+                        depth -= 1;
+                        if depth == 0 {
+                            i += 1;
+                            break;
+                        }
+                    }
+                    Some(_) => {}
+                    None => return false,
+                }
+                i += 1;
+            }
+        }
+        self.nth_kind(i) == Some(TokenKind::Ident)
+            && matches!(self.nth_text(i), "called" | "never" | "before")
     }
 
     /// Parse an observation clause (v0.117): `Cap.op` followed by a matcher —
@@ -165,6 +219,8 @@ impl<'a> Parser<'a> {
             "after the capability name in an observation",
         )?;
         let op = self.expect_ident("as the observed operation name")?;
+        // #3945: explicit type arguments of a generic operation.
+        let type_args = self.parse_stub_type_args()?;
         let start = cap.span;
         let word = self.nth_text(0);
         let matcher = match word {
@@ -240,7 +296,12 @@ impl<'a> Parser<'a> {
         let end = self.prev_span();
         Ok(Expr {
             id: self.alloc_expr_id(),
-            kind: ExprKind::Observation(Box::new(ObservationExpr { cap, op, matcher })),
+            kind: ExprKind::Observation(Box::new(ObservationExpr {
+                cap,
+                op,
+                type_args,
+                matcher,
+            })),
             span: start.merge(end),
         })
     }
@@ -680,13 +741,15 @@ impl<'a> Parser<'a> {
                             span,
                         };
                         self.deepen_spine(e.span)?;
-                    } else if let (ExprKind::IntLit { value: v, .. }, Some(unit)) =
-                        (&e.kind, DurationUnit::from_name(&member.name))
-                    {
+                    } else if let ExprKind::IntLit { value: v, .. } = &e.kind {
                         // v0.86 (ADR 0112): `<int-literal>.<unit>` is a `Duration`
                         // literal, not a field access — an integer-literal
-                        // receiver has no fields, so this is unambiguous.
+                        // receiver has no fields, so this is unambiguous (#3947:
+                        // a word that names no unit is `unknown_unit`, and the
+                        // unit must agree with the number).
                         let value = *v;
+                        let unit =
+                            duration::resolve_duration_unit(value, &member.name, member.span)?;
                         let span = e.span.merge(member.span);
                         let millis = value.checked_mul(unit.millis()).ok_or_else(|| {
                             CompileError::new(
@@ -694,7 +757,7 @@ impl<'a> Parser<'a> {
                                 span,
                                 format!(
                                     "the duration `{value}.{}` overflows the millisecond range",
-                                    unit.name()
+                                    unit.name_for(value)
                                 ),
                             )
                         })?;
@@ -992,11 +1055,7 @@ impl<'a> Parser<'a> {
             | TokenKind::Messages
             | TokenKind::On
             | TokenKind::Suite => {
-                self.bump();
-                let ident = Ident {
-                    name: self.slice(t.span).to_string(),
-                    span: t.span,
-                };
+                let ident = self.bump_ident_maybe_qualified(t);
                 // v0.9.4: `Val[T]` / `Val[T](args)` — test-context construction.
                 if ident.name == "Val" && self.peek_kind() == Some(TokenKind::LBracket) {
                     return self.parse_val_expr(ident.span);
@@ -2372,8 +2431,12 @@ impl<'a> Parser<'a> {
         // ids the outer parser allocates *after* this hole don't re-collide
         // with ones the sub-parse just handed out.
         sub.next_expr_id = self.next_expr_id;
+        // #4045: the hole reads the qualifiers the unit's `uses` clauses made, and
+        // the names it qualifies are the unit's to hand back.
+        sub.use_prefixes = self.use_prefixes.clone();
         let expr = sub.parse_expr()?;
         self.next_expr_id = sub.next_expr_id;
+        self.qualified_refs.append(&mut sub.qualified_refs);
         if let Some(extra) = sub.peek() {
             return Err(CompileError::new(
                 "bynk.parse.extra_tokens",

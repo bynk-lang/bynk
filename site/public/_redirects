@@ -1,23 +1,103 @@
 # Cloudflare Pages redirects for bynk-lang.org (web presence track, link rule L2).
 # A page that moved or retired keeps working here. Tree moves use one splat
 # rule; a single page gets a rule only where something is known to link to it.
+# The first matching rule wins, so a single page's rule comes before the splat
+# for its folder.
 
 # Retired in slice 2 (#3865); the Book's front page now says how the Book is laid out.
 /book/introduction/how-these-docs-are-organised/ /book/ 301
 /book/introduction/how-these-docs-are-organised /book/ 301
 
 # The changelog became one page per release in slice 3 (#3868).
-/book/reference/changelog/ /book/reference/releases/ 301
-/book/reference/changelog /book/reference/releases/ 301
+/book/reference/changelog/ /reference/releases/ 301
+/book/reference/changelog /reference/releases/ 301
 
 # Every tool links a diagnostic code as /d/<code> (slice 4, #3876); the page it
 # names may move, so the link stays a 302.
-/d /book/reference/diagnostics/ 302
-/d/ /book/reference/diagnostics/ 302
-/d/:code /book/reference/diagnostics/:code/ 302
-/d/:code/ /book/reference/diagnostics/:code/ 302
+/d /reference/diagnostics/ 302
+/d/ /reference/diagnostics/ 302
+/d/:code /reference/diagnostics/:code/ 302
+/d/:code/ /reference/diagnostics/:code/ 302
 
 # The troubleshooting pages were folded into each code's explanation in slice 4b
 # (#3907); every code now has its own page, listed on the Diagnostic index.
-/book/troubleshooting /book/reference/diagnostics/ 302
-/book/troubleshooting/* /book/reference/diagnostics/ 302
+/book/troubleshooting /reference/diagnostics/ 302
+/book/troubleshooting/* /reference/diagnostics/ 302
+
+# The explanation pages moved to /book/concepts/ in slice 5b (#4002). They left
+# folders whose other pages stayed, so each has its own rule (link rule L6).
+/book/guides/program-structure/how-a-program-is-shaped/ /book/concepts/program-structure/how-a-program-is-shaped/ 301
+/book/guides/program-structure/how-a-program-is-shaped /book/concepts/program-structure/how-a-program-is-shaped/ 301
+/book/guides/type-system/philosophy/ /book/concepts/type-system/philosophy/ 301
+/book/guides/type-system/philosophy /book/concepts/type-system/philosophy/ 301
+/book/guides/type-system/refined-literal-admission/ /book/concepts/type-system/refined-literal-admission/ 301
+/book/guides/type-system/refined-literal-admission /book/concepts/type-system/refined-literal-admission/ 301
+/book/guides/type-system/recursion-and-iteration/ /book/concepts/type-system/recursion-and-iteration/ 301
+/book/guides/type-system/recursion-and-iteration /book/concepts/type-system/recursion-and-iteration/ 301
+/book/guides/type-system/ordering-your-own-types/ /book/concepts/type-system/ordering-your-own-types/ 301
+/book/guides/type-system/ordering-your-own-types /book/concepts/type-system/ordering-your-own-types/ 301
+/book/guides/effects-and-capabilities/understand-the-capability-model/ /book/concepts/effects-and-capabilities/understand-the-capability-model/ 301
+/book/guides/effects-and-capabilities/understand-the-capability-model /book/concepts/effects-and-capabilities/understand-the-capability-model/ 301
+/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/ /book/concepts/effects-and-capabilities/synchronous-and-asynchronous-sends/ 301
+/book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends /book/concepts/effects-and-capabilities/synchronous-and-asynchronous-sends/ 301
+/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure/ /book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/ 301
+/book/guides/effects-and-capabilities/what-a-join-guarantees-on-failure /book/concepts/effects-and-capabilities/what-a-join-guarantees-on-failure/ 301
+/book/guides/effects-and-capabilities/what-a-timeout-stops/ /book/concepts/effects-and-capabilities/what-a-timeout-stops/ 301
+/book/guides/effects-and-capabilities/what-a-timeout-stops /book/concepts/effects-and-capabilities/what-a-timeout-stops/ 301
+/book/guides/agents-and-state/the-agent-model/ /book/concepts/agents-and-state/the-agent-model/ 301
+/book/guides/agents-and-state/the-agent-model /book/concepts/agents-and-state/the-agent-model/ 301
+/book/guides/agents-and-state/understand-invariants/ /book/concepts/agents-and-state/understand-invariants/ 301
+/book/guides/agents-and-state/understand-invariants /book/concepts/agents-and-state/understand-invariants/ 301
+/book/guides/events/understand-events/ /book/concepts/events/understand-events/ 301
+/book/guides/events/understand-events /book/concepts/events/understand-events/ 301
+/book/guides/localisation/understand-localisation/ /book/concepts/localisation/understand-localisation/ 301
+/book/guides/localisation/understand-localisation /book/concepts/localisation/understand-localisation/ 301
+/book/guides/testing/philosophy/ /book/concepts/testing/philosophy/ 301
+/book/guides/testing/philosophy /book/concepts/testing/philosophy/ 301
+/book/guides/projects-build-and-deployment/why-compile-to-typescript/ /book/concepts/projects-build-and-deployment/why-compile-to-typescript/ 301
+/book/guides/projects-build-and-deployment/why-compile-to-typescript /book/concepts/projects-build-and-deployment/why-compile-to-typescript/ 301
+/book/about/bynk-compared-to-typescript/ /book/concepts/about/bynk-compared-to-typescript/ 301
+/book/about/bynk-compared-to-typescript /book/concepts/about/bynk-compared-to-typescript/ 301
+/book/about/bynk-compared-to-the-alternatives/ /book/concepts/about/bynk-compared-to-the-alternatives/ 301
+/book/about/bynk-compared-to-the-alternatives /book/concepts/about/bynk-compared-to-the-alternatives/ 301
+
+# The Learn Bynk chapter files lost their numbers in slice 12 (#4077), so a
+# chapter's URL no longer changes when chapters are added (track §10).
+/book/tutorials/01-first-program/ /book/tutorials/first-program/ 301
+/book/tutorials/01-first-program /book/tutorials/first-program/ 301
+/book/tutorials/02-http-service/ /book/tutorials/http-service/ 301
+/book/tutorials/02-http-service /book/tutorials/http-service/ 301
+/book/tutorials/03-modelling-data/ /book/tutorials/modelling-data/ 301
+/book/tutorials/03-modelling-data /book/tutorials/modelling-data/ 301
+/book/tutorials/04-refined-types/ /book/tutorials/refined-types/ 301
+/book/tutorials/04-refined-types /book/tutorials/refined-types/ 301
+/book/tutorials/05-stateful-agent/ /book/tutorials/stateful-agent/ 301
+/book/tutorials/05-stateful-agent /book/tutorials/stateful-agent/ 301
+/book/tutorials/06-testing/ /book/tutorials/testing/ 301
+/book/tutorials/06-testing /book/tutorials/testing/ 301
+# The Project pages left the Book in slice 13 (#4082): contributing and the
+# roadmap moved to /project/, and Why Bynk exists folded into What is Bynk?.
+/book/about/versioning-and-roadmap/ /project/versioning-and-roadmap/ 301
+/book/about/versioning-and-roadmap /project/versioning-and-roadmap/ 301
+/book/about/why-bynk-exists/ /book/introduction/what-is-bynk/ 301
+/book/about/why-bynk-exists /book/introduction/what-is-bynk/ 301
+/book/contributing/ /project/contributing/ 301
+/book/contributing /project/contributing/ 301
+/book/contributing/* /project/contributing/:splat 301
+
+# One Reference surface at /reference/ (slice 5, #3935): the Book's reference
+# and specification and the Developer Docs moved there as folders. The per-tool
+# pages came up a level (/docs/tooling/<tool>/ → /reference/tooling/<tool>/), and
+# the rustdoc moved with them.
+/book/reference /reference/ 301
+/book/reference/* /reference/:splat 301
+/book/spec /reference/spec/ 301
+/book/spec/* /reference/spec/:splat 301
+/docs /reference/tooling/ 301
+/docs/cli /reference/tooling/bynk-cli/ 301
+/docs/tooling /reference/tooling/ 301
+/docs/api /reference/api/ 301
+/docs/cli/ /reference/tooling/bynk-cli/ 301
+/docs/api/* /reference/api/:splat 301
+/docs/tooling/* /reference/tooling/:splat 301
+/docs/* /reference/tooling/:splat 301

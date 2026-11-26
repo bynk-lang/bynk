@@ -25,6 +25,7 @@ use bynk_ts::TsExpr;
 
 use super::runtime_use::RuntimeUse;
 use super::serialisation;
+use crate::ts_build::{call, ident};
 
 /// The hidden witness parameter's name for type parameter `param`.
 pub(crate) fn witness_ident(param: &str) -> String {
@@ -43,7 +44,7 @@ pub(crate) fn has_var(ty: TyId, commons: &TypedCommons) -> bool {
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -87,7 +88,7 @@ pub(crate) fn ground_parts(ty: TyId, commons: &TypedCommons, out: &mut Vec<TyId>
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -132,7 +133,7 @@ pub(crate) fn generic_factories(ty: TyId, commons: &TypedCommons, out: &mut Vec<
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -178,7 +179,7 @@ impl<'a> CodecGen<'a> {
 
     fn wrap(&self, helper: &'static str, parts: Vec<TsExpr>) -> TsExpr {
         self.runtime_use.note_cmp(helper);
-        call(helper, parts)
+        call(ident(helper), parts)
     }
 
     /// The `{ encode, decode }` witness for `ty`, as a node.
@@ -197,10 +198,14 @@ impl<'a> CodecGen<'a> {
             Ty::Option(a) => self.wrap("__bynkCodecOption", vec![self.for_ty_node(*a)]),
             Ty::List(a) => self.wrap("__bynkCodecList", vec![self.for_ty_node(*a)]),
             Ty::Set(a) => self.wrap("__bynkCodecSet", vec![self.for_ty_node(*a)]),
-            Ty::Map(k, v) => self.wrap(
-                "__bynkCodecMap",
-                vec![self.for_ty_node(*k), self.for_ty_node(*v)],
-            ),
+            Ty::Map(k, v) => {
+                let mut parts = vec![self.for_ty_node(*k), self.for_ty_node(*v)];
+                // #3974: a `String`-keyed map also reads from a JSON object.
+                if !has_var(*k, self.commons) && self.is_string_key(*k) {
+                    parts.push(TsExpr::Lit(bynk_ts::TsLit::Bool(true)));
+                }
+                self.wrap("__bynkCodecMap", parts)
+            }
             Ty::Result(a, b) => self.wrap(
                 "__bynkCodecResult",
                 vec![self.for_ty_node(*a), self.for_ty_node(*b)],
@@ -208,14 +213,14 @@ impl<'a> CodecGen<'a> {
             // #2792: a user generic type over a type variable is its declaration's
             // factory applied to the witnesses of its arguments.
             Ty::Named { name, args, .. } => call(
-                &serialisation::codec_factory_ident(name),
+                ident(serialisation::codec_factory_ident(name)),
                 args.iter().map(|a| self.for_ty_node(*a)).collect(),
             ),
             other @ Ty::Error
             | other @ Ty::Never
             | other @ Ty::Base(_)
             | other @ Ty::Effect(_)
-            | other @ Ty::HttpResult(_)
+            | other @ Ty::HttpResult(_, _)
             | other @ Ty::QueueResult
             | other @ Ty::HttpOutcome(_)
             | other @ Ty::BoundaryRejection
@@ -239,6 +244,13 @@ impl<'a> CodecGen<'a> {
         }
     }
 
+    /// #3974: whether a variable-free map key is a `String`, or a refined or opaque `String`.
+    fn is_string_key(&self, key: TyId) -> bool {
+        let tys = self.commons.tys();
+        super::ty_to_type_ref(key, tys)
+            .is_some_and(|t| serialisation::is_string_key_ref(&t, &self.commons.types))
+    }
+
     /// The generated pair for a variable-free type.
     fn ground(&self, ty: TyId) -> TsExpr {
         let tys = self.commons.tys();
@@ -248,17 +260,7 @@ impl<'a> CodecGen<'a> {
         // `JsonValue` and `BoundaryError`, whether or not the type yields a
         // codec root; a module that curates its imports (a test module) needs
         // them brought in.
-        self.runtime_use.note_json_codec();
-        self.runtime_use.note_boundary_codec();
         serialisation::witness_codec_expr(&tref, self.runtime_use)
-    }
-}
-
-/// `helper(args…)`.
-fn call(helper: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(TsExpr::Ident(helper.to_string())),
-        args,
     }
 }
 
@@ -308,7 +310,7 @@ mod tests {
         assert_eq!(witness_of(&ts, "b"), "__bynkCodecList(__codec_T)");
         assert_eq!(witness_of(&ts, "c"), "__bynkCodecOption(__codec_T)");
         assert!(witness_of(&ts, "d").starts_with("__bynkCodecMap({ encode: "));
-        assert!(witness_of(&ts, "d").ends_with(", __codec_T)"));
+        assert!(witness_of(&ts, "d").ends_with(", __codec_T, true)"));
         assert!(witness_of(&ts, "e").starts_with("__bynkCodecResult(__codec_T, { encode: "));
         for h in [
             "__bynkCodecList",

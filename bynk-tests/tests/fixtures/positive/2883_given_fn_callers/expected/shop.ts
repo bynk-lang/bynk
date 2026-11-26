@@ -20,16 +20,16 @@ export const Frame = {
 export type RoomId = string & { readonly __brand: "shop.RoomId" };
 
 export const RoomId = {
-  of(value: string): Result<RoomId, ValidationError> {
-    return Ok(value as RoomId);
+  of(value: string): RoomId {
+    return value as RoomId;
   },
 };
 
 export type UserId = string & { readonly __brand: "shop.UserId" };
 
 export const UserId = {
-  of(value: string): Result<UserId, ValidationError> {
-    return Ok(value as UserId);
+  of(value: string): UserId {
+    return value as UserId;
   },
 };
 
@@ -72,12 +72,16 @@ export class LoggedAudit implements Audit {
 export const __LoggedAuditProvider = { token: __AuditToken, factory: (deps: { Logger: Logger }) => new LoggedAudit(deps) };
 
 export const chat = {
+  maxFrame: 1048576,
   async open(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await __makeRoom(roomId).join(deps.identity, connection, deps);
     return undefined;
   },
   async message(connection: Connection<Frame>, roomId: RoomId, frame: Frame, deps: { Logger: Logger; identity: UserId }): globalThis.Promise<void> {
     const __r0 = await warn(frame.text, deps);
+    return undefined;
+  },
+  async close(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     return undefined;
   },
 };

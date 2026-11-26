@@ -1,7 +1,7 @@
 context hof.api
 
 service runner {
-  on call(f: Int -> Int) -> Effect[Int] {
+  on call(f: Int -> Int) -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

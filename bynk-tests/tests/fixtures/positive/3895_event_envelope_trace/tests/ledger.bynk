@@ -1,0 +1,27 @@
+// #3895: `EventEnvelope.trace` is additive and defaulted. An envelope built
+// without it has no trace, a default envelope is minted outside any trace, and
+// one built with a trace hands that trace to the handler.
+suite shop.ledger {
+  consumes shop.order { Placed }
+  consumes bynk { EventEnvelope }
+
+  case "an envelope built without a trace has none" {
+    let env = EventEnvelope { eventId: "evt-1", publisherId: "shop.order", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1 }
+    let _ <- OnPlaced.event(Placed { id: "a" }, env)
+    let seen <- Books("a").traceSeen()
+    expect seen == "none"
+  }
+
+  case "a default envelope is minted outside any trace" {
+    let _ <- OnPlaced.event(Placed { id: "b" })
+    let seen <- Books("b").traceSeen()
+    expect seen == "none"
+  }
+
+  case "an envelope built with a trace hands it to the handler" {
+    let env = EventEnvelope { eventId: "evt-2", publisherId: "shop.order", emittedAt: Instant.fromEpochMillis(0), schemaVersion: 1, trace: Some("0af7651916cd43dd8448eb211c80319c") }
+    let _ <- OnPlaced.event(Placed { id: "c" }, env)
+    let seen <- Books("c").traceSeen()
+    expect seen == "0af7651916cd43dd8448eb211c80319c"
+  }
+}

@@ -49,6 +49,14 @@ export function __serialise_GateError(value: GateError): __JsonValue {
 }
 
 export function __deserialise_GateError(json: __JsonValue, path: string = "$"): Result<GateError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Rejected":
+        return Ok({ tag: "Rejected" } as GateError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -115,10 +123,10 @@ export function __deserialise_Score(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0 && json <= 100)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be in range [0, 100]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value: json } });
   }
   return Ok(json as unknown as shop_tokens.Score);
 }
@@ -144,6 +152,16 @@ export function __serialise_TokenError(value: shop_tokens.TokenError): __JsonVal
 }
 
 export function __deserialise_TokenError(json: __JsonValue, path: string = "$"): Result<shop_tokens.TokenError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Denied":
+        return Ok({ tag: "Denied" } as shop_tokens.TokenError);
+      case "Expired":
+        return Ok({ tag: "Expired" } as shop_tokens.TokenError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

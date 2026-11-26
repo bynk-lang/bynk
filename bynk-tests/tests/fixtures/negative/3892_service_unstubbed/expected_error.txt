@@ -1,0 +1,2 @@
+bynk.tier.cross_context_needs_system
+`placeOrder`, which calls `shop.pay.authorise` in another context

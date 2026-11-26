@@ -58,7 +58,7 @@ fn viaLambda(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
 
 // A function named as a value.
 fn tick(n: Int) -> Effect[()] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(())
 }
 
@@ -75,12 +75,12 @@ type Box = { n: Int }
 
 // A method and a static method.
 fn Box.bump(self, d: Int) -> Effect[Int] {
-	let r <- Effect.pure(self.n + d).within(1.seconds)
+	let r <- Effect.pure(self.n + d).within(1.second)
 	Effect.pure(self.n + d)
 }
 
 fn Box.make(n: Int) -> Effect[Box] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(Box { n: n })
 }
 
@@ -103,12 +103,12 @@ agent Roller {
 }
 
 service run {
-	on call(n: Int) -> Effect[Int] given Audit, Quotes {
+	on call(n: Int) -> Effect[Int] by Caller given Audit, Quotes {
 		let a <- outer((x) => Audit.note(x), n)
 		let b <- bounded(Quotes.quote(n))
 		let c <- hedged(Quotes.quote(1), Quotes.quote(2))
 		let d <- viaLambda((x) => Audit.note(x), n)
-		let _ <- [1, 2].parTraverse(tick)
+		let _ <- [1, 2].parForEach(tick)
 		let e <- guarded((x) => Audit.note(x), n)
 		let box <- Box.make(n)
 		let f <- box.bump(1)

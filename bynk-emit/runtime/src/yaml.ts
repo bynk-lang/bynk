@@ -24,7 +24,7 @@
 import { Ok, Err } from "./result.ts";
 import type { Result } from "./result.ts";
 import type { JsonValue } from "./boundary.ts";
-import type { DecodeError } from "./errors.ts";
+import type { DecodeError, DecodeErrorKind } from "./errors.ts";
 
 /** The input cap, in UTF-8 bytes (the HTTP body cap, `MAX_BODY_BYTES`). */
 export const YAML_MAX_BYTES = 1048576;
@@ -793,7 +793,7 @@ export function __bynkYamlParse(text: string): Result<JsonValue, DecodeError> {
   try {
     if (text.length > YAML_MAX_BYTES || utf8Length(text) > YAML_MAX_BYTES) {
       return Err({
-        kind: "LimitExceeded",
+        kind: { tag: "LimitExceeded" },
         path: "$",
         message: `the input is longer than ${YAML_MAX_BYTES} bytes`,
       });
@@ -814,7 +814,7 @@ export function __bynkYamlParse(text: string): Result<JsonValue, DecodeError> {
   } catch (e) {
     if (typeof e === "object" && e !== null && (e as Failure).yamlFailure === true) {
       const f = e as Failure;
-      return Err({ kind: f.kind, path: f.path, message: f.message });
+      return Err({ kind: { tag: f.kind as DecodeErrorKind["tag"] }, path: f.path, message: f.message });
     }
     throw e;
   }

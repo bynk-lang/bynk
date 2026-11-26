@@ -162,7 +162,7 @@ fn a_first_party_name_links_to_the_book() {
         })
         .expect("`[Clock.now]` links to the Book");
     assert!(
-        href.starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+        href.starts_with("https://bynk-lang.org/reference/bynk-capabilities/#"),
         "{href}"
     );
 }

@@ -2,8 +2,10 @@
 // Worker entry point for context `pay.hooks`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -17,95 +19,121 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    const __security_webhooks: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "pay.hooks");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      const __security_webhooks: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "pay.hooks");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
+          }
         }
-      }
 
-      {
-        if (method === "POST" && path === "/webhooks/legacy") {
-          __route = "POST /webhooks/legacy";
-          let __body_json: __JsonValue;
-          let __raw: string;
-          try {
-            __raw = await request.text();
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+        {
+          if (method === "POST" && __matchPath("/webhooks/legacy", path) !== null) {
+            __route = "POST /webhooks/legacy";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 1048576);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            let __body_json: __JsonValue;
+            const __raw = new globalThis.TextDecoder().decode(__bytes);
+            const __secret = (env as unknown as globalThis.Record<string, unknown>)["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["LEGACY_SECRET"];
+            if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Legacy-Sig\""]), __security_webhooks);
+            const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Legacy-Sig"), null, null);
+            if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Legacy-Sig\""]), __security_webhooks);
+            try {
+              __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            const body = __r_body.value;
+            const result = await surface.http_POST_webhooks_legacy(body);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /webhooks/legacy" }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Legacy-Sig\""])), __security_webhooks);
           }
-          const __secret = (env as unknown as globalThis.Record<string, unknown>)["LEGACY_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["LEGACY_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_webhooks);
-          const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Legacy-Sig"), null, null);
-          if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_webhooks);
-          try {
-            __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
-          }
-          const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
-          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
-          const body = __r_body.value;
-          const result = await surface.http_POST_webhooks_legacy(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_webhooks);
         }
-      }
-      {
-        if (method === "POST" && path === "/webhooks/processor") {
-          __route = "POST /webhooks/processor";
-          let __body_json: __JsonValue;
-          let __raw: string;
-          try {
-            __raw = await request.text();
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+        {
+          if (method === "POST" && __matchPath("/webhooks/processor", path) !== null) {
+            __route = "POST /webhooks/processor";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 1048576);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            let __body_json: __JsonValue;
+            const __raw = new globalThis.TextDecoder().decode(__bytes);
+            const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
+            if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""]), __security_webhooks);
+            const __ts = request.headers.get("X-Ts");
+            if (__ts === null) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""]), __security_webhooks);
+            const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Sig"), __ts, 300);
+            if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""]), __security_webhooks);
+            try {
+              __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            }
+            const __r_body = handlers.__deserialise_Notice(__body_json, "$");
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
+            const body = __r_body.value;
+            const result = await surface.http_POST_webhooks_processor(body);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /webhooks/processor" }), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""])), __security_webhooks);
           }
-          const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_webhooks);
-          const __ts = request.headers.get("X-Ts");
-          if (__ts === null) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_webhooks);
-          const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Sig"), __ts, 300);
-          if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_webhooks);
-          try {
-            __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
-          }
-          const __r_body = handlers.__deserialise_Notice(__body_json, "$");
-          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
-          const body = __r_body.value;
-          const result = await surface.http_POST_webhooks_processor(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_webhooks);
         }
+        if (__matchPath("/webhooks/legacy", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_webhooks);
+        }
+        if (__matchPath("/webhooks/processor", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_webhooks);
+        }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`pay.hooks ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("pay.hooks", __route);
       }
-      if (path === "/webhooks/legacy") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_webhooks);
-      }
-      if (path === "/webhooks/processor") {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_webhooks);
-      }
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      globalThis.console.error(`pay.hooks ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("pay.hooks", __route);
-    }
+    });
   },
 };

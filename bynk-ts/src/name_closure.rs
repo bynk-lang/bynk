@@ -91,6 +91,7 @@ const GLOBAL_TYPES: &[&str] = &[
     "ReturnType",
     "Parameters",
     "Awaited",
+    "BufferSource",
     "Promise",
     "PromiseLike",
     "Map",
@@ -148,6 +149,7 @@ const GLOBAL_VALUES: &[&str] = &[
     "String",
     "Boolean",
     "Array",
+    "BufferSource",
     "Promise",
     "Math",
     "Date",
@@ -239,6 +241,31 @@ pub fn unbound_names_in(stmts: &[TsStmt], provided: impl Fn(&str) -> bool) -> Ve
     });
     let all: BTreeSet<String> = types.chain(values).chain(declared).cloned().collect();
     all.into_iter().collect()
+}
+
+/// 1A.39b (Decision D): every `TsExpr::Ident` of `program` that is not an identifier path
+/// (`[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*`) and every `TsBindingName::Ident` that is not an
+/// identifier, sorted and deduplicated. Such a text is expression text or a name built from it
+/// held in a variable-like node: it hides what it uses from [`unbound_names`] and from the
+/// printer's precedence. Member chains (`globalThis.Number`, `this.state`) pass: they print as
+/// they read and their head is what the closure sees.
+pub fn text_idents(program: &TsProgram) -> Vec<String> {
+    let mut w = Walk::default();
+    for s in &program.stmts {
+        w.stmt(s);
+    }
+    w.text_idents.into_iter().collect()
+}
+
+/// 1B.5e: the text of every opaque statement (`TsStmt::raw`, `raw_using`, a `Verbatim`) in
+/// `stmts`, **at any depth** — inside a function body, a `try`, a switch case or an object
+/// method, not only at the top level. A producer that reads a tree for the names it uses asks
+/// for this to check what the tree cannot see: a shallow `raw_text()` over the top-level
+/// statements alone misses a nested one.
+pub fn raw_statement_texts(stmts: &[TsStmt]) -> Vec<String> {
+    let mut w = Walk::default();
+    w.stmts(stmts);
+    w.raw_texts
 }
 
 /// #2045: each `(specifier, name)` a structured named import brings in as a
@@ -438,6 +465,27 @@ struct Walk {
     /// other way. A value use of the first and not the second is `TS1361`.
     type_only: BTreeSet<String>,
     value_bound: BTreeSet<String>,
+    /// 1B.5e: the text of every `Raw` or `Verbatim` statement met, at any depth, for
+    /// [`raw_statement_texts`].
+    raw_texts: Vec<String>,
+    /// 1A.39b (Decision D): each `TsExpr::Ident` or `TsBindingName::Ident` text that is not an
+    /// identifier path (see [`text_idents`]).
+    text_idents: BTreeSet<String>,
+}
+
+/// Whether `text` is an identifier (`[A-Za-z_$][\w$]*`).
+fn is_identifier(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
+/// Whether `text` is an identifier path: identifiers joined by single dots (`this.state`,
+/// `globalThis.Number`).
+pub(crate) fn is_identifier_path(text: &str) -> bool {
+    text.split('.').all(is_identifier)
 }
 
 /// The identifier a piece of text starts with: `value` of `value.name`,
@@ -494,7 +542,12 @@ impl Walk {
 
     fn binding(&mut self, name: &TsBindingName) {
         match name {
-            TsBindingName::Ident(n) => self.bind(n),
+            TsBindingName::Ident(n) => {
+                if !is_identifier(n) {
+                    self.text_idents.insert(n.clone());
+                }
+                self.bind(n)
+            }
             TsBindingName::ObjectPattern(names) => self.bind_pattern(names),
             TsBindingName::ArrayPattern(names) => {
                 for n in names.iter().filter(|n| !n.is_empty()) {
@@ -899,8 +952,12 @@ impl Walk {
 
     fn stmt(&mut self, stmt: &TsStmt) {
         match &stmt.kind {
-            TsStmtKind::Verbatim { text, .. } => self.opaque(text),
+            TsStmtKind::Verbatim { text, .. } => {
+                self.raw_texts.push(text.clone());
+                self.opaque(text)
+            }
             TsStmtKind::Raw(text, uses) => {
+                self.raw_texts.push(text.clone());
                 self.opaque(text);
                 for n in uses {
                     if !self.in_scope(n) {
@@ -1101,7 +1158,10 @@ impl Walk {
                     self.ty(ty);
                 }
                 for f in fields {
-                    self.ty(&f.ty);
+                    self.opt_ty(&f.ty);
+                    if let Some(init) = &f.init {
+                        self.expr(init);
+                    }
                 }
                 if let Some(ctor) = constructor {
                     self.params(&ctor.params);
@@ -1134,7 +1194,12 @@ impl Walk {
 
     fn expr(&mut self, expr: &TsExpr) {
         match expr {
-            TsExpr::Ident(name) => self.use_value(name),
+            TsExpr::Ident(name) => {
+                if !is_identifier_path(name) {
+                    self.text_idents.insert(name.clone());
+                }
+                self.use_value(name)
+            }
             TsExpr::Lit(_) => {}
             TsExpr::VerbatimExpr(text, _) => self.opaque(text),
             // Text the emitter printed from nodes, with the names it uses declared
@@ -1774,6 +1839,7 @@ mod tests {
     fn a_parenthesised_type_uses_the_names_it_holds() {
         let thunk = |name: &str| {
             TsType::paren(TsType::Fn {
+                rest: false,
                 names: vec![],
                 params: vec![],
                 ret: Box::new(TsType::named(name)),
@@ -2312,5 +2378,25 @@ mod tests {
         };
         assert_eq!(unbound_names(&program(vec![f()])), ["fallback"]);
         assert!(unbound_names(&program(vec![import(&["fallback"]), f()])).is_empty());
+    }
+
+    /// 1A.39b (Decision D): an identifier path passes; expression text held in an `Ident` is
+    /// reported, as is a binding name that is not an identifier.
+    #[test]
+    fn text_idents_reports_expression_text_and_passes_identifier_paths() {
+        let id = |n: &str| TsExpr::Ident(n.to_string());
+        let p = program(vec![
+            TsStmt::expr_stmt(id("globalThis.Number"), None),
+            TsStmt::expr_stmt(id("this.state"), None),
+            TsStmt::expr_stmt(id("f(a) as K"), None),
+            TsStmt::expr_stmt(id("a..b"), None),
+            TsStmt::const_stmt(
+                TsBindingName::Ident("x y".to_string()),
+                None,
+                id("ok"),
+                None,
+            ),
+        ]);
+        assert_eq!(text_idents(&p), vec!["a..b", "f(a) as K", "x y"]);
     }
 }

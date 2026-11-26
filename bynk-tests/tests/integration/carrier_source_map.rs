@@ -53,12 +53,12 @@ service sweeper from cron {
   ---
   Every five minutes.
   ---
-  on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+  on schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
     let _ <- Wallet(\"a\").topUp(1)
     Ok(())
   }
 
-  on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+  on schedule(\"0 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
     let _ <- Wallet(\"b\").spend(1)
     Ok(())
   }
@@ -149,7 +149,7 @@ agent Room {
   }
 
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }
@@ -324,6 +324,12 @@ const WALLET_MAP: &str = "\
 // now print one statement per line, so extra generated lines joined the snapshot. They are
 // the ruled re-layout, and each repeats an anchor that was already there: the decoded anchor
 // sequence is identical across all 3162 corpus maps, and no mapping moved.
+// #3902: `webSocketClose` and the new `webSocketError` run `on close` through the runtime's
+// `__webSocketClosing`/`__webSocketErrored`, so the trailing run of `33`s (the dispatch methods' span)
+// is eight lines longer: the new `webSocketError` joins `webSocketClose`, each calling `on close`
+// through an arrow. No mapping moved.
+// #3905: `webSocketMessage` starts with the frame admission (`__webSocketAdmit`), one more line in the
+// same run of `33`s. No mapping moved.
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2
 2 2 2 2 3 3 3 3 3 3 3 3 3 4 4 4
@@ -342,7 +348,8 @@ const CHAT_MAP: &str = "\
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
-33 33 33 33 33 33 33 33 33 33
+33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+33 33 33 33 33 33 33 33 33
 ";
 
 const MONEY: &str = "commons commerce.money {

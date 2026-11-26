@@ -1,0 +1,89 @@
+/* The docs site's own touches, on top of the Bynk site theme
+ * (@bynk-lang/site-theme), which carries the brand and the page shell:
+ * tokens, colours, fonts, headings, quotations, code blocks, the header and
+ * the footer. Keep this file to what is particular to this site. */
+
+/* A little more vertical rhythm between content blocks than Starlight's
+ * default. */
+:root {
+  --sl-content-gap-y: 1.25rem;
+}
+
+/* The home page's sections (src/components/home/): a section heading with an
+ * optional eyebrow above it, and generous space between sections. */
+.home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 4rem;
+}
+.home-section h2 {
+  margin: 0;
+  font-size: var(--sl-text-h2);
+}
+.home-section .eyebrow,
+.home-hero .eyebrow {
+  margin: 0;
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bynk-ink-muted);
+}
+.home-section .eyebrow.accent {
+  color: var(--bynk-accent);
+}
+
+/* The home page's components sit outside Markdown (`not-content`), so they
+ * take the theme's link colour here. */
+.home-hero a:not(.sl-link-button),
+.home-section a {
+  color: var(--bynk-accent);
+}
+.home-hero a:not(.sl-link-button):hover,
+.home-section a:hover {
+  color: var(--bynk-ink);
+}
+/* Card titles stay in ink; only their hover is teal. */
+.home-section h3 a {
+  color: var(--bynk-ink);
+}
+
+/* The Diagnostic index (reference/diagnostics.md, generated): a code's
+ * severity badge, when it is not an error, and the filter box that
+ * public/diagnostic-filter.js adds above the first category. */
+.diagnostic-severity {
+  display: inline-block;
+  padding: 0 0.375rem;
+  border: 1px solid var(--bynk-line-strong);
+  border-radius: 0.25rem;
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 0.0625rem;
+}
+.diagnostic-filter {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 1.5rem;
+}
+.diagnostic-filter label {
+  font-weight: 600;
+}
+.diagnostic-filter input {
+  width: 100%;
+  max-width: 28rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--bynk-line-strong);
+  border-radius: 0.375rem;
+  background: var(--bynk-surface-panel);
+  color: var(--bynk-ink);
+  font: inherit;
+}
+.diagnostic-filter p {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: var(--sl-text-sm);
+  color: var(--bynk-ink-muted);
+}

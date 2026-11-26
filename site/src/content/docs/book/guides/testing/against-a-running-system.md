@@ -17,15 +17,15 @@ that are actually running.
 bynk test --against dev
 ```
 
-The runner builds the project, starts a local [`bynk dev`](/docs/bynk-cli/#bynk-dev)
+The runner builds the project, starts a local [`bynk dev`](/reference/tooling/bynk-cli/#bynk-dev)
 for the run, waits for it, sends each `system` case's requests to it, and stops
 it. Unit and `integration` suites still run in process. Nothing reaches
 Cloudflare: `bynk dev` runs `wrangler dev` locally.
 
-A case's [`env`](/book/reference/testing/#env) is applied to the Workers, so
+A case's [`env`](/reference/testing/#env) is applied to the Workers, so
 cases with different `env` maps run against separate `bynk dev` sessions, one
 after another. See
-[Running against `bynk dev`](/docs/bynk-cli/#running-against-bynk-dev).
+[Running against `bynk dev`](/reference/tooling/bynk-cli/#running-against-bynk-dev).
 
 ## 2. Against a preview deployment
 
@@ -52,8 +52,8 @@ Three guards keep a run off production:
 - a case's `env` must agree with the target's `vars`, so a suite written for a
   fake payment processor can't run against one wired to the real one.
 
-See [`[test.targets]`](/docs/manifest/#test) and
-[Running against a deployment](/docs/bynk-cli/#running-against-a-deployment).
+See [`[test.targets]`](/reference/tooling/manifest/#test) and
+[Running against a deployment](/reference/tooling/bynk-cli/#running-against-a-deployment).
 
 ## 3. Write cases that hold on a real system
 
@@ -61,7 +61,7 @@ A real system differs from the in-process harness in three ways. Each has a
 tool.
 
 **State persists.** A deployment keeps what earlier runs wrote. Key what a case
-creates by [`run.id`](/book/reference/testing/#run-id), fresh for each
+creates by [`run.id`](/reference/testing/#run-id), fresh for each
 `--against` run and `"local"` in process:
 
 ```bynk,fragment
@@ -76,7 +76,7 @@ safe reads before it, until it holds or `--settle` expires (default `5s`, for
 each retried stretch rather than the whole case). A `POST` is never replayed,
 and an `expect` after a `let … else` isn't retried. Each case's retry count is reported, so an ordering
 bug shows up as retries rather than hiding behind a pass. See
-[Waiting for a real system](/docs/bynk-cli/#waiting-for-a-real-system).
+[Waiting for a real system](/reference/tooling/bynk-cli/#waiting-for-a-real-system).
 
 **The clock is real.** The Workers read wall-clock time, which the runner
 can't move: `advance Clock` is refused, and an `expect` comparing an `Instant`
@@ -94,18 +94,18 @@ bynk test --smoke --against dev
 
 `--smoke` writes a `system` suite from your `from http` services and runs it
 instead of yours. Each route is called with arguments
-[`Val`](/book/reference/testing/#val) fabricates, and must not answer a 5xx or
+[`Val`](/reference/testing/#val) fabricates, and must not answer a 5xx or
 a body that doesn't decode as its declared type. A route with a JSON body must
 reject a malformed one, and a route behind an actor must refuse a call with no
 credential.
 
 A route `Val` can't fill, such as one whose path parameter is a
 `String where Matches(…)` with no `@example`, is skipped and named. Give the
-type an [`@example`](/book/reference/testing/#val-example) and the route is run. `bynk test --smoke --print`
+type an [`@example`](/reference/testing/#val-example) and the route is run. `bynk test --smoke --print`
 prints the suites, so you can copy one into `tests/` and finish it by hand.
 Against a named target only `GET` routes are called, unless you pass
 `--smoke-unsafe`. See
-[Smoke-testing every route](/docs/bynk-cli/#smoke-testing-every-route).
+[Smoke-testing every route](/reference/tooling/bynk-cli/#smoke-testing-every-route).
 
 A smoke shows that each route answers as declared. It can't tell you what the
 answer should be, or what a sequence of requests does: that is what your own

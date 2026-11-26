@@ -1,0 +1,44 @@
+context ops.mail
+
+type EmailJob = { to: String }
+
+const Backoff: Duration = 30.seconds
+
+// #3877: each `delivery` key becomes a `[[queues.consumers]]` setting, and the
+// dead-letter queue has a consumer of its own, which takes the same message.
+service outbox from queue("outbound-email") {
+  delivery {
+    retries: 5,
+    retryDelay: Backoff,
+    deadLetter: "outbound-email-dlq",
+    batchSize: 25,
+    batchWait: 10.seconds,
+    concurrency: 4,
+  }
+
+  on message(job: EmailJob) -> Effect[QueueResult] by Producer {
+    Retry("not yet")
+  }
+}
+
+service review from queue("outbound-email-dlq") {
+  delivery {
+    deadLetter: None,
+  }
+
+  on message(job: EmailJob) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}
+
+// Only the keys written are emitted; an unset `batchSize` stays 10.
+service digest from queue("digest-email") {
+  delivery {
+    retries: 0,
+    deadLetter: None,
+  }
+
+  on message(job: EmailJob) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}

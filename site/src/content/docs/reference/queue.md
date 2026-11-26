@@ -1,0 +1,378 @@
+---
+title: Queue
+---
+Queue handlers consume messages from a named queue. Like HTTP and cron
+handlers, they are declared in a `service` inside a `context`; the queue is
+bound on the service header (`from queue("name")`), and each handler is an
+`on message(…)`.
+
+## Handler form
+
+```bynk,ignore
+service <Name> from queue("<name>") {
+  on message(message: T) -> Effect[QueueResult] by Producer {
+    …
+  }
+}
+```
+
+- **Actor:** the `by` clause says who may send to this queue, and is required
+  (`bynk.actor.missing_by_on_queue`). `by Producer` admits any producer on the Cloudflare
+  account, which is what a consumer did before the clause was required; a header default,
+  `service fulfil from queue("orders") by Producer`, covers every handler without its own.
+  `bynk check --fix=bynk.actor.missing_by_on_queue` adds it.
+- **Name:** the queue this consumer binds to, on the `from queue("…")` header.
+  It must be a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`,
+  starting and ending with a letter or digit (`bynk.queue.invalid_name`).
+- **Parameters:** the message (conventionally named `message`), of any
+  wire-deserialisable type, and optionally one `QueueDelivery` (see
+  [Delivery metadata](#delivery-metadata)), in either order. Anything else is
+  `bynk.queue.bad_params`. The
+  message is deserialised from the queue body before the handler runs; a
+  body that does not decode is never retried and the handler does not see it
+  ([Messages that cannot be decoded](#messages-that-cannot-be-decoded)).
+- **Return type:** must be `Effect[QueueResult]` — the verdict sum `Ack | Retry`
+  (`bynk.queue.return_not_queue_result`). `Ack` confirms the message; `Retry`
+  redelivers it, carrying a `String` reason for the log.
+- **Placement:** only inside a `service`, never an `agent`
+  (`bynk.parse.handler_in_agent`).
+
+No two queue handlers in a context may consume the same queue
+(`bynk.queue.duplicate_consumer`). The same holds across the project: Cloudflare
+accepts one consumer Worker per queue, so two contexts that consume one queue are
+refused too, whether or not they share a `[deploy.workers]` group. Any number of
+contexts may *send* to a queue; only the consumer is limited to one.
+
+## Acknowledgement and retry
+
+Each message is acknowledged or retried by the handler's `QueueResult` verdict:
+
+- `Ack` — **acknowledge** the message; it is removed from the queue.
+- `Retry(reason)` — **retry** the message (it is redelivered; a message that
+  reaches the retry limit is dead-lettered or deleted, as the
+  [delivery policy](#delivery-policy) says). The reason is logged. It is redelivered
+  after the consumer's `retryDelay` when `delivery { }` sets one, and at once otherwise.
+- `RetryAfter(reason, delay)` — **retry after a delay**: the same, but redelivered
+  after `delay` (a `Duration`) instead, which overrides `retryDelay` for this one
+  message.
+
+`RetryAfter` is how a handler backs off. With the attempt count from a
+[`QueueDelivery`](#delivery-metadata), each retry can wait longer:
+`RetryAfter("smtp unavailable", 10.seconds * delivery.attempts)`. Cloudflare retries
+after a whole number of seconds, from 1 second to 24 hours, so a delay **written as a
+literal** outside that range is `bynk.queue.retry_delay_out_of_range`, and a delay
+**computed at run time** is rounded up to whole seconds and clamped to the range, with
+the clamp logged: a fault would retry with no delay, the opposite of what the handler
+asked for. At the `system` tier a case reads the *settled* verdict: the delay the entry
+gave Cloudflare, so a rounded or clamped delay reads as the one it became (`1500.milliseconds`
+as `2.seconds`, `25.hours` computed as `24.hours`). `expect r == RetryAfter("down", 20.seconds)`
+checks it, and `RetryAfter(_, d)` binds the delay. A `match` of a queue verdict names
+`RetryAfter` or has a wildcard.
+
+The handler never calls an ack API itself — it returns a verdict and the
+framework routes it. The verdict is **independent of success/failure**: `Ack` a
+logical failure to drop a poison message, or `Retry` despite partial success.
+This is why queue handlers return `QueueResult` rather than `Result[(), E]`
+(the agency rule, ADR 0078), the same way an HTTP handler names its wire outcome
+with `HttpResult`.
+
+## Delivery policy
+
+A `delivery { }` section on the service sets how the consumer's messages are
+retried, delayed, dead-lettered and batched. It is written into the consumer's
+`[[queues.consumers]]` in the generated `wrangler.toml`, which Bynk owns, so the
+source is the one place to set it: a value changed in the dashboard is overwritten
+by the next `bynk deploy`.
+
+```bynk
+context mailer
+
+type EmailJob = {
+	to: String,
+}
+
+const Backoff: Duration = 30.seconds
+
+service outbox from queue("outbound-email") {
+	delivery {
+		retries: 5,
+		retryDelay: Backoff,
+		deadLetter: "outbound-email-dlq",
+		batchSize: 25,
+		batchWait: 10.seconds,
+		concurrency: 4,
+	}
+
+	on message(job: EmailJob) -> Effect[QueueResult] by Producer {
+		Ack
+	}
+}
+```
+
+Every key is optional, and an omitted key keeps Cloudflare's default (Bynk's
+`batchSize` default is 10).
+
+| Key | Type | Range | Cloudflare default | `wrangler.toml` |
+|---|---|---|---|---|
+| `retries` | `Int` | 0 to 100 | 3 | `max_retries` |
+| `retryDelay` | `Duration` | whole seconds, at most 24 hours | none | `retry_delay` |
+| `deadLetter` | `String`, or `None` | a queue name | none | `dead_letter_queue` |
+| `batchSize` | `Int` | 1 to 100 | 10 | `max_batch_size` |
+| `batchWait` | `Duration` | whole seconds, 0 to 60 | 5 seconds | `max_batch_timeout` |
+| `concurrency` | `Int` | 1 to 250 | unset (scales to the maximum, which Cloudflare recommends) | `max_concurrency` |
+
+A literal, or a constant of the key's type, is accepted ([constants](/reference/constants/)).
+A value outside its range, an unknown key or a repeated key is
+`bynk.queue.delivery_bad_option`, and a second `delivery` section is
+`bynk.parse.duplicate_delivery`. The section is only valid on a `from queue`
+service (`bynk.queue.delivery_not_queue`).
+
+### Dead-letter queue
+
+Delivery is **at least once** and ordering is best effort. Cloudflare redelivers a
+message that was retried, up to `retries` times, and then **deletes it** unless the
+consumer has a dead-letter queue, in which case it writes it there instead. So a
+consumer with no `deadLetter` draws the warning `bynk.queue.no_dead_letter`.
+Writing `deadLetter: None` says deleting such a message is intended, and silences it.
+
+The dead-letter queue is an ordinary queue:
+
+- its name must be one Cloudflare accepts, and not the consumer's own queue;
+- `bynk deploy` appends `-<environment>` to it as it does to the consumer's queue
+  (outside `default`) and creates it if it is missing, recording it in
+  `bynk.deploy.lock` only when Bynk created it, as for a queue the context only
+  sends to;
+- a Bynk consumer may read it (`from queue("outbound-email-dlq")`), and that
+  consumer must accept the source consumer's message type
+  (`bynk.queue.dead_letter_type_mismatch`), since the dead letter is the same body. The
+  comparison is the one a producer's send gets: a type with the same fields under another
+  name is the same type, and a consumer of a weaker refinement accepts a stronger one.
+
+The environment-qualified name of any queue, consumer, producer or dead-letter,
+must still fit Cloudflare's 63 characters. Only the deploy knows the environment,
+so a name that overflows once `-<environment>` is added is refused by the deploy
+plan, before anything is created.
+
+## Delivery metadata
+
+A handler may take what Cloudflare knows about the delivery as a second parameter, of
+type `QueueDelivery` (`consumes bynk.cloudflare { QueueDelivery }`). It is identified by
+its type, so it may come before or after the message:
+
+```bynk,fragment
+service outbox from queue("outbound-email") {
+	on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] by Producer {
+		if delivery.attempts > 3 {
+			Ack
+		} else {
+			Retry("attempt \(delivery.attempts)")
+		}
+	}
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `attempts` | `Int` | The times the consumer has been given the message, starting at 1. |
+| `sentAt` | `Instant` | When the message was sent, so a message sent with a delay has waited at least that long. |
+
+Delivery is **at least once**: a message can be delivered more than once, so neither
+field is a deduplication key. Only a key the producer writes into the message
+deduplicates, and the guide shows it with `Idempotency.claim`. Cloudflare also gives each
+message an `id`, but whether it is the same across redeliveries is not documented, so
+Bynk does not expose it until that has been shown on a deployed queue.
+
+A message whose own type is `QueueDelivery`, or a second `QueueDelivery`, is
+`bynk.queue.bad_params`.
+
+## Who may send
+
+`by Producer` admits any producer on the Cloudflare account, because a queue message carries no
+proof of who sent it. A `Foreign` actor narrows that to one named producer that is not Bynk,
+which signs each message under a secret it shares with the consumer:
+
+```bynk,ignore
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  on message(order: Order) -> Effect[QueueResult] by Legacy {
+    …
+  }
+}
+```
+
+The consumer admits only messages in the [signed-message format](/reference/wire-format/#signed-queue-messages)
+whose sender is one of the `Foreign` actors it names and whose signature verifies under that actor's
+secret. A message that is unsigned, wrongly signed, from another sender or already delivered is
+acknowledged and reported as a fault, never passed to the handler and never retried or dead-lettered, so
+the dead-letter consumer never receives an injected message. The consumer remembers each message id for
+15 days to recognise a replay, which needs the Worker's `D1_IDEMPOTENCY` database (the compiler declares
+it, as for `Idempotency`). A secret that is missing from the Worker's environment admits nothing.
+
+`bynk deploy` mints the secret, sets it on the consumer's Worker and prints it once for the producer's
+operator. Several `Foreign` actors may stand in one sum, `by who: Legacy | Partner`, and the body
+`match`es on which one signed the message. A lone `Foreign` actor takes no binder, and a `Foreign` actor
+beside the unsigned `Producer` is `bynk.actor.queue_actor_not_enforced`. Signing is
+covered by the format's integrity guarantee, not confidentiality: anyone with access to the account
+can still read a queued body.
+
+A Bynk producer is admitted by what it is, as a Bynk caller is on a `call` handler: a refinement of
+`Producer` names the contexts that may send, with the same `IsContext(…)` vocabulary as a refinement of
+`Caller`.
+
+```bynk,ignore
+actor FromOrders = Producer where IsContext(shop.orders)
+
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] by FromOrders {
+    …
+  }
+}
+```
+
+The producer writes nothing. A `Queue` instance whose queue has such a consumer in the project signs
+everything it sends from a context the refinement admits, under the key of its edge to the consumer's
+context, the key `bynk deploy` sets between two contexts for a call (`bynk dev` passes a local one), and
+the consumer verifies it under the matching key for the sending context's name. A message from a context
+the refinement does not admit, from another sender or from none is refused as above. A refinement may
+stand in a sum beside `Foreign` actors, `by who: FromOrders | Legacy`, and the body's `match` reads the
+context that sent the message as the member's identity, `FromOrders(sender) => …`, which is the signer
+and never anything in the body. A lone refinement takes no binder, and a refinement beside the unsigned
+`Producer` is `bynk.actor.queue_actor_not_enforced`. A dead-letter queue's consumer must name the same
+actors as its source (`bynk.queue.dead_letter_signing_mismatch`).
+
+**A refinement names contexts that send.** A context produces to a queue through a
+`Queue @name("…")` instance it declares, and that instance is what signs its messages. A context the
+refinement admits that declares no instance of the queue never signs a message for it, so the name is
+dead configuration (or stands for a context that does send, spelt differently), and the intended
+producer's messages would be refused only at run time. Each such name is
+`bynk.queue.producer_never_sends`, written at the name inside `IsContext(…)`:
+
+```bynk,ignore
+actor FromOrders = Producer where IsContext(shop.orders)   // ✗ if shop.orders has no Queue @name("order-events")
+```
+
+A refinement whose predicate names no such context but still admits no context that produces is
+reported once, at the predicate. A name under `!` is not a context the refinement promises to hear
+from, so it is not asked to produce. A dead-letter queue's consumer is checked against the producers
+of the queues that dead-letter into it, because a dead letter keeps the signed envelope its source
+received. A name that is no context of the project is `bynk.actor.unknown_context`.
+
+A `system` case sends as a foreign producer with `by`, signing the message as the producer would (as a
+Bynk context it names, `by FromOrders("shop.orders")`), and sending the same message twice replays it:
+
+```bynk,ignore
+suite shop as system {
+  case "a replay is refused" {
+    let first <- fulfil.message(Order { id: "o1" }) by Legacy
+    let again <- fulfil.message(Order { id: "o1" }) by Legacy
+    expect again is Ack
+  }
+}
+```
+
+## Messages that cannot be decoded
+
+Only the generated entry decodes a message body, so the handler never sees a body that does
+not decode as its message type, and cannot decide what happens to it. The same bytes would
+never decode on a retry, so the entry **never retries** one. What it does instead depends on
+the consumer's `delivery { }`:
+
+| `delivery` | A message that cannot be decoded |
+|---|---|
+| `deadLetter: "q-dlq"` | sent to `q-dlq` unchanged (as JSON), then acknowledged; one log line |
+| `deadLetter: None`, or no section | acknowledged (dropped) and reported as a fault; one log line |
+
+- The dead-letter send goes through a `[[queues.producers]]` binding the generated
+  `wrangler.toml` adds for the consumer, named `__BYNK_DLQ_<QUEUE>` (the consumer's queue
+  name in upper case, `-` as `_`). It is the consumer's own, so a Worker group's members and
+  a context with several consumers never share one. If the send fails, or the binding is missing from `env`, the message is retried
+  as any other fault is, so nothing is lost while the dead-letter queue is unavailable.
+- The log line names the queue, the message type and the decode error's path and kind (for
+  example `StructuralMismatch` at `$.id`), never the body, which can hold user data and is
+  kept on the dead-letter queue for inspection.
+- Without a dead-letter queue the fault is reported through `waitUntil`, so the invocation
+  shows as faulted. Every message in the batch still gets an explicit `ack()` or `retry()`,
+  which the platform honours over the rejected promise, so nothing is redelivered.
+- A body that decoded before a consumer's message type changed fails now and is
+  dead-lettered, which is correct: a message that cannot be read is not the handler's to run.
+
+At the `system` tier the address yields `Undecodable` for such a body
+([testing](/reference/testing/#cron-queue-system)).
+
+Only a `system` case can see `Undecodable`: a handler, a helper, or a `unit` or `integration` case never
+receives a body that failed to decode. A pattern of it anywhere else is a dead arm and warns
+(`bynk.queue.undecodable_unreachable`); use `_` there.
+
+## Producers and consumers agree
+
+A queue's name is a string both sides write, so the compiler is the only party that
+sees a producer and its consumer. When a context in the project consumes the queue a
+`Queue @name("…")` instance sends to, the typed sends are checked against the
+consumer's message type:
+
+```bynk,ignore
+// shop.orders
+capability OrderEvents = Queue @name("order-events")
+
+let _ <- OrderEvents.sendValue(Refund { id: r.id })   // ✗ bynk.queue.message_type_mismatch
+
+// shop.fulfil
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] by Producer { … }
+}
+```
+
+- `sendValue(x)`, `sendValueWith(x, …)` and, for each element, `sendValueBatch(xs)` must
+  send a type the consumer's `on message` accepts, by the comparison a cross-context call
+  gets (the same fields and variants; a stronger refinement is admitted where the consumer
+  expects a weaker one). Otherwise the call is `bynk.queue.message_type_mismatch`, labelled
+  at the call and at the consumer's parameter. The check holds whether the two sides are in
+  one context, two contexts, or two Workers of a `[deploy.workers]` group, since the compiler
+  sees the whole project.
+- `send`, `sendWith` and `sendBatch` take JSON text the compiler cannot check, so they warn
+  (`bynk.queue.untyped_send`) when a context in the project consumes the queue, and
+  name the typed form. They stay legal, since they forward a body that is already encoded.
+- A queue no context in the project consumes (a foreign Worker, or nobody yet) has no type
+  to compare with: nothing is reported, and the editor's hover on the instance says
+  "No consumer in this project". Nor is a send checked while its type is still a type
+  parameter of the enclosing generic function.
+- The same rule covers a [dead-letter queue](#dead-letter-queue)'s consumer, which is an
+  ordinary consumer of its own queue.
+
+Changing a consumer's message type while messages are already queued is not caught.
+
+## Traces
+
+A queue message does not carry the request's [trace](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/): a message is only a body, and carrying an id would change the message format. Each batch a consumer receives starts a trace of its own. A producer that wants to follow a message puts an id in the message.
+
+A send can be written in a function, a service or agent handler, or a provider operation. An
+agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
+scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.
+
+## Example
+
+```bynk
+context mailer
+
+type EmailJob = {
+	to: String,
+	subject: String,
+}
+
+service outbox from queue("outbound-email") {
+	on message(message: EmailJob) -> Effect[QueueResult] by Producer {
+		Ack
+	}
+}
+```
+
+## Emission
+
+`on message` handlers compile to the Worker's `queue` entry point on the
+`--target workers` target (dispatching on `batch.queue`, deserialising each
+message, acking on `Ack` / retrying on `Retry`), and every queue becomes a
+`[[queues.consumers]]` binding in the generated `wrangler.toml`, carrying the
+[delivery policy](#delivery-policy)'s settings. See
+[emission](/reference/tooling/emission/) and
+[Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/).

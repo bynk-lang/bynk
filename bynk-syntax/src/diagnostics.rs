@@ -1,9 +1,9 @@
 //! Central registry of diagnostic codes.
 //!
 //! This is the single source of truth for the `bynk.*` codes the compiler can
-//! emit. The reference page `site/src/content/docs/book/reference/diagnostics.md` is generated
-//! from [`render_markdown`], and the test `tests/diagnostics_registry.rs`
-//! asserts that this table matches exactly the set of codes used across the
+//! emit. The reference index `site/src/content/docs/reference/diagnostics.md` is assembled at site
+//! build time from the per-code files [`render_json_per_code`] writes (#4286), and the test
+//! `tests/diagnostics_registry.rs` asserts that this table matches exactly the set of codes used across the
 //! compiler source — so a new code cannot be introduced without documenting it
 //! here, and a removed code cannot linger in the docs.
 //!
@@ -12,8 +12,8 @@
 //! (`Error` unless built via the crate-private `warn` helper). The category
 //! shown in the generated reference is derived from the second dotted segment
 //! of the code; the grammar weave (`docs/grammar-semantics.json`, the
-//! `{{#grammar-semantics}}` directive, and the diagnostics page's Construct
-//! column) is generated from `grammar_symbol`.
+//! `{{#grammar-semantics}}` directive, and the "Grammar rules" line on each
+//! code's own page) is generated from `grammar_symbol`.
 
 use crate::error::Severity;
 
@@ -55,7 +55,7 @@ pub const D_PATH: &str = "/d/";
 /// A curated, offline-complete explanation of a diagnostic code (#853).
 ///
 /// The `blurb`/`example` are the offline answer `bynk explain` prints, and the
-/// text of the code's page on the site ([`render_json`]). Where that page
+/// text of the code's page on the site ([`render_json_per_code`]). Where that page
 /// lives, and which reference sections it links to, belong to the docs
 /// (`site/src/data/diagnostic-links.json`), not to this table (#3876): the
 /// toolchain links every code as [`href`], so a docs reorganisation never
@@ -155,6 +155,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
     },
     Explain {
+        code: "bynk.actor.caller_not_admitted",
+        blurb: "A refinement over `Caller`, such as `actor Admin = Caller where IsContext(shop.admin)`, names the contexts that may call a service. The compiler sees every call in the project, so a call from any other context is refused here, at the call, before anything is deployed. The wire format still checks the caller at run time (a `403`), because signing keys are per pair of contexts and a caller from before the restriction may still be deployed. In a test, a call-site `by Admin(\"shop.web\")` is checked the same way. Call a service the context may call, or add the context to the actor's `IsContext(…)`.",
+        example: "// shop/billing.bynk\ncontext shop.billing\n\nactor Admin = Caller where IsContext(shop.admin)\n\nservice refunds {\n\x20 on call(id: String) -> Effect[Int] by Admin {\n\x20   Effect.pure(1)\n\x20 }\n}\n\nservice quote {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   Effect.pure(2)\n\x20 }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes shop.billing\n\nservice place {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   shop.billing.refunds(id)   // ✗ `shop.orders` is not `shop.admin`\n\x20   shop.billing.quote(id)   // ✓ `quote` admits any consuming context\n\x20 }\n}",
+    },
+    Explain {
         code: "bynk.actor.duplicate_sum_scheme",
         blurb: "Peers in a `by who: A | B` clause are told apart by their authentication scheme, so two peers of the same scheme can't both be reached: the second would never be chosen. Keep one peer per scheme, or fold the two into a single actor. A catch-all peer placed too early is a different mistake, `bynk.actor.unreachable_sum_arm`.",
         example: "type UserId = String where NonEmpty\nactor One { auth = Bearer(secret = \"KEY_A\"), identity = UserId }\nactor Two { auth = Bearer(secret = \"KEY_B\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Two {   // ✗ two `Bearer` peers\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Visitor {   // ✓ one peer per scheme",
@@ -200,6 +205,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
     },
     Explain {
+        code: "bynk.actor.missing_by_on_call",
+        blurb: "An `on call` handler is reachable by every context that consumes this one, and which of them may call it is an access decision, so the handler must say, with a `by` clause. `by Caller` is the explicit \"any consuming context\"; a refinement over `Caller`, a `Foreign` actor or a sum narrows it. The error's fix inserts `by Caller`, which is what the handler did before the clause was required, and `bynk check --fix=bynk.actor.missing_by_on_call` migrates a whole project. A header default, `service pay by Caller`, covers every handler without its own `by`. Agents, cron and `Events` handlers have no caller to name, so they are unchanged.",
+        example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
+    },
+    Explain {
+        code: "bynk.actor.missing_by_on_email",
+        blurb: "Inbound mail comes from the internet, and the platform reports a DMARC verdict on it that can be a pass, a fail or absent. Whether a handler acts on mail that failed authentication is a decision, so an email `on message` handler states its actor with a `by` clause instead of inheriting one. `by Sender` is the explicit \"any mail\", which is what an email handler meant before the clause was required, and `s.identity.dmarc` carries the verdict for a handler that wants to check it. The error's fix inserts `by Sender`, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a whole project. A header default, `service support from email(\"support@shop.example\") by Sender`, covers a handler without its own `by`.",
+        example: "context shop\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✗ what mail does this act on?\n    Accept\n  }\n}\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓ any mail, said outright\n    Accept\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -207,7 +222,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set \
                 it once on the header, `service api from http by Visitor`, and every handler \
                 without its own `by` inherits it. A WebSocket `on open` handler needs one too. \
-                The internal protocols (`call`, cron, queue) have a default.",
+                `call` handlers (`bynk.actor.missing_by_on_call`) and queue handlers (`bynk.actor.missing_by_on_queue`) need one too; cron has a default.",
         example: "service api from http {\n\
                   \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
                   \x20   Ok(\"up\")\n\
@@ -219,6 +234,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(\"up\")\n\
                   \x20 }\n\
                   }",
+    },
+    Explain {
+        code: "bynk.actor.missing_by_on_queue",
+        blurb: "A queue consumer reads whatever reaches its queue, and any Worker on the Cloudflare account that has a producer binding can put a message there, so who may send to it is an access decision and the handler must say, with a `by` clause. `by Producer` is the explicit \"anyone on the account\", which is what an `on message` handler meant before the clause was required. The error's fix inserts `by Producer`, and `bynk check --fix=bynk.actor.missing_by_on_queue` migrates a whole project. A header default, `service fulfil from queue(\"orders\") by Producer`, covers every handler without its own `by`. Cron and `Events` handlers have no sender to name, so they are unchanged.",
+        example: "service fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] {   // ✗ who may send to this queue?\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
         code: "bynk.actor.oidc_identity_not_string_constructible",
@@ -241,11 +261,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
     },
     Explain {
-        code: "bynk.actor.oidc_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
-        example: "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
-    },
-    Explain {
         code: "bynk.actor.oidc_trust_from_is_secret",
         blurb: "`trustFrom` names a variable that holds trust roots as JSON. A variable an actor uses as its `secret` holds a signing key, and one variable cannot be both. Give `trustFrom` a variable of its own.",
         example: "type UserId = String where NonEmpty\ntype WorkloadId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"JWT_KEY\"), identity = WorkloadId }   // ✗ `JWT_KEY` is a key\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
@@ -259,6 +274,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.outside_context",
         blurb: "An `actor` says who may call a handler and what the compiler then knows about them. Only a context has handlers, and an actor's identity is sealed to the context that declares it, so only a context may declare one. A `commons` is shared code that other units `uses`. Move the `actor` into the context whose services take it.",
         example: "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
+    },
+    Explain {
+        code: "bynk.actor.queue_actor_not_enforced",
+        blurb: "A queue consumer can narrow who may send to it with `Foreign` actors, which admit only messages signed under the actor's secret, and with refinements of `Producer`, which admit only messages a Bynk producer in the named contexts signed. Two forms are not enforced, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: one of those beside the unsigned `Producer` in a sum, because an unsigned message carries no signature to tell it from a signed one, and a lone one with a binder, because it identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors and `Producer` refinements, a lone one with no binder.",
+        example: "context shop\n\ntype Order = { id: String }\nactor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by who: Legacy | Producer {   // ✗ an unsigned message cannot be told from a signed one\n    match who {\n      Legacy => Ack\n      Producer => Ack\n    }\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Legacy {   // ✓ only messages signed under its secret\n    Ack\n  }\n}",
     },
     Explain {
         code: "bynk.actor.refinement_base_unsupported",
@@ -300,6 +320,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(())\n\
                   \x20 }\n\
                   }",
+    },
+    Explain {
+        code: "bynk.actor.sender_admits_nothing",
+        blurb: "A refinement of `Sender` admits mail by its DMARC verdict, which is one of `DmarcPass`, `DmarcFail` or `DmarcNone`. The compiler decides the predicate against each of the three, and a refinement that is false for all of them would make the Worker refuse every message to an address, with nothing to tell the author it is dead. Check the `&&` and `!` the predicate combines: `Dmarc(DmarcPass) && Dmarc(DmarcFail)` can never hold, because no message has both verdicts.",
+        example: "context shop\n\nactor Never = Sender where Dmarc(DmarcPass) && Dmarc(DmarcFail)   // ✗ no verdict is both\n\nactor Verified = Sender where Dmarc(DmarcPass)   // ✓ admits a pass",
     },
     Explain {
         code: "bynk.actor.signature_identity_unsupported",
@@ -372,11 +397,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
     },
     Explain {
-        code: "bynk.actor.signed_cookie_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
-    },
-    Explain {
         code: "bynk.actor.signed_cookie_public_cache",
         blurb: "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
         example: "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
@@ -389,7 +409,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.signed_cookie_secret_shared",
         blurb: "A session key signs one actor's cookies and nothing else. If two actors shared a variable, a cookie issued for one would verify for the other, and a Bearer token could be replayed as a cookie. Give each actor its own variable; `previous` is the key being rotated out, so it differs from `secret` too.",
-        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✓",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✓",
     },
     Explain {
         code: "bynk.actor.signed_cookie_ttl_long",
@@ -437,6 +457,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
     },
     Explain {
+        code: "bynk.actor.unknown_context",
+        blurb: "`IsContext(…)` names the project's own contexts, written as qualified names rather than strings, so that a typo is an error here and not a restriction that silently admits nobody. A name that is no context of the project is usually misspelt, or names a context that was renamed. Foreign callers are not contexts of the project: they have their own `Foreign` actors.",
+        example: "// shop/admin.bynk\ncontext shop.admin\n\nservice audit {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   Effect.pure(1)\n\x20 }\n}\n\n// shop/billing.bynk\ncontext shop.billing\n\nactor Admin = Caller where IsContext(shop.admn)   // ✗ no such context\n\nactor Admin = Caller where IsContext(shop.admin)   // ✓\n\nservice refunds {\n\x20 on call(id: String) -> Effect[Int] by Admin {\n\x20   Effect.pure(1)\n\x20 }\n}",
+    },
+    Explain {
         code: "bynk.actor.unknown_scheme",
         blurb: "An actor's `auth` names how its callers are verified, and the compiler writes \
                 that check itself, so the scheme must be one it knows: `None`, `Internal`, \
@@ -474,7 +499,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 \x20 binding \"./tokens.binding.ts\"\n\
                 \x20 provides Jwt = JoseJwt\n\
                 \x20 service login {                       // ✗ an adapter may not declare a service\n\
-                \x20   on call(x: Int) -> Effect[Int] { … }\n\
+                \x20   on call(x: Int) -> Effect[Int] by Caller { … }\n\
                 \x20 }\n\
                 }\n\
                 \n\
@@ -529,6 +554,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.adapter.provider_has_body",
         blurb: "An adapter wraps code written in TypeScript. Its provider has no body: `provides Jwt = JoseJwt`, and the binding exports a class of that name. A Bynk body would be a second implementation beside the binding's. Remove the body and implement the operations in the binding, or, for a provider written in Bynk, move it to a context. An external provider in a context is `bynk.context.external_provider`.",
         example: "adapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt {          // ✗ the binding supplies it\n        fn sign(secret: String) -> Effect[String] { secret }\n    }\n}\n\nadapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt            // ✓ no body\n}",
+    },
+    Explain {
+        code: "bynk.agent.bad_annotation",
+        blurb: "An agent has two annotations, each written once, immediately before `agent`: `@busyAfter(<Duration>)`, taking a single `Duration` literal such as `5.seconds`, and `@jurisdiction(\"eu\")`, taking one string literal that is `\"eu\"`, `\"fedramp\"` or `\"us\"`, which keeps every instance's state in that jurisdiction. Another name, a repeated annotation, or an argument that is not one such literal (a label, a second argument, a number, an unknown jurisdiction, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)` or `@jurisdiction(\"eu\")`, or drop the annotation.",
+        example: "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
+    },
+    Explain {
+        code: "bynk.agent.busy_after_out_of_range",
+        blurb: "An agent instance runs one handler at a time, so a call to a busy one waits in a queue, and gives up after 30 seconds with `AgentBusy`. `@busyAfter(d)` lowers that wait for one agent class, so a latency-sensitive route fails fast. It cannot raise it: a longer wait only holds callers longer, and the runtime's limit is 30 seconds. Use a `Duration` from 1 second to 30 seconds.",
+        example: "@busyAfter(60.seconds)   // ✗ longer than the 30-second limit\nagent Basket { … }\n\n@busyAfter(5.seconds)    // ✓ lowers the wait\nagent Basket { … }",
     },
     Explain {
         code: "bynk.agent.class_conflict",
@@ -780,6 +815,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
     },
     Explain {
+        code: "bynk.agent.write_after_erase",
+        blurb: "`self.erase()` marks the instance for deletion, and the handler's commit then deletes everything stored for the key instead of writing the handler's state. A `:=` after it in the same block has nothing to write to, so it is dropped. Remove the write. A write before `self.erase()` is dropped the same way. If something should outlive the erasure, emit an event first: events emitted in the handler are still released at the commit, so a subscriber can keep what it needs.",
+        example: "on call close() -> Effect[()] {\n\x20 self.erase()\n\x20 closed := true    // ✗ the commit deletes the instance, so nothing is written\n}\n\non call close() -> Effect[()] given Events {\n\x20 do Events.emit[AccountClosed](AccountClosed { id: self.id })\n\x20 self.erase()    // ✓ the event records it; the state goes\n}",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
@@ -790,6 +830,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Secret = opaque String\n\n\
                   store secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\n\
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
+    },
+    Explain {
+        code: "bynk.agents.self_operation",
+        blurb: "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+        example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
+    },
+    Explain {
+        code: "bynk.analytics.mapping_changed",
+        blurb: "`Signups.writeValue(point)` writes a record's fields to `blob1…`, `double1…` and `index1` by position, and a point already written keeps its positions. Moving a field, changing its kind (text to number, a `Bool` to a `String`), removing it, or changing the `@index` field changes what every reader of the old points sees in a column, and nothing else would notice, so bynk.schema.lock records the mapping of each instance under `[analytics]` and a build that finds a different one fails until the change is accepted. Appending a field, and renaming one in place, are not changes and the lock follows them. If the new mapping is intended, run `bynk lock accept-analytics <Instance>` (or `--all`) and commit the lock with the change; otherwise put the record back and add new fields at the end.",
+        example: "// cart.bynk, with `Signups` recorded as blob1 = country, blob2 = channel\ntype Signup = { @index plan: String, channel: String, country: String }    // ✗ the columns swapped\n\ntype Signup = { @index plan: String, country: String, channel: String }    // ✓ the recorded order",
     },
     Explain {
         code: "bynk.asset.duplicate",
@@ -882,7 +932,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   type Box = { weight: Int }\n\
                   \n\
-                  service weigh {\n    on call(b: Box) -> Effect[Int] { … }\n\
+                  service weigh {\n    on call(b: Box) -> Effect[Int] by Caller { … }\n\
                   }\n\
                   \n\
                   // depot.bynk\n\
@@ -899,9 +949,19 @@ pub const EXPLANATIONS: &[Explain] = &[
                   shop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
     },
     Explain {
+        code: "bynk.call.outcome_construction",
+        blurb: "A `CallOutcome` or `CallFailure` says what a call came to, and only the compiled call knows that: whether the callee's handler ran, was refused, faulted, or could not be reached. So a program matches on one, and `.outcome(…)` and a test `stub` make them. Writing `Handled(…)`, `Faulted` or `CallFailure.Unreachable(…)` as a value would invent an outcome no call produced. To test a caller of a failing service, `stub` the service (`rejected NotAdmitted`, `faulted`, `unreachable`); to pass a failure along, use `handled()` and `?`.",
+        example: "// shop/orders.bynk\nlet o: CallOutcome[Int] = Faulted   // ✗ no call produced this\n\nlet paid = o.handled()?               // ✓ its failure, as a `Result`",
+    },
+    Explain {
+        code: "bynk.call.outcome_not_in_scope",
+        blurb: "`<context>.<service>.outcome(args)` returns `CallOutcome[_]`, and `CallOutcome` is declared in `bynk`, so a unit that wants `outcome` has to consume it. Without that the result type names a type the unit cannot see, and its `Handled`, `Rejected`, `Faulted` and `Unreachable` cases could not be matched. Add `consumes bynk { CallOutcome }` to the unit, or add `CallOutcome` to its existing `consumes bynk { … }` list.",
+        example: "// shop/orders.bynk\nlet o <- Pay.authorise.outcome(total)   // ✗ `CallOutcome` is not in scope\n\nconsumes bynk { CallOutcome }            // ✓ in the unit's header\nlet o <- Pay.authorise.outcome(total)",
+    },
+    Explain {
         code: "bynk.capability.base_not_instantiable",
         blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
-        example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
+        example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
     },
     Explain {
         code: "bynk.capability.derived_outside_context",
@@ -918,9 +978,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 handler asks for that instance in `given` instead of the kind. Two instances of \
                 one kind never share data. Some kinds need options on the instance, such as \
                 `RateLimit @limit(20) @period(60.seconds)`.",
-        example: "on call() -> Effect[()] given D1 {            // ✗ the bare kind names no database\n\n\
+        example: "on call() -> Effect[()] by Caller given D1 {            // ✗ the bare kind names no database\n\n\
                   capability Orders = D1\n\
-                  on call() -> Effect[()] given Orders {        // ✓ a named instance",
+                  on call() -> Effect[()] by Caller given Orders {        // ✓ a named instance",
     },
     Explain {
         code: "bynk.capability.invalid_option",
@@ -930,7 +990,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. \
                 The value must be a literal of the option's kind, and one the platform accepts: \
                 `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, \
-                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@tls` (on a `MySql`) `\"required\"`, \
+                `@jurisdiction` `\"eu\"`, `\"fedramp\"` or `\"us\"`, `@tls` (on a `MySql`) `\"required\"`, \
                 `\"verify-ca\"` or `\"verify-identity\"`, `@worker` a Worker name and `@name` a \
                 queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name \
                 may also hold `_`). Each option is given once, and an `@worker` must name a Worker \
@@ -985,7 +1045,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `bynk.exports.capability_not_provided`. Add a provider to the context, or, on \
                 Workers, build for `--target bundle` when the bundle has no composition root.",
         example: "service notify {\n\
-                  \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
+                  \x20\x20on call(to: String) -> Effect[()] by Caller given Mailer {   // ✗ no `provides Mailer` in this context\n\
                   \x20\x20\x20\x20Mailer.send(to)\n\
                   \x20\x20}\n\
                   }\n\
@@ -1049,14 +1109,14 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   // api.bynk\n\
                   service yank {\n\
-                  \x20\x20on call() -> Effect[Bool] given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
+                  \x20\x20on call() -> Effect[Bool] by Caller given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
                   \x20\x20\x20\x20registry.Yanks.set(true)\n\
                   \x20\x20}\n\
                   }\n\
                   \n\
                   // api.bynk\n\
                   service yank {\n\
-                  \x20\x20on call() -> Effect[Bool] {\n\
+                  \x20\x20on call() -> Effect[Bool] by Caller {\n\
                   \x20\x20\x20\x20registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n\
                   \x20\x20}\n\
                   }",
@@ -1126,7 +1186,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.cloudflare.edge_cache_in_queue",
         blurb: "A purge reaches the edge cache only from the Worker's own `fetch`, the entrypoint that serves cached responses. A queue consumer is not that entrypoint, and its purge is not known to reach the cache, so a consumer that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_schedule`.",
-        example: "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        example: "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] by Producer given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
     },
     Explain {
         code: "bynk.cloudflare.edge_cache_in_schedule",
@@ -1137,6 +1197,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.cloudflare.edge_cache_public_authenticated",
         blurb: "In a context with `EdgeCache`, the edge keys a response by its URL alone, and `scope: public` lets it share one response with every later caller. On a route whose actor authenticates, such as a `Bearer` one, that response belongs to one caller, so it would be served to the rest. Use `scope: private`, which is never shared at the edge, or serve the route `by Visitor`. See also `bynk.http.cache_public_reads_cookies`.",
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
+    },
+    Explain {
+        code: "bynk.commons.consumes_not_types",
+        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
     },
     Explain {
         code: "bynk.consumes.alias_conflict",
@@ -1151,7 +1216,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.capability_not_selected",
         blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
-        example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
+        example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
     },
     Explain {
         code: "bynk.consumes.name_conflict",
@@ -1187,12 +1252,12 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.service_arity",
         blurb: "A cross-context call has the shape of the `on call` handler it reaches: one argument for each parameter. The consumed context owns that signature, so the caller adapts to it. Pass the arguments the handler declares (the note says where it is declared), or change the handler's parameters if the service needs different input.",
-        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
     },
     Explain {
         code: "bynk.consumes.signature_type_unconsumed",
         blurb: "A service you call may take or return a type declared in a third context. The value crosses the call as that context's type, so your context has to state the dependency itself: it does not inherit it from the service's context. Add `consumes` for the context the error names.",
-        example: "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
+        example: "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] by Caller { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
     },
     Explain {
         code: "bynk.consumes.target_is_commons",
@@ -1227,7 +1292,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.unit_not_consumed",
         blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
-        example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+        example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
     },
     Explain {
         code: "bynk.consumes.unknown_context",
@@ -1237,7 +1302,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.unknown_service",
         blurb: "A call such as `pay.charge(…)` reaches a service of the consumed context, and `pay` has none by that name. Only a service's `on call` handler can be called across contexts, so check the spelling against the consumed context and that the service has an `on call` handler. A call with the wrong number of arguments is `bynk.consumes.service_arity`.",
-        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
     },
     Explain {
         code: "bynk.container.build_missing",
@@ -1295,7 +1360,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   consumes a                       // ✗\n\
                   \n\
-                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n\
+                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] by Caller {\n        Effect.pure(rate * 2)\n    }\n\
                   }",
     },
     Explain {
@@ -1316,21 +1381,23 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.context.external_construction",
-        blurb: "A context that `consumes` another may hold and pass on the other's types, but \
-                may not build one. A refined or opaque type can promise an invariant, a \
-                `Matches` pattern or a smart constructor, and that holds only if every value is \
-                made by the owner; `.of`, `.unsafe` and a variant constructor are refused from \
-                outside, as is the record syntax of an opaque type. Ask the owner for the value \
-                instead: a service that returns it, or takes the plain input and does the check. \
-                `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
+                build an opaque one. (A `transparent` export, whether a context's or an adapter's, such \
+                as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record \
+                literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a \
+                smart constructor, and that holds only if every value is made by the owner; `.of`, a \
+                variant constructor and record syntax are refused from outside, and so is `.unsafe` on \
+                any type. Ask the owner for the value instead: a service that returns it, or takes the \
+                plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking \
+                inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
-                  exports transparent { AuthId }\n\
+                  exports opaque { AuthId }\n\
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\
-                  service issue {\n    on call() -> Effect[AuthId] { … }\n\
+                  service issue {\n    on call() -> Effect[AuthId] by Caller { … }\n\
                   }\n\
                   \n\
                   // orders.bynk\n\
@@ -1388,7 +1455,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // shop.bynk\n\
                   context shop\n\n\
                   consumes pay\n\n\
-                  service checkout {\n    on call() -> Effect[Bool] {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
+                  service checkout {\n    on call() -> Effect[Bool] by Caller {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
                   // pay.bynk\n\
                   exports transparent { Status }   // ✓ the owner shares the shape",
     },
@@ -1456,8 +1523,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Int`: that time in milliseconds since the epoch. Drop the parameter, or type it `Int`. To act on a richer value, build it from the time inside the body.",
-        example: "on schedule(\"*/5 * * * *\") (label: String) -> Effect[Result[(), String]] { … }   // ✗ the parameter is the time\n\non schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }          // ✓",
+        blurb: "A scheduled trigger carries two things: the time it fired and the schedule that fired it. So an `on schedule` handler takes at most two parameters, told apart by type and in either order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the schedule expression that fired this run). A second parameter of the same type, a third parameter, or any other type is this error. A parameter typed `Int` (the old spelling of the time) is too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number. Drop the parameter if the handler does not need it.",
+        example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
         code: "bynk.cron.duplicate_schedule",
@@ -1466,13 +1533,28 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.invalid_schedule",
-        blurb: "A cron schedule is a standard five-field expression: minute, hour, day of month, month, day of week, separated by whitespace. Bynk checks the field count at compile time so a schedule the platform's cron trigger would reject is caught before deploy, not when it silently never runs. Only the count is checked at compile time. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
-        example: "on schedule(\"every day\") () -> Effect[Result[(), String]] { … }   // ✗ words, not five fields\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 every day",
+        blurb: "A cron schedule is Cloudflare's five-field syntax: minute `0-59`, hour `0-23`, day of month `1-31` (also `L` and `W`), month `1-12` or `JAN`-`DEC`, and day of week `1-7` with `1` as Sunday, or `SUN`-`SAT` (also `L` and `#`). `*`, `,`, `-` and `/` work in every field. There are no seconds, no year, no `?` and no `@daily`-style macros. Fields are separated by exactly one space, with none leading or trailing, because Cloudflare hands the handler that exact string back and dispatches on it character for character. Bynk checks all of this at compile time, so a schedule Cloudflare would reject is caught before deploy, not when it silently never runs; the message names the failing field. The same rule is the `Cron` refinement predicate, and `CronSchedule` is the type of a valid schedule. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
+        example: "on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] { … }   // ✗ minute 61 is outside 0-59\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 UTC every day",
+    },
+    Explain {
+        code: "bynk.cron.numeric_weekday",
+        blurb: "Standard cron numbers the days `0` or `7` for Sunday, so `5` is Friday. Cloudflare's cron triggers number them `1`-`7` with `1` as Sunday, so `5` is Thursday. A schedule that was copied from standard cron, or written from habit, then runs a day early. Both forms are valid, so this is only a warning; name the day (`FRI`) or list the days explicitly to say what is meant, which also silences it.",
+        example: "on schedule(\"0 9 * * 5\") () -> Effect[Result[(), String]] { … }     // ⚠ Thursday on Cloudflare, not Friday\n\non schedule(\"0 9 * * FRI\") () -> Effect[Result[(), String]] { … }   // ✓ unambiguous",
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
+    },
+    Explain {
+        code: "bynk.cron.uneven_step",
+        blurb: "A step such as `*/45` in the minute field counts from the start of the hour, so it fires at minute 0 and 45 and then starts over at 0 in the next hour: the gaps are 45 and 15 minutes, not an even 45. The same is true of an hour step that does not divide 24. Only a step that divides the field's range (`*/5`, `*/15`, `*/30` for minutes; `*/2`, `*/6`, `*/12` for hours) fires evenly. Both forms are valid, so this is only a warning; list the times you mean (`0,45`) or pick a step that divides the range, which silences it.",
+        example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
+    },
+    Explain {
+        code: "bynk.d1.decimal_numeric_affinity",
+        blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
+        example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
     },
     Explain {
         code: "bynk.d1.migration_name",
@@ -1594,6 +1676,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
     },
     Explain {
+        code: "bynk.duration.unit_agreement",
+        blurb: "A `Duration` literal uses the unit that agrees with its number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with every other number, `0` included (`2.hours`, `0.seconds`). `1.hours` and `5.hour` read wrongly and give a duration two spellings, so they are refused with a fix that rewrites the unit. The rule reads the literal's own number: a negative duration is the negation of a literal (`-1.hour`).",
+        example: "fn tick() -> Duration { 1.hours }     // ✗ `1` takes the singular unit
+
+fn tick() -> Duration { 1.hour }      // ✓",
+    },
+    Explain {
+        code: "bynk.duration.unknown_unit",
+        blurb: "An integer literal has no fields, so a word after one (`5.hr`) is always read as the unit of a `Duration` literal. The units are `millisecond(s)`, `second(s)`, `minute(s)`, `hour(s)` and `day(s)`; there is no `week`. The diagnostic lists them and suggests the nearest one. Write the unit out in full, in the form that agrees with the number (`1.hour`, `5.hours`).",
+        example: "fn wait() -> Duration { 5.hr }        // ✗ `hr` is not a unit
+
+fn wait() -> Duration { 5.hours }     // ✓",
+    },
+    Explain {
         code: "bynk.effect.bind_in_pure_context",
         blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
         example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
@@ -1611,7 +1707,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.effect.cross_context_in_pure_context",
         blurb: "A call to a service in a consumed context is an effect, as a capability call is, so it is only allowed in a body that is itself effectful. A handler is effectful, but a lambda inside it is a body of its own, and a service call alone does not make it effectful. Make the call in the handler body, bind it with `<-`, and use the result in the lambda.",
-        example: "on call() -> Effect[Int] {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+        example: "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] by Caller {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
     },
     Explain {
         code: "bynk.effect.do_discards_result",
@@ -1658,17 +1754,22 @@ pub const EXPLANATIONS: &[Explain] = &[
                 variant or a record field. An argument to another call is left alone, because the \
                 parameter decides what happens to it. If you want the result, use `<-`; if only the \
                 effect, use `do`.",
-        example: "on call() -> Effect[()] {\n    \
+        example: "on call() -> Effect[()] by Caller {\n    \
                     let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    \
                     Effect.pure(())\n}\n\n\
-                  on call() -> Effect[()] {\n    \
+                  on call() -> Effect[()] by Caller {\n    \
                     do Counter(\"k\").bump()           // ✓ run in order\n    \
                     Effect.pure(())\n}",
     },
     Explain {
         code: "bynk.email.bad_params",
         blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
+    },
+    Explain {
+        code: "bynk.email.bad_tag",
+        blurb: "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` (or `x-`, header names are case-insensitive) and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map that breaks this is refused when the program compiles, wherever it is written, in a handler body or in a helper function; one built at run time has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
+        example: "on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"Subject\", \"urgent\"),   // ✗ not an `X-` header\n    })\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"X-Ticket\", \"urgent\"),   // ✓\n    })\n}",
     },
     Explain {
         code: "bynk.email.duplicate_address",
@@ -1678,17 +1779,32 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_bad_option",
+        blurb: "A `fallback { }` block on a `from email` service has one field, `forward`: the address mail a handler faulted on, or that could not be read, is forwarded to. It is a string literal holding a bare address, not a display name and not a domain's catch-all, and it must be a verified destination address on the account (`bynk deploy` warns of one that is not). A second `forward`, any other field or a missing `forward` is this error.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"*@ops.example\" }   // ✗ a catch-all, not one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_claimed",
+        blurb: "A fallback forwards mail to an address outside the service. If a `from email` service of the project claims that address, directly or through its domain's catch-all, the forwarded message is routed straight back to Bynk, and a fault there would forward it again. Name a verified destination address that no service of the project claims.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"help@shop.example\" }   // ✗ `helpdesk` claims it\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice helpdesk from email(\"help@shop.example\") { … }\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ not routed to a service\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_not_email",
+        blurb: "A `fallback { }` block says where mail a handler faulted on is forwarded, so only a `from email` service, which receives mail, can have one. A queue's equivalent is its `delivery { }` dead-letter queue.",
+        example: "service jobs from queue(\"jobs\") {\n    delivery { deadLetter: None }\n    fallback { forward: \"ops@ops.example\" }   // ✗ not a `from email` service\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice jobs from queue(\"jobs\") {\n    delivery { deadLetter: \"jobs-dead\" }   // ✓ a queue's counterpart\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}",
     },
     Explain {
         code: "bynk.email.invalid_address",
-        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address. The address may be written as the name of a constant declared exactly `String` and bound to such a literal; a constant of any other type, refined or not, is this error with a note naming it.",
         example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
     },
     Explain {
         code: "bynk.email.return_not_email_verdict",
         blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
-        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        example: "on message(mail: InboundEmail) -> Effect[String] by Sender {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n    Accept\n}",
     },
     Explain {
         code: "bynk.embed.binary_content",
@@ -1748,6 +1864,36 @@ pub const EXPLANATIONS: &[Explain] = &[
                 inside `embeds/`. A relative path that is only outside `embeds/` is \
                 `bynk.embed.outside_embeds_dir`.",
         example: "embed shell = \"embeds/../page.html\"    // ✗ a `..` segment\n\nembed shell = \"embeds/page.html\"       // ✓",
+    },
+    Explain {
+        code: "bynk.env.bad_value",
+        blurb: "Each `env(NAME)` constant is read from `bynk.toml` as the type it is declared with: a `String` takes a string, an `Int` a whole number, a `Bool` `true` or `false`, a `List[String]` an array of strings. A value of another kind is refused rather than converted, so a quoted `\"3\"` cannot stand in for the `Int` 3. The message names the variable, the table it was read from, and the type the constant needs. Fix the value in `bynk.toml`, or change the constant's type. A value of the right kind that breaks the constant's refinement is reported on the `env(…)` initialiser, as any literal that breaks its type would be.",
+        example: "// bynk.toml\n[vars]\nMAX_LINES = \"100\"\n\n// config.bynk\nconst MaxLines: Int = env(MAX_LINES)   // ✗ the value is a string\n\n// bynk.toml\n[vars]\nMAX_LINES = 100   // ✓ a whole number",
+    },
+    Explain {
+        code: "bynk.env.conflicting_default",
+        blurb: "A `bynk.toml` variable has one value per environment, so two constants that read it must agree on what it is when no environment sets it. Two different defaults leave the variable meaning two things at once. Give both the same default, or give neither a default and set the variable in `bynk.toml`, or read two different variables.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://a.example\")\nconst Callback: String = env(APP_ORIGIN, \"https://b.example\")   // ✗ a different default for `APP_ORIGIN`\n\nconst Callback: String = env(APP_ORIGIN, \"https://a.example\")   // ✓ the same default",
+    },
+    Explain {
+        code: "bynk.env.malformed_call",
+        blurb: "A constant's `env` initialiser names the `bynk.toml` variable it reads, bare and not as a string, and may give a default: `env(NAME)` or `env(NAME, default)`. The name is capital letters, digits and `_`, starting with a capital letter, so a variable cannot be mistaken for a constant (which is written in upper-camel case). Write the call in that form.",
+        example: "const Origin: String = env(\"APP_ORIGIN\")   // ✗ the name is written as a string\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a bare name",
+    },
+    Explain {
+        code: "bynk.env.missing",
+        blurb: "`env(NAME)` with no default is a required value: every environment must supply one. The build for this environment found none in its `[env.<name>.vars]` or in `[vars]`. Set the variable in `bynk.toml`, under `[vars]` for every environment or under `[env.<name>.vars]` for one, or give `env` a default: `env(NAME, \"fallback\")`. The value is read from `bynk.toml` only, never from the Worker's run-time environment or the build machine's, so a deploy depends only on committed configuration.",
+        example: "const Origin: String = env(APP_ORIGIN)   // ✗ no default, and `bynk.toml` sets no `APP_ORIGIN`\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a default",
+    },
+    Explain {
+        code: "bynk.env.not_initialiser",
+        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list, nor appear in a function or handler body. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value\n\nfn origin() -> String { env(APP_ORIGIN) }   // ✗ `env` in a function body\n\nfn origin() -> String { Origin }   // ✓ name the constant",
+    },
+    Explain {
+        code: "bynk.env.unsupported_type",
+        blurb: "A `bynk.toml` value is text, a whole number, `true` or `false`, or an array of strings, so an `env(NAME)` constant can be a `String`, an `Int`, a `Bool` or a `List[String]`, or a refinement over a `String` or an `Int` declared in the same unit. A record, a sum, a `Duration` or any other type has no spelling there yet. Read the pieces as separate constants and build the value from them, or declare the constant with a supported type.",
+        example: "const Window: Duration = env(WINDOW)   // ✗ a `Duration` cannot be written in `bynk.toml`\n\nconst WindowMillis: Int = env(WINDOW_MS, 1000)   // ✓ an `Int`",
     },
     Explain {
         code: "bynk.event.bad_params",
@@ -1832,7 +1978,12 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.exec.unavailable",
         blurb: "A function that uses `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
-        example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
+        example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] by Caller {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
+    },
+    Explain {
+        code: "bynk.expect.ambiguous_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. Two agents this suite reaches both declare `<name>`, so the claim does not say which one. Qualify it with the agent: `violates Account.non_negative`.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negative           // ✗ `Account` and `Wallet` both declare it\nexpect Account(\"a\").withdraw(5) violates Account.non_negative   // ✓",
     },
     Explain {
         code: "bynk.expect.faults_not_effect",
@@ -1893,6 +2044,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   expect positive(1)       // ✓ in a case",
     },
     Explain {
+        code: "bynk.expect.unknown_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. The name must be one an agent this suite reaches declares: an invariant or transition by its name, or a `@unique` constraint by its field and key (`customers.email`). A name nothing declares could never be raised, so the claim could never hold. The note lists the names that are reachable.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negatve   // ✗ no such invariant\nexpect Account(\"a\").withdraw(5) violates non_negative  // ✓",
+    },
+    Explain {
         code: "bynk.exports.capability_not_provided",
         blurb: "`exports capability { Clock }` lets other contexts depend on `Clock` and have it \
                 built for them, so the exporting context must also say how: a `provides Clock = \
@@ -1937,6 +2093,29 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.exports.undeclared_type",
         blurb: "An `exports` clause lists types this context declares, to make them visible to the contexts that consume it. A name the context does not declare has nothing to export: it is usually a misspelling, or a type that is declared elsewhere. Correct the name, or declare the type in this context. A name in `exports capability` that is not declared is `bynk.exports.undeclared_capability`.",
         example: "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
+    },
+    Explain {
+        code: "bynk.field.replaces_conflict",
+        blurb: "`replaces old` says a field was renamed from `old`: its stored value, a locked event's recorded field and an incoming wire key under the old name are all read as this field. That only makes sense when `old` is a name this field alone gives up. It is refused when the clause names the field itself, when `old` is still another field of the same record or agent (two fields cannot read one name), when two fields replace the same name, and when the project's schema lock records both names as separate fields (the rename would merge two histories). Drop the clause if the fields are separate, or delete the old field.",
+        example: "type Account = {\n  name: String,\n  label: String replaces name,   // ✗ `name` is still declared\n}\n\ntype Account = {\n  label: String replaces name,   // ✓ a rename: `name` is gone\n}",
+    },
+    Explain {
+        code: "bynk.field.replaces_needed",
+        blurb: "A `store` field renamed with `replaces old` is read under `old` for as long as any stored version the lock holds keeps its value there. Deleting the clause while one does would read those records as the field's zero. Keep the clause until `bynk migrate` has raised the class's floor past those versions, and the compiler stops reading the old name; `bynk.field.replaces_settled` says when that is.",
+        example: "agent Cart {
+    key id: String
+    store owner: Cell[String]            // ✗ renamed from `customer`, and version 1 still stores `customer`
+}
+
+agent Cart {
+    key id: String
+    store owner: Cell[String] replaces customer   // ✓ kept until the floor passes version 1
+}",
+    },
+    Explain {
+        code: "bynk.field.replaces_unknown",
+        blurb: "`replaces old` carries the data of a field the project's schema lock already records, so `old` has to be one. A name the lock does not record for this event or agent has nothing to rename: it is usually a misspelling, a clause added to a field that was never renamed, or a rename already applied and since dropped from the lock. Check the old name against the lock's entry for the type, and that it was built with this project. If the field was not renamed, drop the clause.",
+        example: "store owner: Cell[String] replaces customer   // ✗ the lock records no field `customer`\n\nstore owner: Cell[String]                     // ✓ no clause: the field was never renamed",
     },
     Explain {
         code: "bynk.fixture.binary_content",
@@ -2085,9 +2264,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 through another type, its note names the field path. To cross a boundary today, \
                 use a concrete recursive type, or keep the generic one inside the context.",
         example: "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\n\
-                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\n\
+                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] by Caller { … }   // ✗ no codec for a recursive generic\n}\n\n\
                   type IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\n\
-                  service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+                  service s {\n    on call(t: IntTree) -> Effect[Int] by Caller { … }     // ✓ a concrete recursive type\n}",
     },
     Explain {
         code: "bynk.generics.type_arg_count",
@@ -2115,7 +2294,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 no expected type, so there is nothing to choose `T` from. The error also fires when a \
                 lambda's parameter types depend on a parameter that the other arguments leave open. Give \
                 the type argument explicitly with `none[Int]()`, or annotate the binding so the expected \
-                type supplies it: `let x: Option[Int] = none()`.",
+                type supplies it: `let x: Option[Int] = none()`. A capability operation also accepts \
+                fewer type arguments than it has parameters: the written ones bind the leading \
+                parameters and the arguments determine the rest, so `Cap.pair[Int](1)` on \
+                `pair[A, B]` leaves `B` open and is refused until you write `Cap.pair[Int, String](1)`.",
         example: "fn none[T]() -> Option[T] {\n    None\n}\n\n\
                   let x = none()                    // ✗ nothing says what `T` is\n\n\
                   let x = none[Int]()               // ✓ given explicitly",
@@ -2168,9 +2350,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `given`; the error names which ones. Using a capability directly, without declaring \
                 it, is `bynk.given.undeclared_capability`.",
         example: "fn warn(what: String) -> Effect[()] given Logger { … }\n\n\
-                  on call(sku: String) -> Effect[()] {\n    \
+                  on call(sku: String) -> Effect[()] by Caller {\n    \
                     warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\n\
-                  on call(sku: String) -> Effect[()] given Logger {   // ✓ declared on the caller\n    \
+                  on call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    \
                     warn(sku)\n}",
     },
     Explain {
@@ -2181,9 +2363,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 reaches for, so a reader (and the compiler) can see a handler's \
                 full reach from its signature alone. Using a capability that is \
                 not in `given` is the missing half of that contract.",
-        example: "on call() -> Effect[()] {\n    \
+        example: "on call() -> Effect[()] by Caller {\n    \
                     Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\n\
-                  on call() -> Effect[()] given Logger {   // ✓ declared, then used\n    \
+                  on call() -> Effect[()] by Caller given Logger {   // ✓ declared, then used\n    \
                     Logger.log(\"hi\")\n}",
     },
     Explain {
@@ -2224,7 +2406,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.held.query_accessor_on_held_map",
         blurb: "A held `Map[K, Connection]` is iterated with the broadcast operations, `forEach` (one at a time) or `parTraverse` (in parallel), not with a key query. `.entries`, `.keys` and `.values` would lift the connections out into a query, which the single-owner rules for held values do not allow. To send to every connection, broadcast over the map; to learn who is connected, keep a separate `Set` of their keys.",
-        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
     },
     Explain {
         code: "bynk.held.unsupported_map_op",
@@ -2248,8 +2430,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.history.not_generable",
-        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
-        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
+        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern with a lookahead, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"(?=[A-Z])[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
     },
     Explain {
         code: "bynk.history.outside_property",
@@ -2260,6 +2442,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.history.restates_invariant",
         blurb: "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
+    },
+    Explain {
+        code: "bynk.http.body_cap_defaulted",
+        blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
+        example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.body_kind_conflict",
@@ -2278,8 +2465,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.cache_bad_max_age",
-        blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
-        example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hours\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number or a string is refused; write a `Duration` literal whose unit agrees with its number: `30.seconds`, `5.minutes`, `1.hour`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
+        example: "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.cache_bad_no_store",
+        blurb: "`noStore` on `@cache` forbids any cache from keeping the response, which is a yes or a no, so the value must be the literal `true` or `false`; a bare word, a string or a number is refused. Write `noStore: true` for data that must never be stored, such as a one-time token. See also `bynk.http.cache_no_store_conflict`.",
+        example: "@cache(noStore: yes)    // ✗ `true` or `false`\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)   // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.cache_bad_scope",
@@ -2289,7 +2481,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.cache_duplicate",
         blurb: "A handler has one `@cache`, which says how long the response to that route may be reused. Two would give it two freshness windows, and neither could be said to win, so the second is refused. Delete the one you do not want. A handler may likewise carry only one `@limit` (`bynk.http.limit_duplicate`), `@raw` or `@json`.",
-        example: "@cache(maxAge: 1.minutes)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        example: "@cache(maxAge: 1.minute)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.cache_max_age_fractional_seconds",
@@ -2297,9 +2489,19 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "@cache(maxAge: 1500.milliseconds)   // ✗ not a whole number of seconds\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 2.seconds)           // ✓",
     },
     Explain {
+        code: "bynk.http.cache_no_store_conflict",
+        blurb: "`@cache(noStore: true)` sends `Cache-Control: no-store`, which tells every cache to keep nothing, and drops the automatic `ETag`, because nothing is stored to revalidate. `maxAge`, `scope` and `immutable` describe how a stored response may be reused, so they contradict it and are refused. Keep `noStore: true` alone to forbid storing, or drop it and declare the freshness you want.",
+        example: "@cache(noStore: true, maxAge: 5.minutes)   // ✗ no-store and a freshness window\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)                          // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.cache_on_non_get",
-        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all.",
+        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all. The one form that is not for reads is `@cache(noStore: true)`, which sends `Cache-Control: no-store` and is legal on a route of any HTTP method; it is still refused on a handler that is not HTTP, and on an agent.",
         example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.cache_public_authenticated",
+        blurb: "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
+        example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
     },
     Explain {
         code: "bynk.http.cache_public_reads_cookies",
@@ -2393,28 +2595,33 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.cors_invalid_field",
-        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hours`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+        blurb: "Each optional `cors` field takes one kind of value: `headers` and `expose` a list of header names written as string literals (`expose` may instead be `[\"*\"]` alone), `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. A header name is an RFC 9110 token: letters, digits and ``!#$%&'*+-.^_`|~``, with no space, colon or comma. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
         example: "cors { origins: [\"https://app.example.com\"], credentials: \"yes\" }   // ✗ `true` or `false`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. A single string, an empty list, a computed entry or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
-        example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The comparison is exact, and a browser sends an origin only as `scheme://host[:port]`: the scheme and host in lower case, no path, query, fragment or trailing slash, and no port that is the scheme's default (`:443` for `https`, `:80` for `http`). An entry in any other shape (`\"https://app.example.com/\"`, `\"https://App.example.com\"`, `\"app.example.com\"`, `\"https://*.example.com\"`) can never equal a header a browser sends, so every request from that site would be refused and nothing would say why; it is refused here, with the form to write instead. There is no subdomain wildcard: list each origin. `\"null\"`, the origin a browser sends from a sandboxed frame, is compared like any other entry (but see `bynk.http.cors_wildcard_credentials`). A constant is checked as the value it was read as, and an `env(…)` constant as the value `bynk.toml` gives it in the environment being built, so a bad value for one environment is refused when that environment is built. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: \"https://app.example.com\" }       // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com/\"] }     // ✗ a browser sends no trailing slash\n\ncors { origins: [\"https://app.example.com\"] }      // ✓",
     },
     Explain {
         code: "bynk.http.cors_not_http",
-        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP surface has cross-origin browser callers, so it is valid only on a `from http` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP and WebSocket surfaces have cross-origin browser callers, so it is valid only on a `from http` or `from websocket` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
         example: "service jobs from cron {\n    cors { origins: [\"https://app.example.com\"] }   // ✗ a schedule has no browser callers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.cors_unknown_field",
-        blurb: "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
-        example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hours }    // ✓",
+        blurb: "A `cors { }` policy has five fields: `origins`, `headers`, `expose`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
+        example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
-        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
-        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service. The origin `\"null\"` is refused beside `credentials: true` for the same reason in effect: a browser sends `Origin: null` from a sandboxed frame or a `data:` page, which any other site can create, so naming it admits any page, and the visitor\'s cookies would go to it. Without credentials `\"null\"` is an ordinary entry.",
+        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\", \"null\"], credentials: true }   // ✗ any page can claim `null`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.cors_wildcard_expose_credentials",
+        blurb: "`expose` names the response headers a browser script may read from a cross-origin response. The Fetch standard reads `*` there as every header only when the request carries no credentials; on a credentialed response a browser treats it as a header literally named `*`, so a policy that looks like it exposes everything would expose nothing. Bynk refuses the pair at compile time. List the header names the page reads, or set `credentials: false`. The same rule for origins is `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"*\"] }                 // ✗ credentials need named headers\n\ncors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"x-request-id\"] }   // ✓",
     },
     Explain {
         code: "bynk.http.duplicate_rejected",
@@ -2436,6 +2643,26 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let status = ErrorStatus.Forbidden                          // ✗ a status has no value here\n\n\
                   fn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\n\
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
+    },
+    Explain {
+        code: "bynk.http.errors_duplicate",
+        blurb: "A handler has one `@errors`, which says which shape its error bodies take. Two would name two shapes for the same response, and neither could be said to win, so the second is refused. Keep one. See also `bynk.http.json_duplicate`.",
+        example: "@errors(format: problem)\n@errors(format: bynk)       // ✗ already set above\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@errors(format: problem)     // ✓ one shape\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.errors_invalid_field",
+        blurb: "`format` chooses the shape of an HTTP service's error bodies, and has two values, written bare: `bynk` (Bynk's own bodies, the default) or `problem` (RFC 9457 `application/problem+json`). Anything else, a string included, is refused, and `@errors` also needs its `format:` argument. See also `bynk.http.json_invalid_field`.",
+        example: "@errors(format: \"problem\")   // ✗ bare, not a string\n\n@errors(format: problem)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.errors_not_http",
+        blurb: "An `errors { }` section, or an `@errors` annotation, chooses the shape of a service's HTTP error bodies. Only a `from http` service has them, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `json` section has the same rule: `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    errors { format: problem }   // ✗ a schedule has no error body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    errors { format: problem }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.errors_unknown_field",
+        blurb: "`errors { }` has one field, `format`, and `@errors` has one argument, also `format:`. Any other name is refused rather than ignored, so a misspelling does not silently leave the default in place. See also `bynk.http.json_unknown_field`.",
+        example: "errors { format: problem, title: short }   // ✗ only `format`\n\nerrors { format: problem }                  // ✓",
     },
     Explain {
         code: "bynk.http.extra_param",
@@ -2473,14 +2700,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.headers_field_consumed",
+        blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
+        example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed_optional",
+        blurb: "A `headers` field reads a header the route's actor consumes (`authorization` on a `Bearer` or `Oidc` route, the signature header, the session cookie out of `cookie`), so the router hides it from the record and the field is always `None` or empty. It does no harm, but it never carries anything, which is rarely what the author meant. Read the value through the actor's principal, or drop the field. A required field is the error `bynk.http.headers_field_consumed`.",
+        example: "type Auth = { authorization: Option[String] }   // ⚠ always `None` on a `Bearer` route",
+    },
+    Explain {
+        code: "bynk.http.headers_field_not_stringy",
+        blurb: "A header is a single text value (or a comma-separated list of them), so each field of the `headers` record must be one a header can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a header that may be absent) or a `List` (a comma-separated value, split respecting quoted strings). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `cookies` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.cookies_field_not_stringy`.",
+        example: "type Range = { from: Int, to: Int }\n\ntype Upload = { range: Range }   // ✗ a header is one value, not a record\n\ntype Upload = { from: Int, to: Int }   // ✓\n\non PUT(\"/files\") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
-        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
+        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.invalid_path",
         blurb: "The router matches a route against the request's path, which always begins with `/`, so a route that does not is refused rather than guessed at. A `:` segment must also carry a name, since the name is what binds the value to a handler parameter. Start the route with `/` and name each parameter, as in `\"/items/:id\"`. A route under a reserved prefix is `bynk.http.reserved_prefix`.",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.invalid_response_header",
+        blurb: "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+        example: "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
     },
     Explain {
         code: "bynk.http.json_duplicate",
@@ -2549,28 +2796,23 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.limits_invalid_field",
-        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody` and `maxFile` are byte counts, and `maxParts` counts parts. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the three is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
+        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody`, `maxFile` and a WebSocket service's `maxFrame` are byte counts, and `maxParts` counts parts. `maxFrame` is also at most 33_554_432, Cloudflare's own limit on an inbound message. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the set is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: \"1MB\" }       // ✗ a byte count, not a string\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_048_576 }   // ✓ 1 MiB\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_not_http",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service's routes, and only a `from http` service has routes that take requests, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of an HTTP service's routes, or a WebSocket service's `maxFrame`, and only a `from http` or `from websocket` service has requests or frames to bound, so on a `cron` or other service it is refused. Move it to the service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
         example: "type Note = { text: String }\n\nservice jobs from cron {\n    limits { maxBody: 1_000_000 }   // ✗ a schedule takes no request body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }   // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_unknown_field",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`; on a `from websocket` service the one field is `maxFrame`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
-        code: "bynk.http.multipart_body_unbounded",
-        blurb: "A `@multipart` body is buffered whole, with its parsed parts held beside it, so an upload with no ceiling lets one client use up the Worker's memory. A `@multipart` route therefore needs a cap, as a `@raw` one does (`bynk.http.raw_body_unbounded`): `@limit(maxBody: …)` on the handler, or `limits { maxBody: … }` on the service. Choose the largest upload you mean to accept.",
-        example: "type Upload = { title: String }\n\n@multipart   // ✗ no cap on the handler or the service\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 1_000_000)   // ✓ capped\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
-    },
-    Explain {
         code: "bynk.http.path_param_not_stringy",
-        blurb: "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
-        example: "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
+        example: "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.query_field_not_stringy",
@@ -2588,9 +2830,34 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on GET(\"/items\") (query: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `query` is a record or `RequestQuery`\n\ntype Filter = { tag: Option[String] }\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.rate_limit_bad_args",
+        blurb: "`@rateLimit` takes a limiter and a key, and the key is a word the router knows: `@rateLimit(SignupLimit, key: clientIp)`. A missing key, a key that is not `clientIp` or `identity`, extra arguments or a literal where the limiter's name goes leaves the router nothing to count by, so the annotation is refused. A limit keyed on something only the handler knows stays a call to the limiter's `allow(key)` in the handler. `identity` is `bynk.http.rate_limit_key_unavailable`.",
+        example: "@rateLimit(SignupLimit, key: region)       // ✗ not a key\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_duplicate",
+        blurb: "A route carries at most one `@rateLimit`, because the router asks one limiter, by one key, before it reads the body. Two annotations would leave it two answers, and neither could be said to win. Keep one. A limiter shared by several routes counts across all of them by key, so to limit two routes together, name the same limiter on each.",
+        example: "@rateLimit(SignupLimit, key: clientIp)\n@rateLimit(SignupLimit, key: clientIp)   // ✗ already set above\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓ one limiter, one key",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_key_unavailable",
+        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
+        example: "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_not_http",
+        blurb: "`@rateLimit` makes the router ask a rate limiter before it reads a request body, and only an `on http` route has a router and a request body. On a `call`, an event or a schedule handler it has nothing to act on, so it is refused rather than ignored. Remove it, or call the limiter yourself with `allow(key)` in a handler that is given it.",
+        example: "service jobs {\n    @rateLimit(SignupLimit, key: clientIp)   // ✗ a `call` has no router step\n    on call(n: Int) -> Effect[Int] by Caller { … }\n}\n\nservice jobs {\n    on call(n: Int) -> Effect[Int] by Caller given SignupLimit {   // ✓ ask the limiter\n        let ok <- SignupLimit.allow(\"jobs\")\n        Effect.pure(if ok { 1 } else { 0 })\n    }\n}",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_unknown_limiter",
+        blurb: "`@rateLimit` names the limiter that counts the route's requests, and the limiter is a `RateLimit` capability the route's own context declares: `capability SignupLimit = RateLimit @limit(10) @period(60.seconds)`. A name that is not declared there, or that names something that is not a `RateLimit` (a constant, another capability), leaves the router with nothing to ask. Declare the limiter in the context, or fix the name. The annotation needs no `given` on the handler.",
+        example: "@rateLimit(NoSuchLimit, key: clientIp)   // ✗ not declared in this context\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ declared above",
+    },
+    Explain {
         code: "bynk.http.raw_bad_content_type",
-        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`. Write `\"image/png\"`, or `\"*/*\"` to accept any type.",
-        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`, or a non-empty list of them. Write `\"image/png\"`, `[\"image/png\", \"image/jpeg\"]` to accept either, or `\"*/*\"` alone to accept any type; the wildcard cannot be one of several, since it would make the others pointless.",
+        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: [\"image/png\", \"*/*\"])   // ✗ `\"*/*\"` is only valid alone\n\n@raw(contentType: \"image/png\")   // ✓\n\n@raw(contentType: [\"image/png\", \"image/jpeg\"])   // ✓ either type\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.raw_body_not_bytes",
@@ -2641,6 +2908,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.reserved_response_header",
+        blurb: "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+        example: "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.reserved_route_syntax",
         blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
         example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -2652,7 +2924,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.security_invalid_field",
-        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. Write the value out. A field other than these two is `bynk.http.security_unknown_field`.",
+        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. `frameAncestors` must be a list of exact origins (`\"https://partner.example\"`) or `\"self\"`, with no wildcard, except `[\"*\"]`, which stands alone and needs an explicit `csp` beside it so that opening framing to every site is never an accident. `referrerPolicy` must be one of the standard values written in camel case (`noReferrer`, `sameOrigin`, `strictOriginWhenCrossOrigin`, and so on). `csp` must be a non-empty string literal with no line break. Write the value out. A field other than these is `bynk.http.security_unknown_field`.",
         example: "service api from http {\n    security { hsts: 180 }         // ✗ a `Duration`, not a number\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }    // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -2662,8 +2934,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.security_unknown_field",
-        blurb: "A `security { }` section has two fields, `hsts` and `nosniff`, and each becomes a response header. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
-        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ `hsts` and `nosniff` only\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        blurb: "A `security { }` section has five fields: `hsts`, `nosniff`, `frameAncestors`, `referrerPolicy` and `csp`, and each becomes a response header (the last three on an HTML response). The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
+        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ not a field of `security`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.status_needs_get",
+        blurb: "`PartialContent` (206) answers a range request and `NotModified` (304) answers a conditional read, and only a `GET` route serves either: a range or a validator is how a client re-reads a representation it already knows, and `HEAD` is answered by the `GET` route. Return them from a `GET` handler; a write that fails a precondition answers `PreconditionFailed` (412) instead.",
+        example: "service api from http {\n    on POST(\"/blob\") (body: String) -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✗ not a `GET` route\n    }\n}\n\nservice api from http {\n    on GET(\"/blob\") () -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✓\n    }\n}",
     },
     Explain {
         code: "bynk.http.stream_body_not_raw",
@@ -2687,8 +2964,13 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.unknown_handler_annotation",
-        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
+        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
+    },
+    Explain {
+        code: "bynk.http.unreachable_route",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
         code: "bynk.index.bad_argument",
@@ -2697,13 +2979,18 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.index.unkeyable_key",
-        blurb: "An index is looked up by equality on its key, so the field has to be a value the store can compare and key on: `Int`, `String`, or a refined or opaque type over one of them. A `Bool`, a record or a list cannot be. Index another field, or add a field of a keyable type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
-        example: "type Order = { id: String, paid: Bool, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: paid)         // ✗ a `Bool` is not keyable\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
+        blurb: "An index is looked up by equality on its key, so the field has to be a `Key` type: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. A `Float` is never a key, at any depth, because `NaN` is not equal to itself. Index another field, or add a field of a key type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
+        example: "type Order = { id: String, weight: Float, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: weight)       // ✗ a `Float` is not a key\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
     },
     Explain {
         code: "bynk.internal.missing_checker_fact",
         blurb: "This is a compiler fault, not a mistake in your program. The code generator needs a fact the checker should have recorded about a construct (its type, the callee it resolves to, how many arguments it takes, a field's default value) and did not find one. Every program the checker accepts carries these facts, so no source you write can cause this on purpose. The diagnostic points at the construct being compiled when the fact was missing. Please report it at https://github.com/bynk-lang/bynk/issues with the source around that location, which is all that is needed to reproduce it. The compiler stops before it writes any output for the unit, rather than emit a program that might mean something other than what you wrote.",
         example: "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
+    },
+    Explain {
+        code: "bynk.invariant.collection_scan",
+        blurb: "An invariant is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()`: the commit already knows the staged count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Bound the collection with `size()`, or check the property in the handler that writes the collection, where the one entry in hand is known. The mirror rule for steps is `bynk.transition.collection_scan`.",
+        example: "invariant has_x: lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ninvariant few_lines: lines.size() <= 100   // ✓ one count, read at the commit",
     },
     Explain {
         code: "bynk.invariant.cross_agent_reference",
@@ -2857,6 +3144,16 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `\\n`, or use a multi-line string literal.",
         example: "const Greeting: String = \"hello      // ✗ no closing quote\n\
                   const Greeting: String = \"hello\"   // ✓",
+    },
+    Explain {
+        code: "bynk.list.par_limit_range",
+        blurb: "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",
+        example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
+    },
+    Explain {
+        code: "bynk.match.refined_pattern_is_range",
+        blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
+        example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
     },
     Explain {
         code: "bynk.messages.format_mismatch",
@@ -3102,7 +3399,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
-        blurb: "The closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` (or their `…With` forms) runs \
                 once per element, all at once, so it may not write a `store` field, which is \
                 the rule a `par { … }` block already follows. Every `<-` is an await point, \
                 so a `get` then a `put` in the closure lets the other branches write in \
@@ -3113,7 +3410,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 write reads the entry before it stages the write, so the sequential form \
                 reads one entry at a time; per-key atomicity is the reason for the rule. To \
                 keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
-        example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
+        example: "xs.parForEach((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
     },
     Explain {
@@ -3224,6 +3521,21 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
     },
     Explain {
+        code: "bynk.parse.duplicate_delivery",
+        blurb: "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_errors",
+        blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
+        example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_fallback",
+        blurb: "A `from email` service has one `fallback` block: the one address mail a handler faulted on is forwarded to. A second block could name another address, and the reader would not know which holds, so it is refused. Keep one.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }\n    fallback { forward: \"oncall@ops.example\" }   // ✗ a second `fallback`\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one policy\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
         code: "bynk.parse.duplicate_json",
         blurb: "A service's `json` policy sets whether its response bodies use plain or tagged JSON, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@json` on its handler. The same rule holds for `cors`, `security` and `limits`, as `bynk.parse.duplicate_cors` shows.",
         example: "service api from http {\n    json { options: plain }\n    json { options: tagged }                         // ✗ a second `json`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }                          // ✓ one setting\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
@@ -3235,7 +3547,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.parse.duplicate_security",
-        blurb: "A service has one `security` policy, and it sets the security headers (`hsts`, `nosniff`) stamped on every response. Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
+        blurb: "A service has one `security` policy, and it sets the security headers stamped on responses (`hsts` and `nosniff` on every response, and `frameAncestors`, `referrerPolicy` and `csp` on an HTML page). Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
         example: "service api from http {\n    security { hsts: 180.days }\n    security { nosniff: true }                       // ✗ a second `security`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days, nosniff: true }       // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
     },
     Explain {
@@ -3308,7 +3620,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }\n\
                   \n\
                   service orders {\n\
-                  \x20\x20\x20\x20on call() -> Effect[Int] {     // ✓\n\
+                  \x20\x20\x20\x20on call() -> Effect[Int] by Caller {     // ✓\n\
                   \x20\x20\x20\x20\x20\x20\x20\x20Effect.pure(0)\n\
                   \x20\x20\x20\x20}\n\
                   }",
@@ -3995,34 +4307,94 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type Order = { customerId: String, region: Int }\ntype Customer = { code: String, region: Int }\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.region, (o, c) => c.region).count()   // ✗ `String` against `Int`\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()     // ✓ both `String`",
     },
     Explain {
+        code: "bynk.query.par_traverse_renamed",
+        blurb: "`parTraverse` on a store or held `Map` is now `parForEach`. On a `List`, `parTraverse` runs the steps concurrently and returns their values; the query form returns `()`, so it takes the `parForEach` name, which means the same on both receivers. Rename the call: the fix is machine-applicable. A step whose results you want back is a `List`: `collect()` the query, then `parTraverse` the list.",
+        example: "agent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parTraverse((c) => c.send(Frame { text: text }))   // ✗ renamed\n    }\n}\n\nagent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parForEach((c) => c.send(Frame { text: text }))    // ✓ runs for effect\n    }\n}",
+    },
+    Explain {
         code: "bynk.query.sum_needs_numeric",
         blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. `sum` also adds a `Decimal` key, exactly, on a `List` and on a `Query`. `average` does not take one: a mean is a division, and a `Decimal` division needs a scale and a rounding mode, so sum the key, then `div(Decimal.fromInt(n), scale, mode)` by the count. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key.",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first, or a window of one (`since`, `before`, `between`, `recent`, `reversed`). A `flatMap` loses the order, because each inner query is joined in its own. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
-        blurb: "A queue consumer is invoked once per message, so `on message` takes exactly one parameter: the message, of any type that can be decoded from the queue body. Two parameters leave the second with nothing to supply it, and none leaves the handler without the message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
-        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+        blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
+        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
+    },
+    Explain {
+        code: "bynk.queue.dead_letter_signing_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, so a signed queue's dead letters are still the signed envelope and an unsigned queue's are the bare body. The dead-letter queue's consumer must therefore be signed exactly when the source consumer is, in the same context, and a signed one must admit every sender the source does; otherwise it could not verify or decode a single dead letter, and each would be dropped. Make the dead-letter consumer admit the same `Foreign` actors, or point `deadLetter` at a queue whose consumer does.",
+        example: "actor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer admits unsigned messages\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }   // ✓ the same sender\n}",
+    },
+    Explain {
+        code: "bynk.queue.dead_letter_type_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_bad_option",
+        blurb: "A `delivery { }` section sets the consumer's `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours), `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole seconds, 0 to 60) and `concurrency` (1 to 250). Those are Cloudflare's limits, so a value outside its range, a key that is not one of these, or one written twice is refused here rather than failing at deploy. The dead-letter queue also cannot be the consumer's own queue, which would redeliver a failed message to the consumer that failed it. A literal, or a constant of the key's type, is accepted.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_not_queue",
+        blurb: "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
+        example: "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.queue.duplicate_consumer",
         blurb: "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
-        example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
+        example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ a queue of its own\n}",
     },
     Explain {
         code: "bynk.queue.invalid_name",
         blurb: "`from queue(\"…\")` names a Cloudflare queue, so the name must be one Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. An empty name, capitals or `_` are refused here, rather than failing at deploy. Rename it, for example `order-events`.",
-        example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
+        example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.queue.message_type_mismatch",
+        blurb: "The queue name is a string both sides write, so the compiler is the only party that sees a producer and its consumer and can say they disagree. When a context in the project consumes the queue a `Queue @name(\"…\")` instance sends to, `sendValue`, `sendValueWith` and `sendValueBatch` (its elements) must send a type the consumer's `on message` accepts, by the comparison a cross-context call gets: the same fields and variants, and a stronger refinement is admitted where the consumer expects a weaker one. Otherwise the consumer could not decode the message, which would be retried and then dead-lettered or dropped at run time. Send the consumer's type, or change the consumer. A queue no context in the project consumes (a foreign Worker, or nobody yet) has nothing to compare with and is not checked; nor is a send whose type is still a type parameter.",
+        example: "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.queue.no_dead_letter",
+        blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
+        example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.queue.producer_never_sends",
+        blurb: "A refinement of `Producer`, such as `actor FromOrders = Producer where IsContext(shop.orders)`, names the Bynk contexts that may send to a queue's consumer. A context sends to a queue through a `Queue @name(\"…\")` instance it declares, and that instance is what signs its messages under the edge key between the two contexts. A named context that declares no instance of the queue never signs a message for it, so the name is dead configuration or a stand-in for the context that does send, and the messages that do arrive from the intended producer would be refused only at run time. Name a context that has a `Queue` for this queue, or declare the `Queue` in the context you meant. A dead-letter queue's consumer names the producers of the queue it dead-letters from, since a dead letter keeps the signed envelope its source received. A name that is no context of the project is `bynk.actor.unknown_context`.",
+        example: "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n\x20 delivery { deadLetter: None }\n\x20 on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
+    },
+    Explain {
+        code: "bynk.queue.retry_delay_out_of_range",
+        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
+        example: "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
     },
     Explain {
         code: "bynk.queue.return_not_queue_result",
-        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
-        example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
+        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
+        example: "on message(message: String) -> Effect[Result[Int, String]] by Producer { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ `Ack` or `Retry(…)`",
+    },
+    Explain {
+        code: "bynk.queue.undecodable_unreachable",
+        blurb: "`Undecodable` is the verdict a `system` case reads when a message reached a real queue and its body did not decode. Only that path can produce it: a handler builds `Ack`, `Retry` or `RetryAfter`, and a `unit` or `integration` case calls the consumer with a value that is already typed, so no message can fail to decode there. A pattern of `Undecodable` anywhere else is a dead arm that looks as if it handled something. Replace the arm with `_`, since a `match` must still be exhaustive, or, if the decode failure is what you want to test, make the case `as system` and address the queue by its context path. It is only a warning, since the arm does no harm.",
+        example: "case \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false   // ⚠ a unit case never sees this verdict\n      _ => expect false\n    }\n}\n\ncase \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack   // ✓ the verdicts a unit case can see\n}",
+    },
+    Explain {
+        code: "bynk.queue.untyped_send",
+        blurb: "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
+        example: "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
     },
     Explain {
         code: "bynk.race.in_agent_handler",
         blurb: "`race` hands the side that loses to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the race is run from outside. The same rule holds for `bynk.within.in_agent_handler`.",
-        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
+        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] by Caller {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.race.in_pure_context",
@@ -4053,6 +4425,24 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.record_spread.unknown_field",
         blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
+    },
+    Explain {
+        code: "bynk.refine.bound_not_literal",
+        blurb: "An argument of a refinement predicate (`InRange`, `AtLeast`, `AtMost`, \
+                `MinLength`, `MaxLength`, `Length`, `Matches`) can be a constant, and \
+                the compiler replaces it with the literal it is bound to before the \
+                refinement is read, so `InRange(1, MaxQty)` means what `InRange(1, 100)` \
+                means. This one cannot be replaced: the constant is declared a type \
+                other than exactly the argument's (a refined constant is not a plain \
+                `Int`), is not bound to a literal or to another such constant, or is not \
+                a constant in scope. Declare it with the argument's own type and bind it \
+                to a literal, or write the literal in the predicate. A constant declared \
+                the refined type whose bound it is reports `bynk.resolve.const_cycle`.",
+        example: "type Count = Int where Positive\n\
+                  const MaxQty: Count = 100\n\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✗ `MaxQty` is a `Count`, not an `Int`\n\n\
+                  const MaxQty: Int = 100\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✓ declared exactly `Int`",
     },
     Explain {
         code: "bynk.refine.literal_violates",
@@ -4315,7 +4705,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.resolve.unconsumed_context",
         blurb: "A call such as `platform.pay.charge(1)` reaches into another context, and a context may only do that to one it has declared with `consumes`. The declaration is what makes a dependency between contexts visible and checked, instead of a name that happens to resolve. The same code is reported for a `given platform.pay.Cap` whose context is not consumed. Add `consumes platform.pay` (with an alias, if you want to call it by another name) at the top of the calling context. A consumed context that does not export a capability is `bynk.given.cross_context_unknown_capability`.",
-        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
+        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
                   context app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
     },
     Explain {
@@ -4423,7 +4813,7 @@ bynk revert --context shop.orders --to <version>",
     },
     Explain {
         code: "bynk.revert.id_unrecorded",
-        blurb: "The target version binds resources (KV namespaces, databases, limiters) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned since, and the older code would bind one that is no longer yours. `bynk revert` refuses. Redeploy forward.",
+        blurb: "The target version binds resources (KV namespaces, databases, limiters, Hyperdrive configs) by id. If the deploy lock no longer records the same id for a binding, the resource was re-provisioned or replaced since, and the older code would bind one that is no longer yours, or one `--prune` has deleted. `bynk revert` refuses. Redeploy forward.",
         example: "bynk revert --dry-run\n\
 \x20\x20ids       shop-orders  refused: the target would bind a resource that has since been replaced\n\
 \n\
@@ -4455,18 +4845,18 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.service.duplicate_call_handler",
-        blurb: "A service with no `from` clause is called by its name, `svc.call(…)`, so it has one entry: exactly one `on call` handler. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
-        example: "service greet {\n    on call(name: String) -> Effect[String] { … }\n    on call(name: String) -> Effect[String] { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] { … }\n}",
+        blurb: "A service with no `from` clause is a call service with one entry: exactly one `on call` handler, which another context calls by the service's name (`payment.authorise(…)`) and a test addresses as `svc.call(…)`. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
+        example: "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
     },
     Explain {
         code: "bynk.service.missing_from",
         blurb: "A service with no `from` clause is a call service, and admits only `on call` handlers; the protocol in the header is what says how a handler is invoked. A handler of another form needs its protocol named: `from http` for a route, `from cron`, `from queue(\"…\")`, `from websocket(…)` or `from Events(E)`. The error suggests the one that fits the handler. If the service really is a mix, split it (see `bynk.service.mixed_protocols`).",
-        example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] { … }\n}",
+        example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.service.mixed_protocols",
         blurb: "A service is one protocol adapter: with `from http`, `from cron`, `from queue(…)`, `from websocket(…)` or `from Events(E)` it admits only handlers of that form, and one that does not match is refused. Declare a service per protocol. A handler in a service with no `from` at all is `bynk.service.missing_from`.",
-        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] { … }\n}",
+        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
     },
     Explain {
         code: "bynk.service.outside_context",
@@ -4476,7 +4866,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.return_not_effect",
         blurb: "Every service handler returns an `Effect[T]`, whatever its protocol. A handler runs as the context answers a call, route, schedule, message or frame, and its effects and `given` capabilities are the runtime's to run, so a bare `Int` is refused. Wrap the result: `Effect.pure(x)` for a value you already hold. An `on event` handler that returns an `Effect` of anything but `()` is `bynk.event.return_not_effect_unit`.",
-        example: "service probe {\n    on call() -> Int { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] { … }    // ✓\n}",
+        example: "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] by Caller { … }    // ✓\n}",
     },
     Explain {
         code: "bynk.service.unknown_protocol",
@@ -4549,13 +4939,18 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
     },
     Explain {
+        code: "bynk.store.unique_implies_indexed",
+        blurb: "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
+        example: "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
+    },
+    Explain {
         code: "bynk.store.unkeyable_key",
-        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
-        example: "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
+        example: "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
     },
     Explain {
         code: "bynk.store.unknown_annotation",
-        blurb: "A `store` field takes one of four annotations: `@indexed`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
+        blurb: "A `store` field takes one of five annotations: `@indexed`, `@unique`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
         example: "store audit: Log[String] @keep(7.days)     // ✗ not a storage annotation\n\nstore audit: Log[String] @retain(7.days)   // ✓ how long a `Log` keeps entries",
     },
     Explain {
@@ -4574,6 +4969,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
     },
     Explain {
+        code: "bynk.string.empty_pad_fill",
+        blurb: "`padStart` and `padEnd` make a string `width` code points wide by repeating `fill` at the start or the end, so a `fill` with no characters has nothing to repeat. When the `fill` is an empty string literal the call is refused here; a `fill` computed at run time that turns out empty faults the call instead. Pass a non-empty `fill` (`\" \"` to pad with spaces, `\"0\"` for a number). A `fill` longer than one character is cut to fit, and the width counts code points, so an emoji in either string is one position.",
+        example: "fn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"\")    // ✗ nothing to pad with\n}\n\nfn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"0\")   // ✓ 42 is 000042\n}",
+    },
+    Explain {
         code: "bynk.stub.after_type",
         blurb: "`stub … returns <value> after <delay>` makes the stubbed call \
                 complete only once the harness clock has advanced by that \
@@ -4585,6 +4985,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/meter.test.bynk\n\
                   stub Meter.read() returns 7 after 3           // ✗ no unit\n\
                   stub Meter.read() returns 7 after 3.seconds   // ✓",
+    },
+    Explain {
+        code: "bynk.stub.agent_stub",
+        blurb: "An agent operation can be stubbed with `stub <Agent>.<op>(<args>) faulted` or `unreachable`, which make every matching call to it, whatever the key, end as `Faulted` or `Unreachable(None)` in `Agent(key).op.outcome(…)`, and make a plain call fault. It is limited to what the unit-test runtime can stand in for: an agent the context under test declares (another context's agents are reached through its services, which can be stubbed), in a `unit` suite or case (an `integration` case runs the real agent), and only those two words. There is no `returns <value>`, since a stubbed value would bypass the agent's state and invariants; test those through the real agent.",
+        example: "// demo/basket.bynk\nagent Basket { … on call add(n: Int) -> Effect[Int] { … } }\n\n// tests/basket.test.bynk\nstub Basket.add(_) returns 5    // ✗ an agent is stubbed `faulted` or `unreachable`\n\nstub Basket.add(_) unreachable  // ✓ `Basket(k).add.outcome(x)` is `Unreachable(None)`",
     },
     Explain {
         code: "bynk.stub.at_system",
@@ -4607,8 +5012,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.stub.generic_op",
-        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
+        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names. A `stub` of it names the type argument, as the call site does, so its answer has a concrete type, and it answers only the calls made at that type: `stub Idempotency.dedup[Int](_) returns None`. Without the type argument the clause could not be typed, and is refused.",
+        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None        // ✗ `dedup` has its own type parameter\nstub Idempotency.dedup[Int](_) returns None   // ✓ the type argument, as the call writes it\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()\n    expect result is None\n}",
     },
     Explain {
         code: "bynk.stub.not_a_seam",
@@ -4625,6 +5030,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/meter.test.bynk\n\
                   stub Gauge.read() returns 7   // ✗ the context has no `Gauge`\n\
                   stub Meter.read() returns 7   // ✓",
+    },
+    Explain {
+        code: "bynk.stub.outcome_word",
+        blurb: "`rejected <Refusal>`, `faulted` and `unreachable` stand in for the outcome of a call to a consumed context's service, which `<context>.<service>.outcome(args)` hands back as a `CallOutcome`. They belong to a consumed service's `stub` alone: a capability's `stub` is a provider, and a provider faults with `fails`. And `rejected` names one of `bynk`'s `Refusal` cases (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`, `StaleContract`, `Undecodable`). `returns <value>` stubs a call the handler answered.",
+        example: "// tests/meter.test.bynk\nstub Meter.read() faulted   // ✗ `Meter` is a capability, not a consumed service\n\nstub Meter.read() fails     // ✓ a provider faults with `fails`",
     },
     Explain {
         code: "bynk.stub.rhs_type",
@@ -4723,13 +5133,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
-        blurb: "A suite helper is a pure function that builds a value for a \
-                case: a request, a fixture, an expected result. Returning an \
-                `Effect` would hide a step of the test inside a helper. Build \
-                the value in the helper and run the effect in the `case`, \
+        blurb: "A suite helper that returns an `Effect` must say which capabilities it \
+                uses, with `given`, so a case's dependency on it is visible where it \
+                is called: `fn seed() -> Effect[()] given Stock { … }`. Without \
+                `given` it is a pure function that builds a value for a case, so \
+                build the value in the helper and run the effect in the `case`, \
                 where each step is visible with `<-`.",
         example: "// tests/desk.test.bynk\n\
-                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\n\
                   fn start() -> Int { 1 }                            // ✓ build the value\n\
                   let n <- local.call(start())                       // ✓ run it in the case",
     },
@@ -4876,6 +5287,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
     },
     Explain {
+        code: "bynk.test.bad_principal_needs_arm",
+        blurb: "A bad credential is presented to one member's seam, so on an actor sum \
+                `by Forged`, `by Expired`, `by Stale` and `by Revoked` must say which \
+                member's refusal the case checks, when more than one member could \
+                refuse it. Name the member in parentheses, as `by Forged(Browser)`. \
+                The name is a bare member name of the handler's `by` sum, not a value: \
+                an actor's identity is a value (`by Browser(\"ada\")`), a bad credential \
+                carries none. A member that cannot refuse the credential is refused \
+                with the principal's own error.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/me\") () -> Effect[HttpResult[String]] by who: Browser | Partner { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Forged            // ✗ the cookie's or the token's?\n\
+                  let r <- api.GET(\"/me\") by Forged(Browser)   // ✓",
+    },
+    Explain {
         code: "bynk.test.call_needs_in_process",
         blurb: "A service with an `on call` handler is internal to a deployment: \
                 it has no public route, and a `system` case can only send requests \
@@ -4990,6 +5417,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   }",
     },
     Explain {
+        code: "bynk.test.helper_given_at_system",
+        blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+        example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
+    },
+    Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
         blurb: "`by NoSubject` sends two correctly signed, unexpired tokens whose `sub` the seam must refuse: one empty, one missing. Only an `Oidc` actor's seam is driven with these tokens, so on any other route, a `Bearer` or `Signature` one or a public one, the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_audience_needs_oidc_route` and `bynk.test.wrong_algorithm_needs_oidc_route`.",
         example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by NoSubject      // ✗ a `Bearer` route is not an `Oidc` one\nlet r <- api.GET(\"/who\") by NoSubject     // ✓",
@@ -5096,14 +5528,15 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.principal_claims_not_oidc",
-        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
-                carries, which the handler reads and the actor's rules check. A \
-                `Bearer` actor's token holds an identity and nothing else, so \
-                there is no claim set to fill, and the argument is refused. Drop \
-                the claims, or test a route guarded by an `Oidc` actor. See \
-                `bynk.test.actor_no_identity` for the other extra argument.",
+        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` or `Bearer` \
+                actor's token carries, which the handler reads and the actor's rules \
+                check. A `SignedCookie` actor's credential holds an identity and \
+                nothing else, so there is no claim set to fill, and the argument is \
+                refused. Drop the claims, or test a route guarded by an `Oidc` or \
+                `Bearer` actor. See `bynk.test.actor_no_identity` for the other extra \
+                argument.",
         example: "// tests/api.test.bynk\n\
-                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a SignedCookie actor\n\
                   let r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
     },
     Explain {
@@ -5147,6 +5580,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// tests/api.test.bynk\n\
                   let r <- api.GET(\"/items\")                  // ✗ who is calling?\n\
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
+    },
+    Explain {
+        code: "bynk.test.revoked_needs_sessions_route",
+        blurb: "`by Revoked` sends a cookie for a session that was issued and then \
+                revoked in the session agent, so it needs a route whose seam \
+                checks one: a `SignedCookie` actor declared with `sessions = true`. \
+                A stateless cookie keeps no session to revoke, a route guarded by \
+                another scheme has no cookie, and a public route has no seam. \
+                Declare `sessions = true` on the actor, or test the cookie's \
+                signature and expiry with `by Forged` and `by Expired`.",
+        example: "// demo/api.bynk\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✗ without `sessions = true` there is no session to revoke\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✓ once the actor keeps sessions",
     },
     Explain {
         code: "bynk.test.service_bad_address",
@@ -5295,6 +5744,17 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
     },
     Explain {
+        code: "bynk.test.violates_needs_in_process",
+        blurb: "`expect <call> violates <name>` claims that a commit was refused by a named invariant, transition or `@unique` constraint. At `system` a refused commit reaches the case as a `500` with no payload from the deployed Worker, not a throw that names the declaration, so claim it at `unit` or `integration`.",
+        example: "// tests/ledger.test.bynk\n\
+                  case \"an overdraft is refused\" as system {\n\
+                  \x20\x20\x20\x20expect api.GET(\"/a\") by User(\"bob\") violates non_negative   // ✗ a `system` refusal is a `500`\n\
+                  }\n\n\
+                  case \"an overdraft is refused\" {                           // ✓\n\
+                  \x20\x20\x20\x20expect Account(\"a\").withdraw(5) violates non_negative\n\
+                  }",
+    },
+    Explain {
         code: "bynk.test.wire_http_only",
         blurb: "`Wire(…)` delivers raw text to an http body or path segment. A \
                 queue message, a cron tick, an `on call` or an event has no raw \
@@ -5350,7 +5810,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.tier.cross_context_needs_system",
-        blurb: "Below `system` a case runs in one process. No other context is stood up, and a `stub` doubles capabilities, not another context's services. So a `unit` or `integration` case, or a `property`, that reaches another context, directly or through a service or agent handler, has nothing to call. Promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
+        blurb: "Below `system` a case runs in one process. No other context is stood up, so a `unit` or `integration` case, or a `property`, that reaches another context's service, directly or through a service or agent handler, has nothing to call unless the service is stubbed: `stub Pay.authorise(_) returns …` substitutes it, and only the services left unstubbed are reported. Stub each service the case reaches, promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
         example: "suite demo.desk {\n    case \"the desk checks\" {\n        let n <- check.call(5)   // ✗ `check` calls `demo.vault`, another context\n    }\n}\n\nsuite demo.desk as system {\n    case \"the desk checks\" {\n        let n <- demo.desk.check(5)   // ✓ both contexts are stood up\n    }\n}",
     },
     Explain {
@@ -5362,6 +5822,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.tier.system_needs_wire",
         blurb: "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue` or `email` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
         example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
+    },
+    Explain {
+        code: "bynk.transition.collection_scan",
+        blurb: "A transition is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()` in `old` and `new`: the commit knows the staged count, and the last committed one is a single stored count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself, a bare field name) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Compare the sizes, or check the property in the handler that writes the collection. The mirror rule for states is `bynk.invariant.collection_scan`.",
+        example: "transition keeps_x: old.lines.contains(\"x\") implies new.lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ntransition never_shrinks: new.lines.size() >= old.lines.size()   // ✓ one count each",
     },
     Explain {
         code: "bynk.transition.cross_agent_reference",
@@ -5387,6 +5852,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.transition.not_bool",
         blurb: "A `transition` is a claim about a step, from `old` to `new`, that is either kept or broken, so its predicate must be a `Bool`. A bare `new.count` is a value, not a claim. Compare it with the old state: `new.count >= old.count`. An `invariant` is held to the same rule (`bynk.invariant.not_bool`).",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
+    },
+    Explain {
+        code: "bynk.types.analytics_point_shape",
+        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
+        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
+    },
+    Explain {
+        code: "bynk.types.annotation_unknown",
+        blurb: "A `type` takes `@discriminator(\"…\")` (on a sum), and a sum's variant takes `@name(\"…\")`. Any other annotation in those places would do nothing, so it is refused rather than ignored. Remove it, or use one of the two.",
+        example: "type Shape =\n    | @label(\"round\") Circle(r: Int)    // ✗ not a variant annotation\n    | Square(side: Int)\n\ntype Shape =\n    | @name(\"round\") Circle(r: Int)    // ✓\n    | Square(side: Int)",
     },
     Explain {
         code: "bynk.types.argument_mismatch",
@@ -5517,6 +5992,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_bad_arg",
+        blurb: "`@discriminator` names the JSON key that carries a sum's variant, and the compiler reads that key at compile time, so it takes exactly one non-empty string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A sum may carry one `@discriminator`. Write the key as a literal, as in `@discriminator(\"type\")`.",
+        example: "@discriminator(1)    // ✗ not a string literal\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)\n\n@discriminator(\"type\")    // ✓\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)",
+    },
+    Explain {
+        code: "bynk.types.discriminator_collides",
+        blurb: "A sum value is one JSON object: the discriminator key holds the variant's name, and the payload fields are the other keys of the same object. A payload field whose wire name is the discriminator would be written twice. A field's wire name is its `@name`, or its own name when it has none, and the discriminator is `kind` unless the sum has a `@discriminator`. Rename the field with `@name`, or choose another discriminator.",
+        example: "@discriminator(\"type\")\ntype Event =\n    | Created(@name(\"type\") category: String)    // ✗ `type` is the discriminator\n\n@discriminator(\"type\")\ntype Event =\n    | Created(category: String)                    // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_not_sum",
+        blurb: "`@discriminator` names the key that tells a sum's variants apart on the wire. A record, a refined type or an opaque type has no variants, so the annotation would do nothing. Remove it, or put it on the sum.",
+        example: "@discriminator(\"type\")    // ✗ a record has no variants\ntype Event = { id: String }\n\ntype Event = { id: String }    // ✓",
     },
     Explain {
         code: "bynk.types.duplicate_example",
@@ -5656,7 +6146,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_bad_arg",
-        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
+        blurb: "`@name` names the key a field, a sum variant or a variant's payload field has on the wire, and the compiler reads that name at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
         example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\nconst PageKey: String = \"page-size\"\n\ntype Filter = {\n    @name(PageKey) pageSize: Option[Int],       // ✓ a `String` constant bound to a literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
     },
     Explain {
@@ -5666,23 +6156,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_duplicate",
-        blurb: "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+        blurb: "A wire name is the key a reader looks a field up by (or, for a sum variant, the value the discriminator takes), so two fields of one record, two payload fields of one variant, or two variants of one sum cannot share one: both would read the same value. A wire name is the `@name`, or the Bynk name when there is none. A field or variant may also carry only one `@name`. Give each its own name. Names differing only in case are `bynk.types.field_name_case_conflict`.",
         example: "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
     },
     Explain {
         code: "bynk.types.field_name_invalid",
         blurb: "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
         example: "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_not_request_record",
-        blurb: "`@name` renames the key a request reader looks for. Only a record that is the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler is read that way, so on any other record the annotation would do nothing. Remove it, or make the record that parameter. A record used as a JSON body or result may not carry `@name` either: `bynk.types.field_name_record_not_boundary`.",
-        example: "type Plain = {\n    @name(\"x-y\") a: String,    // ✗ `Plain` is not read from a request\n}\n\ntype Plain = {\n    a: String,                // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_record_not_boundary",
-        blurb: "A record with `@name` fields is read off a request by those names, but its JSON form uses the field names, so using it as a JSON body, a result, a store field, an event or a call argument would make the two forms disagree. It may only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter. Use a second record, without `@name`, for the other position.",
-        example: "type Filter = {\n    @name(\"page-size\") pageSize: Option[Int],\n}\n\ntype FilterView = {\n    pageSize: Option[Int],\n}\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[Filter]] by v: Visitor { … }        // ✗\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor { … }    // ✓",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -5760,13 +6240,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
-                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
+                nothing else. An `Instant` prints as RFC 3339 UTC and a `Duration` as units, \
+                largest first (`1h30m`), the text their `toString()` gives. A record or \
                 sum has no canonical text, and Bynk will not print an unreadable stand-in \
                 such as `[object Object]`. An opaque type hides its base, so use `.raw` \
                 first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
-                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
-                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
-                `DecodeError`.",
+                on `Bytes` (hex or base64 is a real choice), or interpolate the fields of a \
+                record, a `ValidationError` or a `DecodeError`.",
         example: "type User = { name: String }\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",
@@ -5901,6 +6382,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   fn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
     },
     Explain {
+        code: "bynk.types.map_entry_at_boundary",
+        blurb: "`MapEntry[K, V]` is the record a map's `entries()` yields and `Map.of` takes: `{ key: K, value: V }`. It is built and used in place, so it has no codec: it is refused as a record, sum or event field, an agent key or store field, a capability operation, or a handler's parameter or result. A helper may take or return one. Where the pair must cross a boundary, declare a record of your own with the fields you need, and convert with `map`.",
+        example: "type Index = {\n    entries: List[MapEntry[String, Int]],   // ✗ a map entry is not boundary data\n}\n\ntype Pair = { key: String, value: Int }\n\ntype Index = {\n    entries: List[Pair],                    // ✓ a record of your own\n}",
+    },
+    Explain {
         code: "bynk.types.match_arm_mismatch",
         blurb: "A `match` is an expression, so its arms must produce one type: the least upper \
                 bound of their types, where a refined type and its base agree at the base. If \
@@ -5957,6 +6443,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
     },
     Explain {
+        code: "bynk.types.nested_effect",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic type that holds its parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }`) cannot be given an effect either: `Wrap[Effect[Int]]` has a field `Effect[Effect[Int]]`. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
+    },
+    Explain {
         code: "bynk.types.never_inferred",
         blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
                 bottom type `never returns`, which stands in for any type. If an unannotated \
@@ -5970,7 +6461,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.no_numeric_coercion",
         blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
-                a comparison or an `InRange` bound. Each conversion can lose or invent \
+                a comparison or an `InRange`, `AtLeast` or `AtMost` bound, which takes literals of the base's own type (`1.second` for a `Duration`). Each conversion can lose or invent \
                 precision, so Bynk makes you write it: `.toFloat()` on an `Int`, \
                 `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, \
                 `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same \
@@ -6020,7 +6511,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.not_keyable",
         blurb: "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` \
                 or join, must be a `Key` type, one whose equal values can always be found \
-                again. `String`, `Int`, `Bool`, `Instant`, `Duration` and `Bytes` are, as are \
+                again. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` and `Decimal` are, as are \
                 `Option` and `List` of a key and records, sums and enums made only of keys. \
                 A `Float` never is, at any depth, because `NaN` is not equal to itself, so a \
                 key holding one could never be looked up. Key on a type that is: an `Int` \
@@ -6031,7 +6522,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.not_orderable",
         blurb: "`<`, `<=`, `>` and `>=`, and a parameter declared `T: Ord`, need a type with \
-                a total order. `Int`, `Float`, `String`, `Duration`, `Instant` and `Bytes` have \
+                a total order. `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and `Bytes` have \
                 one, as do refined types over them, `Option` and `List` of an orderable type, \
                 and any type of your own that declares `derives Ord`. `Bool`, `Result`, `Map`, \
                 `Set` and functions do not. Your own types are not ordered by accident, \
@@ -6067,6 +6558,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.or_pattern_type_mismatch",
         blurb: "An or-pattern, `A(n) | B(n)`, runs one arm for either alternative, so a name it binds must mean the same thing in both: the arm's body has only one `n` to use. Here `n` is an `Int` in one alternative and a `String` in the other, so the body could not be checked. A refined type and its base count as different too. Give each alternative its own arm, or bind a value of the same type in both.",
         example: "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
+    },
+    Explain {
+        code: "bynk.types.ord_order_changed",
+        blurb: "A `derives Ord` type orders by declaration order: a record by its fields in turn, a sum \
+                or enum by its variants and then their payloads. Moving a field or variant changes \
+                how every value of the type sorts, and nothing else would notice, so bynk.schema.lock \
+                records the order of each of the project's `derives Ord` types under `[orders]` and a \
+                build that finds a different one fails until the change is accepted. Swapping two \
+                existing fields or variants, or inserting one anywhere but the end, is a change; \
+                adding at the end, removing, and renaming in place are not, and the lock follows \
+                them. If the new order is intended, run `bynk lock accept-order <Type>` (or \
+                `--all`) and commit the lock with the change; otherwise put the declaration back.",
+        example: "// tasks.bynk, with `Priority` recorded as Low < Medium < High\n\
+                  type Priority = enum { High, Low, Medium } derives Ord    // ✗ the order changed\n\
+                  \n\
+                  type Priority = enum { Low, Medium, High } derives Ord    // ✓ the recorded order",
     },
     Explain {
         code: "bynk.types.pattern_arity",
@@ -6108,7 +6615,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.predicate_base_mismatch",
-        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive` and `InRange` to an `Int`, `Float` or `Decimal`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
+        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive`, `InRange`, `AtLeast` and `AtMost` to an `Int`, `Float`, `Decimal` or `Duration`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
         example: "type Code = Int where NonEmpty         // ✗ `NonEmpty` is a `String` predicate\n\ntype Code = String where NonEmpty      // ✓",
     },
     Explain {
@@ -6128,8 +6635,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.question_option_outside_http",
-        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a handler that returns an `HttpResult`, `None` becomes a `NotFound` response. Elsewhere an `Option` has no error to carry, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
-        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ no `HttpResult` to answer `NotFound`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
+        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a function returning an `Option` (or an `Effect` of one) the `None` is the result, and in a handler returning an `HttpResult` it becomes a `NotFound` response. Elsewhere there is nowhere to return it, and an `Option` never converts to a `Result` implicitly, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
+        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ `double` returns a `Result`, not an `Option`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
     },
     Explain {
         code: "bynk.types.question_outside_result",
@@ -6145,6 +6652,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.record_pattern_on_non_record",
         blurb: "A record pattern, `Order { total, .. }`, takes a record apart by its fields, so the name before the braces must be a record type. A sum, an enum, a refined or opaque type and a built-in have no fields to name. Match a sum or an enum by its variants, and read an opaque or built-in value through its methods.",
         example: "type Status = enum { Open, Paid }\n\nfn code(s: Status) -> Int {\n    match s {\n        Status { .. } => 1    // ✗ `Status` is an enum, not a record\n        _ => 2\n    }\n}\n\nfn code(s: Status) -> Int {\n    match s {\n        Open => 1             // ✓ name the variants\n        Paid => 2\n    }\n}",
+    },
+    Explain {
+        code: "bynk.types.regex_duplicate_group_name",
+        blurb: "`findRegexNamed` keys its result by the pattern's group names, and a name may belong to one group only: the runtimes refuse a repeated name, even across alternatives, when the pattern is built, so the program would fail at run time. Give each group its own name.",
+        example: "fn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<side>a)|(?<side>b)\")          // ✗ `side` names two groups\n}\n\nfn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<left>a)|(?<right>b)\")         // ✓\n}",
+    },
+    Explain {
+        code: "bynk.types.regex_no_named_groups",
+        blurb: "`findRegexNamed` returns the first match's capture groups keyed by their names, and the names come from the pattern, which is a literal checked when the program compiles. A pattern with no named group, `(?<name>…)`, has nothing to key the result by, so it is refused. Name the groups you want, or use `findRegex`, which returns the groups by position (the whole match first).",
+        example: "fn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(\\\\d{4})-(\\\\d{2})\")                 // ✗ no group is named\n}\n\nfn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<year>\\\\d{4})-(?<month>\\\\d{2})\")  // ✓\n}",
     },
     Explain {
         code: "bynk.types.regex_not_literal",
@@ -6188,6 +6705,30 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let mode = RoundingMode.HalfUp         // ✗ a mode is not a value\n\nprice.round(2, RoundingMode.HalfUp)    // ✓ written where it rounds",
     },
     Explain {
+        code: "bynk.types.secret_at_boundary",
+        blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
+                stored, sent or encoded form (nor has the `Authorization` made from one): putting one in a record, event or `store` field, \
+                or passing one into or out of a handler, would write the secret into data that \
+                is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
+                or a function parameter and use it where it is read, with `matches(candidate)` \
+                to compare or `reveal()` to hand its text to the one call that needs it. A \
+                capability operation may take or return one: that is how `Secrets.get` and \
+                `StoredSecret.get` produce it.",
+        example: "type Credentials = {\n    owner: String,\n    token: Secret,     // ✗ a secret cannot be held in a type\n}\n\n\
+                  type Credentials = {\n    owner: String,     // ✓ read the secret where it is used\n}",
+    },
+    Explain {
+        code: "bynk.types.secret_not_comparable",
+        blurb: "`==` on text stops at the first character that differs, so how long it takes \
+                tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
+                never compared with `==` or `!=` (and an `Authorization` not at all), nor held in a type that is (a record or sum \
+                that derives equality). Compare with `secret.matches(candidate)`, which takes \
+                the same time however the two differ, or call `reveal()` where the text itself \
+                is needed.",
+        example: "fn same(a: Secret, b: Secret) -> Bool {\n    a == b                       // ✗ variable-time\n}\n\n\
+                  fn same(a: Secret, b: Secret) -> Bool {\n    a.matches(b.reveal())        // ✓ constant-time\n}",
+    },
+    Explain {
         code: "bynk.types.select_tail_has_select",
         blurb: "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
         example: "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
@@ -6227,13 +6768,18 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 return a stream, since its provider runs in the caller's own isolate, and a \
                 `@raw` HTTP handler's `body` may be a `Stream[Bytes]`, the request body as it \
                 arrives.",
-        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
-                  service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] by Caller {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
+                  service s {\n    on call(readings: List[Int]) -> Effect[Int] by Caller {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
     },
     Explain {
         code: "bynk.types.stream_not_comparable",
         blurb: "A `Stream` is a source of values over time, read once, so two of them have no value to compare. `==` on one, or on a type that holds one, is refused. Read the streams first, with `collect`, and compare the lists, or compare the data each was built from. Functions and effects have `bynk.types.not_comparable`, and a held connection has `bynk.types.held_not_comparable`.",
         example: "fn same(a: Stream[Int], b: Stream[Int]) -> Bool {\n    a == b                            // ✗ a stream has no value to compare\n}\n\nfn same(a: Stream[Int], b: Stream[Int]) -> Effect[Bool] {\n    let xs <- a.collect()             // ✓ read them first\n    let ys <- b.collect()\n    Effect.pure(xs == ys)\n}",
+    },
+    Explain {
+        code: "bynk.types.streaming_element",
+        blurb: "`HttpResult[T, E]` names what a `Streaming` body carries in its second argument, so a test that matches `Streaming(s)` reads `s` as a `Stream[E]` and a body of any other element is a type error. The router frames each element as a server-sent event, so `E` is a `String` or the `SseEvent` record that `bynk` exports; any other type has no framing. Name `String`, or `SseEvent` for events with an `event`, `id` or `retry`. Naming nothing, `HttpResult[T]`, keeps a `Streaming` body either of the two, and a route that never streams may still name one.",
+        example: "on GET(\"/ticks\") () -> Effect[HttpResult[(), Int]] by v: Visitor {    // ✗ the router cannot frame an `Int`\n    Streaming(Stream.of([1, 2]))\n}\n\non GET(\"/ticks\") () -> Effect[HttpResult[(), String]] by v: Visitor {   // ✓\n    Streaming(Stream.of([\"1\", \"2\"]))\n}",
     },
     Explain {
         code: "bynk.types.type_mismatch",
@@ -6253,7 +6799,10 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 take a type from, and the compiler will not guess, because the element type \
                 becomes part of the type of everything the collection touches. Give it one: \
                 annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
-                where a type is expected, such as an argument or a return value.",
+                where a type is expected, such as an argument or a return value. The seed \
+                of a `fold` is such a place: `fold(Set.empty(), …)` takes its type from the \
+                result the fold is expected to produce, so annotate the result (`let tags: \
+                Set[String] = xs.fold(Set.empty(), …)`).",
         example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
                   fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
     },
@@ -6329,25 +6878,51 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
     },
     Explain {
-        code: "bynk.uses.name_conflict",
+        code: "bynk.uses.ambiguous_name",
         blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
-                and embeds) in scope under their own names, with no prefix. If two commons it uses \
-                both declare the same name, a mention of it could mean either, so the compiler \
-                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
-                declarations, drop one of the `uses`, or mark the declaration `private` if only \
-                its own commons needs it, since a `private` declaration is never imported and so \
-                never conflicts.",
+                and embeds) in scope under their own names. Two commons it uses may declare the same \
+                name, and that is fine until the name is written bare: then it could mean either, so \
+                the compiler refuses that reference and lists the qualified spellings. Choose one: give \
+                a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
+                (`uses billing { Amount }`), which outranks the same name from a whole `uses` and brings \
+                in only the names you list; two selections of one name are still ambiguous. A \
+                declaration of the unit's own wins over a used name, and a `private` declaration is \
+                never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\
                   commons billing\n\n\
                   type Amount = Int where Positive\n\n\
                   // shipping.bynk\n\
                   commons shipping\n\n\
-                  type Amount = Int where NonNegative    // both declare `Amount`\n\
-                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\n\
                   // orders.bynk\n\
                   commons orders\n\n\
                   uses billing\n\
-                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+                  uses shipping as S                     // ✓ `S.Amount` is `shipping`'s\n\n\
+                  type Order = { total: Amount }         // ✗ `Amount` is declared by `billing` and `shipping`\n\
+                  type Order = { total: Amount, postage: S.Amount }    // ✓ the second one by its alias",
+    },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit's own declaration shadows a `uses`-imported one of the same name, as it does in \
+                the emitted module, and a reference the local declaration cannot answer cannot mean \
+                the import either: a call to a type, a bare service name, a name written where the \
+                local declaration hides a type. Rename the local declaration, or `uses` the commons \
+                with an alias or a braced list that renames the import (`uses lib.util { total as \
+                totalOf }`). Two used commons that declare one name are not this: that is \
+                `bynk.uses.ambiguous_name`, reported where the name is written.",
+        example: "// lib/util.bynk\n\
+                  commons lib.util\n\n\
+                  fn total() -> Int {\n\
+                  \x20 1\n\
+                  }\n\n\
+                  // app/main.bynk\n\
+                  context app\n\n\
+                  uses lib.util\n\n\
+                  type total = { n: Int }\n\
+                  type Totals = { n: Int }               // ✓ a name of its own\n\n\
+                  fn sum() -> Int {\n\
+                  \x20 total()                              // ✗ the local type `total` hides the imported function\n\
+                  }",
     },
     Explain {
         code: "bynk.uses.self_reference",
@@ -6360,9 +6935,29 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
     },
     Explain {
+        code: "bynk.uses.test_only_commons",
+        blurb: "A commons declared `for tests` holds what suites share (helpers, types, constants and test-only values) and is left out of every deployable. Only a suite or another test-only commons may `uses` it, so production code cannot depend on code that is not there. Move what the unit needs into a commons that is not marked `for tests`.",
+        example: "// kit.bynk\ncommons kit for tests\n\nconst Start: Int = 1\n\n// shop.bynk\ncontext shop\n\nuses kit                         // ✗ `kit` is test-only\n\n// tests/shop.test.bynk\nsuite shop\n\nuses kit                         // ✓ a suite may use it",
+    },
+    Explain {
         code: "bynk.uses.unknown_commons",
         blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
+    },
+    Explain {
+        code: "bynk.uses.unknown_name",
+        blurb: "A braced `uses` list, or a name written through a `uses` qualifier, names something the \
+                commons does not declare publicly. A type, function, constant, asset or embed that the \
+                commons marks `private` is never imported, so it cannot be listed either. Check the \
+                spelling against the commons' own declarations.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing { Amont }                   // ✗ `billing` declares no `Amont`\n\
+                  uses billing { Amount }                  // ✓ the declared name\n\n\
+                  type Order = { id: Int }",
     },
     Explain {
         code: "bynk.val.agent_not_generable",
@@ -6413,8 +7008,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
                 but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
-                the same goes for a record or sum that reaches one. A `for all` over such a type \
-                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                the same goes for a record or sum that reaches one, and the message names the \
+                field that does. A `for all` is different: it draws a `Matches` or `IsoDate` \
+                string, and pins only a `Cron` or a pattern it cannot walk. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
                 refinement, or give the type an `@example` and use bare `Val`. See the \
                 `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
         example: "// demo/codes.bynk\n\
@@ -6526,22 +7122,37 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.within.in_agent_handler",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the agent's work is bounded from outside. For a slow call out, `FetchOptions.timeout` bounds it inside the agent. The same rule holds for `bynk.race.in_agent_handler`.",
-        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
+        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.second)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.second)   // ✓ the service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.within.in_pure_context",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context`.",
-        example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.seconds)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.seconds)\n}",
+        example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.second)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.second)\n}",
     },
     Explain {
         code: "bynk.within.outside_handler",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, which only a service handler's body, or a function's it calls, has. A WebSocket handler, a provider operation and a test `case` have none. Move the `within` into a service handler or a function, and have the case call that, simulating a slow call with `stub … after`. In an agent handler the rule is `bynk.within.in_agent_handler`.",
-        example: "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.seconds)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
+        example: "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.second)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
     },
     Explain {
         code: "bynk.within.timed_out_not_in_scope",
         blurb: "`within` returns `Result[_, TimedOut]`, and `TimedOut` is declared in `bynk`, so a unit that wants `within` has to consume it. Without that the result type names a type the unit cannot see. Add `consumes bynk { TimedOut }` to the unit, or add `TimedOut` to its existing `consumes bynk { … }` list.",
         example: "let r <- Pricing.quote(id).within(2.seconds)   // ✗ `TimedOut` is not in scope\n\nconsumes bynk { TimedOut }                     // ✓ in the unit's header\nlet r <- Pricing.quote(id).within(2.seconds)",
+    },
+    Explain {
+        code: "bynk.ws.bad_close_code",
+        blurb: "`connection.close(code, reason)` sends a close code to the client. An application may send `1000` (a normal closure) or a code from `3000` to `4999`. `1001` to `2999` belong to the protocol, and `1004`, `1005`, `1006` and `1015` are never sent on the wire. A literal code outside that is refused here; a computed one faults at run time. Use `1000`, or a code from `3000` to `4999` that your clients know.",
+        example: "agent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(1006, \"gone\")   // ✗ `1006` is never sent on the wire\n        ()\n    }\n}\n\nagent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(4001, \"room archived\")   // ✓ an application code\n        ()\n    }\n}",
+    },
+    Explain {
+        code: "bynk.ws.bad_close_reason",
+        blurb: "A close frame carries its reason in at most 123 bytes of UTF-8, the protocol's limit. A literal reason longer than that is refused here; a computed one is cut to 123 bytes on a character boundary. Shorten the reason, and put anything longer in a frame sent before closing.",
+        example: "        let _ <- conn.close(4001, \"the room was archived by an administrator after twelve months without any activity, and its members were moved to the general room\")   // ✗ over the protocol's limit\n        let _ <- conn.close(4001, \"room archived\")   // ✓",
+    },
+    Explain {
+        code: "bynk.ws.cookie_needs_origins",
+        blurb: "A browser sends the session cookie on a WebSocket upgrade from any site, and a WebSocket is not covered by CORS, so a page on another site could open the socket as the signed-in user (cross-site WebSocket hijacking). The upgrade therefore checks `Origin` against the service's `cors` origins: exactly one of them, scheme, host and port, or it is refused with `403` before the cookie is read, and a missing `Origin` is refused too. So a `from websocket` service whose `on open` authenticates a `SignedCookie` actor must declare `cors { origins: [...], credentials: true }` with the exact origins that may open it, and a wildcard is not one. Add the `cors` block.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✗ a `SignedCookie` actor and no `cors`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
     },
     Explain {
         code: "bynk.ws.lifecycle_by_mismatch",
@@ -6552,6 +7163,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.ws.message_frame_param",
         blurb: "A WebSocket `on message` handler is called with a decoded inbound frame, so it needs exactly one parameter of the service's `in:` type. Any other parameters are route values recovered from the connection. Add the frame parameter. A route value whose type differs from `on open`'s is `bynk.ws.route_param_mismatch`.",
         example: "service gateway from websocket(in: Frame, out: Frame) {\n    on message (room: RoomId) -> Effect[()] by user: Member { … }                  // ✗ no `Frame` parameter\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.ws.missing_close",
+        blurb: "A WebSocket service has an `on close` handler. `on open` always hands its connection to an agent's state, and the runtime cannot tell which store entry holds it, so nothing removes it when the client leaves. Without `on close`, a departed client's dead connection stays held, and the next broadcast to it raises, so one departure breaks every later broadcast to the room. Add `on close` with the same leading route parameters and `by` as `on open`, and release the connection there. A trailing `close: CloseInfo` parameter carries the close code and reason.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {   // ✗ no `on close`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on close (room: RoomId, close: CloseInfo) -> Effect[()] by user: Member { … }   // ✓ releases the connection\n}",
     },
     Explain {
         code: "bynk.ws.open_given_unsupported",
@@ -6627,10 +7243,84 @@ pub fn explain(code: &str) -> Option<&'static Explain> {
     EXPLANATIONS.iter().find(|e| e.code == code)
 }
 
+/// A diagnostic code that no longer exists (#4277): the tombstone `bynk explain` answers with
+/// in place of "unknown", and the generated reference lists under "Retired codes". A user
+/// upgrading, or reading an old CI log or issue, still gets an explanation.
+///
+/// A code added and removed between two releases never shipped, so it needs no tombstone: the
+/// shipped list (`bynk-syntax/shipped-codes.txt`, extended at each release cut) is what holds
+/// a code to being live or retired.
+pub struct Retired {
+    /// The retired code.
+    pub code: &'static str,
+    /// The last release that carried the code, as `X.Y.Z`. The change that removes a code cannot know
+    /// the version that will retire it (the merge-time stamp assigns that), so this is the latest
+    /// release page when the change is written.
+    pub last_release: &'static str,
+    /// One sentence on why it went.
+    pub why: &'static str,
+    /// The code or feature that replaced it, if any.
+    pub replacement: Option<&'static str>,
+}
+
+/// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
+/// code from [`REGISTRY`].
+pub const RETIRED: &[Retired] = &[
+    Retired {
+        code: "bynk.actor.oidc_not_in_sum",
+        last_release: "0.661.1",
+        why: "An `Oidc` actor may now be a member of a multi-actor sum (#3936): the sum's seam checks its members in order, asynchronously, so a JWKS fetch fits.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose members are tried in declared order",
+        ),
+    },
+    Retired {
+        code: "bynk.actor.signed_cookie_not_in_sum",
+        last_release: "0.661.1",
+        why: "A `SignedCookie` actor may now be a member of a multi-actor sum (#3936): its CSRF check belongs to the cookie arm, so a token client that sends no cookie never meets it.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose cookie arm applies the CSRF check only when it is tried",
+        ),
+    },
+    Retired {
+        code: "bynk.http.multipart_body_unbounded",
+        last_release: "0.661.1",
+        why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+        replacement: Some(
+            "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+    Retired {
+        code: "bynk.types.field_name_not_request_record",
+        last_release: "0.661.1",
+        why: "A wire name (`@name`) is now part of a type's one encoding and legal on a field of any record (#3975), so it is no longer limited to a request record.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
+        code: "bynk.types.field_name_record_not_boundary",
+        last_release: "0.661.1",
+        why: "A record's `@name` fields now name its keys at every boundary (#3975), so the record may be a body, a result, a store field, an event or a call argument.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
+        code: "bynk.uses.second_spelling",
+        last_release: "0.661.1",
+        why: "Every spelling of a used declaration (`Status`, `Y.Status`, `lib.y.Status`) now resolves to the one declaration (#4352), so reading it by a second spelling is no longer an error.",
+        replacement: Some(
+            "any spelling of the declaration, which are all one type, function or constant",
+        ),
+    },
+];
+
+/// The tombstone for a retired `code`, or `None` when it was never retired.
+pub fn retired(code: &str) -> Option<&'static Retired> {
+    RETIRED.iter().find(|r| r.code == code)
+}
+
 /// The hosted diagnostic index page (the generated `reference/diagnostics`
 /// page). Each code's own page is `{INDEX_PATH}<code>/`, which `/d/<code>`
 /// redirects to.
-pub const INDEX_PATH: &str = "/book/reference/diagnostics/";
+pub const INDEX_PATH: &str = "/reference/diagnostics/";
 
 /// The anchor slug of a category's `## <title>` heading on the generated
 /// diagnostic index (Starlight/github-slugger shape: lowercase, spaces to
@@ -6685,6 +7375,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `by` actor clause was placed on an agent `on call` handler, which has no actor.",
     ),
     d(
+        "bynk.actor.caller_not_admitted",
+        "A call is made from a context the callee's `Caller` refinement does not admit.",
+    ),
+    d(
         "bynk.actor.duplicate_sum_scheme",
         "Two peers in a multi-actor sum share an authentication scheme.",
     ),
@@ -6721,8 +7415,20 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An actor identity type is not a context-ownable (sealed) value type.",
     ),
     d(
+        "bynk.actor.missing_by_on_call",
+        "An `on call` handler lacks the required `by` actor clause.",
+    ),
+    d(
+        "bynk.actor.missing_by_on_email",
+        "An email `on message` handler lacks the required `by` actor clause.",
+    ),
+    d(
         "bynk.actor.missing_by_on_http",
         "An HTTP handler lacks the required `by` actor clause.",
+    ),
+    d(
+        "bynk.actor.missing_by_on_queue",
+        "An `on message` handler lacks the required `by` actor clause.",
     ),
     d(
         "bynk.actor.oidc_identity_not_string_constructible",
@@ -6741,10 +7447,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Oidc` actor does not name its `jwks` endpoint.",
     ),
     d(
-        "bynk.actor.oidc_not_in_sum",
-        "An `Oidc` actor appears as a member of a multi-actor sum.",
-    ),
-    d(
         "bynk.actor.oidc_trust_from_is_secret",
         "An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`.",
     ),
@@ -6755,6 +7457,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.outside_context",
         "An `actor` was declared outside a context (e.g. in a commons).",
+    ),
+    d(
+        "bynk.actor.queue_actor_not_enforced",
+        "A queue consumer names a signed actor beside an unsigned one, or a lone one with a binder, which nothing enforces.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",
@@ -6775,6 +7481,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.scheme_not_admissible",
         "An actor's scheme is not admissible on this handler's protocol.",
+    ),
+    d(
+        "bynk.actor.sender_admits_nothing",
+        "A refinement of `Sender` admits no DMARC verdict, so it would refuse every message.",
     ),
     d(
         "bynk.actor.signature_identity_unsupported",
@@ -6833,10 +7543,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `SignedCookie` actor does not declare a `ttl`.",
     ),
     d(
-        "bynk.actor.signed_cookie_not_in_sum",
-        "A `SignedCookie` actor appears as a member of a multi-actor sum.",
-    ),
-    d(
         "bynk.actor.signed_cookie_public_cache",
         "A `@cache(scope: public)` route is guarded by a `SignedCookie` actor.",
     ),
@@ -6875,6 +7581,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.unknown_actor",
         "A handler's `by` clause names an actor that is not declared.",
+    ),
+    d(
+        "bynk.actor.unknown_context",
+        "`IsContext(…)` names something that is not a context of the project.",
     ),
     d(
         "bynk.actor.unknown_scheme",
@@ -6933,6 +7643,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.adapter.provider_has_body",
         "A provider inside an `adapter` has a Bynk body; adapter providers must be external.",
         &["provider_decl"],
+    ),
+    d(
+        "bynk.agent.bad_annotation",
+        "An agent carries an annotation other than `@busyAfter(<Duration literal>)` and `@jurisdiction(\"eu\" | \"fedramp\" | \"us\")`, or one of them is written twice, with the wrong argument, or with an unknown jurisdiction.",
+    ),
+    d(
+        "bynk.agent.busy_after_out_of_range",
+        "An agent's `@busyAfter(d)` is outside the 1 to 30 seconds it may lower the queue wait to.",
     ),
     d(
         "bynk.agent.class_conflict",
@@ -7028,6 +7746,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agent.version_without_path",
         "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning).",
     )),
+    warn(d(
+        "bynk.agent.write_after_erase",
+        "A `:=` follows `self.erase()` in the same block, so the commit drops it (warning).",
+    )),
     dg(
         "bynk.agents.bad_state_initialiser",
         "An agent `store` field initialiser is not a static value of the field's type.",
@@ -7037,6 +7759,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agents.non_zeroable_state_field",
         "An agent `store` field has no initialiser and no implicit zero value.",
         &["store_field"],
+    ),
+    d(
+        "bynk.agents.self_operation",
+        "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
+    ),
+    d(
+        "bynk.analytics.mapping_changed",
+        "The columns an `Analytics` instance's `writeValue` writes (a field moved, retyped or removed, or a different `@index`) differ from the mapping `bynk.schema.lock` records under `[analytics]`, so points already written would be read from the wrong column; accept it with `bynk lock accept-analytics`.",
     ),
     d(
         "bynk.asset.duplicate",
@@ -7093,6 +7823,15 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.boundary.structural_mismatch",
         "Data crossing a context boundary did not match the expected shape.",
+    ),
+    d(
+        "bynk.call.outcome_construction",
+        "A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them.",
+    ),
+    dg(
+        "bynk.call.outcome_not_in_scope",
+        "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope.",
+        &["method_call"],
     ),
     dg(
         "bynk.capability.base_not_instantiable",
@@ -7189,6 +7928,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
+    dg(
+        "bynk.commons.consumes_not_types",
+        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        &["consumes_decl"],
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -7333,7 +8077,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Int` one.",
+        "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.",
         &["cron_handler"],
     ),
     dg(
@@ -7343,14 +8087,28 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.invalid_schedule",
-        "A cron expression is not five whitespace-separated fields.",
+        "A cron schedule is not valid Cloudflare cron syntax: a field is out of range or malformed, or the fields are not separated by exactly one space.",
         &["cron_handler"],
     ),
+    warn(dg(
+        "bynk.cron.numeric_weekday",
+        "A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning).",
+        &["cron_handler"],
+    )),
     dg(
         "bynk.cron.return_not_effect_result",
         "A cron handler does not return `Effect[Result[(), E]]`.",
         &["cron_handler"],
     ),
+    warn(dg(
+        "bynk.cron.uneven_step",
+        "A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning).",
+        &["cron_handler"],
+    )),
+    warn(d(
+        "bynk.d1.decimal_numeric_affinity",
+        "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
+    )),
     warn(d(
         "bynk.d1.migration_invalid",
         "A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning).",
@@ -7384,9 +8142,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.accept_fresh_agent_unused",
+        "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
+    warn(d(
+        "bynk.deploy.agent_starts_fresh",
+        "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
+    )),
     d(
         "bynk.deploy.asset_path_conflict",
         "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file.",
@@ -7400,16 +8166,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
     ),
     d(
+        "bynk.deploy.context_not_found",
+        "`bynk deploy --context NAME` (or `--worker NAME`) named a context or Worker the build did not produce, or a context that is a member of a `[deploy.workers.<key>]` group, which deploys as a unit (use `--worker <key>`). With `--format json` the plan's `refusals` carries it with the `requested` name.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.contracts_lock_unwritable",
+        "`bynk deploy --accept-compatible-skew` could not write the older contracts it records in `bynk.contracts.lock`, so it stopped before building or pushing anything. Fix the file's permissions or path and run it again. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.contracts_manifest_unreadable",
+        "`bynk deploy` could not read the contracts manifest the build wrote for a Worker (in its directory under `.bynk/deploy/`), so it cannot check the Worker against the live contracts and stopped before pushing anything. Rebuild (`bynk build --target workers`) and run it again. With `--format json` the plan's `refusals` carries it with the `worker`.",
+    ),
+    d(
+        "bynk.deploy.dependency_not_deployed",
+        "`bynk deploy --context NAME` selected a Worker that binds to Workers the ledger has never recorded as deployed in this environment. A Service Binding to a Worker that does not exist fails at upload, so `bynk` stops first: deploy the whole project once to bring the topology up. With `--format json` the plan's `refusals` carries it with the `worker` and its `dependencies`.",
     ),
     d(
         "bynk.deploy.duplicate_hostname",
         "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
     ),
     d(
+        "bynk.deploy.email_claim_refused",
+        "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
+    ),
+    d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
+        "bynk.deploy.env_passthrough_conflict",
+        "`bynk deploy --env NAME` was given a second, contradictory `--env` or `--environment` after `--`, which would reach `wrangler deploy` as two flags and let wrangler's last-wins parsing pick silently while the ledger recorded the other. Pass one or the other. With `--format json` the plan's `refusals` carries it with the `environment` and the conflicting `flag`.",
     ),
     d(
         "bynk.deploy.foreign_contract_skew",
@@ -7420,16 +8210,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.ledger_unreadable",
+        "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.multiple_websocket_members",
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
+    ),
+    d(
+        "bynk.deploy.no_workers_built",
+        "`bynk deploy` found nothing to deploy: the build produced no Workers, because the project defines no contexts. Add a context, or check `[paths] include` in `bynk.toml`.",
     ),
     d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.preflight_failed",
+        "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
+    ),
+    d(
+        "bynk.deploy.project_undeployable",
+        "`bynk deploy` refused the project before preparing anything: its `[deploy.workers]` table does not read, or its build profile checks contracts, which a deployment does not. The message says which. With `--format json` the plan's `refusals` carries it.",
+    ),
+    d(
+        "bynk.deploy.rebuild_failed",
+        "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_source_unreadable",
+        "`bynk deploy` could not read the secrets source named by `--secrets-file` (a malformed or unreadable dotenv-style file), so it stopped before planning rather than fail on a missing secret partway through a run that has already pushed a Worker.",
     ),
     d(
         "bynk.deploy.service_name_conflict",
@@ -7440,6 +8254,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     d(
+        "bynk.deploy.upload_order_cycle",
+        "The Workers a run deploys cannot be ordered, because the Service Bindings between them form a cycle (often through event delivery: a publishing context binds to each subscriber, and a subscriber on the cycle calls back into it). Cloudflare rejects a Worker uploaded before its binding target, so there is no valid upload order; move the services a subscriber calls out of the publishing context. With `--format json` the plan's `refusals` carries it with the `cycle`.",
+    ),
+    d(
         "bynk.deploy.worker_cycle",
         "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
@@ -7447,6 +8265,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.workers_ignored_on_bundle",
         "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",
     )),
+    d(
+        "bynk.deploy.workers_unreadable",
+        "`bynk deploy` could not read what each built Worker declares from its generated `wrangler.toml` and manifests, so it stopped before planning. Rebuild and run it again; the message names the file.",
+    ),
     dg(
         "bynk.detach.in_agent_handler",
         "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",
@@ -7471,6 +8293,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.duration.literal_overflow",
         "A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range.",
+    ),
+    d(
+        "bynk.duration.unit_agreement",
+        "A `Duration` literal's unit does not agree with its number: `1` takes the singular unit, every other number the plural.",
+    ),
+    d(
+        "bynk.duration.unknown_unit",
+        "An integer literal is followed by a word that is not a `Duration` unit.",
     ),
     dg(
         "bynk.effect.bind_in_pure_context",
@@ -7519,12 +8349,31 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An email `on message` handler does not take exactly one `InboundEmail` parameter.",
     ),
     d(
+        "bynk.email.bad_tag",
+        "A literal `tag` header of a `Route` verdict is not an `X-` header name with letters, digits and `-`, or its value has a line break.",
+    ),
+    d(
         "bynk.email.duplicate_address",
         "Two `from email` services claim the same recipient address.",
     ),
     d(
         "bynk.email.duplicate_handler",
         "A `from email` service declares more than one `on message` handler; it has exactly one.",
+    ),
+    dg(
+        "bynk.email.fallback_bad_option",
+        "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_claimed",
+        "A `fallback` address is one a `from email` service of the project claims.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_not_email",
+        "A `fallback { }` block is on a service that is not `from email`.",
+        &["fallback_policy"],
     ),
     d(
         "bynk.email.invalid_address",
@@ -7573,6 +8422,42 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.embed.unsafe_path",
         "An `embed` path is empty, absolute, or contains a `..` segment.",
+    ),
+    d(
+        "bynk.env.bad_value",
+        "A `bynk.toml` variable holds a value of the wrong kind for the `env(…)` constant that reads it: a string where the constant is an `Int`, say.",
+    ),
+    d(
+        "bynk.env.conflicting_default",
+        "Two `env(…)` constants name one variable but give it different defaults.",
+    ),
+    d(
+        "bynk.env.in_dependency",
+        "A constant of a package consumed as a dependency reads a `bynk.toml` variable with `env(…)`: deployment configuration is the application's to read.",
+    ),
+    d(
+        "bynk.env.malformed_call",
+        "`env(…)` is not `env(NAME)` or `env(NAME, default)`.",
+    ),
+    d(
+        "bynk.env.missing",
+        "An `env(NAME)` constant has no default, and `bynk.toml` gives its variable no value in the environment being built.",
+    ),
+    d(
+        "bynk.env.not_initialiser",
+        "`env(…)` appears inside another expression: it is only ever a constant's whole initialiser.",
+    ),
+    warn(d(
+        "bynk.env.secret_like_name",
+        "An `env(…)` variable is named like a secret (`*_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`), but `bynk.toml` is committed (warning).",
+    )),
+    d(
+        "bynk.env.unknown_variable",
+        "`bynk.toml` sets a build-time variable that no `env(…)` constant reads.",
+    ),
+    d(
+        "bynk.env.unsupported_type",
+        "An `env(…)` constant has a type `bynk.toml` cannot spell.",
     ),
     d(
         "bynk.event.bad_params",
@@ -7653,6 +8538,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
+        "bynk.expect.ambiguous_invariant",
+        "A `violates` claim names an invariant, transition or `@unique` constraint that more than one agent this suite reaches declares; qualify it with its agent (`violates Account.non_negative`).",
+        &["faults_expr"],
+    ),
+    dg(
         "bynk.expect.faults_not_effect",
         "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`.",
         &["faults_expr"],
@@ -7671,6 +8561,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.expect.outside_case",
         "`expect` was used outside a `case` body.",
         &["expect_expr"],
+    ),
+    dg(
+        "bynk.expect.unknown_invariant",
+        "A `violates` claim names something no agent this suite reaches declares as an invariant, a transition or a `@unique` constraint.",
+        &["faults_expr"],
     ),
     dg(
         "bynk.exports.capability_not_provided",
@@ -7711,6 +8606,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.fault.todo",
         "A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning).",
     )),
+    dg(
+        "bynk.field.replaces_conflict",
+        "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields.",
+        &["record_field", "store_field"],
+    ),
+    dg(
+        "bynk.field.replaces_needed",
+        "A `store` field was renamed with `replaces`, the clause was deleted, and a stored version the lock still holds keeps the value under the old name.",
+        &["store_field"],
+    ),
+    warn(dg(
+        "bynk.field.replaces_settled",
+        "A `store` field's `replaces old` is no longer read: no stored version the lock holds keeps the value under the old name, so the clause can be deleted (a warning).",
+        &["store_field"],
+    )),
+    dg(
+        "bynk.field.replaces_unknown",
+        "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename.",
+        &["record_field", "store_field"],
+    ),
     dg(
         "bynk.fixture.binary_content",
         "A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text.",
@@ -7917,7 +8832,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.held.query_accessor_on_held_map",
-        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query.",
+        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query.",
     ),
     d(
         "bynk.held.unsupported_map_op",
@@ -7937,7 +8852,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.history.not_generable",
-        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
+        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` pattern with a lookahead), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
     ),
     d(
         "bynk.history.outside_property",
@@ -7947,6 +8862,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    hint(d(
+        "bynk.http.body_cap_defaulted",
+        "A service's body-taking routes rely on the default 1 MiB request-body cap (hint).",
+    )),
     d(
         "bynk.http.body_kind_conflict",
         "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
@@ -7965,6 +8884,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.",
     ),
     d(
+        "bynk.http.cache_bad_no_store",
+        "A `@cache` annotation's `noStore` is not a `Bool` literal.",
+    ),
+    d(
         "bynk.http.cache_bad_scope",
         "A `@cache` annotation's `scope` is not `public` or `private`.",
     ),
@@ -7977,8 +8900,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.",
     ),
     d(
+        "bynk.http.cache_no_store_conflict",
+        "A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.",
+    ),
+    d(
         "bynk.http.cache_on_non_get",
-        "A `@cache` annotation is placed on a handler that is not `on http GET`.",
+        "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).",
+    ),
+    d(
+        "bynk.http.cache_public_authenticated",
+        "A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.",
     ),
     dg(
         "bynk.http.cache_public_reads_cookies",
@@ -8083,7 +9014,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.cors_not_http",
-        "A `cors { }` policy appears on a service that is not `from http`.",
+        "A `cors { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.cors_unknown_field",
@@ -8092,6 +9023,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cors_wildcard_credentials",
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
+    ),
+    d(
+        "bynk.http.cors_wildcard_expose_credentials",
+        "A `cors` policy combines `credentials: true` with `expose: [\"*\"]`.",
     ),
     dg(
         "bynk.http.duplicate_rejected",
@@ -8106,6 +9041,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.error_status_position",
         "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
+    ),
+    d(
+        "bynk.http.errors_duplicate",
+        "A handler carries more than one `@errors` annotation.",
+    ),
+    d(
+        "bynk.http.errors_invalid_field",
+        "An `errors` `format`, or an `@errors` `format:`, is missing or is not `bynk` or `problem`.",
+    ),
+    d(
+        "bynk.http.errors_not_http",
+        "An `errors { }` section or an `@errors` annotation is not on a `from http` service.",
+    ),
+    d(
+        "bynk.http.errors_unknown_field",
+        "An `errors { }` section or an `@errors` annotation names something other than `format`.",
     ),
     dg(
         "bynk.http.extra_param",
@@ -8148,14 +9099,33 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
     )),
     dg(
+        "bynk.http.headers_field_consumed",
+        "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.headers_field_consumed_optional",
+        "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning).",
+        &["http_handler"],
+    )),
+    dg(
+        "bynk.http.headers_field_not_stringy",
+        "A field of an HTTP handler's `headers` record has a type a header cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.headers_wrong_type",
-        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
+        "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(
         "bynk.http.invalid_path",
         "An HTTP route path is malformed.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.invalid_response_header",
+        "A response header method is given a malformed name, value, URL, filename or delay.",
     ),
     d(
         "bynk.http.json_duplicate",
@@ -8211,19 +9181,15 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.limits_invalid_field",
-        "A `limits` policy field (`maxBody`) has the wrong value shape.",
+        "A `limits` policy field (`maxBody`, `maxFrame`) has the wrong value shape.",
     ),
     d(
         "bynk.http.limits_not_http",
-        "A `limits { }` policy appears on a service that is not `from http`.",
+        "A `limits { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
-    ),
-    d(
-        "bynk.http.multipart_body_unbounded",
-        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
     ),
     warn(d(
         "bynk.http.multipart_large_cap",
@@ -8231,7 +9197,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.http.path_param_not_stringy",
-        "A path parameter's type is not constructible from a string.",
+        "A path parameter's type is not one a single path segment can carry.",
         &["http_handler"],
     ),
     dg(
@@ -8250,8 +9216,28 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.rate_limit_bad_args",
+        "A `@rateLimit` is malformed: not a limiter and a `key:` the router knows.",
+    ),
+    d(
+        "bynk.http.rate_limit_duplicate",
+        "A route carries more than one `@rateLimit`.",
+    ),
+    d(
+        "bynk.http.rate_limit_key_unavailable",
+        "A `@rateLimit` uses `key: identity` on a route whose actor carries no identity.",
+    ),
+    d(
+        "bynk.http.rate_limit_not_http",
+        "A `@rateLimit` annotates a handler that is not `on http`.",
+    ),
+    d(
+        "bynk.http.rate_limit_unknown_limiter",
+        "A `@rateLimit` names something that is not a `RateLimit` the context declares.",
+    ),
+    d(
         "bynk.http.raw_bad_content_type",
-        "A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `\"*/*\"`) string literal.",
+        "A `@raw` annotation's `contentType` is missing, or not a `type/subtype` (or `\"*/*\"`) string literal or a list of `type/subtype` literals.",
     ),
     d(
         "bynk.http.raw_body_not_bytes",
@@ -8287,6 +9273,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
     ),
+    d(
+        "bynk.http.reserved_response_header",
+        "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`.",
+    ),
     dg(
         "bynk.http.reserved_route_syntax",
         "A route segment contains `*`, `{` or `}`, which are reserved for a future route form.",
@@ -8299,7 +9289,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.security_invalid_field",
-        "A `security` policy field (`hsts`/`nosniff`) has the wrong value shape.",
+        "A `security` policy field (`hsts`, `nosniff`, `frameAncestors`, `referrerPolicy`, `csp`) has the wrong value shape.",
     ),
     d(
         "bynk.http.security_not_http",
@@ -8308,6 +9298,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.security_unknown_field",
         "A `security { }` policy declares a field outside the closed set.",
+    ),
+    d(
+        "bynk.http.status_needs_get",
+        "`PartialContent` or `NotModified` is returned from a route that is not a `GET`.",
     ),
     d(
         "bynk.http.stream_body_not_raw",
@@ -8329,6 +9323,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.unknown_handler_annotation",
         "A handler carries an annotation outside the closed set (`@cache`/`@limit`).",
+    ),
+    d(
+        "bynk.http.unreachable_route",
+        "A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).",
     ),
     d(
         "bynk.index.bad_argument",
@@ -8353,6 +9351,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.internal.missing_checker_fact",
         "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues.",
+    ),
+    d(
+        "bynk.invariant.collection_scan",
+        "An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
     ),
     d(
         "bynk.invariant.cross_agent_reference",
@@ -8465,12 +9467,33 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(d(
         "bynk.list.deprecated_function",
-        "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
+        "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
+    )),
+    warn(d(
+        "bynk.list.par_limit_one",
+        "A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).",
+    )),
+    d(
+        "bynk.list.par_limit_range",
+        "A `ParOptions` `limit` that is statically known is outside 1 to 1000.",
+    ),
+    warn(d(
+        "bynk.list.par_traverse_unit",
+        "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).",
     )),
     d(
         "bynk.locale.multiple_message_bundles",
         "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.",
     ),
+    warn(d(
+        "bynk.map.deprecated_function",
+        "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
+    warn(dg(
+        "bynk.match.refined_pattern_is_range",
+        "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; quick fix, not applied by `--fix`).",
+        &["refined_pattern"],
+    )),
     d(
         "bynk.messages.format_mismatch",
         "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales.",
@@ -8625,7 +9648,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     d(
         "bynk.par.store_write_in_closure",
-        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
+        "A closure passed to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
     ),
     dg(
         "bynk.parse.bare_expression_statement",
@@ -8657,6 +9680,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_cors",
         "A service declares more than one `cors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_delivery",
+        "A service declares more than one `delivery { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_errors",
+        "A service declares more than one `errors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_fallback",
+        "A service declares more than one `fallback { }` policy.",
         &["service_decl"],
     ),
     dg(
@@ -9067,15 +10105,43 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.query.join_key_mismatch",
         "A `joinOn`/`leftJoin` left and right key function return different types.",
     ),
+    d(
+        "bynk.query.par_traverse_renamed",
+        "`Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable).",
+    ),
     dg(
         "bynk.query.sum_needs_numeric",
         "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
         &[],
     ),
     dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
+    ),
+    d(
+        "bynk.queue.dead_letter_signing_mismatch",
+        "A signed queue's dead-letter consumer is not signed, is in another context, or does not admit the same senders (or the reverse).",
+    ),
+    dg(
+        "bynk.queue.dead_letter_type_mismatch",
+        "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_bad_option",
+        "A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_not_queue",
+        "A `delivery { }` policy on a service that is not `from queue`.",
+        &["delivery_policy"],
     ),
     dg(
         "bynk.queue.duplicate_consumer",
@@ -9087,11 +10153,36 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
+    d(
+        "bynk.queue.message_type_mismatch",
+        "A `sendValue`, `sendValueWith` or `sendValueBatch` sends a type the queue's consumer in the project does not accept.",
+    ),
+    warn(dg(
+        "bynk.queue.no_dead_letter",
+        "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
+        &["delivery_policy"],
+    )),
+    d(
+        "bynk.queue.producer_never_sends",
+        "A `Producer` refinement admits a context that declares no `Queue` for the queue, so it never sends to it.",
+    ),
+    d(
+        "bynk.queue.retry_delay_out_of_range",
+        "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",
+    ),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",
         &["handler"],
     ),
+    warn(d(
+        "bynk.queue.undecodable_unreachable",
+        "An `Undecodable` pattern of a `QueueResult` appears where the value is not a `system` case's queue verdict, so it can never match (warning).",
+    )),
+    warn(d(
+        "bynk.queue.untyped_send",
+        "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning).",
+    )),
     dg(
         "bynk.race.in_agent_handler",
         "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to.",
@@ -9126,6 +10217,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.record_spread.unknown_field",
         "A record spread overrides a field the record does not have.",
         &["record_spread"],
+    ),
+    dg(
+        "bynk.refine.bound_not_literal",
+        "A constant in a refinement predicate's argument is not a literal of the argument's type.",
+        &["refined_type"],
     ),
     dg(
         "bynk.refine.literal_violates",
@@ -9415,7 +10511,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.revert.id_unrecorded",
-        "`bynk revert` refused because the target binds a KV namespace, database or limiter that the deploy lock no longer records, usually because the resource was re-provisioned since.",
+        "`bynk revert` refused because the target binds a KV namespace, database, limiter or Hyperdrive config that the deploy lock no longer records, usually because the resource was re-provisioned or replaced since.",
     ),
     d(
         "bynk.revert.layout_older",
@@ -9483,6 +10579,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.service.websocket_param_not_stringy",
         "A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657).",
     ),
+    warn(d(
+        "bynk.set.deprecated_function",
+        "A `bynk.set` free function is deprecated in favour of the `Set` method form (warning; auto-fixable).",
+    )),
     d(
         "bynk.stability.experimental",
         "An experimental standard-library item is used without an `[unstable] allow` entry in `bynk.toml` covering it.",
@@ -9515,13 +10615,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
     ),
+    warn(d(
+        "bynk.store.unique_implies_indexed",
+        "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning).",
+    )),
     d(
         "bynk.store.unkeyable_key",
-        "A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680).",
+        "A store `Set` element or `Map`/`Cache` key is not a `Key` type (a `Float`, a `Map`, a `Set` or a function appears in it).",
     ),
     d(
         "bynk.store.unknown_annotation",
-        "A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set.",
+        "A `store` field carries an annotation outside the closed `@indexed`/`@unique`/`@ttl`/`@retain`/`@bounded` set.",
     ),
     d(
         "bynk.store.unknown_kind",
@@ -9535,9 +10639,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.unknown_op",
         "A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations.",
     ),
+    warn(d(
+        "bynk.string.deprecated_function",
+        "A `bynk.string` free function is deprecated in favour of the `List[String]` method form (warning; auto-fixable).",
+    )),
+    d(
+        "bynk.string.empty_pad_fill",
+        "The `fill` of `String.padStart` or `String.padEnd` is an empty literal, so there is nothing to pad with.",
+    ),
     d(
         "bynk.stub.after_type",
         "A test `stub … returns <value> after <d>` latency is not a `Duration`.",
+    ),
+    dg(
+        "bynk.stub.agent_stub",
+        "A test `stub` on an agent operation is not `faulted` or `unreachable`, is in an `integration`-tier case or suite, or names an agent of another context than the one under test.",
+        &["stub_clause"],
     ),
     dg(
         "bynk.stub.at_system",
@@ -9550,11 +10667,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.stub.generic_op",
-        "A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.",
+        "A test `stub` targets a capability operation that declares its own type parameter without naming its type argument (`stub Cap.op[T](…)`).",
     ),
     d(
         "bynk.stub.not_a_seam",
         "A test `stub` overrides a capability the unit under test does not consume.",
+    ),
+    dg(
+        "bynk.stub.outcome_word",
+        "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`.",
+        &["stub_clause"],
     ),
     d(
         "bynk.stub.rhs_type",
@@ -9679,6 +10801,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.bad_principal_needs_arm",
+        "A case drives `by Forged`, `by Expired`, `by Stale` or `by Revoked` at an actor sum with more than one member that could refuse it, without naming the member (`by Forged(Browser)`).",
+        &["case"],
+    ),
+    dg(
         "bynk.test.call_needs_in_process",
         "A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`.",
         &["case"],
@@ -9727,6 +10854,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.forged_needs_system",
         "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
+    ),
+    d(
+        "bynk.test.helper_given_at_system",
+        "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
@@ -9828,6 +10959,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.revoked_needs_sessions_route",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.service_bad_address",
         "A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string).",
         &["case"],
@@ -9893,6 +11029,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.violates_needs_in_process",
+        "A `system`-tier case claims a refused commit with `expect <call> violates <name>`; at `system` a refusal reaches the case as an error response from the deployed Worker, never a throw that names the declaration, so the claim belongs at `unit` or `integration`.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.wire_http_only",
         "A `Wire(...)` raw argument is passed to a queue, cron, `on call` or event address; `Wire` drives an http body or path segment only, so a queue message, cron tick or event is passed as a typed value.",
         &["case"],
@@ -9942,6 +11083,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
     ),
     d(
+        "bynk.transition.collection_scan",
+        "A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
+    ),
+    d(
         "bynk.transition.cross_agent_reference",
         "A transition predicate references another agent; step invariants are per-agent.",
     ),
@@ -9964,6 +11109,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.transition.not_bool",
         "A transition predicate does not have type `Bool`.",
+    ),
+    dg(
+        "bynk.types.analytics_point_shape",
+        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.types.annotation_unknown",
+        "A type or a sum variant carries an annotation other than `@discriminator(\"…\")` on a type or `@name(\"…\")` on a variant.",
+        &["type_decl", "sum_variant"],
     ),
     dg(
         "bynk.types.argument_mismatch",
@@ -10034,6 +11189,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.types.derives_field_not_orderable",
         "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_bad_arg",
+        "A sum's `@discriminator` does not take exactly one non-empty string literal, or a `String` constant bound to one, or there is more than one.",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_collides",
+        "A payload field's wire name is its sum's discriminator.",
+        &["variant_payload_field", "type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_not_sum",
+        "`@discriminator` is on a type that is not a sum.",
         &["type_decl"],
     ),
     dg(
@@ -10133,22 +11303,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.field_name_duplicate",
-        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        "A field, variant or payload field has more than one `@name`, or two fields of a record, two variants of a sum or two payload fields of a variant have the same wire name.",
         &["record_field"],
     ),
     dg(
         "bynk.types.field_name_invalid",
-        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_not_request_record",
-        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_record_not_boundary",
-        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        "A `@name` is not a valid name for where it stands (a cookie or header name that is not a token, or an empty name).",
         &["record_field"],
     ),
     dg(
@@ -10284,6 +11444,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`).",
         &["list_pattern"],
     ),
+    d(
+        "bynk.types.map_entry_at_boundary",
+        "A `MapEntry` type appears in a storable or boundary-crossing position: a map entry is built and consumed in place, never persisted or sent.",
+    ),
     dg(
         "bynk.types.match_arm_mismatch",
         "A `match` arm has a different type from the others.",
@@ -10318,6 +11482,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.nested_effect",
+        "An `Effect` wraps another `Effect`, as written or through a call's instantiation; effects are promises and flatten, so the shape cannot exist (use `andThen`).",
     ),
     dg(
         "bynk.types.never_inferred",
@@ -10376,6 +11544,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An or-pattern's alternatives give a shared binding different types (or refinements).",
         &["match_arm", "is_expr"],
     ),
+    d(
+        "bynk.types.ord_order_changed",
+        "A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`.",
+    ),
     dg(
         "bynk.types.pattern_arity",
         "A pattern binds the wrong number of payload fields.",
@@ -10417,7 +11589,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.question_option_outside_http",
-        "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
+        "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
         &["question_expr"],
     ),
     dg(
@@ -10436,8 +11608,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["record_pattern"],
     ),
     dg(
+        "bynk.types.regex_duplicate_group_name",
+        "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.types.regex_no_named_groups",
+        "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.regex_not_literal",
-        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
+        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
         &["method_call"],
     ),
     d(
@@ -10459,6 +11641,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.rounding_mode_position",
         "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
+    ),
+    d(
+        "bynk.types.secret_at_boundary",
+        "A `bynk` `Secret` or `Authorization` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+    ),
+    d(
+        "bynk.types.secret_not_comparable",
+        "`==` or `!=` on a `bynk` `Secret` or `Authorization`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",
@@ -10496,6 +11686,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.stream_not_comparable",
         "A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0).",
+    ),
+    d(
+        "bynk.types.streaming_element",
+        "The second argument of `HttpResult[T, E]`, the element a `Streaming` body carries, is not `String` or `SseEvent` (#4394).",
     ),
     d(
         "bynk.types.type_mismatch",
@@ -10553,8 +11747,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A variant payload has the wrong type.",
     ),
     dg(
+        "bynk.uses.ambiguous_name",
+        "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.name_conflict",
-        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
         &["uses_decl"],
     ),
     dg(
@@ -10568,8 +11767,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["uses_decl"],
     ),
     dg(
+        "bynk.uses.test_only_commons",
+        "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.unknown_commons",
         "`uses` names a commons that does not exist.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.unknown_name",
+        "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly.",
         &["uses_decl"],
     ),
     dg(
@@ -10671,12 +11880,28 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     d(
+        "bynk.ws.bad_close_code",
+        "A WebSocket `connection.close(code, reason)` names a literal close code an application may not send — only `1000` and `3000`–`4999` (#3902).",
+    ),
+    d(
+        "bynk.ws.bad_close_reason",
+        "A WebSocket `connection.close(code, reason)` names a literal reason over the protocol's 123 bytes of UTF-8 (#3902).",
+    ),
+    d(
+        "bynk.ws.cookie_needs_origins",
+        "A `from websocket` service whose `on open` authenticates a `SignedCookie` actor does not declare `cors { origins: [...], credentials: true }` with exact origins, so there is nothing to check the upgrade's `Origin` against (#3904).",
+    ),
+    d(
         "bynk.ws.lifecycle_by_mismatch",
         "A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ).",
     ),
     d(
         "bynk.ws.message_frame_param",
         "A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii).",
+    ),
+    d(
+        "bynk.ws.missing_close",
+        "A `from websocket` service has no `on close` handler, so a departed client's connection, held in an agent by `on open`, is never released (#3902).",
     ),
     d(
         "bynk.ws.open_given_unsupported",
@@ -10750,6 +11975,7 @@ fn category_title(cat: &str) -> &'static str {
     match cat {
         "actor" => "Actors",
         "adapter" => "Adapters",
+        "analytics" => "Analytics",
         "agent" | "agents" => "Agents",
         "asset" => "Static assets",
         "boundary" => "Boundaries",
@@ -10772,6 +11998,7 @@ fn category_title(cat: &str) -> &'static str {
         "http" => "HTTP",
         "internal" => "Internal errors",
         "lex" => "Lexer",
+        "match" => "Match",
         "messages" => "Message bundles",
         "mock" => "Mocks (collaborators)",
         "observe" => "Observation",
@@ -10800,93 +12027,24 @@ fn category_title(cat: &str) -> &'static str {
     }
 }
 
-/// Render the diagnostic index as a Markdown reference page, grouped by
-/// category. This is the generator behind
-/// `site/src/content/docs/book/reference/diagnostics.md`.
-pub fn render_markdown() -> String {
-    use std::collections::BTreeMap;
-
-    // Group codes by their category title, preserving sorted code order.
-    let mut by_category: BTreeMap<&str, Vec<&DiagnosticInfo>> = BTreeMap::new();
-    for info in REGISTRY {
-        by_category
-            .entry(category_title(category(info.code)))
-            .or_default()
-            .push(info);
-    }
-
-    let mut out = String::new();
-    out.push_str("# Diagnostic index\n\n");
-    out.push_str(
-        "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->\n\n",
-    );
-    out.push_str(
-        "Every diagnostic code the compiler can emit, with a one-line summary of \
-         the cause, grouped by category. Each code links to its own page: what the \
-         code means, how to fix it and an example where an explanation is written, \
-         and the Book pages that explain it. \
-         `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
-         **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
-    );
-    out.push_str(&format!(
-        "There are **{}** codes in total.\n",
-        REGISTRY.len()
-    ));
-
-    for (title, infos) in &by_category {
-        out.push_str(&format!("\n## {title}\n\n"));
-        out.push_str("| Code | Summary | Construct | Severity |\n|---|---|---|---|\n");
-        for info in infos {
-            // The construct column deep-links each governing production to its
-            // entry in the annotated grammar reference; generated from
-            // `grammar_symbol` (each value is an embeddable rule, so the
-            // `#rule-<raw>` anchor resolves — enforced in diagnostics_registry).
-            let construct = info
-                .grammar_symbol
-                .iter()
-                .map(|sym| format!("[`{sym}`](grammar.md#rule-{sym})"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            // Every code links to its own page (#3876), which the site
-            // generates from `render_json` for every registry code.
-            let code_cell = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
-            // ADR 0117/finding #50: every code's severity, straight from the
-            // registry — `Error` (the overwhelming majority) renders as "—"
-            // to keep the common case unobtrusive; only a `warn`-built entry
-            // shows "Warning".
-            let severity = match info.severity {
-                Severity::Error => "—",
-                Severity::Warning => "Warning",
-                Severity::Hint => "Hint",
-            };
-            out.push_str(&format!(
-                "| {} | {} | {} | {} |\n",
-                code_cell, info.summary, construct, severity
-            ));
-        }
-    }
-
-    out
-}
-
-/// Every registry code as JSON, for the site's page per code (#3876): its
-/// summary, severity, category (title and the index anchor of its heading),
-/// grammar constructs, and the curated `blurb` and `example` where the code
-/// has one (else `null`). Sorted by code. This is the generator behind
-/// `site/src/generated/diagnostics.json`, which the route
-/// `site/src/pages/book/reference/diagnostics/[code].astro` renders; the
-/// docs-consistency test keeps the committed file current.
-pub fn render_json() -> String {
+/// Every registry code as JSON, one document per code, for the site's page per code (#3876): its
+/// summary, severity, category (title and the index anchor of its heading), grammar constructs,
+/// and the curated `blurb` and `example` where the code has one (else `null`). Returned as
+/// `(code, json)`, sorted by code. This is the generator behind
+/// `site/src/generated/diagnostics/<code>.json`, one committed file per code so two changes that
+/// add different codes never touch the same file (#4286). The route
+/// `site/src/pages/reference/diagnostics/[code].astro` renders them, and
+/// `site/scripts/build-diagnostics-index.mjs` assembles the index page from them at build time;
+/// the docs-consistency test keeps the committed files current.
+pub fn render_json_per_code() -> Vec<(String, String)> {
     let mut infos: Vec<&DiagnosticInfo> = REGISTRY.iter().collect();
     infos.sort_by_key(|i| i.code);
-    let codes: Vec<serde_json::Value> = infos
+    infos
         .iter()
         .map(|info| {
             let cat = category(info.code);
             let explained = explain(info.code);
-            serde_json::json!({
+            let doc = serde_json::json!({
                 "code": info.code,
                 "summary": info.summary,
                 "severity": match info.severity {
@@ -10899,12 +12057,33 @@ pub fn render_json() -> String {
                 "constructs": info.grammar_symbol,
                 "blurb": explained.map(|e| e.blurb),
                 "example": explained.map(|e| e.example),
-            })
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
+            out.push('\n');
+            (info.code.to_string(), out)
         })
-        .collect();
-    let mut out = serde_json::to_string_pretty(&codes).expect("diagnostics serialise");
-    out.push('\n');
-    out
+        .collect()
+}
+
+/// Every tombstone as JSON, one document per retired code, as `(code, json)` sorted by code
+/// (#4277). Written to `site/src/generated/diagnostics/retired/<code>.json`, which
+/// `site/scripts/build-diagnostics-index.mjs` lists under "Retired codes".
+pub fn render_retired_json() -> Vec<(String, String)> {
+    let mut all: Vec<&Retired> = RETIRED.iter().collect();
+    all.sort_by_key(|r| r.code);
+    all.iter()
+        .map(|r| {
+            let doc = serde_json::json!({
+                "code": r.code,
+                "lastRelease": r.last_release,
+                "why": r.why,
+                "replacement": r.replacement,
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("tombstone serialises");
+            out.push('\n');
+            (r.code.to_string(), out)
+        })
+        .collect()
 }
 
 /// Invert the registry into a `{ "<rule>": [ { code, summary }, … ], … }` map,

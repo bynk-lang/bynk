@@ -5,103 +5,27 @@ use super::*;
 // order against (slices 1 and 2)
 // ---------------------------------------------------------------------------
 
-/// The stanzas of a generated `wrangler.toml` that `deploy` acts on.
+/// The settings of a generated `wrangler.toml` that `deploy` acts on and the
+/// build's binding model does not carry: the queues a Worker consumes, its
+/// Durable Object `exports`, and the Email Routing `addresses`.
 ///
-/// Everything here is read from the **emitted config** rather than from the
-/// checker's project model because this is precisely the file wrangler is about
-/// to send and Cloudflare is about to validate — so the plan and the upload can
-/// never describe different projects (ADR 0193 D3, extended to slice 1's kinds).
+/// A Worker's *bindings* are not read from the file (1C.3b, #4040): the file is
+/// the same process's rendering of the `WorkerBindings` the build holds, and
+/// [`declared_bindings`] reads the model directly. What is left here is what
+/// the model never held. ADR 0193 D3's guarantee, that the plan and the upload
+/// never describe different projects, rests on there being one source for both.
 #[derive(Debug, Default, Deserialize)]
-struct WranglerConfig {
-    #[serde(default)]
-    services: Vec<ServiceBinding>,
+struct WorkerSettings {
     #[serde(default)]
     queues: QueueBindings,
     /// #1796: Cloudflare's declarative `exports` map, keyed by class name —
     /// what replaced the `[[migrations]]` this struct used to read.
     #[serde(default)]
     exports: BTreeMap<String, Export>,
-    // P7.4 (#1305): read structurally alongside everything else this struct
-    // already deserialises, replacing `needs_kv`'s own former
-    // `text.contains(KV_NAMESPACE_ID_PLACEHOLDER)` whole-file substring
-    // search (R8.20 — deploy-time placeholders are typed, not textual).
-    #[serde(default)]
-    kv_namespaces: Vec<KvNamespaceBinding>,
-    /// P5 (#2323): the `[[r2_buckets]]` of the `R2` instances.
-    #[serde(default)]
-    r2_buckets: Vec<R2BucketBinding>,
-    /// P4a (#2602): the `[[d1_databases]]` of the `D1` instances.
-    #[serde(default)]
-    d1_databases: Vec<D1DatabaseBinding>,
-    /// #3479: the `[[vectorize]]` of the `Vectorize` instances.
-    #[serde(default)]
-    vectorize: Vec<VectorizeStanza>,
-    /// #3477: the `[[containers]]` of the `Container` instances.
-    #[serde(default)]
-    containers: Vec<ContainerStanza>,
-    /// #3319: the `[[hyperdrive]]` of the `Postgres` instances.
-    #[serde(default)]
-    hyperdrive: Vec<HyperdriveStanza>,
-    /// P3 (#2342): the `[[ratelimits]]` of the `RateLimit` instances.
-    #[serde(default)]
-    ratelimits: Vec<RateLimitBinding>,
-    /// P3b (#2582): the `[[analytics_engine_datasets]]` of the `Analytics`
-    /// instances.
-    #[serde(default)]
-    analytics_engine_datasets: Vec<AnalyticsDatasetBinding>,
-    /// #3301: the `[[secrets_store_secrets]]` of the `StoredSecret` instances.
-    #[serde(default)]
-    secrets_store_secrets: Vec<StoredSecretBinding>,
-    /// #3480: the `[[ai_search]]` of the `AiSearch` instances.
-    #[serde(default)]
-    ai_search: Vec<AiSearchBinding>,
-    /// #3513 A: the `[[mtls_certificates]]` of the `MtlsCertificate` instances.
-    #[serde(default)]
-    mtls_certificates: Vec<MtlsCertificateBinding>,
-    /// #3302: the `[[send_email]]` of the `Email` instances.
-    #[serde(default)]
-    send_email: Vec<SendEmailBinding>,
     /// #3328: the top-level `addresses` of the `from email` services, the
     /// Email Routing rules wrangler reconciles on every deploy.
     #[serde(default)]
     addresses: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SendEmailBinding {
-    /// `EMAIL_<SNAKE>`: the instance's binding.
-    name: String,
-    /// The addresses the instance may send as (`@allowedSenders`); absent when
-    /// the instance is unrestricted.
-    #[serde(default)]
-    allowed_sender_addresses: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct MtlsCertificateBinding {
-    /// `MTLS_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The certificate's name, as `@certificate` wrote it, until the deploy replaces it
-    /// with the id it resolves.
-    certificate_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AiSearchBinding {
-    /// `AI_SEARCH_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The account's instance, as `@instance` wrote it.
-    instance_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct StoredSecretBinding {
-    /// `SECRET_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// In a freshly generated config, the store's *name*, which `bynk deploy`
-    /// replaces with the id it resolves.
-    store_id: String,
-    secret_name: String,
 }
 
 /// #3302: one `Email` instance's sender restriction, as the emitted config
@@ -116,33 +40,6 @@ pub(crate) struct EmailSendersDecl {
     pub(crate) senders: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct AnalyticsDatasetBinding {
-    /// `ANALYTICS_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>_<capability, snake>`), which
-    /// [`analytics_dataset_name`] environment-qualifies.
-    dataset: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RateLimitBinding {
-    /// `RATELIMIT_<SNAKE>`: the instance's binding, keyed `name`, not
-    /// `binding`. The `namespace_id` itself is only read and written
-    /// structurally, by `materialise_ratelimit_namespace_ids`.
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ServiceBinding {
-    /// The binding's `env` name: `SHOP_CART` for a project context,
-    /// `SERVICE_BILLING` for a foreign Worker (interop I5, #1972).
-    binding: String,
-    /// The *target* worker's name (`worker_dir_name`, dots dasherised), or a
-    /// foreign Worker's as its declaration names it.
-    service: String,
-}
-
 /// Interop I5 (#1972): a Service Binding to a Worker that is not one of the
 /// project's (`capability Billing = Service @worker("legacy-billing")`).
 /// Deploy reads only generated output (ADR 0193 D3), so a `[[services]]`
@@ -154,33 +51,19 @@ pub(crate) struct ForeignService {
     pub(crate) worker: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct KvNamespaceBinding {
-    /// `KV` for the bare `Kv`, `KV_<SNAKE>` for a derived instance (S4b,
-    /// #1967). The `id` itself is only ever read and written structurally, by
-    /// `bynk_emit::emitter::wrangler::materialise_kv_namespace_ids`.
-    binding: String,
-}
-
 #[derive(Debug, Default, Deserialize)]
 struct QueueBindings {
     #[serde(default)]
     consumers: Vec<QueueConsumer>,
-    /// P2 (#2578): the `[[queues.producers]]` of the `Queue` instances.
-    #[serde(default)]
-    producers: Vec<QueueProducer>,
-}
-
-#[derive(Debug, Deserialize)]
-struct QueueProducer {
-    /// The queue's user-given name, straight from `@name("n")`.
-    queue: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct QueueConsumer {
     /// The queue's user-given name, straight from `from queue("n")`.
     queue: String,
+    /// #3877: the consumer's dead-letter queue, from its `delivery { deadLetter }`.
+    #[serde(default)]
+    dead_letter_queue: Option<String>,
 }
 
 /// One `[exports.<Class>]` entry. Only the fields that say whether it is a
@@ -204,101 +87,10 @@ struct Export {
 pub(crate) struct DurableObject {
     pub(crate) class: String,
     pub(crate) storage: String,
-}
-
-/// #3477: one `[[containers]]` entry: the class whose container it runs.
-#[derive(Debug, Deserialize)]
-struct ContainerStanza {
-    class_name: String,
-}
-
-/// #3477: `bynk-containers.json` beside a Worker's config: each container's
-/// capability, `@build` directory and `@instanceType`, which the stanza does
-/// not carry.
-#[derive(Debug, Deserialize)]
-struct ContainersManifest {
-    version: u32,
-    #[serde(default)]
-    containers: Vec<ContainersManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ContainersManifestEntry {
-    capability: String,
-    class: String,
-    build: String,
-    #[serde(default)]
-    instance_type: Option<String>,
-}
-
-/// Read the containers manifest beside `worker_dir`'s config, if there is one.
-fn read_containers_manifest(worker_dir: &Path) -> Result<Vec<ContainersManifestEntry>, String> {
-    let name = bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST;
-    let path = worker_dir.join(name);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: ContainersManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST_VERSION {
-        return Err(format!("unsupported {name} version {}", manifest.version));
-    }
-    Ok(manifest.containers)
-}
-
-#[derive(Debug, Deserialize)]
-struct VectorizeStanza {
-    /// `VECTORIZE_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived index name, which [`vectorize_index_name`]
-    /// environment-qualifies.
-    index_name: String,
-}
-
-/// #3479: `bynk-vectorize.json` beside a Worker's config: each index's
-/// dimensions, metric and metadata indexes, which the stanza does not carry.
-#[derive(Debug, Deserialize)]
-struct VectorizeManifest {
-    version: u32,
-    #[serde(default)]
-    vectorize: Vec<VectorizeManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct VectorizeManifestEntry {
-    binding: String,
-    dimensions: i64,
-    metric: String,
-    #[serde(default)]
-    indexed: Vec<String>,
-}
-
-/// Read the Vectorize manifest beside `worker_dir`'s config, if there is one.
-/// A version this deploy does not know is refused rather than guessed: an index
-/// made with the wrong dimensions cannot be corrected.
-fn read_vectorize_manifest(worker_dir: &Path) -> Result<Vec<VectorizeManifestEntry>, String> {
-    let name = bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST;
-    let path = worker_dir.join(name);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: VectorizeManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST_VERSION {
-        return Err(format!("unsupported {name} version {}", manifest.version));
-    }
-    Ok(manifest.vectorize)
-}
-
-#[derive(Debug, Deserialize)]
-struct R2BucketBinding {
-    /// `R2_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
-    /// [`r2_bucket_name`] environment-qualifies.
-    bucket_name: String,
-    #[serde(default)]
-    jurisdiction: Option<String>,
+    /// #3819: the agent's `@jurisdiction`, from the build's model. Not in the wrangler config
+    /// (a jurisdiction is a property of the id, not of the binding), so `deploy` records it per
+    /// class and compares it on the next run. `None` for an agent with no `@jurisdiction`.
+    pub(crate) jurisdiction: Option<String>,
 }
 
 /// P3b (#2582): one `Analytics` instance's dataset, as the emitted config
@@ -348,12 +140,6 @@ pub(crate) struct StoredSecretDecl {
     pub(crate) secret: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct HyperdriveStanza {
-    /// `HYPERDRIVE_<SNAKE>`: the instance's binding.
-    binding: String,
-}
-
 /// #3319: one `Postgres` instance's Hyperdrive config, as the emitted config
 /// declares it. Its id is made (or adopted) by the deploy and kept in the
 /// ledger; nothing about the connection string is in the config.
@@ -388,51 +174,6 @@ impl HyperdriveKind {
     }
 }
 
-/// The emitted `bynk-hyperdrive.json` (#3322): the bindings that are not
-/// `Postgres`, each with its kind and `@tls` mode. Names and modes only.
-#[derive(Debug, Deserialize)]
-struct HyperdriveManifest {
-    version: u32,
-    #[serde(default)]
-    hyperdrive: Vec<HyperdriveManifestEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HyperdriveManifestEntry {
-    binding: String,
-    kind: String,
-    #[serde(default)]
-    tls: Option<String>,
-}
-
-/// Read the Hyperdrive manifest beside `worker_dir`'s config, if there is one.
-/// A version or kind this deploy does not know is refused rather than guessed:
-/// making a Postgres config for a MySQL binding would be the wrong database.
-fn read_hyperdrive_manifest(worker_dir: &Path) -> Result<Vec<HyperdriveManifestEntry>, String> {
-    let path = worker_dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let manifest: HyperdriveManifest = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    if manifest.version != bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST_VERSION {
-        return Err(format!(
-            "unsupported {} version {}",
-            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
-            manifest.version
-        ));
-    }
-    if let Some(other) = manifest.hyperdrive.iter().find(|e| e.kind != "mysql") {
-        return Err(format!(
-            "{} names kind `{}` for `{}`, which this bynk does not know",
-            bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST,
-            other.kind,
-            other.binding
-        ));
-    }
-    Ok(manifest.hyperdrive)
-}
-
 impl HyperdriveDecl {
     /// The capability's name as the source wrote it, recovered from the
     /// binding (`HYPERDRIVE_MAIN` is `Main`): the key of `[deploy.hyperdrive]`
@@ -458,19 +199,6 @@ impl HyperdriveDecl {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct D1DatabaseBinding {
-    /// `D1_<SNAKE>`: the instance's binding.
-    binding: String,
-    /// The unqualified derived name (`<worker>-<capability, kebab>`), which
-    /// [`d1_database_name`] environment-qualifies.
-    database_name: String,
-    /// P4b (#2608): the copy of its migrations beside the config, when it has
-    /// any (`migrations/<database>`).
-    #[serde(default)]
-    migrations_dir: Option<String>,
-}
-
 /// P4a (#2602): one `D1` instance's database, as the emitted config declares
 /// it. Its id is minted by Cloudflare at creation and kept in the ledger.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -482,6 +210,8 @@ pub(crate) struct D1Decl {
     /// P4b (#2608): its migration files, by name in the order wrangler
     /// applies them; empty without a `migrations_dir`.
     pub(crate) migrations: Vec<String>,
+    /// #3820: the `@jurisdiction` the database is pinned to at creation, if any.
+    pub(crate) jurisdiction: Option<String>,
 }
 
 /// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
@@ -583,6 +313,10 @@ pub(crate) struct Resources {
     /// to a missing queue fails the deploy too), but recorded in the ledger
     /// only when Bynk created it.
     pub(crate) producer_queues: Vec<String>,
+    /// #3899: the Workers of the signed queue consumers this context's producers send to, by
+    /// directory. Each is an edge key's other end ([`secrets::project_edges`]), though no Service
+    /// Binding joins them, so it never orders the deploy.
+    pub(crate) signs_queue_to: Vec<String>,
     /// #1796: the Durable Object classes the config declares in `exports`
     /// (each agent, plus the events fan-out class), in class-name order.
     /// **Advisory** — Cloudflare reconciles the declared set against the
@@ -656,6 +390,11 @@ pub(crate) struct Resources {
     /// Advisory in the plan, like a Durable Object export: Cloudflare owns the
     /// rules, and a rule for an address no longer listed is removed by the push.
     pub(crate) email_addresses: Vec<String>,
+    /// #3883: the addresses the source's `from email` services name, before the environment
+    /// decides which of them it claims. `email_addresses` is what is left for the
+    /// environment being deployed (see `deploy::email`), so a plan can say a Worker that has
+    /// addresses claims none in this environment.
+    pub(crate) email_source: Vec<String>,
     /// Slice 3: the secret names this context's handlers will read from `env` —
     /// an `actor`'s `auth` secret, read from the emitted `bynk-secrets.json`.
     ///
@@ -704,9 +443,19 @@ pub(crate) struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one.
     #[serde(default)]
     pub(crate) worker: Option<String>,
+    /// #3899: the sender signs queue messages to a `from queue` consumer rather than calls.
+    #[serde(default)]
+    pub(crate) queue: bool,
 }
 
 impl Resources {
+    /// #3883: whether this Worker has `from email` addresses in the source but, in the named
+    /// `environment`, claims none (`[deploy.email]` maps it none). Its push leaves `addresses`
+    /// out, so there is no rule to add and none to prune.
+    pub(crate) fn email_unclaimed(&self, environment: &str) -> bool {
+        environment != "default" && !self.email_source.is_empty() && self.email_addresses.is_empty()
+    }
+
     /// P2 (#2578): every queue this context names, consumed or produced to,
     /// in name order, each once: what deploy creates and what keeps a queue
     /// from being an orphan.
@@ -729,6 +478,7 @@ impl Default for Resources {
             foreign_services: Vec::new(),
             queues: Vec::new(),
             producer_queues: Vec::new(),
+            signs_queue_to: Vec::new(),
             durable_objects: Vec::new(),
             renamed_durable_objects: Vec::new(),
             deleted_durable_objects: Vec::new(),
@@ -746,6 +496,7 @@ impl Default for Resources {
             mtls_certificates: Vec::new(),
             email_senders: Vec::new(),
             email_addresses: Vec::new(),
+            email_source: Vec::new(),
             declared_secrets: Vec::new(),
             read_secrets: Vec::new(),
             reads_complete: true,
@@ -832,7 +583,7 @@ fn read_secrets_manifest(worker_dir: &Path) -> Result<SecretsManifest, String> {
 
 /// P4b (#2608): the `.sql` files in a database's copied migrations directory,
 /// in name order, as wrangler applies them.
-fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
+pub(super) fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
     let entries = std::fs::read_dir(dir)
         .map_err(|e| format!("could not list the D1 migrations in {}: {e}", dir.display()))?;
     let mut files: Vec<String> = entries
@@ -844,10 +595,12 @@ fn migration_files(dir: &Path) -> Result<Vec<String>, String> {
     Ok(files)
 }
 
-/// Read everything `deploy` acts on out of one worker's generated build output.
-fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources, String> {
+/// Read everything `deploy` acts on for one Worker: its settings out of the
+/// generated `config`, its secrets from the manifest beside it, and its
+/// bindings from `declared`, which the build's model gave.
+fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, String> {
     let text = std::fs::read_to_string(config).map_err(|e| e.to_string())?;
-    let parsed: WranglerConfig = toml::from_str(&text).map_err(|e| e.to_string())?;
+    let parsed: WorkerSettings = toml::from_str(&text).map_err(|e| e.to_string())?;
     // Beside the config, not in it: secrets are a runtime store rather than
     // configuration, so `wrangler.toml` has no stanza to carry them.
     let secrets = read_secrets_manifest(
@@ -855,6 +608,18 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
             .parent()
             .ok_or_else(|| "configuration has no directory".to_string())?,
     )?;
+    // #3877: a dead-letter queue is created before the push like a queue the Worker sends to,
+    // and recorded only when Bynk created it.
+    let dead_letters: Vec<String> = parsed
+        .queues
+        .consumers
+        .iter()
+        .filter_map(|c| c.dead_letter_queue.clone())
+        .collect();
+    let mut producer_queues = declared.producer_queues;
+    producer_queues.extend(dead_letters);
+    producer_queues.sort();
+    producer_queues.dedup();
     let mut queues: Vec<String> = parsed
         .queues
         .consumers
@@ -866,14 +631,6 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
     // rather than an emitter detail deploy happens to inherit.
     queues.sort();
     queues.dedup();
-    let mut producer_queues: Vec<String> = parsed
-        .queues
-        .producers
-        .into_iter()
-        .map(|p| p.queue)
-        .collect();
-    producer_queues.sort();
-    producer_queues.dedup();
     // A `BTreeMap`, so already in class-name order. A live class always has
     // a backend: Wrangler's schema requires `storage` unless `state` is a
     // tombstone. One without is refused, not skipped (review of #1803):
@@ -907,266 +664,88 @@ fn read_resources(config: &Path, project_workers: &[String]) -> Result<Resources
         let storage = export.storage.ok_or_else(|| {
             format!("`exports.{class}` declares a Durable Object with no `storage`")
         })?;
-        durable_objects.push(DurableObject { class, storage });
+        let jurisdiction = declared.agent_jurisdictions.get(&class).cloned().flatten();
+        durable_objects.push(DurableObject {
+            class,
+            storage,
+            jurisdiction,
+        });
     }
-    let (binds_to, mut foreign): (Vec<ServiceBinding>, Vec<ServiceBinding>) = parsed
-        .services
-        .into_iter()
-        .partition(|s| project_workers.contains(&s.service));
-    foreign.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut r2_buckets: Vec<R2Decl> = parsed
-        .r2_buckets
-        .into_iter()
-        .map(|b| R2Decl {
-            binding: b.binding,
-            name: b.bucket_name,
-            jurisdiction: b.jurisdiction,
-        })
-        .collect();
-    r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let configured = read_vectorize_manifest(config.parent().unwrap_or(Path::new(".")))?;
-    let mut vectorize_indexes: Vec<VectorizeDecl> = parsed
-        .vectorize
-        .into_iter()
-        .map(|v| {
-            let entry = configured
-                .iter()
-                .find(|c| c.binding == v.binding)
-                .ok_or_else(|| {
-                    format!(
-                        "{} does not state the configuration of `{}`, so the index cannot be created or checked",
-                        bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST,
-                        v.binding
-                    )
-                })?;
-            Ok(VectorizeDecl {
-                binding: v.binding,
-                name: v.index_name,
-                dimensions: entry.dimensions,
-                metric: entry.metric.clone(),
-                indexed: entry.indexed.clone(),
-                adopt: None,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    vectorize_indexes.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let manifest = read_containers_manifest(config.parent().unwrap_or(Path::new(".")))?;
-    let mut containers: Vec<ContainerDecl> = parsed
-        .containers
-        .into_iter()
-        .map(|stanza| {
-            let entry = manifest
-                .iter()
-                .find(|c| c.class == stanza.class_name)
-                .ok_or_else(|| {
-                    format!(
-                        "{} does not describe the container of `{}`, so it cannot be planned or adopted",
-                        bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST,
-                        stanza.class_name
-                    )
-                })?;
-            Ok(ContainerDecl {
-                capability: entry.capability.clone(),
-                class: entry.class.clone(),
-                build: entry.build.clone(),
-                instance_type: entry.instance_type.clone(),
-                adopt: None,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    containers.sort_by(|a, b| a.class.cmp(&b.class));
-    let mut ratelimits: Vec<String> = parsed.ratelimits.into_iter().map(|r| r.name).collect();
-    ratelimits.sort();
-    let mut analytics_datasets: Vec<AnalyticsDecl> = parsed
-        .analytics_engine_datasets
-        .into_iter()
-        .map(|d| AnalyticsDecl {
-            binding: d.binding,
-            name: d.dataset,
-        })
-        .collect();
-    analytics_datasets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut stored_secrets: Vec<StoredSecretDecl> = parsed
-        .secrets_store_secrets
-        .into_iter()
-        .map(|s| StoredSecretDecl {
-            binding: s.binding,
-            store: s.store_id,
-            secret: s.secret_name,
-        })
-        .collect();
-    stored_secrets.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut ai_search: Vec<AiSearchDecl> = parsed
-        .ai_search
-        .into_iter()
-        .map(|s| AiSearchDecl {
-            binding: s.binding,
-            instance: s.instance_name,
-        })
-        .collect();
-    ai_search.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut mtls_certificates: Vec<MtlsCertificateDecl> = parsed
-        .mtls_certificates
-        .into_iter()
-        .map(|c| MtlsCertificateDecl {
-            binding: c.binding,
-            certificate: c.certificate_id,
-        })
-        .collect();
-    mtls_certificates.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let mut email_senders: Vec<EmailSendersDecl> = parsed
-        .send_email
-        .into_iter()
-        .filter(|e| !e.allowed_sender_addresses.is_empty())
-        .map(|e| EmailSendersDecl {
-            binding: e.name,
-            senders: e.allowed_sender_addresses,
-        })
-        .collect();
-    email_senders.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let worker_dir = config
-        .parent()
-        .ok_or_else(|| "configuration has no directory".to_string())?;
-    let mut d1_databases: Vec<D1Decl> = parsed
-        .d1_databases
-        .into_iter()
-        .map(|d| {
-            Ok(D1Decl {
-                migrations: match &d.migrations_dir {
-                    Some(dir) => migration_files(&worker_dir.join(dir))?,
-                    None => Vec::new(),
-                },
-                binding: d.binding,
-                name: d.database_name,
-            })
-        })
-        .collect::<Result<_, String>>()?;
-    d1_databases.sort_by(|a, b| a.binding.cmp(&b.binding));
-    let kinds = read_hyperdrive_manifest(worker_dir)?;
-    let mut hyperdrive: Vec<HyperdriveDecl> = parsed
-        .hyperdrive
-        .into_iter()
-        .map(|h| {
-            let mysql = kinds.iter().find(|k| k.binding == h.binding);
-            HyperdriveDecl {
-                kind: if mysql.is_some() {
-                    HyperdriveKind::MySql
-                } else {
-                    HyperdriveKind::Postgres
-                },
-                tls: mysql.and_then(|k| k.tls.clone()),
-                binding: h.binding,
-            }
-        })
-        .collect();
-    hyperdrive.sort_by(|a, b| a.binding.cmp(&b.binding));
+    let mut addresses = parsed.addresses;
+    addresses.sort();
     Ok(Resources {
-        members: Vec::new(),
-        agent_contexts: BTreeMap::new(),
-        binds_to: binds_to.into_iter().map(|s| s.service).collect(),
-        foreign_services: foreign
-            .into_iter()
-            .map(|s| ForeignService {
-                binding: s.binding,
-                worker: s.service,
-            })
-            .collect(),
+        binds_to: declared.binds_to,
+        foreign_services: declared.foreign_services,
         queues,
         producer_queues,
+        signs_queue_to: declared.signs_queue_to,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
-        needs_kv: parsed
-            .kv_namespaces
-            .iter()
-            .any(|ns| ns.binding == bynk_emit::emitter::wrangler::KV_BINDING_NAME),
-        kv_instances: {
-            let mut instances: Vec<String> = parsed
-                .kv_namespaces
-                .into_iter()
-                .map(|ns| ns.binding)
-                .filter(|b| b != bynk_emit::emitter::wrangler::KV_BINDING_NAME)
-                .collect();
-            instances.sort();
-            instances
-        },
-        r2_buckets,
-        vectorize_indexes,
-        containers,
-        d1_databases,
-        hyperdrive,
-        ratelimits,
-        analytics_datasets,
-        stored_secrets,
-        ai_search,
-        mtls_certificates,
-        email_senders,
-        email_addresses: {
-            let mut addresses = parsed.addresses;
-            addresses.sort();
-            addresses
-        },
+        needs_kv: declared.needs_kv,
+        kv_instances: declared.kv_instances,
+        r2_buckets: declared.r2_buckets,
+        vectorize_indexes: declared.vectorize_indexes,
+        containers: declared.containers,
+        d1_databases: declared.d1_databases,
+        hyperdrive: declared.hyperdrive,
+        ratelimits: declared.ratelimits,
+        analytics_datasets: declared.analytics_datasets,
+        stored_secrets: declared.stored_secrets,
+        ai_search: declared.ai_search,
+        mtls_certificates: declared.mtls_certificates,
+        email_senders: declared.email_senders,
+        email_addresses: addresses,
+        email_source: Vec::new(),
         declared_secrets: secrets.declared,
         read_secrets: secrets.read,
         reads_complete: secrets.read_complete,
         foreign_callers: secrets.foreign,
         session_keys: secrets.session,
+        // Filled in by `project_resources`, from the layout and the agents manifest.
+        members: Vec::new(),
+        agent_contexts: BTreeMap::new(),
     })
 }
 
 /// Read the whole project's declared resources, one config read per worker.
-/// `workers` is every Worker the build holds: a Service Binding to anything
-/// else is to a foreign Worker.
+/// `workers` is every Worker the build holds, and `model` the binding model of
+/// the build that wrote `workers_dir` (1C.3b, #4040): each Worker's bindings
+/// are what it declares, and a group Worker's members and its Service Bindings'
+/// targets are from the layout the build used.
 pub(crate) fn project_resources(
     workers_dir: &Path,
     workers: &[String],
+    model: &bynk_emit::emit_model::WorkersBuild,
 ) -> Result<BTreeMap<String, Resources>, String> {
     // A Service Binding names its target's *script* name. That is the Worker's
     // directory unless a `[deploy.workers.<key>]` group overrides it with `name`
-    // (#3562), so each binding is read against the script names and turned back
-    // into the directory the rest of deploy keys a Worker by.
+    // (#3562), so a foreign Service Binding is told from a project's by the
+    // build's script names.
     let scripts = script_names(workers_dir, workers);
-    // Only a script name is a Worker a binding can name: a directory that is not
-    // also its Worker's script name is no target (`core` for a group renamed
-    // `core-script`), and a binding to it is a foreign Worker like any other.
-    let known: Vec<String> = scripts.keys().cloned().collect();
     let mut all = BTreeMap::new();
     for worker in workers {
-        let mut resources = read_resources(&workers_dir.join(worker).join("wrangler.toml"), &known)
+        let declared = declared_bindings(
+            workers_dir,
+            worker,
+            model.bindings.of_worker(worker),
+            &model.layout,
+            &scripts,
+        )
+        .map_err(|e| format!("could not read the bindings of `{worker}`: {e}"))?;
+        let mut resources = read_worker(&workers_dir.join(worker).join("wrangler.toml"), declared)
             .map_err(|e| format!("could not read the configuration for `{worker}`: {e}"))?;
         resources.agent_contexts =
             read_agent_contexts(&workers_dir.join(worker), worker, &resources)
                 .map_err(|e| format!("could not read the agent classes of `{worker}`: {e}"))?;
-        resources.binds_to = resources
-            .binds_to
-            .into_iter()
-            .map(|service| scripts.get(&service).cloned().unwrap_or(service))
-            // A group's member calling another member is the Worker binding to
-            // itself, which exists as soon as it is uploaded: no edge (ADR 0874 D7).
-            .filter(|dir| dir != worker)
-            .collect();
-        all.insert(worker.clone(), resources);
-    }
-    Ok(all)
-}
-
-/// [`project_resources`] with each group Worker's members from the project's
-/// layout (#3562), which a push records in the version's deploy facts.
-pub(crate) fn project_resources_for(
-    workers_dir: &Path,
-    workers: &[String],
-    project_root: &Path,
-) -> Result<BTreeMap<String, Resources>, String> {
-    let layout = bynk_project::worker_layout::WorkerLayout::for_project(
-        project_root,
-        &std::collections::HashMap::new(),
-    );
-    let mut all = project_resources(workers_dir, workers)?;
-    for (worker, resources) in &mut all {
-        resources.members = layout
+        // Each group Worker's members, which a push records in the version's
+        // deploy facts (#3562).
+        resources.members = model
+            .layout
             .group_members(worker)
             .map(<[String]>::to_vec)
             .unwrap_or_default();
+        all.insert(worker.clone(), resources);
     }
     Ok(all)
 }
@@ -1321,47 +900,12 @@ pub(crate) fn materialise_ratelimit_ids(path: &Path, ids: &BTreeMap<String, Stri
     std::fs::write(path, patched).is_ok()
 }
 
-/// The environment-qualified physical name for a resource whose logical
-/// identity is chosen by the source (`on queue "n"`) or the compiler (a
-/// target context's `worker_dir_name`) — slice 4, DECISION C.
-///
-/// `"default"` is unqualified, which is the property that keeps a plain
-/// `bynk deploy` byte-for-byte unchanged from before this slice. Any other
-/// environment gets Cloudflare's own suffix shape (`<name>-<env>`) — not a
-/// free choice for a Service Binding target: Cloudflare auto-suffixes a
-/// Worker's *own* deployed name the same way under `--env`, so a binding must
-/// match it exactly to resolve. Queues are not Cloudflare-mandated to follow
-/// this shape, but using the same one keeps the two resource kinds — and the
-/// mental model — consistent.
-pub(crate) fn env_qualify(environment: &str, name: &str) -> String {
-    if environment == "default" {
-        name.to_string()
-    } else {
-        format!("{name}-{environment}")
-    }
-}
-
-/// The name project Worker `worker` is deployed under in `environment`, and
-/// so the name every Service Binding to it must carry (#2028).
-///
-/// The one place both sides of a deploy get this name: the plan prints it
-/// (each context's `worker`, `binds_to`, and the `order` line), and
-/// [`synthesise_environment_block`] writes it into the `[env.<name>]` block
-/// the push hands Wrangler, as the block's `name` and as each project
-/// Service Binding's `service`. So what `--dry-run` says is what the push
-/// creates, by construction rather than by agreement.
-///
-/// It is [`env_qualify`]: `default` is the bare name, any other environment
-/// `<worker>-<env>`. Writing `name` explicitly changes nothing Wrangler would
-/// have done on its own: under `--env`, Wrangler 4.149.0 names an
-/// environment that sets no `name` `<top-level name>-<env>` (`inheritable`
-/// with `appendEnvName`; its `legacy_env` removal note: "each environment is
-/// now deployed as its own Worker named `<name>-<environment>`"), and uses an
-/// environment's own `name` as given. Stating it makes Bynk, not a Wrangler
-/// default, the owner of the name the plan promises.
-pub(crate) fn deployed_worker_name(environment: &str, worker: &str) -> String {
-    env_qualify(environment, worker)
-}
+// 1C.2 (Decision E of #4039): the names a deploy gives a resource in an environment are
+// `bynk_project::environment`'s, one set for the plan, the push and the block `bynk-emit` renders.
+pub(crate) use bynk_project::environment::{
+    analytics_dataset_name, d1_database_name, deployed_worker_name, env_qualify, r2_bucket_name,
+    vectorize_index_name,
+};
 
 /// The `bynk deploy` command a message suggests, for the environment the run
 /// is deploying (#2047): `bynk deploy` for `default`, `bynk deploy --env
@@ -1373,20 +917,6 @@ pub(crate) fn deploy_command(environment: &str) -> String {
     } else {
         format!("bynk deploy --env {environment}")
     }
-}
-
-/// P5 (#2323): the name an `R2` instance's bucket has on the account in
-/// `environment`: its derived name, [`env_qualify`]d. R2 bucket names are
-/// scoped to the account, so (like a Worker's) it is a function of the
-/// project's names alone.
-pub(crate) fn r2_bucket_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
-}
-
-/// #3479: the name a `Vectorize` instance's index has in `environment`: its
-/// derived name, qualified as [`env_qualify`] does.
-pub(crate) fn vectorize_index_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
 }
 
 /// #3479, #3496: why `name` cannot be an index name, or `None`. Cloudflare
@@ -1415,30 +945,10 @@ pub(crate) fn vectorize_index_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// P3b (#2582): the name an `Analytics` instance's dataset has in
-/// `environment`: its derived name, qualified as [`env_qualify`] does but with
-/// `_` (`shop_cart_signups_staging`), since the dataset is a SQL table name.
-pub(crate) fn analytics_dataset_name(environment: &str, name: &str) -> String {
-    if environment == "default" {
-        name.to_string()
-    } else {
-        format!(
-            "{name}_{}",
-            environment.to_ascii_lowercase().replace('-', "_")
-        )
-    }
-}
-
-/// P4a (#2602): the name a `D1` instance's database has on the account in
-/// `environment`: its derived name, [`env_qualify`]d, as a bucket's is.
-pub(crate) fn d1_database_name(environment: &str, name: &str) -> String {
-    env_qualify(environment, name)
-}
-
 /// P4a (#2602): materialise each `D1` database's environment's name and
 /// recorded id into the generated config at `path`, by binding, as
 /// [`materialise_kv_ids`] does KV ids. A named environment's block copies the
-/// stanza from here ([`synthesise_environment_block`]).
+/// stanza from here (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_d1_databases(
     path: &Path,
     databases: &BTreeMap<String, (String, String)>,
@@ -1458,7 +968,7 @@ pub(crate) fn materialise_d1_databases(
 
 /// #3319: materialise each `Postgres` binding's Hyperdrive config id into the
 /// generated config at `path`, by binding. A named environment's block copies
-/// the stanza from here ([`synthesise_environment_block`]). Only ids go in: the
+/// the stanza from here (`bynk_emit::emitter::wrangler::environment::render`). Only ids go in: the
 /// connection string never reaches a generated file.
 pub(crate) fn materialise_hyperdrive_ids(path: &Path, ids: &BTreeMap<String, String>) -> bool {
     let Ok(text) = std::fs::read_to_string(path) else {
@@ -1475,7 +985,7 @@ pub(crate) fn materialise_hyperdrive_ids(path: &Path, ids: &BTreeMap<String, Str
 
 /// #3301: materialise each linked `StoredSecret`'s store id into the generated
 /// config at `path`, by binding. A named environment's block copies the stanza
-/// from here ([`synthesise_environment_block`]).
+/// from here (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_stored_secret_stores(
     path: &Path,
     stores: &BTreeMap<String, String>,
@@ -1495,7 +1005,7 @@ pub(crate) fn materialise_stored_secret_stores(
 
 /// #3513 A: materialise each linked `MtlsCertificate`'s certificate id into the generated config at
 /// `path`, by binding. A named environment's block copies the stanza from here
-/// ([`synthesise_environment_block`]).
+/// (`bynk_emit::emitter::wrangler::environment::render`).
 pub(crate) fn materialise_mtls_certificates(
     path: &Path,
     certificates: &BTreeMap<String, String>,
@@ -1534,327 +1044,31 @@ pub(crate) fn r2_bucket_name_problem(name: &str) -> Option<&'static str> {
     None
 }
 
-/// Synthesise a `[env.<name>]` table covering every binding Wrangler does not
-/// inherit into a named environment, and append it to the generated config —
-/// slice 4, DECISIONs B and C combined.
-///
-/// **Why this exists at all.** Confirmed against Cloudflare's own docs:
-/// bindings (`kv_namespaces`, `queues.consumers`, `durable_objects`,
-/// `services`) are *non-inheritable* — a bare `--env staging` against the
-/// flat config `emit_wrangler_toml` writes would deploy with **zero**
-/// bindings. `emit_wrangler_toml` cannot fix this itself: it runs at compile
-/// time, before any `--env` is known (there is no `environment` concept
-/// anywhere in `bynk-syntax`/`bynk-check`), so the driver is the only place
-/// this can live.
-///
-/// **Why this appends rather than edits.** The top-level stanza must stay
-/// exactly as emitted — it continues to serve the plain, no-`--env`
-/// `bynk deploy`. So this parses the config only to *read* the values it
-/// needs (via `toml::Table`, not the narrow read-only `WranglerConfig`/
-/// `ServiceBinding`/`QueueConsumer` structs above, which drop fields — e.g.
-/// `ServiceBinding` has no `binding` — that must be copied byte-for-byte),
-/// builds a
-/// *separate* `{ env: { <name>: … } }` table, serialises only that
-/// fragment (so TOML string-escaping is the
-/// `toml` crate's job, not a hand-rolled duplicate of
-/// `bynk-emit`'s private `escape_toml_basic_string`), and appends the result
-/// as text. The original bytes are never touched.
-///
-/// The Worker's own `name` and the targets of Service Bindings to project
-/// contexts are [`deployed_worker_name`]s, and queue names are
-/// environment-qualified ([`env_qualify`]); a foreign Worker's is copied as
-/// declared, since Bynk did not name it (interop I5, #1972); each KV namespace gets its resolved id for this
-/// environment, by binding (S4b, #1967); each rate limiter is copied with the
-/// `namespace_id` already materialised for this environment (P3, #2342); Durable
-/// Object bindings, `exports`, and cron triggers carry no per-environment
-/// identity and are copied verbatim.
-///
-/// #1796: unlike the bindings, `exports` *is* inheritable — Wrangler 4.107's
-/// `normalizeAndValidateEnvironment` reads it with `inheritable(…)`, as it
-/// did `migrations` — so copying it is not what makes it apply. It is copied
-/// anyway, so the `[env.<name>]` block states every Durable Object fact its
-/// bindings rely on rather than leaning on an inheritance rule the bindings
-/// beside it don't follow. The two can't disagree: the copy is verbatim.
-///
-/// #1890: `compatibility_date` and `compatibility_flags` are inheritable too,
-/// and nothing here is environment-specific about them, so neither is copied:
-/// every environment runs under the top level's date and flags.
-pub(crate) fn synthesise_environment_block(
+/// The `[env.<name>]` block of a named-environment deploy, appended to `config_text` (a test
+/// stand-in for the one call `ApplyWorker::environment_block` makes). It is `bynk-emit`'s
+/// renderer (1C.2, Decision A of #4039).
+#[cfg(test)]
+pub(crate) fn environment_block(
     config_text: &str,
     environment: &str,
-    // The resolved id of each KV namespace, by binding. Empty for a context
-    // with no KV.
     kv_ids: &BTreeMap<String, String>,
-    // Interop I5 (#1972): the bindings of Service Bindings to foreign
-    // Workers, whose targets are copied as declared.
     foreign_bindings: &BTreeSet<String>,
 ) -> Result<String, String> {
-    let doc: toml::Table = config_text
-        .parse()
-        .map_err(|e| format!("generated configuration is not valid TOML: {e}"))?;
-
-    let mut env_block = toml::Table::new();
-
-    // #2028: the deployed name, from the function the plan prints it with.
-    if let Some(name) = doc.get("name").and_then(toml::Value::as_str) {
-        env_block.insert(
-            "name".to_string(),
-            toml::Value::String(deployed_worker_name(environment, name)),
-        );
-    }
-
-    if !kv_ids.is_empty()
-        && let Some(toml::Value::Array(namespaces)) = doc.get("kv_namespaces")
-    {
-        let mut namespaces = namespaces.clone();
-        for ns in &mut namespaces {
-            if let toml::Value::Table(t) = ns
-                && let Some(id) = t
-                    .get("binding")
-                    .and_then(toml::Value::as_str)
-                    .and_then(|b| kv_ids.get(b))
-            {
-                t.insert("id".to_string(), toml::Value::String(id.clone()));
-            }
-        }
-        env_block.insert("kv_namespaces".to_string(), toml::Value::Array(namespaces));
-    }
-
-    // P5 (#2323): each bucket under its environment-qualified name.
-    if let Some(toml::Value::Array(buckets)) = doc.get("r2_buckets") {
-        let mut buckets = buckets.clone();
-        for bucket in &mut buckets {
-            if let toml::Value::Table(t) = bucket
-                && let Some(name) = t
-                    .get("bucket_name")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "bucket_name".to_string(),
-                    toml::Value::String(r2_bucket_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert("r2_buckets".to_string(), toml::Value::Array(buckets));
-    }
-
-    // #3479: each index under its environment-qualified name.
-    if let Some(toml::Value::Array(indexes)) = doc.get("vectorize") {
-        let mut indexes = indexes.clone();
-        for index in &mut indexes {
-            if let toml::Value::Table(t) = index
-                && let Some(name) = t
-                    .get("index_name")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "index_name".to_string(),
-                    toml::Value::String(vectorize_index_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert("vectorize".to_string(), toml::Value::Array(indexes));
-    }
-
-    // #3477: each container's application as emitted (an adopted image already
-    // materialised by `materialise_adopted_container_images`). Like `exports`,
-    // it is copied so the `[env.<name>]` block states the container its class
-    // runs rather than leaning on an inheritance rule.
-    if let Some(containers) = doc.get("containers") {
-        env_block.insert("containers".to_string(), containers.clone());
-    }
-
-    // P4a (#2602): each database as the deploy materialised it, under this
-    // environment's name and id (`materialise_d1_databases` runs first).
-    if let Some(databases) = doc.get("d1_databases") {
-        env_block.insert("d1_databases".to_string(), databases.clone());
-    }
-
-    // #3319: each Hyperdrive config as the deploy materialised it, under this
-    // environment's id (`materialise_hyperdrive_ids` runs first). A named
-    // environment's block does not inherit the top level's bindings.
-    if let Some(configs) = doc.get("hyperdrive") {
-        env_block.insert("hyperdrive".to_string(), configs.clone());
-    }
-
-    // P3b (#2582): each dataset under its environment-qualified name, or
-    // staging would write into the default environment's dataset.
-    if let Some(toml::Value::Array(datasets)) = doc.get("analytics_engine_datasets") {
-        let mut datasets = datasets.clone();
-        for dataset in &mut datasets {
-            if let toml::Value::Table(t) = dataset
-                && let Some(name) = t
-                    .get("dataset")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "dataset".to_string(),
-                    toml::Value::String(analytics_dataset_name(environment, &name)),
-                );
-            }
-        }
-        env_block.insert(
-            "analytics_engine_datasets".to_string(),
-            toml::Value::Array(datasets),
-        );
-    }
-
-    // #3513 B: the `[vars]` the dataset names travel in (`Analytics.dataset()` reads them),
-    // each dataset var under the environment-qualified name its binding now has, or
-    // `dataset()` would name the default environment's table from a staging Worker. `vars` is
-    // not inherited by `[env.*]` either. Merged into any `vars` the block already has, never
-    // replacing a variable that is there.
-    if let Some(toml::Value::Table(vars)) = doc.get("vars") {
-        let prefix = "BYNK_DATASET_";
-        let mut carried = toml::Table::new();
-        for (key, value) in vars {
-            let value = match value {
-                toml::Value::String(name) if key.starts_with(prefix) => {
-                    toml::Value::String(analytics_dataset_name(environment, name))
-                }
-                other => other.clone(),
-            };
-            carried.insert(key.clone(), value);
-        }
-        match env_block.get_mut("vars") {
-            Some(toml::Value::Table(existing)) => {
-                for (key, value) in carried {
-                    existing.insert(key, value);
-                }
-            }
-            _ => {
-                env_block.insert("vars".to_string(), toml::Value::Table(carried));
-            }
-        }
-    }
-
-    // #3301: each stored secret as the deploy linked it, with the store's id
-    // (`materialise_stored_secret_stores` runs first). The store is the
-    // account's, so its name carries over as written, with no environment
-    // suffix; bindings are not inherited by `[env.*]`.
-    if let Some(secrets) = doc.get("secrets_store_secrets") {
-        env_block.insert("secrets_store_secrets".to_string(), secrets.clone());
-    }
-
-    // #3513 A: each mTLS certificate as written: the account's certificate, named the same in
-    // every environment, so it carries over with no environment suffix; the deploy slice
-    // resolves its id into the top level first. Bindings are not inherited by `[env.*]`, or a
-    // staging Worker has no `MTLS_*` to call through.
-    if let Some(certificates) = doc.get("mtls_certificates") {
-        env_block.insert("mtls_certificates".to_string(), certificates.clone());
-    }
-
-    // #3302: each email binding as written, restrictions included: it names
-    // no resource of the build, so it is the same in every environment, and
-    // bindings are not inherited by `[env.*]`, or a staging Worker has no
-    // `EMAIL_MAIL` to send through.
-    if let Some(send_email) = doc.get("send_email") {
-        env_block.insert("send_email".to_string(), send_email.clone());
-    }
-
-    // #3300: the Version metadata binding, which names no resource, so it is
-    // the same in every environment; bindings are not inherited by `[env.*]`.
-    if let Some(version_metadata) = doc.get("version_metadata") {
-        env_block.insert("version_metadata".to_string(), version_metadata.clone());
-    }
-
-    // #3577: Workers AI (#3478), AI Search (#3480) and Images (#3515), each as
-    // written: `[ai]` and `[images]` name no resource, and an `[[ai_search]]`
-    // entry names the account's instance as the declaration writes it, the
-    // same in every environment. Bindings are not inherited by `[env.*]`, or a
-    // staging Worker has no `AI`, `AI_SEARCH_*` or `IMAGES` to call. #3513 B: and
-    // the `[analytics]` Analytics SQL binding, which names no resource either.
-    for table in ["ai", "ai_search", "images", "analytics"] {
-        if let Some(value) = doc.get(table) {
-            env_block.insert(table.to_string(), value.clone());
-        }
-    }
-
-    // P3 (#2342): the rate limiters, copied as the top level has them. The
-    // push materialises this environment's `namespace_id`s into the top
-    // level before this block is synthesised from it, so they are already
-    // the right ones; the limit and window are the same in every environment.
-    if let Some(ratelimits) = doc.get("ratelimits") {
-        env_block.insert("ratelimits".to_string(), ratelimits.clone());
-    }
-
-    // P2 (#2578): a producer's queue is qualified as a consumer's is, or
-    // staging would send into the default environment's queue.
-    if let Some(mut queues) = doc.get("queues").cloned() {
-        if let toml::Value::Table(q) = &mut queues {
-            for side in ["consumers", "producers"] {
-                let Some(toml::Value::Array(entries)) = q.get_mut(side) else {
-                    continue;
-                };
-                for entry in entries.iter_mut() {
-                    if let toml::Value::Table(t) = entry
-                        && let Some(name) = t
-                            .get("queue")
-                            .and_then(toml::Value::as_str)
-                            .map(str::to_owned)
-                    {
-                        t.insert(
-                            "queue".to_string(),
-                            toml::Value::String(env_qualify(environment, &name)),
-                        );
-                    }
-                }
-            }
-        }
-        env_block.insert("queues".to_string(), queues);
-    }
-
-    if let Some(toml::Value::Array(services)) = doc.get("services") {
-        let mut services = services.clone();
-        for service in &mut services {
-            let foreign = matches!(service, toml::Value::Table(t)
-                if t.get("binding").and_then(toml::Value::as_str).is_some_and(|b| foreign_bindings.contains(b)));
-            if !foreign
-                && let toml::Value::Table(t) = service
-                && let Some(target) = t
-                    .get("service")
-                    .and_then(toml::Value::as_str)
-                    .map(str::to_owned)
-            {
-                t.insert(
-                    "service".to_string(),
-                    toml::Value::String(deployed_worker_name(environment, &target)),
-                );
-            }
-        }
-        env_block.insert("services".to_string(), toml::Value::Array(services));
-    }
-
-    for key in ["durable_objects", "exports", "triggers"] {
-        if let Some(value) = doc.get(key) {
-            env_block.insert(key.to_string(), value.clone());
-        }
-    }
-
-    if env_block.is_empty() {
-        // No name and nothing to bind (never true of a config `bynk build`
-        // emits, which always names its Worker) — leave the config exactly as
-        // emitted rather than appending an empty table.
-        return Ok(config_text.to_string());
-    }
-
-    let mut env_table = toml::Table::new();
-    env_table.insert(environment.to_string(), toml::Value::Table(env_block));
-    let mut wrapper = toml::Table::new();
-    wrapper.insert("env".to_string(), toml::Value::Table(env_table));
-
-    let appended = toml::to_string_pretty(&wrapper)
-        .map_err(|e| format!("could not serialise the `[env.{environment}]` block: {e}"))?;
-    Ok(format!("{config_text}\n{appended}"))
+    bynk_emit::emitter::wrangler::environment::render(
+        config_text,
+        environment,
+        &bynk_emit::emitter::wrangler::environment::Resolved {
+            kv_ids,
+            foreign_bindings,
+        },
+    )
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+    use bynk_project::worker_layout::WorkerLayout;
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -1884,6 +1098,7 @@ pub(crate) mod tests {
                 .map(|class| DurableObject {
                     class: class.to_string(),
                     storage: "sqlite".to_string(),
+                    jurisdiction: None,
                 })
                 .collect();
             self
@@ -1981,6 +1196,7 @@ pub(crate) mod tests {
                     binding: binding.to_string(),
                     name: name.to_string(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 })
                 .collect();
             self
@@ -2090,21 +1306,73 @@ pub(crate) mod tests {
     /// (a queue) and 372 (KV + agent + queue in one context). Deploy reads what
     /// the emitter writes, so the two must depict the same file.
     fn parse_config(label: &str, text: &str) -> Resources {
+        parse_with(label, text, "shop", &[])
+    }
+
+    /// A binding of `source`, named `name`.
+    fn bnd(name: &str, source: BindingSource) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    /// What the Worker in directory `dir` declares from `bindings`, over the
+    /// tests' project Workers, with no staged migrations.
+    fn declare(dir: &str, bindings: &[WorkerBinding]) -> DeclaredBindings {
+        let scripts = PROJECT_WORKERS
+            .iter()
+            .map(|w| (w.to_string(), w.to_string()))
+            .collect();
+        declared_bindings(
+            Path::new("/nowhere"),
+            dir,
+            bindings,
+            &WorkerLayout::identity(),
+            &scripts,
+        )
+        .unwrap()
+    }
+
+    /// [`parse_config`] with the bindings `bindings` gives the Worker in
+    /// directory `dir`: the settings are read from `text` and the bindings
+    /// from the model, as `deploy` reads a Worker.
+    fn parse_with(label: &str, text: &str, dir: &str, bindings: &[WorkerBinding]) -> Resources {
         let path = temp_config(label);
         std::fs::write(&path, text).unwrap();
-        let resources =
-            read_resources(&path, &names(PROJECT_WORKERS)).expect("the emitted config parses");
+        let resources = read_worker(&path, declare(dir, bindings)).expect("the config parses");
         let _ = std::fs::remove_file(&path);
         resources
     }
 
-    /// #3302: only an `Email` instance with `@allowedSenders` is read, with
+    /// #3302: only an `Email` instance with `@allowedSenders` is declared, with
     /// its addresses, in binding order; an unrestricted one asks nothing.
     #[test]
-    fn email_senders_are_read_from_the_send_email_stanzas() {
-        let resources = parse_config(
+    fn email_senders_are_the_restricted_email_instances() {
+        let email = |name: &str, to: Option<&str>, senders: &[&str]| {
+            bnd(
+                name,
+                BindingSource::Email {
+                    capability: "Cap".into(),
+                    to: to.map(str::to_string),
+                    allowed_recipients: Vec::new(),
+                    allowed_senders: names(senders),
+                },
+            )
+        };
+        let resources = parse_with(
             "email-senders",
-            "name = \"shop\"\n\n[[send_email]]\nname = \"EMAIL_OPS\"\ndestination_address = \"ops@shop.example\"\n\n[[send_email]]\nname = \"EMAIL_MAIL\"\nallowed_sender_addresses = [\"orders@shop.example\", \"billing@shop.example\"]\n\n[[send_email]]\nname = \"EMAIL_ALERTS\"\n",
+            "name = \"shop\"\n",
+            "shop",
+            &[
+                email("EMAIL_OPS", Some("ops@shop.example"), &[]),
+                email(
+                    "EMAIL_MAIL",
+                    None,
+                    &["orders@shop.example", "billing@shop.example"],
+                ),
+                email("EMAIL_ALERTS", None, &[]),
+            ],
         );
         assert_eq!(
             resources.email_senders,
@@ -2199,9 +1467,9 @@ max_batch_size = 10
     /// S4b (#1967): each namespace in the `[env.<name>]` block gets its own
     /// id, by binding, never another's.
     #[test]
-    fn synthesise_environment_block_gives_each_kv_namespace_its_own_id() {
+    fn the_environment_block_gives_each_kv_namespace_its_own_id() {
         let config = "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV\"\nid = \"<KV_NAMESPACE_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n";
-        let out = synthesise_environment_block(
+        let out = environment_block(
             config,
             "staging",
             &kv_ids(&[("KV", "bare-staging"), ("KV_SESSIONS", "sessions-staging")]),
@@ -2221,15 +1489,8 @@ max_batch_size = 10
     }
 
     #[test]
-    fn env_qualify_is_a_no_op_for_default_and_suffixes_otherwise() {
-        assert_eq!(env_qualify("default", "jobs"), "jobs");
-        assert_eq!(env_qualify("staging", "jobs"), "jobs-staging");
-        assert_eq!(env_qualify("staging", "payment"), "payment-staging");
-    }
-
-    #[test]
-    fn synthesise_environment_block_covers_every_binding_kind() {
-        let out = synthesise_environment_block(
+    fn the_environment_block_covers_every_binding_kind() {
+        let out = environment_block(
             FULL_CONFIG,
             "staging",
             &kv_ids(&[("KV", "kv-staging-id")]),
@@ -2348,11 +1609,11 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_is_unchanged_for_the_default_environment() {
-        // `deploy_one` only calls this for a non-default environment, but the
+    fn the_environment_block_is_unchanged_for_the_default_environment() {
+        // The apply only calls this for a non-default environment, but the
         // function itself staying a faithful no-op at the boundary is worth
         // pinning: "default" must never gain a synthesised block.
-        let out = synthesise_environment_block(
+        let out = environment_block(
             FULL_CONFIG,
             "default",
             &kv_ids(&[("KV", "kv-id")]),
@@ -2368,12 +1629,11 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_names_the_worker_even_with_nothing_to_bind() {
+    fn the_environment_block_names_the_worker_even_with_nothing_to_bind() {
         // #2028: the deployed name is stated whether or not anything needs
         // binding, so the push never leans on Wrangler's default for it.
         let bare = "name = \"api\"\nmain = \"index.ts\"\n";
-        let out = synthesise_environment_block(bare, "staging", &BTreeMap::new(), &BTreeSet::new())
-            .unwrap();
+        let out = environment_block(bare, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert!(out.starts_with(bare), "the top level is untouched: {out}");
         let doc: toml::Table = out.parse().unwrap();
         let block = doc["env"]["staging"].as_table().unwrap();
@@ -2426,13 +1686,20 @@ max_batch_size = 10
                 BindingSource::QueueProducer {
                     capability: cap(),
                     queue: "jobs".into(),
+                    signs_to: None,
                 },
             ),
             sample(
                 "AE_X",
                 BindingSource::AnalyticsDataset { capability: cap() },
             ),
-            sample("D1_X", BindingSource::D1Database { capability: cap() }),
+            sample(
+                "D1_X",
+                BindingSource::D1Database {
+                    capability: cap(),
+                    jurisdiction: None,
+                },
+            ),
             sample(
                 "SECRET_X",
                 BindingSource::StoredSecret {
@@ -2498,6 +1765,7 @@ max_batch_size = 10
                 "AGENT",
                 BindingSource::Agent {
                     class_name: "Counter".into(),
+                    jurisdiction: None,
                 },
             ),
             sample(
@@ -2516,6 +1784,7 @@ max_batch_size = 10
                 | BindingSource::R2Instance { .. }
                 | BindingSource::RateLimitInstance { .. }
                 | BindingSource::QueueProducer { .. }
+                | BindingSource::QueueDeadLetter { .. }
                 | BindingSource::AnalyticsDataset { .. }
                 | BindingSource::D1Database { .. }
                 | BindingSource::StoredSecret { .. }
@@ -2547,6 +1816,7 @@ max_batch_size = 10
                 bindings,
                 &["0 * * * *".to_string()],
                 &[],
+                &[],
                 &["orders@shop.example".to_string()],
                 &[],
                 Some(true),
@@ -2572,7 +1842,7 @@ max_batch_size = 10
     /// singleton), so a new kind is held to the same rule without a list to
     /// update.
     #[test]
-    fn every_binding_table_the_emitter_writes_is_copied_into_the_environment() {
+    fn every_table_the_emitter_writes_has_an_environment_rule_and_reaches_the_block() {
         let mut bindings = one_binding_of_every_kind();
         let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
             .expect("the Cloudflare unit is registered");
@@ -2582,6 +1852,27 @@ max_batch_size = 10
                 capability: s.capability.to_string(),
             },
         }));
+        // Every top-level key of the emission has an environment rule: a key outside the
+        // vocabulary would be dropped from `[env.*]` without a word (#3577, #3586).
+        {
+            let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+                .expect("the Cloudflare unit is registered");
+            let emitted: toml::Table = every_kind_config().parse().expect("valid TOML");
+            let unruled: Vec<&String> = emitted
+                .keys()
+                .filter(|key| {
+                    bynk_project::wrangler_keys::WranglerKey::from_top_key(key).is_none()
+                        && !cloudflare
+                            .singletons
+                            .iter()
+                            .any(|s| s.wrangler_table == key.as_str())
+                })
+                .collect();
+            assert!(
+                unruled.is_empty(),
+                "the emitter writes these top-level keys, but `WranglerKey` has no environment rule for them: {unruled:?}"
+            );
+        }
         let tables = emitted_binding_tables(&bindings);
         assert!(
             tables.len() >= 10 && tables.contains("ai") && tables.contains("version_metadata"),
@@ -2598,12 +1889,13 @@ max_batch_size = 10
                 &[],
                 &[],
                 &[],
+                &[],
                 None,
                 &Default::default(),
                 &Default::default(),
             ))
         };
-        let out = synthesise_environment_block(
+        let out = environment_block(
             &config,
             "staging",
             &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
@@ -2624,12 +1916,77 @@ max_batch_size = 10
         );
     }
 
+    /// The text of every-kind emission: one binding of every kind and every singleton, with
+    /// crons, a queue consumer, a dataset `[vars]` entry, and the inherited tables a named
+    /// environment leaves out (`[assets]`, `[cache]`, `[[rules]]`), as `bynk build` leaves it.
+    fn every_kind_config() -> String {
+        use bynk_emit::emitter::{toml_doc::print_toml_document, wrangler::emit_wrangler_toml};
+        let mut bindings = one_binding_of_every_kind();
+        let cloudflare = bynk_check::firstparty::unit(bynk_check::firstparty::CLOUDFLARE_UNIT)
+            .expect("the Cloudflare unit is registered");
+        bindings.extend(cloudflare.singletons.iter().map(|s| WorkerBinding {
+            name: s.binding.to_string(),
+            source: BindingSource::Singleton {
+                capability: s.capability.to_string(),
+            },
+        }));
+        let mut config = print_toml_document(&emit_wrangler_toml(
+            "shop",
+            &bynk_project::worker_layout::WorkerLayout::identity(),
+            &bindings,
+            &["0 * * * *".to_string()],
+            &["jobs".to_string()],
+            &[],
+            &[],
+            &[],
+            None,
+            &Default::default(),
+            &Default::default(),
+        ));
+        config.push_str(
+            "\n[assets]\ndirectory = \"assets\"\n\n[cache]\nenabled = true\n\n[[rules]]\ntype = \"CompiledWasm\"\nglobs = [\"**/*.wasm\"]\n",
+        );
+        config
+    }
+
+    /// Back-half paydown 1C.2, Decision C of #4039: the `[env.*]` block's bytes are pinned before
+    /// anything moves. The config and the block `staging` and `eu-staging` append to it (the
+    /// second for the dataset form), with a KV id resolved for each KV binding and `FOREIGN` a
+    /// foreign Service Binding. A diff here is a stop-and-report, never a bless.
     #[test]
-    fn synthesise_environment_block_is_a_true_no_op_with_nothing_to_state() {
+    fn the_environment_block_bytes_are_pinned() {
+        let config = every_kind_config();
+        let mut out = String::new();
+        for environment in ["staging", "eu-staging"] {
+            out.push_str(&format!("# == {environment} ==\n"));
+            out.push_str(
+                &environment_block(
+                    &config,
+                    environment,
+                    &kv_ids(&[("KV", "kv-id"), ("KV_X", "kv-x-id")]),
+                    &["FOREIGN".to_string()].into_iter().collect(),
+                )
+                .expect("valid TOML in, valid TOML out"),
+            );
+        }
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/deploy/fixtures/every_kind.env.toml");
+        if std::env::var_os("BYNK_WRITE_ENV_FIXTURE").is_some() {
+            std::fs::write(&path, &out).unwrap();
+            return;
+        }
+        assert_eq!(
+            out,
+            include_str!("fixtures/every_kind.env.toml"),
+            "the `[env.*]` block's bytes changed: 1C.2 must not change what `bynk deploy` hands Wrangler"
+        );
+    }
+
+    #[test]
+    fn the_environment_block_is_a_true_no_op_with_nothing_to_state() {
         let nameless = "main = \"index.ts\"\n";
         let out =
-            synthesise_environment_block(nameless, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(nameless, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert_eq!(
             out, nameless,
             "no name and no binding appends nothing, not an empty [env.staging]"
@@ -2637,9 +1994,9 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_rejects_unparseable_config() {
+    fn the_environment_block_rejects_unparseable_config() {
         assert!(
-            synthesise_environment_block(
+            environment_block(
                 "not = valid = toml = =",
                 "staging",
                 &BTreeMap::new(),
@@ -2650,22 +2007,20 @@ max_batch_size = 10
     }
 
     #[test]
-    fn service_targets_are_read_from_the_generated_config() {
-        // The graph is read from the emitted `[[services]]` — the same file
-        // wrangler uploads — so parse the real shape the emitter writes.
+    fn service_targets_are_the_models_service_bindings() {
+        // The graph is the model's `Service` bindings, the list the config's
+        // `[[services]]` is rendered from.
         assert_eq!(
-            parse_config(
+            parse_with(
                 "services",
-                r#"
-name = "commerce-orders"
-main = "index.ts"
-compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
-
-[[services]]
-binding = "COMMERCE_PAYMENT"
-service = "commerce-payment"
-"#,
+                "name = \"commerce-orders\"\nmain = \"index.ts\"\n",
+                "commerce-orders",
+                &[bnd(
+                    "COMMERCE_PAYMENT",
+                    BindingSource::Service {
+                        context: "commerce.payment".into()
+                    }
+                )],
             ),
             Resources::default().binds(&["commerce-payment"]),
         );
@@ -2708,24 +2063,31 @@ max_batch_size = 10
     fn a_producer_declares_the_queues_it_sends_to_apart_from_those_it_consumes() {
         // P2 (#2578): `capability OrderEvents = Queue @name("order-events")`
         // beside a consumer of another queue, and a second producer to it.
-        let declared = parse_config(
+        let producer = |name: &str, queue: &str| {
+            bnd(
+                name,
+                BindingSource::QueueProducer {
+                    capability: "Cap".into(),
+                    queue: queue.into(),
+                    signs_to: None,
+                },
+            )
+        };
+        let declared = parse_with(
             "producers",
             r#"
 name = "shop"
 main = "index.ts"
 
-[[queues.producers]]
-binding = "QUEUE_ORDER_EVENTS"
-queue = "order-events"
-
-[[queues.producers]]
-binding = "QUEUE_AUDIT"
-queue = "audit"
-
 [[queues.consumers]]
 queue = "order-events"
 max_batch_size = 10
 "#,
+            "shop",
+            &[
+                producer("QUEUE_ORDER_EVENTS", "order-events"),
+                producer("QUEUE_AUDIT", "audit"),
+            ],
         );
         assert_eq!(
             declared,
@@ -2737,16 +2099,59 @@ max_batch_size = 10
     }
 
     #[test]
-    fn synthesise_environment_block_qualifies_a_producer_queue() {
+    fn the_environment_block_qualifies_a_producer_queue() {
         // P2 (#2578): unqualified, staging would send into the default
         // environment's queue.
         let config = "name = \"shop\"\n\n[[queues.producers]]\nbinding = \"QUEUE_ORDER_EVENTS\"\nqueue = \"order-events\"\n";
-        let out = synthesise_environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new())
-            .unwrap();
+        let out = environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let producer = &doc["env"]["staging"]["queues"]["producers"][0];
         assert_eq!(producer["queue"].as_str(), Some("order-events-staging"));
         assert_eq!(producer["binding"].as_str(), Some("QUEUE_ORDER_EVENTS"));
+    }
+
+    #[test]
+    fn a_dead_letter_queue_is_created_like_a_queue_the_context_sends_to() {
+        // #3877: the dead-letter queue is read from the consumer's table, so it is made before
+        // the push and recorded only when Bynk made it (a producer-style queue).
+        let declared = parse_with(
+            "dead-letter",
+            r#"
+name = "shop"
+main = "index.ts"
+
+[[queues.consumers]]
+queue = "outbound-email"
+max_batch_size = 10
+dead_letter_queue = "outbound-email-dlq"
+"#,
+            "shop",
+            &[],
+        );
+        assert_eq!(
+            declared,
+            Resources::default()
+                .consumes(&["outbound-email"])
+                .produces(&["outbound-email-dlq"]),
+        );
+        assert_eq!(
+            declared.all_queues(),
+            names(&["outbound-email", "outbound-email-dlq"])
+        );
+    }
+
+    #[test]
+    fn the_environment_block_qualifies_a_dead_letter_queue() {
+        let config = "name = \"shop\"\n\n[[queues.consumers]]\nqueue = \"outbound-email\"\nmax_batch_size = 10\ndead_letter_queue = \"outbound-email-dlq\"\n";
+        let out = environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new()).unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let consumer = &doc["env"]["staging"]["queues"]["consumers"][0];
+        assert_eq!(consumer["queue"].as_str(), Some("outbound-email-staging"));
+        assert_eq!(
+            consumer["dead_letter_queue"].as_str(),
+            Some("outbound-email-dlq-staging")
+        );
+        assert_eq!(consumer["max_batch_size"].as_integer(), Some(10));
     }
 
     #[test]
@@ -2782,17 +2187,13 @@ storage = "sqlite"
         // a queue, in one context. Each kind is read independently, so one
         // present must not mask another.
         assert_eq!(
-            parse_config(
+            parse_with(
                 "everything",
                 r#"
 name = "ops-hub"
 main = "index.ts"
 compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
-
-[[kv_namespaces]]
-binding = "KV"
-id = "<KV_NAMESPACE_ID>" # set at deploy time
 
 [[durable_objects.bindings]]
 name = "JOB_LEDGER"
@@ -2806,6 +2207,8 @@ storage = "sqlite"
 queue = "job-intake"
 max_batch_size = 10
 "#,
+                "ops-hub",
+                &[bnd("KV", BindingSource::Kv)],
             ),
             Resources::default()
                 .needs_kv()
@@ -2856,10 +2259,12 @@ type = "worker"
                 DurableObject {
                     class: "Basket".to_string(),
                     storage: "legacy-kv".to_string(),
+                    jurisdiction: None,
                 },
                 DurableObject {
                     class: "Cart".to_string(),
                     storage: "sqlite".to_string(),
+                    jurisdiction: None,
                 },
             ],
         );
@@ -2901,11 +2306,26 @@ state = "deleted"
     }
 
     #[test]
-    fn rate_limiters_are_read_by_name() {
-        // P3 (#2342): `[[ratelimits]]` are keyed `name`, not `binding`.
-        let resources = parse_config(
+    fn rate_limiters_are_declared_by_binding_name() {
+        // P3 (#2342): a limiter is declared under its binding name.
+        let limiter = |name: &str, limit, period| {
+            bnd(
+                name,
+                BindingSource::RateLimitInstance {
+                    capability: "Cap".into(),
+                    limit,
+                    period,
+                },
+            )
+        };
+        let resources = parse_with(
             "ratelimits",
-            "name = \"registry-publish\"\n\n[[ratelimits]]\nname = \"RATELIMIT_READ_LIMIT\"\nnamespace_id = \"<RATELIMIT_READ_LIMIT_NAMESPACE>\"\nsimple = { limit = 1000, period = 10 }\n\n[[ratelimits]]\nname = \"RATELIMIT_PUBLISH_LIMIT\"\nnamespace_id = \"<RATELIMIT_PUBLISH_LIMIT_NAMESPACE>\"\nsimple = { limit = 20, period = 60 }\n",
+            "name = \"registry-publish\"\n",
+            "registry-publish",
+            &[
+                limiter("RATELIMIT_READ_LIMIT", 1000, 10),
+                limiter("RATELIMIT_PUBLISH_LIMIT", 20, 60),
+            ],
         );
         assert_eq!(
             resources.ratelimits,
@@ -2915,19 +2335,29 @@ state = "deleted"
     }
 
     #[test]
-    fn analytics_datasets_are_read_and_qualified_per_environment() {
+    fn analytics_datasets_are_declared_and_qualified_per_environment() {
         // P3b (#2582): read in binding order, and qualified with `_`.
         let config = "name = \"shop-cart\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
         assert_eq!(
-            parse_config("analytics", config).analytics_datasets,
+            parse_with(
+                "analytics",
+                config,
+                "shop-cart",
+                &[bnd(
+                    "ANALYTICS_SIGNUPS",
+                    BindingSource::AnalyticsDataset {
+                        capability: "Cap".into()
+                    }
+                )]
+            )
+            .analytics_datasets,
             [AnalyticsDecl {
                 binding: "ANALYTICS_SIGNUPS".into(),
                 name: "shop_cart_signups".into(),
             }]
         );
         let out =
-            synthesise_environment_block(config, "eu-staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(config, "eu-staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let datasets = doc["env"]["eu-staging"]["analytics_engine_datasets"]
             .as_array()
@@ -2948,9 +2378,7 @@ state = "deleted"
         // #3513 B: `Analytics.dataset()` reads `BYNK_DATASET_<BINDING>`, so a staging block
         // carries the staging name, beside any other variable the config has (kept as written).
         let config = "name = \"shop-cart\"\n\n[vars]\nBYNK_DATASET_ANALYTICS_SIGNUPS = \"shop_cart_signups\"\nGREETING = \"hello\"\n\n[[analytics_engine_datasets]]\nbinding = \"ANALYTICS_SIGNUPS\"\ndataset = \"shop_cart_signups\"\n";
-        let out =
-            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+        let out = environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let vars = &doc["env"]["staging"]["vars"];
         assert_eq!(
@@ -2966,11 +2394,25 @@ state = "deleted"
     }
 
     #[test]
-    fn r2_buckets_are_read_with_their_names_and_jurisdictions() {
+    fn r2_buckets_are_declared_with_their_names_and_jurisdictions() {
         // P5 (#2323): fixture `2323_r2_workers`'s buckets, in binding order.
-        let resources = parse_config(
+        let bucket = |name: &str, jurisdiction: Option<&str>| {
+            bnd(
+                name,
+                BindingSource::R2Instance {
+                    capability: "Cap".into(),
+                    jurisdiction: jurisdiction.map(str::to_string),
+                },
+            )
+        };
+        let resources = parse_with(
             "r2-buckets",
-            "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n\n[[r2_buckets]]\nbinding = \"R2_ARCHIVES\"\nbucket_name = \"registry-store-archives\"\n",
+            "name = \"registry-store\"\n",
+            "registry-store",
+            &[
+                bucket("R2_INDEXES", Some("eu")),
+                bucket("R2_ARCHIVES", None),
+            ],
         );
         assert_eq!(
             resources.r2_buckets,
@@ -3001,30 +2443,50 @@ state = "deleted"
                 .unwrap()
                 .as_nanos()
         ));
-        let migrations = dir.join("migrations/shop-orders");
+        let migrations = dir.join("shop/migrations/shop-orders");
         std::fs::create_dir_all(&migrations).unwrap();
         for file in ["0002_more.sql", "0001_create.sql"] {
             std::fs::write(migrations.join(file), "SELECT 1;").unwrap();
         }
-        let config = dir.join("wrangler.toml");
-        std::fs::write(
-            &config,
-            "name = \"shop\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\nmigrations_dir = \"migrations/shop-orders\"\n",
-        )
-        .unwrap();
-        let resources = read_resources(&config, &names(PROJECT_WORKERS));
+        let declared = declared_bindings(
+            &dir,
+            "shop",
+            &[bnd(
+                "D1_ORDERS",
+                BindingSource::D1Database {
+                    capability: "Cap".into(),
+                    jurisdiction: None,
+                },
+            )],
+            &WorkerLayout::identity(),
+            &BTreeMap::new(),
+        );
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
-            resources.unwrap().d1_databases[0].migrations,
+            declared.unwrap().d1_databases[0].migrations,
             ["0001_create.sql", "0002_more.sql"]
         );
     }
 
     #[test]
-    fn d1_databases_are_read_in_binding_order_and_copied_into_a_named_environment() {
+    fn d1_databases_are_declared_in_binding_order_and_copied_into_a_named_environment() {
         // P4a (#2602).
         let config = "name = \"shop-cart\"\n\n[[d1_databases]]\nbinding = \"D1_ORDERS\"\ndatabase_name = \"shop-cart-orders\"\ndatabase_id = \"<D1_ORDERS_ID>\"\n\n[[d1_databases]]\nbinding = \"D1_AUDIT\"\ndatabase_name = \"shop-cart-audit\"\ndatabase_id = \"<D1_AUDIT_ID>\"\n";
-        let resources = parse_config("d1-databases", config);
+        let database = |name: &str| {
+            bnd(
+                name,
+                BindingSource::D1Database {
+                    capability: "Cap".into(),
+                    jurisdiction: None,
+                },
+            )
+        };
+        let resources = parse_with(
+            "d1-databases",
+            config,
+            "shop-cart",
+            &[database("D1_ORDERS"), database("D1_AUDIT")],
+        );
         assert_eq!(
             resources.d1_databases,
             [
@@ -3032,11 +2494,13 @@ state = "deleted"
                     binding: "D1_AUDIT".into(),
                     name: "shop-cart-audit".into(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 },
                 D1Decl {
                     binding: "D1_ORDERS".into(),
                     name: "shop-cart-orders".into(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 },
             ]
         );
@@ -3052,13 +2516,8 @@ state = "deleted"
             )]),
         )
         .unwrap();
-        let out = synthesise_environment_block(
-            &materialised,
-            "staging",
-            &BTreeMap::new(),
-            &BTreeSet::new(),
-        )
-        .unwrap();
+        let out = environment_block(&materialised, "staging", &BTreeMap::new(), &BTreeSet::new())
+            .unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let databases = doc["env"]["staging"]["d1_databases"].as_array().unwrap();
         assert_eq!(
@@ -3073,9 +2532,7 @@ state = "deleted"
     #[test]
     fn a_named_environment_qualifies_each_bucket_and_keeps_its_jurisdiction() {
         let config = "name = \"registry-store\"\n\n[[r2_buckets]]\nbinding = \"R2_INDEXES\"\nbucket_name = \"registry-store-indexes\"\njurisdiction = \"eu\"\n";
-        let out =
-            synthesise_environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+        let out = environment_block(config, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let buckets = doc["env"]["staging"]["r2_buckets"].as_array().unwrap();
         assert_eq!(
@@ -3133,22 +2590,38 @@ state = "deleted"
     }
 
     #[test]
-    fn the_bare_namespace_and_each_instance_are_read_apart() {
+    fn the_bare_namespace_and_each_instance_are_declared_apart() {
         // S4b (#1967): fixture `1966_derived_kv_workers`'s namespaces beside
         // the bare `KV`. The config lists them in emission order; the
         // instances come back in binding order.
-        let resources = parse_config(
+        let instance = |name: &str| {
+            bnd(
+                name,
+                BindingSource::KvInstance {
+                    capability: "Cap".into(),
+                },
+            )
+        };
+        let resources = parse_with(
             "kv-instances",
-            "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV\"\nid = \"<KV_NAMESPACE_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n\n[[kv_namespaces]]\nbinding = \"KV_PRICE_CACHE\"\nid = \"<KV_PRICE_CACHE_ID>\"\n",
+            "name = \"shop-cart\"\n",
+            "shop-cart",
+            &[
+                bnd("KV", BindingSource::Kv),
+                instance("KV_SESSIONS"),
+                instance("KV_PRICE_CACHE"),
+            ],
         );
         assert!(resources.needs_kv);
         assert_eq!(
             resources.kv_instances,
             names(&["KV_PRICE_CACHE", "KV_SESSIONS"])
         );
-        let instances_only = parse_config(
+        let instances_only = parse_with(
             "kv-instances-only",
-            "name = \"shop-cart\"\n\n[[kv_namespaces]]\nbinding = \"KV_SESSIONS\"\nid = \"<KV_SESSIONS_ID>\"\n",
+            "name = \"shop-cart\"\n",
+            "shop-cart",
+            &[instance("KV_SESSIONS")],
         );
         assert!(
             !instances_only.needs_kv,
@@ -3168,7 +2641,8 @@ state = "deleted"
             "name = \"cart\"\n\n[exports.Cart]\ntype = \"durable-object\"\n",
         )
         .unwrap();
-        let err = read_resources(&path, &[]).expect_err("a live class with no backend is refused");
+        let err = read_worker(&path, DeclaredBindings::default())
+            .expect_err("a live class with no backend is refused");
         let _ = std::fs::remove_file(&path);
         assert!(
             err.contains("`exports.Cart`") && err.contains("`storage`"),
@@ -3176,43 +2650,30 @@ state = "deleted"
         );
     }
 
-    /// #3479: an index's name comes from the config's `[[vectorize]]` and its
-    /// configuration from the manifest beside it; a stanza the manifest does not
-    /// state is an error (an index made with a guessed shape cannot be corrected),
-    /// and a named environment's block carries the qualified name.
-    /// #3477: a container is read from the config's `[[containers]]` and its
-    /// manifest, which states what the stanza does not; the `[env.<name>]` block
-    /// copies the application, and the config alone does not describe a container.
+    /// #3477: a container is declared from the model's `ContainerInstance`,
+    /// which states what the config's `[[containers]]` stanza does not; the
+    /// `[env.<name>]` block copies the application, and the config alone does
+    /// not describe a container.
     #[test]
-    fn a_container_is_read_from_the_config_and_its_manifest() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-containers-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
-        std::fs::write(&config, text).unwrap();
-
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("does not describe the container of `__Container_Renderer`"),
-            "{error}"
+    fn a_container_is_declared_from_the_model() {
+        let declared = declare(
+            "shop",
+            &[bnd(
+                "CONTAINER_RENDERER",
+                BindingSource::ContainerInstance {
+                    capability: "Renderer".into(),
+                    class_name: "__Container_Renderer".into(),
+                    build: "containers/render".into(),
+                    root_from_worker: "../../..".into(),
+                    port: 8080,
+                    sleep_after: None,
+                    instance_type: Some("standard-1".into()),
+                    forward: Vec::new(),
+                },
+            )],
         );
-
-        let manifest = dir.join(bynk_emit::emitter::wrangler::CONTAINERS_MANIFEST);
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"containers\": [{ \"capability\": \"Renderer\", \"class\": \"__Container_Renderer\", \"build\": \"containers/render\", \"instance_type\": \"standard-1\" }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
         assert_eq!(
-            read.containers,
+            declared.containers,
             [ContainerDecl {
                 capability: "Renderer".into(),
                 class: "__Container_Renderer".into(),
@@ -3221,54 +2682,34 @@ state = "deleted"
                 adopt: None,
             }]
         );
-
-        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("unsupported bynk-containers.json version 2"),
-            "{error}"
-        );
-
+        let text = "name = \"shop\"\n\n[[containers]]\nclass_name = \"__Container_Renderer\"\nscheduling_policy = \"durable_object\"\n\n[containers.images.Renderer]\ndockerfile = \"../../../containers/render/Dockerfile\"\nbuild_context = \"../../../containers/render\"\n";
         let synthesised =
-            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         let doc: toml::Table = synthesised.parse().unwrap();
         let copied = &doc["env"]["staging"]["containers"][0];
         assert_eq!(copied["scheduling_policy"].as_str(), Some("durable_object"));
         assert!(copied["images"]["Renderer"].get("dockerfile").is_some());
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// #3479: an index's name and configuration are declared from the model's
+    /// `VectorizeIndex` (an index made with a guessed shape cannot be
+    /// corrected), and a named environment's block carries the qualified name.
     #[test]
-    fn a_vectorize_index_is_read_from_the_config_and_its_manifest() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-vectorize-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
-        std::fs::write(&config, text).unwrap();
-
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("does not state the configuration of `VECTORIZE_DOCS`"),
-            "{error}"
+    fn a_vectorize_index_is_declared_from_the_model() {
+        let declared = declare(
+            "shop",
+            &[bnd(
+                "VECTORIZE_DOCS",
+                BindingSource::VectorizeIndex {
+                    capability: "Cap".into(),
+                    dimensions: 768,
+                    metric: "cosine".into(),
+                    indexed: vec!["category:string".into()],
+                },
+            )],
         );
-
-        let manifest = dir.join(bynk_emit::emitter::wrangler::VECTORIZE_MANIFEST);
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"vectorize\": [{ \"binding\": \"VECTORIZE_DOCS\", \"dimensions\": 768, \"metric\": \"cosine\", \"indexed\": [\"category:string\"] }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
         assert_eq!(
-            read.vectorize_indexes,
+            declared.vectorize_indexes,
             [VectorizeDecl {
                 binding: "VECTORIZE_DOCS".into(),
                 name: "shop-docs".into(),
@@ -3278,61 +2719,38 @@ state = "deleted"
                 adopt: None,
             }]
         );
-
-        std::fs::write(&manifest, "{ \"version\": 2 }").unwrap();
-        let error = read_resources(&config, &[]).unwrap_err();
-        assert!(
-            error.contains("unsupported bynk-vectorize.json version 2"),
-            "{error}"
-        );
-
+        let text = "name = \"shop\"\n\n[[vectorize]]\nbinding = \"VECTORIZE_DOCS\"\nindex_name = \"shop-docs\"\n";
         let synthesised =
-            synthesise_environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new())
-                .unwrap();
+            environment_block(text, "staging", &BTreeMap::new(), &BTreeSet::new()).unwrap();
         assert!(
             synthesised.contains("index_name = \"shop-docs-staging\""),
             "{synthesised}"
         );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Hyperdrive H5 (#3322): a binding the Hyperdrive manifest lists is MySQL's,
-    /// with its `@tls` mode; one it does not is Postgres'; a version or kind this
-    /// deploy does not know is refused, not guessed.
+    /// Hyperdrive H5 (#3322): a `MySql` binding is MySQL's, with its `@tls`
+    /// mode; a `Postgres` one is Postgres'.
     #[test]
-    fn the_hyperdrive_manifest_names_the_mysql_bindings_and_refuses_what_it_does_not_know() {
-        let dir = std::env::temp_dir().join(format!(
-            "bynk-hyperdrive-manifest-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        let config = dir.join("wrangler.toml");
-        std::fs::write(
-            &config,
-            "name = \"shop\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_MAIN\"\nid = \"<A>\"\n\n[[hyperdrive]]\nbinding = \"HYPERDRIVE_LEGACY\"\nid = \"<B>\"\n",
-        )
-        .unwrap();
-        let manifest = dir.join(bynk_emit::emitter::wrangler::HYPERDRIVE_MANIFEST);
-
-        // No manifest: both are Postgres', as a Postgres-only project's are.
-        let none = read_resources(&config, &[]).unwrap();
-        assert!(
-            none.hyperdrive
-                .iter()
-                .all(|h| h.kind == HyperdriveKind::Postgres)
+    fn a_hyperdrive_binding_is_mysql_or_postgres_by_its_source() {
+        let declared = declare(
+            "shop",
+            &[
+                bnd(
+                    "HYPERDRIVE_MAIN",
+                    BindingSource::Postgres {
+                        capability: "Main".into(),
+                    },
+                ),
+                bnd(
+                    "HYPERDRIVE_LEGACY",
+                    BindingSource::MySql {
+                        capability: "Legacy".into(),
+                        tls: Some("verify-ca".into()),
+                    },
+                ),
+            ],
         );
-
-        std::fs::write(
-            &manifest,
-            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"mysql\", \"tls\": \"verify-ca\" }] }",
-        )
-        .unwrap();
-        let read = read_resources(&config, &[]).unwrap();
-        let kinds: Vec<_> = read
+        let kinds: Vec<_> = declared
             .hyperdrive
             .iter()
             .map(|h| (h.binding.as_str(), h.kind, h.tls.as_deref()))
@@ -3348,15 +2766,6 @@ state = "deleted"
                 ("HYPERDRIVE_MAIN", HyperdriveKind::Postgres, None),
             ]
         );
-
-        for bad in [
-            "{ \"version\": 9, \"hyperdrive\": [] }",
-            "{ \"version\": 1, \"hyperdrive\": [{ \"binding\": \"HYPERDRIVE_LEGACY\", \"kind\": \"oracle\" }] }",
-        ] {
-            std::fs::write(&manifest, bad).unwrap();
-            assert!(read_resources(&config, &[]).is_err(), "{bad}");
-        }
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -3413,6 +2822,26 @@ state = "deleted"
 #[cfg(test)]
 mod foreign_service_tests {
     use super::*;
+    use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
+    use bynk_project::worker_groups::{WorkerGroup, WorkerGroups};
+    use bynk_project::worker_layout::WorkerLayout;
+
+    fn bnd(name: &str, source: BindingSource) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source,
+        }
+    }
+
+    fn foreign(name: &str, worker: &str) -> WorkerBinding {
+        bnd(
+            name,
+            BindingSource::ForeignService {
+                capability: "Cap".into(),
+                worker: worker.into(),
+            },
+        )
+    }
 
     const WITH_FOREIGN: &str = r#"
 name = "shop-billing"
@@ -3437,14 +2866,23 @@ service = "legacy-billing"
     /// build's Workers is a foreign Worker, kept out of the deploy graph.
     #[test]
     fn a_service_to_a_worker_outside_the_build_is_foreign() {
-        let path = std::env::temp_dir().join(format!(
-            "bynk-foreign-{}-{:?}.toml",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        std::fs::write(&path, WITH_FOREIGN).unwrap();
-        let resources = read_resources(&path, &["payment".to_string()]).unwrap();
-        let _ = std::fs::remove_file(&path);
+        let resources = declared_bindings(
+            Path::new("/nowhere"),
+            "shop-billing",
+            &[
+                bnd(
+                    "PAYMENT",
+                    BindingSource::Service {
+                        context: "payment".into(),
+                    },
+                ),
+                foreign("SERVICE_LEDGER", "ledger"),
+                foreign("SERVICE_BILLING", "legacy-billing"),
+            ],
+            &WorkerLayout::identity(),
+            &BTreeMap::from([("payment".to_string(), "payment".to_string())]),
+        )
+        .unwrap();
         assert_eq!(resources.binds_to, ["payment"]);
         assert_eq!(
             resources.foreign_services,
@@ -3465,13 +2903,12 @@ service = "legacy-billing"
     /// qualified and a foreign Worker's is copied as declared — Bynk did not
     /// name it, so `legacy-billing-staging` would be a Worker nobody made.
     #[test]
-    fn synthesise_environment_block_leaves_a_foreign_target_as_declared() {
+    fn the_environment_block_leaves_a_foreign_target_as_declared() {
         let foreign: BTreeSet<String> = ["SERVICE_BILLING", "SERVICE_LEDGER"]
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let out = synthesise_environment_block(WITH_FOREIGN, "staging", &BTreeMap::new(), &foreign)
-            .unwrap();
+        let out = environment_block(WITH_FOREIGN, "staging", &BTreeMap::new(), &foreign).unwrap();
         let doc: toml::Table = out.parse().unwrap();
         let services: Vec<(&str, &str)> = doc["env"]["staging"]["services"]
             .as_array()
@@ -3502,28 +2939,46 @@ service = "legacy-billing"
     fn a_group_is_one_node_in_the_deploy_graph() {
         let root = std::env::temp_dir().join(format!("bynk-group-graph-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let write = |dir: &str, name: &str, services: &[&str]| {
+        for (dir, name) in [
+            ("core", "core-script"),
+            ("web", "web"),
+            ("pay", "pay"),
+            ("odd", "odd"),
+        ] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
-            let mut text = format!("name = \"{name}\"\n");
-            for (i, service) in services.iter().enumerate() {
-                text.push_str(&format!(
-                    "\n[[services]]\nbinding = \"B{i}\"\nservice = \"{service}\"\n"
-                ));
-            }
-            std::fs::write(root.join(dir).join("wrangler.toml"), text).unwrap();
-        };
+            std::fs::write(
+                root.join(dir).join("wrangler.toml"),
+                format!("name = \"{name}\"\n"),
+            )
+            .unwrap();
+        }
         // `core` is a group renamed `core-script`; it binds to itself and to `pay`.
-        write("core", "core-script", &["core-script", "pay"]);
-        // `web` binds to the group by its script name.
-        write("web", "web", &["core-script"]);
-        write("pay", "pay", &[]);
-        // `odd` names the group's *directory*, which is not a script on Cloudflare.
-        write("odd", "odd", &["core"]);
+        // `web` binds to the group by its script name. `odd` names the group's
+        // *directory*, which is not a script on Cloudflare.
+        let model = bynk_emit::emit_model::WorkersBuild {
+            bindings: bynk_emit::emitter::WorkerBindings::of_workers(BTreeMap::from([
+                (
+                    "core".to_string(),
+                    vec![foreign("B0", "core-script"), foreign("B1", "pay")],
+                ),
+                ("web".to_string(), vec![foreign("B0", "core-script")]),
+                ("pay".to_string(), Vec::new()),
+                ("odd".to_string(), vec![foreign("B0", "core")]),
+            ])),
+            layout: WorkerLayout::from_groups(&WorkerGroups::from([(
+                "core".to_string(),
+                WorkerGroup {
+                    contexts: vec!["shop.orders".to_string(), "shop.pricing".to_string()],
+                    name: Some("core-script".to_string()),
+                    ..WorkerGroup::default()
+                },
+            )])),
+        };
         let workers: Vec<String> = ["core", "odd", "pay", "web"]
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let resources = project_resources(&root, &workers).unwrap();
+        let resources = project_resources(&root, &workers, &model).unwrap();
         let _ = std::fs::remove_dir_all(&root);
         assert_eq!(resources["core"].binds_to, ["pay"], "no edge to itself");
         assert_eq!(resources["web"].binds_to, ["core"], "by directory");

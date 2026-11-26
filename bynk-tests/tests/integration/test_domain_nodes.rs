@@ -178,7 +178,7 @@ fn advance_is_a_call_statement() {
     let text = emit(
         "ck/holds.bynk",
         HOLDS,
-        "suite ck.holds {\n  case \"c\" {\n    advance Clock by 16.minutes\n    let back = 0.minutes - 1.minutes\n    advance Clock by back\n  }\n}\n",
+        "suite ck.holds {\n  case \"c\" {\n    advance Clock by 16.minutes\n    let back = 0.minutes - 1.minute\n    advance Clock by back\n  }\n}\n",
     );
     assert!(text.contains("__bynkAdvanceClock(960000);"), "{text}");
     assert!(text.contains("__bynkAdvanceClock(back);"), "{text}");

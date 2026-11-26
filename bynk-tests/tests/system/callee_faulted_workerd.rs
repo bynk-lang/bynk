@@ -23,7 +23,7 @@ use bynk_driver::project::BuildTarget;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 #[path = "../require/mod.rs"]
@@ -37,7 +37,7 @@ const WRANGLER: &str = wrangler::SPEC;
 const SOURCE_CALLEE: &str = r#"context fault.callee
 
 service square {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n * n)
   }
 }
@@ -62,17 +62,6 @@ service api from http {
 
 fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
-}
-
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves.
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
 }
 
 fn skip(reason: &str) -> bool {
@@ -167,13 +156,9 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         );
     }
 
-    // Four ports (two servers, two inspectors) in a band clear of the other
-    // workerd tests' (20_000 + 2·pid, 30_000 + 4·pid, 40_000 + 2·pid,
-    // 45_000 + 4·pid and 55_000 + 2·pid, each pid bounded), so they can all
-    // run at once.
-    let base = 63_000 + 4 * (std::process::id() % 600) as u16;
-    let callee_port = base;
-    let caller_port = base + 1;
+    // Four ports: two servers and two inspectors.
+    let [callee_port, caller_port, callee_inspector, caller_inspector] =
+        wrangler::ports::free_ports();
     let callee_log = tmp.join("callee-wrangler.log");
     let caller_log = tmp.join("caller-wrangler.log");
     let spawn = |dir: &Path,
@@ -184,8 +169,8 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         let out_log = fs::File::create(log_path)?;
         let err_log = out_log.try_clone()?;
         wrangler::Wrangler::spawn(
-            base_command("npx")
-                .args(["-y", WRANGLER, "dev"])
+            wrangler::npx()
+                .args(["dev"])
                 // I2 (#1971): the caller signs each call under the key for its
                 // edge to the callee, as under `bynk dev`.
                 .args(wrangler::local_edge_vars(&[(
@@ -205,8 +190,8 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         )
     };
 
-    let callee = spawn(&callee_dir, callee_port, base + 2, &callee_log);
-    let caller = spawn(&caller_dir, caller_port, base + 3, &caller_log);
+    let callee = spawn(&callee_dir, callee_port, callee_inspector, &callee_log);
+    let caller = spawn(&caller_dir, caller_port, caller_inspector, &caller_log);
     let wranglers = match (callee, caller) {
         (Ok(a), Ok(b)) => Wranglers(vec![a, b]),
         (a, b) => {

@@ -8,9 +8,27 @@
 //! created again (slice 5, DECISION B).
 
 use super::*;
+use crate::cloudflare::CloudflareError;
 
 /// The KV kind.
 pub(crate) struct Kv;
+
+impl Kv {
+    /// Slice 5, DECISION B: once per run, not once per context (an account-wide list), and only
+    /// when it could change an outcome: a Worker of `cx.order` binds a namespace whose id is
+    /// recorded (a first deploy has nothing to check drift against). `None` (no wrangler, or
+    /// the call failed) trusts the ledger unconditionally, as every deploy before that slice did.
+    pub(crate) fn read_live(tools: Tools<'_>, cx: &ProjectCx<'_>) -> Option<BTreeSet<String>> {
+        if cx.order.iter().any(|worker| {
+            kv_bindings(&cx.resources[worker])
+                .any(|binding| cx.ledger.recorded::<Kv>(worker, binding).is_some())
+        }) {
+            live_kv_namespace_ids(tools.api)
+        } else {
+            None
+        }
+    }
+}
 
 /// [`Kv`]'s records: the bare namespace in `Environment::kv`, by Worker, and each instance in
 /// `Environment::kv_instances`, by Worker and binding.
@@ -89,10 +107,16 @@ impl ResourceKind for Kv {
     type Table = KvTable;
     type Line<'r> = PlanKv<'r>;
     type Orphan = OrphanKv;
-    /// The account's namespace ids, when they were read ([`live_kv_namespace_ids`]).
-    type Live = Option<BTreeSet<String>>;
+    /// The account's namespace ids, when they were read ([`Kv::read_live`]).
+    type Live<'a> = Option<&'a BTreeSet<String>>;
     /// The namespace id.
     type Bound = String;
+    type Change = TableChange<KvTable>;
+    type Step<'r> = KvStep<'r>;
+
+    const GUARDS: &'static [&'static str] = &[
+        "a `reuse` whose recorded id the account's live ids lack is created again, after the cross-environment title check",
+    ];
 
     fn declared(r: &Resources) -> Vec<&str> {
         kv_bindings(r).collect()
@@ -110,16 +134,39 @@ impl ResourceKind for Kv {
         &mut context.kv
     }
 
-    fn plan_line<'r>(cx: &PlanCx<'_>, binding: Self::Decl<'r>) -> PlanKv<'r> {
+    fn live_in<'a>(lives: Lives<'a>) -> Option<&'a BTreeSet<String>> {
+        lives.kv
+    }
+
+    fn plan_line<'r>(
+        cx: &PlanCx<'_>,
+        binding: Self::Decl<'r>,
+        _live: Option<&BTreeSet<String>>,
+    ) -> PlanKv<'r> {
+        let step = kv_step(cx, binding);
         PlanKv {
             binding,
-            action: if cx.ledger.recorded::<Kv>(cx.worker, binding).is_some() {
-                "reuse"
-            } else {
-                "create"
-            },
+            action: step.action(),
             namespace: kv_title(cx.worker, binding, cx.ledger.environment),
         }
+    }
+
+    fn steps<'r>(
+        cx: &PlanCx<'_>,
+        declared: &'r Resources,
+        _live: Self::Live<'_>,
+    ) -> Vec<KvStep<'r>> {
+        kv_bindings(declared)
+            .map(|binding| kv_step(cx, binding))
+            .collect()
+    }
+
+    fn steps_of<'p, 'r>(steps: &'p WorkerSteps<'r>) -> &'p [KvStep<'r>] {
+        &steps.kv
+    }
+
+    fn steps_mut<'p, 'r>(steps: &'p mut WorkerSteps<'r>) -> &'p mut Vec<KvStep<'r>> {
+        &mut steps.kv
     }
 
     fn short_line(kv: &PlanKv<'_>, out: &mut String) {
@@ -183,8 +230,8 @@ impl ResourceKind for Kv {
         &orphans.kv
     }
 
-    fn orphans_in_mut(orphans: &mut Orphans) -> &mut Vec<OrphanKv> {
-        &mut orphans.kv
+    fn set_orphans(orphans: &mut Orphans, found: Vec<OrphanKv>) {
+        orphans.kv = found;
     }
 
     /// The bare namespace with its Worker, or on its own once the live Worker stops using the
@@ -256,7 +303,10 @@ impl ResourceKind for Kv {
 
     /// Deletes the namespace by its recorded id, and forgets it whether the delete removed it
     /// or found it gone (DECISION E). An orphan with no recorded id is left alone.
-    fn prune(cx: &mut ApplyCx<'_, Kv>, orphan: &OrphanKv) -> Result<Option<String>, DeployFailure> {
+    fn prune(
+        cx: &StepCx<'_, '_, Kv>,
+        orphan: &OrphanKv,
+    ) -> Result<Option<Commit<Self::Change>>, DeployFailure> {
         let (worker, binding) = (orphan.worker.as_str(), orphan.binding());
         let Some(id) = cx
             .ledger()
@@ -269,68 +319,43 @@ impl ResourceKind for Kv {
             None => format!("the orphaned KV namespace for `{worker}`"),
             Some(binding) => format!("the orphaned KV namespace `{binding}` for `{worker}`"),
         };
-        delete_kv_namespace(cx.tools.provenance, &id, cx.tools.project_root)
+        delete_kv_namespace(cx.tools.api, &id)
             .map_err(|e| DeployFailure::driver(format!("could not delete {what}: {e}")))?;
-        cx.forget(binding);
-        Ok(Some(what))
+        Ok(Some(Commit::recorded(
+            TableChange::remove(worker, binding),
+            &format!("deleted {what}"),
+        )))
     }
 
-    /// Slice 5, DECISION B: once per run, not once per context (an account-wide list), and only
-    /// when it could change an outcome: a Worker of `cx.order` binds a namespace whose id is
-    /// recorded (a first deploy has nothing to check drift against). `None` (no wrangler, or
-    /// the call failed) trusts the ledger unconditionally, as every deploy before that slice did.
-    fn live(tools: Tools<'_>, cx: &ProjectCx<'_>) -> Option<BTreeSet<String>> {
-        if cx.order.iter().any(|worker| {
-            kv_bindings(&cx.resources[worker])
-                .any(|binding| cx.ledger.recorded::<Kv>(worker, binding).is_some())
-        }) {
-            live_kv_namespace_ids(tools.provenance, tools.project_root)
-        } else {
-            None
-        }
-    }
-
-    /// Reuses the recorded id when [`should_trust_recorded_kv`]; otherwise creates the namespace
-    /// under its current title and records it.
-    fn provision(
-        cx: &mut ApplyCx<'_, Kv>,
-        binding: &str,
-    ) -> Result<Provisioned<String>, DeployFailure> {
-        let (worker, environment) = (cx.worker, cx.environment);
-        let recorded = cx
-            .ledger()
-            .recorded::<Kv>(worker, binding)
-            .map(|kv| kv.id.clone());
-        if should_trust_recorded_kv(recorded.as_deref(), cx.live.as_ref()) {
+    /// The step's decision, unless its guard says otherwise: a recorded id is reused when
+    /// [`should_trust_recorded_kv`]; otherwise the namespace is created under its current title and
+    /// recorded.
+    fn apply(cx: &StepCx<'_, '_, Kv>, step: &KvStep<'_>) -> Result<Applied<Kv>, DeployFailure> {
+        let (worker, environment, binding) = (cx.worker, cx.environment, step.binding);
+        let recorded = match &step.decision {
+            KvDecision::Reuse { id } => Some(id.as_str()),
+            KvDecision::Create => None,
+        };
+        // The guard (#4001 Decision B): the live ids are read after the confirmation, so the plan,
+        // offline under `--dry-run`, cannot see that a recorded namespace has gone.
+        if should_trust_recorded_kv(recorded, cx.live) {
             let id = recorded.expect("trust_recorded is only true when recorded is Some");
-            return Ok(Provisioned {
-                bound: Some((binding.to_string(), id)),
-                recorded: None,
-            });
+            return Ok(Applied::bound(binding, id.to_string()));
         }
         // #2059: the plan-time check covered only namespaces with no recorded id. One whose
         // recorded id has gone from the account is created again here, under its current title,
         // so compare that title across environments now, before `kv namespace create`.
-        if let Some(message) = cross_environment_title_clash(
-            cx.project,
-            cx.ledger(),
-            &[(worker, binding)],
-            cx.live.as_ref(),
-        ) {
+        if let Some(message) =
+            cross_environment_title_clash(cx.project, cx.ledger(), &[(worker, binding)], cx.live)
+        {
             return Err(DeployFailure::driver(message));
         }
         let what = kv_namespace_noun(worker, binding);
-        let id = create_kv(
-            cx.tools.provenance,
-            &kv_title(worker, binding, environment),
-            cx.tools.project_root,
-        )
-        .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
-        cx.record(binding, KvNamespace::of(&id));
-        Ok(Provisioned {
-            bound: Some((binding.to_string(), id)),
-            recorded: Some(what),
-        })
+        let id = create_kv(cx.tools.api, &kv_title(worker, binding, environment))
+            .map_err(|e| DeployFailure::driver(format!("could not create {what}: {e}")))?;
+        // Recorded before the push, so an interrupted run never makes a second namespace.
+        let record = cx.recording(binding, KvNamespace::of(&id), &format!("created {what}"));
+        Ok(Applied::bound(binding, id).with(record))
     }
 
     fn materialise(
@@ -419,7 +444,7 @@ pub(crate) fn kv_bindings(declared: &Resources) -> impl Iterator<Item = &str> {
 }
 
 /// Slice 5, DECISION B, extracted for direct testing (review, #840): should
-/// `deploy_one` trust a recorded KV id, or treat it as though nothing were
+/// the apply trust a recorded KV id, or treat it as though nothing were
 /// recorded at all?
 ///
 /// - No record at all → never trust (nothing to trust).
@@ -437,6 +462,43 @@ pub(crate) fn should_trust_recorded_kv(
         (Some(id), Some(live)) => live.contains(id),
         (Some(_), None) => true,
         (None, _) => false,
+    }
+}
+
+/// One KV namespace's step (1D.2b): its binding, and what the ledger decided for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KvStep<'r> {
+    pub(crate) binding: &'r str,
+    pub(crate) decision: KvDecision,
+}
+
+/// What the ledger decides for one KV namespace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum KvDecision {
+    /// The ledger records the namespace: bind its id.
+    Reuse { id: String },
+    /// It does not: make one.
+    Create,
+}
+
+impl KvStep<'_> {
+    /// The plan's word for the step.
+    pub(crate) fn action(&self) -> &'static str {
+        match self.decision {
+            KvDecision::Reuse { .. } => "reuse",
+            KvDecision::Create => "create",
+        }
+    }
+}
+
+/// `worker`'s step for `binding`, from the ledger.
+fn kv_step<'r>(cx: &PlanCx<'_>, binding: &'r str) -> KvStep<'r> {
+    KvStep {
+        binding,
+        decision: match cx.ledger.recorded::<Kv>(cx.worker, binding) {
+            Some(kv) => KvDecision::Reuse { id: kv.id.clone() },
+            None => KvDecision::Create,
+        },
     }
 }
 
@@ -468,7 +530,7 @@ pub(crate) struct PlanKv<'a> {
 ///   already recorded here is not created, so it cannot fail; that clash is
 ///   refused by the other environment's deploy instead. A recorded namespace
 ///   whose id has gone from the account is created again, and that is only
-///   known once the deploy fetches the live ids, so `deploy_one` runs
+///   known once the deploy fetches the live ids, so the apply runs
 ///   [`cross_environment_title_clash`] again at that point (#2059).
 ///
 /// Checked across the whole project, not just `--context`'s selection, since
@@ -512,7 +574,7 @@ pub(crate) fn kv_title_collision(
 /// `environment`, take a title another environment the ledger knows holds or
 /// would create? The message names both namespaces and both environments.
 ///
-/// Also run by `deploy_one` at the moment it decides to create (#2059), since
+/// Also run by the KV step at the moment it decides to create (#2059), since
 /// that is the only point that knows a recorded id has gone from the account
 /// and its namespace is about to be created again. There `live_kv_ids` is the
 /// account's live ids, when fetched: another environment's recorded namespace
@@ -587,64 +649,20 @@ pub(crate) fn kv_namespace_noun(worker: &str, binding: &str) -> String {
     }
 }
 
-fn create_kv(provenance: &Provenance, name: &str, project_root: &Path) -> Result<String, String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("create")
-        .arg(name)
-        // No `--json`: `kv namespace create` has no such flag (`Unknown
-        // argument: json`, #2428). The id is read from the binding snippet it
-        // prints instead.
-        // The generated worker config still carries the placeholder until the
-        // namespace exists. Create from the project root so Wrangler cannot
-        // load and validate that incomplete config.
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(wrangler_said(&output));
-    }
-    parse_kv_id(&String::from_utf8_lossy(&output.stdout))
-        .ok_or_else(|| "wrangler did not return a namespace id".into())
-}
-
-/// The namespace id in `wrangler kv namespace create`'s printed binding
-/// snippet: `"id": "…"` in a JSON config, `id = "…"` in a TOML one.
-fn parse_kv_id(output: &str) -> Option<String> {
-    // A whole-output JSON document first (compact or pretty), then the line scan.
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(output) {
-        let id = value
-            .get("id")
-            .or_else(|| value.get("kv_namespaces")?.get(0)?.get("id"));
-        if let Some(id) = id.and_then(|id| id.as_str()) {
-            return Some(id.to_owned());
-        }
-    }
-    output.lines().find_map(|line| {
-        let line = line.trim().trim_start_matches(['{', '[']).trim_start();
-        let rest = line
-            .strip_prefix("\"id\"")
-            .or_else(|| line.strip_prefix("id"))?
-            .trim_start();
-        let rest = rest
-            .strip_prefix([':', '='])?
-            .trim_start()
-            .strip_prefix('"')?;
-        let id = &rest[..rest.find('"')?];
-        (!id.is_empty()).then(|| id.to_owned())
-    })
+pub(crate) fn create_kv(api: &dyn CloudflareApi, name: &str) -> Result<String, CloudflareError> {
+    // The generated worker config still carries the placeholder until the namespace exists, so
+    // the adapter creates from the project root, where wrangler cannot load that incomplete
+    // config.
+    api.kv_create(name).map_err(CloudflareError::from)
 }
 
 /// Every KV namespace id currently on the account — slice 5, DECISION B.
 ///
 /// Fetched **once per `bynk deploy` run**, not once per context: this is an
-/// account-wide list, so calling it from inside `deploy_one` would pay one
+/// account-wide list, so calling it from inside each KV step would pay one
 /// identical round-trip per KV-bearing context on every redeploy. `run()`
 /// calls this once, before the per-context loop, and threads the result
-/// through — see `deploy_one`'s `live_kv` parameter ([`Kv`]'s `live`).
+/// through — see `Lives::kv` ([`Kv`]'s `live`).
 ///
 /// `None` means "could not ask" (no wrangler, network/auth failure, or an
 /// unparseable response) — read the same way [`list_secrets`]'s `None` is:
@@ -657,25 +675,12 @@ fn parse_kv_id(output: &str) -> Option<String> {
 /// short page comes back, aggregating every page before this command prints
 /// — confirmed against wrangler's own source, not assumed. A truncated
 /// response is not a live risk on the CLI path this calls.
-pub(crate) fn live_kv_namespace_ids(
-    provenance: &Provenance,
-    project_root: &Path,
-) -> Option<BTreeSet<String>> {
-    let mut command = workers::wrangler_command(provenance, "kv")?;
+pub(crate) fn live_kv_namespace_ids(api: &dyn CloudflareApi) -> Option<BTreeSet<String>> {
     // No `--format json`: unlike `secret list`/`queues`, this command has no
     // such flag at all — confirmed against wrangler 4.103 (`Unknown argument:
     // format`, exit 1). Its *default* output is already a raw JSON array, so
     // this is not a missing-flag gap, just a different default per command.
-    let output = command
-        .arg("namespace")
-        .arg("list")
-        .current_dir(project_root)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    parse_kv_namespace_ids(&String::from_utf8_lossy(&output.stdout))
+    parse_kv_namespace_ids(&api.kv_list().ok()?)
 }
 
 /// The ids in `wrangler kv namespace list`'s (default, already-JSON) output —
@@ -698,62 +703,23 @@ fn parse_kv_namespace_ids(stdout: &str) -> Option<BTreeSet<String>> {
 /// [`confirm_prune`], which already named every resource about to go and
 /// asked once for the whole batch: a second, per-resource prompt would be
 /// noise, not safety. Idempotent against a namespace already gone (matched
-/// via [`kv_namespace_already_deleted`]) — confirmed empirically (#839):
+/// by [`crate::cloudflare::WranglerError::already_gone`]) — confirmed empirically (#839):
 /// Cloudflare answers a not-found delete with an error, never silent success,
 /// so this driver-side match is what makes re-running `--prune` safe.
 pub(crate) fn delete_kv_namespace(
-    provenance: &Provenance,
+    api: &dyn CloudflareApi,
     id: &str,
-    project_root: &Path,
-) -> Result<(), String> {
-    let Some(mut command) = workers::wrangler_command(provenance, "kv") else {
-        return Err("wrangler not found".into());
-    };
-    let output = command
-        .arg("namespace")
-        .arg("delete")
-        .arg("--namespace-id")
-        .arg(id)
-        .arg("--skip-confirmation")
-        .current_dir(project_root)
-        .output()
-        .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        return Ok(());
+) -> Result<(), CloudflareError> {
+    match api.kv_delete(id) {
+        Ok(()) => Ok(()),
+        Err(e) if e.already_gone() => Ok(()),
+        Err(e) => Err(e.into()),
     }
-    let said = wrangler_said(&output);
-    if kv_namespace_already_deleted(&said) {
-        return Ok(());
-    }
-    Err(said)
-}
-
-/// Does this `wrangler kv namespace delete` failure just mean the namespace
-/// is already gone? Confirmed empirically (#839) against a real account:
-/// `namespace not found [code: 10013]`. Matching the stable error code rather
-/// than the prose, unlike [`queue_already_exists`]'s text match — Cloudflare
-/// structures its API errors with a `code`, and `10013` is the more durable
-/// half of the message if the wording is ever revised. Pure, so the rule is
-/// tested without an account.
-fn kv_namespace_already_deleted(stderr: &str) -> bool {
-    stderr.contains("code: 10013") || stderr.to_ascii_lowercase().contains("namespace not found")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_the_id_from_the_printed_binding_snippet() {
-        let toml = "🌀 Creating namespace with title \"api\"\n✨ Success!\n\
-                    [[kv_namespaces]]\nbinding = \"api\"\nid = \"abc\"\n";
-        assert_eq!(parse_kv_id(toml), Some("abc".into()));
-        let json = "{\n  \"kv_namespaces\": [\n    {\n      \"binding\": \"api\",\n      \"id\": \"abc\"\n    }\n  ]\n}\n";
-        assert_eq!(parse_kv_id(json), Some("abc".into()));
-        let compact = r#"{"kv_namespaces":[{"binding":"api","id":"abc"}]}"#;
-        assert_eq!(parse_kv_id(compact), Some("abc".into()));
-        assert_eq!(parse_kv_id("✘ [ERROR] nope"), None);
-    }
 
     #[test]
     fn should_trust_recorded_kv_only_when_the_id_is_live_or_unchecked() {
@@ -775,6 +741,12 @@ mod tests {
             "nothing recorded at all"
         );
         assert!(!should_trust_recorded_kv(None, None));
+    }
+
+    /// A failed `kv namespace delete` that only says the namespace is gone.
+    fn kv_namespace_already_deleted(stderr: &str) -> bool {
+        crate::cloudflare::fake::failed(&crate::cloudflare::Op::KvDelete { id: "i" }, "", stderr)
+            .already_gone()
     }
 
     #[test]
@@ -864,7 +836,7 @@ mod tests {
             .kv_instances(&["KV_SESSIONS"]);
         let lines: Vec<_> = Kv::declared(&declared)
             .into_iter()
-            .map(|decl| Kv::plan_line(&cx, decl))
+            .map(|decl| Kv::plan_line(&cx, decl, None))
             .collect();
         let mut out = String::new();
         for line in &lines {
@@ -882,7 +854,11 @@ mod tests {
     fn a_namespace_to_create_that_the_account_holds_is_noted_not_reused() {
         struct Holds;
         impl on_account::Listings for Holds {
-            fn names(&self, _: KindId, _: Option<&str>) -> Result<BTreeSet<String>, String> {
+            fn names(
+                &self,
+                _: KindId,
+                _: Option<&str>,
+            ) -> Result<BTreeSet<String>, crate::cloudflare::CloudflareError> {
                 Ok(BTreeSet::from(["shop".to_string()]))
             }
         }
@@ -1017,51 +993,52 @@ mod tests {
 
     #[test]
     fn a_trusted_recorded_namespace_is_bound_without_a_record_or_an_account_call() {
-        let mut lock = lock_of(&[("default", "shop", "KV", "bare")]);
+        let lock = lock_of(&[("default", "shop", "KV", "bare")]);
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let tools = Tools {
-            provenance: &provenance,
+            api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
             project_root: Path::new("/nonexistent"),
         };
         let resources = project(vec![("shop", Resources::default().needs_kv())]);
         // Unchecked (no live ids) and checked against an account that has it alike.
         for live in [None, Some(BTreeSet::from(["bare".to_string()]))] {
-            let done = Kv::provision(
-                &mut ApplyCx {
+            let step = KvStep {
+                binding: "KV",
+                decision: KvDecision::Reuse {
+                    id: "bare".to_string(),
+                },
+            };
+            let done = Kv::apply(
+                &StepCx {
                     environment: "default",
                     worker: "shop",
                     project: &resources,
-                    environments: &mut lock.environments,
-                    live: &live,
+                    lock: &lock,
+                    live: live.as_ref(),
                     tools,
                 },
-                "KV",
+                &step,
             )
             .expect("nothing to create");
-            assert_eq!(
-                done,
-                Provisioned {
-                    bound: Some(("KV".to_string(), "bare".to_string())),
-                    recorded: None,
-                }
-            );
+            assert_eq!(done.bound, [("KV".to_string(), "bare".to_string())]);
+            assert!(done.commits.is_empty(), "nothing to record");
         }
     }
 
     #[test]
     fn pruning_an_orphan_with_no_recorded_id_does_nothing() {
-        let mut lock = DeployLock::default();
+        let lock = DeployLock::default();
         let provenance = Provenance::Path("/nonexistent/wrangler".into());
         let project = BTreeMap::new();
-        let forgot = Kv::prune(
-            &mut ApplyCx {
+        let commit = Kv::prune(
+            &StepCx {
                 environment: "default",
                 worker: "gone",
                 project: &project,
-                environments: &mut lock.environments,
-                live: &None,
+                lock: &lock,
+                live: None,
                 tools: Tools {
-                    provenance: &provenance,
+                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
                     project_root: Path::new("/nonexistent"),
                 },
             },
@@ -1071,8 +1048,7 @@ mod tests {
             },
         )
         .expect("nothing to delete");
-        assert_eq!(forgot, None);
-        assert_eq!(lock, DeployLock::default());
+        assert!(commit.is_none(), "so nothing is recorded");
     }
 
     #[test]
@@ -1084,6 +1060,22 @@ mod tests {
                 &BTreeMap::new()
             )
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn materialising_into_a_missing_configuration_fails_with_its_worker() {
+        let e = Kv::materialise(
+            Path::new("/nonexistent/wrangler.toml"),
+            "shop",
+            &BTreeMap::from([("KV".to_string(), "id-1".to_string())]),
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("could not materialise the KV namespace ids into `shop`'s"),
+            "{}",
+            e.message
         );
     }
 }

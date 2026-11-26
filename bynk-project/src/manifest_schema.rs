@@ -87,6 +87,39 @@ struct WorkersTable {
     /// off `workers.dev`. Unset leaves the key out, so Cloudflare's default
     /// (on) applies.
     workers_dev: Option<bool>,
+    /// Workers Logs, so `Logger.log`'s structured fields are queryable on
+    /// Cloudflare. On by default; written as `[observability]` into every
+    /// `wrangler.toml`, which each environment inherits. A worker group
+    /// overrides it key by key under `[deploy.workers.<key>.observability]`.
+    observability: Option<ObservabilityTable>,
+    /// The CPU time each Worker may use per request, in milliseconds, written as
+    /// `[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.
+    /// From `1` to `300000`; a limit above the account's plan is Cloudflare's
+    /// error at deploy. Unset leaves Cloudflare's default. A worker group
+    /// overrides it.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// `"smart"` turns on Smart Placement for every Worker (written as
+    /// `[placement] mode = "smart"`): the Worker runs near the back end it
+    /// talks to, such as a `D1` database, rather than near the user. `"off"`
+    /// (the default) leaves Cloudflare's default placement. A worker group
+    /// overrides it.
+    #[schemars(extend("enum" = ["smart", "off"], "default" = "off"))]
+    placement: Option<String>,
+}
+
+/// `[workers.observability]` (and a worker group's own `observability`).
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ObservabilityTable {
+    /// Whether Workers Logs collects the Worker's logs. Default: `true`.
+    #[schemars(extend("default" = true))]
+    enabled: Option<bool>,
+    /// The fraction of invocations whose logs are kept, from `0` to `1`: lower
+    /// it for a noisy Worker. Default: `1`.
+    #[schemars(extend("default" = 1, "minimum" = 0, "maximum" = 1))]
+    head_sampling_rate: Option<f64>,
 }
 
 /// Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.
@@ -102,6 +135,11 @@ struct DeployTable {
     /// Vectorize settings, keyed by the `Vectorize` capability's name
     /// (`capability Docs = Vectorize …` is `Docs`).
     vectorize: Option<std::collections::BTreeMap<String, DeployVectorizeEntry>>,
+    /// Inbound-email addresses per environment, keyed by an address a
+    /// `from email` service names (`from email("support@shop.example")` is
+    /// `support@shop.example`). A named environment claims no address unless
+    /// it is mapped here.
+    email: Option<std::collections::BTreeMap<String, DeployEmailEntry>>,
     /// Container settings, keyed by the `Container` capability's name
     /// (`capability Renderer = Container …` is `Renderer`).
     containers: Option<std::collections::BTreeMap<String, DeployContainerEntry>>,
@@ -129,6 +167,15 @@ struct DeployWorkerEntry {
     routes: Option<Vec<String>>,
     /// Custom domains the Worker is attached to, like `pay.example.com`.
     custom_domains: Option<Vec<String>>,
+    /// This Worker's Workers Logs settings, laid over `[workers.observability]`
+    /// key by key: `head_sampling_rate = 0.01` for a noisy Worker.
+    observability: Option<ObservabilityTable>,
+    /// This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// This Worker's placement, `"smart"` or `"off"`, over `[workers] placement`.
+    #[schemars(extend("enum" = ["smart", "off"]))]
+    placement: Option<String>,
 }
 
 /// One `Container` capability's image at deploy.
@@ -142,6 +189,21 @@ struct DeployContainerEntry {
     /// here runs that image and is never built, so the deploy needs no Docker;
     /// without an entry the image is built from `@build`'s Dockerfile.
     image: std::collections::BTreeMap<String, String>,
+}
+
+/// One `from email` address, as a named environment claims it.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployEmailEntry {
+    /// The address each deployment environment claims in place of this one,
+    /// by `--env` name (`default` is never mapped: it claims the address as
+    /// the source writes it). Wrangler applies `addresses` to a Worker at its
+    /// top level only, so an environment with no entry here claims nothing
+    /// and leaves production's routing rules alone. The Worker for a mapped
+    /// environment accepts mail to the mapped address, and the domain needs
+    /// Email Routing enabled.
+    address: std::collections::BTreeMap<String, String>,
 }
 
 /// One `Vectorize` capability's index at deploy.
@@ -501,6 +563,43 @@ struct RegistryEntry {
 #[allow(dead_code)]
 struct RegistriesTable(std::collections::BTreeMap<String, RegistryEntry>);
 
+/// A build-time variable's value: what an `env(NAME)` constant is declared as.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum VarValueSchema {
+    Text(String),
+    Number(i64),
+    Flag(bool),
+    List(Vec<String>),
+}
+
+/// Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's
+/// `const X: T = env(NAME[, default])` constants take, in every environment
+/// (`default` included). They are resolved when the project is built, from this
+/// committed file only, and are not Wrangler's run-time `[vars]`. A name no
+/// `env(…)` constant reads is an error, so a typo cannot leave a default in
+/// force.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[A-Z][A-Z0-9_]*$" }))]
+#[allow(dead_code)]
+struct VarsTable(std::collections::BTreeMap<String, VarValueSchema>);
+
+/// One environment's settings.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct EnvEntry {
+    /// This environment's build-time variables, over `[vars]`.
+    vars: Option<VarsTable>,
+}
+
+/// Per-environment settings, keyed by the environment's name (the `--env`
+/// value).
+#[derive(JsonSchema)]
+#[allow(dead_code)]
+struct EnvTable(std::collections::BTreeMap<String, EnvEntry>);
+
 /// Makes this directory a workspace root: a group of projects that `bynk
 /// check`, `fmt` and `test` run across. A workspace root isn't a project:
 /// its `bynk.toml` holds only `[workspace]` and `[registries]`.
@@ -538,6 +637,8 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "dependencies" => generator.subschema_for::<DependenciesTable>(),
         "dev-dependencies" => generator.subschema_for::<DevDependenciesTable>(),
         "registries" => generator.subschema_for::<RegistriesTable>(),
+        "vars" => generator.subschema_for::<VarsTable>(),
+        "env" => generator.subschema_for::<EnvTable>(),
         _ => return None,
     })
 }

@@ -1,9 +1,9 @@
-//! The `parTraverse` family against the settle-all contract (concurrent
+//! The `parForEach` / `parTraverse` family against the settle-all contract (concurrent
 //! effects, slice 0b, #2662).
 //!
 //! Compiles a real project and runs it under `node` against capability doubles
-//! whose promises the script settles by hand. For each of `parTraverse`,
-//! `parTraverseAll` and `parTraverseTry`, on a list and on a store-`Map` query
+//! whose promises the script settles by hand. For each of `parForEach`,
+//! `parTraverse` (on a list), `parTraverseAll` and `parTraverseTry`, on a list and on a store-`Map` query
 //! receiver, it checks:
 //!
 //! - **settle-all:** a fast fault is raised only after a slow sibling settles;
@@ -32,22 +32,29 @@ const SOURCE: &str = r#"context demo
 capability Notes {
   fn put(id: Int) -> Effect[()]
   fn tryPut(id: Int) -> Effect[Result[Int, String]]
+  fn val(id: Int) -> Effect[Int]
 }
 
 service lst {
-  on call(xs: List[Int]) -> Effect[()] given Notes {
-    xs.parTraverse((n: Int) => Notes.put(n))
+  on call(xs: List[Int]) -> Effect[()] by Caller given Notes {
+    xs.parForEach((n: Int) => Notes.put(n))
+  }
+}
+
+service lstVals {
+  on call(xs: List[Int]) -> Effect[List[Int]] by Caller given Notes {
+    xs.parTraverse((n: Int) => Notes.val(n))
   }
 }
 
 service lstAll {
-  on call(xs: List[Int]) -> Effect[List[Result[Int, String]]] given Notes {
+  on call(xs: List[Int]) -> Effect[List[Result[Int, String]]] by Caller given Notes {
     xs.parTraverseAll((n: Int) => Notes.tryPut(n))
   }
 }
 
 service lstTry {
-  on call(xs: List[Int]) -> Effect[Result[List[Int], String]] given Notes {
+  on call(xs: List[Int]) -> Effect[Result[List[Int], String]] by Caller given Notes {
     xs.parTraverseTry((n: Int) => Notes.tryPut(n))
   }
 }
@@ -57,7 +64,7 @@ agent Room {
   store items: Map[String, Int]
 
   on call fan(x: Int) -> Effect[()] given Notes {
-    items.parTraverse((n: Int) => Notes.put(n))
+    items.parForEach((n: Int) => Notes.put(n))
   }
   on call fanAll(x: Int) -> Effect[List[Result[Int, String]]] given Notes {
     items.parTraverseAll((n: Int) => Notes.tryPut(n))
@@ -69,7 +76,7 @@ agent Room {
 "#;
 
 const SCRIPT: &str = r#"import assert from "node:assert/strict";
-import { lst, lstAll, lstTry, Room } from "./demo.js";
+import { lst, lstVals, lstAll, lstTry, Room } from "./demo.js";
 import { Ok, Err } from "./__bynk_runtime/result.js";
 
 function deferred() {
@@ -91,7 +98,7 @@ function doubles() {
   return {
     issued,
     pending,
-    deps: { Notes: { put: make("put"), tryPut: make("tryPut") } },
+    deps: { Notes: { put: make("put"), tryPut: make("tryPut"), val: make("val") } },
   };
 }
 
@@ -102,15 +109,16 @@ function room() {
 
 // Each subject runs the operation over the elements 1, 2, 3, in that order.
 const subjects = [
-  { name: "list parTraverse", method: "put", run: (deps) => lst.call([1, 2, 3], deps) },
+  { name: "list parForEach", method: "put", run: (deps) => lst.call([1, 2, 3], deps) },
+  { name: "list parTraverse", method: "val", run: (deps) => lstVals.call([1, 2, 3], deps) },
   { name: "list parTraverseAll", method: "tryPut", run: (deps) => lstAll.call([1, 2, 3], deps) },
   { name: "list parTraverseTry", method: "tryPut", run: (deps) => lstTry.call([1, 2, 3], deps) },
-  { name: "query parTraverse", method: "put", run: (deps) => room().fan(0, deps) },
+  { name: "query parForEach", method: "put", run: (deps) => room().fan(0, deps) },
   { name: "query parTraverseAll", method: "tryPut", run: (deps) => room().fanAll(0, deps) },
   { name: "query parTraverseTry", method: "tryPut", run: (deps) => room().fanTry(0, deps) },
 ];
 
-const ok = (s, n) => (s.method === "put" ? undefined : Ok(n));
+const ok = (s, n) => (s.method === "put" ? undefined : s.method === "val" ? n : Ok(n));
 const watch = (promise) => {
   const box = {};
   box.done = promise.then((v) => { box.value = v; box.settled = true; }, (e) => { box.error = e; box.settled = true; });
@@ -173,6 +181,18 @@ for (const s of subjects) {
     await box.done;
     assert.equal(box.error, sync, `${s.name}: the throw is raised`);
   }
+}
+
+// parTraverse returns the values in input order, whatever order they settle in.
+{
+  const { pending, deps } = doubles();
+  const box = watch(lstVals.call([1, 2, 3], deps));
+  await tick();
+  pending[3].resolve(30);
+  pending[1].resolve(10);
+  pending[2].resolve(20);
+  await box.done;
+  assert.deepEqual(box.value, [10, 20, 30], "values in input order");
 }
 
 // parTraverseAll gathers every Result in input order.

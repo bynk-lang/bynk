@@ -108,4 +108,4 @@ in-process database, and reaching a deployed one would make a test run touch
 real data. See
 [Testing against a running system](/book/guides/testing/against-a-running-system/).
 
-**See also:** [Reference — Reading a participant's database](/book/reference/testing/#peek-a-database).
+**See also:** [Reference — Reading a participant's database](/reference/testing/#peek-a-database).

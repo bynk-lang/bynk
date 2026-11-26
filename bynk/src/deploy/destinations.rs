@@ -24,7 +24,7 @@
 //! - `--dry-run` shows the same warnings.
 
 use super::*;
-use crate::migrate::live::{self, Credentials, Rest};
+use crate::cloudflare::{CloudflareError, Rest};
 use bynk_driver::colour;
 use bynk_driver::project::EmailForward;
 
@@ -47,21 +47,11 @@ pub(crate) struct AddressPage {
     pub(crate) total_pages: u64,
 }
 
-/// Why a lookup did not answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LookupError {
-    /// The token lacks the permission (a 401/403, or Cloudflare's
-    /// authentication error codes).
-    Denied(String),
-    /// Anything else: unreachable, unreadable, or no credentials.
-    Failed(String),
-}
-
 /// The account's destination addresses, a page at a time. A trait so the check
 /// is tested against a fake and the REST client against a stub.
 pub(crate) trait DestinationAddresses {
     /// Page `page` (from 1) of the listing.
-    fn page(&self, page: u64) -> Result<AddressPage, LookupError>;
+    fn page(&self, page: u64) -> Result<AddressPage, CloudflareError>;
 }
 
 /// Cloudflare's REST API, for the destination-address listing.
@@ -72,47 +62,23 @@ pub(crate) struct RestDestinations {
 impl RestDestinations {
     /// A client for the account in `CLOUDFLARE_ACCOUNT_ID`, or why there is
     /// none: a missing credential skips the check, it does not fail the deploy.
-    pub(crate) fn from_env() -> Result<Self, LookupError> {
-        let credentials = Credentials::from_env_for(
-            "check an email forward destination",
-            &format!(
-                "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
-            ),
-        )
-        .map_err(LookupError::Failed)?;
+    pub(crate) fn from_env() -> Result<Self, CloudflareError> {
         Ok(Self {
-            rest: Rest {
-                agent: live::agent().map_err(LookupError::Failed)?,
-                credentials,
-                base: live::API.to_string(),
-            },
+            rest: crate::cloudflare::rest::for_purpose(
+                "check an email forward destination",
+                &format!(
+                    "an API token with \"{TOKEN_SCOPE}\" (a `wrangler login` session is not enough: the lookup calls Cloudflare's API directly)"
+                ),
+            )?,
         })
     }
 }
 
-/// Cloudflare's answer to a token without the permission: HTTP 401 or 403, or
-/// its authentication error codes (10000 "Authentication error", 9109 "Invalid
-/// access token", 9106 "Missing authentication headers").
-pub(crate) fn is_denied(said: &str) -> bool {
-    said.contains("answered 401")
-        || said.contains("answered 403")
-        || ["10000", "9109", "9106"]
-            .iter()
-            .any(|code| said.contains(&format!("\"code\":{code}")))
-}
-
 impl DestinationAddresses for RestDestinations {
-    fn page(&self, page: u64) -> Result<AddressPage, LookupError> {
+    fn page(&self, page: u64) -> Result<AddressPage, CloudflareError> {
         let body = self
             .rest
-            .get(&format!("/email/routing/addresses?per_page=50&page={page}"))
-            .map_err(|said| {
-                if is_denied(&said) {
-                    LookupError::Denied(said)
-                } else {
-                    LookupError::Failed(said)
-                }
-            })?;
+            .get(&format!("/email/routing/addresses?per_page=50&page={page}"))?;
         let addresses = body["result"]
             .as_array()
             .into_iter()
@@ -136,16 +102,18 @@ impl DestinationAddresses for RestDestinations {
 /// `linked.rs` follows a paginated one.
 pub(crate) fn list_all(
     account: &dyn DestinationAddresses,
-) -> Result<Vec<Destination>, LookupError> {
+) -> Result<Vec<Destination>, CloudflareError> {
     let mut out = Vec::new();
-    for page in 1.. {
+    crate::cloudflare::paging::Numbered::TO_TOTAL.follow(|page| -> Result<_, CloudflareError> {
         let got = account.page(page)?;
-        let empty = got.addresses.is_empty();
+        let read = crate::cloudflare::paging::Page {
+            entries: got.addresses.len(),
+            total_pages: Some(got.total_pages),
+            ..Default::default()
+        };
         out.extend(got.addresses);
-        if empty || page >= got.total_pages {
-            break;
-        }
-    }
+        Ok(read)
+    })?;
     Ok(out)
 }
 
@@ -191,6 +159,9 @@ fn standing(address: &str, known: &[Destination]) -> Standing {
 
 /// `` `service` (context `x`) `` for a handler, as a warning names it.
 fn handler_label(f: &EmailForward) -> String {
+    if f.fallback {
+        return format!("the fallback of `{}` (context `{}`)", f.service, f.context);
+    }
     format!("`{}` (context `{}`)", f.service, f.context)
 }
 
@@ -198,7 +169,7 @@ fn handler_label(f: &EmailForward) -> String {
 /// `forwards`, asking `account` only when a literal destination needs it.
 pub(crate) fn forward_warnings(
     forwards: &[EmailForward],
-    account: Result<&dyn DestinationAddresses, LookupError>,
+    account: Result<&dyn DestinationAddresses, CloudflareError>,
 ) -> Vec<String> {
     let mut out = computed_notes(forwards);
     let mut literals: BTreeMap<&str, Vec<String>> = BTreeMap::new();
@@ -244,19 +215,21 @@ fn computed_notes(forwards: &[EmailForward]) -> Vec<String> {
 
 /// The one warning for a lookup that did not answer: which check was skipped,
 /// and (for a refused token) the permission to grant.
-fn lookup_warning(literals: &BTreeMap<&str, Vec<String>>, e: LookupError) -> String {
+fn lookup_warning(literals: &BTreeMap<&str, Vec<String>>, e: CloudflareError) -> String {
     let addresses = literals
         .keys()
         .map(|a| format!("`{a}`"))
         .collect::<Vec<_>>()
         .join(", ");
-    match e {
-        LookupError::Denied(said) => format!(
-            "bynk: warning: could not check that the email forward destination(s) {addresses} are verified: the token needs the account-level \"{TOKEN_SCOPE}\" permission (or Write) ({said}). The check is skipped; the deploy continues."
-        ),
-        LookupError::Failed(said) => format!(
-            "bynk: warning: could not check that the email forward destination(s) {addresses} are verified: {said}. The check is skipped; the deploy continues."
-        ),
+    // A refused token (`CloudflareError::is_denied`) names the permission to grant.
+    if e.is_denied() {
+        format!(
+            "bynk: warning: could not check that the email forward destination(s) {addresses} are verified: the token needs the account-level \"{TOKEN_SCOPE}\" permission (or Write) ({e}). The check is skipped; the deploy continues."
+        )
+    } else {
+        format!(
+            "bynk: warning: could not check that the email forward destination(s) {addresses} are verified: {e}. The check is skipped; the deploy continues."
+        )
     }
 }
 
@@ -294,13 +267,10 @@ pub(crate) fn forward_warnings_for_run(
         .filter(|f| order.iter().any(|w| *w == dir_of(&f.context)))
         .cloned()
         .collect();
-    let rest = RestDestinations::from_env();
-    forward_warnings(
-        &forwards,
-        rest.as_ref()
-            .map(|r| r as &dyn DestinationAddresses)
-            .map_err(Clone::clone),
-    )
+    match RestDestinations::from_env() {
+        Ok(rest) => forward_warnings(&forwards, Ok(&rest)),
+        Err(e) => forward_warnings(&forwards, Err(e)),
+    }
 }
 
 /// The `Forward` verdicts of the project at `root`, from its checked tree.
@@ -360,7 +330,7 @@ mod tests {
     struct Fake {
         pages: Vec<Vec<(&'static str, bool)>>,
         asked: RefCell<Vec<u64>>,
-        refuse: Option<LookupError>,
+        refuse: Option<crate::cloudflare::RestError>,
     }
 
     impl Fake {
@@ -374,10 +344,10 @@ mod tests {
     }
 
     impl DestinationAddresses for Fake {
-        fn page(&self, page: u64) -> Result<AddressPage, LookupError> {
+        fn page(&self, page: u64) -> Result<AddressPage, CloudflareError> {
             self.asked.borrow_mut().push(page);
             if let Some(e) = &self.refuse {
-                return Err(e.clone());
+                return Err(e.clone().into());
             }
             let addresses = self
                 .pages
@@ -402,6 +372,7 @@ mod tests {
             service: service.into(),
             address: format!("{service}@shop.example"),
             to: to.map(str::to_string),
+            fallback: false,
         }
     }
 
@@ -440,6 +411,24 @@ mod tests {
         assert!(
             w[0].contains("clicking the link Cloudflare emailed")
                 && w[0].contains("Email Routing → Destination addresses"),
+            "{}",
+            w[0]
+        );
+    }
+
+    #[test]
+    fn an_unverified_fallback_warns_as_a_forward_does_and_says_it_is_the_fallback() {
+        // #3885: a fallback that cannot be forwarded to would bounce the very mail it exists to
+        // keep, so it is checked like a `Forward` destination.
+        let account = Fake::new(vec![vec![("ops@shop.example", false)]]);
+        let fallback = EmailForward {
+            fallback: true,
+            ..forward("support", Some("ops@shop.example"))
+        };
+        let w = run(&[fallback], &account);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(
+            w[0].contains("the fallback of `support` (context `shop.support`) forwards to `ops@shop.example`, which is not verified yet"),
             "{}",
             w[0]
         );
@@ -548,8 +537,11 @@ mod tests {
     #[test]
     fn a_token_without_the_permission_is_one_warning_and_the_deploy_goes_on() {
         let mut account = Fake::new(vec![]);
-        account.refuse = Some(LookupError::Denied(
-            "GET /email/routing/addresses: Cloudflare answered 403 [{\"code\":10000}]".into(),
+        account.refuse = Some(crate::cloudflare::RestError::answered(
+            "GET",
+            "/email/routing/addresses",
+            403,
+            "[{\"code\":10000}]",
         ));
         let w = run(
             &[
@@ -571,7 +563,7 @@ mod tests {
     fn missing_credentials_skip_the_check_with_one_warning() {
         let w = forward_warnings(
             &[forward("billing", Some("finance@shop.example"))],
-            Err(LookupError::Failed(
+            Err(CloudflareError::Credentials(
                 "set CLOUDFLARE_API_TOKEN to check".into(),
             )),
         );
@@ -613,10 +605,14 @@ mod tests {
 
     #[test]
     fn authentication_failures_are_told_from_other_ones() {
-        assert!(is_denied("GET /x: Cloudflare answered 403 []"));
-        assert!(is_denied(
-            "GET /x: Cloudflare answered 400 [{\"code\":9109}]"
-        ));
-        assert!(!is_denied("GET /x: Cloudflare answered 500 []"));
+        let at = |status, errors: &str| {
+            CloudflareError::from(crate::cloudflare::RestError::answered(
+                "GET", "/x", status, errors,
+            ))
+        };
+        assert!(at(403, "[]").is_denied());
+        assert!(at(400, "[{\"code\":9109}]").is_denied());
+        assert!(!at(500, "[]").is_denied());
+        assert!(!CloudflareError::Credentials("set X".into()).is_denied());
     }
 }

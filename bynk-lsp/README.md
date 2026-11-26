@@ -65,8 +65,8 @@ This produces the **`bynk-lsp`** binary. Requires a stable Rust toolchain,
 which bundles and launches it automatically. For other editors, point your LSP
 client at the `bynk-lsp` binary and associate it with the `bynk` language /
 `.bynk` files. See the
-[`bynk-lsp` tooling docs](https://bynk-lang.org/docs/tooling/bynk-lsp/) and
-[Set up editor support](https://bynk-lang.org/docs/editor-and-tooling/editor-support/).
+[`bynk-lsp` tooling docs](https://bynk-lang.org/reference/tooling/bynk-lsp/) and
+[Set up editor support](https://bynk-lang.org/reference/tooling/editor-and-tooling/editor-support/).
 
 The server discovers a project by walking up to the nearest `bynk.toml` (falling
 back to single-file mode if there is none). It logs to `~/.bynk-lsp.log` at

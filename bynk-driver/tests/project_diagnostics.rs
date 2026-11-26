@@ -294,9 +294,9 @@ fn email_forwards_come_from_the_checked_tree_not_the_text() {
     .unwrap();
     let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\n\
 fn finance() -> String { \"finance@shop.example\" }\n\n\
-service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
+service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
 fn route(mail: InboundEmail) -> EmailVerdict { Forward(\"helper@shop.example\") }\n\n\
-service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
+service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
     let root = scratch_project(
         "email_forwards",
         &[("bynk.toml", &manifest), ("src/shop/support.bynk", source)],
@@ -319,5 +319,109 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
         ],
         "{:?}",
         check.email_forwards
+    );
+}
+
+/// #3887: the destinations of a `Route` are checked like a `Forward`: each literal element of its
+/// `forward` list is read, and a list built at run time is reported as computed.
+#[test]
+fn route_destinations_are_read_from_the_checked_tree() {
+    let manifest = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../bynk-tests/tests/fixtures/positive/3328_s2_email_worker/bynk.toml"),
+    )
+    .unwrap();
+    let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailActions }\n\n\
+fn dests() -> List[String] { [\"computed@shop.example\"] }\n\n\
+service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions { forward: [\"finance@shop.example\", \"audit@shop.example\"] })\n  }\n}\n\n\
+service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions { forward: dests() })\n  }\n}\n";
+    let root = scratch_project(
+        "route_forwards",
+        &[("bynk.toml", &manifest), ("src/shop/support.bynk", source)],
+    );
+    let opts = bynk_driver::project_options(&root.0).expect("readable");
+    let check = project::check_project(&opts);
+    assert!(
+        !check.has_errors(),
+        "{:?}",
+        check
+            .errors
+            .iter()
+            .map(|e| &e.error.category)
+            .collect::<Vec<_>>()
+    );
+    let got: Vec<(&str, Option<&str>)> = check
+        .email_forwards
+        .iter()
+        .map(|f| (f.service.as_str(), f.to.as_deref()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("billing", Some("audit@shop.example")),
+            ("billing", Some("finance@shop.example")),
+            ("ops", None),
+        ],
+        "{:?}",
+        check.email_forwards
+    );
+}
+
+/// #4233: `bynk check` emits each suite's test module, and a case that delivers
+/// an event (`Svc.event(e, env)`) reads the unit's event-subscriber shapes. The
+/// analysis path used to return before recording them, so the check panicked
+/// ("the events service `X` of unit `Y` has no recorded subscriber shape") where
+/// `bynk test` did not. Runs the checked-in `2052_test_event_address` fixture.
+#[test]
+fn check_does_not_panic_on_a_suite_that_delivers_an_event() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../bynk-tests/tests/fixtures/positive/2052_test_event_address");
+    let opts = bynk_driver::project_options(&fixture).expect("fixture must be readable");
+    let check = project::check_project(&opts);
+    assert!(
+        !check.has_errors(),
+        "{:?}",
+        check
+            .errors
+            .iter()
+            .map(|e| &e.error.category)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// #4233 (review): a half-edited program must not panic either. A type error in
+/// the events service's own file means the unit's subscriber shapes are never
+/// recorded, yet the suite that delivers an event is still lowered; only the
+/// user's own error is reported, not an internal fault.
+#[test]
+fn check_reports_only_the_users_error_when_the_events_service_file_is_broken() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../bynk-tests/tests/fixtures/positive/2052_test_event_address");
+    let read = |rel: &str| fs::read_to_string(fixture.join(rel)).unwrap();
+    let manifest = read("bynk.toml");
+    let ledger = format!(
+        "{}\nfn broken() -> Int {{ \"not an int\" }}\n",
+        read("src/shop/ledger.bynk")
+    );
+    let order = read("src/shop/order.bynk");
+    let archive = read("src/shop/archive.bynk");
+    let suite = read("tests/ledger.bynk");
+    let root = scratch_project(
+        "broken_events_service",
+        &[
+            ("bynk.toml", &manifest),
+            ("src/shop/ledger.bynk", &ledger),
+            ("src/shop/order.bynk", &order),
+            ("src/shop/archive.bynk", &archive),
+            ("tests/ledger.bynk", &suite),
+        ],
+    );
+    let opts = bynk_driver::project_options(&root.0).expect("scratch project must be readable");
+    let check = project::check_project(&opts);
+    let categories: Vec<&str> = check.errors.iter().map(|e| e.error.category).collect();
+    assert!(!categories.is_empty(), "the type error must be reported");
+    assert!(
+        !categories.iter().any(|c| c.starts_with("bynk.internal")),
+        "no internal fault may be reported on top of the user's error: {categories:?}"
     );
 }

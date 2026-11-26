@@ -433,6 +433,7 @@ impl<'a> Stream<'a> {
                             refusals: None,
                             origin: self.origin_of(suite, name),
                             warnings: None,
+                            actual: None,
                             duration_ms: None,
                         },
                     ));
@@ -453,6 +454,12 @@ impl<'a> Stream<'a> {
             }
             _ => String::new(),
         }
+    }
+
+    /// Whether the runner reached `run-end` (#4000): a stream that did not is an
+    /// incomplete report, whatever the runner process's own exit status was.
+    pub fn ended(&self) -> bool {
+        self.ended
     }
 
     /// What closes the stream when the runner's output has ended: nothing after
@@ -565,6 +572,7 @@ mod tests {
             refusals: None,
             origin: None,
             warnings: None,
+            actual: None,
             duration_ms: None,
         }
     }
@@ -676,6 +684,7 @@ mod tests {
             "an unrecognised line is dropped, and `unmatched` is not part of the stream"
         );
         assert_eq!(stream.finish(""), "", "nothing closes a stream that ended");
+        assert!(stream.ended());
     }
 
     #[test]
@@ -786,6 +795,10 @@ mod tests {
         let status = forward(cmd, &mut stream, &mut sink, &[]).unwrap();
         let finished = started.elapsed();
         assert!(status.success());
+        assert!(
+            !stream.ended(),
+            "a runner that exits 0 without `run-end` has not ended the stream (#4000)"
+        );
         let first = sink.0.first().expect("an event");
         assert_eq!(first.1, "{\"type\":\"run-begin\",\"suites\":1}\n");
         assert!(

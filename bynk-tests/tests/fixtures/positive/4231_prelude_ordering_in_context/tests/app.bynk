@@ -1,0 +1,9 @@
+suite app
+
+case "Ordering needs no import in a context" {
+  expect name(cmp(1, 2)) == "less"
+  expect name(less()) == "less"
+  expect name(bare()) == "less"
+  expect name(flip(cmp(1, 2))) == "greater"
+  expect sorted([2, 3, 1]) == [3, 2, 1]
+}

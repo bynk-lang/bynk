@@ -8,7 +8,7 @@ type Money = { cents: Int }
 type Order = { id: String, total: Money }
 
 service probe {
-    on call() -> Effect[Bool] given Orders {
+    on call() -> Effect[Bool] by Caller given Orders {
         let _ <- Orders.select[Order]("FROM orders", [])
         true
     }

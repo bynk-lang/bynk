@@ -6,7 +6,7 @@
 //! `groupBy` or join key). It is automatic, never derived: a type is `Key` when it
 //! is one of:
 //!
-//! - `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or
+//! - `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` or `Decimal`, or a refined or
 //!   opaque type over one of them;
 //! - `Option[T]` or `List[T]` with `T` `Key`;
 //! - a record, sum or enum whose every field and payload is `Key`, and, when it is
@@ -22,8 +22,9 @@
 //! The runtime holds a composite key under a canonical encoding
 //! (`__bynkKeyEncode`); `Key` needs no witness, so it adds no hidden argument.
 //!
-//! The store rule (`store m: Map[K, V]`, `Cache`, `@indexed`) keeps its own
-//! `String`/`Int` predicate: those keys persist through `String(k)`.
+//! The store rule (`store m: Map[K, V]`, `Set`, `Cache`, `@indexed`) is this rule too (#4037): a
+//! `String`/`Int` key (or a refined or opaque type over one) persists through `String(k)`, as it
+//! always has, and any other `Key` type under its canonical encoding.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -75,6 +76,13 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotKey>
                 return Some(NotKey {
                     part: tys.display(ty),
                     float: true,
+                });
+            }
+            // #4111: a `Secret` is not `Key` (`==` on text is variable-time).
+            if crate::context_checks::is_secret_type(name, &ctx.input.types) {
+                return Some(NotKey {
+                    part: "Secret".to_string(),
+                    float: false,
                 });
             }
             let args = args.clone();
@@ -150,6 +158,13 @@ fn walk_ref(
         }),
         TypeRef::Option(a, _) | TypeRef::List(a, _) => walk_ref(a, params, types, visited),
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
+        // #4111: a `Secret` is not `Key`.
+        TypeRef::Named(id) if crate::context_checks::is_secret_type(&id.name, types) => {
+            Some(NotKey {
+                part: "Secret".to_string(),
+                float: false,
+            })
+        }
         // An unresolved name is reported by the resolver, not here.
         TypeRef::Named(id) => walk_decl(&id.name, types, visited),
         TypeRef::App { name, args, .. } => args
@@ -327,7 +342,7 @@ pub(crate) fn require_key_positions(
         Ty::Option(a)
         | Ty::List(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)

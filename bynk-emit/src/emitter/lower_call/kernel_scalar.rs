@@ -8,11 +8,15 @@
 use bynk_check::kernel_op::{BytesOp, DecimalOp, DurationOp, FloatOp, InstantOp, IntOp, StringOp};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsType};
 
-use super::super::lower::{Lowered, Pre, str_node};
+use super::super::lower::{Lowered, Pre};
 use super::super::lower_ctx::LowerCtx;
-use super::super::lower_list::{arrow, call, id, member, param, spread, take, zero};
+use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
+use crate::ts_build::{
+    arrow, assign, binary, bool_lit, call, ident, member, num_lit, spread, str_lit,
+};
+use bynk_ts::TsParam;
 
 /// The receiver and then each argument, lowered in order.
 fn operands(pre: &mut Pre, cx: &mut LowerCtx, parts: &[&Expr]) -> Vec<bynk_ts::TsExpr> {
@@ -31,7 +35,7 @@ pub(super) fn identity(pre: &mut Pre, operand: &Expr, cx: &mut LowerCtx) -> bynk
 }
 
 fn global_math(name: &str) -> TsExpr {
-    member(member(id("globalThis"), "Math"), name)
+    member(member(ident("globalThis"), "Math"), name)
 }
 
 /// `globalThis.Math.<name>(…)` over the lowered operands.
@@ -53,7 +57,7 @@ fn clamp(kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
 /// `name(…)` for a runtime helper or a global function (`String`).
 fn plain_call(name: &str, kids: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
     let n = kids;
-    call(id(name), n)
+    call(ident(name), n)
 }
 
 /// `recv.prop`, bracketed only where precedence needs it.
@@ -68,6 +72,29 @@ fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
     let mut n = kids;
     let recv = receiver_object(n.remove(0));
     call(member(recv, method), n)
+}
+
+/// `recv.<method>(sub)` as an `Option[Int]`: `None` for `-1`. Shared by `indexOf` and
+/// `lastIndexOf`, which both count UTF-16 code units.
+fn index_option(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
+    let n = kids;
+    let [recv, sub] = take::<2, _>(n);
+    let to_option = arrow(
+        vec![TsParam::new("__i", Some(ts_named("number")))],
+        TsExpr::Conditional {
+            test: Box::new(TsExpr::Binary {
+                op: TsBinaryOp::LessThan,
+                left: Box::new(ident("__i")),
+                right: Box::new(zero()),
+            }),
+            consequent: Box::new(ident("None")),
+            alternate: Box::new(call(ident("Some"), vec![ident("__i")])),
+        },
+    );
+    call(
+        to_option,
+        vec![call(member(receiver_object(recv), method), vec![sub])],
+    )
 }
 
 /// `lo` and `hi` clamped at zero as `String.slice` does: `globalThis.Math.max(0, x)`.
@@ -144,7 +171,6 @@ pub(in crate::emitter) fn lower_int_kernel(
                 | IntOp::Max
                 | IntOp::Clamp => "__bynkIntPow",
             };
-            cx.note_int();
             Some(plain_call(helper, kids))
         }
         _ => None,
@@ -179,12 +205,11 @@ pub(in crate::emitter) fn lower_float_kernel(
             } else {
                 op.name()
             };
-            cx.note_int();
             Some({
                 let n = kids;
                 call(
-                    id("__bynkToInt"),
-                    vec![call(global_math(f), n), str_node(op.name())],
+                    ident("__bynkToInt"),
+                    vec![call(global_math(f), n), str_lit(op.name())],
                 )
             })
         }
@@ -201,7 +226,7 @@ pub(in crate::emitter) fn lower_float_kernel(
             let name = op.name();
             Some({
                 let n = kids;
-                call(member(member(id("globalThis"), "Number"), name), n)
+                call(member(member(ident("globalThis"), "Number"), name), n)
             })
         }
         (FloatOp::ToString, []) => {
@@ -255,9 +280,46 @@ pub(in crate::emitter) fn lower_duration_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (DurationOp::ToMillis, []) => Some(identity(&mut pre, receiver, cx)),
-        (DurationOp::ToString, []) => {
+        // #3948: whole units, rounding towards zero. `+ 0` turns the `-0` of a
+        // part unit below zero into `0`.
+        (
+            DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+            [],
+        ) => {
+            let factor = match op {
+                DurationOp::ToSeconds => "1000",
+                DurationOp::ToMinutes => "60000",
+                DurationOp::ToHours => "3600000",
+                DurationOp::ToDays
+                | DurationOp::ToMillis
+                | DurationOp::ToString
+                | DurationOp::ToIso => "86400000",
+            };
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(plain_call("String", kids))
+            let [recv] = take::<1, _>(kids);
+            let quotient = TsExpr::Binary {
+                op: TsBinaryOp::Div,
+                left: Box::new(recv),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num(factor.to_string()))),
+            };
+            Some(TsExpr::Binary {
+                op: TsBinaryOp::Add,
+                left: Box::new(math_call("trunc", vec![quotient])),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num("0".to_string()))),
+            })
+        }
+        // #3977: the text of a `Duration`, in units (`1h30m`) or ISO 8601 (`PT1H30M`).
+        (DurationOp::ToString | DurationOp::ToIso, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            let helper = if matches!(op, DurationOp::ToIso) {
+                "__bynkDurationToIso"
+            } else {
+                "__bynkDurationToString"
+            };
+            Some(plain_call(helper, kids))
         }
         _ => None,
     };
@@ -277,14 +339,9 @@ pub(in crate::emitter) fn lower_instant_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (InstantOp::ToEpochMillis, []) => Some(identity(&mut pre, receiver, cx)),
-        (InstantOp::ToString, []) => {
+        // K3 (#2592): RFC 3339 in UTC. #3977: `toString` is the same text.
+        (InstantOp::ToString | InstantOp::ToIso, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(plain_call("String", kids))
-        }
-        // K3 (#2592): RFC 3339 in UTC.
-        (InstantOp::ToIso, []) => {
-            let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_time_ops();
             Some(plain_call("__bynkInstantToIso", kids))
         }
         _ => None,
@@ -327,22 +384,14 @@ pub(in crate::emitter) fn lower_bytes_kernel(
         }
         (BytesOp::Concat, [other]) => {
             let kids = operands(&mut pre, cx, &[receiver, other]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesConcat", kids))
-        }
-        (BytesOp::Compare, [other]) => {
-            let kids = operands(&mut pre, cx, &[receiver, other]);
-            cx.note_bytes_ops();
-            Some(plain_call("__bynkBytesCompare", kids))
         }
         (BytesOp::ToHex, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesToHex", kids))
         }
         (BytesOp::ToBase64Url, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_bytes_ops();
             Some(plain_call("__bynkBytesToBase64Url", kids))
         }
         _ => None,
@@ -369,7 +418,8 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
     } else {
         pat
     };
-    (source, format!("{flags}{extra}"))
+    // #3950: every Bynk regex runs in Unicode mode.
+    (source, format!("{flags}{extra}u"))
 }
 
 /// [`regex_construction`] as a node: `new globalThis.RegExp("<source>", "<flags>")`. The `Str`
@@ -377,8 +427,8 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
 fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
     let (source, flags) = regex_parts(literal, extra, anchored);
     TsExpr::New {
-        callee: Box::new(member(id("globalThis"), "RegExp")),
-        args: vec![str_node(source), str_node(flags)],
+        callee: Box::new(member(ident("globalThis"), "RegExp")),
+        args: vec![str_lit(source), str_lit(flags)],
     }
 }
 
@@ -387,12 +437,6 @@ fn regex_node(literal: &str, extra: &str, anchored: bool) -> TsExpr {
 /// the sticky regex, so its body is built once for every literal.
 fn split_regex_arrow() -> TsExpr {
     use bynk_ts::{TsBindingName, TsLit, TsStmt};
-    let num = |n: &str| TsExpr::Lit(TsLit::Num(n.to_string()));
-    let bin = |op, l: TsExpr, r: TsExpr| TsExpr::Binary {
-        op,
-        left: Box::new(l),
-        right: Box::new(r),
-    };
     let let_num = |name: &str, init: TsExpr| {
         TsStmt::let_stmt(
             TsBindingName::Ident(name.to_string()),
@@ -404,22 +448,29 @@ fn split_regex_arrow() -> TsExpr {
     let const_of = |name: &str, ty: Option<TsType>, init: TsExpr| {
         TsStmt::const_stmt(TsBindingName::Ident(name.to_string()), ty, init, None)
     };
-    let assign = |target: TsExpr, value: TsExpr| TsStmt::assign(target, value, None);
-    let exec = || call(member(id("__r"), "exec"), vec![id("__s")]);
-    let last_index = || member(id("__r"), "lastIndex");
+    let exec = || call(member(ident("__r"), "exec"), vec![ident("__s")]);
+    let last_index = || member(ident("__r"), "lastIndex");
     let slice_to = |from: &str, to: Option<&str>| {
-        let mut args = vec![id(from)];
-        args.extend(to.map(id));
-        call(member(id("__s"), "slice"), args)
+        let mut args = vec![ident(from)];
+        args.extend(to.map(ident));
+        call(member(ident("__s"), "slice"), args)
     };
     // An empty input has no characters to scan: no match gives `[""]`, a match gives `[]`.
     let empty = TsStmt::if_stmt(
-        bin(TsBinaryOp::StrictEq, member(id("__s"), "length"), num("0")),
+        binary(
+            TsBinaryOp::StrictEq,
+            member(ident("__s"), "length"),
+            num_lit("0"),
+        ),
         TsStmt::block(
             vec![TsStmt::return_stmt(
                 Some(TsExpr::Conditional {
-                    test: Box::new(bin(TsBinaryOp::StrictEq, exec(), TsExpr::Lit(TsLit::Null))),
-                    consequent: Box::new(TsExpr::array(vec![str_node("")])),
+                    test: Box::new(binary(
+                        TsBinaryOp::StrictEq,
+                        exec(),
+                        TsExpr::Lit(TsLit::Null),
+                    )),
+                    consequent: Box::new(TsExpr::array(vec![str_lit("")])),
                     alternate: Box::new(TsExpr::array(vec![])),
                 }),
                 None,
@@ -430,33 +481,41 @@ fn split_regex_arrow() -> TsExpr {
     );
     // A miss, or an empty match at the last split point, advances one code unit; a hit cuts.
     let advance = TsStmt::if_else_stmt(
-        bin(
+        binary(
             TsBinaryOp::Or,
-            bin(TsBinaryOp::StrictEq, id("__hit"), TsExpr::Lit(TsLit::Null)),
-            bin(TsBinaryOp::StrictEq, id("__e"), id("__p")),
+            binary(
+                TsBinaryOp::StrictEq,
+                ident("__hit"),
+                TsExpr::Lit(TsLit::Null),
+            ),
+            binary(TsBinaryOp::StrictEq, ident("__e"), ident("__p")),
         ),
-        TsStmt::block(vec![TsStmt::increment(id("__q"), None)], None),
+        TsStmt::block(vec![TsStmt::increment(ident("__q"), None)], None),
         TsStmt::block(
             vec![
                 TsStmt::expr_stmt(
                     call(
-                        member(id("__out"), "push"),
+                        member(ident("__out"), "push"),
                         vec![slice_to("__p", Some("__q"))],
                     ),
                     None,
                 ),
-                assign(id("__p"), id("__e")),
-                assign(id("__q"), id("__p")),
+                assign(ident("__p"), ident("__e")),
+                assign(ident("__q"), ident("__p")),
             ],
             None,
         ),
         None,
     );
     let scan = TsStmt::while_stmt(
-        bin(TsBinaryOp::LessThan, id("__q"), member(id("__s"), "length")),
+        binary(
+            TsBinaryOp::LessThan,
+            ident("__q"),
+            member(ident("__s"), "length"),
+        ),
         TsStmt::block(
             vec![
-                assign(last_index(), id("__q")),
+                assign(last_index(), ident("__q")),
                 const_of("__hit", None, exec()),
                 const_of("__e", None, last_index()),
                 advance,
@@ -467,8 +526,8 @@ fn split_regex_arrow() -> TsExpr {
     );
     TsExpr::Arrow {
         params: vec![
-            param("__s", Some(ts_named("string"))),
-            param("__r", Some(ts_named("globalThis.RegExp"))),
+            TsParam::new("__s", Some(ts_named("string"))),
+            TsParam::new("__r", Some(ts_named("globalThis.RegExp"))),
         ],
         is_async: false,
         generics: Vec::new(),
@@ -480,14 +539,14 @@ fn split_regex_arrow() -> TsExpr {
                 Some(TsType::array(ts_named("string"))),
                 TsExpr::array(vec![]),
             ),
-            let_num("__p", num("0")),
-            let_num("__q", num("0")),
+            let_num("__p", num_lit("0")),
+            let_num("__q", num_lit("0")),
             scan,
             TsStmt::expr_stmt(
-                call(member(id("__out"), "push"), vec![slice_to("__p", None)]),
+                call(member(ident("__out"), "push"), vec![slice_to("__p", None)]),
                 None,
             ),
-            TsStmt::return_stmt(Some(id("__out")), None),
+            TsStmt::return_stmt(Some(ident("__out")), None),
         ])),
     }
 }
@@ -504,7 +563,7 @@ fn option_string() -> TsType {
 /// `(name: ty): ret => body`, a one-parameter arrow with a declared return type.
 fn typed_arrow(name: &str, ty: TsType, ret: TsType, body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
-        params: vec![param(name, Some(ty))],
+        params: vec![TsParam::new(name, Some(ty))],
         is_async: false,
         generics: Vec::new(),
         return_type: Some(ret),
@@ -517,28 +576,38 @@ fn none_or_some(name: &str, rhs: TsExpr, some: TsExpr) -> TsExpr {
     TsExpr::Conditional {
         test: Box::new(TsExpr::Binary {
             op: TsBinaryOp::StrictEq,
-            left: Box::new(id(name)),
+            left: Box::new(ident(name)),
             right: Box::new(rhs),
         }),
-        consequent: Box::new(id("None")),
+        consequent: Box::new(ident("None")),
         alternate: Box::new(some),
     }
 }
 
-/// The groups of a regex match, as `Option<string>[]`.
-fn groups_node() -> TsExpr {
-    let map_group = typed_arrow(
+/// `(__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g)`, one
+/// capture group as an `Option`.
+fn group_option_arrow() -> TsExpr {
+    typed_arrow(
         "__g",
         TsType::union(vec![ts_named("string"), ts_named("undefined")]),
         option_string(),
-        none_or_some("__g", id("undefined"), call(id("Some"), vec![id("__g")])),
-    );
+        none_or_some(
+            "__g",
+            ident("undefined"),
+            call(ident("Some"), vec![ident("__g")]),
+        ),
+    )
+}
+
+/// The groups of a regex match, as `Option<string>[]`.
+fn groups_node() -> TsExpr {
+    let map_group = group_option_arrow();
     typed_arrow(
         "__m",
         ts_named("globalThis.RegExpMatchArray"),
         TsType::array(option_string()),
         call(
-            member(TsExpr::array(vec![spread(id("__m"))]), "map"),
+            member(TsExpr::array(vec![spread(ident("__m"))]), "map"),
             vec![map_group],
         ),
     )
@@ -557,7 +626,59 @@ fn find_regex_node(regex: TsExpr, recv: TsExpr) -> TsExpr {
         none_or_some(
             "__m",
             TsExpr::Lit(bynk_ts::TsLit::Null),
-            call(id("Some"), vec![call(groups_node(), vec![id("__m")])]),
+            call(ident("Some"), vec![call(groups_node(), vec![ident("__m")])]),
+        ),
+    );
+    call(mapper, vec![call(member(regex, "exec"), vec![recv])])
+}
+
+/// #3979: `((__m: RegExpExecArray | null): Option<ReadonlyMap<string, Option<string>>> =>
+/// __m === null ? None : Some(new Map<string, Option<string>>([["major", (group)(__m.groups?.["major"])],
+/// …])))(regex.exec(recv))`: the first match's named groups, keyed by the names the pattern
+/// writes. The names are known at compile time, so there is one entry per name and no runtime
+/// helper; a group that did not take part is `None`.
+fn find_regex_named_node(regex: TsExpr, recv: TsExpr, names: &[String]) -> TsExpr {
+    let entries = names
+        .iter()
+        .map(|name| {
+            let groups = TsExpr::OptionalMember {
+                object: Box::new(ident("__m")),
+                property: "groups".to_string(),
+            };
+            let picked = TsExpr::OptionalIndex {
+                object: Box::new(groups),
+                index: Box::new(str_lit(name.clone())),
+            };
+            TsExpr::array(vec![
+                str_lit(name.clone()),
+                call(group_option_arrow(), vec![picked]),
+            ])
+        })
+        .collect();
+    let map = crate::ts_build::new(
+        crate::ts_build::type_app(
+            ident("globalThis.Map"),
+            vec![ts_named("string"), option_string()],
+        ),
+        vec![TsExpr::array(entries)],
+    );
+    let mapper = typed_arrow(
+        "__m",
+        TsType::union(vec![
+            ts_named("globalThis.RegExpExecArray"),
+            ts_named("null"),
+        ]),
+        TsType::named_with_args(
+            "Option",
+            vec![TsType::named_with_args(
+                "ReadonlyMap",
+                vec![ts_named("string"), option_string()],
+            )],
+        ),
+        none_or_some(
+            "__m",
+            TsExpr::Lit(bynk_ts::TsLit::Null),
+            call(ident("Some"), vec![map]),
         ),
     );
     call(mapper, vec![call(member(regex, "exec"), vec![recv])])
@@ -582,6 +703,12 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<
             let n = kids;
             let [recv] = take::<1, _>(n);
             find_regex_node(regex_node(literal, "", false), recv)
+        }
+        StringOp::FindRegexNamed => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            let names = bynk_check::regex_groups::group_names(literal);
+            find_regex_named_node(regex_node(literal, "", false), recv, &names)
         }
         StringOp::FindAllRegex => {
             let n = kids;
@@ -631,7 +758,16 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<
         | StringOp::Chars
         | StringOp::Concat
         | StringOp::PercentEncode
-        | StringOp::PercentDecode => return None,
+        | StringOp::PercentDecode
+        | StringOp::IsEmpty
+        | StringOp::TrimStart
+        | StringOp::TrimEnd
+        | StringOp::PadStart
+        | StringOp::PadEnd
+        | StringOp::Repeat
+        | StringOp::Lines
+        | StringOp::LastIndexOf
+        | StringOp::ReplaceFirst => return None,
     })
 }
 
@@ -651,6 +787,7 @@ pub(in crate::emitter) fn lower_string_kernel(
                 StringOp::MatchesRegex
                     | StringOp::ContainsRegex
                     | StringOp::FindRegex
+                    | StringOp::FindRegexNamed
                     | StringOp::FindAllRegex
                     | StringOp::ReplaceRegex
                     | StringOp::SplitRegex
@@ -734,36 +871,60 @@ pub(in crate::emitter) fn lower_string_kernel(
         }
         (StringOp::IndexOf, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some({
-                let n = kids;
-                let [recv, sub] = take::<2, _>(n);
-                let to_option = arrow(
-                    vec![param("__i", Some(ts_named("number")))],
-                    TsExpr::Conditional {
-                        test: Box::new(TsExpr::Binary {
-                            op: TsBinaryOp::LessThan,
-                            left: Box::new(id("__i")),
-                            right: Box::new(zero()),
-                        }),
-                        consequent: Box::new(id("None")),
-                        alternate: Box::new(call(id("Some"), vec![id("__i")])),
-                    },
-                );
-                call(
-                    to_option,
-                    vec![call(member(receiver_object(recv), "indexOf"), vec![sub])],
-                )
-            })
+            Some(index_option(kids, "indexOf"))
+        }
+        (StringOp::LastIndexOf, [sub]) => {
+            let kids = operands(&mut pre, cx, &[receiver, sub]);
+            Some(index_option(kids, "lastIndexOf"))
+        }
+        // #3978.
+        (StringOp::IsEmpty, []) => {
+            let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
+            Some(binary(
+                TsBinaryOp::StrictEq,
+                member_of(recv, "length"),
+                zero(),
+            ))
+        }
+        (StringOp::TrimStart, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(method_of(kids, "trimStart"))
+        }
+        (StringOp::TrimEnd, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(method_of(kids, "trimEnd"))
+        }
+        // Widths count code points, so these go through a runtime helper; `true` pads at the start.
+        (StringOp::PadStart | StringOp::PadEnd, [width, fill]) => {
+            let mut kids = operands(&mut pre, cx, &[receiver, width, fill]);
+            kids.push(bool_lit(op == StringOp::PadStart));
+            Some(plain_call("__bynkPad", kids))
+        }
+        (StringOp::Repeat, [n]) => {
+            let kids = operands(&mut pre, cx, &[receiver, n]);
+            Some(plain_call("__bynkRepeat", kids))
+        }
+        (StringOp::Lines, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(plain_call("__bynkLines", kids))
+        }
+        // The first occurrence only, and `to` literally: a function replacer's result is
+        // never `$`-expanded, as `replace`'s is not either (#1650).
+        (StringOp::ReplaceFirst, [from, to]) => {
+            let kids = operands(&mut pre, cx, &[receiver, from, to]);
+            let [recv, from, to] = take::<3, _>(kids);
+            Some(call(
+                member(receiver_object(recv), "replace"),
+                vec![from, arrow(vec![], to)],
+            ))
         }
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         (StringOp::PercentEncode, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_url_ops();
             Some(plain_call("__bynkPercentEncode", kids))
         }
         (StringOp::PercentDecode, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            cx.note_url_ops();
             Some(plain_call("__bynkPercentDecode", kids))
         }
         _ => None,
@@ -784,10 +945,10 @@ pub(in crate::emitter) fn lower_decimal_kernel(
     let mode = |a: &Expr| rounding_mode(a).map(|m| m.name());
     // A helper call whose last operand is the rounding mode, a string literal.
     let with_mode = |helper: &str, mut kids: Vec<bynk_ts::TsExpr>, mode: &str| {
-        kids.push(str_node(mode));
+        kids.push(str_lit(mode));
         {
             let n = kids;
-            call(id(helper), n)
+            call(ident(helper), n)
         }
     };
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
@@ -1012,8 +1173,24 @@ mod tests {
                 "globalThis.Math.atan2(x, y)",
                 "",
             ),
-            ("d: Duration", "String { d.toString() }", "String(d)", ""),
-            ("i: Instant", "String { i.toString() }", "String(i)", ""),
+            (
+                "d: Duration",
+                "String { d.toString() }",
+                "__bynkDurationToString(d)",
+                "__bynkDurationToString",
+            ),
+            (
+                "d: Duration",
+                "String { d.toIso() }",
+                "__bynkDurationToIso(d)",
+                "__bynkDurationToIso",
+            ),
+            (
+                "i: Instant",
+                "String { i.toString() }",
+                "__bynkInstantToIso(i)",
+                "__bynkInstantToIso",
+            ),
             (
                 "i: Instant",
                 "String { i.toIso() }",
@@ -1044,12 +1221,6 @@ mod tests {
                 "Bytes { b.concat(c) }",
                 "__bynkBytesConcat(b, c)",
                 "__bynkBytesConcat",
-            ),
-            (
-                "b: Bytes, c: Bytes",
-                "Int { b.compare(c) }",
-                "__bynkBytesCompare(b, c)",
-                "__bynkBytesCompare",
             ),
             (
                 "b: Bytes",
@@ -1246,35 +1417,35 @@ mod tests {
         for (body, want) in [
             (
                 "Bool { s.matchesRegex(\"a+\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.matchesRegex(\"(?i)abc\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"i\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"iu\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"a\\\\.b\") }",
-                "new globalThis.RegExp(\"a\\\\.b\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"a\\\\.b\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"\\\"q\\\"$\") }",
-                "new globalThis.RegExp(\"\\\"q\\\"$\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"\\\"q\\\"$\", \"u\").test(s)".to_string(),
             ),
             (
                 "Option[List[Option[String]]] { s.findRegex(\"(a)(b)?\") }",
                 format!(
-                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"\").exec(s))"
+                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"u\").exec(s))"
                 ),
             ),
             (
                 "List[List[Option[String]]] { s.findAllRegex(\"\\\\d+\") }",
                 format!(
-                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"g\"))].map({groups}) as readonly (readonly Option<string>[])[])"
+                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"gu\"))].map({groups}) as readonly (readonly Option<string>[])[])"
                 ),
             ),
             (
                 "String { s.replaceRegex(\"\\\\s+\", \" \") }",
-                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"g\"), \" \")".to_string(),
+                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"gu\"), \" \")".to_string(),
             ),
         ] {
             let ts = emitted("s: String", body);
@@ -1304,7 +1475,7 @@ mod tests {
             "{ts}"
         );
         assert!(
-            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"y\"))"),
+            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"yu\"))"),
             "{ts}"
         );
         assert!(ts.contains("\n    while (__q < __s.length) {\n"), "{ts}");

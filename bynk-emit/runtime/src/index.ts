@@ -2,7 +2,9 @@
 // for what the bundled runtime.ts exports; the bundle script concatenates the
 // modules below (in this dependency order) into one flat file.
 export * from "./result.ts";
+export * from "./traceparent.ts";
 export * from "./bytes.ts";
+export * from "./secret.ts";
 export * from "./decimal.ts";
 export * from "./time.ts";
 export * from "./settle.ts";
@@ -16,6 +18,7 @@ export * from "./storage.ts";
 export * from "./vectorize.ts";
 export * from "./store.ts";
 export * from "./entries.ts";
+export * from "./traceparent.ts";
 export * from "./boundary.ts";
 export * from "./yaml.ts";
 export * from "./codec.ts";
@@ -25,7 +28,8 @@ export * from "./queue.ts";
 export * from "./email.ts";
 export * from "./postgres.ts";
 export * from "./mysql.ts";
-export * from "./pglite.ts";
+export * from "./testing/pglite.ts";
+export * from "./testing/bindings.ts";
 export * from "./agent.ts";
 export * from "./auth.ts";
 export * from "./session.ts";

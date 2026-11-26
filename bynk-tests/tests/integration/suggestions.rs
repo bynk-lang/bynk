@@ -50,7 +50,7 @@ provides Gamma = GammaImpl {{
 }}
 
 service handlers {{
-  on call(x: Int) -> Effect[Int]{given} {{
+  on call(x: Int) -> Effect[Int] by Caller{given} {{
 {body}
   }}
 }}
@@ -222,7 +222,7 @@ context app.crossuse
 consumes platform.time as Time
 
 service crossuse {{
-  on call() -> Effect[Int]{given} {{
+  on call() -> Effect[Int] by Caller{given} {{
     let t <- Time.Clock.now()
     t
   }}
@@ -408,6 +408,62 @@ fn refined_raw_quick_fix_drops_dot_raw() {
     assert!(
         !fixed.contains(".raw") && fixed.contains("  s\n"),
         "`.raw` removed, leaving the bare value: {fixed:?}"
+    );
+    assert_clean("app/refine.bynk", &fixed);
+}
+
+// -- #3976: `e.kind == "Malformed"` → compare with the variant --
+
+#[test]
+fn decode_error_kind_string_comparison_is_fixed_to_the_variant() {
+    // `DecodeError.kind` was a `String`; it is a `DecodeErrorKind` now.
+    let src = "commons app.refine\n\n\
+               fn bad(e: DecodeError) -> Bool {\n  e.kind == \"Malformed\"\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let s = sole_suggestion(&diags, "bynk.types.type_mismatch");
+    assert_eq!(s.applicability, Applicability::MachineApplicable);
+    let fixed = apply(src, &s);
+    assert!(
+        fixed.contains("e.kind == Malformed") && !fixed.contains('"'),
+        "the literal becomes the variant: {fixed:?}"
+    );
+    assert_clean("app/refine.bynk", &fixed);
+}
+
+#[test]
+fn decode_error_kind_comparison_with_no_such_kind_gets_no_fix() {
+    let src = "commons app.refine\n\n\
+               fn bad(e: DecodeError) -> Bool {\n  e.kind == \"Malfomed\"\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let d = diags
+        .iter()
+        .find(|d| d.error.category == "bynk.types.type_mismatch")
+        .expect("a type mismatch");
+    assert!(d.error.suggestions.is_empty(), "no fix for a typo: {d:?}");
+    assert!(
+        d.error
+            .notes
+            .iter()
+            .any(|n| n.contains("no kind is named \"Malfomed\"")),
+        "the note says so: {d:?}"
+    );
+}
+
+// -- #3946: `?` on a predicate-free named type's `.of` → "drop the `?`" quick-fix --
+
+#[test]
+fn named_type_of_question_fix_drops_the_question_mark() {
+    // `type Id = Int` has no predicate, so `Id.of(n)` is total and returns `Id`;
+    // the `?` written when it returned a `Result` is the error.
+    let src = "commons app.refine\n\n\
+               type Id = Int\n\n\
+               fn mk(n: Int) -> Result[Id, ValidationError] {\n  let id = Id.of(n)?\n  Ok(id)\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let s = sole_suggestion(&diags, "bynk.types.question_on_non_result");
+    let fixed = apply(src, &s);
+    assert!(
+        fixed.contains("let id = Id.of(n)\n"),
+        "`?` removed: {fixed:?}"
     );
     assert_clean("app/refine.bynk", &fixed);
 }

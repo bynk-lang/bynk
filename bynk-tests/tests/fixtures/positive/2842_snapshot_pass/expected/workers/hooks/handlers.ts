@@ -41,12 +41,12 @@ export function read(text: string): Result<Delivery, string> {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Delivery(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as Delivery);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(text);
   switch (__r0.tag) {
     case "Ok": {
@@ -77,6 +77,18 @@ export function __serialise_Action(value: Action): __JsonValue {
 }
 
 export function __deserialise_Action(json: __JsonValue, path: string = "$"): Result<Action, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Opened":
+        return Ok({ tag: "Opened" } as Action);
+      case "Closed":
+        return Ok({ tag: "Closed" } as Action);
+      case "Labeled":
+        return Ok({ tag: "Labeled" } as Action);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

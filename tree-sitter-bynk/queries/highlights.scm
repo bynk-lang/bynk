@@ -48,6 +48,9 @@
   "security"
   "limits"
   "json"
+  "delivery"
+  "fallback"
+  "errors"
   "exports"
   "key"
   "suite"
@@ -109,6 +112,9 @@
   "fails"
   "after"
   "never"
+  "rejected"
+  "faulted"
+  "unreachable"
 ] @keyword.operator
 
 ; #2134: the contextual `env` word heading a suite/case `env { … }` clause.
@@ -120,6 +126,7 @@
 ; #1706: the fault-claim word — contextual, like the observation words: the
 ; token exists only inside a `faults_expr`.
 "faults" @keyword.operator
+"violates" @keyword.operator
 
 ; #2842: the snapshot claim's words — contextual, like `faults`: the tokens exist
 ; only inside a `snapshot_expr`.
@@ -253,6 +260,11 @@
 
 (qualified_name (identifier) @module)
 (uses_decl target: (qualified_name) @module)
+; #4045: the alias of `uses lib.y as Y`, and the qualifier of a name read through it.
+(uses_decl alias: (identifier) @module)
+(qualified_type_ref qualifier: (identifier) @module)
+; #4403: the qualifier of a generic applied through a `uses` clause (`Y.Box[Int]`).
+(applied_type_ref qualifier: (identifier) @module)
 (consumes_decl target: (qualified_name) @module)
 ; #2890: the name a `consumes U { T as Alias }` item introduces is a type.
 (consumes_item alias: (identifier) @type)

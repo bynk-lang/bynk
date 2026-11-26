@@ -11,7 +11,7 @@ consumes bynk.cloudflare { MySql, MySqlError, MySqlRun, MySqlStatement, MySqlVal
 capability Legacy = MySql
 
 service probe {
-  on call(name: String) -> Effect[Result[String, MySqlError]] given Legacy {
+  on call(name: String) -> Effect[Result[String, MySqlError]] by Caller given Legacy {
     let a <- Legacy.all("select `id`, `name` from `orders` where `name` like ? order by `id` limit ?, ?", [MySqlText(name), MySqlInteger(0), MySqlInteger(10)])
     let b <- Legacy.all("insert into orders (name, qty) values (?, ?) on duplicate key update qty = qty + values(qty)", [MySqlText(name), MySqlInteger(1)])
     let c <- Legacy.all("insert ignore into orders (name) values (?)", [MySqlText(name)])
@@ -21,7 +21,7 @@ service probe {
 }
 
 service batch {
-  on call(name: String) -> Effect[Result[List[MySqlRun], MySqlError]] given Legacy {
+  on call(name: String) -> Effect[Result[List[MySqlRun], MySqlError]] by Caller given Legacy {
     Legacy.transaction([
       MySqlStatement { sql: "insert ignore into orders (name) values (?)", params: [MySqlText(name)] },
       MySqlStatement { sql: "delete from orders where qty < ?", params: [MySqlInteger(0)] },

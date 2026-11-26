@@ -30,9 +30,8 @@ use crate::test_json::TestRun;
 /// Workers (`-- --var`) and in the runner that signs for them.
 pub const TEST_SECRET: &str = "__bynk_test_secret";
 
-/// #3386: the fixed signing key a `SignedCookie` actor's key variable takes in a test run (base64url of
-/// 32 bytes), as the verifier refuses the short `TEST_SECRET`.
-pub const TEST_SESSION_KEY: &str = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
+// 1B.2a (#4028): defined beside the test-harness generation that embeds it.
+pub use bynk_emit::testgen::TEST_SESSION_KEY;
 
 /// How long to wait for a `bynk dev` to answer before giving up.
 const READY_TIMEOUT: Duration = Duration::from_secs(180);
@@ -391,6 +390,7 @@ fn merge(docs: &[serde_json::Value]) -> TestRun {
                 refusals: crate::test_json::refusals_from_json(c.get("refusals")),
                 origin: c["origin"].as_str().map(str::to_string),
                 warnings: crate::test_json::warnings_from_json(c.get("warnings")),
+                actual: c["actual"].as_str().map(str::to_string),
                 // The groups run as `json`, whose document holds no durations.
                 duration_ms: None,
             });

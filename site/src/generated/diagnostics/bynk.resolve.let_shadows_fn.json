@@ -1,0 +1,12 @@
+{
+  "blurb": "A `let` may not reuse the name of a function declared in the unit. The name would mean the function in one place and the binding in another, and a reader could not tell which `total` is meant. Choose a different name for the binding. Reusing a type's name is `bynk.resolve.let_shadows_type`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.let_shadows_fn",
+  "constructs": [
+    "let_stmt"
+  ],
+  "example": "fn total() -> Int { 1 }\n\nfn run() -> Int {\n    let total = 2                // ✗ shadows the function `total`\n    total\n}\n\nfn run() -> Int {\n    let sum = total() + 1        // ✓ a new name\n    sum\n}",
+  "severity": "error",
+  "summary": "A `let` binding shadows a function."
+}

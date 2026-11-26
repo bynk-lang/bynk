@@ -1,0 +1,10 @@
+{
+  "blurb": "An `event` is declared in a context, and only that context may emit it, so an event belongs to its owner. A `commons` is shared code that other units `uses`, with no owner to emit from, so one may not declare an event. Declare the event in the context that raises it. Other contexts subscribe by consuming that context.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.outside_context",
+  "constructs": [],
+  "example": "commons shop\n\nevent Paid = { id: String }   // ✗ a commons has no owner to emit it\n\ncontext shop\n\nevent Paid = { id: String }   // ✓ declared where it is emitted",
+  "severity": "error",
+  "summary": "An `event` was declared outside a context."
+}

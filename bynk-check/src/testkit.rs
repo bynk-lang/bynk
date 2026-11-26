@@ -143,6 +143,15 @@ impl Analysed {
             .collect()
     }
 
+    /// Every note of every diagnostic.
+    pub(crate) fn notes(&self) -> Vec<&str> {
+        self.analysis
+            .errors
+            .iter()
+            .flat_map(|e| e.error.notes.iter().map(String::as_str))
+            .collect()
+    }
+
     /// The categories of error-severity diagnostics only.
     pub(crate) fn error_categories(&self) -> Vec<&'static str> {
         self.analysis
@@ -153,10 +162,14 @@ impl Analysed {
             .collect()
     }
 
-    /// Panic, listing every diagnostic, unless the project has none at all.
+    /// Panic, listing every diagnostic, unless the project has none at all. A hint
+    /// is a suggestion, not a finding, so it does not count.
     pub(crate) fn assert_clean(&self) {
         assert!(
-            self.analysis.errors.is_empty(),
+            self.analysis
+                .errors
+                .iter()
+                .all(|e| Severity::for_error(&e.error) == Severity::Hint),
             "expected a clean project, got:\n{}",
             self.render()
         );

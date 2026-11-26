@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "authorise": "86cab4b0fe626569"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "authorise": "Svc(\"authorise\",P(\"total\",B(\"Int\")),Ret(R(Rec(\"Receipt\",F(\"id\",B(\"String\"))),Sum(\"PaymentError\",V(\"Declined\"),V(\"Down\")))))"
+  }
+}

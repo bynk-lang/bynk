@@ -5,7 +5,7 @@ import * as shop_ledger from "./shop/ledger.js";
 import * as shop_order from "./shop/order.js";
 
 export function composeApp() {
-  const shop_orderDeps = {  };
+  const shop_orderDeps = {};
   const shop_orderSurface = shop_order.__makeSurface(shop_orderDeps);
   const shop_ledgerDeps = { surface: { order: shop_orderSurface } };
   const shop_ledgerSurface = shop_ledger.__makeSurface(shop_ledgerDeps);

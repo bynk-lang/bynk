@@ -48,7 +48,7 @@ fn notifyAll(ns: List[Int]) -> Effect[()] given Mail {
 }
 
 service run {
-	on call(n: Int) -> Effect[Int] given Mail, Audit, Count {
+	on call(n: Int) -> Effect[Int] by Caller given Mail, Audit, Count {
 		// a payload that is not a `Result`
 		do Count.next(n).detach()
 		// a unit effect, and a `Result` payload

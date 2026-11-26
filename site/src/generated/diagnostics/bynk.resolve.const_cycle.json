@@ -1,0 +1,12 @@
+{
+  "blurb": "Constants may refer to each other in any order, across files and through `uses`, but a value cannot depend on itself: in a cycle no member has anything to start from. The error lists the cycle (`First` → `Second` → `First`) and is reported once, at the member declared first. Break the cycle by giving one member a literal or other static value. A reference such as `Second` is itself a static initialiser, so this is the only rule that limits constants naming each other; `bynk.resolve.bad_const_initialiser` covers initialisers that are not static at all.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.const_cycle",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "const First: Int = Second   // ✗ `First` → `Second` → `First`\nconst Second: Int = First\n\nconst Second: Int = 10   // ✓ end the chain at a literal",
+  "severity": "error",
+  "summary": "Constants refer to each other in a cycle, so none of them has a value."
+}

@@ -1,0 +1,42 @@
+---
+#3873: the schedule rule at its edges.
+---
+suite demo.sched
+
+case "a literal is admitted at compile time" {
+  expect nightly() == "0 2 * * MON-FRI"
+}
+
+case "Cloudflare's examples are accepted by .of" {
+  expect Schedule.of("* * * * *").isOk()
+  expect Schedule.of("0 18 * * 6L").isOk()
+  expect Schedule.of("0 18 * * friL").isOk()
+  expect Schedule.of("59 23 LW * *").isOk()
+  expect Schedule.of("*/45 * * * *").isOk()
+}
+
+case "an out-of-range, malformed or unsupported schedule is refused by .of" {
+  expect !Schedule.of("61 * * * *").isOk()
+  expect !Schedule.of("* * * * 0").isOk()
+  expect !Schedule.of("5-1 * * * *").isOk()
+  expect !Schedule.of("*/0 * * * *").isOk()
+  expect !Schedule.of("? * * * *").isOk()
+  expect !Schedule.of("@daily").isOk()
+  expect !Schedule.of("0 0 * * * *").isOk()
+}
+
+case "irregular whitespace is refused" {
+  expect !Schedule.of("0  2 * * *").isOk()
+  expect !Schedule.of("0\t2 * * *").isOk()
+  expect !Schedule.of("0 2 * * * ").isOk()
+  expect !Schedule.of(" 0 2 * * *").isOk()
+}
+
+case "Json.decode and is enforce the same rule" {
+  expect decodeSchedule("\"0 2 * * *\"").isOk()
+  expect !decodeSchedule("\"61 * * * *\"").isOk()
+  expect decodeJob("{\"name\": \"n\", \"schedule\": \"*/5 * * * *\"}").isOk()
+  expect !decodeJob("{\"name\": \"n\", \"schedule\": \"0  2 * * *\"}").isOk()
+  expect isSchedule("0 2 * * *")
+  expect !isSchedule("0  2 * * *")
+}

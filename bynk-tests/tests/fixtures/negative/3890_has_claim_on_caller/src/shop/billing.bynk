@@ -1,0 +1,9 @@
+context shop.billing
+
+actor Admin = Caller where hasClaim("admin")
+
+service refunds {
+  on call(id: String) -> Effect[Result[String, String]] by Admin {
+    Ok(id)
+  }
+}

@@ -8,7 +8,7 @@ consumes docs.archive
 // non-serialisable `Stream`/`Connection`.
 
 service submit {
-  on call(d: Doc) -> Effect[Result[Int, ()]] {
+  on call(d: Doc) -> Effect[Result[Int, ()]] by Caller {
     let n <- docs.archive.intake(d)
     n
   }

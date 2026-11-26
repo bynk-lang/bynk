@@ -50,7 +50,7 @@ use crate::symbols::{
 use bynk_project::{
     AttributedError, LabelFile, ParsedFile, UnitKind, check_directory_kind_consistency,
     check_directory_name_consistency, check_file_directory_conflicts, check_group_kind_consistency,
-    check_group_module_docs, check_path_name_alignment, detect_consumes_cycles,
+    check_group_module_docs, check_path_name_alignment, detect_dependency_cycles,
     discover_bynk_files, is_unpinned_range, normalize_rel, parse_sources, parse_sources_recovering,
     read_adapter_binding, read_adapter_include, read_source,
 };
@@ -243,6 +243,15 @@ impl ErrorSink {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Rewrite each error-severity diagnostic pushed since the sink held `from`
+    /// of them (see [`Self::len`]), for a check that wraps another's errors with
+    /// where its input came from (#3942).
+    pub fn map_errors_from(&mut self, from: usize, f: impl Fn(CompileError) -> CompileError) {
+        for entry in self.entries.iter_mut().skip(from) {
+            entry.error = f(entry.error.clone());
+        }
+    }
 }
 
 /// #3431: offer `signed_cookie_unprefixed`'s rename to `__Host-…` only when no
@@ -365,6 +374,38 @@ pub enum BuildTarget {
     /// invocations using a JSON wire format with refinement validation on
     /// the receiving side.
     Workers,
+}
+
+/// #3941: resolve every `const X: T = env(NAME[, default])` to the literal
+/// `bynk.toml` gives it in the `default` environment, so every later phase sees
+/// an ordinary constant. The per-environment build selects another environment
+/// ([`crate::env_consts::resolve`] takes its name). A manifest whose variables
+/// do not read is the manifest check's to report, and leaves the constants to
+/// their defaults.
+pub fn resolve_env_consts(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    errors: &mut ErrorSink,
+) {
+    let default = bynk_project::vars::DEFAULT_ENVIRONMENT;
+    resolve_env_consts_for(parsed, project_root, overlay, default, errors);
+}
+
+/// [`resolve_env_consts`] for the named environment (`bynk deploy --env`).
+pub fn resolve_env_consts_for(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    environment: &str,
+    errors: &mut ErrorSink,
+) {
+    let vars = bynk_project::vars::try_read_vars_with(project_root, overlay).unwrap_or_default();
+    let outcome = crate::env_consts::resolve(parsed, &vars, environment);
+    errors.extend_attributed_by_span(parsed, outcome.source);
+    for e in outcome.manifest {
+        errors.push_for(Some(std::path::Path::new("bynk.toml")), e);
+    }
 }
 
 pub fn normalize_service_defaults(parsed: &mut [ParsedFile]) {
@@ -682,6 +723,10 @@ pub fn phase_parse(
         return Err(());
     }
 
+    // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
+    crate::implicit_uses::add_implicit_uses(&mut parsed);
+    // #4181: a commons that names a transparent type of the `bynk` adapter reaches it.
+    crate::implicit_uses::add_implicit_consumes(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }
@@ -859,9 +904,23 @@ pub fn phase_resolve_derived(
                                 )
                                 .with_note("an instance takes each option once"),
                             );
-                        } else if let Some(value) =
-                            instance_option_value(ann, option_kind, &d.base.name, &path, errors)
-                        {
+                        } else if let Some(value) = {
+                            // #3942: an error about a value a constant gave says so.
+                            let mark = errors.len();
+                            let value = instance_option_value(
+                                ann,
+                                option_kind,
+                                &d.base.name,
+                                &path,
+                                errors,
+                            );
+                            if let Some(arg) = ann.args.first() {
+                                errors.map_errors_from(mark, |e| {
+                                    crate::annotation_consts::with_const_origin(e, arg)
+                                });
+                            }
+                            value
+                        } {
                             // A Worker the build itself makes is a Bynk
                             // context: deploy and dev read any build Worker
                             // as a project edge, never a foreign one, so it
@@ -1207,7 +1266,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
 /// A sample value of option `option`, as a note writes it.
 fn option_sample(option: &str) -> &'static str {
     match option {
-        firstparty::R2_JURISDICTION_OPTION => "\"eu\"",
+        firstparty::JURISDICTION_OPTION => "\"eu\"",
         firstparty::RATELIMIT_LIMIT_OPTION => "100",
         firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
         firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
@@ -1320,6 +1379,39 @@ fn vectorize_metric_error(
     })
 }
 
+/// #3942 B: the bare name an option was given, when it was one that did not
+/// resolve to a literal (see `annotation_consts::rewrite_instance_options`).
+fn bare_name_arg(ann: &bynk_syntax::ast::Annotation) -> Option<String> {
+    ann.args.first().and_then(|a| match &a.value.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        // A list option's element that did not resolve (`@allowedRecipients([Ops])`).
+        ExprKind::ListLit(items, ..) => items.iter().find_map(|i| match &i.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        }),
+        _ => None,
+    })
+}
+
+/// An instance option's own error, with a note on what a constant must be to
+/// stand there when the option was given a name (#3942 B).
+fn invalid_option_error(
+    option: &str,
+    named: Option<&str>,
+    span: bynk_syntax::span::Span,
+    message: String,
+) -> CompileError {
+    let error = CompileError::new("bynk.capability.invalid_option", span, message).with_note(
+        format!("write `@{option}({})`, for example", option_sample(option)),
+    );
+    match named {
+        Some(name) => error.with_note(format!(
+            "`{name}` is not a constant declared exactly the option's type and bound to a literal, or to another such constant"
+        )),
+        None => error,
+    }
+}
+
 /// Interop I5 (#1972): the value of one instance option: one positional
 /// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
@@ -1337,12 +1429,9 @@ fn instance_option_value(
 ) -> Option<crate::symbols::OptionValue> {
     use crate::symbols::OptionValue;
     let option = ann.name.name.as_str();
-    let invalid = |span, message: String| {
-        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
-            "write `@{option}({})`, for example",
-            option_sample(option)
-        ))
-    };
+    let named = bare_name_arg(ann);
+    let invalid =
+        |span, message: String| invalid_option_error(option, named.as_deref(), span, message);
     let [arg] = ann.args.as_slice() else {
         errors.push_for(
             Some(path),
@@ -1522,8 +1611,8 @@ fn instance_option_value(
         );
         return None;
     }
-    if option == crate::firstparty::R2_JURISDICTION_OPTION
-        && !r2_jurisdiction_ok(text, base, ann, path, errors)
+    if option == crate::firstparty::JURISDICTION_OPTION
+        && !jurisdiction_ok(text, base, ann, path, errors)
     {
         return None;
     }
@@ -1654,16 +1743,16 @@ fn email_list_ok(
     false
 }
 
-/// Whether `text` is a jurisdiction an `R2` bucket can be pinned to. Pushes the
-/// error and returns `false` otherwise.
-fn r2_jurisdiction_ok(
+/// Whether `text` is a jurisdiction an `R2` bucket or a `D1` database can be
+/// pinned to. Pushes the error and returns `false` otherwise.
+fn jurisdiction_ok(
     text: &str,
     base: &str,
     ann: &bynk_syntax::ast::Annotation,
     path: &std::path::Path,
     errors: &mut ErrorSink,
 ) -> bool {
-    if crate::firstparty::R2_JURISDICTIONS.contains(&text) {
+    if crate::firstparty::is_jurisdiction(text) {
         return true;
     }
     errors.push_for(
@@ -1671,16 +1760,12 @@ fn r2_jurisdiction_ok(
         CompileError::new(
             "bynk.capability.invalid_option",
             ann.span,
-            format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+            format!(
+                "`{text}` is not a jurisdiction a `{base}` {} can be pinned to",
+                if base == "D1" { "database" } else { "bucket" }
+            ),
         )
-        .with_note(format!(
-            "the jurisdictions are {}",
-            crate::firstparty::R2_JURISDICTIONS
-                .iter()
-                .map(|j| format!("`\"{j}\"`"))
-                .collect::<Vec<_>>()
-                .join(" and ")
-        )),
+        .with_note(crate::firstparty::jurisdictions_note()),
     );
     false
 }
@@ -2370,6 +2455,87 @@ fn conflicts_with_first_party_pin(
     true
 }
 
+/// #3984/#4348: the `uses` map a suite's view sees: each target's own, plus the test-only commons
+/// the `suites` (indices into `parsed`) `uses`, so those names reach them as they reach the
+/// target's own commons. Only the test pass reads it, so no deployable module imports a
+/// test-only commons. Checking passes one suite at a time, so a test-only commons is in scope only
+/// where it is `uses`d; the emitted test module passes every suite.
+pub fn unit_uses_with_suite_uses(
+    unit_uses: &HashMap<String, Vec<String>>,
+    parsed: &[ParsedFile],
+    suites: &[usize],
+) -> HashMap<String, Vec<String>> {
+    let test_only: HashSet<String> = parsed
+        .iter()
+        .filter_map(|pf| match pf.unit() {
+            SourceUnit::Commons(c) if c.test_only => Some(c.name.joined()),
+            _ => None,
+        })
+        .collect();
+    let mut out = unit_uses.clone();
+    for pf in suites.iter().map(|&i| &parsed[i]) {
+        let SourceUnit::Suite(t) = pf.unit() else {
+            continue;
+        };
+        for u in t.uses.iter().map(|u| u.target.joined()) {
+            if test_only.contains(&u) {
+                let entry = out.entry(t.target.joined()).or_default();
+                if !entry.contains(&u) {
+                    entry.push(u);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// #3984: a `commons x.y for tests` is the test build's alone. A unit that is not a suite or
+/// another test-only commons and `uses` one is `bynk.uses.test_only_commons`, and a deployable
+/// build (`tests` off) leaves every test-only commons out, as it does a suite.
+pub fn phase_test_only_commons(parsed: &mut Vec<ParsedFile>, tests: bool, errors: &mut ErrorSink) {
+    let is_test_only = |pf: &ParsedFile| matches!(pf.unit(), SourceUnit::Commons(c) if c.test_only);
+    let names: HashSet<String> = parsed
+        .iter()
+        .filter(|pf| is_test_only(pf))
+        .map(|pf| match pf.unit() {
+            SourceUnit::Commons(c) => c.name.joined(),
+            _ => String::new(),
+        })
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    let mut refused = false;
+    for pf in parsed.iter() {
+        if is_test_only(pf) || matches!(pf.unit(), SourceUnit::Suite(_)) {
+            continue;
+        }
+        for u in pf
+            .uses()
+            .iter()
+            .filter(|u| names.contains(&u.target.joined()))
+        {
+            refused = true;
+            errors.push_for(
+                Some(pf.identity_path().as_path()),
+                CompileError::new(
+                    "bynk.uses.test_only_commons",
+                    u.span,
+                    format!(
+                        "`{}` is a test-only commons, which only a suite or another test-only commons may `uses`",
+                        u.target.joined()
+                    ),
+                )
+                .with_note("a test-only commons (`commons x.y for tests`) is left out of every deployable, so production code cannot depend on it; move what it needs into a production commons"),
+            );
+        }
+    }
+    // A refused `uses` leaves the commons in, so it is reported once, not again as unknown.
+    if !tests && !refused {
+        parsed.retain(|pf| !is_test_only(pf));
+    }
+}
+
 /// v0.20a: apply the function-type boundary confinement to every serialisable
 /// or boundary-crossing position in a file's items: record fields and sum
 /// payloads (types can cross contexts and persist), service/agent handler
@@ -2399,11 +2565,36 @@ pub fn phase_function_type_boundaries(parsed: &[ParsedFile], errors: &mut ErrorS
     let types = collect_type_decls(parsed.iter().flat_map(|pf| pf.items()));
     for pf in parsed {
         let mut file_errors: Vec<CompileError> = Vec::new();
-        check_function_type_boundary_items(pf.items(), &types, &mut file_errors);
+        // #4111: `consumes bynk { Secret as Token }` writes the type as `Token` here, so a
+        // file that renames a type sees it under the new name too.
+        let aliased = with_consumed_type_aliases(&types, pf.consumes());
+        check_function_type_boundary_items(
+            pf.items(),
+            aliased.as_ref().unwrap_or(&types),
+            &mut file_errors,
+        );
         for err in file_errors {
             errors.push_for(Some(&pf.identity_path()), err);
         }
     }
+}
+
+/// `types` plus, for each `consumes U { T as Alias }` of a file, `Alias` naming the declaration
+/// of `T`; `None` when the file renames nothing, so the common case copies nothing.
+fn with_consumed_type_aliases(
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumes: &[ConsumesDecl],
+) -> Option<HashMap<String, Arc<TypeDecl>>> {
+    let mut out: Option<HashMap<String, Arc<TypeDecl>>> = None;
+    for item in consumes.iter().flat_map(|c| c.selected.iter().flatten()) {
+        let (Some(alias), Some(decl)) = (&item.alias, types.get(&item.name.name)) else {
+            continue;
+        };
+        out.get_or_insert_with(|| types.clone())
+            .entry(alias.name.clone())
+            .or_insert_with(|| Arc::clone(decl));
+    }
+    out
 }
 
 /// v0.174 (#592): a `name -> TypeDecl` table over a set of items, for the
@@ -2486,8 +2677,12 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Type(t) => match &t.body {
                 TypeBody::Record(r) => {
                     check_polymorphic_recursion(t, types, errors);
-                    for f in &r.fields {
-                        reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                    // #4111: `bynk`'s own `Request` holds an `Authorization`, which is how a secret
+                    // reaches `Fetch`; its fields are not the ones a program declares.
+                    if !crate::context_checks::is_firstparty_decl(t) {
+                        for f in &r.fields {
+                            reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                        }
                     }
                 }
                 TypeBody::Sum(s) => {
@@ -2578,10 +2773,10 @@ pub fn check_function_type_boundary_items(
                         // parts are received.
                         let multipart_body = p.name.name == "body"
                             && h.annotations.iter().any(|a| a.name.name == "multipart");
-                        // #3343: and the record a request reader fills (`cookies`, `query`,
+                        // #3343: and the record a request reader fills (`cookies`, `headers` (#3911), `query`,
                         // a `@form` body) is where `@name` fields are allowed.
                         let request_record = matches!(h.kind, HandlerKind::Http { .. })
-                            && (matches!(p.name.name.as_str(), "cookies" | "query")
+                            && (matches!(p.name.name.as_str(), "cookies" | "headers" | "query")
                                 || (p.name.name == "body"
                                     && h.annotations.iter().any(|a| a.name.name == "form")));
                         // #3380: a `@raw` handler's `body` may be a `Stream[Bytes]`, the
@@ -2748,6 +2943,8 @@ pub fn phase_tables_uses_consts(
 ) -> (HashMap<String, UnitTable>, HashMap<String, Vec<String>>) {
     let mut unit_tables = phase_symbol_tables(groups, kinds, parsed, errors);
     let unit_uses = phase_resolve_uses(groups, kinds, parsed, &unit_tables, policy, errors);
+    // #4455: the items of a braced `uses` list are references to what they select.
+    crate::uses_view::record_selected_items(&unit_uses, parsed, groups, &unit_tables, refs);
     crate::annotation_consts::resolve_annotation_consts(
         groups,
         kinds,
@@ -2987,37 +3184,33 @@ pub fn phase_resolve_consumes(
                     );
                     continue;
                 }
+                // #4044: a commons consumes types only: braced, from an adapter.
+                if kind == UnitKind::Commons
+                    && let Some(err) = commons_consumes_refusal(
+                        c,
+                        &target,
+                        target_kind,
+                        unit_tables,
+                        &exports_type,
+                    )
+                {
+                    errors.push_for(Some(&parsed[i].identity_path()), err);
+                    continue;
+                }
                 // v0.18: adapter dependencies are adapter-to-adapter (spec §4.5) —
                 // an adapter consuming a *context* would pull service logic into
                 // the host boundary.
                 if kind == UnitKind::Adapter && target_kind == UnitKind::Context {
-                    errors.push_for(Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.adapter.consumes_context",
-                            c.span,
-                            format!(
-                                "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
-                            ),
-                        )
-                        .with_note(
-                            "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
-                        ),
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        adapter_consumes_context(name, &target, c.span),
                     );
                     continue;
                 }
                 if target == *name {
-                    let kind_word = if kind == UnitKind::Adapter {
-                        "adapter"
-                    } else {
-                        "context"
-                    };
                     errors.push_for(
                         Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.consumes.self_reference",
-                            c.span,
-                            format!("{kind_word} `{name}` cannot `consumes` itself"),
-                        ),
+                        consumes_self_reference(kind, name, c.span),
                     );
                     continue;
                 }
@@ -3555,163 +3748,6 @@ pub fn phase_private_in_public(
                     if private_types.contains(&n.name.name) {
                         report(n.name.span, "`exports` list", &n.name.name);
                     }
-                }
-            }
-        }
-    }
-}
-
-/// Phase 6: for each unit, detect when two `uses`-imported commons declare the
-/// same (non-shadowed) type or function name — an unrenamable conflict at the use
-/// site. Diagnostics go into `errors`.
-pub fn phase_uses_name_conflicts(
-    unit_uses: &HashMap<String, Vec<String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    errors: &mut ErrorSink,
-) {
-    for (name, targets) in unit_uses {
-        let local = unit_tables.get(name).expect("unit table present");
-        let mut imported: HashMap<String, String> = HashMap::new();
-        for t in targets {
-            // #2618: `private` declarations never come in, so never conflict.
-            let used = unit_tables
-                .get(t)
-                .expect("used unit table present")
-                .importable();
-            for type_name in used.types.keys() {
-                // Unlike the fn and asset loops below, a local service, agent,
-                // provider or asset does not skip this (#1927, review of
-                // #1933). It hides an imported type from naming, but the type
-                // stays composed so its values resolve, and with two used
-                // commons declaring it, which one the unit's values carry is
-                // still ambiguous.
-                if local.types.contains_key(type_name) || local.fns.contains_key(type_name) {
-                    continue;
-                }
-                if let Some(prev) = imported.get(type_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{type_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(type_name.clone(), t.clone());
-                }
-            }
-            for fn_name in used.fns.keys() {
-                // #1925: any local value hides the import (`shadowed_imports`),
-                // so two used commons declaring it leave nothing ambiguous.
-                if crate::symbols::local_value_kind(local, fn_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(fn_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{fn_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(fn_name.clone(), t.clone());
-                }
-            }
-            // #1883, slice 1a ([DECISION G]): a commons' assets come in
-            // through `uses` like its functions, and share their namespace.
-            for asset_name in used.assets.keys() {
-                // #1925: any local value hides the import, as above.
-                if crate::symbols::local_value_kind(local, asset_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(asset_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{asset_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(asset_name.clone(), t.clone());
-                }
-            }
-            // #2387, slice 1: a commons' embeds come in through `uses` the
-            // same way, in the same namespace.
-            for embed_name in used.embeds.keys() {
-                if crate::symbols::local_value_kind(local, embed_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(embed_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{embed_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(embed_name.clone(), t.clone());
-                }
-            }
-            // #2617: and its constants, the same way.
-            for const_name in used.consts.keys() {
-                if crate::symbols::local_value_kind(local, const_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(const_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{const_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(const_name.clone(), t.clone());
                 }
             }
         }
@@ -5082,44 +5118,98 @@ pub fn resolve_consume_prefix(
 /// — see [`resolve_consume_prefix`]'s doc.
 pub fn handler_cross_caps(
     table: &UnitTable,
+    declaring_unit: &str,
     consumed: &[String],
     aliases: &HashMap<String, String>,
     flattened: &HashMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    let mut scan = |given: &[CapRef]| {
-        for c in given {
-            // Events track, slice 0 (spine #936): `Events.emit` is
-            // intercepted entirely at the call site (release-at-commit
-            // buffering) and never calls through a constructed provider —
-            // there is no `EventsProvider` for compose to build, so the
-            // first-party `Events` must never become a compose deps entry.
-            if c.key() == "Events" && flattened.get(c.key()).map(String::as_str) == Some("bynk") {
-                continue;
-            }
-            if let Some(p) = c.prefix() {
-                if let Some(ctx) = resolve_consume_prefix(&p, consumed, aliases) {
-                    out.entry(c.key().to_string()).or_insert(ctx);
-                }
-            } else if let Some(unit) = flattened.get(c.key()) {
-                // v0.17: a bare flattened capability is provided by the unit it
-                // was flattened from.
-                out.entry(c.key().to_string())
-                    .or_insert_with(|| unit.clone());
-            }
-        }
-    };
     for s in table.services.values() {
         for h in &s.handlers {
-            scan(&h.given);
+            scan_cross_caps(
+                &mut out,
+                &h.given,
+                declaring_unit,
+                consumed,
+                aliases,
+                flattened,
+            );
         }
     }
     for a in table.agents.values() {
         for h in &a.handlers {
-            scan(&h.given);
+            scan_cross_caps(
+                &mut out,
+                &h.given,
+                declaring_unit,
+                consumed,
+                aliases,
+                flattened,
+            );
         }
     }
     out
+}
+
+/// The cross-context capabilities a context's **providers** reference in their
+/// own `given`, as `deps_key -> consumed_context` (1B.1b, `ComposePlan`). The
+/// Workers `compose.ts` instantiates these at the top level beside the
+/// handlers' ([`handler_cross_caps`]); the Bundle root reaches them only
+/// through a provider's own recursive instantiation.
+pub fn provider_cross_caps(
+    table: &UnitTable,
+    declaring_unit: &str,
+    consumed: &[String],
+    aliases: &HashMap<String, String>,
+    flattened: &HashMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for p in table.providers.values() {
+        scan_cross_caps(
+            &mut out,
+            &p.given,
+            declaring_unit,
+            consumed,
+            aliases,
+            flattened,
+        );
+    }
+    out
+}
+
+/// One `given` list's cross-context capabilities, first reference winning.
+fn scan_cross_caps(
+    out: &mut BTreeMap<String, String>,
+    given: &[CapRef],
+    declaring_unit: &str,
+    consumed: &[String],
+    aliases: &HashMap<String, String>,
+    flattened: &HashMap<String, String>,
+) {
+    for c in given {
+        // Events track, slice 0 (spine #936): `Events.emit` is
+        // intercepted entirely at the call site (release-at-commit
+        // buffering) and never calls through a constructed provider —
+        // there is no `EventsProvider` for compose to build, so the
+        // first-party `Events` must never become a compose deps entry.
+        // The canonical first-party rule (1A.33), which also covers a
+        // capability declared by `bynk` itself.
+        if firstparty::resolve(c.key(), declaring_unit, flattened)
+            == Some(firstparty::FirstPartyCap::Events)
+        {
+            continue;
+        }
+        if let Some(p) = c.prefix() {
+            if let Some(ctx) = resolve_consume_prefix(&p, consumed, aliases) {
+                out.entry(c.key().to_string()).or_insert(ctx);
+            }
+        } else if let Some(unit) = flattened.get(c.key()) {
+            // v0.17: a bare flattened capability is provided by the unit it
+            // was flattened from.
+            out.entry(c.key().to_string())
+                .or_insert_with(|| unit.clone());
+        }
+    }
 }
 
 /// The `(unit, capability)` pairs a provider capability's `given` closure
@@ -5220,7 +5310,7 @@ fn native_platforms_of_context(
     let consumed = unit_consumes.get(ctx).cloned().unwrap_or_default();
     let aliases = unit_consumes_aliases.get(ctx).cloned().unwrap_or_default();
     let flattened = unit_flattened.get(ctx).cloned().unwrap_or_default();
-    for (key, cctx) in handler_cross_caps(table, &consumed, &aliases, &flattened) {
+    for (key, cctx) in handler_cross_caps(table, ctx, &consumed, &aliases, &flattened) {
         collect_given_closure(
             &cctx,
             &key,
@@ -5470,6 +5560,7 @@ pub fn phase_topology(
 ) {
     phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
     crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
+    crate::email_fallback::phase_fallback_claimed(parsed, groups, kinds, errors);
     crate::queue_consumers::phase_duplicate_queue_consumers(parsed, groups, kinds, errors);
     phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
 }
@@ -5630,6 +5721,14 @@ pub fn phase_unprovided_capabilities(
 /// whether a bundle has a composition root from the same facts.
 pub type UnitCallees = HashMap<String, HashMap<ExprId, checker::Callee>>;
 
+/// What the whole-program call checks read besides the tables: every unit's
+/// kept callees, the units each `uses`, and the project's type interner.
+pub type CallFacts<'a> = (
+    &'a UnitCallees,
+    &'a HashMap<String, Vec<String>>,
+    &'a Arc<checker::Types>,
+);
+
 /// Whether a resolved call is `Events.emit`, the one callee
 /// [`unit_table_uses_emit`] looks for. `Events.emit[...]` dispatches through
 /// the ordinary capability-call path (`checker/calls.rs`).
@@ -5743,7 +5842,8 @@ pub fn composition_root_trigger(
         let consumed = unit_consumes.get(name).cloned().unwrap_or_default();
         let aliases = unit_consumes_aliases.get(name).cloned().unwrap_or_default();
         let flattened = unit_flattened.get(name).cloned().unwrap_or_default();
-        let uses_cross_cap = !handler_cross_caps(table, &consumed, &aliases, &flattened).is_empty()
+        let uses_cross_cap = !handler_cross_caps(table, name, &consumed, &aliases, &flattened)
+            .is_empty()
             || table.providers.values().any(|p| {
                 p.given.iter().any(|g| {
                     g.is_cross_context()
@@ -5796,10 +5896,51 @@ pub fn phase_bundle_composition_unprovided(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_tables: &HashMap<String, UnitTable>,
-    unit_callees: &UnitCallees,
+    (unit_callees, unit_uses, tys): CallFacts<'_>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     errors: &mut ErrorSink,
 ) {
+    // #3877, #4305: a dead-letter queue's consumer against the source consumer, by the same
+    // comparison as a producer's send.
+    crate::queue_delivery::phase_dead_letter_consumers(
+        parsed,
+        groups,
+        kinds,
+        &crate::queue_producers::Project {
+            tables: unit_tables,
+            uses: unit_uses,
+            consumes: unit_consumes,
+        },
+        errors,
+    );
+    // #3899: a signed queue's dead-letter consumer is signed too.
+    crate::queue_delivery::phase_dead_letter_signing(parsed, groups, kinds, errors);
+    // #3879: a producer's message type against the queue's consumer.
+    crate::queue_producers::phase_queue_producers(
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_callees,
+        tys,
+        errors,
+    );
+    // #4441: a `Producer` refinement names only contexts that produce to the queue.
+    crate::producer_admission::phase_producer_admission(parsed, groups, kinds, unit_tables, errors);
+    // #3890: the whole-program call checks share this entry point, which both
+    // pipelines call once the per-unit checks are done: a call the callee's
+    // `Caller` refinement does not admit, and an `IsContext(…)` name that is no
+    // context.
+    crate::caller_admission::phase_caller_admission(
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_callees,
+        errors,
+    );
     if target != BuildTarget::Bundle || !errors.is_empty() {
         return;
     }
@@ -6218,6 +6359,29 @@ pub fn collect_unit_methods(
     local_methods_for_type
 }
 
+/// #4270: whether the consumed export `type_name` of `target` takes the place of
+/// a type a braced `consumes` of a first-party unit left out. Only a selected
+/// export of a user unit does, and only from a first-party unit this context
+/// consumes: a local declaration, or a first-party type reached any other way
+/// (`uses`), still wins over (or conflicts with) it.
+fn displaces_unselected_import(
+    table: &crate::symbols::UnitTable,
+    type_name: &str,
+    target: &str,
+    imported_from: &HashMap<String, String>,
+    consumed: &[String],
+    has_local_value: bool,
+) -> bool {
+    !has_local_value
+        && !crate::symbols::is_first_party_name(target)
+        && table.unselected_consumed_types.contains(type_name)
+        && imported_from.get(type_name).is_some_and(|o| {
+            // The occupant is a first-party unit this context consumes (whose
+            // braces left the name out), not one it reaches with `uses`.
+            crate::symbols::is_first_party_name(o) && consumed.contains(o)
+        })
+}
+
 /// #2887: the alias the `name_conflict` note suggests for `target`'s export
 /// `type_name`: the target's last segment, capitalised, then the type
 /// (`bynk.crypto` + `Digest` → `CryptoDigest`).
@@ -6229,6 +6393,93 @@ fn suggest_alias(target: &str, type_name: &str) -> String {
         .map(|c| c.to_uppercase().collect())
         .unwrap_or_default();
     format!("{head}{}{type_name}", chars.as_str())
+}
+
+/// `bynk.consumes.self_reference`: a unit that `consumes` itself.
+fn consumes_self_reference(kind: UnitKind, name: &str, span: Span) -> CompileError {
+    let kind_word = if kind == UnitKind::Adapter {
+        "adapter"
+    } else {
+        "context"
+    };
+    CompileError::new(
+        "bynk.consumes.self_reference",
+        span,
+        format!("{kind_word} `{name}` cannot `consumes` itself"),
+    )
+}
+
+/// `bynk.adapter.consumes_context`: adapter dependencies are adapter-to-adapter
+/// (spec §4.5), so an adapter consuming a context would pull service logic into
+/// the host boundary.
+fn adapter_consumes_context(name: &str, target: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.adapter.consumes_context",
+        span,
+        format!(
+            "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
+        ),
+    )
+    .with_note(
+        "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
+    )
+}
+
+/// #4044: why a commons may not write this `consumes`, or `None` when it names
+/// only types an adapter exports, in braces. A commons is shared, pure code, so
+/// it takes types from another unit and nothing else: no whole-unit or aliased
+/// form (those bring services), no capability, and no context (a context's
+/// exported types belong to its boundary, and naming one would tie shared code
+/// to one deployable). `T as Alias` stays allowed, as in a context's `consumes`.
+fn commons_consumes_refusal(
+    c: &bynk_syntax::ast::ConsumesDecl,
+    target: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+    exports_type: &dyn Fn(&str, &str) -> bool,
+) -> Option<CompileError> {
+    const CODE: &str = "bynk.commons.consumes_not_types";
+    let capabilities = unit_tables.get(target).map(|t| &t.exported_capabilities);
+    let refuse = |span: Span, msg: String, note: &str| {
+        Some(CompileError::new(CODE, span, msg).with_note(note.to_string()))
+    };
+    let Some(names) = &c.selected else {
+        let form = if c.alias.is_some() {
+            "an aliased"
+        } else {
+            "a whole-unit"
+        };
+        return refuse(
+            c.span,
+            format!("a commons cannot write {form} `consumes {target}`"),
+            "a commons may list types only: write `consumes U { Type, … }`",
+        );
+    };
+    if target_kind == UnitKind::Context {
+        return refuse(
+            c.target.span,
+            format!("a commons cannot consume the context `{target}`"),
+            "a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable; a commons consumes types of an adapter",
+        );
+    }
+    for item in names {
+        let n = &item.name;
+        if capabilities.is_some_and(|caps| caps.contains(&n.name)) {
+            return refuse(
+                n.span,
+                format!("`{}` is a capability of `{target}`, not a type", n.name),
+                "a commons stays pure: it names types, and a context uses a capability with `consumes` and `given`",
+            );
+        }
+        if !exports_type(target, &n.name) {
+            return refuse(
+                n.span,
+                format!("`{target}` does not export a type named `{}`", n.name),
+                "a commons may list only the types an adapter exports: `consumes U { Type, … }`",
+            );
+        }
+    }
+    None
 }
 
 /// Phase 8b: merge one context's `consumes` exports into the composed symbol
@@ -6288,7 +6539,21 @@ pub fn merge_consumed_exports(
                 .filter(|kind| !matches!(*kind, "type" | "event"));
             // #3536: a type the braces leave out is not in scope as a name of
             // its own, so a declaration of this unit's wins over it, silently.
-            if unit_info[name]
+            // #4270: not when the occupant is itself an unselected first-party
+            // import (`bynk`'s `Refusal`): this export is selected, so it wins.
+            let displaces_unselected = displaces_unselected_import(
+                &unit_info[name].table,
+                type_name,
+                t,
+                imported_from,
+                &unit_info[name].consumes,
+                local_value.is_some(),
+            );
+            if displaces_unselected {
+                combined_types.remove(type_name);
+                combined_methods.remove(type_name);
+                consumed_types.remove(type_name);
+            } else if unit_info[name]
                 .table
                 .unselected_consumed_types
                 .contains(type_name)
@@ -6303,7 +6568,13 @@ pub fn merge_consumed_exports(
                 let consumes_file = consumes_site.map(|(i, _)| parsed[i].identity_path());
                 let in_scope = match local_value {
                     Some(kind) => format!("this context declares a {kind} of the same name"),
-                    None => "a type of the same name is already in scope".to_string(),
+                    // #4270: name the other source when an import holds the name.
+                    None => match imported_from.get(type_name) {
+                        Some(other) => {
+                            format!("a type of the same name is already in scope from `{other}`")
+                        }
+                        None => "a type of the same name is already in scope".to_string(),
+                    },
                 };
                 // An alias clashing with what is in scope, or a bare export
                 // clashing with one of this unit's aliases: the alias is the
@@ -7068,13 +7339,18 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => type_ref_names(t, vars, out),
+        TypeRef::HttpResult(t, e, _) => {
+            type_ref_names(t, vars, out);
+            if let Some(e) = e {
+                type_ref_names(e, vars, out);
+            }
+        }
         TypeRef::Fn(params, ret, _) => {
             for p in params {
                 type_ref_names(p, vars, out);
@@ -7128,6 +7404,7 @@ pub fn compose_unit_symbols(
             .expect("used unit present")
             .table
             .importable();
+        let used = local_table.seen_through(t, &used);
         for (type_name, decl) in &used.types {
             if !combined_types.contains_key(type_name) {
                 combined_types.insert(type_name.clone(), decl.clone());
@@ -7229,12 +7506,16 @@ pub fn shadowed_imports(
     let Some(info) = unit_info.get(name) else {
         return HashMap::new();
     };
-    shadowed_imports_in(
+    let mut out = shadowed_imports_in(
         &info.table,
-        info.uses
-            .iter()
-            .filter_map(|t| unit_info.get(t).map(|u| (t, &u.table))),
-    )
+        info.uses.iter().filter_map(|t| {
+            unit_info
+                .get(t)
+                .map(|u| (t, info.table.seen_through(t, &u.table)))
+        }),
+    );
+    crate::uses_view::add_ambiguous_imports(&info.table, &mut out);
+    out
 }
 
 /// [`shadowed_imports`] over a unit's own table and its `uses` targets'
@@ -7266,6 +7547,7 @@ pub fn shadowed_imports_in<'a>(
                     imported,
                     local: kind,
                     local_span,
+                    ambiguous: Vec::new(),
                 };
                 // The first `uses` target to declare a name decides, except
                 // that a type replaces a function or asset (review of #1933).
@@ -7300,8 +7582,15 @@ pub fn phase_detect_consumes_cycles(
     errors: &mut ErrorSink,
 ) {
     let mut consumes_sites: HashMap<(String, String), (PathBuf, Span)> = HashMap::new();
+    // #4044: a commons may `consumes` an adapter that `uses` it, so the cycle
+    // check walks each unit's `uses` edges too.
+    let mut unit_uses: HashMap<String, Vec<String>> = HashMap::new();
     for (name, indices) in groups {
         for &i in indices {
+            unit_uses
+                .entry(name.clone())
+                .or_default()
+                .extend(parsed[i].uses().iter().map(|u| u.target.joined()));
             if parsed[i].is_synthetic() {
                 continue;
             }
@@ -7313,7 +7602,12 @@ pub fn phase_detect_consumes_cycles(
         }
     }
     let mut cycle_errors: Vec<(Option<PathBuf>, CompileError)> = Vec::new();
-    detect_consumes_cycles(unit_consumes, &consumes_sites, &mut cycle_errors);
+    detect_dependency_cycles(
+        unit_consumes,
+        &unit_uses,
+        &consumes_sites,
+        &mut cycle_errors,
+    );
     for (path, err) in cycle_errors {
         errors.push_for(path.as_deref(), err);
     }
@@ -7421,6 +7715,7 @@ mod native_platform_closure_tests {
         UnitTable {
             exec_plan: Default::default(),
             kind: None,
+            test_only: false,
             removed_agents: Vec::new(),
             types: StdHashMap::new(),
             fns: StdHashMap::new(),
@@ -7440,6 +7735,9 @@ mod native_platform_closure_tests {
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
             derived: StdHashMap::new(),
+            use_views: Default::default(),
+            ambiguous_uses: Default::default(),
+            use_origin: Default::default(),
         }
     }
 
@@ -7587,7 +7885,7 @@ mod view_closure_tests {
         let a = table(
             "t.a",
             UnitKind::Context,
-            "context t.a\n\nuses t.lib\n\nservice s {\n  on call() -> Effect[Wrap] { Effect.pure(Wrap { x: X.unsafe(\"x\") }) }\n}\n",
+            "context t.a\n\nuses t.lib\n\nservice s {\n  on call() -> Effect[Wrap] by Caller { Effect.pure(Wrap { x: X.unsafe(\"x\") }) }\n}\n",
         );
         let b = table(
             "t.b",
@@ -7775,7 +8073,7 @@ mod shadowed_import_tests {
         ("event", "event thing = { n: Int }\n"),
         (
             "service",
-            "service thing {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+            "service thing {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
         ),
         (
             "agent",
@@ -7803,7 +8101,7 @@ mod shadowed_import_tests {
                         Use::None => String::new(),
                         Use::FnBody => format!("fn useIt() -> {ty} {{\n  {expr}\n}}\n"),
                         Use::HandlerBody => format!(
-                            "service user {{\n  on call() -> Effect[{ty}] {{\n    Effect.pure({expr})\n  }}\n}}\n"
+                            "service user {{\n  on call() -> Effect[{ty}] by Caller {{\n    Effect.pure({expr})\n  }}\n}}\n"
                         ),
                     };
                     let lib = format!("commons lib.util\n\n{idecl}");
@@ -7854,7 +8152,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app/main.bynk",
-                "context app\n\nuses lib.util\n\nagent thing {\n  key id: String\n\n  store hits: Cell[Int]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n\nservice web {\n  on call() -> Effect[Int] {\n    let n <- thing(\"k\").ping()\n    Effect.pure(n)\n  }\n}\n",
+                "context app\n\nuses lib.util\n\nagent thing {\n  key id: String\n\n  store hits: Cell[Int]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n\nservice web {\n  on call() -> Effect[Int] by Caller {\n    let n <- thing(\"k\").ping()\n    Effect.pure(n)\n  }\n}\n",
             ),
         ]);
         r.assert_clean();
@@ -7876,7 +8174,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app/main.bynk",
-                "context app\n\nuses lib.a\nuses lib.b\n\nservice thing {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+                "context app\n\nuses lib.a\nuses lib.b\n\nservice thing {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
         r.assert_clean();
@@ -7975,7 +8273,7 @@ mod shadowed_import_tests {
         );
         for (first, second) in [("lib.a", "lib.b"), ("lib.b", "lib.a")] {
             let app = format!(
-                "context app\n\nuses {first}\nuses {second}\n\nservice Status {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n\nfn f(s: Status) -> Int {{\n  s.n\n}}\n"
+                "context app\n\nuses {first}\nuses {second}\n\nservice Status {{\n  on call() -> Effect[Int] by Caller {{\n    Effect.pure(1)\n  }}\n}}\n\nfn f(s: Status) -> Int {{\n  s.n\n}}\n"
             );
             let r = analyse(&[a, b, ("app/main.bynk", &app)]);
             assert_eq!(
@@ -8014,7 +8312,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app.bynk",
-                "context app\n\nconsumes shop\n\nservice Order {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+                "context app\n\nconsumes shop\n\nservice Order {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
         assert_eq!(r.error_categories(), vec!["bynk.consumes.name_conflict"]);
@@ -8045,7 +8343,7 @@ mod shadowed_import_tests {
         );
     }
 
-    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
+    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] by Caller {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
 
     /// #2765: the braces may name a type the target exports, so the form the
     /// `timed_out_not_in_scope` note recommends is accepted.
@@ -8084,6 +8382,54 @@ mod shadowed_import_tests {
         assert_eq!(
             r.error_categories(),
             vec!["bynk.given.cross_context_unknown_capability"]
+        );
+    }
+
+    /// #4270: a type the file selects from a consumed context keeps its name
+    /// when `bynk` exports one of the same (`Refusal`) that the braces leave out.
+    const ADMISSION: &str = "context registry.admission\n\nexports transparent { Refusal }\n\ntype Refusal = { code: String, message: String }\n";
+    const USE_REFUSAL: &str = "fn describe(r: Refusal) -> String {\n  r.code\n}\n";
+
+    #[test]
+    fn a_selected_consumed_type_wins_over_an_unselected_bynk_export() {
+        for consumes in [
+            "consumes bynk { Clock }\nconsumes registry.admission { Refusal }",
+            "consumes registry.admission { Refusal }\nconsumes bynk { Clock }",
+            "consumes registry.admission { Refusal }",
+        ] {
+            let store = format!("context registry.store\n\n{consumes}\n\n{USE_REFUSAL}");
+            analyse(&[
+                ("registry/admission.bynk", ADMISSION),
+                ("registry/store.bynk", &store),
+            ])
+            .assert_clean();
+        }
+    }
+
+    #[test]
+    fn selecting_a_name_from_bynk_and_a_consumed_context_is_a_name_conflict_naming_both() {
+        let store = format!(
+            "context registry.store\n\nconsumes bynk {{ Refusal }}\nconsumes registry.admission {{ Refusal }}\n\n{USE_REFUSAL}"
+        );
+        let r = analyse(&[
+            ("registry/admission.bynk", ADMISSION),
+            ("registry/store.bynk", &store),
+        ]);
+        let e = r
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.consumes.name_conflict")
+            .expect("both selections claim `Refusal`");
+        assert!(
+            e.error.message.contains("registry.admission"),
+            "{}",
+            e.error.message
+        );
+        assert!(
+            e.error.message.contains("from `bynk`"),
+            "{}",
+            e.error.message
         );
     }
 
@@ -8131,7 +8477,7 @@ mod consumes_alias_tests {
 
     const USES_BOTH: &str = "fn empty() -> Digest { Digest { total: 0 } }\n\
         fn name(d: CryptoDigest) -> String {\n  match d {\n    Sha256 => \"a\"\n    Sha384 => \"b\"\n    Sha512 => \"c\"\n  }\n}\n\
-        service hashing {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(\"x\"))\n  }\n}";
+        service hashing {\n  on call() -> Effect[Bytes] by Caller given Crypto {\n    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(\"x\"))\n  }\n}";
 
     #[test]
     fn an_aliased_export_clears_the_clash_and_works_everywhere() {
@@ -8269,7 +8615,7 @@ mod consumes_alias_tests {
         a.assert_clean();
         let bad = app(
             "consumes bynk.crypto { Crypto, Digest as CryptoDigest }",
-            "service s {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(Digest { total: 1 }, Bytes.fromUtf8(\"x\"))\n  }\n}",
+            "service s {\n  on call() -> Effect[Bytes] by Caller given Crypto {\n    Crypto.digest(Digest { total: 1 }, Bytes.fromUtf8(\"x\"))\n  }\n}",
         );
         let a = run(&[REPORT, ("app.bynk", &bad)]);
         assert!(
@@ -8389,8 +8735,8 @@ mod firstparty_injection_tests {
         add(bynk, "bynk");
         add(cloudflare, "bynk.cloudflare");
         add(map, "bynk.map");
-        add(map || locale || list, "bynk.list");
-        add(locale || string, "bynk.string");
+        add(list, "bynk.list");
+        add(string, "bynk.string");
         // The `bynk` adapter's own `uses bynk.locale.types`, seen because the
         // adapter was injected before the scan ran.
         add(locale || locale_types || bynk, "bynk.locale.types");
@@ -8731,5 +9077,96 @@ mod lock_unit_tests {
         assert_eq!(units[0].group, None);
         assert_eq!(units[0].members, ["a.x"]);
         assert_eq!(units[0].native.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod cross_caps_first_party_tests {
+    //! The first-party `Events` skip in `scan_cross_caps` is
+    //! `firstparty::resolve`, the single definition of bynk's own capabilities
+    //! (1A.33): a capability flattened from `bynk`, or declared by `bynk`
+    //! itself, never becomes a compose deps entry.
+    use super::*;
+    use bynk_syntax::ast::{CapRef, Ident, ProviderDecl};
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    fn bare(name: &str) -> CapRef {
+        CapRef {
+            context: None,
+            name: ident(name),
+            span: Span::default(),
+        }
+    }
+
+    fn flattened_from(unit: &str, caps: &[&str]) -> HashMap<String, String> {
+        caps.iter()
+            .map(|c| (c.to_string(), unit.to_string()))
+            .collect()
+    }
+
+    fn scan(declaring_unit: &str, flattened: &HashMap<String, String>) -> BTreeMap<String, String> {
+        let mut out = BTreeMap::new();
+        scan_cross_caps(
+            &mut out,
+            &[bare("Events"), bare("Ledger")],
+            declaring_unit,
+            &[],
+            &HashMap::new(),
+            flattened,
+        );
+        out
+    }
+
+    #[test]
+    fn a_flattened_bynk_events_is_skipped_and_other_flattened_caps_are_kept() {
+        let flattened = flattened_from("bynk", &["Events"]);
+        let mut flattened = flattened;
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = scan("shop", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
+    }
+
+    #[test]
+    fn an_events_declared_by_bynk_itself_is_skipped_without_being_flattened() {
+        let mut flattened = HashMap::new();
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = scan("bynk", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
+    }
+
+    #[test]
+    fn an_events_flattened_from_another_unit_is_not_first_party() {
+        let flattened = flattened_from("other", &["Events", "Ledger"]);
+        let got = scan("shop", &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Events", "Ledger"]);
+    }
+
+    #[test]
+    fn a_providers_given_skips_a_flattened_bynk_events_too() {
+        let mut table = UnitTable::default();
+        table.providers.insert(
+            "Billing".to_string(),
+            ProviderDecl {
+                capability: ident("Billing"),
+                provider_name: ident("BillingImpl"),
+                given: vec![bare("Events"), bare("Ledger")],
+                ops: Vec::new(),
+                external: false,
+                documentation: None,
+                span: Span::default(),
+                trivia: Default::default(),
+            },
+        );
+        let mut flattened = flattened_from("bynk", &["Events"]);
+        flattened.insert("Ledger".to_string(), "bank".to_string());
+        let got = provider_cross_caps(&table, "shop", &[], &HashMap::new(), &flattened);
+        assert_eq!(got.keys().collect::<Vec<_>>(), ["Ledger"]);
     }
 }

@@ -18,12 +18,12 @@ export const placeOrder = {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Money(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Money);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(raw);
     const t = await deps.surface.payment.authorise((total as unknown as commerce_payment.Money));
     return Ok(0);
@@ -61,7 +61,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   }
   const __minorUnits = obj["minorUnits"];
   if (!(__minorUnits >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.minorUnits`, violation: { field: "minorUnits", message: "must be non-negative", value: __minorUnits } });
+    return Err({ kind: "RefinementViolation", path: `${path}.minorUnits`, violation: { field: "minorUnits", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __minorUnits } });
   }
   return Ok({ minorUnits: __minorUnits } as Money);
 }

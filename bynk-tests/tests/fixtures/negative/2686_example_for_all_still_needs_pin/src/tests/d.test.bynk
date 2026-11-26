@@ -1,4 +1,4 @@
-// #2686: an example is for `Val`; a property over it would repeat one value.
+// #2686: an example is for `Val`; it does not rescue a pattern the walk cannot honour (#4121).
 suite demo.d {
   property "codes cannot be generated" {
     for all c: Code {

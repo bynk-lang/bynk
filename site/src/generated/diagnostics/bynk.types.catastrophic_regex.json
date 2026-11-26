@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Matches` pattern, and the pattern of a regex method such as `matchesRegex` or `replaceRegex`, is analysed when the program compiles. Patterns run with JavaScript's backtracking `RegExp`, and one in which a repetition can split the same text several ways takes exponential time on a crafted near miss, so a few dozen characters of input could stall a handler. Nested or ambiguous repetition, such as `(a+)+` or `(a|aa)+`, is refused, bounded or not, as is a backreference under an unbounded quantifier, an unbounded quantifier over a body that can match the empty string, and a pattern too large or complex to analyse. Rewrite it so each repetition has one way to match: `a+` for `(a+)+`, or a separator the repeated part cannot match, as in `[a-z]+(-[a-z]+)*`. Two adjacent repetitions that compete, as in `\\d*\\d*`, are the milder `bynk.types.polynomial_regex`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.catastrophic_regex",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"(a+)+$\")    // ✗ nested unbounded repetition\n\ntype Code = String where Matches(\"a+$\")       // ✓ one way to match",
+  "severity": "error",
+  "summary": "A `Matches` pattern, or a regex method's pattern, can match the same text in exponentially many ways (nested or ambiguous repetition, bounded or not), or cannot be analysed, risking catastrophic backtracking (ReDoS)."
+}

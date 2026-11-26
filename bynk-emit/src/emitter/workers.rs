@@ -1,196 +1,49 @@
-//! Per-Worker composition root generation (v0.8 §4.5, v0.9 §5.1).
+//! The Worker edge wrappers: the `on call`, `on http`, event, cron, queue and
+//! WebSocket adapters that a Worker's `compose.ts` returns (v0.8 §4.5, v0.9 §5.1).
 //!
-//! Each Worker's `compose.ts` exports a `compose(env)` function that
-//! assembles the context's deps and returns the surface the entry point
-//! invokes — `on call` services for the internal Service Binding protocol
-//! plus `on http` route wrappers for the external HTTP router.
+//! The composition root that assembles them, `emit_worker_compose`, lives in
+//! [`super::compose::workers`] (back-half paydown 1B.1a moved it out).
 //!
-//! Arc C slice 3 (#1321): `emit_worker_compose` and its nine private
-//! helpers build a real `bynk_ts::TsProgram` directly instead of
-//! `writeln!`-ing a `String` — this file's own conversion, closing the
-//! third Arc C slice (`events_fanout.rs` was the first, #1317).
+//! Arc C slice 3 (#1321): these wrappers build a real `bynk_ts::TsProgram`
+//! tree directly instead of `writeln!`-ing a `String`.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use super::internal_fault::undefined_node;
 use super::workers_entry::wire_ident;
-use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
-use crate::emitter::RuntimeUse;
+use crate::emitter::bindings::agent_binding;
 use crate::emitter::http_handler_method_name_ir;
-use crate::emitter::wrangler::{
-    BindingSource, WorkerBinding, agent_binding, binding_ts_type, events_fanout_binding,
+use crate::ts_build::{
+    as_expr, await_expr, binary, block, call, cond_expr, const_, expr_stmt, ident, if_, member,
+    method_call, new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq,
+    strict_neq, typeof_expr,
 };
-use bynk_check::symbols::MessageBundleInfo;
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceDecl, ServiceProtocol, TypeRef};
-use bynk_ts::{
-    TsArrowBody, TsBindingName, TsDecl, TsExpr, TsLit, TsObjectEntry, TsParam, TsProgram, TsStmt,
-    TsType, TsTypeMember,
-};
+use bynk_ts::{TsBindingName, TsExpr, TsObjectEntry, TsParam, TsStmt, TsType, TsTypeMember};
 
-/// Where `compose.ts` imports the runtime from — it sits two levels below the
-/// out root (`<out>/workers/<worker>/compose.ts`).
-///
-/// Named because the emitted import line and the post-pass that injects into it
-/// (#914) must agree exactly: [`crate::emitter::inject_runtime_imports`]
-/// (the still-`String`-based post-pass every other module uses) anchors on
-/// the specifier verbatim — #1321's own [`append_missing_bindings`] below
-/// reimplements the same dedup directly over the built `TsDecl::Import`
-/// node's `names`, since this file's own import line is now a tree node,
-/// not text to splice into. Two drifting literals would silently stop
-/// injecting rather than fail loudly — the anchor-drift failure v0.176
-/// (#642) already hit once.
-const COMPOSE_RUNTIME_SPECIFIER: &str = "../../runtime.js";
-
-// -- Small tree-construction helpers (#1321) -----------------------------
-//
-// `workers.rs` is by far the largest single Arc C conversion so far (13
-// wrapper/helper functions, ~1000 lines of `writeln!` before this slice) —
-// these exist purely to keep the conversion below readable and to avoid
-// repeating the same `Box::new`/field-name boilerplate at dozens of call
-// sites, the same reason `bynk-ts`'s own `TsExpr`/`TsStmt` associated
-// constructors exist. Not part of the public node algebra — `bynk-ts` still
-// owns every real constructor; these just compose them for this file's own
-// repeated shapes.
-
-fn ident(s: impl Into<String>) -> TsExpr {
-    TsExpr::Ident(s.into())
-}
-
-fn str_lit(s: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Str(s.into()))
-}
-
-fn num_lit(n: impl Into<String>) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(n.into()))
-}
-
-fn null_lit() -> TsExpr {
-    TsExpr::Lit(TsLit::Null)
-}
-
-fn member(object: TsExpr, property: impl Into<String>) -> TsExpr {
-    TsExpr::Member {
-        object: Box::new(object),
-        property: property.into(),
-    }
-}
+// -- Helpers over the shared builders (`crate::ts_build`) -----------------
 
 /// `base.a.b. …` — a left-associative chain of plain member accesses, e.g.
 /// `member_chain(ident("handlers"), &[sname, "call"])` for
 /// `handlers.<sname>.call`.
-fn member_chain(base: TsExpr, properties: &[&str]) -> TsExpr {
+pub(super) fn member_chain(base: TsExpr, properties: &[&str]) -> TsExpr {
     properties.iter().fold(base, |acc, p| member(acc, *p))
 }
 
-fn call(callee: TsExpr, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::Call {
-        callee: Box::new(callee),
-        args,
-    }
-}
-
-fn method_call(object: TsExpr, method: &str, args: Vec<TsExpr>) -> TsExpr {
-    call(member(object, method), args)
-}
-
-fn new_expr(callee: &str, args: Vec<TsExpr>) -> TsExpr {
-    TsExpr::New {
-        callee: Box::new(ident(callee)),
-        args,
-    }
-}
-
-fn as_expr(expr: TsExpr, ty: TsType) -> TsExpr {
-    TsExpr::As {
-        expr: Box::new(expr),
-        ty,
-    }
-}
-
-fn await_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Await(Box::new(expr))
-}
-
-fn not_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Not,
-        expr: Box::new(expr),
-    }
-}
-
-fn typeof_expr(expr: TsExpr) -> TsExpr {
-    TsExpr::Unary {
-        op: bynk_ts::TsUnaryOp::Typeof,
-        expr: Box::new(expr),
-    }
-}
-
-fn binary(op: bynk_ts::TsBinaryOp, left: TsExpr, right: TsExpr) -> TsExpr {
-    TsExpr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
-    }
-}
-
-fn strict_eq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictEq, left, right)
-}
-
-fn strict_neq(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::StrictNotEq, left, right)
-}
-
-fn or_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::Or, left, right)
-}
-
-fn and_expr(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::And, left, right)
-}
-
-fn nullish(left: TsExpr, right: TsExpr) -> TsExpr {
-    binary(bynk_ts::TsBinaryOp::NullishCoalescing, left, right)
-}
-
-fn return_(expr: Option<TsExpr>) -> TsStmt {
-    TsStmt::return_stmt(expr, None)
-}
-
-fn const_(name: impl Into<String>, init: TsExpr) -> TsStmt {
-    TsStmt::const_stmt(TsBindingName::Ident(name.into()), None, init, None)
-}
-
-fn let_(name: impl Into<String>, ty: TsType) -> TsStmt {
-    TsStmt::let_stmt(TsBindingName::Ident(name.into()), Some(ty), None, None)
-}
-
-fn expr_stmt(expr: TsExpr) -> TsStmt {
-    TsStmt::expr_stmt(expr, None)
-}
-
-fn if_(cond: TsExpr, then_branch: TsStmt) -> TsStmt {
-    TsStmt::if_stmt(cond, then_branch, None)
-}
-
-fn block(stmts: Vec<TsStmt>) -> TsStmt {
-    TsStmt::block(stmts, None)
-}
-
-fn status_object(code: &str) -> TsExpr {
+pub(super) fn status_object(code: &str) -> TsExpr {
     TsExpr::object(vec![("status".to_string(), num_lit(code))])
 }
 
-fn new_response(args: Vec<TsExpr>) -> TsExpr {
-    new_expr("globalThis.Response", args)
+pub(super) fn new_response(args: Vec<TsExpr>) -> TsExpr {
+    new(ident("globalThis.Response"), args)
 }
 
 /// `{ ...deps, <key>: <value> }` — the three real "spread `deps`, override
 /// one identity-shaped field" sites (Decision A, gap 2): `emit_call_wrapper`'s
 /// `identity`, `emit_http_wrapper`/`emit_http_oidc_wrapper`'s `identity`,
 /// `emit_http_sum_wrapper`'s `who`.
-fn deps_spread_with(key: &str, value: TsExpr) -> TsExpr {
+pub(super) fn deps_spread_with(key: &str, value: TsExpr) -> TsExpr {
     TsExpr::object_entries(vec![
         TsObjectEntry::Spread(ident("deps")),
         TsObjectEntry::prop(key.to_string(), value),
@@ -205,7 +58,7 @@ fn deps_spread_with(key: &str, value: TsExpr) -> TsExpr {
 /// callers). `secret` is already TS-string-escaped by the caller
 /// (`crate::emitter::escape_ts_string`) — this function only builds the
 /// tree, matching every other helper here.
-fn secret_probe_expr(secret: &str) -> TsExpr {
+pub(super) fn secret_probe_expr(secret: &str) -> TsExpr {
     let env_record_ty = TsType::named_with_args(
         "globalThis.Record",
         vec![TsType::named("string"), TsType::named("unknown")],
@@ -228,706 +81,11 @@ fn secret_probe_expr(secret: &str) -> TsExpr {
         }),
         index: Box::new(str_lit(secret)),
     };
-    nullish(explicit, global_probe)
-}
-
-/// The events a publishing handler hands its fan-out. A group's one fan-out
-/// serves every publishing member, so a member names itself on each event
-/// (`publisher`), as two members may declare an event of one name (#3562, G3-1).
-/// A context on a Worker of its own sends them as they are.
-fn fanout_events(context: &str, layout: &bynk_project::worker_layout::WorkerLayout) -> TsExpr {
-    if !layout.is_member(context) {
-        return ident("events");
-    }
-    let tagged = TsExpr::Arrow {
-        params: vec![TsParam::new("e".to_string(), None)],
-        is_async: false,
-        generics: Vec::new(),
-        return_type: None,
-        // Parenthesised, or the braces read as the arrow's body.
-        body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::Paren(Box::new(
-            as_expr(
-                TsExpr::object_entries(vec![
-                    TsObjectEntry::Spread(ident("e")),
-                    TsObjectEntry::prop("publisher".to_string(), str_lit(context.to_string())),
-                ]),
-                TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE),
-            ),
-        ))))),
-    };
-    method_call(ident("events"), "map", vec![tagged])
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn emit_worker_compose(
-    context: &str,
-    layout: &bynk_project::worker_layout::WorkerLayout,
-    table: &UnitTable,
-    consumes: &[String],
-    aliases: &HashMap<String, String>,
-    unit_tables: &HashMap<String, UnitTable>,
-    // v0.17: adapter unit name → its binding module path (relative to the out
-    // root, `.js`). An adapter's external provider class lives in this module,
-    // not in a `handlers.ts`.
-    binding_modules: &HashMap<String, String>,
-    // v0.17: bare flattened capability → the unit it was flattened from.
-    flattened: &HashMap<String, String>,
-    // v0.18: the whole-project consume/alias/flattening maps, so external
-    // provider deps recurse across adapters (spec §4.5).
-    unit_consumes: &HashMap<String, Vec<String>>,
-    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
-    unit_flattened: &HashMap<String, HashMap<String, String>>,
-    // Locale capability track, slice 2 (#882): this context's uniquely-
-    // detected message bundle, if any (`None` when zero or 2+ were found —
-    // the caller already resolved the cardinality, this function only acts).
-    locale_bundle: Option<&MessageBundleInfo>,
-    import_ext: ImportExt,
-    // #1187's slice 6 plumbing: `unit_table_uses_emit(table, callees)`,
-    // precomputed by the caller (`crate::project::RunChecks::Checked::
-    // unit_callees`'s own doc comment has the full grounding for what feeds
-    // it) — reads the checker's own already-resolved `Callee` classification
-    // instead of re-deriving `Events.emit` detection from raw AST syntax. A
-    // bare `bool`, not the `Callee` map itself: this function has exactly
-    // one use for it.
-    uses_emit: bool,
-    // #1944: every binding this Worker declares (`wrangler::worker_bindings`),
-    // the list its `wrangler.toml` is written from; `Env` types exactly it.
-    bindings: &[WorkerBinding],
-    // #2137: the test build of a context a `system` harness stands up — its
-    // first-party `Clock` reads the harness clock (`ProviderNamespaces::Workers`).
-    harness_clock: bool,
-    // #2719: whether any of this context's service handlers hands work to the
-    // execution context (`detach`, `within` or `race`, directly or through the
-    // functions it calls), so `compose` takes the request's and threads its
-    // `waitUntil` into `deps.__exec`. From the checker's needs-context set.
-    ctx_uses_send: bool,
-    // #2967: the commons this context `uses`, whose public constants can key a
-    // WebSocket `on open`'s transfer (`bynk_check::consts::visible_consts`).
-    uses: &[String],
-    // #2969: used commons → the file declaring each of its functions and
-    // constants (`FileDeclIndex::fns`), for a commons split across files.
-    used_decl_paths: &HashMap<String, HashMap<String, std::path::PathBuf>>,
-) -> (TsProgram, bool) {
-    // #2967: the constants visible in this context, as the checker's
-    // `phase_workers_ws_open_key` classifies a transfer key against them.
-    let visible_consts = bynk_check::consts::visible_consts(table, uses, |u| unit_tables.get(u));
-    // #2967: a used commons' constant keying an `on open`'s transfer, imported
-    // into this module under an alias: alias → (owning commons, constant).
-    let mut const_imports: BTreeMap<String, (String, String)> = BTreeMap::new();
-    // v0.15: cross-context capabilities this Worker uses (in handlers or in a
-    // local provider's `given`) → `deps_key → consumed_context`. Their
-    // providers are instantiated locally (model A1).
-    let cross_caps = worker_cross_caps(context, table, consumes, aliases, flattened);
-
-    // Locale capability track, slice 2 (#882, Decision C): only when this
-    // Worker both consumes `bynk`'s `Locale` and has a uniquely-detected
-    // message bundle do we import its declared-locale constants and pass
-    // `request` + them into `LocaleProvider`'s construction below.
-    let mut locale_import: Option<TsStmt> = None;
-    let mut locale_negotiation_args: Option<LocaleNegotiationArgs> = None;
-    if cross_caps
-        .get("Locale")
-        .is_some_and(|c| c == bynk_check::firstparty::BYNK_UNIT)
-        && let Some(bundle) = locale_bundle
-    {
-        let import = crate::emitter::cross_commons_import_specifier_for_path(
-            &layout.handlers_source_path(context),
-            &bundle.source_path,
-            import_ext,
-        );
-        // #1321: a renamed named import (`X as Y`) is one opaque `String`
-        // entry in `TsDecl::Import.names` — see that field's own doc.
-        locale_import = Some(TsStmt::decl(
-            TsDecl::Import {
-                type_only: false,
-                names: vec![
-                    "__messagesLocales as __locale_declaredLocales".to_string(),
-                    "__messagesReferenceLocale as __locale_referenceLocale".to_string(),
-                ],
-                from: import,
-            },
-            None,
-        ));
-        locale_negotiation_args = Some(LocaleNegotiationArgs {
-            request_expr: "request".to_string(),
-            declared_locales_expr: "__locale_declaredLocales".to_string(),
-            reference_locale_expr: "__locale_referenceLocale".to_string(),
-        });
-    }
-    let needs_request = locale_negotiation_args.is_some();
-
-    // v0.18: build each cross-cap provider expression up front, recording the
-    // units it references — an external provider's `given` may pull in another
-    // adapter's binding (the transitive given-closure), which must be imported.
-    let mut referenced_units: BTreeSet<String> = BTreeSet::new();
-    let mut cross_cap_exprs: Vec<(String, TsExpr)> = Vec::new();
-    for (key, cctx) in &cross_caps {
-        // #1321: the `TsExpr`-returning twin of `instantiate_provider_expr`
-        // (`project.rs`'s own Decision-B-style addition) — see its own doc
-        // for why the `String` version stays untouched.
-        let expr = crate::emit_model::instantiate_provider_ts_expr(
-            cctx,
-            key,
-            unit_tables,
-            unit_consumes,
-            unit_consumes_aliases,
-            unit_flattened,
-            crate::emit_model::ProviderNamespaces::Workers { harness_clock },
-            Some("env"),
-            locale_negotiation_args.as_ref(),
-            &mut referenced_units,
-        );
-        cross_cap_exprs.push((key.clone(), expr));
-    }
-    // S4a (#1966): each derived capability's instance, its base's platform
-    // provider bound to the instance's own Worker binding (which also imports
-    // the binding module).
-    let mut derived_keys: Vec<String> = table.derived.keys().cloned().collect();
-    derived_keys.sort();
-    for cap in &derived_keys {
-        let expr = crate::emit_model::instantiate_provider_ts_expr(
-            context,
-            cap,
-            unit_tables,
-            unit_consumes,
-            unit_consumes_aliases,
-            unit_flattened,
-            crate::emit_model::ProviderNamespaces::Workers { harness_clock },
-            Some("env"),
-            locale_negotiation_args.as_ref(),
-            &mut referenced_units,
-        );
-        cross_cap_exprs.push((cap.clone(), expr));
-    }
-
-    let runtime_use = RuntimeUse::default();
-    let binds = |kind: fn(&BindingSource) -> bool| bindings.iter().any(|b| kind(&b.source));
-
-    // Only consumed *contexts* become Service Bindings — a consumed adapter is
-    // not a Worker (its capability is provided in-process via the binding).
-    let mut sorted_consumes: Vec<&String> = consumes
-        .iter()
-        .filter(|t| !binding_modules.contains_key(*t))
-        .collect();
-    sorted_consumes.sort();
-
-    // v0.79: if any handler in this context uses `detach`, `compose` also takes the
-    // request's execution context and threads its `waitUntil` into `deps.__exec`.
-
-    // -- Build the `compose` function's own body (Decision A/B: real nodes
-    // throughout) before assembling the header: the runtime import is read off the
-    // finished tree (below). --
-
-    let mut body: Vec<TsStmt> = Vec::new();
-
-    // v0.15: instantiate consumed-unit capability providers locally first, so
-    // local providers (and handlers) can depend on them by their deps key.
-    // v0.18: the expression recursively wires an external provider's `given`
-    // deps (built in the pre-pass above; cross_caps is a BTreeMap, so the
-    // pairs are already key-sorted).
-    let cross_keys: Vec<&String> = cross_caps.keys().collect();
-    for (key, expr) in cross_cap_exprs {
-        body.push(const_(key, expr));
-    }
-
-    // Capabilities: instantiate each capability's provider. v0.12: providers
-    // are emitted in dependency order (a composed provider's `given` deps must
-    // exist first) as local `const` bindings, injecting each provider's deps;
-    // then assembled into the `deps` object. v0.15: a provider's `given` may
-    // include cross-context capability keys (instantiated above).
-    let order = crate::emitter::topo_order_providers(&table.providers);
-    for cap in &order {
-        let provider = table.providers.get(cap).unwrap();
-        let provider_ts = provider.provider_name.name.clone();
-        // #2355: a provider whose ops construct a local agent takes `env` in
-        // its deps, for the agent factory (`emit::emit_provider`).
-        let constructs_agent =
-            bynk_check::project_model::provider_constructs_agent(provider, |n| {
-                table.agents.contains_key(n)
-            });
-        let args = if provider.given.is_empty() && !constructs_agent {
-            vec![]
-        } else {
-            let mut entries: Vec<TsObjectEntry> = provider
-                .given
-                .iter()
-                .map(|c| TsObjectEntry::Shorthand(c.key().to_string()))
-                .collect();
-            if constructs_agent {
-                entries.push(TsObjectEntry::Shorthand("env".to_string()));
-            }
-            vec![TsExpr::object_entries(entries)]
-        };
-        let init = TsExpr::New {
-            callee: Box::new(member(ident("handlers"), provider_ts)),
-            args,
-        };
-        body.push(const_(cap.clone(), init));
-    }
-    let mut deps_entries: Vec<TsObjectEntry> = {
-        let mut caps: Vec<String> = order.clone();
-        caps.extend(cross_keys.iter().map(|k| (*k).clone()));
-        caps.extend(derived_keys.iter().cloned());
-        caps.sort();
-        caps.into_iter().map(TsObjectEntry::Shorthand).collect()
-    };
-    // env passes through for cross-context calls (Service Bindings) and agent instantiations (DOs).
-    if !sorted_consumes.is_empty() || !table.agents.is_empty() {
-        deps_entries.push(TsObjectEntry::Shorthand("env".to_string()));
-    }
-    deps_entries.extend(session_deps_entry(table));
-    // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
-    if ctx_uses_send {
-        deps_entries.push(TsObjectEntry::prop("__exec".to_string(), ident("exec")));
-    }
-    // Events track, slice 0 (spine #936, ADR 0284): a publishing handler's
-    // release-at-commit event batch is handed to this context's own fan-out
-    // DO — `env.<bind>` is typed by the `Env` interface built above, one
-    // instance per publishing context.
-    if uses_emit {
-        let bind = events_fanout_binding().name;
-        let arrow = TsExpr::Arrow {
-            params: vec![TsParam::new(
-                "events".to_string(),
-                Some(TsType::named_with_args(
-                    "globalThis.Array",
-                    vec![TsType::named(crate::emitter::EVENTS_WIRE_EVENT_TS_TYPE)],
-                )),
-            )],
-            is_async: false,
-            generics: Vec::new(),
-            return_type: None,
-            body: Box::new(TsArrowBody::Expr(Box::new(call(
-                ident("__dispatchToEventsFanout"),
-                vec![member(ident("env"), bind), fanout_events(context, layout)],
-            )))),
-        };
-        deps_entries.push(TsObjectEntry::prop("__eventsDispatch".to_string(), arrow));
-    }
-    // #1321: the pre-conversion `writeln!(out, "  const deps = {{ {} }};",
-    // deps_entries.join(", "))` template always has a space on each side of
-    // its `{}` slot — with zero entries that literally produces `"{  }"`
-    // (a *double* space, not the tight `"{}"` the ordinary single-line
-    // `TsExpr::Object` empty-entries shortcut renders), a real, reachable
-    // shape (a Worker with no providers/cross-caps/consumed services/agents,
-    // no `detach`, no events — `941_http_result_float_bytes_serialise` and
-    // several other real fixtures hit exactly this). The shortcut itself is
-    // correct and stays unchanged for every *other* real call site (e.g.
-    // `events_fanout.rs`'s own `(env ?? {})`, which genuinely wants the
-    // tight form) — this one site's own historical quirk is carried as
-    // opaque pre-rendered text instead, the same "existing textual variant
-    // for a fixed, non-generalizable literal shape" precedent used
-    // elsewhere in this file (`exec`'s type, `DurableObjectNamespace`'s
-    // type).
-    let deps_init = if deps_entries.is_empty() {
-        ident("{  }")
-    } else {
-        TsExpr::object_entries(deps_entries)
-    };
-    body.push(const_("deps", deps_init));
-
-    // Local-surface object: one async wrapper per service operation plus
-    // one wrapper per `on http` handler.
-    let mut service_names: Vec<&String> = table.services.keys().collect();
-    service_names.sort();
-    let mut return_entries: Vec<TsObjectEntry> = Vec::new();
-    for sname in &service_names {
-        let service = table.services.get(*sname).unwrap();
-        let mut cron_idx = 0usize;
-        let mut queue_idx = 0usize;
-        for h in &service.handlers {
-            // P6.30 (design/tracks/the-ir.md §6a): dispatches on the checker-
-            // classified `IrHandlerKind` (P6.24a's own pure, unconditional
-            // mirror) rather than the raw AST `HandlerKind` directly. Slice 1
-            // of `#1542` (the IR cutover, `design/archive/retired-tracks.md`): the `Http`
-            // arm now reads `method`/`path` straight off that same
-            // `IrHandlerKind::Http` payload instead of re-deriving them from
-            // `h.kind` — un-deferred from Q7's original "wrapper signatures
-            // stay AST-typed until phase 7's printer" (phase 7 shipped; see
-            // the front-loading ADR).
-            match bynk_model::lower_handler_kind_ir(&h.kind) {
-                bynk_model::IrHandlerKind::Call => {
-                    return_entries.push(emit_call_wrapper(sname, h, &table.actors));
-                }
-                bynk_model::IrHandlerKind::Http { method, path } => {
-                    // v0.151: a single-actor `Oidc` handler gets the JWKS
-                    // verification wrapper. v0.52: a multi-actor sum handler gets
-                    // the first-wins resolution wrapper; otherwise the
-                    // single-actor Bearer/plain path. Review of #1209: this site
-                    // used to check `oidc` ahead of `sum`; `lower_actor_seam_ir`
-                    // checks `sum` ahead of `oidc` (matching `ActorSeamIr`'s own
-                    // canonical order). That swap is licensed by
-                    // `oidc_seam_for`'s own `by.is_sum()` early return
-                    // (`bynk-check/src/actors.rs`) — Oidc and a sum can never
-                    // both resolve for one handler, so which is tried first is a
-                    // no-op, unlike the sum-vs-Bearer order `ActorSeamIr`'s own
-                    // doc comment is about (Bearer was already checked last at
-                    // this site, so that pair's order didn't change here).
-                    // `Caller` never arises here — `caller_binder_for` only ever
-                    // resolves for `HandlerKind::Call` — so it shares the plain
-                    // path with `None`, exactly like the old fallthrough
-                    // (`bearer_seam_for` also misses on a `Caller` handler, since
-                    // `Caller` is a prelude actor, not a key of `table.actors`).
-                    match bynk_model::lower_actor_seam_ir(h, &table.actors) {
-                        bynk_model::ActorSeamIr::Oidc(oidc) => {
-                            return_entries
-                                .push(emit_http_oidc_wrapper(sname, h, method, &path, &oidc));
-                        }
-                        bynk_model::ActorSeamIr::SignedCookie(seam) => return_entries
-                            .push(signed_cookie_entry(service, sname, h, method, &path, &seam)),
-                        bynk_model::ActorSeamIr::Sum(members) => {
-                            return_entries.push(emit_http_sum_wrapper(
-                                sname,
-                                h,
-                                method,
-                                &path,
-                                &members,
-                                service.limits.as_ref().and_then(|p| p.max_body()),
-                                &runtime_use,
-                            ));
-                        }
-                        bynk_model::ActorSeamIr::Bearer(seam) => {
-                            return_entries.push(emit_http_wrapper(
-                                sname,
-                                h,
-                                method,
-                                &path,
-                                Some(&seam),
-                            ));
-                        }
-                        bynk_model::ActorSeamIr::Caller(_)
-                        | bynk_model::ActorSeamIr::Sender(_)
-                        | bynk_model::ActorSeamIr::CallSum(_)
-                        | bynk_model::ActorSeamIr::None => {
-                            return_entries.push(emit_http_wrapper(sname, h, method, &path, None));
-                        }
-                    }
-                }
-                bynk_model::IrHandlerKind::Cron { .. } => {
-                    return_entries.push(emit_cron_wrapper(sname, cron_idx, h));
-                    cron_idx += 1;
-                }
-                bynk_model::IrHandlerKind::Message => {
-                    let Some(entry) = message_wrapper(service, sname, queue_idx, h, &table.actors)
-                    else {
-                        continue;
-                    };
-                    return_entries.push(entry);
-                    queue_idx += 1;
-                }
-                bynk_model::IrHandlerKind::Open => {
-                    // An actor sum (`by who: A | B`) resolves member by member at the
-                    // edge; `bearer_seam_for` would see only its first member.
-                    let sum = bynk_check::actors::sum_members_for(h, &table.actors);
-                    let seam = if sum.is_some() {
-                        None
-                    } else {
-                        bynk_check::actors::bearer_seam_for(h, &table.actors)
-                    };
-                    let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
-                    // #1818: hosting agents that read their key are forwarded it.
-                    let key_readers: HashSet<String> = table
-                        .agents
-                        .iter()
-                        .filter(|(_, a)| crate::emitter::emit::agent_reads_key(a))
-                        .map(|(n, _)| n.clone())
-                        .collect();
-                    return_entries.push(emit_websocket_upgrade(
-                        sname,
-                        h,
-                        seam.as_ref(),
-                        sum.as_deref(),
-                        &local_agents,
-                        &key_readers,
-                        &visible_consts,
-                        &mut const_imports,
-                    ));
-                }
-                // v0.106 (slice 3b-iii): `on close` runs in the DO (`webSocketClose`),
-                // not at the edge — no compose wrapper.
-                bynk_model::IrHandlerKind::Close => {}
-                // Events track, slice 0 (spine #936): unlike the WS
-                // lifecycle handlers above, an `on event` handler's body
-                // *does* need a compose-surface wrapper — it is reached from
-                // `/_bynk/event/<sname>` (`emit_worker_entry`), the route a
-                // *subscriber* Worker's own fan-out delivery lands on (not
-                // this context's edge traffic, and not HTTP-routable, hence
-                // no route table entry — just a plain wrapper like `on
-                // call`'s).
-                bynk_model::IrHandlerKind::Event => {
-                    return_entries.push(emit_event_wrapper(sname, h, &service.protocol));
-                }
-                // #2341 (decision C): the router calls `rejected_<svc>(why)`
-                // to render a rejection of one of this service's requests.
-                bynk_model::IrHandlerKind::Rejected => {
-                    return_entries.push(emit_rejected_wrapper(sname));
-                }
-            }
-        }
-    }
-    body.push(return_(Some(TsExpr::multiline_object_entries(
-        return_entries,
-    ))));
-
-    let mut compose_params = vec![TsParam::new("env".to_string(), Some(TsType::named("Env")))];
-    // Locale capability track, slice 2 (#882): `request` is threaded
-    // independently of `exec` — the two-way independence matters because
-    // `scheduled`/`queue` (which never have a `request`) may still use
-    // `detach` (`exec`), and a `fetch`-only Worker with no message bundle needs
-    // neither.
-    if needs_request {
-        compose_params.push(TsParam::optional(
-            "request".to_string(),
-            Some(TsType::named("globalThis.Request")),
-        ));
-    }
-    // L7 (#2414, Decision E): an `EdgeCache` instance is built from the
-    // entry's `ctx` (`new WorkersEdgeCache(exec)`), so compose takes it even
-    // when nothing sends; optional then, as the entry's own `ctx` is.
-    let edge_cache = table.derived.values().any(|d| d.is_edge_cache());
-    if edge_cache && !ctx_uses_send {
-        compose_params.push(TsParam::optional(
-            "exec".to_string(),
-            Some(TsType::named("unknown")),
-        ));
-    }
-    if ctx_uses_send {
-        compose_params.push(TsParam {
-            name: "exec".to_string(),
-            // #1321: a fixed, non-generative type-literal-with-a-method
-            // constant — no per-call variation, so it's carried as opaque
-            // `Named` text rather than a general method-signature-in-a-
-            // type-literal shape, the same "opaque `Named` for one real,
-            // unvarying shape" precedent `ts_type_ref_to_ts_type`'s own
-            // `TypeRef::Query` arm already established (`emitter.rs`).
-            ty: Some(TsType::named(
-                "{ waitUntil(promise: globalThis.Promise<unknown>): void }",
-            )),
-            optional: false,
-            rest: false,
-            array_pattern: None,
-            default: None,
-        });
-    }
-
-    // -- Assemble the whole document in its real, final order. --
-    let mut program = TsProgram::new();
-    program.push(TsStmt::comment(
-        "Generated by bynk — do not edit by hand.",
-        None,
-    ));
-    program.push(TsStmt::comment(
-        format!("composition root for `{context}` Worker."),
-        None,
-    ));
-    // The runtime import goes here, once the rest of the module is built (below).
-    let runtime_import_at = program.stmts.len();
-    program.push(TsStmt::decl(
-        TsDecl::ImportNamespace {
-            type_only: false,
-            alias: "handlers".to_string(),
-            from: layout.own_handlers_specifier(context),
-        },
-        None,
-    ));
-    // Import each referenced unit's provider classes. A *context*'s providers
-    // live in its Worker's `handlers.js`; an *adapter*'s external provider
-    // classes live in its binding module at the out root.
-    for cctx in &referenced_units {
-        let ns = cctx.replace('.', "_");
-        if let Some(module) = binding_modules.get(cctx) {
-            program.push(TsStmt::decl(
-                TsDecl::ImportNamespace {
-                    type_only: false,
-                    alias: format!("{ns}__binding"),
-                    from: format!("../../{module}"),
-                },
-                None,
-            ));
-        } else {
-            program.push(TsStmt::decl(
-                TsDecl::ImportNamespace {
-                    type_only: false,
-                    alias: format!("handlers_{ns}"),
-                    from: layout.handlers_specifier(context, cctx),
-                },
-                None,
-            ));
-        }
-    }
-    if let Some(li) = locale_import {
-        program.push(li);
-    }
-    // #2967: `compose.ts` imports a used commons' constant from the commons
-    // itself, as the context's own modules do: `handlers.ts` imports it without
-    // re-exporting it. Aliased, so a constant named like a binding of this
-    // module (`Env`, `handlers`) cannot shadow it.
-    // #2969: grouped by the module that declares each constant, which for a
-    // commons split across files is one of its files, not the commons path.
-    let mut by_module: BTreeMap<std::path::PathBuf, Vec<String>> = BTreeMap::new();
-    for (alias, (owner, name)) in &const_imports {
-        let module = used_decl_paths
-            .get(owner)
-            .and_then(|paths| paths.get(name))
-            .cloned()
-            .unwrap_or_else(|| crate::emit_model::EmitProjectCtx::commons_path(owner));
-        by_module.entry(module).or_default().push(format!(
-            "{} as {alias}",
-            bynk_check::emitted_names::ts_ident(name)
-        ));
-    }
-    for (module, names) in by_module {
-        program.push(TsStmt::decl(
-            TsDecl::Import {
-                type_only: false,
-                names,
-                from: crate::emitter::cross_commons_import_specifier_for_path(
-                    &layout.handlers_source_path(context),
-                    &module,
-                    import_ext,
-                ),
-            },
-            None,
-        ));
-    }
-
-    // Env shape: one member per binding the Worker's `wrangler.toml`
-    // declares, from the same list (#1944), so the two cannot drift.
-    let env_members: Vec<TsTypeMember> = bindings
-        .iter()
-        .map(|b| TsTypeMember::prop(b.name.clone(), TsType::named(binding_ts_type(&b.source))))
-        .collect();
-    program.push(TsStmt::decl(
-        TsDecl::Export(Box::new(TsDecl::Interface {
-            name: "Env".to_string(),
-            type_params: Vec::new(),
-            members: env_members,
-        })),
-        None,
-    ));
-
-    if binds(|s| {
-        matches!(
-            s,
-            BindingSource::Agent { .. }
-                | BindingSource::EventsFanout { .. }
-                | BindingSource::ContainerInstance { .. }
-        )
-    }) {
-        // P7.2: deferred, not narrowed — this settling attempt broke real
-        // `tsc --strict` fixtures. A real, differently-shaped imported
-        // `DurableObjectNamespace` (from `./runtime`, `fetch(input: string,
-        // init?: unknown)`) can be in scope in the same file as this local
-        // fallback (used with `fetch(new Request(...))` at this file's own
-        // `__stub.fetch` call site) — the two share a name but not a shape, and
-        // reconciling them needs more than a same-line fix (a real import/alias,
-        // or renaming the local fallback), not a guessed structural type.
-        program.push(TsStmt::decl(
-            TsDecl::TypeAlias {
-                name: "__DurableObjectNamespace".to_string(),
-                type_params: Vec::new(),
-                ty: TsType::named(
-                    "{ idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any }",
-                ),
-            },
-            None,
-        ));
-    }
-
-    program.push(TsStmt::decl(
-        TsDecl::Export(Box::new(TsDecl::Function {
-            name: "compose".to_string(),
-            generics: Vec::new(),
-            params: compose_params,
-            return_type: None,
-            body,
-            is_async: false,
-            inline: false,
-        })),
-        None,
-    ));
-
-    // 1A.36b-2: the runtime import is what the module's tree uses (`derived_worker_runtime_names`);
-    // its position is after the banner, before the other imports.
-    let names = crate::emitter::runtime_header::derived_worker_runtime_names(
-        &program.stmts[runtime_import_at..],
-    );
-    for (i, stmt) in crate::emitter::runtime_files::runtime_import_stmts(
-        false,
-        &names,
-        COMPOSE_RUNTIME_SPECIFIER,
+    binary(
+        bynk_ts::TsBinaryOp::NullishCoalescing,
+        explicit,
+        global_probe,
     )
-    .into_iter()
-    .enumerate()
-    {
-        program.stmts.insert(runtime_import_at + i, stmt);
-    }
-    // Each fixed import (`handlers`, a provider's namespace) is kept only if the tree uses it.
-    program.prune_unused_imports();
-
-    (program, needs_request)
-}
-
-/// v0.15: cross-context capabilities this Worker references in handlers or in
-/// a local provider's `given`, as `deps_key → consumed_context`.
-fn worker_cross_caps(
-    context: &str,
-    table: &UnitTable,
-    consumes: &[String],
-    aliases: &HashMap<String, String>,
-    flattened: &HashMap<String, String>,
-) -> std::collections::BTreeMap<String, String> {
-    fn resolve(
-        prefix: &str,
-        consumes: &[String],
-        aliases: &HashMap<String, String>,
-    ) -> Option<String> {
-        if let Some(q) = aliases.get(prefix) {
-            return Some(q.clone());
-        }
-        if consumes.iter().any(|c| c == prefix) {
-            return Some(prefix.to_string());
-        }
-        None
-    }
-    let mut out = std::collections::BTreeMap::new();
-    let mut givens: Vec<bynk_model::CapRefIr> = Vec::new();
-    for s in table.services.values() {
-        for h in &s.handlers {
-            givens.extend(bynk_model::lower_handler_given_ir(h));
-        }
-    }
-    for a in table.agents.values() {
-        for h in &a.handlers {
-            givens.extend(bynk_model::lower_handler_given_ir(h));
-        }
-    }
-    for p in table.providers.values() {
-        givens.extend(bynk_model::lower_provider_given_ir(p));
-    }
-    for c in &givens {
-        // Events track, slice 0 (spine #936): `Events.emit` is
-        // intercepted entirely at the call site (release-at-commit
-        // buffering) and never calls through a constructed provider —
-        // see the matching skip in `bynk-emit/src/project.rs`'s
-        // `handler_cross_caps`. Without this, Workers-mode compose
-        // tries to construct a `bynk__binding.EventsProvider` that
-        // does not exist.
-        if bynk_check::firstparty::resolve(&c.name, context, flattened)
-            == Some(bynk_check::firstparty::FirstPartyCap::Events)
-        {
-            continue;
-        }
-        if let Some(p) = &c.context {
-            if let Some(ctx) = resolve(p, consumes, aliases) {
-                out.entry(c.name.clone()).or_insert(ctx);
-            }
-        } else if let Some(unit) = flattened.get(&c.name) {
-            // v0.17: a bare flattened capability is provided by its source unit.
-            out.entry(c.name.clone()).or_insert_with(|| unit.clone());
-        }
-    }
-    out
 }
 
 /// v0.176 (#642, Decision E): an `on call` wrapper's parameters carry their real
@@ -943,7 +101,7 @@ fn worker_cross_caps(
 /// URL as raw strings, so typing them against the *declared* type would assert a
 /// coercion that seam does not perform. Those are separate boundaries with their
 /// own extraction rules, and they are not what this increment fixed.
-fn emit_call_wrapper(
+pub(super) fn emit_call_wrapper(
     sname: &str,
     h: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -1046,7 +204,7 @@ fn emit_call_wrapper(
 /// positionally, so the condition widens to match.
 /// #2341 (decision C): the compose-surface wrapper for `on rejected` — the
 /// rejection the router built, passed to the handler with its deps.
-fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
+pub(super) fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
     TsObjectEntry::Method {
         name: format!("rejected_{sname}"),
         is_async: true,
@@ -1068,15 +226,9 @@ fn emit_rejected_wrapper(sname: &str) -> TsObjectEntry {
     }
 }
 
-fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> TsObjectEntry {
-    let wants_envelope = h.params.len() == 2
-        || matches!(
-            protocol,
-            ServiceProtocol::Events {
-                schema_dispatch: Some(_),
-                ..
-            }
-        );
+/// `wants_envelope` is the plan's decision for this subscriber (`EventSubscriberShape::
+/// wants_envelope`, 1B.1c): the wrapper only spells it.
+pub(super) fn emit_event_wrapper(sname: &str, wants_envelope: bool) -> TsObjectEntry {
     // P7.2: deferred, not narrowed. Two attempts: a bare `ts_type_ref` failed
     // ("Cannot find name" — the event's synthetic type needs the `handlers.`
     // prefix here), and qualifying it via `qualified_ts_type_ref` (the same
@@ -1110,7 +262,7 @@ fn emit_event_wrapper(sname: &str, h: &Handler, protocol: &ServiceProtocol) -> T
     }
 }
 
-fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry {
+pub(super) fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry {
     let method_key = crate::emitter::cron_handler_method_name(sname, cron_idx);
     // A cron handler takes an optional scheduled-time parameter; forward it (if
     // any) to the bound handler, with deps trailing. P7.2: the checker requires
@@ -1156,7 +308,7 @@ fn emit_cron_wrapper(sname: &str, cron_idx: usize, h: &Handler) -> TsObjectEntry
 /// queue consumer and a `from email` one (#3328) the email handler. A raw
 /// `ServiceProtocol` match (not `ProtocolIr`, P6.30): `emit_worker_compose` has no
 /// `TypedCommons` in scope to lower it with.
-fn message_wrapper(
+pub(super) fn message_wrapper(
     service: &ServiceDecl,
     sname: &str,
     queue_idx: usize,
@@ -1166,11 +318,14 @@ fn message_wrapper(
     if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
         return None;
     }
+    let who =
+        bynk_check::actors::queue_admission_for(h, &service.protocol, actors).and_then(|a| a.sum);
     Some(emit_queue_wrapper(
         sname,
         queue_idx,
         h,
         email_actors(service, actors),
+        who.as_deref(),
     ))
 }
 
@@ -1191,6 +346,7 @@ fn emit_queue_wrapper(
     queue_idx: usize,
     h: &Handler,
     email: Option<&HashMap<String, ActorDecl>>,
+    who: Option<&[bynk_check::actors::CallSumMember]>,
 ) -> TsObjectEntry {
     let method_key = crate::emitter::queue_handler_method_name(sname, queue_idx);
     // The queue handler takes its message parameter; forward it with deps. P7.2:
@@ -1224,6 +380,18 @@ fn emit_queue_wrapper(
             } else {
                 call_args.push(ident("deps"));
             }
+        }
+        // #3899: a signed consumer's sum takes the resolved actor first, which the entry builds from
+        // the message's signer, and threads it into `deps` as `who`.
+        None if who.is_some() => {
+            params.insert(
+                0,
+                TsParam::new(
+                    "__who".to_string(),
+                    who.map(crate::emitter::emit::call_sum_ts_type),
+                ),
+            );
+            call_args.push(deps_spread_with("who", ident("__who")));
         }
         None => call_args.push(ident("deps")),
     }
@@ -1287,11 +455,54 @@ fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
     }
 }
 
+/// #3900: the statements reading a Bearer upgrade's offered subprotocols into `__offer`, refusing the
+/// old single-element form with `400`. With `require_token`, an offer with no token is `401` too, so
+/// `__offer` is a `Token` after them.
+pub(super) fn bearer_offer_stmts(require_token: bool, marker: &str) -> Vec<TsStmt> {
+    // #3904: an `Oidc` upgrade offers `["bynk.oidc", token]`; the default marker is left implicit.
+    let marker_args = |mut args: Vec<TsExpr>| {
+        if marker != "bynk.bearer" {
+            args.push(str_lit(marker));
+        }
+        args
+    };
+    let mut stmts = vec![
+        const_(
+            "__offer",
+            call(
+                ident("__webSocketBearerOffer"),
+                marker_args(vec![method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit("Sec-WebSocket-Protocol")],
+                )]),
+            ),
+        ),
+        if_(
+            strict_eq(member(ident("__offer"), "tag"), str_lit("Legacy")),
+            return_(Some(call(
+                ident("__webSocketBearerRefusal"),
+                marker_args(vec![]),
+            ))),
+        ),
+    ];
+    if require_token {
+        stmts.push(if_(
+            strict_neq(member(ident("__offer"), "tag"), str_lit("Token")),
+            return_(Some(new_response(vec![
+                str_lit("Unauthorized"),
+                status_object("401"),
+            ]))),
+        ));
+    }
+    stmts
+}
+
 /// v0.104 (real-time track slice 3b): emit the WebSocket upgrade route — the
 /// edge half of DECISION A. The upgrade authenticates the actor **in the Worker,
 /// before any request reaches the Durable Object** (the safety boundary): it
-/// reads the Bearer token from the first `Sec-WebSocket-Protocol` element
-/// (DECISION C), verifies it fail-closed with the same audited JWT verifier HTTP
+/// reads the Bearer token from the `Sec-WebSocket-Protocol` pair
+/// `["bynk.bearer", token]` (DECISION C, #3900), verifies it fail-closed with the same audited JWT verifier HTTP
 /// uses, and only on success forwards the upgrade request to the addressed DO —
 /// the agent the `on open` transfers the connection to (DECISION B), keyed by a
 /// request parameter. The verified identity rides in a trusted internal header
@@ -1299,13 +510,14 @@ fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
 /// the cross-context caller seam relies on). A failure returns `401`/`426` and
 /// **does not forward** — no socket is accepted unauthenticated.
 #[allow(clippy::too_many_arguments)]
-fn emit_websocket_upgrade(
+pub(super) fn emit_websocket_upgrade(
     sname: &str,
     h: &Handler,
-    seam: Option<&bynk_check::actors::BearerSeam>,
+    credential: Option<&super::workers_ws_auth::WsCredential>,
     sum: Option<&[bynk_check::actors::SumMember]>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
+    jurisdictions: &HashMap<String, String>,
     consts: &HashMap<String, bynk_check::consts::VisibleConst<'_>>,
     const_imports: &mut BTreeMap<String, (String, String)>,
 ) -> TsObjectEntry {
@@ -1351,9 +563,8 @@ fn emit_websocket_upgrade(
         ]))),
     ));
 
-    // DECISION C: a Bearer token arrives as the first `Sec-WebSocket-Protocol`
-    // subprotocol element (a browser sets it via `new WebSocket(url, [token])`),
-    // verified fail-closed before the request is forwarded. The `on open` requires
+    // DECISION C (#3900): a Bearer token arrives as the `Sec-WebSocket-Protocol` subprotocol after
+    // `bynk.bearer` (a browser sets it via `new WebSocket(url, ["bynk.bearer", token])`), verified fail-closed before the request is forwarded. The `on open` requires
     // a `by` actor, but — exactly as an HTTP `by v: Visitor` route — that actor's
     // scheme may be `None` (an intentional anonymous channel): then `seam` is
     // `None` and no token is read. `Signature` is rejected at the WS boundary (a
@@ -1366,39 +577,29 @@ fn emit_websocket_upgrade(
     // HTTP path threads through `deps.who`, so the Durable Object rebuilds it.
     if let Some(members) = sum {
         use bynk_check::actors::SumMemberSeam;
-        stmts.push(const_(
-            "__proto",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Sec-WebSocket-Protocol")],
-            ),
-        ));
         stmts.push(TsStmt::let_stmt(
             TsBindingName::Ident("__token".to_string()),
             Some(TsType::named("string | undefined")),
             Some(ident("undefined")),
             None,
         ));
-        stmts.push(if_(
-            strict_neq(ident("__proto"), null_lit()),
-            TsStmt::assign(
-                ident("__token"),
-                method_call(
-                    TsExpr::Index {
-                        object: Box::new(method_call(
-                            ident("__proto"),
-                            "split",
-                            vec![str_lit(",")],
-                        )),
-                        index: Box::new(num_lit("0")),
-                    },
-                    "trim",
-                    vec![],
-                ),
+        // #3900: the token is the subprotocol after `bynk.bearer`; the old `[token]` form is a `400`.
+        if members
+            .iter()
+            .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+        {
+            stmts.extend(bearer_offer_stmts(false, "bynk.bearer"));
+            stmts.push(TsStmt::let_stmt(
+                TsBindingName::Ident("__exp".to_string()),
+                Some(TsType::named("number | undefined")),
+                Some(ident("undefined")),
                 None,
-            ),
-        ));
+            ));
+            stmts.push(if_(
+                strict_eq(member(ident("__offer"), "tag"), str_lit("Token")),
+                TsStmt::assign(ident("__token"), member(ident("__offer"), "token"), None),
+            ));
+        }
         stmts.push(TsStmt::let_stmt(
             TsBindingName::Ident("__who".to_string()),
             Some(TsType::named(
@@ -1418,66 +619,14 @@ fn emit_websocket_upgrade(
                 SumMemberSeam::Bearer {
                     secret,
                     identity_type,
-                } => {
-                    let secret = crate::emitter::escape_ts_string(secret);
-                    vec![if_(
-                        strict_neq(ident("__token"), ident("undefined")),
-                        block(vec![
-                            const_("__secret", secret_probe_expr(&secret)),
-                            if_(
-                                strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
-                                block(vec![
-                                    const_(
-                                        "__claims",
-                                        await_expr(call(
-                                            ident("__verifyBearerJwtHs256"),
-                                            vec![ident("__token"), ident("__secret")],
-                                        )),
-                                    ),
-                                    if_(
-                                        strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
-                                        block(vec![
-                                            const_(
-                                                "__id",
-                                                method_call(
-                                                    member(
-                                                        ident("handlers"),
-                                                        identity_type.clone(),
-                                                    ),
-                                                    "of",
-                                                    vec![member(
-                                                        member(ident("__claims"), "value"),
-                                                        "sub",
-                                                    )],
-                                                ),
-                                            ),
-                                            if_(
-                                                strict_eq(
-                                                    member(ident("__id"), "tag"),
-                                                    str_lit("Ok"),
-                                                ),
-                                                TsStmt::assign(
-                                                    ident("__who"),
-                                                    TsExpr::object(vec![
-                                                        ("tag".to_string(), str_lit(tag)),
-                                                        (
-                                                            "identity".to_string(),
-                                                            member(ident("__id"), "value"),
-                                                        ),
-                                                    ]),
-                                                    None,
-                                                ),
-                                            ),
-                                        ]),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    )]
-                }
+                } => sum_bearer_member_stmts(&tag, secret, identity_type),
                 // Rejected at the WebSocket boundary (no body to sign), so a
                 // checked program has none; resolve nothing, fail closed.
-                SumMemberSeam::Signature(_) => Vec::new(),
+                // `Signature`, `Oidc` and `SignedCookie` are not WebSocket schemes (the checker
+                // refuses them on `from websocket`), so no member of those resolves here.
+                SumMemberSeam::Signature(_)
+                | SumMemberSeam::Oidc(_)
+                | SumMemberSeam::SignedCookie(_) => Vec::new(),
             };
             stmts.push(if_(
                 strict_eq(ident("__who"), ident("undefined")),
@@ -1493,85 +642,12 @@ fn emit_websocket_upgrade(
         ));
     }
 
-    if let Some(seam) = seam {
-        let secret = crate::emitter::escape_ts_string(&seam.secret);
-        stmts.push(const_(
-            "__proto",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Sec-WebSocket-Protocol")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(ident("__proto"), null_lit()),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        stmts.push(const_(
-            "__token",
-            method_call(
-                TsExpr::Index {
-                    object: Box::new(method_call(ident("__proto"), "split", vec![str_lit(",")])),
-                    index: Box::new(num_lit("0")),
-                },
-                "trim",
-                vec![],
-            ),
-        ));
-        // The hosting context's `Env` carries the DO binding (a non-empty object
-        // type), so the secret probe casts through `unknown` to index it.
-        stmts.push(const_("__secret", secret_probe_expr(&secret)));
-        stmts.push(if_(
-            strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        stmts.push(const_(
-            "__claims",
-            await_expr(call(
-                ident("__verifyBearerJwtHs256"),
-                vec![ident("__token"), ident("__secret")],
-            )),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        // A refinement actor's authorisation invariant: scheme verified (401
-        // above), a failed claim predicate is 403, checked against verified claims.
-        if let Some(pred) = &seam.authorization {
-            let js = bynk_check::actors::claim_predicate_to_js(pred, "__claims.value.claims");
-            // #1321: `claim_predicate_to_js` is a `bynk_check`-crate helper
-            // that returns already-built JS boolean-expression *text* —
-            // out of this slice's own scope (a different crate; `bynk-ts`'s
-            // own crate-boundary invariant, `bynk-syntax` only, forbids
-            // `bynk-check` depending on it to return a real `TsExpr`
-            // instead). Carried as an opaque `TsExpr::Ident` — the same
-            // "existing textual variant carries pre-rendered text this
-            // crate structurally can't build a shape for" precedent
-            // `ts_type_ref_to_ts_type`'s own `TypeRef::Query` arm already
-            // established for `TsType::Named` (`emitter.rs`), applied here
-            // to `TsExpr::Ident` — not a new pattern. The literal parens
-            // are baked into the text (not left to `Unary::Not`'s own
-            // operand rules) since `js`'s own precedence isn't guaranteed
-            // compatible with a bare `!`, matching the original `writeln!`
-            // text's own explicit `!({js})`.
-            stmts.push(if_(
-                ident(format!("!({js})")),
-                return_(Some(new_response(vec![
-                    str_lit("Forbidden"),
-                    status_object("403"),
-                ]))),
-            ));
-        }
+    // A lone actor's credential (#3900 Bearer, #3904 Oidc and SignedCookie) is verified here, in the
+    // Worker, fail closed, and its identity minted, before the request is forwarded.
+    let mut verified = credential.map(super::workers_ws_auth::ws_credential_stmts);
+    let has_identity = verified.as_ref().is_some_and(|v| v.has_identity);
+    if let Some(v) = &mut verified {
+        stmts.append(&mut v.stmts);
     }
 
     // DECISION B: resolve the hosting Durable Object from the single connection
@@ -1599,28 +675,6 @@ fn emit_websocket_upgrade(
         return internal_error(stmts, params);
     }
     let binding = agent_binding(target.agent).name;
-    // The verified identity (when the actor binds one) is forwarded in the trusted
-    // internal header alongside the route arguments. A binder-less `by` verifies
-    // but mints no identity.
-    let has_identity = seam.is_some_and(|s| s.binder.is_some());
-    if has_identity {
-        let id_ty = &seam.unwrap().identity_type;
-        stmts.push(const_(
-            "__id",
-            method_call(
-                member(ident("handlers"), id_ty.clone()),
-                "of",
-                vec![member(member(ident("__claims"), "value"), "sub")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-    }
     // The route params arrive attacker-controlled (the upgrade URL's query string).
     // Validate each refined / opaque param through its `.of` constructor fail-closed
     // — a `400` with a `RefinementViolation`, exactly as the HTTP path validates a
@@ -1653,14 +707,18 @@ fn emit_websocket_upgrade(
                         method_call(
                             ident("globalThis.JSON"),
                             "stringify",
-                            vec![TsExpr::object(vec![
-                                ("kind".to_string(), str_lit("RefinementViolation")),
-                                ("path".to_string(), str_lit(format!("param.{pn}"))),
-                                (
-                                    "violation".to_string(),
-                                    member(ident(r_name.clone()), "error"),
-                                ),
-                            ])],
+                            // #4278: never the offending value on the wire.
+                            vec![call(
+                                ident("__wireRefusal"),
+                                vec![TsExpr::object(vec![
+                                    ("kind".to_string(), str_lit("RefinementViolation")),
+                                    ("path".to_string(), str_lit(format!("param.{pn}"))),
+                                    (
+                                        "violation".to_string(),
+                                        member(ident(r_name.clone()), "error"),
+                                    ),
+                                ])],
+                            )],
                         ),
                         TsExpr::object(vec![
                             ("status".to_string(), num_lit("400")),
@@ -1746,13 +804,23 @@ fn emit_websocket_upgrade(
                 .unwrap_or_else(|| ident(wire_ident(&p.name.name)))
         })
         .collect();
+    // #3819: an agent pinned with `@jurisdiction` resolves its stub through the restricted
+    // namespace, as `makeAgent` does, so the id is the one every other caller mints.
+    let namespace = member_chain(ident("deps"), &["env", &binding]);
+    let namespace = match jurisdictions.get(target.agent) {
+        Some(j) => call(
+            ident("__agentNamespace"),
+            vec![namespace, str_lit(j.as_str())],
+        ),
+        None => namespace,
+    };
     stmts.push(const_(
         "__ns",
         // `member_chain`, not a single `Member { property: "env.{binding}" }`
         // node — the printed text is two chained accesses (`deps.env.<binding>`),
         // and a `format!`-built dotted-property slot would claim it is one
         // property literally named "env.<binding>" (review of #1322, finding 3).
-        member_chain(ident("deps"), &["env", &binding]),
+        namespace,
     ));
     stmts.push(const_(
         "__stub",
@@ -1768,33 +836,19 @@ fn emit_websocket_upgrade(
     ));
     stmts.push(const_(
         "__fwd",
-        new_expr(
-            "globalThis.Headers",
+        new(
+            ident("globalThis.Headers"),
             vec![member(ident("request"), "headers")],
         ),
     ));
-    let mut fwd_entries = vec![("args".to_string(), TsExpr::array(args_json))];
-    if has_identity {
-        fwd_entries.push(("identity".to_string(), member(ident("__id"), "value")));
-    }
-    if sum.is_some() {
-        fwd_entries.push(("who".to_string(), ident("__who")));
-    }
-    // #1818: the hosting agent reads its key, so the upgrade carries it, encoded
-    // by the agent's key codec.
-    if key_readers.contains(target.agent) {
-        fwd_entries.push((
-            "key".to_string(),
-            method_call(
-                member(
-                    ident("handlers"),
-                    crate::emitter::emit::agent_key_codec_name(target.agent),
-                ),
-                "enc",
-                vec![key_ref.clone()],
-            ),
-        ));
-    }
+    let exp = ws_credential_exp(verified.as_ref().map(|v| v.exp.clone()), sum);
+    let key = key_readers.contains(target.agent).then(|| {
+        (
+            crate::emitter::emit::agent_key_codec_name(target.agent),
+            key_ref.clone(),
+        )
+    });
+    let fwd_entries = ws_forward_entries(args_json, has_identity, sum.is_some(), exp, key);
     stmts.push(expr_stmt(method_call(
         ident("__fwd"),
         "set",
@@ -1810,8 +864,8 @@ fn emit_websocket_upgrade(
     stmts.push(return_(Some(method_call(
         ident("__stub"),
         "fetch",
-        vec![new_expr(
-            "globalThis.Request",
+        vec![new(
+            ident("globalThis.Request"),
             vec![
                 str_lit(format!("https://_bynk/_bynk/ws/open/{sname}")),
                 TsExpr::object(vec![
@@ -1825,11 +879,157 @@ fn emit_websocket_upgrade(
     TsObjectEntry::method(method_name, true, params, None, stmts)
 }
 
+/// What a verified actor leaves for the handler: the key a rate limit counts by (the
+/// verified `sub`), and the entries added to the handler's `deps` after `...deps`
+/// (the identity, the claims, the session). Empty `extras` means the handler gets
+/// plain `deps`.
+pub(super) struct SeamPrincipal {
+    pub(super) key: TsExpr,
+    pub(super) extras: Vec<TsObjectEntry>,
+}
+
+/// How a verification step reports a refusal: given the `HttpResult` to refuse with,
+/// the statement that leaves the step. A wrapper returns it; a `verify` step (#3926)
+/// returns it as the `Err` of its outcome.
+pub(super) type Failure<'a> = &'a dyn Fn(TsExpr) -> TsStmt;
+
+/// A `verify` step's refusal (#3926): `return { tag: "Err", error: <result> }`.
+pub(super) fn err_failure(result: TsExpr) -> TsStmt {
+    return_(Some(TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Err")),
+        ("error".to_string(), result),
+    ])))
+}
+
+fn refused(failure: Failure, status: &str) -> TsStmt {
+    let result = member(ident("HttpResult"), status);
+    failure(result)
+}
+
+/// The call of the handler a verified wrapper ends with: the route's params, then
+/// `deps`, extended by `extras` when the seam leaves a principal.
+fn handler_return(
+    sname: &str,
+    method_key: &str,
+    mut param_args: Vec<TsExpr>,
+    extras: Vec<TsObjectEntry>,
+) -> TsStmt {
+    if extras.is_empty() {
+        param_args.push(ident("deps"));
+    } else {
+        let mut entries = vec![TsObjectEntry::Spread(ident("deps"))];
+        entries.extend(extras);
+        param_args.push(TsExpr::object_entries(entries));
+    }
+    return_(Some(call(
+        member_chain(ident("handlers"), &[sname, method_key]),
+        param_args,
+    )))
+}
+
+#[allow(clippy::vec_init_then_push)]
+/// A Bearer actor's verification: the header, the secret, the JWT, the claim predicate
+/// (a refinement actor's authorisation invariant, `403`) and the identity mint. Every
+/// refusal goes through `failure`, in the order they always ran.
+fn bearer_seam_stmts(
+    seam: &bynk_check::actors::BearerSeam,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let secret = crate::emitter::escape_ts_string(&seam.secret);
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    stmts.push(const_(
+        "__authz",
+        method_call(
+            member(ident("request"), "headers"),
+            "get",
+            vec![str_lit("Authorization")],
+        ),
+    ));
+    stmts.push(if_(
+        or_expr(
+            strict_eq(ident("__authz"), null_lit()),
+            not_expr(method_call(
+                ident("__authz"),
+                "startsWith",
+                vec![str_lit("Bearer ")],
+            )),
+        ),
+        refused(failure, "Unauthorized"),
+    ));
+    // Source the signing secret from the same env the `Secrets` capability
+    // reads (explicit env first, then a `process.env` probe).
+    stmts.push(const_("__secret", secret_probe_expr(&secret)));
+    stmts.push(if_(
+        strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
+        refused(failure, "Unauthorized"),
+    ));
+    stmts.push(const_(
+        "__claims",
+        await_expr(call(
+            ident("__verifyBearerJwtHs256"),
+            vec![
+                method_call(ident("__authz"), "slice", vec![num_lit("7")]),
+                ident("__secret"),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
+        refused(failure, "Unauthorized"),
+    ));
+    // v0.53: a refinement actor's authorisation invariant — the scheme
+    // verified (else 401 above), so a failed claim predicate is 403, not
+    // 401. Checked against the *verified* claims, before the identity mints
+    // or the body runs.
+    if let Some(pred) = &seam.authorization {
+        stmts.push(if_(
+            super::claim_predicate::claim_predicate_denied(pred),
+            refused(failure, "Forbidden"),
+        ));
+    }
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
+    if seam.binder.is_some() {
+        // Capture the identity: construct the declared type from `sub`
+        // (fail-closed on a refinement violation) and thread it into deps.
+        stmts.push(const_(
+            "__id",
+            method_call(
+                member(ident("handlers"), seam.identity_type.clone()),
+                "of",
+                vec![member(member(ident("__claims"), "value"), "sub")],
+            ),
+        ));
+        stmts.push(if_(
+            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
+            refused(failure, "Unauthorized"),
+        ));
+        extras.push(TsObjectEntry::prop(
+            "identity".to_string(),
+            member(ident("__id"), "value"),
+        ));
+        // #3937: and the verified token's claims, which the binder's `.claims` reads.
+        extras.push(TsObjectEntry::prop(
+            "claims".to_string(),
+            call(
+                ident("__tokenClaims"),
+                vec![member(member(ident("__claims"), "value"), "claims")],
+            ),
+        ));
+    }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__claims"), "value"), "sub"),
+            extras,
+        },
+    )
+}
+
 // `stmts`/`secret_body` in the functions below are built incrementally —
 // unconditional pushes followed by later conditional ones, not a fixed
 // literal clippy's suggested `vec![]` could replace.
 #[allow(clippy::vec_init_then_push)]
-fn emit_http_wrapper(
+pub(super) fn emit_http_wrapper(
     sname: &str,
     h: &Handler,
     method: bynk_model::IrHttpMethod,
@@ -1868,92 +1068,13 @@ fn emit_http_wrapper(
                 Some(qualified_ts_type_ref(&p.type_ref)),
             )
         }));
-        let secret = crate::emitter::escape_ts_string(&seam.secret);
-        let mut stmts: Vec<TsStmt> = Vec::new();
-        stmts.push(const_(
-            "__authz",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Authorization")],
-            ),
+        let (mut stmts, principal) = bearer_seam_stmts(seam, &|result| return_(Some(result)));
+        stmts.push(handler_return(
+            sname,
+            &method_key,
+            param_args,
+            principal.extras,
         ));
-        stmts.push(if_(
-            or_expr(
-                strict_eq(ident("__authz"), null_lit()),
-                not_expr(method_call(
-                    ident("__authz"),
-                    "startsWith",
-                    vec![str_lit("Bearer ")],
-                )),
-            ),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        // Source the signing secret from the same env the `Secrets` capability
-        // reads (explicit env first, then a `process.env` probe).
-        stmts.push(const_("__secret", secret_probe_expr(&secret)));
-        stmts.push(if_(
-            strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        stmts.push(const_(
-            "__claims",
-            await_expr(call(
-                ident("__verifyBearerJwtHs256"),
-                vec![
-                    method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                    ident("__secret"),
-                ],
-            )),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        // v0.53: a refinement actor's authorisation invariant — the scheme
-        // verified (else 401 above), so a failed claim predicate is 403, not
-        // 401. Checked against the *verified* claims, before the identity mints
-        // or the body runs.
-        if let Some(pred) = &seam.authorization {
-            let js = bynk_check::actors::claim_predicate_to_js(pred, "__claims.value.claims");
-            // #1321: see `emit_websocket_upgrade`'s own identical construction
-            // for why this is an opaque `Ident` carrying pre-built text.
-            stmts.push(if_(
-                ident(format!("!({js})")),
-                return_(Some(member(ident("HttpResult"), "Forbidden"))),
-            ));
-        }
-        if seam.binder.is_some() {
-            // Capture the identity: construct the declared type from `sub`
-            // (fail-closed on a refinement violation) and thread it into deps.
-            stmts.push(const_(
-                "__id",
-                method_call(
-                    member(ident("handlers"), seam.identity_type.clone()),
-                    "of",
-                    vec![member(member(ident("__claims"), "value"), "sub")],
-                ),
-            ));
-            stmts.push(if_(
-                strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-                return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-            ));
-            let mut call_args = param_args.clone();
-            call_args.push(deps_spread_with("identity", member(ident("__id"), "value")));
-            stmts.push(return_(Some(call(
-                member_chain(ident("handlers"), &[sname, &method_key]),
-                call_args,
-            ))));
-        } else {
-            // Binder-less: the token is verified (fail-closed above); the
-            // identity is not captured, so call the handler with plain deps.
-            let mut call_args = param_args.clone();
-            call_args.push(ident("deps"));
-            stmts.push(return_(Some(call(
-                member_chain(ident("handlers"), &[sname, &method_key]),
-                call_args,
-            ))));
-        }
         return TsObjectEntry::Method {
             name: method_key,
             is_async: true,
@@ -1996,42 +1117,279 @@ fn emit_http_wrapper(
     }
 }
 
-/// v0.151: the compose wrapper for a single-actor `Oidc` HTTP handler. It reads
-/// the `Authorization: Bearer <token>`, verifies the JWT against the provider's
-/// JWKS (RS256/ES256, `iss`/`aud`/`exp`/`nbf`) via `verifyOidcJwt`, mints the
-/// identity from the verified `sub`, and threads it into `deps` — all before the
-/// body runs. Any failure returns `Unauthorized` (401), fail-closed. Unlike the
-/// Bearer wrapper it sources **no secret**: the trust parameters are the public
-/// `issuer`/`audience`/`jwks` literals from the actor declaration.
-#[allow(clippy::vec_init_then_push)]
-fn emit_http_oidc_wrapper(
+/// One `Bearer` member of an actor sum at the WebSocket upgrade: verify the offered token against the
+/// member's secret and, when it verifies and mints the identity, resolve `__who` to this member. #3903:
+/// also records the token's `exp` in `__exp`, so the connection can be closed once the credential expires.
+fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
+    let secret = crate::emitter::escape_ts_string(secret);
+    vec![if_(
+        strict_neq(ident("__token"), ident("undefined")),
+        block(vec![
+            const_("__secret", secret_probe_expr(&secret)),
+            if_(
+                strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
+                block(vec![
+                    const_(
+                        "__claims",
+                        await_expr(call(
+                            ident("__verifyBearerJwtHs256"),
+                            vec![ident("__token"), ident("__secret")],
+                        )),
+                    ),
+                    if_(
+                        strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
+                        block(vec![
+                            const_(
+                                "__id",
+                                method_call(
+                                    member(ident("handlers"), identity_type),
+                                    "of",
+                                    vec![member(member(ident("__claims"), "value"), "sub")],
+                                ),
+                            ),
+                            if_(
+                                strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
+                                block(vec![
+                                    TsStmt::assign(
+                                        ident("__who"),
+                                        TsExpr::object(vec![
+                                            ("tag".to_string(), str_lit(tag)),
+                                            (
+                                                "identity".to_string(),
+                                                member(ident("__id"), "value"),
+                                            ),
+                                        ]),
+                                        None,
+                                    ),
+                                    TsStmt::assign(
+                                        ident("__exp"),
+                                        cond_expr(
+                                            strict_eq(typeof_expr(claims_exp()), str_lit("number")),
+                                            claims_exp(),
+                                            ident("undefined"),
+                                        ),
+                                        None,
+                                    ),
+                                ]),
+                            ),
+                        ]),
+                    ),
+                ]),
+            ),
+        ]),
+    )]
+}
+
+/// `__claims.value.claims.exp`: the verified token's expiry (#3903).
+pub(super) fn claims_exp() -> TsExpr {
+    member(member(member(ident("__claims"), "value"), "claims"), "exp")
+}
+
+/// #3903: the expiry of the credential the upgrade verified, forwarded so the Durable Object can close
+/// the connection once it has passed. A lone `Bearer` seam reads it off its verified claims; an actor
+/// sum with a `Bearer` member recorded it in `__exp` when that member verified (it stays `undefined`
+/// when a `None` member resolved, so such a connection never expires). A `None` upgrade has none.
+fn ws_credential_exp(
+    lone_exp: Option<TsExpr>,
+    sum: Option<&[bynk_check::actors::SumMember]>,
+) -> Option<TsExpr> {
+    use bynk_check::actors::SumMemberSeam;
+    if lone_exp.is_some() {
+        return lone_exp;
+    }
+    sum.filter(|members| {
+        members
+            .iter()
+            .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+    })
+    .map(|_| ident("__exp"))
+}
+
+/// The entries of the trusted `X-Bynk-Ws-Open` header: the route arguments, the verified identity (or
+/// the actor-sum member that verified), the credential's expiry, and, for a hosting agent that reads
+/// its own key, that key encoded by the agent's key codec (#1818).
+fn ws_forward_entries(
+    args: Vec<TsExpr>,
+    has_identity: bool,
+    is_sum: bool,
+    exp: Option<TsExpr>,
+    key: Option<(String, TsExpr)>,
+) -> Vec<(String, TsExpr)> {
+    let mut entries = vec![("args".to_string(), TsExpr::array(args))];
+    if has_identity {
+        entries.push(("identity".to_string(), member(ident("__id"), "value")));
+    }
+    if is_sum {
+        entries.push(("who".to_string(), ident("__who")));
+    }
+    if let Some(exp) = exp {
+        entries.push(("exp".to_string(), exp));
+    }
+    if let Some((codec, key_ref)) = key {
+        entries.push((
+            "key".to_string(),
+            method_call(member(ident("handlers"), codec), "enc", vec![key_ref]),
+        ));
+    }
+    entries
+}
+
+/// The scope of a verified identity's limiter key (#3926): `identity:<Actor>:` ahead of the
+/// `sub`. A limiter is shared by every route that names it, so the bare `sub` of one actor
+/// (or an issuer's) would otherwise spend another's budget, and an address a `clientIp`
+/// route counts could collide with a `sub`. `identity:` cannot begin an IP address.
+fn limiter_key_prefix(h: &Handler) -> String {
+    let actor = h
+        .by_clause
+        .as_ref()
+        .map(|b| b.primary().name.clone())
+        .unwrap_or_default();
+    format!("identity:{actor}:")
+}
+
+/// #3926: a route with `@rateLimit(Limiter, key: identity)` is served by two compose
+/// methods in place of the one wrapper, so the entry can verify the caller, ask the
+/// limiter about them, and only then read the body. `<route>__verify(request)` runs the
+/// seam's own statements, refusals included, and gives `{ tag: "Err", error }` (the
+/// `HttpResult` the wrapper would have returned) or `{ tag: "Ok", value: { key,
+/// principal } }`; `<route>(params…, principal)` runs the handler with the principal
+/// the verification left. Verification runs once: the entry never calls the wrapper's
+/// own seam again.
+fn identity_split_wrapper(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    (mut stmts, principal): (Vec<TsStmt>, SeamPrincipal),
+) -> Vec<TsObjectEntry> {
+    let method_key = http_handler_method_name_ir(method, path);
+    let verify_return = TsType::named(
+        "globalThis.Promise<{ tag: \"Err\"; error: any } | { tag: \"Ok\"; value: { key: string; principal: any } }>",
+    );
+    stmts.push(return_(Some(TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Ok")),
+        (
+            "value".to_string(),
+            TsExpr::object(vec![
+                (
+                    "key".to_string(),
+                    method_call(
+                        str_lit(limiter_key_prefix(h)),
+                        "concat",
+                        vec![call(ident("globalThis.String"), vec![principal.key])],
+                    ),
+                ),
+                (
+                    "principal".to_string(),
+                    TsExpr::object_entries(principal.extras),
+                ),
+            ]),
+        ),
+    ]))));
+    let verify = TsObjectEntry::Method {
+        name: format!("{method_key}__verify"),
+        is_async: true,
+        generics: Vec::new(),
+        params: vec![TsParam::new(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        )],
+        return_type: Some(verify_return),
+        doc: None,
+        inline: false,
+        body: stmts,
+        span: None,
+    };
+    let mut params: Vec<TsParam> = h
+        .params
+        .iter()
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
+        })
+        .collect();
+    params.push(TsParam::new(
+        "principal".to_string(),
+        Some(TsType::named("any")),
+    ));
+    let mut args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| ident(wire_ident(&p.name.name)))
+        .collect();
+    args.push(TsExpr::object_entries(vec![
+        TsObjectEntry::Spread(ident("deps")),
+        TsObjectEntry::Spread(ident("principal")),
+    ]));
+    let run = TsObjectEntry::Method {
+        name: method_key.clone(),
+        is_async: true,
+        generics: Vec::new(),
+        params,
+        return_type: None,
+        doc: None,
+        inline: false,
+        body: vec![return_(Some(call(
+            member_chain(ident("handlers"), &[sname, &method_key]),
+            args,
+        )))],
+        span: None,
+    };
+    vec![verify, run]
+}
+
+/// #3926: the verify/run pair of an identity-limited `Bearer` route.
+pub(super) fn bearer_identity_split(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::BearerSeam,
+) -> Vec<TsObjectEntry> {
+    identity_split_wrapper(
+        sname,
+        h,
+        method,
+        path,
+        bearer_seam_stmts(seam, &err_failure),
+    )
+}
+
+/// #3926: the verify/run pair of an identity-limited `Oidc` route.
+pub(super) fn oidc_identity_split(
     sname: &str,
     h: &Handler,
     method: bynk_model::IrHttpMethod,
     path: &str,
     seam: &bynk_check::actors::OidcSeam,
-) -> TsObjectEntry {
-    let method_key = http_handler_method_name_ir(method, path);
-    let param_args: Vec<TsExpr> = h
-        .params
-        .iter()
-        .map(|p| ident(wire_ident(&p.name.name)))
-        .collect();
-    let issuer = crate::emitter::escape_ts_string(&seam.issuer);
-    let audience = crate::emitter::escape_ts_string(&seam.audience);
-    let jwks = crate::emitter::escape_ts_string(&seam.jwks);
+) -> Vec<TsObjectEntry> {
+    identity_split_wrapper(sname, h, method, path, oidc_seam_stmts(seam, &err_failure))
+}
 
-    // P7.2: real declared types — same correction as `emit_http_wrapper`'s own.
-    let mut params: Vec<TsParam> = vec![TsParam::new(
-        "request".to_string(),
-        Some(TsType::named("globalThis.Request")),
-    )];
-    params.extend(h.params.iter().map(|p| {
-        TsParam::new(
-            wire_ident(&p.name.name),
-            Some(qualified_ts_type_ref(&p.type_ref)),
-        )
-    }));
+/// #3926: the verify/run pair of an identity-limited `SignedCookie` route. The seam's own
+/// statements run in `verify`: the cross-site check for a state-changing request, the
+/// cookie, its signature and lifetime, and with `sessions = true` the session-live check.
+pub(super) fn signed_cookie_identity_split(
+    service: &ServiceDecl,
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::SignedCookieSeam,
+) -> Vec<TsObjectEntry> {
+    let stmts = signed_cookie_seam_stmts(method, seam, &csrf_origins(service), &err_failure);
+    identity_split_wrapper(sname, h, method, path, stmts)
+}
+
+/// An `Oidc` actor's verification: the header, the trust roots (`trustFrom` replaces the
+/// declared ones, fail closed), the JWT against the provider's JWKS and the identity mint.
+/// Every refusal goes through `failure`, in the order they always ran.
+fn oidc_seam_stmts(
+    seam: &bynk_check::actors::OidcSeam,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
     let mut stmts: Vec<TsStmt> = Vec::new();
     stmts.push(const_(
         "__authz",
@@ -2050,8 +1408,26 @@ fn emit_http_oidc_wrapper(
                 vec![str_lit("Bearer ")],
             )),
         ),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
+    let token = method_call(ident("__authz"), "slice", vec![num_lit("7")]);
+    let (verify, principal) = oidc_verify_stmts(seam, token, failure);
+    stmts.extend(verify);
+    (stmts, principal)
+}
+
+/// An `Oidc` actor's verification of the token `token` (the bearer token of an HTTP request, or the
+/// subprotocol after `bynk.oidc` of a WebSocket upgrade, #3904): the trust roots, the JWT and the
+/// identity mint, every refusal going through `failure`.
+pub(super) fn oidc_verify_stmts(
+    seam: &bynk_check::actors::OidcSeam,
+    token: TsExpr,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let issuer = crate::emitter::escape_ts_string(&seam.issuer);
+    let audience = crate::emitter::escape_ts_string(&seam.audience);
+    let jwks = crate::emitter::escape_ts_string(&seam.jwks);
+    let mut stmts: Vec<TsStmt> = Vec::new();
     // #2380 (L5): `trustFrom`'s variable, when set, replaces the declared
     // trust roots; set but malformed refuses the request (fail closed).
     let (issuer, audience, jwks) = match &seam.trust_from {
@@ -2070,7 +1446,7 @@ fn emit_http_oidc_wrapper(
             ));
             stmts.push(if_(
                 strict_eq(ident("__trust"), null_lit()),
-                return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+                refused(failure, "Unauthorized"),
             ));
             (
                 member(ident("__trust"), "issuer"),
@@ -2084,18 +1460,14 @@ fn emit_http_oidc_wrapper(
         "__claims",
         await_expr(call(
             ident("__verifyOidcJwt"),
-            vec![
-                method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                issuer,
-                audience,
-                jwks,
-            ],
+            vec![token, issuer, audience, jwks],
         )),
     ));
     stmts.push(if_(
         strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
     if seam.binder.is_some() {
         // Capture the identity: construct the declared type from the verified
         // `sub` (fail-closed on a refinement violation) and thread it into deps.
@@ -2109,33 +1481,69 @@ fn emit_http_oidc_wrapper(
         ));
         stmts.push(if_(
             strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+            refused(failure, "Unauthorized"),
         ));
-        let mut call_args = param_args;
         // #2380 (L5): the binder's `.claims` read the verified token's claims.
-        call_args.push(TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
-            TsObjectEntry::prop(
-                "claims".to_string(),
-                call(
-                    ident("__tokenClaims"),
-                    vec![member(member(ident("__claims"), "value"), "claims")],
-                ),
+        extras.push(TsObjectEntry::prop(
+            "identity".to_string(),
+            member(ident("__id"), "value"),
+        ));
+        extras.push(TsObjectEntry::prop(
+            "claims".to_string(),
+            call(
+                ident("__tokenClaims"),
+                vec![member(member(ident("__claims"), "value"), "claims")],
             ),
-        ]));
-        stmts.push(return_(Some(call(
-            member_chain(ident("handlers"), &[sname, &method_key]),
-            call_args,
-        ))));
-    } else {
-        let mut call_args = param_args;
-        call_args.push(ident("deps"));
-        stmts.push(return_(Some(call(
-            member_chain(ident("handlers"), &[sname, &method_key]),
-            call_args,
-        ))));
+        ));
     }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__claims"), "value"), "sub"),
+            extras,
+        },
+    )
+}
+
+/// v0.151: the compose wrapper for a single-actor `Oidc` HTTP handler. It reads
+/// the `Authorization: Bearer <token>`, verifies the JWT against the provider's
+/// JWKS (RS256/ES256, `iss`/`aud`/`exp`/`nbf`) via `verifyOidcJwt`, mints the
+/// identity from the verified `sub`, and threads it into `deps` — all before the
+/// body runs. Any failure returns `Unauthorized` (401), fail-closed. Unlike the
+/// Bearer wrapper it sources **no secret**: the trust parameters are the public
+/// `issuer`/`audience`/`jwks` literals from the actor declaration.
+#[allow(clippy::vec_init_then_push)]
+pub(super) fn emit_http_oidc_wrapper(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::OidcSeam,
+) -> TsObjectEntry {
+    let method_key = http_handler_method_name_ir(method, path);
+    let param_args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| ident(wire_ident(&p.name.name)))
+        .collect();
+    // P7.2: real declared types — same correction as `emit_http_wrapper`'s own.
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(h.params.iter().map(|p| {
+        TsParam::new(
+            wire_ident(&p.name.name),
+            Some(qualified_ts_type_ref(&p.type_ref)),
+        )
+    }));
+    let (mut stmts, principal) = oidc_seam_stmts(seam, &|result| return_(Some(result)));
+    stmts.push(handler_return(
+        sname,
+        &method_key,
+        param_args,
+        principal.extras,
+    ));
     TsObjectEntry::Method {
         name: method_key,
         is_async: true,
@@ -2151,7 +1559,7 @@ fn emit_http_oidc_wrapper(
 
 /// #3386: `deps.__session`, the signing keys of this context's `SignedCookie` actors by name,
 /// read from the environment, for a handler's `Actor.issue(identity)`. `None` when it has none.
-fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
+pub(super) fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
     let mut actors: Vec<_> = table
         .actors
         .values()
@@ -2184,7 +1592,7 @@ fn session_deps_entry(table: &UnitTable) -> Option<TsObjectEntry> {
 
 /// #3386: the compose entry for one `SignedCookie` handler. A credentialed `cors` origin is one
 /// the CSRF check trusts.
-fn signed_cookie_entry(
+pub(super) fn signed_cookie_entry(
     service: &ServiceDecl,
     sname: &str,
     h: &Handler,
@@ -2192,13 +1600,135 @@ fn signed_cookie_entry(
     path: &str,
     seam: &bynk_check::actors::SignedCookieSeam,
 ) -> TsObjectEntry {
-    let origins = service
+    emit_http_signed_cookie_wrapper(sname, h, method, path, seam, &csrf_origins(service))
+}
+
+/// The origins a `SignedCookie` arm's CSRF check trusts: the service's credentialed `cors`
+/// origins (never a wildcard).
+pub(super) fn csrf_origins(service: &ServiceDecl) -> Vec<String> {
+    service
         .cors
         .as_ref()
         .filter(|c| c.credentials() && !c.is_wildcard())
         .map(|c| c.origins())
-        .unwrap_or_default();
-    emit_http_signed_cookie_wrapper(sname, h, method, path, seam, &origins)
+        .unwrap_or_default()
+}
+
+/// A `SignedCookie` actor's verification: the cross-site check for a state-changing
+/// request, the cookie, its signature and lifetime, the identity mint and, for a
+/// `sessions = true` actor, the session-live check. Every refusal goes through
+/// `failure`, in the order they always ran, so nothing here is skipped when the step
+/// runs ahead of the body.
+pub(super) fn signed_cookie_seam_stmts(
+    method: bynk_model::IrHttpMethod,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    csrf_origins: &[String],
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    if !matches!(method, bynk_model::IrHttpMethod::Get) {
+        let origins: Vec<TsExpr> = csrf_origins
+            .iter()
+            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
+            .collect();
+        stmts.push(if_(
+            not_expr(call(
+                ident("__csrfAllowed"),
+                vec![ident("request"), TsExpr::array(origins)],
+            )),
+            refused(failure, "Forbidden"),
+        ));
+    }
+    stmts.push(const_(
+        "__cookie",
+        call(
+            ident("__sessionCookieOf"),
+            vec![
+                ident("request"),
+                str_lit(crate::emitter::escape_ts_string(&seam.cookie)),
+            ],
+        ),
+    ));
+    stmts.push(if_(
+        strict_eq(ident("__cookie"), null_lit()),
+        refused(failure, "Unauthorized"),
+    ));
+    let previous = match &seam.previous {
+        Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
+        // A legitimate default: no previous secret is `undefined`.
+        None => undefined_node(),
+    };
+    stmts.push(const_(
+        "__session",
+        await_expr(call(
+            ident("__verifySignedCookie"),
+            vec![
+                ident("__cookie"),
+                TsExpr::object(vec![
+                    (
+                        "secret".to_string(),
+                        secret_probe_expr(&crate::emitter::escape_ts_string(&seam.secret)),
+                    ),
+                    ("previous".to_string(), previous),
+                ]),
+                str_lit(crate::emitter::escape_ts_string(&seam.actor)),
+                num_lit(seam.ttl_secs.to_string()),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        strict_eq(member(ident("__session"), "tag"), str_lit("Err")),
+        refused(failure, "Unauthorized"),
+    ));
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
+    if seam.binder.is_some() || seam.sessions {
+        // Capture the identity: construct the declared type from the verified `sub`
+        // (fail-closed on a refinement violation) and thread it into deps. A `sessions = true`
+        // actor needs it even without a binder: it keys the session agent.
+        stmts.push(const_(
+            "__id",
+            method_call(
+                member(ident("handlers"), seam.identity_type.clone()),
+                "of",
+                vec![member(member(ident("__session"), "value"), "sub")],
+            ),
+        ));
+        stmts.push(if_(
+            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
+            refused(failure, "Unauthorized"),
+        ));
+        if seam.sessions {
+            push_session_check(&mut stmts, seam, failure);
+            // The verified session, for `Actor.expire()` to end. Spread from its own object so the
+            // handler's exact `deps` type does not flag it as an excess property.
+            extras.push(TsObjectEntry::Spread(TsExpr::object(vec![(
+                "__sessionOf".to_string(),
+                TsExpr::object(vec![
+                    (
+                        "sid".to_string(),
+                        member(member(ident("__session"), "value"), "sid"),
+                    ),
+                    (
+                        "sub".to_string(),
+                        member(member(ident("__session"), "value"), "sub"),
+                    ),
+                ]),
+            )])));
+        }
+        if seam.binder.is_some() {
+            extras.push(TsObjectEntry::prop(
+                "identity".to_string(),
+                member(ident("__id"), "value"),
+            ));
+        }
+    }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__session"), "value"), "sub"),
+            extras,
+        },
+    )
 }
 
 /// #3386: the compose wrapper for a single-actor `SignedCookie` HTTP handler. Before the body
@@ -2234,88 +1764,14 @@ fn emit_http_signed_cookie_wrapper(
             Some(qualified_ts_type_ref(&p.type_ref)),
         )
     }));
-    let mut stmts: Vec<TsStmt> = Vec::new();
-    if !matches!(method, bynk_model::IrHttpMethod::Get) {
-        let origins: Vec<TsExpr> = csrf_origins
-            .iter()
-            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
-            .collect();
-        stmts.push(if_(
-            not_expr(call(
-                ident("__csrfAllowed"),
-                vec![ident("request"), TsExpr::array(origins)],
-            )),
-            return_(Some(member(ident("HttpResult"), "Forbidden"))),
-        ));
-    }
-    stmts.push(const_(
-        "__cookie",
-        call(
-            ident("__sessionCookieOf"),
-            vec![
-                ident("request"),
-                str_lit(crate::emitter::escape_ts_string(&seam.cookie)),
-            ],
-        ),
+    let (mut stmts, principal) =
+        signed_cookie_seam_stmts(method, seam, csrf_origins, &|result| return_(Some(result)));
+    stmts.push(handler_return(
+        sname,
+        &method_key,
+        param_args,
+        principal.extras,
     ));
-    stmts.push(if_(
-        strict_eq(ident("__cookie"), null_lit()),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-    ));
-    let previous = match &seam.previous {
-        Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
-        // A legitimate default: no previous secret is `undefined`.
-        None => undefined_node(),
-    };
-    stmts.push(const_(
-        "__session",
-        await_expr(call(
-            ident("__verifySignedCookie"),
-            vec![
-                ident("__cookie"),
-                TsExpr::object(vec![
-                    (
-                        "secret".to_string(),
-                        secret_probe_expr(&crate::emitter::escape_ts_string(&seam.secret)),
-                    ),
-                    ("previous".to_string(), previous),
-                ]),
-                str_lit(crate::emitter::escape_ts_string(&seam.actor)),
-                num_lit(seam.ttl_secs.to_string()),
-            ],
-        )),
-    ));
-    stmts.push(if_(
-        strict_eq(member(ident("__session"), "tag"), str_lit("Err")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-    ));
-    let mut call_args = param_args;
-    if seam.binder.is_some() {
-        // Capture the identity: construct the declared type from the verified `sub`
-        // (fail-closed on a refinement violation) and thread it into deps.
-        stmts.push(const_(
-            "__id",
-            method_call(
-                member(ident("handlers"), seam.identity_type.clone()),
-                "of",
-                vec![member(member(ident("__session"), "value"), "sub")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        call_args.push(TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
-        ]));
-    } else {
-        call_args.push(ident("deps"));
-    }
-    stmts.push(return_(Some(call(
-        member_chain(ident("handlers"), &[sname, &method_key]),
-        call_args,
-    ))));
     TsObjectEntry::Method {
         name: method_key,
         is_async: true,
@@ -2329,346 +1785,50 @@ fn emit_http_signed_cookie_wrapper(
     }
 }
 
-/// Source a string secret from the same env the `Secrets` capability reads
-/// (explicit `env` first, then a `process.env` probe), binding it to `var`.
-fn emit_secret_lookup(var: &str, secret: &str) -> TsStmt {
-    let secret = crate::emitter::escape_ts_string(secret);
-    const_(var, secret_probe_expr(&secret))
+/// #3938: the seam's session check, after the signature, `kid`, audience and expiry have passed
+/// and the identity is minted: the cookie must carry a session id (a `sessions = true` actor refuses
+/// one that does not, so a cookie from before the option was set fails closed) and the identity's
+/// session agent must still hold it live. A forged cookie never reaches here, so costs no agent
+/// call. A revoked, expired or unknown session is `Unauthorized`; an agent that cannot answer
+/// faults the request, which also refuses it.
+fn push_session_check(
+    stmts: &mut Vec<TsStmt>,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    failure: Failure,
+) {
+    let sid = member(member(ident("__session"), "value"), "sid");
+    stmts.push(if_(
+        strict_eq(sid.clone(), ident("undefined")),
+        refused(failure, "Unauthorized"),
+    ));
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    let factory = member(
+        ident("handlers"),
+        crate::emitter::agent_factory_name(&agent),
+    );
+    stmts.push(const_(
+        "__live",
+        await_expr(method_call(
+            call(factory, vec![member(ident("__id"), "value"), ident("env")]),
+            "isLive",
+            vec![
+                sid,
+                method_call(member(ident("globalThis"), "Date"), "now", vec![]),
+                ident("deps"),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        not_expr(ident("__live")),
+        refused(failure, "Unauthorized"),
+    ));
 }
 
-/// v0.52: the compose wrapper for a **multi-actor sum** handler (`by who: A |
-/// B`). Unlike the single-actor wrappers, this one owns the *whole* boundary:
-/// it reads the raw body once (when any member needs it or the handler takes a
-/// `body`), tries each member's scheme in declared order, binds the first that
-/// verifies into a tagged `__who`, and — fail-closed → 401 if none verifies —
-/// parses the body and dispatches with `who` threaded through `deps`. The body
-/// `match`es on `who`. The entry passes `request` (+ any path params); no body
-/// read happens in the entry for a sum route.
-#[allow(clippy::too_many_arguments, clippy::vec_init_then_push)]
-fn emit_http_sum_wrapper(
-    sname: &str,
-    h: &Handler,
-    method: bynk_model::IrHttpMethod,
-    path: &str,
-    members: &[bynk_check::actors::SumMember],
-    service_cap: Option<i64>,
-    runtime_use: &RuntimeUse,
-) -> TsObjectEntry {
-    use bynk_check::actors::SumMemberSeam;
-    let method_key = http_handler_method_name_ir(method, path);
-    // The wrapper takes the request first (it reads the body / headers), then
-    // the path params (parsed in the entry and passed through); the `body`
-    // param is parsed here, not passed in.
-    // `ts_ident`-renamed so a reserved-word path param forwards as a valid binder
-    // (#723); the wrapper's decl and its forwarded arg both read from this list.
-    // P7.2: carries each param's own `TypeRef` alongside its name — real
-    // declared types, not `unknown`, matching the same correction
-    // `emit_http_wrapper`'s own path params needed (`workers_entry.rs`'s
-    // dispatch validates each one against its declared type before this
-    // wrapper ever sees it).
-    let path_params: Vec<(String, TypeRef)> = h
-        .params
-        .iter()
-        .filter(|p| p.name.name != "body")
-        .map(|p| (wire_ident(&p.name.name), p.type_ref.clone()))
-        .collect();
-    let mut params: Vec<TsParam> = vec![TsParam::new(
-        "request".to_string(),
-        Some(TsType::named("globalThis.Request")),
-    )];
-    params.extend(
-        path_params
-            .iter()
-            .map(|(n, ty)| TsParam::new(n.clone(), Some(qualified_ts_type_ref(ty)))),
-    );
-    let mut stmts: Vec<TsStmt> = Vec::new();
-
-    // Read the raw body once if a member verifies over it (Signature) or the
-    // handler takes a `body` param (parsed from the same bytes).
-    let has_body = h.params.iter().any(|p| p.name.name == "body");
-    let needs_raw = has_body || members.iter().any(|m| m.needs_body());
-    // A capped route reads through the counting reader (the entry's
-    // `Content-Length` fast-reject stays the cheap first check); a `@raw` route
-    // keeps the octets as received for the members to verify and the handler to
-    // take, and is always capped.
-    let cap = bynk_model::lower_route_limit_ir(h)
-        .or(service_cap)
-        .filter(|_| needs_raw);
-    let raw = has_body && h.raw_content_type().is_some();
-    let bad_body = || {
-        return_(Some(call(
-            member(ident("HttpResult"), "BadRequest"),
-            vec![str_lit("Invalid request body")],
-        )))
-    };
-    if let Some(cap) = cap {
-        stmts.push(let_(
-            "__bytes",
-            TsType::named("globalThis.Uint8Array | undefined"),
-        ));
-        stmts.push(TsStmt::try_catch(
-            block(vec![TsStmt::assign(
-                ident("__bytes"),
-                await_expr(call(
-                    ident("__readBodyCapped"),
-                    vec![ident("request"), num_lit(cap.to_string())],
-                )),
-                None,
-            )]),
-            None::<String>,
-            block(vec![bad_body()]),
-            None,
-        ));
-        stmts.push(if_(
-            strict_eq(ident("__bytes"), ident("undefined")),
-            return_(Some(call(
-                member(ident("HttpResult"), "PayloadTooLarge"),
-                vec![str_lit(format!("request body exceeds {cap} bytes"))],
-            ))),
-        ));
-        if !raw {
-            stmts.push(const_(
-                "__raw",
-                method_call(
-                    new_expr("globalThis.TextDecoder", vec![]),
-                    "decode",
-                    vec![ident("__bytes")],
-                ),
-            ));
-        }
-    } else if needs_raw {
-        stmts.push(let_("__raw", TsType::named("string")));
-        stmts.push(TsStmt::try_catch(
-            block(vec![TsStmt::assign(
-                ident("__raw"),
-                await_expr(method_call(ident("request"), "text", vec![])),
-                None,
-            )]),
-            None::<String>,
-            block(vec![bad_body()]),
-            None,
-        ));
-    }
-    // What a `Signature` member's HMAC covers.
-    let signed = if raw { "__bytes" } else { "__raw" };
-
-    // First-wins resolution: try each member in order; the first to verify sets
-    // `__who`. A `None` (catch-all) member always succeeds.
-    //
-    // P7.2: deferred, not narrowed. `__who` is assigned one of two shapes across
-    // the loop below — `{ tag }` or `{ tag; identity: <member's own identity type> }`
-    // — and is later spread into `deps.who`, which `handlers.ts`'s own generated
-    // interface types precisely per member. A correct narrowing needs a real
-    // per-member discriminated union built from each `member.seam`'s
-    // `identity_type` and checked against what that generated interface actually
-    // expects — more than a same-line text change, and risks a `tsc --strict`
-    // mismatch if guessed. Left as `any`, named here rather than silently kept.
-    stmts.push(TsStmt::let_stmt(
-        TsBindingName::Ident("__who".to_string()),
-        Some(TsType::named("any")),
-        Some(ident("undefined")),
-        None,
-    ));
-    for member_seam in members {
-        let tag = crate::emitter::escape_ts_string(&member_seam.actor_name);
-        let mut inner: Vec<TsStmt> = Vec::new();
-        match &member_seam.seam {
-            SumMemberSeam::None => {
-                inner.push(TsStmt::assign(
-                    ident("__who"),
-                    TsExpr::object(vec![("tag".to_string(), str_lit(tag.clone()))]),
-                    None,
-                ));
-            }
-            SumMemberSeam::Bearer {
-                secret,
-                identity_type,
-            } => {
-                inner.push(const_(
-                    "__authz",
-                    method_call(
-                        member(ident("request"), "headers"),
-                        "get",
-                        vec![str_lit("Authorization")],
-                    ),
-                ));
-                let mut authz_body: Vec<TsStmt> = Vec::new();
-                authz_body.push(emit_secret_lookup("__secret", secret));
-                let mut secret_body: Vec<TsStmt> = Vec::new();
-                secret_body.push(const_(
-                    "__claims",
-                    await_expr(call(
-                        ident("__verifyBearerJwtHs256"),
-                        vec![
-                            method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                            ident("__secret"),
-                        ],
-                    )),
-                ));
-                secret_body.push(if_(
-                    strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
-                    block(vec![
-                        const_(
-                            "__id",
-                            method_call(
-                                member(ident("handlers"), identity_type.clone()),
-                                "of",
-                                vec![member(member(ident("__claims"), "value"), "sub")],
-                            ),
-                        ),
-                        if_(
-                            strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
-                            TsStmt::assign(
-                                ident("__who"),
-                                TsExpr::object(vec![
-                                    ("tag".to_string(), str_lit(tag.clone())),
-                                    ("identity".to_string(), member(ident("__id"), "value")),
-                                ]),
-                                None,
-                            ),
-                        ),
-                    ]),
-                ));
-                authz_body.push(if_(
-                    strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
-                    block(secret_body),
-                ));
-                inner.push(if_(
-                    and_expr(
-                        strict_neq(ident("__authz"), null_lit()),
-                        method_call(ident("__authz"), "startsWith", vec![str_lit("Bearer ")]),
-                    ),
-                    block(authz_body),
-                ));
-            }
-            SumMemberSeam::Signature(seam) => {
-                inner.push(emit_secret_lookup("__secret", &seam.secret));
-                let mut secret_body: Vec<TsStmt> = Vec::new();
-                let ts_expr = match &seam.timestamp_header {
-                    Some(th) => {
-                        let th = crate::emitter::escape_ts_string(th);
-                        secret_body.push(const_(
-                            "__ts",
-                            method_call(
-                                member(ident("request"), "headers"),
-                                "get",
-                                vec![str_lit(th)],
-                            ),
-                        ));
-                        ident("__ts")
-                    }
-                    None => null_lit(),
-                };
-                let tol = match seam.tolerance_secs {
-                    Some(n) => num_lit(n.to_string()),
-                    None => null_lit(),
-                };
-                let header = crate::emitter::escape_ts_string(&seam.header);
-                secret_body.push(const_(
-                    "__sig_ok",
-                    await_expr(call(
-                        ident("__verifySignatureHmacSha256"),
-                        vec![
-                            ident(signed),
-                            ident("__secret"),
-                            method_call(
-                                member(ident("request"), "headers"),
-                                "get",
-                                vec![str_lit(header)],
-                            ),
-                            ts_expr,
-                            tol,
-                        ],
-                    )),
-                ));
-                secret_body.push(if_(
-                    ident("__sig_ok"),
-                    TsStmt::assign(
-                        ident("__who"),
-                        TsExpr::object(vec![("tag".to_string(), str_lit(tag.clone()))]),
-                        None,
-                    ),
-                ));
-                inner.push(if_(
-                    strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
-                    block(secret_body),
-                ));
-            }
-        }
-        stmts.push(if_(
-            strict_eq(ident("__who"), ident("undefined")),
-            block(inner),
-        ));
-    }
-    stmts.push(if_(
-        strict_eq(ident("__who"), ident("undefined")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-    ));
-
-    // Parse the body param from the raw bytes already read (fail-closed → 400).
-    if raw {
-        // The octets, untouched: no JSON, no base64.
-        stmts.push(const_("body", ident("__bytes")));
-    } else if let Some(body_param) = h.params.iter().find(|p| p.name.name == "body") {
-        stmts.push(let_("__body_json", TsType::named("__JsonValue")));
-        stmts.push(TsStmt::try_catch(
-            block(vec![TsStmt::assign(
-                ident("__body_json"),
-                as_expr(
-                    method_call(ident("globalThis.JSON"), "parse", vec![ident("__raw")]),
-                    TsType::named("__JsonValue"),
-                ),
-                None,
-            )]),
-            None::<String>,
-            block(vec![return_(Some(call(
-                member(ident("HttpResult"), "BadRequest"),
-                vec![str_lit("Invalid request body")],
-            )))]),
-            None,
-        ));
-        // #1321: `super::workers_entry::deserialise_call` delegates to
-        // `serialisation::deserialise_expr_via` (#1435, Arc E slice 1: a
-        // real `bynk_ts::TsExpr` now, not opaque text). Its result feeds the
-        // handler directly: since #1704 a `uses`-commons codec's unbranded
-        // result fits the context's optionally-branded parameter type.
-        let dser = super::workers_entry::deserialise_call(
-            &body_param.type_ref,
-            "__body_json",
-            "$",
-            runtime_use,
-        );
-        stmts.push(const_("__r_body", dser));
-        stmts.push(if_(
-            strict_eq(member(ident("__r_body"), "tag"), str_lit("Err")),
-            return_(Some(call(
-                member(ident("HttpResult"), "BadRequest"),
-                vec![str_lit("Invalid request body")],
-            ))),
-        ));
-        stmts.push(const_("body", member(ident("__r_body"), "value")));
-    }
-    // The handler's arguments in its declaration order: `body` (parsed above)
-    // wherever it sits, and every other parameter — the path params, and
-    // #2341's `headers` — as the entry passed it.
-    let mut call_args: Vec<TsExpr> = h
-        .params
-        .iter()
-        .map(|p| {
-            if p.name.name == "body" {
-                ident("body")
-            } else {
-                ident(wire_ident(&p.name.name))
-            }
-        })
-        .collect();
-    call_args.push(deps_spread_with("who", ident("__who")));
-    stmts.push(return_(Some(call(
-        member_chain(ident("handlers"), &[sname, &method_key]),
-        call_args,
-    ))));
-
-    TsObjectEntry::method(method_key, true, params, None, stmts)
+/// Source a string secret from the same env the `Secrets` capability reads
+/// (explicit `env` first, then a `process.env` probe), binding it to `var`.
+pub(super) fn emit_secret_lookup(var: &str, secret: &str) -> TsStmt {
+    let secret = crate::emitter::escape_ts_string(secret);
+    const_(var, secret_probe_expr(&secret))
 }
 
 /// v0.176 (#642): the user-named types appearing anywhere in a type-ref, including
@@ -2697,7 +1857,7 @@ pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _) => walk(a, out),
+            | TypeRef::HttpResult(a, _, _) => walk(a, out),
             TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)
@@ -2739,334 +1899,7 @@ pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
 /// (#1399) converted that last caller and deleted it — this function's own
 /// call site was never affected, since it always used the `TsType`-returning
 /// form.
-fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
+pub(super) fn qualified_ts_type_ref(r: &TypeRef) -> TsType {
     let scope: HashSet<String> = named_types_in(r).into_iter().collect();
     crate::emitter::ts_types::ts_type_ref_qualified_ts_type(r, &scope, "handlers")
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::testkit::emit_workers;
-
-    const PAYMENT: &str = "context demo.payment
-
-exports transparent { Receipt }
-
-type Receipt = { id: String }
-
-service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
-    Ok(Receipt { id: id })
-  }
-}
-";
-
-    const CHECKOUT: &str = "context demo.checkout
-
-consumes demo.payment
-
-service pay {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
-    demo.payment.authorise(id)
-  }
-}
-";
-
-    fn compose(files: &[(&str, &str)], worker: &str) -> String {
-        emit_workers(files)
-            .text(&format!("workers/{worker}/compose.ts"))
-            .to_string()
-    }
-
-    #[test]
-    fn each_call_service_gets_a_wrapper_delegating_to_its_handler() {
-        let ts = compose(&[("demo/payment.bynk", PAYMENT)], "demo-payment");
-        assert!(ts.contains("export function compose(env: Env) {"), "{ts}");
-        assert!(
-            ts.contains(
-                "async authorise(id: string) {\n      return handlers.authorise.call(id, deps);"
-            ),
-            "{ts}"
-        );
-    }
-
-    #[test]
-    fn a_context_consuming_nothing_has_an_empty_env_and_no_env_in_deps() {
-        let ts = compose(&[("demo/payment.bynk", PAYMENT)], "demo-payment");
-        assert!(ts.contains("export interface Env {\n}"), "{ts}");
-        assert!(ts.contains("const deps = {  };"), "{ts}");
-    }
-
-    #[test]
-    fn a_consumed_context_is_a_service_binding_and_env_reaches_the_handlers() {
-        let ts = compose(
-            &[
-                ("demo/payment.bynk", PAYMENT),
-                ("demo/checkout.bynk", CHECKOUT),
-            ],
-            "demo-checkout",
-        );
-        assert!(ts.contains("  DEMO_PAYMENT: __ServiceBinding;"), "{ts}");
-        assert!(ts.contains("const deps = { env };"), "{ts}");
-    }
-
-    /// #1961: a context consumed only for its types is not called, so it gets
-    /// no Service Binding and its handlers' `env` does not name one.
-    #[test]
-    fn a_consumed_context_that_is_never_called_is_not_bound() {
-        let ledger = "context demo.ledger
-
-consumes demo.payment
-
-service keep {
-  on call(r: Receipt) -> Effect[Int] {
-    Effect.pure(1)
-  }
-}
-";
-        let out = emit_workers(&[("demo/payment.bynk", PAYMENT), ("demo/ledger.bynk", ledger)]);
-        let ts = out.text("workers/demo-ledger/compose.ts");
-        assert!(!ts.contains("DEMO_PAYMENT"), "{ts}");
-        assert!(ts.contains("export interface Env {\n}"), "{ts}");
-        let toml = out.text("workers/demo-ledger/wrangler.toml");
-        assert!(!toml.contains("[[services]]"), "{toml}");
-    }
-
-    /// #1961: each handler's `deps.env` names only the context it calls, while
-    /// the Worker's `Env` binds both, so `compose`'s `env` satisfies each.
-    #[test]
-    fn each_handler_env_names_only_the_contexts_it_calls() {
-        let ledger = "context demo.ledger
-
-service note {
-  on call(id: String) -> Effect[Int] {
-    Effect.pure(1)
-  }
-}
-";
-        let hub = "context demo.hub
-
-consumes demo.payment
-consumes demo.ledger
-
-service pay {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
-    demo.payment.authorise(id)
-  }
-}
-
-service log {
-  on call(id: String) -> Effect[Int] {
-    demo.ledger.note(id)
-  }
-}
-";
-        let out = emit_workers(&[
-            ("demo/payment.bynk", PAYMENT),
-            ("demo/ledger.bynk", ledger),
-            ("demo/hub.bynk", hub),
-        ]);
-        let ts = out.text("workers/demo-hub/compose.ts");
-        assert!(ts.contains("  DEMO_LEDGER: __ServiceBinding;"), "{ts}");
-        assert!(ts.contains("  DEMO_PAYMENT: __ServiceBinding;"), "{ts}");
-        let handlers = out.text("workers/demo-hub/handlers.ts");
-        let env_of = |svc: &str| {
-            let at = handlers
-                .find(&format!("export const {svc} = {{"))
-                .unwrap_or_else(|| panic!("no `{svc}`:\n{handlers}"));
-            let rest = &handlers[at..];
-            let start = rest.find("env: {").expect("an env type");
-            let end = rest[start..].find('}').expect("closed");
-            rest[start..start + end].to_string()
-        };
-        assert!(env_of("pay").contains("DEMO_PAYMENT") && !env_of("pay").contains("DEMO_LEDGER"));
-        assert!(env_of("log").contains("DEMO_LEDGER") && !env_of("log").contains("DEMO_PAYMENT"));
-    }
-
-    /// #1944: `Env` declares exactly the bindings `wrangler.toml` does, in
-    /// the same order: services, the KV namespace, then the Durable Objects
-    /// by class name, the events fan-out (`__EventsFanout`) after an agent.
-    #[test]
-    fn env_declares_the_wrangler_bindings_in_order() {
-        let hub = "context ops.hub
-
-consumes bynk { Events }
-consumes bynk.cloudflare { Kv }
-consumes demo.payment
-
-event Pinged = { id: String }
-
-agent Ledger {
-  key id: String
-
-  store seen: Cell[Int]
-
-  on call total() -> Effect[Int] {
-    Effect.pure(seen)
-  }
-}
-
-service ping {
-  on call(id: String) -> Effect[()] given Events, Kv {
-    let _ <- Kv.put(id, id)
-    let _ <- demo.payment.authorise(id)
-    Events.emit[Pinged](Pinged { id: id })
-  }
-}
-";
-        let out = emit_workers(&[("demo/payment.bynk", PAYMENT), ("ops/hub.bynk", hub)]);
-        let ts = out.text("workers/ops-hub/compose.ts");
-        let env = ts
-            .split_once("export interface Env {\n")
-            .and_then(|(_, rest)| rest.split_once("}"))
-            .map(|(members, _)| members)
-            .unwrap_or_else(|| panic!("no Env interface:\n{ts}"));
-        assert_eq!(
-            env,
-            "  DEMO_PAYMENT: __ServiceBinding;
-  KV: __KVNamespace;
-  LEDGER: __DurableObjectNamespace;
-  ___EVENTS_FANOUT: __DurableObjectNamespace;
-",
-            "{ts}"
-        );
-        let toml = out.text("workers/ops-hub/wrangler.toml");
-        let declared: Vec<&str> = toml
-            .lines()
-            .filter_map(|l| {
-                l.strip_prefix("binding = \"")
-                    .or_else(|| l.strip_prefix("name = \""))
-            })
-            .filter_map(|rest| rest.strip_suffix('"'))
-            .filter(|name| *name != "ops-hub")
-            .collect();
-        let members: Vec<&str> = env
-            .lines()
-            .filter_map(|l| l.trim().split_once(':').map(|(name, _)| name))
-            .collect();
-        assert_eq!(members, declared, "{toml}");
-    }
-
-    /// #1950: a handler's `deps.env` type names a subset of the Worker's
-    /// `Env` members, by the same names and types: the consumed context and
-    /// the agent it constructs, never the KV namespace or the events fan-out.
-    #[test]
-    fn a_handlers_deps_env_is_a_projection_of_env() {
-        let hub = "context ops.hub
-
-consumes bynk { Events }
-consumes bynk.cloudflare { Kv }
-consumes demo.payment
-
-event Pinged = { id: String }
-
-agent Ledger {
-  key id: String
-
-  store seen: Cell[Int]
-
-  on call total() -> Effect[Int] {
-    Effect.pure(seen)
-  }
-}
-
-service ping {
-  on call(id: String) -> Effect[Int] given Events, Kv {
-    let _ <- Kv.put(id, id)
-    let _ <- demo.payment.authorise(id)
-    let n <- Ledger(id).total()
-    let _ <- Events.emit[Pinged](Pinged { id: id })
-    Effect.pure(n)
-  }
-}
-";
-        let out = emit_workers(&[("demo/payment.bynk", PAYMENT), ("ops/hub.bynk", hub)]);
-        let compose = out.text("workers/ops-hub/compose.ts");
-        let env: Vec<&str> = compose
-            .split_once("export interface Env {\n")
-            .and_then(|(_, rest)| rest.split_once("}"))
-            .map(|(members, _)| members.lines().map(|l| l.trim().trim_end_matches(';')))
-            .unwrap_or_else(|| panic!("no Env interface:\n{compose}"))
-            .collect();
-        let handlers = out.text("workers/ops-hub/handlers.ts");
-        let deps_env: Vec<&str> = handlers
-            .split_once("env: { ")
-            .and_then(|(_, rest)| rest.split_once(" }"))
-            .map(|(members, _)| members.split("; "))
-            .unwrap_or_else(|| panic!("no deps.env type:\n{handlers}"))
-            .collect();
-        assert_eq!(
-            deps_env,
-            [
-                "DEMO_PAYMENT: __ServiceBinding",
-                "LEDGER: __DurableObjectNamespace"
-            ],
-            "{handlers}"
-        );
-        for member in &deps_env {
-            assert!(env.contains(member), "`{member}` is not in Env: {env:?}");
-        }
-    }
-
-    #[test]
-    fn a_user_type_in_a_wrapper_signature_is_qualified_through_handlers() {
-        let src = "context demo.shop
-
-type Order = { id: String }
-
-service place {
-  on call(order: Order) -> Effect[Option[Order]] {
-    Effect.pure(Some(order))
-  }
-}
-";
-        let ts = compose(&[("demo/shop.bynk", src)], "demo-shop");
-        assert!(ts.contains("async place(order: handlers.Order) {"), "{ts}");
-    }
-
-    #[test]
-    fn each_http_route_gets_a_wrapper_named_by_method_and_path() {
-        let src = "context demo.shop
-
-service api from http {
-  on GET(\"/items/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Ok(id)
-  }
-}
-";
-        let ts = compose(&[("demo/shop.bynk", src)], "demo-shop");
-        assert!(
-            ts.contains("async http_GET_items_Param_id(id: string) {\n      return handlers.api.http_GET_items_Param_id(id, deps);"),
-            "{ts}"
-        );
-    }
-
-    #[test]
-    fn a_provided_capability_is_constructed_once_and_passed_in_deps() {
-        let src = "context demo.shop
-
-capability Clock {
-  fn now() -> Effect[Int]
-}
-
-provides Clock = FixedClock {
-  fn now() -> Effect[Int] {
-    Effect.pure(0)
-  }
-}
-
-service probe {
-  on call() -> Effect[Int] given Clock {
-    Clock.now()
-  }
-}
-";
-        let ts = compose(&[("demo/shop.bynk", src)], "demo-shop");
-        assert!(
-            ts.contains("const Clock = new handlers.FixedClock();"),
-            "{ts}"
-        );
-        assert_eq!(ts.matches("new handlers.FixedClock()").count(), 1, "{ts}");
-        assert!(ts.contains("const deps = { Clock };"), "{ts}");
-    }
 }

@@ -2,6 +2,7 @@
 // context app.api
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -9,15 +10,15 @@ export type UserId = string & { readonly __brand: "app.api.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
 };
 
 export const api = {
-  async http_POST_blobs(body: globalThis.Uint8Array, deps: { who: { tag: "User", identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
+  async http_POST_blobs(body: globalThis.Uint8Array, deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
     switch (deps.who.tag) {
       case "User": {
         return HttpResult.Ok(body.length);

@@ -42,6 +42,8 @@ pub mod documentation_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
+pub mod match_to_expect;
+pub use bynk_ide::env_const;
 pub use bynk_ide::first_party_docs;
 pub mod fix_all;
 pub use bynk_ide::hover;
@@ -146,6 +148,9 @@ struct Analysis {
     /// and service/agent tables the `bynk/wireContract` request resolves a
     /// handler's boundary shape and cross-context hash against.
     boundary_info: std::collections::HashMap<String, bynk_ide::ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, behind the hover on a written field and a typed read's completion.
+    analytics: std::collections::BTreeMap<String, bynk_ide::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets — backs intra-doc-link resolution in `document_link` and
@@ -521,6 +526,145 @@ impl Backend {
             state.root_cache.insert(uri.clone(), root.clone());
         }
         root
+    }
+
+    /// #3941: the project's `bynk.toml` variables, read from disk; `None` when the
+    /// file is in no project or the tables do not parse (the build says why).
+    async fn project_vars(&self, uri: &Url) -> Option<crate::env_const::ProjectVars> {
+        let root = self.root_for_uri(uri).await?;
+        tokio::task::spawn_blocking(move || crate::env_const::read_vars(&root))
+            .await
+            .ok()
+            .flatten()
+    }
+
+    /// #3941: the live text of an open document, and the `env(NAME)` variable the
+    /// cursor is on in it.
+    async fn env_variable_at(
+        &self,
+        uri: &Url,
+        pos: Position,
+    ) -> Option<(String, String, usize, usize)> {
+        let text = {
+            let state = self.state.read().await;
+            state.docs.get(uri)?.text.clone()
+        };
+        let offset = crate::position::position_to_offset(&text, pos)?;
+        let (name, start, end) = crate::env_const::variable_at(&text, offset)?;
+        Some((text, name, start, end))
+    }
+
+    /// #3941: rename the `bynk.toml` variable under the cursor in an `env(NAME)`
+    /// constant: its name in every constant that reads it and its key in each
+    /// `bynk.toml` table that sets it. `None` when the cursor is on no variable.
+    async fn env_variable_rename(
+        &self,
+        uri: &Url,
+        pos: Position,
+        new_name: &str,
+    ) -> Option<Result<WorkspaceEdit, String>> {
+        let (text, name, _, _) = self.env_variable_at(uri, pos).await?;
+        let root = self.root_for_uri(uri).await?;
+        let mut sources = self
+            .project_content(uri)
+            .await
+            .map(|c| (*c).clone())
+            .unwrap_or_default();
+        let here = uri.to_file_path().ok()?;
+        let here = here.canonicalize().unwrap_or(here);
+        sources.insert(here, text);
+        let manifest_path = root.join("bynk.toml");
+        // The open buffer's text wins over the disk's, and its version stamps the
+        // edit: the client rejects the rename if a buffer drifted past it.
+        let (manifest_text, versions) = {
+            let state = self.state.read().await;
+            let versions: std::collections::HashMap<PathBuf, i32> = state
+                .docs
+                .iter()
+                .filter_map(|(u, d)| {
+                    let p = u.to_file_path().ok()?;
+                    Some((p.canonicalize().unwrap_or(p), d.version))
+                })
+                .collect();
+            // Match by canonical path: the root is canonical, an editor's URI need not be.
+            let manifest_canonical = manifest_path
+                .canonicalize()
+                .unwrap_or_else(|_| manifest_path.clone());
+            let open = state.docs.iter().find_map(|(u, d)| {
+                let p = u.to_file_path().ok()?;
+                (p.canonicalize().unwrap_or(p) == manifest_canonical).then(|| d.text.clone())
+            });
+            (open, versions)
+        };
+        let manifest_text = match manifest_text {
+            Some(t) => Some(t),
+            None => tokio::fs::read_to_string(&manifest_path).await.ok(),
+        };
+        // The variables come from the same text the edits are computed on.
+        let vars = {
+            let root = root.clone();
+            let text = manifest_text.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::env_const::read_vars_from(&root, text.as_deref())
+            })
+            .await
+            .ok()
+            .flatten()
+        };
+        let Some(vars) = vars else {
+            return Some(Err(
+                "`bynk.toml` does not parse, so a variable cannot be renamed".into(),
+            ));
+        };
+        let plan = match crate::env_const::plan_rename(
+            &name,
+            new_name,
+            &sources,
+            manifest_text
+                .as_deref()
+                .map(|t| (manifest_path.as_path(), t)),
+            &vars,
+        ) {
+            Ok(plan) => plan,
+            Err(reason) => return Some(Err(reason)),
+        };
+        let mut document_edits: Vec<TextDocumentEdit> = Vec::new();
+        for (path, spans) in &plan {
+            let file_text = if *path == manifest_path {
+                manifest_text.as_deref()
+            } else {
+                sources.get(path).map(String::as_str)
+            };
+            let (Some(file_text), Ok(file_uri)) = (file_text, Url::from_file_path(path)) else {
+                continue;
+            };
+            let edits = spans
+                .iter()
+                .map(|(s, e)| {
+                    OneOf::Left(TextEdit {
+                        range: crate::position::span_to_range(
+                            file_text,
+                            bynk_syntax::span::Span::new(*s, *e),
+                        ),
+                        new_text: new_name.to_string(),
+                    })
+                })
+                .collect();
+            document_edits.push(TextDocumentEdit {
+                text_document: OptionalVersionedTextDocumentIdentifier {
+                    uri: file_uri,
+                    version: versions
+                        .get(&path.canonicalize().unwrap_or_else(|_| path.clone()))
+                        .copied(),
+                },
+                edits,
+            });
+        }
+        Some(Ok(WorkspaceEdit {
+            changes: None,
+            document_changes: Some(DocumentChanges::Edits(document_edits)),
+            change_annotations: None,
+        }))
     }
 
     /// #682: whether a `root_for_uri` write-back computed while the cache was
@@ -947,6 +1091,7 @@ impl Backend {
                 sequence_info: result.sequence_info,
                 architecture_facts: result.architecture_facts,
                 boundary_info: result.boundary_info,
+                analytics: result.analytics,
                 doc_scope: result.doc_scope,
                 contract_diff: result.contract_diff,
             });
@@ -1213,10 +1358,29 @@ impl Backend {
         text: &str,
         offset: usize,
     ) -> Vec<CompletionItem> {
-        let Some((rewritten, recv_offset)) = completion::value_receiver_rewrite(text, offset)
-        else {
+        // #4312: `old.lines.` / `new.lines.` in a transition predicate is a
+        // dotted receiver the bare-name rewrite declines.
+        let (rewritten, recv_offset, dotted) =
+            match completion::value_receiver_rewrite(text, offset) {
+                Some((rewritten, recv_offset)) => (rewritten, recv_offset, false),
+                None => match completion::predicate_field_rewrite(text, offset) {
+                    Some((rewritten, recv_offset)) => (rewritten, recv_offset, true),
+                    None => return Vec::new(),
+                },
+            };
+        // #4312: a store field in a predicate offers `size` only, whichever
+        // form reaches it.
+        let locals = self.fast_path_locals(uri, &rewritten).await;
+        if let Some(members) =
+            completion::predicate_store_member_candidates(&rewritten, recv_offset, &locals)
+        {
+            return members.into_iter().map(to_completion_item).collect();
+        }
+        // A dotted `old.x.` outside a predicate is no store field: it offered
+        // nothing before, and still does.
+        if dotted {
             return Vec::new();
-        };
+        }
         let mut items: Vec<CompletionItem> = Vec::new();
         if let Some((ty, tys)) = self
             .type_receiver(uri, rewritten.clone(), recv_offset)
@@ -1237,7 +1401,6 @@ impl Backend {
                     .map(to_completion_item),
             );
         }
-        let locals = self.fast_path_locals(uri, &rewritten).await;
         items.extend(
             completion::store_field_member_candidates(&rewritten, recv_offset, &locals)
                 .into_iter()
@@ -1358,6 +1521,82 @@ impl Backend {
         completion::variants_for_ty(ty, &tys, text, files.as_deref())
             .into_iter()
             .map(to_completion_item)
+            .collect()
+    }
+
+    /// #4227: where the text names the type a value is expected to have (the
+    /// right of `lhs ==`/`!=`, an annotated `let`, a call argument), that
+    /// type's variants, ranked ahead of everything else the position offers.
+    async fn expected_type_completions(
+        &self,
+        uri: &Url,
+        text: &str,
+        offset: usize,
+        line_prefix: &str,
+    ) -> Vec<CompletionItem> {
+        // A call argument on its own line has a whitespace-only prefix, which
+        // reads as keyword position: it counts when a call is open there.
+        let in_open_call = completion::is_keyword_position(line_prefix)
+            && bynk_ide::signature_help::call_context(text, offset).is_some();
+        let in_value_position = completion::is_expression_position(line_prefix) || in_open_call;
+        // The cheap lexical checks first: the project's files are swept only
+        // when one of them says there is a type to name (#4334 review).
+        let before = &text[..offset];
+        let field_site = bynk_ide::expected_type::record_field_site(before);
+        let tail_type = bynk_ide::expected_type::tail_position_type(text, offset);
+        let files = if in_value_position || field_site.is_some() || tail_type.is_some() {
+            self.project_content(uri).await
+        } else {
+            None
+        };
+        let comparison = in_value_position
+            .then(|| bynk_ide::expected_type::comparison_lhs_end(text, offset))
+            .flatten();
+        let mut variants = if let Some(lhs_end) = comparison {
+            // The buffer with `== <partial>` dropped parses, so the left
+            // operand keeps its recorded type (the value-member trick).
+            let lhs_len = text[lhs_end..].chars().next().map_or(1, char::len_utf8);
+            let rewritten = format!("{}{}", &text[..lhs_end + lhs_len], &text[offset..]);
+            match self.type_receiver(uri, rewritten, lhs_end).await {
+                Some((ty, tys)) => completion::variants_for_ty(ty, &tys, text, files.as_deref()),
+                None => Vec::new(),
+            }
+        } else {
+            // #4334: a record field's value and the tail of a body name their
+            // type too, and sit outside the operator positions above.
+            let expected = field_site
+                .and_then(|site| {
+                    bynk_ide::expected_type::record_field_type(site, text, files.as_deref())
+                })
+                .or_else(|| {
+                    in_value_position
+                        .then(|| {
+                            bynk_ide::expected_type::let_annotation_type(line_prefix).or_else(
+                                || {
+                                    bynk_ide::expected_type::argument_type(
+                                        text,
+                                        offset,
+                                        files.as_deref(),
+                                    )
+                                },
+                            )
+                        })
+                        .flatten()
+                })
+                .or(tail_type);
+            expected
+                .map(|t| bynk_ide::expected_type::variants_of_type_text(&t, text, files.as_deref()))
+                .unwrap_or_default()
+        };
+        variants
+            .drain(..)
+            .map(|c| {
+                let mut item = to_completion_item(c);
+                // Sorts ahead of every other candidate (labels start with a
+                // letter or `_`, never `0`).
+                item.sort_text = Some(format!("0_{}", item.label));
+                item
+            })
             .collect()
     }
 
@@ -2425,6 +2664,17 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR))
                 .collect();
+        // #4451: each `{dataset}` placeholder in an Analytics SQL literal, as `keyword` over the string.
+        dt.extend(
+            bynk_ide::analytics_tooling::dataset_token_spans(text)
+                .into_iter()
+                .map(|(s, e)| {
+                    (
+                        bynk_syntax::span::Span::new(s, e),
+                        crate::semantic_tokens::TOK_KEYWORD,
+                    )
+                }),
+        );
         // Constraint names in a bound (`T: Eq`, `where A: Eq`), as `interface`.
         dt.extend(
             crate::symbols::constraint_token_spans(text)
@@ -2449,6 +2699,30 @@ impl Backend {
         // #2618: each `private` modifier, as `keyword`.
         dt.extend(
             crate::symbols::private_modifier_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
+        // #3877: each `delivery` section keyword of a queue consumer, as `keyword`.
+        dt.extend(
+            bynk_ide::queue_delivery::delivery_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
+        // #3975: each `@name` / `@discriminator` wire-name annotation, as `decorator`.
+        dt.extend(
+            bynk_ide::wire_names::wire_annotation_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR)),
+        );
+        // #3793: each field `replaces` clause's keyword, as `keyword`.
+        dt.extend(
+            bynk_ide::field_rename::replaces_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
+        // #3885: each `fallback` section keyword of an email service, as `keyword`.
+        dt.extend(
+            bynk_ide::email_fallback::fallback_keyword_spans(text)
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
@@ -2477,6 +2751,17 @@ impl Backend {
                     bynk_syntax::lexer::StringPart::Tag => {
                         (s, crate::semantic_tokens::TOK_DECORATOR)
                     }
+                }),
+        );
+        // #3941: the variable name in an `env(NAME)` constant, as `property`.
+        dt.extend(
+            bynk_ide::env_const::variable_spans(text)
+                .into_iter()
+                .map(|(s, e)| {
+                    (
+                        bynk_syntax::span::Span::new(s, e),
+                        crate::semantic_tokens::TOK_PROPERTY,
+                    )
                 }),
         );
         crate::index_queries::semantic_tokens(&analysis.index, &lt, &dt, &rel, text, span)
@@ -3187,6 +3472,7 @@ impl LanguageServer for Backend {
                     &a.boundary_info,
                     &a.unit_sources,
                 ),
+                analytics: &a.analytics,
             });
         // #2842: a `matches snapshot` claim hovers with the stored snapshot, read
         // from the project's `snapshots/` folder (or "not yet recorded").
@@ -3198,13 +3484,30 @@ impl LanguageServer for Backend {
             }
             _ => None,
         };
-        let content = snapshot_hover.or_else(|| {
+        // #3941: an `env(NAME)` constant's call hovers with what each environment
+        // resolves the variable to.
+        let env_hover = match doc {
+            Some((text, offset)) if crate::env_const::call_on_line(text, offset).is_some() => self
+                .project_vars(&uri)
+                .await
+                .and_then(|vars| crate::env_const::describe_at(text, offset, &vars)),
+            _ => None,
+        };
+        let content = snapshot_hover.or(env_hover).or_else(|| {
             crate::hover::hover_content(&crate::hover::HoverInput {
                 analysis,
                 doc,
                 path: uri.to_file_path().ok().as_deref(),
                 files: files.as_deref(),
             })
+        });
+        // #3879: a `Queue` instance's hover names the context that consumes its queue.
+        let content = content.map(|value| {
+            bynk_ide::queue_delivery::with_consumer_note(
+                value,
+                doc.map_or("", |(text, _)| text),
+                files.as_deref(),
+            )
         });
         // #2470: a refined type's hover gains its predicates in words and,
         // for a client that runs the command, a "Try values…" link.
@@ -3259,7 +3562,12 @@ impl LanguageServer for Backend {
         // #733: `resolve_label` enumerates the project's units (file stats +
         // recovery parse of the cache-missed ones), so run it on the blocking
         // pool — signature help fires on every `(`/`,` while typing a call.
-        let resolved_label = {
+        // #3941: `env(NAME, default)` on a constant is not a function anywhere.
+        let env_label = (ctx.callee == "env" && crate::env_const::in_call(&text, offset))
+            .then(|| crate::env_const::SIGNATURE.to_string());
+        let resolved_label = if env_label.is_some() {
+            env_label
+        } else {
             let callee = ctx.callee.clone();
             let text = text.clone();
             let files = files.clone();
@@ -3275,8 +3583,8 @@ impl LanguageServer for Backend {
                 }
             }
         };
-        let label = match resolved_label {
-            Some(l) => Some(l),
+        let labels: Vec<String> = match resolved_label {
+            Some(l) => vec![l],
             // v0.32 slice 2: a value-receiver method (`xs.fold(`) — type the
             // receiver via the rewrite + re-analyse, then the kernel signature.
             None => match crate::signature_help::value_receiver_method(&ctx.callee) {
@@ -3291,31 +3599,43 @@ impl LanguageServer for Backend {
                         && let Some((ty, tys)) =
                             self.type_receiver(&uri, rewritten, recv_offset).await
                     {
-                        crate::signature_help::kernel_method_signature(ty, &tys, method)
+                        crate::signature_help::kernel_method_signatures(ty, &tys, method)
                     } else {
-                        None
+                        Vec::new()
                     }
                 }
-                None => None,
+                None => Vec::new(),
             },
         };
-        let Some(label) = label else { return Ok(None) };
+        if labels.is_empty() {
+            return Ok(None);
+        }
         let active = ctx.active_param as u32;
-        let parameters: Vec<ParameterInformation> = crate::signature_help::param_ranges(&label)
+        // #4262: one signature per arity; the active one fits the arguments
+        // typed so far.
+        let active_signature = crate::signature_help::active_signature(&labels, ctx.active_param);
+        let signatures = labels
             .into_iter()
-            .map(|(s, e)| ParameterInformation {
-                label: ParameterLabel::LabelOffsets([s as u32, e as u32]),
-                documentation: None,
+            .map(|label| {
+                let parameters: Vec<ParameterInformation> =
+                    crate::signature_help::param_ranges(&label)
+                        .into_iter()
+                        .map(|(s, e)| ParameterInformation {
+                            label: ParameterLabel::LabelOffsets([s as u32, e as u32]),
+                            documentation: None,
+                        })
+                        .collect();
+                SignatureInformation {
+                    label,
+                    documentation: None,
+                    parameters: Some(parameters),
+                    active_parameter: Some(active),
+                }
             })
             .collect();
         Ok(Some(SignatureHelp {
-            signatures: vec![SignatureInformation {
-                label,
-                documentation: None,
-                parameters: Some(parameters),
-                active_parameter: Some(active),
-            }],
-            active_signature: Some(0),
+            signatures,
+            active_signature: Some(active_signature as u32),
             active_parameter: Some(active),
         }))
     }
@@ -3796,10 +4116,49 @@ impl LanguageServer for Backend {
             return Ok(Some(CompletionResponse::Array(items)));
         }
         let files = self.project_content(&uri).await;
+        // #3911: inside `@name("…")` on a `headers` record's field, the common header names.
+        if let Some(items) =
+            bynk_ide::header_completion::header_name_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #4451: the first argument of `AnalyticsSql.query` / `select` names an `Analytics` instance.
+        if let Some(items) =
+            bynk_ide::analytics_tooling::instance_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #4502: a field-name position of the record an `AnalyticsSql.select[R]` reads offers the
+        // fields its instance was written with.
+        if let Some(a) = self.project_analysis_for(&uri).await
+            && let Some(items) = bynk_ide::analytics_tooling::read_field_candidates_at(
+                &text,
+                offset,
+                files.as_deref(),
+                &a.analytics,
+            )
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
         if completion::in_env_name_position(&text, offset) {
             let items = completion::env_name_candidates(&text, files.as_deref())
+                .into_iter()
+                .map(to_completion_item)
+                .collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #3941: inside `env(` on a constant, the variables `bynk.toml` defines.
+        if crate::env_const::in_name_position(&text, offset) {
+            let items = self
+                .project_vars(&uri)
+                .await
+                .map(|vars| crate::env_const::variable_candidates(&vars))
+                .unwrap_or_default()
                 .into_iter()
                 .map(to_completion_item)
                 .collect();
@@ -3840,6 +4199,20 @@ impl LanguageServer for Backend {
         {
             items.extend(self.locals_completions(&uri, pos).await);
         }
+        // #4227: the expected type's variants, ranked first.
+        let mut expected = self
+            .expected_type_completions(&uri, &text, offset, &line_prefix)
+            .await;
+        if !expected.is_empty() {
+            // `Ok`/`Err`/`Some`/`None` are also offered as constructors at an
+            // expression position: the ranked variant replaces that copy.
+            items.retain(|i| {
+                i.kind != Some(CompletionItemKind::CONSTRUCTOR)
+                    || !expected.iter().any(|e| e.label == i.label)
+            });
+            expected.append(&mut items);
+            items = expected;
+        }
         // v0.124 (slice 3): inside a `requires`/`ensures` predicate, offer the
         // enclosing function's parameters (and `result` in an `ensures`),
         // merged with whatever the lexical cell yields there — the same
@@ -3859,10 +4232,22 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside a `limits { }` block, offer the policy field
         // names; at a service-body item start, offer the `limits` section keyword.
         items.extend(limits_completions(&text, offset, &line_prefix));
+        // #3877: inside a `delivery { }` block, the keys not yet written; at a
+        // service-body item start, the `delivery` section keyword.
+        items.extend(delivery_completions(&text, offset, &line_prefix));
+        // #3885: inside a `fallback { }` block, the `forward` key; at a service-body item
+        // start, the `fallback` section keyword.
+        items.extend(fallback_completions(&text, offset, &line_prefix));
+        // #3793: `replaces` after a field's type.
+        items.extend(field_rename_completions(&line_prefix));
+        // #3975: `@name` before a field or variant, `@discriminator` before a sum's `type`.
+        items.extend(wire_name_completions(&line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
+        items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
+        items.extend(rate_limit_completions(&text, offset, &line_prefix));
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
@@ -3871,6 +4256,8 @@ impl LanguageServer for Backend {
         // #2854: in an `on http` handler's parameter list, offer the special
         // parameter names (`query`, `headers`, `body`).
         items.extend(http_param_completions(&text, offset));
+        // #3880: `delivery: QueueDelivery` at a parameter of an `on message` handler.
+        items.extend(message_param_completions(&text, offset));
         // #2640: at statement position in an effectful body, the `par` block.
         if completion::is_keyword_position(&line_prefix)
             && completion::in_effectful_body_position(&text, offset)
@@ -4301,6 +4688,8 @@ impl LanguageServer for Backend {
             version,
         ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
+        // #4252: `match` with an `expect false` arm -> `expect … is`.
+        actions.extend(crate::match_to_expect::quick_fix(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
         let empty_types = Vec::new();
@@ -4658,6 +5047,17 @@ impl LanguageServer for Backend {
     ) -> JsonRpcResult<Option<PrepareRenameResponse>> {
         let uri = params.text_document.uri;
         let pos = params.position;
+        // #3941: the variable name in an `env(NAME)` constant renames with its
+        // `bynk.toml` keys; the index does not cover it.
+        if let Some((text, name, start, end)) = self.env_variable_at(&uri, pos).await {
+            return Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                range: crate::position::span_to_range(
+                    &text,
+                    bynk_syntax::span::Span::new(start, end),
+                ),
+                placeholder: name,
+            }));
+        }
         // Refuse (None) for anything the index does not cover — locals,
         // methods, record fields, capability ops, unit names — rather than
         // falling through to a partial or name-matched rename.
@@ -4671,8 +5071,30 @@ impl LanguageServer for Backend {
         let Some(text) = analysis.snapshots.get(&rel) else {
             return Ok(None);
         };
+        // #4455: a use of a declaration under an alias is not renameable as the declaration.
+        if crate::index_queries::alias_rename_refusal(
+            &analysis.index,
+            &analysis.snapshots,
+            &rel,
+            offset,
+        )
+        .is_some()
+        {
+            return Ok(None);
+        }
+        // #4352: a name written through a `uses` qualifier highlights the name alone.
+        // #4183: a unit's dotted name is the whole of what is renamed.
+        let span = if key.kind == bynk_check::index::SymbolKind::Unit {
+            site.span
+        } else {
+            crate::index_queries::narrow_qualified_span(
+                text,
+                site.span,
+                crate::index_queries::key_segment(&key.name),
+            )
+        };
         Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-            range: crate::position::span_to_range(text, site.span),
+            range: crate::position::span_to_range(text, span),
             placeholder: key.name.clone(),
         }))
     }
@@ -4686,6 +5108,10 @@ impl LanguageServer for Backend {
             message: msg.into(),
             data: None,
         };
+        // #3941: an `env(NAME)` variable is renamed with its `bynk.toml` keys.
+        if let Some(result) = self.env_variable_rename(&uri, pos, &new_name).await {
+            return result.map(Some).map_err(refused);
+        }
         // Slice B: rename emits versioned edits across *every* file that
         // references the symbol, so it needs the round current for **all** open
         // buffers, not just the cursor's (`analysis_for` would leave a dirty
@@ -4711,8 +5137,17 @@ impl LanguageServer for Backend {
         let Some(offset) = crate::position::position_to_offset(text, pos) else {
             return Ok(None);
         };
+        if let Some(why) = crate::index_queries::alias_rename_refusal(
+            &analysis.index,
+            &analysis.snapshots,
+            &rel,
+            offset,
+        ) {
+            return Err(refused(why));
+        }
         let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
+        crate::index_queries::narrow_qualified_edits(&mut plan, &analysis.snapshots);
         // #2456: doc links that resolved to the symbol are rewritten with it.
         crate::index_queries::add_doc_link_edits(
             &mut plan,
@@ -4770,6 +5205,9 @@ impl LanguageServer for Backend {
                     .map(|d| (f.source_path.clone(), d.error.category.to_string()))
             })
             .collect();
+        // #4183: a unit rename leaves its files' paths for the user to move, which the layout
+        // diagnostic reports and the warning below says; it is not a collision.
+        let post_diags = crate::index_queries::without_expected_diagnostics(&plan, post_diags);
         crate::index_queries::no_new_diagnostics(&analysis.diag_categories(), &post_diags)
             .map_err(refused)?;
 
@@ -4803,6 +5241,13 @@ impl LanguageServer for Backend {
             &plan,
         )
         .map_err(refused)?;
+
+        // #4183 (decision B): a unit rename edits the name, not the files that lay it out.
+        for warning in crate::index_queries::layout_warnings(&plan, &analysis.snapshots) {
+            self.client
+                .show_message(MessageType::WARNING, warning)
+                .await;
+        }
 
         // Versioned edits: the client rejects the rename if a buffer drifted
         // past the analysed version rather than mis-applying it.
@@ -5379,7 +5824,9 @@ fn cors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
         return vec![CompletionItem {
             label: "cors".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("a cross-origin (CORS) policy for this HTTP service".to_string()),
+            detail: Some(
+                "a cross-origin (CORS) policy for this HTTP or WebSocket service".to_string(),
+            ),
             insert_text: Some("cors {\n\torigins: [$0],\n}".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
@@ -5390,9 +5837,20 @@ fn cors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
 
 /// v0.141 (ADR 0164): the security-headers completion cells. Inside a
 /// `security { }` block at a field-name position, offer the closed field set
-/// (`nosniff`/`hsts`); at a service-body item start, offer the `security` section
+/// (`nosniff`/`hsts`/`frameAncestors`/`referrerPolicy`/`csp`), and the values of `referrerPolicy`; at a service-body item start, offer the `security` section
 /// keyword. Both are lexical (offset-based), mirroring `cors_completions`.
 fn security_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_security_referrer_policy_value_position(text, offset) {
+        return completion::referrer_policy_values()
+            .into_iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some(doc),
+                ..Default::default()
+            })
+            .collect();
+    }
     if completion::in_security_field_position(text, offset) {
         return completion::SECURITY_FIELDS
             .iter()
@@ -5456,13 +5914,58 @@ fn cache_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
 /// service-body item start, offer the `limits` section keyword. Both are lexical
 /// (offset-based), mirroring `security_completions`.
 fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    let websocket = completion::in_websocket_service_limits(text, offset);
     if completion::in_limits_field_position(text, offset) {
-        return completion::LIMITS_FIELDS
-            .iter()
+        return if websocket {
+            completion::WS_LIMITS_FIELDS
+        } else {
+            completion::LIMITS_FIELDS
+        }
+        .iter()
+        .map(|(name, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ")),
+            ..Default::default()
+        })
+        .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        let (detail, snippet) = if websocket {
+            (
+                "the frame size limit for this WebSocket service",
+                "limits {\n\tmaxFrame: $0,\n}",
+            )
+        } else {
+            (
+                "request limits for this HTTP service",
+                "limits {\n\tmaxBody: $0,\n}",
+            )
+        };
+        return vec![CompletionItem {
+            label: "limits".to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            detail: Some(detail.to_string()),
+            insert_text: Some(snippet.to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// #3877: the queue delivery completion cells. Inside a `delivery { }` block at a
+/// key-name position, the keys not yet written; at a service-body item start, the
+/// `delivery` section keyword. Lexical (offset-based), as `limits_completions`.
+fn delivery_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if bynk_ide::queue_delivery::in_delivery_field_position(text, offset) {
+        return bynk_ide::queue_delivery::unwritten_keys(text, offset)
+            .into_iter()
             .map(|(name, doc)| CompletionItem {
                 label: name.to_string(),
                 kind: Some(CompletionItemKind::FIELD),
-                detail: Some((*doc).to_string()),
+                detail: Some(doc.to_string()),
                 insert_text: Some(format!("{name}: ")),
                 ..Default::default()
             })
@@ -5470,10 +5973,10 @@ fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIt
     }
     if completion::in_service_body_item_position(text, offset, line) {
         return vec![CompletionItem {
-            label: "limits".to_string(),
+            label: "delivery".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("request limits for this HTTP service".to_string()),
-            insert_text: Some("limits {\n\tmaxBody: $0,\n}".to_string()),
+            detail: Some("delivery policy for this queue consumer".to_string()),
+            insert_text: Some("delivery {\n\tdeadLetter: $0,\n}".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
@@ -5537,6 +6040,61 @@ fn json_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
     Vec::new()
 }
 
+/// #3916: the error-body completion cells, as [`json_completions`]: inside
+/// `errors { }` or `@errors( )` at a name position, `format`; at the value of
+/// `format:`, `bynk` / `problem`; at a service-body item start, the `errors`
+/// section keyword and the `@errors` annotation snippet.
+fn errors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_errors_format_value_position(text, offset) {
+        return completion::ERRORS_FORMAT_VALUES
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some((*doc).to_string()),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_errors_field_position(text, offset)
+        || completion::in_errors_arg_position(text, offset)
+    {
+        return completion::ERRORS_FIELDS
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some((*doc).to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![
+            CompletionItem {
+                label: "errors".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("error body shape for this HTTP service".to_string()),
+                insert_text: Some("errors {\n\tformat: ${1:problem},\n}".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "@errors".to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some(
+                    "write this route's error bodies as `bynk` or `problem` (RFC 9457)".to_string(),
+                ),
+                insert_text: Some("@errors(format: ${1:problem})".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+        ];
+    }
+    Vec::new()
+}
+
 /// v0.142 (ADR 0165): the `@limit` completion cells. Inside `@limit( … )` at an
 /// argument-name position, offer the closed argument set (`maxBody`); at a
 /// service-body item start, offer the `@limit` annotation snippet. Both are lexical
@@ -5570,6 +6128,63 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
     Vec::new()
 }
 
+/// #3926: the `@rateLimit` completion cells: inside `@rateLimit( … )`, the `RateLimit`
+/// instances the document declares, then the `key:` label, then the two keys; at a
+/// service-body item start, the annotation snippet.
+fn rate_limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::rate_limit_completion::{
+        RATE_LIMIT_KEYS, RateLimitArg, rate_limit_arg_position, rate_limit_limiters,
+    };
+    match rate_limit_arg_position(text, offset) {
+        Some(RateLimitArg::Limiter) => {
+            return rate_limit_limiters(text)
+                .into_iter()
+                .map(|name| CompletionItem {
+                    label: name,
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some("a `RateLimit` this context declares".to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        Some(RateLimitArg::KeyLabel) => {
+            return vec![CompletionItem {
+                label: "key".to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some("what the limit counts by".to_string()),
+                insert_text: Some("key: ".to_string()),
+                ..Default::default()
+            }];
+        }
+        Some(RateLimitArg::KeyValue) => {
+            return RATE_LIMIT_KEYS
+                .iter()
+                .map(|(name, doc)| CompletionItem {
+                    label: name.to_string(),
+                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                    detail: Some((*doc).to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        None => {}
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "@rateLimit".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            detail: Some(
+                "refuse a client over its limit before the request body is read (`429`)"
+                    .to_string(),
+            ),
+            insert_text: Some("@rateLimit(${1:Limiter}, key: ${2|clientIp,identity|})".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
 /// #2854: the special parameter names of an `on http` handler, at a
 /// parameter-name position in its header. Lexical, like the annotation cells.
 fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
@@ -5587,6 +6202,105 @@ fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
             ..Default::default()
         })
         .collect()
+}
+
+/// #3885: the email fallback completion cells, as `delivery_completions`: the `forward` key inside
+/// a `fallback { }` block until it is written, and the `fallback` section keyword at a
+/// service-body item start.
+fn fallback_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if bynk_ide::email_fallback::in_fallback_field_position(text, offset) {
+        if bynk_ide::email_fallback::forward_written(text, offset) {
+            return Vec::new();
+        }
+        return vec![CompletionItem {
+            label: "forward".to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some(bynk_ide::email_fallback::FORWARD_DOC.to_string()),
+            insert_text: Some("forward: \"$0\"".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "fallback".to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            detail: Some(
+                "where mail this email service could not process is forwarded".to_string(),
+            ),
+            insert_text: Some("fallback { forward: \"$0\" }".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// #3975: the wire-name annotations, offered at the `@` that can lead them.
+fn wire_name_completions(line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::wire_names::WirePosition;
+    let (label, detail, doc, snippet) =
+        match bynk_ide::wire_names::in_wire_annotation_position(line) {
+            Some(WirePosition::Member) => (
+                "name",
+                "the key or value this has on the wire",
+                bynk_ide::wire_names::NAME_DOC,
+                "name(\"${1:wireName}\")",
+            ),
+            Some(WirePosition::Item) => (
+                "discriminator",
+                "the key that carries a sum's variant",
+                bynk_ide::wire_names::DISCRIMINATOR_DOC,
+                "discriminator(\"${1:type}\")",
+            ),
+            None => return Vec::new(),
+        };
+    vec![CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::PROPERTY),
+        detail: Some(detail.to_string()),
+        documentation: Some(Documentation::String(doc.to_string())),
+        insert_text: Some(snippet.to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
+}
+
+/// #3793: the `replaces` clause, offered after a field's complete type.
+fn field_rename_completions(line: &str) -> Vec<CompletionItem> {
+    if !bynk_ide::field_rename::in_replaces_position(line) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "replaces".to_string(),
+        kind: Some(CompletionItemKind::KEYWORD),
+        detail: Some("renames this field from an old name".to_string()),
+        documentation: Some(Documentation::String(
+            bynk_ide::field_rename::REPLACES_DOC.to_string(),
+        )),
+        insert_text: Some("replaces ${1:oldName}".to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
+}
+
+/// #3880: the `QueueDelivery` parameter of a queue consumer's `on message`, at a
+/// parameter-name position in its header. Lexical, like the HTTP parameter cells.
+fn message_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
+    if !bynk_ide::queue_delivery::in_message_param_name_position(text, offset) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "delivery".to_string(),
+        kind: Some(CompletionItemKind::VARIABLE),
+        detail: Some(
+            "the message's delivery metadata: `attempts` and `sentAt` (`consumes bynk.cloudflare { QueueDelivery }`)"
+                .to_string(),
+        ),
+        insert_text: Some("delivery: ${1:QueueDelivery}".to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at
@@ -6124,6 +6838,8 @@ fn lsp_symbol_kind(kind: bynk_check::index::SymbolKind) -> SymbolKind {
         bynk_check::index::SymbolKind::Embed => SymbolKind::CONSTANT,
         // #2617: a named constant.
         bynk_check::index::SymbolKind::Const => SymbolKind::CONSTANT,
+        // #4183: a unit is a module the project is built from.
+        bynk_check::index::SymbolKind::Unit => SymbolKind::MODULE,
     }
 }
 
@@ -6513,7 +7229,7 @@ mod tests {
         use tower::{Service, ServiceExt};
 
         let service_src =
-            "service api {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n";
+            "service api {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n";
         let s = scratch_project(
             "sibling_label",
             &[
@@ -6624,7 +7340,7 @@ mod tests {
         const SOURCE: &str = "context commerce.order\n\n\
             consumes bynk { Events }\n\n\
             event PaymentConfirmed = {\n  orderId: String,\n  region: String,\n}\n\n\
-            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            service markPaid {\n  on call(orderId: String) -> Effect[()] by Caller given Events {\n    \
             Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
             }\n}\n";
 
@@ -6845,7 +7561,7 @@ mod tests {
             consumes bynk { Events }\n\n\
             event PaymentConfirmed = {\n  orderId: String,\n  region: String = \"US\",\n}\n\n\
             event ShipmentSent = {\n  orderId: String,\n}\n\n\
-            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            service markPaid {\n  on call(orderId: String) -> Effect[()] by Caller given Events {\n    \
             Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
             }\n}\n";
         const CART: &str = "context shop\n\nagent Cart {\n  key id: String\n\n  \
@@ -8055,6 +8771,96 @@ mod tests {
         );
     }
 
+    /// #3941: the variable name in an `env(NAME)` constant renames with every
+    /// constant that reads it and every `bynk.toml` table that sets it; a name
+    /// already in use is refused.
+    #[tokio::test]
+    async fn renaming_an_env_variable_edits_its_constants_and_the_manifest() {
+        let manifest = "[project]\nname = \"demo\"\n\n[vars]\nAPP_ORIGIN = \"https://app\"\nTAKEN = 1\n\n[env.production.vars]\nAPP_ORIGIN = \"https://prod\"\n";
+        let a = "commons demo.a\n\nconst Origin: String = env(APP_ORIGIN)\nconst Taken: Int = env(TAKEN, 1)\n";
+        let b = "commons demo.b\n\nconst Again: String = env(APP_ORIGIN, \"x\")\n";
+        let s = scratch_project(
+            "rename_env_var",
+            &[
+                ("bynk.toml", manifest),
+                ("src/demo/a.bynk", a),
+                ("src/demo/b.bynk", b),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = |rel: &str| {
+            let abs = s.0.join(rel);
+            Url::from_file_path(abs.canonicalize().unwrap_or(abs)).unwrap()
+        };
+        let a_uri = uri("src/demo/a.bynk");
+        let b_uri = uri("src/demo/b.bynk");
+        for (u, text) in [(&a_uri, a), (&b_uri, b)] {
+            backend
+                .did_open(DidOpenTextDocumentParams {
+                    text_document: TextDocumentItem {
+                        uri: u.clone(),
+                        language_id: "bynk".into(),
+                        version: 1,
+                        text: text.to_string(),
+                    },
+                })
+                .await;
+        }
+        let pos = crate::position::offset_to_position(a, a.find("APP_ORIGIN").unwrap() + 2);
+        let at = TextDocumentPositionParams {
+            text_document: TextDocumentIdentifier { uri: a_uri.clone() },
+            position: pos,
+        };
+        let prepared = backend
+            .prepare_rename(at.clone())
+            .await
+            .unwrap()
+            .expect("the variable name can be renamed");
+        let PrepareRenameResponse::RangeWithPlaceholder { placeholder, .. } = prepared else {
+            panic!("expected a range with a placeholder");
+        };
+        assert_eq!(placeholder, "APP_ORIGIN");
+
+        let rename = |new_name: &str| {
+            backend.rename(RenameParams {
+                text_document_position: at.clone(),
+                new_name: new_name.into(),
+                work_done_progress_params: Default::default(),
+            })
+        };
+        let edit = rename("SITE_ORIGIN").await.unwrap().expect("edits");
+        let DocumentChanges::Edits(edits) = edit.document_changes.unwrap() else {
+            panic!("expected document-change edits");
+        };
+        let count = |u: &Url| {
+            edits
+                .iter()
+                .find(|e| &e.text_document.uri == u)
+                .map_or(0, |e| e.edits.len())
+        };
+        assert_eq!(count(&a_uri), 1);
+        assert_eq!(count(&b_uri), 1);
+        // An open buffer's edit carries its version, so the client rejects the
+        // rename if the buffer drifted; the unopened manifest carries none.
+        let version = |u: &Url| {
+            edits
+                .iter()
+                .find(|e| &e.text_document.uri == u)
+                .and_then(|e| e.text_document.version)
+        };
+        assert_eq!(version(&a_uri), Some(1));
+        assert_eq!(version(&b_uri), Some(1));
+        let manifest_uri = uri("bynk.toml");
+        assert_eq!(count(&manifest_uri), 2, "[vars] and [env.production.vars]");
+
+        let err = rename("TAKEN").await.expect_err("a name in use is refused");
+        assert!(
+            err.message.contains("already a variable"),
+            "{}",
+            err.message
+        );
+    }
+
     /// #302: renaming a unit's file rewrites its own declaration header
     /// **and** every other file's `uses`/`consumes` reference — over a split
     /// `src`/`tests` project, exercising the project-relative (`src/`-prefixed)
@@ -8969,7 +9775,7 @@ mod tests {
     /// `source.fixAll.bynk`), and carries every machine-applicable fix.
     #[tokio::test]
     async fn fix_all_is_offered_only_when_asked_for() {
-        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n";
+        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n";
         let s = scratch_project(
             "fix_all_only",
             &[
@@ -9254,7 +10060,7 @@ mod tests {
     /// disabled action with its reason, only for a client that shows those.
     #[tokio::test]
     async fn extract_function_lists_then_resolves_or_says_why_not() {
-        let src = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
+        let src = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
         let s = scratch_project(
             "extract_fn",
             &[
@@ -11065,6 +11871,225 @@ mod tests {
         );
     }
 
+    /// #3925: inside a service's `cors { }`, `expose` is a field name and a
+    /// `String` constant is offered in `origins: [`, through the real
+    /// `Backend::completion`.
+    #[tokio::test]
+    async fn cors_offers_expose_and_origin_constants() {
+        let src = "context shop\n\nconst AppOrigin: String = \"https://app.example.com\"\n\nservice api from http {\n  cors {\n    origins: [AppOrigin],\n    \n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"pong\") }\n}\n";
+        let s = scratch_project(
+            "cors_expose_consts",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/a.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let fields = complete_at(&backend, &uri, src, "    origins: [AppOrigin],\n    ").await;
+        assert!(
+            fields.contains(&"expose".to_string()),
+            "the cors field names: {fields:?}"
+        );
+        let values = complete_at(&backend, &uri, src, "origins: [").await;
+        assert!(
+            values.contains(&"AppOrigin".to_string()),
+            "an in-scope String constant: {values:?}"
+        );
+    }
+
+    /// #3926: inside `@rateLimit( … )` the declared `RateLimit` instances are offered for the
+    /// limiter, then the two keys after `key:`, through the real `Backend::completion`.
+    #[tokio::test]
+    async fn rate_limit_annotation_offers_limiters_and_keys() {
+        let head = "context shop\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\ncapability Sessions = Kv\n\nservice api from http {\n";
+        let tail = "\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
+        let s = scratch_project(
+            "rate_limit_completion",
+            &[("bynk.toml", "[project]\nname=\"shop\"\n")],
+        );
+        let backend = backend_at(&s.0).await;
+        for (tag, line, needle, want, not_want) in [
+            (
+                "limiter",
+                "  @rateLimit(",
+                "@rateLimit(",
+                "SignupLimit",
+                "Sessions",
+            ),
+            (
+                "key",
+                "  @rateLimit(SignupLimit, key: ",
+                "key: ",
+                "identity",
+                "SignupLimit",
+            ),
+        ] {
+            let src = format!("{head}{line}{tail}");
+            let rel = format!("src/{tag}.bynk");
+            std::fs::create_dir_all(s.0.join("src")).unwrap();
+            std::fs::write(s.0.join(&rel), &src).unwrap();
+            let uri = file_uri(&s.0, &rel);
+            open(&backend, &uri, &src).await;
+            backend.run_round().await;
+            let labels = complete_at(&backend, &uri, &src, needle).await;
+            assert!(labels.contains(&want.to_string()), "{tag}: {labels:?}");
+            assert!(!labels.contains(&not_want.to_string()), "{tag}: {labels:?}");
+        }
+    }
+
+    /// #4312: a store collection read in an agent predicate through `old.`,
+    /// `new.` or a bare name offers `size` and nothing else, through the real
+    /// `Backend::completion`.
+    #[tokio::test]
+    async fn predicate_collections_offer_size_through_old_new_and_bare() {
+        let head =
+            "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        for (tag, pred, needle) in [
+            ("pred_bare", "invariant bounded: lines.", "bounded: lines."),
+            ("pred_new", "transition grows: new.lines.", "new.lines."),
+            ("pred_old", "transition grows: old.lines.", "old.lines."),
+        ] {
+            let src = format!("{head}  {pred}\n{tail}");
+            let s = scratch_project(
+                tag,
+                &[
+                    ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                    ("src/shop.bynk", &src),
+                ],
+            );
+            let backend = backend_at(&s.0).await;
+            let uri = file_uri(&s.0, "src/shop.bynk");
+            open(&backend, &uri, &src).await;
+            backend.run_round().await;
+            let labels = complete_at(&backend, &uri, &src, needle).await;
+            assert_eq!(labels, ["size"], "after `{needle}`");
+        }
+        // A `Log` offers nothing through `old.`; and `old.lines.` in a handler
+        // body is no predicate, so no store operation is offered there.
+        let src = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n  transition quiet: old.notes.\n\n  on call f() -> Effect[()] {\n    old.lines.\n  }\n}\n";
+        let s = scratch_project(
+            "pred_empty",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+        for needle in ["quiet: old.notes.", "    old.lines."] {
+            let labels = complete_at(&backend, &uri, src, needle).await;
+            assert!(labels.is_empty(), "after `{needle}`: {labels:?}");
+        }
+    }
+
+    /// #4227: where the text names the expected type (the right of `lhs ==`,
+    /// an annotated `let`, a call argument), that type's variants lead the
+    /// list; elsewhere a value position gets no such ranking.
+    #[tokio::test]
+    async fn expected_type_variants_lead_in_comparison_let_and_argument() {
+        let src = "context shop\n\ntype Level = | Low | High\n\nfn pick(n: Int, l: Level) -> Int { n }\n\nfn cmp(e: Level) -> Bool {\n  e == \n}\n\nfn ann() -> Int {\n  let x: Level = \n  0\n}\n\nfn arg() -> Int {\n  pick(1, \n}\n\nfn res() -> Int {\n  let r: Result[Int, String] = \n  0\n}\n\nfn own() -> Int {\n  pick(\n    1,\n    \n}\n\nfn plain() -> Int {\n  let y = \n  0\n}\n";
+        let s = scratch_project(
+            "expected_type_variants",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        for needle in ["  e == ", "let x: Level = ", "pick(1, "] {
+            let items = complete_items(&backend, &uri, src, needle, None).await;
+            let mut ranked: Vec<&CompletionItem> = items
+                .iter()
+                .filter(|i| i.sort_text.as_deref().is_some_and(|s| s.starts_with("0_")))
+                .collect();
+            ranked.sort_by(|a, b| a.sort_text.cmp(&b.sort_text));
+            let labels: Vec<&str> = ranked.iter().map(|i| i.label.as_str()).collect();
+            assert_eq!(labels, ["High", "Low"], "after `{needle}`");
+            assert_eq!(
+                items.first().map(|i| i.label.as_str()),
+                Some("Low"),
+                "the variants lead the list after `{needle}`"
+            );
+        }
+        // `Result`'s variants replace, rather than repeat, the constructors.
+        let r = complete_items(&backend, &uri, src, "let r: Result[Int, String] = ", None).await;
+        for label in ["Ok", "Err"] {
+            assert_eq!(
+                r.iter().filter(|i| i.label == label).count(),
+                1,
+                "`{label}` is offered once: {:?}",
+                r.iter().map(|i| &i.label).collect::<Vec<_>>()
+            );
+            assert!(
+                r.iter()
+                    .find(|i| i.label == label)
+                    .and_then(|i| i.sort_text.as_deref())
+                    .is_some_and(|s| s.starts_with("0_")),
+                "`{label}` is ranked"
+            );
+        }
+        // An argument on its own line is ranked too.
+        let own_line = complete_items(&backend, &uri, src, "pick(\n    1,\n    ", None).await;
+        assert!(
+            own_line
+                .iter()
+                .any(|i| i.label == "Low" && i.sort_text.as_deref() == Some("0_Low")),
+            "an argument on its own line is ranked"
+        );
+        let plain = complete_items(&backend, &uri, src, "let y = ", None).await;
+        assert!(
+            plain.iter().all(|i| i.sort_text.is_none()),
+            "an unannotated `let` has no expected type"
+        );
+    }
+
+    /// #4334: a record field's value and the tail of a function body lead with
+    /// the expected type's variants, as `==`, an annotated `let` and an argument
+    /// do (#4227).
+    #[tokio::test]
+    async fn expected_type_variants_lead_in_a_record_field_and_a_tail() {
+        let src = "context shop\n\ntype Level = | Low | High\n\ntype Order = { id: Int, level: Level }\n\nfn tail(n: Int) -> Level {\n  let x = n\n  \n}\n\nfn field() -> Order {\n  Order { id: 1, level: \n}\n\nfn spread() -> Order {\n  Order {\n    id: 1,\n    level: \n  }\n}\n";
+        let s = scratch_project(
+            "expected_type_field_tail",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+        for needle in [
+            "Order { id: 1, level: ",
+            "let x = n\n  ",
+            "Order {\n    id: 1,\n    level: ",
+        ] {
+            let items = complete_items(&backend, &uri, src, needle, None).await;
+            let mut ranked: Vec<&CompletionItem> = items
+                .iter()
+                .filter(|i| i.sort_text.as_deref().is_some_and(|s| s.starts_with("0_")))
+                .collect();
+            ranked.sort_by(|a, b| a.sort_text.cmp(&b.sort_text));
+            let labels: Vec<&str> = ranked.iter().map(|i| i.label.as_str()).collect();
+            assert_eq!(labels, ["High", "Low"], "after `{needle}`");
+        }
+        // An integer field has no variants to rank.
+        let id = complete_items(&backend, &uri, src, "Order { id: ", None).await;
+        assert!(id.iter().all(|i| i.sort_text.is_none()), "an `Int` field");
+    }
+
     /// #2010: inside `let <pattern> … else match { … }`, arm-start completion
     /// offers the value's variants minus the one the pattern already matches —
     /// through the real `Backend::completion`, for `=` and for `<-` (whose
@@ -11325,8 +12350,7 @@ mod analysis_memo_tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("bynk.toml"), "").unwrap();
-        let src =
-            "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+        let src = "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] by Caller {\n    n\n  }\n}\n";
         std::fs::write(root.join("demo.bynk"), src).unwrap();
         let roots = bynk_ide::AnalysisRoots::SingleTree(root.clone());
         let content = std::collections::HashMap::from([(root.join("demo.bynk"), src.to_string())]);

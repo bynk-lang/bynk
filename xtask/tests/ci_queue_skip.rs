@@ -15,7 +15,7 @@ use std::path::PathBuf;
 const CLAUSE: &str = "!contains(fromJSON(needs.changes.outputs.queue_passed), '";
 
 /// Jobs gated on `changes` that deliberately carry no clause, and why.
-const EXEMPT: [(&str, &str); 9] = [
+const EXEMPT: [(&str, &str); 10] = [
     // Matrix jobs: their legs are dropped from `test_os` instead.
     ("test", "legs dropped from test_os"),
     ("test-os", "legs dropped from test_os"),
@@ -27,6 +27,8 @@ const EXEMPT: [(&str, &str); 9] = [
     // A matrix job whose `name:` interpolates the leg, so there is no single
     // name to look up; it runs only on installer-script edits and the schedule.
     ("installers-smoke", "matrix; rare trigger"),
+    // Runs only when release.yml changes and on the nightly schedule.
+    ("apple-cross-build", "rare trigger"),
     // Runs on the nightly only: never in the queue, never on a push.
     ("coverage", "nightly only"),
     // The complement of `test`'s gate: `all` is true on every push, so it

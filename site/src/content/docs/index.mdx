@@ -2,56 +2,28 @@
 title: Bynk
 description: A statically typed, architecture-first language for backend services. The architecture is part of the language and checked by the compiler; it compiles to typed TypeScript and runs on Cloudflare Workers.
 template: splash
+# The hero is drawn by src/components/home/Hero.astro (web presence slice 8):
+# `title` is its heading, `tagline` the paragraph under it, and `actions` its
+# buttons. Its program is src/snippets/home/greeter.bynk.
 hero:
-  tagline: Architecture-first. Statically typed. Compiles to the web.
+  title: Architecture-first. Statically typed. Compiles to the web.
+  tagline: A language for backend services in which contexts, services, agents and the capabilities between them are part of the language, and checked by the compiler. It compiles to typed TypeScript and runs on Cloudflare Workers.
   actions:
     - text: Read the Book
       link: /book/
       icon: right-arrow
       variant: primary
-    - text: Open the playground
-      link: https://playground.bynk-lang.dev
-      icon: external
-      variant: minimal
+    - text: Try an example
+      link: /by-example/
+      variant: secondary
 ---
 
-import { Card, CardGrid } from "@astrojs/starlight/components";
+import WaysIn from "../../components/home/WaysIn.astro";
+import Checks from "../../components/home/Checks.astro";
+import BlogPosts from "../../components/home/BlogPosts.astro";
 
-A statically typed language for backend services in which the architecture —
-contexts, services, agents, and the capabilities that flow between them — is part
-of the language and checked by the compiler. It compiles to typed TypeScript and
-runs on Cloudflare Workers.
+<WaysIn />
 
-```bynk
-context greeter
+<Checks />
 
-service api from http {
-  on GET("/hello/:name") (name: String) -> Effect[HttpResult[String]] by Visitor {
-    Ok("Hello, \(name)!")
-  }
-}
-```
-
-<CardGrid>
-  <Card title="Architecture in the language" icon="puzzle">
-    Contexts, services, and agents are first-class constructs — your architecture
-    is written down and checked by the compiler.
-  </Card>
-  <Card title="Illegal states, unrepresentable" icon="approve-check">
-    Refined types, sum types, opaque types, and exhaustiveness let you rule out the
-    states you never meant to allow.
-  </Card>
-  <Card title="No bespoke runtime" icon="rocket">
-    Bynk compiles to typed TypeScript and deploys to Cloudflare Workers — nothing
-    new to trust underneath.
-  </Card>
-  <Card title="Honest and spec-first" icon="open-book">
-    Bynk grows in small, specified increments; features that are not yet here are
-    deferred, not forgotten.
-  </Card>
-</CardGrid>
-
-<p style="text-align: center; opacity: 0.8; font-size: var(--sl-text-sm); margin-top: 2.5rem;">
-  Bynk is pre-1.0 and evolving in small, spec-first increments — some features are
-  deferred by design.
-</p>
+<BlogPosts />

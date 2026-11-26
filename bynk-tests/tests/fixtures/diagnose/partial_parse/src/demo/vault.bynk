@@ -1,9 +1,9 @@
 context demo.vault
 
 service open {
-  on call(n: Int) -> Effect[Int] { n + }
+  on call(n: Int) -> Effect[Int] by Caller { n + }
 }
 
 service count {
-  on call() -> Effect[Int] { "zero" }
+  on call() -> Effect[Int] by Caller { "zero" }
 }

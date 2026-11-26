@@ -60,8 +60,8 @@ export const api = {
     let __r;
     try {
       __r = await (async () => {
-        const __letElse504 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
-        switch (__letElse504.tag) {
+        const __letElse503 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.api.http_POST_flaky_Param_id::${id}`, 3600000));
+        switch (__letElse503.tag) {
           case "Claimed": {
             return (id === "down" ? HttpResult.ServerError("upstream down") : (id === "invalid" ? HttpResult.BadRequest("invalid payload") : HttpResult.Ok("processed")));
           }
@@ -103,8 +103,8 @@ export const ledger = {
     let __r;
     try {
       __r = await (async () => {
-        const __letElse1240 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
-        switch (__letElse1240.tag) {
+        const __letElse1247 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
+        switch (__letElse1247.tag) {
           case "Claimed": {
             return (id === "bad" ? Err("rejected") : Ok("done"));
           }

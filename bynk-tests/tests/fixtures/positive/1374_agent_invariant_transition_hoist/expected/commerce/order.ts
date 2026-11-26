@@ -25,10 +25,10 @@ export type PositiveInt = number & { readonly __brand: "commerce.order.PositiveI
 export const PositiveInt = {
   of(value: number): Result<PositiveInt, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "PositiveInt", message: "must be a safe integer", value });
+      return Err({ field: "PositiveInt", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "PositiveInt", message: "must be positive", value });
+      return Err({ field: "PositiveInt", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as PositiveInt);
   },
@@ -147,6 +147,18 @@ export function __serialise_OrderStatus(value: OrderStatus): __JsonValue {
 }
 
 export function __deserialise_OrderStatus(json: __JsonValue, path: string = "$"): Result<OrderStatus, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Pending":
+        return Ok({ tag: "Pending" } as OrderStatus);
+      case "Placed":
+        return Ok({ tag: "Placed" } as OrderStatus);
+      case "Paid":
+        return Ok({ tag: "Paid" } as OrderStatus);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

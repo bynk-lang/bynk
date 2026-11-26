@@ -5,18 +5,18 @@
 //!    appear in `bynk_syntax::diagnostics::REGISTRY`, and vice versa. "Compiler
 //!    source" is the `src/` of every workspace member (#1662), since emit sites
 //!    are spread across crates.
-//! 2. `site/src/content/docs/book/reference/diagnostics.md` and
-//!    `site/src/generated/diagnostics.json` must match what the registry
-//!    renders.
+//! 2. `site/src/generated/diagnostics/<code>.json`, one file per code, must match what
+//!    the registry renders, with no file for a code the registry lacks. The index page is
+//!    assembled from them at site build time (#4286), so it is not committed.
 //!
-//! Regenerate the docs page after changing the registry with:
+//! Regenerate the per-code files after changing the registry with:
 //!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY, render_markdown};
+use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY, RETIRED};
 
 fn grammar_json() -> String {
     let path =
@@ -159,7 +159,7 @@ fn registry_matches_codes_used_in_source() {
 fn grammar_symbols_are_embeddable_rules() {
     let grammar = grammar_json();
     // An *embeddable* rule has a `{{#grammar}}` entry (and `#rule-<raw>` anchor)
-    // in grammar.md, so the diagnostics `Construct` deep-link resolves. This is
+    // in grammar.md, so a code page's "grammar rules it governs" link resolves. This is
     // stricter than "a real rule": a collapsed trivial wrapper has no entry.
     let embeddable: BTreeSet<String> = xtask::grammar::embeddable_rules(&grammar)
         .into_iter()
@@ -175,25 +175,6 @@ fn grammar_symbols_are_embeddable_rules() {
             );
         }
     }
-}
-
-#[test]
-fn generated_diagnostics_page_is_up_to_date() {
-    let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/book/reference/diagnostics.md");
-    let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
-
-    if std::env::var_os("BYNK_BLESS").is_some() {
-        fs::write(&page, &rendered).unwrap();
-        return;
-    }
-
-    let current = fs::read_to_string(&page).unwrap_or_default();
-    assert_eq!(
-        current, rendered,
-        "site/src/content/docs/book/reference/diagnostics.md is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
-    );
 }
 
 // --- #853: `bynk explain` / `codeDescription` explanations ------------------
@@ -336,6 +317,20 @@ fn blurb_codes_are_read_from_backtick_spans_only() {
     );
 }
 
+/// The heading slugs of the diagnostic index: one per category, as the per-code files record.
+fn index_anchors() -> BTreeSet<String> {
+    bynk_syntax::diagnostics::render_json_per_code()
+        .iter()
+        .map(|(_, json)| {
+            let doc: serde_json::Value = serde_json::from_str(json).expect("per-code json");
+            doc["categoryAnchor"]
+                .as_str()
+                .expect("categoryAnchor")
+                .to_string()
+        })
+        .collect()
+}
+
 /// A code's links (#3876): `site/src/data/diagnostic-links.json` maps codes to
 /// the Book pages that explain them, which the code's page lists. Every key
 /// must be a registry code, and every link a page on disk with, where it names
@@ -366,6 +361,17 @@ fn diagnostic_links_name_registry_codes_and_real_pages() {
                 "diagnostic-links.json `{code}`: `{target}` must be a root-relative `/…/` path"
             );
             let stem = path.trim_start_matches('/').trim_end_matches('/');
+            // The index is assembled at build time (#4286), so there is no file to read: its
+            // headings are the categories the registry's codes fall into.
+            if stem == "reference/diagnostics" {
+                assert!(
+                    anchor.is_empty() || index_anchors().contains(anchor),
+                    "diagnostic-links.json `{code}` links `{target}`, but the diagnostic index \
+                     has no category with that slug. Present slugs: {:?}",
+                    index_anchors()
+                );
+                continue;
+            }
             let file = ["md", "mdx"]
                 .iter()
                 .map(|x| docs_root.join(format!("{stem}.{x}")))
@@ -391,13 +397,13 @@ fn diagnostic_links_name_registry_codes_and_real_pages() {
     }
 }
 
-/// A link to a code's page (`/book/reference/diagnostics/<code>/`) must name a
+/// A link to a code's page (`/reference/diagnostics/<code>/`) must name a
 /// registry code. The site's links validator cannot see these custom pages, so
 /// it skips them; this is the check in its place, over every page the site
 /// builds from (#3876).
 #[test]
 fn links_to_code_pages_name_registry_codes() {
-    const PREFIX: &str = "/book/reference/diagnostics/";
+    const PREFIX: &str = "/reference/diagnostics/";
     let content = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/content");
     let mut files = vec![content];
     let mut bad = Vec::new();
@@ -420,7 +426,8 @@ fn links_to_code_pages_name_registry_codes() {
             if code.is_empty() {
                 continue;
             }
-            if !REGISTRY.iter().any(|d| d.code == code) {
+            // A retired code keeps a page too (#4277).
+            if !REGISTRY.iter().any(|d| d.code == code) && !RETIRED.iter().any(|r| r.code == code) {
                 bad.push(format!("{}: {PREFIX}{code}/", path.display()));
             }
         }
@@ -433,22 +440,151 @@ fn links_to_code_pages_name_registry_codes() {
     );
 }
 
-/// `site/src/generated/diagnostics.json`, the data behind each code's page
-/// (#3876), must match what the registry renders.
+/// `site/src/generated/diagnostics/<code>.json`, the data behind each code's page (#3876) and the
+/// index (#4286), must match what the registry renders, one file per code. A file for a code the
+/// registry no longer has fails too, so a removed code takes its file with it.
 #[test]
 fn generated_diagnostics_json_is_up_to_date() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics.json");
-    let rendered = bynk_syntax::diagnostics::render_json();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics");
+    let rendered = bynk_syntax::diagnostics::render_json_per_code();
     if std::env::var_os("BYNK_BLESS").is_some() {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, &rendered).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for (code, json) in &rendered {
+            fs::write(dir.join(format!("{code}.json")), json).unwrap();
+        }
+        let retired = bynk_syntax::diagnostics::render_retired_json();
+        if !retired.is_empty() {
+            fs::create_dir_all(dir.join("retired")).unwrap();
+        }
+        for (code, json) in &retired {
+            fs::write(dir.join("retired").join(format!("{code}.json")), json).unwrap();
+        }
         return;
     }
-    let current = fs::read_to_string(&path).unwrap_or_default();
+    let mut problems = Vec::new();
+    for (code, json) in &rendered {
+        let current = fs::read_to_string(dir.join(format!("{code}.json"))).unwrap_or_default();
+        if current != *json {
+            problems.push(format!("{code}.json is missing or out of date"));
+        }
+    }
+    let known: BTreeSet<String> = rendered.iter().map(|(c, _)| format!("{c}.json")).collect();
+    for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name != "retired" && !known.contains(&name) {
+            problems.push(format!("{name} is not a registry code"));
+        }
+    }
     assert!(
-        current == rendered,
-        "site/src/generated/diagnostics.json is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
+        problems.is_empty(),
+        "site/src/generated/diagnostics/ is out of date with the registry:\n  {}\n\
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::",
+        problems.join("\n  ")
+    );
+}
+
+/// #4277: the tombstones are sorted, unique, and for codes that are really gone.
+#[test]
+fn retired_codes_are_sorted_and_not_live() {
+    let codes: Vec<&str> = RETIRED.iter().map(|r| r.code).collect();
+    let mut sorted = codes.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(
+        codes, sorted,
+        "RETIRED must be sorted by code, with no duplicates"
+    );
+    for r in RETIRED {
+        assert!(
+            !REGISTRY.iter().any(|d| d.code == r.code),
+            "`{}` is in RETIRED but still in REGISTRY: a code is live or retired, not both",
+            r.code
+        );
+        assert!(!r.why.is_empty(), "RETIRED `{}` needs a `why`", r.code);
+        // `last_release` names a release that was really cut, so it cannot be a guess.
+        let stem = xtask::release_pages::release_stem(
+            xtask::stamp::Version::parse(r.last_release).expect("RETIRED last_release is X.Y.Z"),
+        );
+        let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(xtask::release_pages::RELEASES_DIR)
+            .join(format!("{stem}.md"));
+        assert!(
+            page.exists(),
+            "RETIRED `{}` says its last release was v{}, which has no release page ({})",
+            r.code,
+            r.last_release,
+            page.display()
+        );
+    }
+}
+
+/// #4277: every code ever shipped is live or tombstoned. `bynk-syntax/shipped-codes.txt` lists
+/// the codes of each release (`cargo xtask release-page --apply` appends the registry's codes at
+/// the cut), so removing a shipped code from the registry without an entry in `RETIRED` fails
+/// here. The check is one-way: a new live code needs no line in the list, and a code added and
+/// removed between two releases never shipped, so needs no tombstone.
+#[test]
+fn every_shipped_code_is_live_or_retired() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/shipped-codes.txt");
+    let list = fs::read_to_string(&path).expect("read bynk-syntax/shipped-codes.txt");
+    let gone: Vec<&str> = list
+        .lines()
+        .filter(|c| !c.is_empty())
+        .filter(|c| !REGISTRY.iter().any(|d| d.code == *c) && !RETIRED.iter().any(|r| r.code == *c))
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "codes shipped in a release but neither in REGISTRY nor RETIRED: {gone:#?}\n\
+         Add a tombstone for each to RETIRED in bynk-syntax/src/diagnostics.rs (the version \
+         that retired it, why, and what replaced it)."
+    );
+}
+
+/// The shipped list is sorted and has no duplicates, so the release cut's append stays a
+/// clean merge.
+#[test]
+fn shipped_codes_list_is_sorted() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/shipped-codes.txt");
+    let list = fs::read_to_string(&path).unwrap();
+    let lines: Vec<&str> = list.lines().collect();
+    let mut sorted = lines.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(
+        lines, sorted,
+        "shipped-codes.txt must be sorted, one code per line"
+    );
+}
+
+/// The tombstone files under `site/src/generated/diagnostics/retired/` match `RETIRED`.
+#[test]
+fn generated_retired_json_is_up_to_date() {
+    let dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics/retired");
+    let rendered = bynk_syntax::diagnostics::render_retired_json();
+    if std::env::var_os("BYNK_BLESS").is_some() {
+        return; // written by `generated_diagnostics_json_is_up_to_date`
+    }
+    let mut problems = Vec::new();
+    for (code, json) in &rendered {
+        let current = fs::read_to_string(dir.join(format!("{code}.json"))).unwrap_or_default();
+        if current != *json {
+            problems.push(format!("retired/{code}.json is missing or out of date"));
+        }
+    }
+    let known: BTreeSet<String> = rendered.iter().map(|(c, _)| format!("{c}.json")).collect();
+    for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !known.contains(&name) {
+            problems.push(format!("retired/{name} is not a retired code"));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "site/src/generated/diagnostics/retired/ is out of date with RETIRED:\n  {}\n\
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::",
+        problems.join("\n  ")
     );
 }

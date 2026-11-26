@@ -27,6 +27,10 @@ service chat from websocket(in: Frame, out: Frame) {
     }
     let _ <- Room(room).say(name, frame.text)
   }
+
+  on close (room: RoomKey) -> Effect[()] by who: User | Visitor {
+    ()
+  }
 }
 
 agent Room {
@@ -39,6 +43,6 @@ agent Room {
   }
 
   on call say(name: String, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: "\(name): \(text)" }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: "\(name): \(text)" }))
   }
 }

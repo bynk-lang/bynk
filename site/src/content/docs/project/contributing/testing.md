@@ -1,0 +1,209 @@
+---
+title: Testing & fixtures
+---
+The compiler's correctness rests on a large fixture suite plus a TypeScript
+type-check gate. Both live under `bynk-tests/tests/`.
+
+## The fixture suite
+
+`tests/e2e.rs` discovers every directory under `tests/fixtures/positive/` and
+`tests/fixtures/negative/` (currently 143 positive, 105 negative) and runs each
+as one fixture. There are two shapes:
+
+**Single-file**
+- `input.bynk` — the source (a self-contained `commons`).
+- `expected.ts` — the exact emitted TypeScript (positive), **or**
+- `expected_error.txt` — expected diagnostics (negative).
+
+**Project**
+- `src/` — a source tree (one or more `context`/`commons` units).
+- `expected/` — the emitted output tree to match (positive), **or**
+  `expected_error.txt` (negative).
+- `target.txt` — optional; `workers` selects the Workers target (default bundle).
+- `bynk.toml` — optional; marks a project and configures `[paths]`.
+
+The `__bynk_runtime/` files, `tsconfig.json` and a `package.json` that is only the
+`"type": "module"` marker are excluded from per-fixture comparison (they are
+checked separately). A `package.json` carrying adapter dependencies is compared.
+
+### How matching works
+
+- **Positive** fixtures compare emitted files byte-for-byte against `expected/`
+  (or `expected.ts`), trailing newlines included. A file that differs only in
+  trailing whitespace fails like any other difference; the failure says so.
+  Standard-library and test-runtime regions are the exception to "in the
+  fixture": see [Shared snapshots](#shared-snapshots).
+- **Negative** fixtures match by **substring**: each non-blank, non-`#` line of
+  `expected_error.txt` must appear somewhere in the concatenated
+  `"{code} {message}"` of the diagnostics. So a line is usually just a code, e.g.
+  `bynk.refine.literal_violates`.
+
+## How CI and the release run the suite
+
+Every gate that runs the workspace suite runs it the same way:
+`cargo nextest run --workspace --locked --profile ci`. That covers the PR gate
+(`ci.yml`), the release gate (`release.yml`) and the bootstrap's verify job. The
+`ci` profile in `.config/nextest.toml` runs each test in its own process, and
+retries a failure once. A test that passes on the retry is listed as **FLAKY**
+but doesn't fail the gate, at release as on a PR. A test still running after 2
+minutes is named in the log, and one still running after 10 is stopped and
+counts as a failure (then retried like any other), so a hang can't hold a gate
+until its job times out. The policy is decided in that
+one file, so a test can't pass CI and then fail the release because of the
+harness. `xtask/tests/suite_harness.rs` checks that all three workflows run that
+exact command, so they can't drift apart again unnoticed.
+
+To reproduce a CI run locally, install
+[nextest](https://nexte.st) and use the same command. A plain `cargo test` also
+works, but it runs each binary's tests as threads in one process, with no
+retry.
+
+## The bless workflow
+
+When you change the emitter (and the new output is correct), regenerate the
+positive fixtures' expectations rather than editing them by hand:
+
+```sh
+BYNK_BLESS=1 cargo test -p bynk-tests --test it e2e::bless_positive_fixtures
+```
+
+The `bless_positive_fixtures` test is a no-op unless `BYNK_BLESS` is set; with it
+set, it recompiles each positive fixture and overwrites `expected/`. **Always
+review the resulting diff** — blessing is how a regression silently becomes the
+new "expected" if you are not careful. A project fixture's `expected/` is
+deleted and rewritten, so a bless also removes the goldens of files the emitter
+no longer writes. The same bless rewrites `tests/fixtures/shared/` (see
+[Shared snapshots](#shared-snapshots)). Because the comparison is byte-exact, a bless leaves the tree
+clean unless emission actually changed, in content or in which files are
+emitted.
+
+`BYNK_BLESS` is the project's shared regenerate switch: the same run also
+refreshes the generated reference pages (see [Working on the docs](/project/contributing/documentation/)).
+Scope it to a specific test when you only mean to bless one thing.
+
+## Shared snapshots
+
+Some of a fixture's emitted output is not the fixture's own: the standard
+library's adapters and commons (`bynk.ts`, `bynk-cloudflare.ts`, `bynk/**`) and
+the test runtime spliced into every `tests/*.test.ts`. Copying them into each
+`expected/` meant a one-line change to `bynk.bynk` or to
+`bynk-emit/runtime/src/testing/expectation.ts` rewrote hundreds of snapshots, and
+made every open PR that added a fixture stale.
+
+In `expected/`, such a region is a single marker line naming the shared module,
+with no content hash:
+
+```text
+<<bynk-shared: std/bynk.ts#bytes+errors+result>>
+<<bynk-shared: testing/expectation>>
+<<bynk-shared: test-runner#base>>
+```
+
+The region itself lives once under `bynk-tests/tests/fixtures/shared/`. The
+harness still checks every emitted byte: the region a fixture really emits must be
+identical to that shared snapshot, and the rest of the file must match the
+fixture's own snapshot. The emitter's output, and the output fixtures run, are
+unchanged. A bless writes each shared snapshot once, and fails if two fixtures
+emit different bytes for the same module and variant.
+
+- A std adapter or commons is a whole file, found by its emitted path and header.
+  Its variant is the sorted set of `__bynk_runtime/*` modules it imports (the
+  emitter prunes per project). Adding or removing such an import renames the
+  variant, which re-blesses the fixtures that use it.
+- The fixed part of `main()` in `tests/main.ts` (the `modules` list stays in the fixture) is
+  delimited by comments the emitter writes, `bynk:shared-begin test-runner#<variant>` to
+  `bynk:shared-end`. Its variant names the optional parts the runner carries (`detach`,
+  `generative`, `pg`, `remote`), or is `base`. A build whose runner carries something of its own
+  (a snapshot report) is not delimited and stays in the fixture.
+- A test-runtime fragment has no emitted delimiter, so it is found by exact match of
+  `bynk-emit/src/testgen/test_runtime/<name>.ts`. A changed or partial copy is not
+  elided and fails the comparison with a full diff.
+
+So changing `bynk.bynk` or a test-runtime module re-blesses its shared snapshot
+only, plus any fixture whose own output changed.
+
+## The `tsc` verification gate
+
+`tests/tsc_verify.rs` (`emitted_typescript_passes_tsc_strict`) compiles every
+positive fixture and runs `tsc --strict --noEmit` over the output. A
+single-file fixture (`input.bynk`) is staged beside the runtime it imports, so
+it is checked like a project. It is a backstop for emitter bugs that produce
+TypeScript which round-trips our own comparison but does not actually
+type-check. A golden matching the emitter byte for byte proves nothing about
+whether either one type-checks.
+
+It needs `tsc` on `PATH`, or falls back to `npx -p typescript@7 tsc`. CI runs it,
+and the examples' `tsc --strict` check, under TypeScript **7**, the only major
+Bynk supports, on every test leg. The behaviour suites, which type-check their
+fixtures before running them, run under it too. A local run without a global
+`tsc` uses 7 through the fallback.
+The major is `TYPESCRIPT_MAJOR_TESTED` in
+`bynk-emit`, which `bynk doctor` and every `npx` fallback also read. Behaviour
+when neither is available:
+
+- locally — it logs a warning and passes (so a missing toolchain does not block
+  you);
+- in CI — set **`BYNK_REQUIRE_TSC=1`** to make a missing `tsc` a hard failure.
+
+The same file checks that every emitted `.ts` is erasable by pure type-stripping
+(ADR 0136), which `bynk test --inspect` and in-browser evaluation depend on.
+`embedded_runtime_strips_types_under_node` needs Node ≥ 22.6;
+`all_emitted_typescript_strips_under_node` needs Node ≥ 22.13 (for
+`stripTypeScriptTypes`). **`BYNK_REQUIRE_TSC=1` governs them too:** with it set,
+a missing or too-old Node is a hard failure rather than a skip. CI's test legs
+run Node 24, so both checks always run there.
+
+A skip banner alone is not a gate: a test that prints `SKIPPED` and passes is
+invisible in CI, because nextest never shows a passing test's output
+(`success-output` defaults to `never`). That is why a required check fails
+rather than skips.
+
+## The behavioural gate
+
+The golden comparison and the `tsc` gate prove what the compiler **emits**.
+Neither runs it. A golden blesses whatever was emitted, so an emitted program
+that type-checks but does the wrong thing passes both.
+
+`tests/behaviour_fixtures.rs` closes that gap. A project-form positive fixture
+whose `suite`s should **run** carries an `expected_run.txt`:
+
+```text
+# comments and blank lines are ignored
+passed=3 failed=1
+# #1649: enum state faults on reload
+fail an enum Cell reads back after a reload
+```
+
+The gate copies each marked fixture to a scratch directory and runs
+`bynk test --format json` over it. It then checks:
+
+- the case counts match `passed=`/`failed=`;
+- every `fail <case name>` case **fails**;
+- every other case **passes**;
+- at least one case ran.
+
+The check is strict in both directions. A listed case that starts passing fails
+the gate, so the change that fixes a known defect must also delete its `fail`
+line. Cite the tracking issue in a comment above each `fail`.
+
+A suite-bearing fixture without the marker is type-checked by the `tsc` gate
+but never run. Mark a fixture unless it exists only to pin emitted *shape*
+rather than behaviour (for example `1402_stub_fails_and_single_outcome_sequence`,
+whose cases can never pass by design).
+
+The run uses the bundle target, because `bynk test` has no `--target` flag.
+Like the `tsc` gate, it skips locally without a TypeScript toolchain, and
+`BYNK_REQUIRE_TSC=1` makes that a failure. The `fixture_kinds` row of
+`design/greenfield-status.md` counts marked fixtures as `run=`.
+
+## Adding a feature: the definition of done
+
+A grammar increment is not complete until:
+
+1. positive **and** negative fixtures cover it (and pass);
+2. emitted output type-checks under the `tsc` gate;
+3. any new diagnostic code is added to the registry in `diagnostics.rs`;
+4. a change to what a program **does** at runtime is proved by a behavioural
+   fixture (an `expected_run.txt` suite), not only by a golden;
+5. the **docs** are updated in the same change — see
+   [Working on the docs](/project/contributing/documentation/).

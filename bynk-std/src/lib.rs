@@ -174,7 +174,7 @@ pub const FIRST_PARTY_NPM: &[FirstPartyNpm] = &[
     FirstPartyNpm {
         package: "@electric-sql/pglite",
         version: "0.5.16",
-        runtime_module: "pglite",
+        runtime_module: "testing/pglite",
         reached_by: Reach::TestPostgresDouble,
     },
 ];
@@ -311,6 +311,90 @@ pub const LOCALE_TYPES_UNIT: &str = "bynk.locale.types";
 /// the `bynk` adapter itself, can reach these types without also reaching
 /// `bynk.locale`'s value-level API.
 pub const BYNK_LOCALE_TYPES_SRC: &str = include_str!("../lib/core/bynk.locale.types.bynk");
+
+/// Inside the reserved `bynk.*` prefix; reached implicitly by any unit that
+/// mentions `compare`, `sortWith` or `Ordering` (#3955), as if it wrote
+/// `uses bynk.ordering`.
+pub const ORDERING_UNIT: &str = "bynk.ordering";
+
+/// `bynk.validation` — the `ValidationRule` sum a `ValidationError` names the
+/// failed rule with (`e.rule`), and the `Bound` its numeric arguments are (#3952).
+/// Reached implicitly by a unit that names either type or reads `.rule`.
+pub const VALIDATION_UNIT: &str = "bynk.validation";
+
+/// `bynk.decode` — the `DecodeErrorKind` sum a `DecodeError` names why a decode failed
+/// with (`e.kind`, #3976). Reached implicitly by a unit that names the type or reads `.kind`.
+pub const DECODE_UNIT: &str = "bynk.decode";
+
+/// #4231: a type every unit may name with no `uses`, and the first-party unit
+/// that declares it. A unit reaches `unit` as if it wrote `uses <unit>` when its
+/// source mentions the type's name or one of `triggers` (a method the type
+/// comes from, written with its leading `.`), unless the unit declares a type of
+/// that name itself. The one registration point: resolution, rebranding and the
+/// bare-variant rule read this table, so a new compiler-known sum is one row
+/// here and its unit.
+///
+/// A row must be a plain sum with no invariant and no brand: every context
+/// constructs it directly, because a prelude type is exempt from the per-context
+/// rebrand that would otherwise hide its constructors.
+pub struct PreludeType {
+    /// The type's name, as a unit writes it.
+    pub name: &'static str,
+    /// The first-party commons that declares it.
+    pub unit: &'static str,
+    /// Spellings other than the name whose presence also makes the unit reachable.
+    pub triggers: &'static [&'static str],
+}
+
+/// Every prelude type. `Ordering` is what `compare` and `sortWith` answer (#3955).
+pub const PRELUDE_TYPES: &[PreludeType] = &[
+    PreludeType {
+        name: "Ordering",
+        unit: ORDERING_UNIT,
+        triggers: &[".compare", ".sortWith"],
+    },
+    // #3952: what a `ValidationError` says failed. `e.rule` yields one.
+    PreludeType {
+        name: "ValidationRule",
+        unit: VALIDATION_UNIT,
+        triggers: &[".rule"],
+    },
+    PreludeType {
+        name: "Bound",
+        unit: VALIDATION_UNIT,
+        triggers: &[],
+    },
+    // #3976: why a decode failed. `e.kind` on a `DecodeError` yields one.
+    PreludeType {
+        name: "DecodeErrorKind",
+        unit: DECODE_UNIT,
+        triggers: &[".kind"],
+    },
+];
+
+/// `bynk.ordering` — the `Ordering` enum (`Less`, `Equal`, `Greater`) that
+/// `compare` and `sortWith` use, with `then` and `reverse`.
+pub const BYNK_ORDERING_SRC: &str = include_str!("../lib/core/bynk.ordering.bynk");
+
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const HTML_UNIT: &str = "bynk.html";
+
+/// `bynk.html` (#3924) — `escapeText` and `escapeAttr`, the two HTML escapes by context, pure and
+/// available on every target, written in Bynk over `String.replace`.
+pub const BYNK_HTML_SRC: &str = include_str!("../lib/core/bynk.html.bynk");
+
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const RANGE_UNIT: &str = "bynk.range";
+
+/// `bynk.range` (#4466) — `ifRangeHolds`, whether a `Range` request may be answered with the part
+/// given its `If-Range` header, pure and available on every target, written in Bynk.
+pub const BYNK_RANGE_SRC: &str = include_str!("../lib/core/bynk.range.bynk");
+
+/// `bynk.validation` — `ValidationRule` and `Bound`.
+pub const BYNK_VALIDATION_SRC: &str = include_str!("../lib/core/bynk.validation.bynk");
+
+/// `bynk.decode` — `DecodeErrorKind`.
+pub const BYNK_DECODE_SRC: &str = include_str!("../lib/core/bynk.decode.bynk");
 
 /// The reserved `bynk` conformance-surface adapter (env-free core). It has no
 /// `binding` clause — the toolchain supplies one per platform (see
@@ -612,11 +696,29 @@ pub const SERVICE_WORKER_OPTION: &str = "worker";
 pub const R2_BINDING_PREFIX: &str = "R2";
 
 /// The one creation option of an `R2` instance: the bucket's jurisdiction.
-pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
+pub const JURISDICTION_OPTION: &str = "jurisdiction";
 
-/// The jurisdictions an `R2` bucket may be pinned to, as `@jurisdiction(…)`
-/// takes them and `wrangler r2 bucket create --jurisdiction` accepts them.
-pub const R2_JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+/// The jurisdictions a resource may be pinned to, as `@jurisdiction(…)` takes them: an `R2`
+/// bucket (`wrangler r2 bucket create --jurisdiction`), a `D1` database and an agent's Durable
+/// Object namespace (`namespace.jurisdiction(…)`) all take the same three (#3819, #3820).
+/// Cloudflare lists `eu`, `fedramp` and `us` for each of the three.
+pub const JURISDICTIONS: &[&str] = &["eu", "fedramp", "us"];
+
+/// Whether `text` names a jurisdiction (the shared check of `R2`, `D1` and `agent`).
+pub fn is_jurisdiction(text: &str) -> bool {
+    JURISDICTIONS.contains(&text)
+}
+
+/// The note every invalid `@jurisdiction` carries: `the jurisdictions are "eu", "fedramp" and "us"`.
+pub fn jurisdictions_note() -> String {
+    let quoted: Vec<String> = JURISDICTIONS.iter().map(|j| format!("`\"{j}\"`")).collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => {
+            format!("the jurisdictions are {} and {last}", rest.join(", "))
+        }
+        _ => format!("the jurisdictions are {}", quoted.join(" and ")),
+    }
+}
 
 /// The Worker binding prefix of a `RateLimit` instance (standard-library P3,
 /// #2342): `capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`
@@ -974,9 +1076,12 @@ pub const UNITS: &[Unit] = &[
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
+            "Kv.getValue",
+            "Kv.putValue",
         ],
         extensible: &[
             "R2Condition",
+            "R2GetIf",
             "KvExpiration",
             "SqlError",
             "EmailError",
@@ -1012,7 +1117,7 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "R2",
                 binding_prefix: R2_BINDING_PREFIX,
-                options: &[(R2_JURISDICTION_OPTION, OptionKind::Str)],
+                options: &[(JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,
@@ -1047,7 +1152,7 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "D1",
                 binding_prefix: D1_BINDING_PREFIX,
-                options: &[],
+                options: &[(JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,
@@ -1315,6 +1420,86 @@ pub const UNITS: &[Unit] = &[
         binding: Binding::None,
         // 9, not 8: K2's `bynk.url` (#2594) takes 8 in parallel.
         id_block: 9,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
+    Unit {
+        name: ORDERING_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/ordering.bynk",
+        source: BYNK_ORDERING_SRC,
+        binding: Binding::None,
+        // 11, not 10: the test-support `bynk.testing` unit takes 10.
+        id_block: 11,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
+    Unit {
+        name: VALIDATION_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/validation.bynk",
+        source: BYNK_VALIDATION_SRC,
+        binding: Binding::None,
+        // 12: `bynk.testing` takes 10 and `bynk.ordering` 11.
+        id_block: 12,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
+    Unit {
+        name: HTML_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/html.bynk",
+        source: BYNK_HTML_SRC,
+        binding: Binding::None,
+        // 13: `bynk.validation` takes 12.
+        id_block: 13,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
+    Unit {
+        name: DECODE_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/decode.bynk",
+        source: BYNK_DECODE_SRC,
+        binding: Binding::None,
+        // 14: `bynk.html` takes 13.
+        id_block: 14,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
+    Unit {
+        name: RANGE_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/range.bynk",
+        source: BYNK_RANGE_SRC,
+        binding: Binding::None,
+        // 15: `bynk.html` takes 13 and `bynk.decode` (#4471) takes 14.
+        id_block: 15,
         platform: None,
         env_providers: &[],
         stability: Stability::Stable,
@@ -2015,6 +2200,8 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
+                "bynk.cloudflare.Kv.getValue",
+                "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto"
             ]
         );
@@ -2029,6 +2216,7 @@ mod tests {
                 ("bynk", "Method"),
                 ("bynk", "Redirect"),
                 ("bynk.cloudflare", "R2Condition"),
+                ("bynk.cloudflare", "R2GetIf"),
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
@@ -2125,6 +2313,11 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
+                ("bynk.ordering", 11),
+                ("bynk.validation", 12),
+                ("bynk.html", 13),
+                ("bynk.decode", 14),
+                ("bynk.range", 15),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2156,6 +2349,11 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
+                "bynk.ordering",
+                "bynk.validation",
+                "bynk.html",
+                "bynk.decode",
+                "bynk.range",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

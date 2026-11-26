@@ -24,10 +24,15 @@ fn remember(m: Map[OrderId, Int], id: OrderId, qty: Int) -> Map[OrderId, Int] {
 }
 
 fn known(m: Map[OrderId, Int], id: OrderId) -> Bool {
-	match m.get(id) {
-		Some(_) => true,
-		None => false,
-	}
+	m.contains(id)
+}
+
+fn forget(m: Map[OrderId, Int], id: OrderId) -> Map[OrderId, Int] {
+	m.remove(id)
+}
+
+fn quantities(m: Map[OrderId, Int]) -> List[Int] {
+	m.entries().map((e) => e.value)
 }
 
 fn openOnly(xs: List[Status]) -> Set[Status] {
@@ -36,7 +41,59 @@ fn openOnly(xs: List[Status]) -> Set[Status] {
 ```
 
 Two `OrderId`s with the same fields are the same key, however they were built.
-`m.keys()` gives back real `OrderId`s, in the order they were first inserted.
+`m.keys()` and `m.entries()` give back real `OrderId`s, in the order they were first inserted,
+and `m.remove(id)` drops one without disturbing the rest.
+
+## A store collection takes the same keys
+
+An agent's `store Map`, `Set` or `Cache` takes any key a value `Map` does, so a model keyed
+by `(region, code)` needs no invented string key:
+
+```bynk
+context guide.warehouse
+
+type StockKey = {
+	region: String,
+	code: Int,
+}
+
+agent Warehouse {
+	key id: String
+
+	store stock: Map[StockKey, Int]
+	store blocked: Set[StockKey]
+
+	on call add(k: StockKey, n: Int) -> Effect[()] {
+		let _ <- stock.upsert(k, n, (q) => q + n)
+	}
+}
+```
+
+Two `StockKey`s with the same fields are one entry, however they were built, and a `String` or
+`Int`-keyed collection is stored exactly as before. See [Agents](/reference/agents/#storage-kinds-and-their-operations).
+
+## Build a map from computed pairs
+
+`Map.of` takes a list of `MapEntry` values, and you can write one yourself,
+`MapEntry { key: k, value: v }`. The type arguments come from the fields:
+
+```bynk
+commons guide.byid
+
+type User = {
+	id: String,
+	age: Int,
+}
+
+fn byId(users: List[User]) -> Map[String, User] {
+	Map.of(users.map((u) => MapEntry { key: u.id, value: u }))
+}
+```
+
+A later entry for a key replaces the earlier value and keeps the first position. A
+`MapEntry` is built and used in place, so it cannot be a record field, a store field
+or a handler's parameter or result (`bynk.types.map_entry_at_boundary`); declare a
+record of your own with the fields you need, and convert with `map`.
 
 ## What cannot be a key
 

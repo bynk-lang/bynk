@@ -28,7 +28,7 @@ capability Audit {
 provides Audit = Ledger given Clock, Events {
   fn note() -> Effect[()] {
     let _ <- Clock.now()
-    let _ <- Events.emit[Pinged](Pinged { n: 1 })
+    let _ <- Events.emit(Pinged { n: 1 })
     Effect.pure(())
   }
 }
@@ -143,7 +143,8 @@ fn event_lists_its_emitter_and_both_subscribers_across_units() {
         ("ev.emitter", "Pinged")
     );
 
-    // The `POST /ping` handler and the `Ledger.note` provider operation emit.
+    // The `POST /ping` handler and the `Ledger.note` provider operation emit (the latter with
+    // its event type inferred from the argument, #4113).
     assert_eq!(ev.emitters.len(), 2);
     let e = ev
         .emitters

@@ -18,6 +18,8 @@
 
 use std::fmt::Write as _;
 
+use bynk_project::wrangler_keys::WranglerKey;
+
 /// A TOML document: the root block's entries (review of #1304, finding 3 —
 /// a field set once at construction, not a `TomlBlock` a caller could
 /// accidentally `push_block` out of first position, which `push_block`
@@ -66,7 +68,7 @@ impl TomlDocument {
     #[must_use]
     pub fn set_main(&mut self, value: impl Into<String>) -> bool {
         for entry in &mut self.root {
-            if entry.key == "main" {
+            if entry.key == WranglerKey::Main.header() {
                 entry.value = TomlValue::Str(value.into());
                 return true;
             }
@@ -96,16 +98,16 @@ enum TomlHeader {
 }
 
 impl TomlBlock {
-    pub(crate) fn table(path: &'static str, entries: Vec<TomlEntry>) -> Self {
+    pub(crate) fn table(path: WranglerKey, entries: Vec<TomlEntry>) -> Self {
         Self {
-            header: TomlHeader::Table(path),
+            header: TomlHeader::Table(path.header()),
             entries,
         }
     }
 
-    pub(crate) fn array_table(path: &'static str, entries: Vec<TomlEntry>) -> Self {
+    pub(crate) fn array_table(path: WranglerKey, entries: Vec<TomlEntry>) -> Self {
         Self {
-            header: TomlHeader::ArrayTable(path),
+            header: TomlHeader::ArrayTable(path.header()),
             entries,
         }
     }
@@ -113,12 +115,12 @@ impl TomlBlock {
     /// `[parent.key]` — one entry of a table keyed by a runtime name, such as
     /// `[exports.Alpha]` (#1796).
     pub(crate) fn keyed_table(
-        parent: &'static str,
+        parent: WranglerKey,
         key: impl Into<String>,
         entries: Vec<TomlEntry>,
     ) -> Self {
         Self {
-            header: TomlHeader::KeyedTable(parent, key.into()),
+            header: TomlHeader::KeyedTable(parent.header(), key.into()),
             entries,
         }
     }
@@ -171,6 +173,9 @@ impl TomlEntry {
 pub(crate) enum TomlValue {
     Str(String),
     Int(i64),
+    /// #4127: `head_sampling_rate = 0.1`. Always written with a decimal point,
+    /// so it reads back as a float.
+    Float(f64),
     /// #1883, slice 1b: `[assets] run_worker_first = false`.
     Bool(bool),
     Array(Vec<TomlValue>),
@@ -243,6 +248,7 @@ fn render_value(value: &TomlValue) -> String {
     match value {
         TomlValue::Str(s) => format!("\"{}\"", escape_toml_basic_string(s)),
         TomlValue::Int(n) => n.to_string(),
+        TomlValue::Float(x) => format!("{x:?}"),
         TomlValue::Bool(b) => b.to_string(),
         TomlValue::Array(items) => {
             let rendered: Vec<String> = items.iter().map(render_value).collect();
@@ -318,7 +324,7 @@ mod tests {
             ],
         );
         doc.push_block(TomlBlock::table(
-            "triggers",
+            WranglerKey::Triggers,
             vec![TomlEntry::kv(
                 "crons",
                 TomlValue::Array(vec![TomlValue::str("*/5 * * * *")]),
@@ -415,14 +421,14 @@ mod tests {
             ],
         );
         doc.push_block(TomlBlock::array_table(
-            "services",
+            WranglerKey::Services,
             vec![
                 TomlEntry::kv("binding", TomlValue::str("COMMERCE_PAYMENT")),
                 TomlEntry::kv("service", TomlValue::str("commerce-payment")),
             ],
         ));
         doc.push_block(TomlBlock::array_table(
-            "kv_namespaces",
+            WranglerKey::KvNamespaces,
             vec![
                 TomlEntry::kv("binding", TomlValue::str("BYNK_KV")),
                 TomlEntry::with_comment(
@@ -433,7 +439,7 @@ mod tests {
             ],
         ));
         doc.push_block(TomlBlock::table(
-            "triggers",
+            WranglerKey::Triggers,
             vec![TomlEntry::kv(
                 "crons",
                 TomlValue::Array(vec![TomlValue::str("*/5 * * * *"), TomlValue::str(hostile)]),
@@ -476,7 +482,7 @@ mod tests {
         let mut doc = TomlDocument::new("t", vec![]);
         for key in ["Alpha", "__EventsFanout", hostile] {
             doc.push_block(TomlBlock::keyed_table(
-                "exports",
+                WranglerKey::Exports,
                 key,
                 vec![TomlEntry::kv("type", TomlValue::str("durable-object"))],
             ));

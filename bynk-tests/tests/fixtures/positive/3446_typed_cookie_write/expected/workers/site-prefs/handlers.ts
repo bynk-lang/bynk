@@ -22,10 +22,10 @@ export type Qty = number & { readonly __brand: "site.prefs.Qty" };
 export const Qty = {
   of(value: number): Result<Qty, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Qty", message: "must be a safe integer", value });
+      return Err({ field: "Qty", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Qty", message: "must be positive", value });
+      return Err({ field: "Qty", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Qty);
   },
@@ -61,7 +61,7 @@ export const site = {
 export function __serialise_Prefs(value: Prefs): __JsonValue {
   return {
     theme: __serialise_Theme(value.theme),
-    visits: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.visits),
+    "__Host-visits": ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.visits),
     price: __serialise_Option_Decimal(value.price),
     dark: value.dark as __JsonValue,
     qty: __serialise_Option_Qty(value.qty),
@@ -78,12 +78,12 @@ export function __deserialise_Prefs(json: __JsonValue, path: string = "$"): Resu
   const __r_theme = __deserialise_Theme(__d_theme, `${path}.theme`);
   if (__r_theme.tag === "Err") return __r_theme;
   const __theme = __r_theme.value;
-  const __d_visits: __JsonValue = "visits" in obj ? obj["visits"] : 0;
+  const __d_visits: __JsonValue = "__Host-visits" in obj ? obj["__Host-visits"] : 0;
   if (typeof __d_visits !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "number", actual: typeof __d_visits });
+    return Err({ kind: "StructuralMismatch", path: `${path}.__Host-visits`, expected: "number", actual: typeof __d_visits });
   }
   if (!globalThis.Number.isSafeInteger(__d_visits)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.visits`, expected: "safe integer", actual: String(__d_visits) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.__Host-visits`, expected: "safe integer", actual: String(__d_visits) });
   }
   const __visits = __d_visits;
   const __r_price = __deserialise_Option_Decimal(obj["price"], `${path}.price`);
@@ -130,6 +130,16 @@ export function __serialise_Theme(value: Theme): __JsonValue {
 }
 
 export function __deserialise_Theme(json: __JsonValue, path: string = "$"): Result<Theme, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Light":
+        return Ok({ tag: "Light" } as Theme);
+      case "Dark":
+        return Ok({ tag: "Dark" } as Theme);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

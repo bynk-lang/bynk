@@ -2,9 +2,13 @@
 name = "demo-desk"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[services]]
 binding = "DEMO_VAULT"
 service = "demo-vault"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

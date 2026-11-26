@@ -111,6 +111,6 @@ A refused cross-context call is also logged by name on both sides: see
 
 ## Related
 
-- Tutorial: [Build a small HTTP service](/book/tutorials/02-http-service/).
+- Tutorial: [Build a small HTTP service](/book/tutorials/http-service/).
 - [Consume another context's services with `consumes`](/book/guides/program-structure/consume-services/).
-- Reference: [emission](/docs/emission/).
+- Reference: [emission](/reference/tooling/emission/).

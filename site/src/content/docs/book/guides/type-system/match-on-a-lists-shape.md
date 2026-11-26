@@ -59,7 +59,7 @@ whole list.
 > `sum` above is quadratic. Reach for `..rest` to peel off a few elements; to
 > add up or transform every element, use a fold such as `xs.fold(0, (a, x) => a + x)`.
 > A bare `..` (`[first, ..]`) copies nothing. See
-> [Recursion and iteration](/book/guides/type-system/recursion-and-iteration/) for
+> [Recursion and iteration](/book/concepts/type-system/recursion-and-iteration/) for
 > when recursion is the right tool.
 
 ## Look inside the elements
@@ -113,4 +113,4 @@ the rest marker but a range: see
 Only a `List` has list patterns: a `Set` or `Map` is not one
 (`bynk.types.list_pattern_on_non_list`).
 
-See [list patterns](/book/reference/types/#list-patterns) for the rules.
+See [list patterns](/reference/types/#list-patterns) for the rules.

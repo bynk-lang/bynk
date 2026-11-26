@@ -31,6 +31,26 @@ takes the same `Bool` predicate an `invariant` does (`is`, `implies`, the
 operators, pure methods) — one predicate surface across code and tests — and a
 failure reports the predicate structure: `expected` versus `actual`.
 
+## Keep what an `expect … is` binds
+
+A statement-form `expect … is P(x)` keeps `x` bound for the rest of the block, so a
+case reads straight down instead of nesting a `match`:
+
+```bynk,fragment
+suite counters {
+	case "a stored count comes back" {
+		let r <- Counter(CounterId.unsafe("c1")).stored()
+		expect r is Some(n)
+		expect n == 0
+	}
+}
+```
+
+Only the names directly inside the pattern bind (`Some(n)`, `Ok(code)`, a record's
+fields), not names in a nested sub-pattern (`Rejected(RefinementViolation(d))`
+binds nothing: unwrap it in two steps or use a `match`). A `property` body binds
+nothing across its claims. See [`expect`](/reference/testing/#expect-is-bindings).
+
 ## Share a fixture with a helper `fn`
 
 When several cases need the same request or value, declare a `fn` in the suite
@@ -59,8 +79,33 @@ case "a ping is acknowledged" {
 }
 ```
 
-A helper is private to its suite and pure; see
-[Helper functions in a suite](/book/reference/testing/#helpers).
+A helper is private to its suite; see
+[Helper functions in a suite](/reference/testing/#helpers).
+
+## Share setup that runs effects
+
+Setup that runs effects, such as creating a table or seeding rows, is a helper
+that declares `given`. Each case calls it by name, so what a case depends on stays
+visible where it is used:
+
+```bynk,fragment
+suite shop.stock
+
+fn freshTable() -> Effect[()] given Stock {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT, qty INTEGER)", [])
+	Effect.pure(())
+}
+
+case "an empty table counts zero" {
+	do freshTable()
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+The helper runs with the case's capabilities, so the case's `stub`s and
+`expect Stock.run called` apply inside it. Other suites do not see it; see
+[Effectful helpers](/reference/testing/#helpers-effectful) for where it can be called.
 
 ## Test with a real payload
 
@@ -79,23 +124,28 @@ case "a real issues delivery decodes" {
 ```
 
 The file is never part of the deployable. See
-[Test fixtures](/book/reference/fixtures/).
+[Test fixtures](/reference/fixtures/).
 
 ## Unwrap a fixture with `?`
 
-A refined type's `.of` returns a `Result`. In a `case`, `?` unwraps it, and an
-`Err` **fails the case** rather than propagating — the failure names the error
-and the `?`'s location, like a failed `expect`:
+In a `case`, `?` unwraps a `Result` or an `Option`, and an `Err` or a `None` **fails the
+case** rather than propagating. The failure names what the operand was and the `?`'s
+location, like a failed `expect`. A refined type's `.of` returns a `Result`, but any
+`Result` works, whatever its error type, which is what you want for the code under test:
 
 ```bynk,fragment
 case "a day reads" {
-  let d = Day.of("2026-11-01")?
+  let d = Day.of("2026-11-01")?        // Result[Day, ValidationError]
+  let saved <- place.call(d)
+  let id = saved?                      // Result[OrderId, PlaceError]: an Err fails the case
+  let line = lines.first()?            // Option[Line]: a None fails the case
   expect len(d) == 10
 }
 ```
 
-The error must be a `ValidationError`, the error type of `.of`.
-See [`?` in a case](/book/reference/testing/#question-in-case).
+The same holds in a `property` body, where it fails the property for that input. A `?`
+inside a lambda, or in a helper `fn`, keeps its ordinary meaning: it returns from that
+function. See [`?` in a case](/reference/testing/#question-in-case).
 
 ## Fabricate values with `Val[T]`
 
@@ -113,8 +163,8 @@ suite quantities {
 }
 ```
 
-A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one is
-rejected ([`bynk.val.needs_pin`](/book/reference/diagnostics/bynk.val.needs_pin/)); pin it
+A `Matches`-refined string cannot be fabricated blindly by `Val` (a `for all` draws members
+of its pattern instead) — a bare `Val` of one is rejected ([`bynk.val.needs_pin`](/reference/diagnostics/bynk.val.needs_pin/)); pin it
 instead, or give the type an example once, where it is declared, so every `Val`
 of it (and the derived smoke) has a value:
 
@@ -123,7 +173,7 @@ type Code = String where Matches("[A-Z]{3}") @example("ABC")
 ```
 
 The compiler checks that the example matches the pattern
-([`@example`](/book/reference/testing/#val-example)). `Val[T]` is test-only.
+([`@example`](/reference/testing/#val-example)). `Val[T]` is test-only.
 
 ## Snapshot a decoded value
 
@@ -154,7 +204,7 @@ changes, the case fails with a line diff of the stored value against the new one
 run `bynk test --update-snapshots` when the change is intended, and the diff of
 the snapshot file is the review. A snapshot whose case you delete is reported as
 obsolete and removed by the same command. Stub `Clock` and `Random` so the value
-is stable. See [Snapshots](/book/reference/testing/#snapshots).
+is stable. See [Snapshots](/reference/testing/#snapshots).
 
 ## Constrain a function with `requires` / `ensures`
 
@@ -180,7 +230,7 @@ and the runner **generates** arguments (filtered by `requires`) to attack the
 `ensures` — reporting a shrunk counterexample if one breaks. In the deploy build
 the checks are stripped, so contracts cost nothing in production. A contract is a
 property that is always on; reach for a `property` only when a claim is relational
-or spans calls. See the [testing reference](/book/reference/testing/#contracts).
+or spans calls. See the [testing reference](/reference/testing/#contracts).
 
 ## Constrain a state change with `transition`
 
@@ -207,7 +257,7 @@ agent Order {
 Again you write no test: a `transition` is checked at the commit boundary (from the
 second commit — the first has no `old`), so it holds under every `case` at every
 tier for free. See
-[Agent invariants → Step invariants](/book/reference/agent-invariants/#step-invariants).
+[Agent invariants → Step invariants](/reference/agent-invariants/#step-invariants).
 
 ## Check a claim across inputs with `property` / `for all`
 
@@ -230,7 +280,7 @@ Reach for a `property` when a claim should hold across a *range* of inputs; reac
 for a `case` when one named scenario is the point. On failure a property prints a
 shrunk counterexample and a reproduce line — see
 [Run your tests](/book/guides/testing/run-tests/) and the
-[testing reference](/book/reference/testing/).
+[testing reference](/reference/testing/).
 
 ## Stub a collaborator with `stub`
 
@@ -257,7 +307,7 @@ failure would, and the fault propagates out of the handler. Left unclaimed it
 fails the case, so a case that expects one says so with `expect <call> faults`,
 giving the call itself rather than a value bound from it. To test an in-band
 error instead, stub the `Err` as a value (`returns Err(…)`) and assert `expect r
-is Err(_)`. See [Claiming a fault](/book/reference/testing/#faults).
+is Err(_)`. See [Claiming a fault](/reference/testing/#faults).
 
 The right-hand side is a *value* or `fails`, **never a block** — a double that
 needs logic is the signal to promote the tier instead. For a collaborator whose
@@ -271,7 +321,7 @@ stub Net.fetch(_) returns each [fails, fails, ok(resp)]  // fails twice, then su
 
 `stub` is capability-only, at suite scope (every case) and case scope
 (precedence: case > suite > the tier default). See the
-[`stub` reference](/book/reference/testing/#stub).
+[`stub` reference](/reference/testing/#stub).
 
 ## Aliased types in a suite
 
@@ -336,6 +386,6 @@ expect calls.all((c) => c.msg.length() > 0)
 
 ## Related
 
-- Tutorial: [Test it](/book/tutorials/06-testing/).
-- Reference: [testing](/book/reference/testing/).
-- Diagnostics: [`bynk.val.*` errors](/book/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/book/reference/diagnostics/#observation).
+- Tutorial: [Test it](/book/tutorials/testing/).
+- Reference: [testing](/reference/testing/).
+- Diagnostics: [`bynk.val.*` errors](/reference/diagnostics/#value-fabrication), [`bynk.observe.*` errors](/reference/diagnostics/#observation).

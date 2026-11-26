@@ -1,0 +1,12 @@
+{
+  "blurb": "A `from email` service has one `fallback` block: the one address mail a handler faulted on is forwarded to. A second block could name another address, and the reader would not know which holds, so it is refused. Keep one.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_fallback",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }\n    fallback { forward: \"oncall@ops.example\" }   // ✗ a second `fallback`\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one policy\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `fallback { }` policy."
+}

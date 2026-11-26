@@ -14,7 +14,7 @@
 //!   [`crate::symbols::discover_event_subscribers`] does;
 //! - an *emitter* is a call the checker resolved to `Events.emit` (its own
 //!   [`crate::checker::Callee`], not the receiver's spelling), with the event
-//!   type read from the call's explicit type argument;
+//!   type the checker recorded on the call's `Callee` (its type argument, written or inferred);
 //! - a handler's `given` set is read after [`crate::project_model::normalize_service_defaults`],
 //!   so a service's `default_given` is already part of each handler that
 //!   declares none of its own; a use is marked `inherited` when its span lies
@@ -31,8 +31,8 @@ use std::path::PathBuf;
 
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
-    CapRef, CommonsItem, ExprKind, Handler, HandlerKind, ServiceDecl, ServiceProtocol, SourceUnit,
-    TypeRef, expr_children, statement_exprs,
+    CapRef, CommonsItem, Handler, HandlerKind, ServiceDecl, ServiceProtocol, SourceUnit, TypeRef,
+    expr_children, statement_exprs,
 };
 use bynk_syntax::span::Span;
 
@@ -486,11 +486,12 @@ impl<'a> UnitCx<'a> {
         }
         stack.push(&body.tail);
         while let Some(e) = stack.pop() {
-            if let ExprKind::MethodCall { type_args, .. } = &e.kind
+            if let Some(crate::checker::Callee::Capability {
+                event: Some(name), ..
+            }) = callees.get(&e.id)
                 && callees.get(&e.id).is_some_and(is_events_emit)
-                && let Some(TypeRef::Named(id)) = type_args.first()
-                && let Some(owner) = self.event_owner(&id.name)
-                && let Some(fact) = events.get_mut(&(owner, id.name.clone()))
+                && let Some(owner) = self.event_owner(name)
+                && let Some(fact) = events.get_mut(&(owner, name.clone()))
             {
                 fact.emitters.push(EmitterFact {
                     member: member.clone(),

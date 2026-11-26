@@ -37,7 +37,8 @@ pub(crate) fn check_fn(
 ) {
     check_fn_in(
         f,
-        false,
+        // #3984: a test-only commons may use what a suite helper may.
+        input.commons.test_only,
         None,
         input,
         expr_types,
@@ -97,6 +98,9 @@ pub fn check_context_fn(
 #[allow(clippy::too_many_arguments)]
 pub fn check_suite_fn(
     f: &FnDecl,
+    // #3983: the target's capabilities, which a helper's `given` names; `None` where there is no
+    // target to name them (the helper then cannot declare `given`).
+    caps: Option<&HashMap<String, CapabilityInfo>>,
     input: &ResolvedCommons,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
     callees: &mut HashMap<ExprId, Callee>,
@@ -107,16 +111,53 @@ pub fn check_suite_fn(
     requirements: &mut RequirementSink,
     tys: &Types,
 ) {
-    // #2868: a suite helper is no context function, so it cannot declare
-    // `given`; its cases get the target's capabilities instead.
-    if !f.given.is_empty() {
-        errors.extend(given_fn_refusal(f, false));
-        return;
-    }
+    // #2868/#3983: a suite helper may declare `given`, naming the target's capabilities, which a
+    // case's own `deps` carry; a method, or one that returns no `Effect`, is refused as in a
+    // context.
+    let fn_caps = if f.given.is_empty() {
+        None
+    } else {
+        if let Some(why) = given_fn_refusal(f, true) {
+            errors.push(why);
+            return;
+        }
+        // #3983: with no capabilities to name (a `system` suite's), `given` has nothing to
+        // refer to.
+        let Some(declared) = caps.cloned() else {
+            errors.push(
+                CompileError::new(
+                    "bynk.test.helper_given_at_system",
+                    f.given[0].span.merge(f.given[f.given.len() - 1].span),
+                    format!(
+                        "the suite helper `{}` declares `given`, but a `system` case cannot name a capability",
+                        f.name.display()
+                    ),
+                )
+                .with_note("a `system` helper reaches its target through the addresses a system case uses, such as `shop.orders.place(…)`; or move the helper to a suite at `unit` or `integration`"),
+            );
+            return;
+        };
+        let mut capabilities: HashMap<String, CapabilityInfo> = HashMap::new();
+        for cap_ref in &f.given {
+            if let Some(info) = crate::symbols::resolve_given_cap_ref(
+                cap_ref,
+                &declared,
+                &input.cross_context,
+                errors,
+                refs,
+            ) {
+                capabilities.insert(cap_ref.key().to_string(), info);
+            }
+        }
+        Some(FnCaps {
+            capabilities,
+            declared_capabilities: declared,
+        })
+    };
     check_fn_in(
         f,
         true,
-        None,
+        fn_caps,
         input,
         expr_types,
         callees,
@@ -301,6 +342,7 @@ pub(crate) fn check_fn_in(
         effectful,
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps: match fn_caps {
             Some(c) => {
                 let given_entries: Vec<(String, Span)> = f
@@ -330,7 +372,9 @@ pub(crate) fn check_fn_in(
             },
         },
         in_test_body: false,
-        oidc_binder: None,
+        lambda_depth: 0,
+        claims_binder: None,
+        claims_sum_arms: Vec::new(),
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
@@ -339,6 +383,7 @@ pub(crate) fn check_fn_in(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        http_non_get: false,
         in_fn_body: true,
         test_values,
     };
@@ -377,7 +422,12 @@ pub(crate) fn check_fn_in(
     }
     if !f.given.is_empty() {
         let entries = ctx.caps.given_entries.clone();
-        report_unused_given(&mut ctx, &entries, f.return_type.span());
+        report_unused_given(
+            &mut ctx,
+            &entries,
+            f.return_type.span(),
+            f.return_type.span(),
+        );
     }
 }
 
@@ -504,9 +554,12 @@ fn type_static_initialiser(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
-            oidc_binder: None,
+            lambda_depth: 0,
+            claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -515,6 +568,7 @@ fn type_static_initialiser(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };
@@ -718,23 +772,32 @@ pub(crate) fn refuse_experimental_import(name: &Ident, ctx: &mut Ctx) {
 
 /// The deprecated `bynk.list` free functions and the `List` method form each
 /// rewrites to. One table, read by the warning below and by the wasm
-/// `bynk_reference` catalogue so the two cannot drift. `reverse`/`traverse`
-/// have no method form yet and stay.
+/// `bynk_reference` catalogue so the two cannot drift. Since #3962 every
+/// function has a method form.
 pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
+    ("reverse", "xs.reverse()"),
     ("map", "xs.map(f)"),
     ("filter", "xs.filter(p)"),
+    ("find", "xs.find(p)"),
     ("any", "xs.any(p)"),
     ("all", "xs.all(p)"),
-    ("find", "xs.filter(p).first()"),
+    ("traverse", "xs.traverse(f)"),
+    ("sort", "xs.sort()"),
+    ("min", "xs.min()"),
+    ("max", "xs.max()"),
 ];
 
-/// v0.91 (ADR 0116 D6): the `bynk.list` free functions whose method forms
-/// shipped with slice 1 are **deprecated** in favour of the method-chain
-/// vocabulary. `reverse`/`traverse` stay (no method form yet). Emits a
-/// non-failing warning (ADR 0117) with a machine-applicable rewrite to the
-/// method form — `map(xs, f)` → `xs.map(f)`, `find(xs, p)` → `xs.filter(p).first()`.
+/// v0.91 (ADR 0116 D6, completed by #3962): every `bynk.list` free function is
+/// **deprecated** in favour of the method-chain vocabulary. Emits a non-failing
+/// warning (ADR 0117) with a machine-applicable rewrite to the method form —
+/// `map(xs, f)` → `xs.map(f)`, `reverse(xs)` → `xs.reverse()`.
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
-    if ctx.input.imported_from.get(&name.name).map(String::as_str) != Some("bynk.list") {
+    let module = ctx.input.imported_from.get(&name.name).map(String::as_str);
+    // #3961: `bynk.map` and `bynk.set` are deprecated the same way.
+    if matches!(module, Some("bynk.map" | "bynk.set" | "bynk.string")) {
+        return super::collections::warn_deprecated_collection_fn(name, args, call_span, ctx);
+    }
+    if module != Some("bynk.list") {
         return;
     }
     // The method-form spelling each free function rewrites to.
@@ -742,7 +805,7 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
         .iter()
         .find(|(f, _)| *f == name.name.as_str())
     else {
-        return; // reverse / traverse keep their free-function form for now
+        return;
     };
     let mut err = CompileError::new(
         "bynk.list.deprecated_function",
@@ -755,35 +818,35 @@ fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx:
     .with_note(
         "the `bynk.list.*` free functions are superseded by the method-chain vocabulary (ADR 0116); the method form reads left-to-right and chains",
     );
-    // The auto-fix needs the (list, fn) shape — a wrong-arity call is reported
-    // elsewhere; only offer the rewrite when it is well-formed.
-    if args.len() == 2 {
-        let mut edits = vec![
-            // delete `name(` — the receiver becomes the first argument.
+    // The auto-fix needs the (list) or (list, fn) shape — a wrong-arity call is
+    // reported elsewhere; only offer the rewrite when it is well-formed.
+    let keyless = matches!(name.name.as_str(), "reverse" | "sort" | "min" | "max");
+    let edits = match (keyless, args.len()) {
+        // delete `name(` — the receiver becomes the first argument.
+        (true, 1) => Some(vec![
             (
                 Span::new(name.span.start, args[0].span.start),
                 String::new(),
             ),
-            // the `, ` between the two args becomes `.<method>(`.
+            (
+                Span::new(args[0].span.end, call_span.end),
+                format!(".{}()", name.name),
+            ),
+        ]),
+        // the `, ` between the two args becomes `.<method>(`.
+        (false, 2) => Some(vec![
+            (
+                Span::new(name.span.start, args[0].span.start),
+                String::new(),
+            ),
             (
                 Span::new(args[0].span.end, args[1].span.start),
-                format!(
-                    ".{}(",
-                    if name.name == "find" {
-                        "filter"
-                    } else {
-                        &name.name
-                    }
-                ),
+                format!(".{}(", name.name),
             ),
-        ];
-        if name.name == "find" {
-            // `filter(p)` then `.first()` after the closing `)`.
-            edits.push((
-                Span::new(call_span.end, call_span.end),
-                ".first()".to_string(),
-            ));
-        }
+        ]),
+        _ => None,
+    };
+    if let Some(edits) = edits {
         err = err.with_suggestion(
             format!("rewrite to the `List` method form `{method_form}`"),
             edits,
@@ -808,7 +871,7 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
         return;
     }
     if ctx.input.imported_fn_names.contains(&callee.name.display())
-        || given_fn_refusal(callee, ctx.input.is_context).is_some()
+        || given_fn_refusal(callee, ctx.input.is_context || ctx.test_values).is_some()
     {
         return;
     }
@@ -848,9 +911,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
                 .join(", ")
         ),
     )
-    .with_note(if ctx.test_values {
-        // A suite helper is not a context function, so it cannot declare
-        // `given` to pass the capabilities on.
+    .with_note(if ctx.test_values && ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
+        // A suite helper with no `given` of its own has no capabilities to pass on.
         "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
     } else if ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
         // A method, a pure function or a lambda in one cannot declare `given`.
@@ -860,9 +922,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
             "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"
         )
     });
-    if !ctx.test_values
-        && let Some((span, insert)) =
-            given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
+    if let Some((span, insert)) =
+        given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
     {
         err = err.with_suggestion(
             format!("add `{list}` to the `given` clause"),
@@ -1047,7 +1108,9 @@ pub(crate) fn check_call(
     // a silent `None` here admitted any unknown call and emitted it verbatim.
     // Mirror the resolver's ladder. #1708: test bodies were exempt, for the
     // same since-repaired reason as `check_ident`'s twin gate; dropped with it.
-    for a in args {
+    // #3941: `env(NAME, …)` names its variable bare, which is no reference.
+    let env_call = name.name == "env" && owners.is_empty();
+    for a in args.iter().skip(usize::from(env_call)) {
         let _ = type_of(a, None, ctx);
     }
     if owners.len() > 1 {
@@ -1071,6 +1134,12 @@ pub(crate) fn check_call(
                 name.name, name.name, name.name
             ),
         ));
+        return None;
+    }
+    if env_call {
+        // #3941: `env(…)` is a constant's whole initialiser, wherever else it
+        // is written (handler and test bodies never reach the resolver's walk).
+        ctx.errors.push(crate::env_consts::not_initialiser(span));
         return None;
     }
     ctx.errors.push(
@@ -1550,12 +1619,11 @@ fn check_generic_call(
     if !witnesses.is_empty() {
         ctx.last_witness = Some(witnesses);
     }
-    let ret = substitute(ret_pattern, &subst, tys);
     // v0.20b: the return is ground *up to the caller's rigid type
     // parameters* — a generic fn calling another generic fn (bynk.list's
     // `map` calling `reverse`) legitimately instantiates the callee at its
     // own rigid vars, which flow through `compatible` by name-equality.
-    Some(ret)
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, name.span, ctx)
 }
 
 fn check_call_against_fn(
@@ -1652,19 +1720,24 @@ fn check_call_against_fn(
 /// argument is checked twice.
 fn infer_op_type_args(
     op: &CapabilityOpInfo,
+    // #4116: the leading type arguments the call writes; the arguments determine the rest.
+    explicit: HashMap<String, TyId>,
     args: &[Expr],
     ctx: &mut Ctx,
 ) -> (Option<HashMap<String, TyId>>, Vec<Option<TyId>>) {
     let tys = ctx.tys;
-    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut subst: HashMap<String, TyId> = explicit;
     let mut typed = Vec::with_capacity(args.len());
     let mut ok = true;
     for (pattern, arg) in op.params.iter().zip(args) {
-        // Only an argument whose parameter mentions a type parameter takes part
-        // in inference; the others are checked against their own parameter type,
-        // so contextual typing (`None`, `[]`, a literal for a `Float`) still holds.
-        if !contains_var(*pattern, tys) {
-            typed.push(type_of(arg, Some(*pattern), ctx));
+        // Only an argument whose parameter still mentions an unbound type parameter takes
+        // part in inference; the others are checked against their own parameter type, so
+        // contextual typing (`None`, `[]`, a literal for a `Float`) still holds. A written
+        // type argument binds its parameter first (#4116), so `remember[List[Quote]](k, [], ttl)`
+        // types `[]` against `List[Quote]`.
+        let bound = substitute(*pattern, &subst, tys);
+        if !contains_var(bound, tys) {
+            typed.push(type_of(arg, Some(bound), ctx));
             continue;
         }
         let t = type_of(arg, None, ctx);
@@ -1700,7 +1773,7 @@ pub(crate) fn check_arg(arg: &Expr, expected: TyId, what: &str, ctx: &mut Ctx) {
 
 /// 1A.33 (Decision A): which first-party capability the local name `cap` is, seen from
 /// the unit being checked: declared here (this unit is `bynk`) or flattened in from it.
-fn local_first_party(cap: &str, ctx: &Ctx) -> Option<crate::firstparty::FirstPartyCap> {
+pub(crate) fn local_first_party(cap: &str, ctx: &Ctx) -> Option<crate::firstparty::FirstPartyCap> {
     crate::firstparty::resolve(
         cap,
         &ctx.input.commons.name.joined(),
@@ -1725,6 +1798,27 @@ fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
     } else {
         ctx.refs.record(span, SymbolKind::Capability, name);
     }
+}
+
+/// The type of `T.of(value)`: `Result[T, ValidationError]`, except on a named
+/// type with no predicate (#3946), where nothing can fail and it is `T`.
+/// Compile-time literal admission (v0.9.4) happens instead wherever an expected
+/// refined type is known — see `admit_refined_literal`, used by `type_of` — so
+/// `.of`'s type depends on the declaration, never on the form of its argument.
+fn of_result_ty(decl: &Arc<TypeDecl>, base: BaseType, tys: &Types) -> TyId {
+    // #4111: a `Secret` has no predicate to fail, so its `of` returns it directly.
+    if crate::context_checks::is_secret_decl(decl)
+        || bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
+        return named_ty(decl, tys);
+    }
+    let named = named_ty(decl, tys);
+    let err = tys.intern(Ty::ValidationError);
+    tys.intern(Ty::Result(named, err))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1762,6 +1856,8 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
+                type_args: Vec::new(),
             },
         );
         let mut err = CompileError::new(
@@ -1830,6 +1926,8 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
+                type_args: Vec::new(),
             },
         );
         if !ctx.effectful {
@@ -1859,6 +1957,17 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
+        // #4105: the typed Analytics operations, lowered over `query` and `write`.
+        if let Some(typed) = super::analytics::check_typed(
+            &type_name.name,
+            cap.derived_from.as_ref(),
+            method,
+            (type_args, args),
+            (span, expr_id),
+            ctx,
+        ) {
+            return typed;
+        }
         if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
             return d1::check_typed_read(
                 cap.derived_from.as_ref(),
@@ -1932,8 +2041,14 @@ pub(crate) fn check_static_call(
             args,
             ctx,
         );
+        // #4104: `AnalyticsSql.query` names its dataset by an `Analytics` instance and takes literal SQL.
+        let analytics_query = d1::is_analytics_sql_query(&type_name.name, &method.name, ctx)
+            && op.params.len() == args.len();
+        if analytics_query {
+            d1::check_analytics_sql_query("query", args, ctx);
+        }
         if op.params.len() != args.len() {
-            ctx.errors.push(CompileError::new(
+            let mut err = CompileError::new(
                 "bynk.capability.op_arity",
                 span,
                 format!(
@@ -1943,7 +2058,12 @@ pub(crate) fn check_static_call(
                     op.params.len(),
                     args.len()
                 ),
-            ));
+            );
+            // #4104: the old two-argument `query(sql, params)`, the change most programs meet.
+            if d1::is_analytics_sql_query(&type_name.name, &method.name, ctx) {
+                err = err.with_note(d1::ANALYTICS_QUERY_HELP);
+            }
+            ctx.errors.push(err);
             for a in args {
                 let _ = type_of(a, None, ctx);
             }
@@ -1951,24 +2071,30 @@ pub(crate) fn check_static_call(
         }
         let op_clone = op.clone();
         // #926: resolve the op's own type parameter(s) from an explicit
-        // call-site type argument — explicit only, never inferred (mirrors
-        // `Json.decode[T]`, not `#594`'s inference). `check_generic_call`
-        // (this file) is the model; only its arity-check + substitution-build
-        // half applies here, since a capability op has no argument-driven
-        // inference pass.
+        // call-site type argument, or (#4113) from the arguments when they
+        // determine every one.
         let mut subst: HashMap<String, TyId> = HashMap::new();
-        // Slice 3: an operation with `Codable` parameters infers its type
+        // Slice 3, widened by #4113: an operation with type parameters infers its type
         // arguments from the arguments, when they determine every one.
         let mut arg_tys: Option<Vec<Option<TyId>>> = None;
-        if type_args.is_empty() && !op_clone.codable_params.is_empty() {
-            let (inferred, typed) = infer_op_type_args(&op_clone, args, ctx);
+        // #4116: written type arguments bind the leading parameters, and the arguments determine
+        // the rest (`Idempotency.dedup[Quote](key)` names `T`; `K` is the key's type).
+        let partial = type_args.len() < op_clone.type_params.len();
+        if (type_args.is_empty() || partial)
+            && (!op_clone.codable_params.is_empty() || !op_clone.type_params.is_empty())
+        {
+            let mut explicit: HashMap<String, TyId> = HashMap::new();
+            for (tp, ta) in op_clone.type_params.iter().zip(type_args) {
+                explicit.insert(tp.clone(), resolve_expr_type_ref(ta, ctx)?);
+            }
+            let (inferred, typed) = infer_op_type_args(&op_clone, explicit, args, ctx);
             arg_tys = Some(typed);
             if let Some(found) = inferred {
                 subst = found;
             }
         }
         if !op_clone.type_params.is_empty() || !type_args.is_empty() {
-            if type_args.is_empty() && subst.len() < op_clone.type_params.len() {
+            if partial && subst.len() < op_clone.type_params.len() {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.generics.uninferable_type_arg",
@@ -1990,7 +2116,7 @@ pub(crate) fn check_static_call(
                 }
                 return None;
             }
-            if !type_args.is_empty() && type_args.len() != op_clone.type_params.len() {
+            if type_args.len() > op_clone.type_params.len() {
                 ctx.errors.push(CompileError::new(
                     "bynk.generics.type_arg_mismatch",
                     span,
@@ -2007,70 +2133,48 @@ pub(crate) fn check_static_call(
                 }
                 return None;
             }
+            // #4113: an inferred type argument meets the same owner-only check as a written one.
+            if partial {
+                for ty in op_clone
+                    .type_params
+                    .iter()
+                    .skip(type_args.len())
+                    .filter_map(|tp| subst.get(tp))
+                {
+                    super::events_emit::check_emit_owner(
+                        local_first_party(&type_name.name, ctx),
+                        &method.name,
+                        (*ty, span, expr_id),
+                        ctx,
+                    );
+                }
+            }
             for (tp, ta) in op_clone.type_params.iter().zip(type_args) {
                 let ty = resolve_expr_type_ref(ta, ctx)?;
-                // Events track, slice 0 (spine #936): owner-only emission —
-                // `Events.emit[E]` may only name an event `E` declared in
-                // *this* context, even though a `consumes`-visible foreign
-                // event resolves here just as validly for every other
-                // purpose. `is_local_type` already distinguishes "declared
-                // here" from "visible via uses/consumes" (the same table
-                // ADR 0256's locale-types-split gap analysis used), so this
-                // is a check over existing data, not new provenance
-                // plumbing — the primary boundary guarantee the threat
-                // model (the retired events track's §6, `design/archive/retired-tracks.md`) names.
-                //
-                // First-party-gated like every other Events-special-cased
-                // site (mirrors #934's Idempotency precedent): a bare
-                // `type_name.name == "Events"` string match would also fire
-                // for a third-party capability that happens to declare its
-                // own `Events` with an `emit` method — only bynk's own
-                // capability (declared here, in `bynk` itself, or flattened
-                // in via `consumes bynk { Events }`) gets this check.
-                let is_first_party_events = method.name == "emit"
-                    && local_first_party(&type_name.name, ctx)
-                        == Some(crate::firstparty::FirstPartyCap::Events);
-                if is_first_party_events && let Ty::Named { name: ename, .. } = &*tys.get(ty) {
-                    if ctx.input.is_local_event(ename) {
-                        // Locally-declared event — the owner. Fine.
-                    } else if ctx.input.is_local_type(ename) {
-                        // Events track, slice 0: `UnitTable`/`ResolvedCommons`
-                        // record which local names are specifically events
-                        // (as opposed to any other locally-declared type) —
-                        // `Events.emit[SomeLocalRecord]` compiled clean before
-                        // this check existed, silently buffering an emission
-                        // no `from Events(...)` subscriber could ever match
-                        // (`discover_event_subscribers` finds no owner for a
-                        // non-event name and just drops it).
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.event.emit_not_an_event",
-                                ta.span(),
-                                format!(
-                                    "`{ename}` is not a declared `event` — `Events.emit` may only name an event type"
-                                ),
-                            )
-                            .with_note(
-                                "declare it with `event Name = { ... }`, or check that the type argument names the event you meant",
-                            ),
-                        );
-                    } else {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.event.emit_outside_owner",
-                                ta.span(),
-                                format!(
-                                    "`{ename}` is not declared in this context — only the context that declares an event may emit it"
-                                ),
-                            )
-                            .with_note(
-                                "a foreign event is visible via `consumes` for subscription (`from Events(...)`), but only its owning context may `Events.emit` it",
-                            ),
-                        );
-                    }
-                }
+                super::events_emit::check_emit_owner(
+                    local_first_party(&type_name.name, ctx),
+                    &method.name,
+                    (ty, ta.span(), expr_id),
+                    ctx,
+                );
                 subst.insert(tp.clone(), ty);
             }
+        }
+        // #4116: each `Key` type parameter takes a key type, so a `Float` or a `Map` cannot
+        // key an `Idempotency` entry that two distinct keys would then share.
+        if !super::keying::check_declared_key_args(
+            &format!("{}.{}", type_name.name, method.name),
+            span,
+            &op_clone.key_params,
+            &subst,
+            ctx,
+        ) {
+            if arg_tys.is_none() {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            return None;
         }
         // Slice 3: each `Codable` type parameter takes a codable type, and the
         // call records how it encodes the parameters that mention one.
@@ -2103,6 +2207,8 @@ pub(crate) fn check_static_call(
             let param_ty = substitute(*param_ty, &subst, tys);
             let arg_ty = match &arg_tys {
                 Some(cached) => cached[i],
+                // #4104: the instance was checked above and is no value to type.
+                None if analytics_query && i == 0 => Some(param_ty),
                 None => type_of(arg, Some(param_ty), ctx),
             };
             if let Some(actual) = arg_ty
@@ -2201,15 +2307,7 @@ pub(crate) fn check_static_call(
             ));
             return None;
         }
-        // `.of` is always the runtime constructor: it returns
-        // `Result[T, ValidationError]`. Compile-time literal admission (v0.9.4)
-        // happens instead wherever an expected refined type is known — see
-        // `admit_refined_literal`, used by `type_of` — so `.of`'s type never
-        // depends on the form of its argument.
-        return Some(tys.intern(Ty::Result(
-            named_ty(decl, tys),
-            tys.intern(Ty::ValidationError),
-        )));
+        return Some(of_result_ty(decl, base, tys));
     }
 
     // 2b) Built-in `unsafe` constructor on opaque types — only available
@@ -2724,8 +2822,15 @@ pub(crate) fn check_store_log_op(
         }
         // The general query vocabulary over the entry values.
         name if is_query_op(name) => {
-            let r =
-                check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx);
+            let r = check_query_kernel_method(
+                method,
+                QueryOp::from_name(name),
+                args,
+                elem,
+                None,
+                span,
+                ctx,
+            );
             par::reject_store_write_in_closure(method, args, ctx);
             r
         }
@@ -3027,8 +3132,57 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
+/// #4111: a method call on a `Secret` or an `Authorization`, or `None` when the receiver is
+/// neither.
+fn check_secret_call(
+    recv_ty: TyId,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty) else {
+        return None;
+    };
+    let kind = ctx
+        .input
+        .types
+        .get(name)
+        .and_then(|decl| crate::context_checks::secret_kind(decl))?;
+    let kop = SecretOp::from_name(&method.name);
+    let r = check_secret_method(kind, method, kop, args, span, ctx);
+    Some(record_kernel(
+        ctx,
+        expr_id,
+        recv_ty,
+        kop.map(KernelOp::Secret),
+        method,
+        r,
+    ))
+}
+
+/// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
+/// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    span: Span,
+    expected: Option<TyId>,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let r = check_method_call_inner(
+        receiver, method, type_args, args, span, expected, expr_id, ctx,
+    );
+    super::nested_effect::method_result(r, span, ctx)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_method_call_inner(
     receiver: &Expr,
     method: &Ident,
     type_args: &[TypeRef],
@@ -3076,7 +3230,9 @@ pub(crate) fn check_method_call(
     ) {
         return r;
     }
-    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx) {
+    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx)
+        .or_else(|| super::erase::check_erase_call(receiver, method, args, span, expr_id, ctx))
+    {
         return r;
     }
     // v0.25 / v0.178: a test body invokes the target's service as
@@ -3099,6 +3255,12 @@ pub(crate) fn check_method_call(
         }
         return check_test_service_address(&sig, id, method, args, expr_id, ctx);
     }
+    // #3933: `Agent(key).op.outcome(args)`.
+    if let Some(r) =
+        super::call_outcome::check_agent_outcome_call(receiver, method, args, expr_id, ctx)
+    {
+        return r;
+    }
     // v0.6: cross-context service call. Two shapes:
     //   - `Alias.service(args)`           where Alias is from `consumes X as Alias`
     //   - `prefix.tail.service(args)`     where `prefix.tail` is a consumed context's
@@ -3112,18 +3274,19 @@ pub(crate) fn check_method_call(
         if let Some(chain) = flatten_ident_chain(receiver)
             && let Some((consumed, cap)) = ctx.input.cross_context.resolve_cross_capability(&chain)
         {
-            // v0.25: the capability name-segment (`Cap` in `B.Cap` /
-            // `Alias.Cap`) is the outermost field of the receiver chain.
-            if let ExprKind::FieldAccess { field, .. } = &receiver.kind {
-                ctx.refs
-                    .record_in_unit(field.span, SymbolKind::Capability, &cap, &consumed);
-            }
+            record_cross_capability_sites(receiver, &cap, &consumed, ctx);
             return check_cross_context_capability_call(
                 receiver, &consumed, &cap, method, type_args, args, span, expr_id, ctx,
             );
         }
         if let Some(consumed) = cross_context_prefix(receiver, ctx) {
             return check_cross_context_call(receiver, &consumed, method, args, span, expr_id, ctx);
+        }
+        // #3894: `<context>.<service>.outcome(args)`.
+        if let Some(r) =
+            super::call_outcome::check_outcome_call(receiver, method, args, span, expr_id, ctx)
+        {
+            return r;
         }
         // Looks like a dotted prefix (no local binding for the root). If the
         // chain matches the shape of a consumed-context call but the prefix
@@ -3371,9 +3534,29 @@ pub(crate) fn check_method_call(
         _ => None,
     };
     let recv_ty = type_of(receiver, recv_expected, ctx)?;
+    // #4193: a `fold`'s result is its accumulator, so what the call is expected to
+    // produce is what an empty `init` (`Set.empty()`) should take its type from.
+    ctx.fold_init_expected = if method.name == "fold" {
+        expected
+    } else {
+        None
+    };
     if type_args_pending && !receiver_has_generic_instance_method(recv_ty, method, ctx) {
         reject_method_type_args(method, args, span, ctx);
         return None;
+    }
+    // #3955: the universal `compare` on every `Ord` receiver.
+    if method.name == "compare"
+        && let Some(r) = super::ordering::check_compare_method(recv_ty, method, args, span, ctx)
+    {
+        return record_kernel(
+            ctx,
+            expr_id,
+            recv_ty,
+            Some(KernelOp::Ord(crate::kernel_op::OrdOp::Compare)),
+            method,
+            r,
+        );
     }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their
@@ -3389,7 +3572,7 @@ pub(crate) fn check_method_call(
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
             let kop = QueryOp::from_name(&method.name);
-            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            let r = check_query_kernel_method(method, kop, args, *elem, Some(receiver), span, ctx);
             par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
@@ -3487,9 +3670,9 @@ pub(crate) fn check_method_call(
             );
         }
         // #3277: an `HttpResult[T]` — `withCookie`, `clearCookie`, `cookies`.
-        Ty::HttpResult(_) => {
+        Ty::HttpResult(_, _) => {
             let kop = HttpResultOp::from_name(&method.name);
-            let r = check_http_result_method(method, kop, recv_ty, args, span, ctx);
+            let r = check_http_result_method(method, kop, receiver, recv_ty, args, span, ctx);
             return record_kernel(
                 ctx,
                 expr_id,
@@ -3567,7 +3750,10 @@ pub(crate) fn check_method_call(
             // `Effect[T]`, and win over the `Effect[Result]` combinators (they are
             // not among them), so `Effect[Result[T, E]].within(d)` is the plain
             // nested case.
-            if matches!(method.name.as_str(), "within" | "race" | "detach") {
+            if matches!(
+                method.name.as_str(),
+                "within" | "race" | "detach" | "map" | "andThen"
+            ) {
                 let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
                 let r = check_effect_method(method, receiver, args, *inner, span, ctx);
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
@@ -3587,9 +3773,18 @@ pub(crate) fn check_method_call(
         }
         _ => {}
     }
+    // #4111: a `Secret` has only the built-ins `reveal` and `matches`.
+    if let Some(r) = check_secret_call(recv_ty, method, args, span, expr_id, ctx) {
+        return r;
+    }
     // Find a named type for the receiver, then look up its instance methods.
     let type_name = match &*tys.get(recv_ty) {
         Ty::Named { name, .. } => name.clone(),
+        // #3965: an `Effect` has methods, so a missing one is `method_not_found`, listing them.
+        Ty::Effect(_) => {
+            super::effect_more::report_missing_method(method, args, ctx);
+            return None;
+        }
         _ => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_on_non_named_type",
@@ -3746,14 +3941,8 @@ pub(crate) fn check_method_call(
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
         }
-        ctx.errors.push(CompileError::new(
-            "bynk.types.method_not_found",
-            method.span,
-            format!(
-                "type `{}` has no instance method named `{}`",
-                type_name, method.name
-            ),
-        ));
+        ctx.errors
+            .push(expressions::method_not_found_error(&type_name, method, ctx));
         return None;
     };
     // v0.36 (ADR 0069): the method is a first-class index symbol, keyed by the
@@ -4191,7 +4380,7 @@ fn check_generic_method_call(
                 .record(method.span, format!("[{}]", parts.join(", ")));
         }
     }
-    Some(substitute(ret_pattern, &subst, tys))
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, method.span, ctx)
 }
 
 /// v0.178 (#662) / v0.182 (#664): resolve a test-body service invocation against
@@ -4341,7 +4530,7 @@ fn check_test_service_address(
             );
             // `Raw(body, contentType)` or `NotFound`: no handler's `T` is involved.
             let unit = ctx.tys.intern(Ty::Unit);
-            return Some(effect_of(ctx.tys.intern(Ty::HttpResult(unit)), ctx));
+            return Some(effect_of(ctx.tys.intern(Ty::HttpResult(unit, None)), ctx));
         }
         let Some(EK::StrLit(path)) = args.first().map(|a| &a.kind) else {
             ctx.errors.push(
@@ -4438,10 +4627,10 @@ fn check_test_service_address(
         // that declares one fills it with the argument already, so a further
         // one is an ordinary arity error (with a note saying why). The
         // trailing argument is typed once, here, and not again below.
-        let declares_headers = params.iter().any(|p| {
-            p.name.name == "headers"
-                && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
-        });
+        // #3911: a typed `headers` record fills the case's headers as well.
+        let headers_is_path = matches!(&handler.kind, HandlerKind::Http { path, .. }
+            if path.split('/').any(|seg| seg == ":headers"));
+        let declares_headers = !headers_is_path && params.iter().any(|p| p.name.name == "headers");
         let trailing = if positional.len() == params.len() + 1
             && let Some((last, rest)) = positional.split_last()
             && !matches!(last.kind, EK::Wire(_))
@@ -4522,16 +4711,16 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: HandlerAddress::Schedule { expr: None },
+                address: HandlerAddress::schedule_unread(),
                 extra_headers: false,
             },
         );
-        let Some(EK::StrLit(expr)) = args.first().map(|a| &a.kind) else {
+        let Some(expr) = args.first().and_then(|a| schedule_literal_text(a, ctx)) else {
             ctx.errors.push(CompileError::new(
                 "bynk.test.service_bad_address",
                 method.span,
                 format!(
-                    "`{}.schedule` addresses a cron handler, so its first argument must be the schedule string",
+                    "`{}.schedule` addresses a cron handler, so its first argument must be the schedule string, or a `String` or `CronSchedule` constant bound to one",
                     id.name
                 ),
             ));
@@ -4546,14 +4735,14 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: HandlerAddress::schedule(expr),
+                address: HandlerAddress::schedule(&expr),
                 extra_headers: false,
             },
         );
         let matched = sig
             .handlers
             .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if e == expr));
+            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if *e == expr));
         let Some(handler) = matched else {
             ctx.errors.push(CompileError::new(
                 "bynk.test.service_unknown_route",
@@ -4568,40 +4757,15 @@ fn check_test_service_address(
             }
             return None;
         };
-        let params = handler.params.clone();
+        let params = schedule_address_params(handler, &expr, expr_id, &id.name, ctx);
         let _ = type_of(&args[0], None, ctx);
         check_address_args(&id.name, "schedule", &params, &args[1..], method.span, ctx);
         return handler_outcome(handler, ctx);
     }
 
-    // `svc.message(msg)` — the queue message handler.
+    // `svc.message(msg)` / `svc.message(msg, delivery)` — the queue message handler.
     if method.name == "message" {
-        ctx.callees.insert(
-            expr_id,
-            Callee::TestService {
-                service: id.name.clone(),
-                address: HandlerAddress::Message,
-                extra_headers: false,
-            },
-        );
-        let matched = sig
-            .handlers
-            .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Message));
-        let Some(handler) = matched else {
-            ctx.errors.push(CompileError::new(
-                "bynk.test.service_unknown_route",
-                method.span,
-                format!("`{}` declares no `on message(...)` handler", id.name),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        };
-        let params = handler.params.clone();
-        check_address_args(&id.name, "message", &params, args, method.span, ctx);
-        return handler_outcome(handler, ctx);
+        return check_message_address(sig, id, method, args, expr_id, ctx);
     }
 
     // #2052: `svc.event(payload)` / `svc.event(payload, envelope)` — one
@@ -4686,7 +4850,10 @@ fn check_ws_address(
             address: HandlerAddress::Ws(match which {
                 "open" => WsAddress::Open,
                 "message" => WsAddress::Message { frame: None },
-                _ => WsAddress::Close { params: None },
+                _ => WsAddress::Close {
+                    params: None,
+                    info: false,
+                },
             }),
             extra_headers: false,
         },
@@ -4771,31 +4938,70 @@ fn check_ws_address(
                 );
             }
         }
-        _ => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::TestService {
-                    service: service.clone(),
-                    address: HandlerAddress::ws_close(handler.params.len()),
-                    extra_headers: false,
-                },
-            );
-            if !rest.is_empty() {
-                ctx.errors.push(CompileError::new(
-                    "bynk.test.service_call_arity",
-                    method.span,
-                    format!(
-                        "`{service}.close` takes only the connection, but {} argument(s) were given",
-                        args.len()
-                    ),
-                ));
-                for a in rest {
-                    let _ = type_of(a, None, ctx);
-                }
-            }
-        }
+        _ => check_ws_close_call(&handler, &service, method, args, expr_id, ctx),
     }
     handler_outcome(&handler, ctx)
+}
+
+/// #3902: `svc.close(tc)` and `svc.close(tc, info)`. The connection's route values were given at `open`;
+/// `info` is the `CloseInfo` the handler's trailing `close: CloseInfo` parameter receives. A bare
+/// `svc.close(tc)` runs it with a normal, clean closure: `CloseInfo { code: 1000, reason: "", clean: true }`.
+fn check_ws_close_call(
+    handler: &TestHandler,
+    service: &str,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) {
+    let info_param = handler
+        .params
+        .last()
+        .filter(|p| crate::context_checks::is_close_info_param(p, &ctx.input.types));
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: service.to_string(),
+            address: HandlerAddress::ws_close(handler.params.len(), info_param.is_some()),
+            extra_headers: false,
+        },
+    );
+    let rest = &args[1..];
+    if rest.len() > 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_call_arity",
+            method.span,
+            format!(
+                "`{service}.close` takes the connection and optionally the `CloseInfo`, but {} argument(s) were given",
+                args.len()
+            ),
+        ));
+    }
+    let Some(info) = rest.first() else {
+        return;
+    };
+    match info_param.and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, ctx.tys)) {
+        Some(ty) => check_arg(
+            info,
+            ty,
+            &format!("the `CloseInfo` of `{service}.close`"),
+            ctx,
+        ),
+        None => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.service_call_arity",
+                    info.span,
+                    format!("`{service}`'s `on close` takes no `CloseInfo`, so `{service}.close` takes only the connection"),
+                )
+                .with_note("declare `close: CloseInfo` as the handler's last parameter to read the code and reason"),
+            );
+            let _ = type_of(info, None, ctx);
+        }
+    }
+    for extra in rest.iter().skip(1) {
+        let _ = type_of(extra, None, ctx);
+    }
 }
 
 /// #1934: what a case's call to `handler` yields — its declared return type,
@@ -4819,7 +5025,7 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
         _ => outcome,
     };
     let t = match &*tys.get(inner) {
-        Ty::HttpResult(t) => *t,
+        Ty::HttpResult(t, _) => *t,
         _ => return outcome,
     };
     tys.intern(Ty::Effect(tys.intern(Ty::HttpOutcome(t))))
@@ -4831,15 +5037,15 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 /// becomes `Effect[HttpOutcome[T]]`; anything else is unchanged.
 /// #2155: on an actor sum with an open member (`Visitor`), say why the seam
 /// never answers `401`.
+pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`";
+
 fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> CompileError {
     let open = handler
         .by_clause
         .as_ref()
         .is_some_and(|by| by.is_sum() && crate::actors::sum_has_open_member(by, &ctx.test_actors));
     if open {
-        err.with_note(
-            "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`",
-        )
+        err.with_note(OPEN_SUM_NOTE)
     } else {
         err
     }
@@ -4900,7 +5106,10 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
             "tokens with an empty and with a missing `sub`",
             "; only an `Oidc` seam is driven with these tokens",
         ),
-        BadCredential::Forged | BadCredential::Stale | BadCredential::Expired => return None,
+        BadCredential::Forged
+        | BadCredential::Stale
+        | BadCredential::Expired
+        | BadCredential::Revoked => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -4909,29 +5118,36 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
     })
 }
 
-/// #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
-/// only an `Oidc` actor's handler reads them.
+/// #2380 (L5), #3937: a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
+/// only an `Oidc` or `Bearer` actor's handler reads them (a refinement reads its base's).
 fn check_principal_claims(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
     let tys = ctx.tys;
     if let Some(claims) = &p.claims {
         let want = tys.intern(Ty::TokenClaims);
         check_arg(claims, want, "the principal's claims", ctx);
-        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
-            decl.auth
-                .as_ref()
-                .is_some_and(|a| a.name.as_str() == "Oidc")
-        });
-        if !oidc {
+        let reads_claims = |name: &str| {
+            ctx.test_actors.get(name).is_some_and(|decl| {
+                decl.auth
+                    .as_ref()
+                    .is_some_and(|a| matches!(a.name.as_str(), "Oidc" | "Bearer"))
+            })
+        };
+        let base = ctx
+            .test_actors
+            .get(&p.actor.name)
+            .and_then(|d| d.refinement.as_ref())
+            .map(|r| r.base.name.clone());
+        if !reads_claims(&p.actor.name) && !base.as_deref().is_some_and(reads_claims) {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.test.principal_claims_not_oidc",
                     claims.span,
                     format!(
-                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
+                        "`{}` isn't an `Oidc` or `Bearer` actor, so its handlers read no token claims",
                         p.actor.name
                     ),
                 )
-                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
+                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` or `Bearer` actor"),
             );
         }
     }
@@ -4965,6 +5181,10 @@ fn resolve_actor_identity(name: &str, ctx: &Ctx) -> ActorIdentity {
     let tys = ctx.tys;
     use crate::actors::{Identity, prelude_actor};
     if let Some(decl) = ctx.test_actors.get(name) {
+        // #3890: a refinement over the prelude `Caller` carries a `CallerId`.
+        if crate::actors::caller_refinement(decl, &ctx.test_actors).is_some() {
+            return ActorIdentity::CallerString;
+        }
         // #2019: a refinement (`actor Admin = User where …`) narrows its base by
         // a claim and inherits the base's identity: the Worker's Bearer seam
         // follows the refinement to its base and mints the base identity
@@ -5024,12 +5244,131 @@ fn is_asset_value(e: &Expr, ctx: &Ctx) -> bool {
     }
 }
 
+/// `svc.message(msg)` / `svc.message(msg, delivery)` (#3880): the queue consumer's address.
+/// A handler's `QueueDelivery` parameter is filled by the address, from its optional second
+/// argument, so the message is the address's first parameter.
+fn check_message_address(
+    sig: &TestServiceSig,
+    id: &Ident,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: bynk_syntax::ast::ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let matched = sig
+        .handlers
+        .iter()
+        .find(|h| matches!(&h.kind, HandlerKind::Message));
+    // #3880: a handler's `QueueDelivery` parameter is filled by the address, from its
+    // optional second argument, so the message is the address's first parameter.
+    let delivery = matched.and_then(|h| {
+        h.params
+            .iter()
+            .position(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    });
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: id.name.clone(),
+            address: HandlerAddress::Message { delivery },
+            extra_headers: false,
+        },
+    );
+    let Some(handler) = matched else {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_unknown_route",
+            method.span,
+            format!("`{}` declares no `on message(...)` handler", id.name),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let mut params: Vec<bynk_syntax::ast::Param> = handler
+        .params
+        .iter()
+        .filter(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+        .cloned()
+        .collect();
+    if let Some(at) = delivery {
+        // The optional delivery follows the message.
+        if args.len() > 1 {
+            params.push(handler.params[at].clone());
+        }
+    }
+    check_address_args(&id.name, "message", &params, args, method.span, ctx);
+    handler_outcome(handler, ctx)
+}
+
+/// #3874: a cron handler's `CronSchedule` parameter is filled from the address's
+/// own schedule (its first argument), so it is not an argument of the address. Records
+/// the address with that parameter's position (for the emitter to fill) and returns the
+/// handler's parameters the address's remaining arguments are checked against.
+fn schedule_address_params(
+    handler: &TestHandler,
+    expr: &str,
+    expr_id: bynk_syntax::ast::ExprId,
+    service: &str,
+    ctx: &mut Ctx,
+) -> Vec<bynk_syntax::ast::Param> {
+    use bynk_syntax::cron::{CronParam, cron_param};
+    let schedule_param = handler
+        .params
+        .iter()
+        .position(|p| cron_param(&p.type_ref) == Some(CronParam::Schedule));
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: service.to_string(),
+            address: HandlerAddress::schedule_with_param(expr, schedule_param),
+            extra_headers: false,
+        },
+    );
+    handler
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| Some(*i) != schedule_param)
+        .map(|(_, p)| p.clone())
+        .collect()
+}
+
+/// #3875 [DECISION C]: the schedule a `svc.schedule(…)` address names: a string
+/// literal, or a bare reference to a constant declared `String` or exactly
+/// `CronSchedule` that, following constant-to-constant references, is bound to a
+/// literal. The address is then matched to its handler by the resolved text, so
+/// a test that names the constant follows a schedule change. `None` for
+/// anything else (a local shadows a constant of the same name).
+fn schedule_literal_text(e: &Expr, ctx: &Ctx) -> Option<String> {
+    use bynk_syntax::ast::ExprKind as EK;
+    match &e.kind {
+        EK::StrLit(s) => Some(s.clone()),
+        EK::Ident(id) if ctx.lookup(id.name.as_str()).is_none() => {
+            let start = ctx.input.consts.get(id.name.as_str())?;
+            let lit = crate::consts::chain_literal_with(
+                start,
+                BaseType::String,
+                crate::consts::is_schedule_type,
+                ctx.input.consts.len(),
+                |n| ctx.input.consts.get(n),
+            )?;
+            match &lit.kind {
+                EK::StrLit(s) => Some(s.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 /// v0.182 (#664): resolve the handler a test-body address invocation targets,
 /// without side effects. Shared by the argument check and the principal check.
 fn resolve_test_address<'a>(
     sig: &'a TestServiceSig,
     method: &str,
     args: &[Expr],
+    ctx: &Ctx,
 ) -> Option<&'a TestHandler> {
     use bynk_syntax::ast::{ExprKind as EK, HandlerKind, HttpMethod};
     if method == "call" {
@@ -5044,13 +5383,11 @@ fn resolve_test_address<'a>(
         });
     }
     if method == "schedule" {
-        let EK::StrLit(expr) = &args.first()?.kind else {
-            return None;
-        };
+        let expr = schedule_literal_text(args.first()?, ctx)?;
         return sig
             .handlers
             .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if e == expr));
+            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if *e == expr));
     }
     if method == "message" {
         return sig
@@ -5137,7 +5474,7 @@ pub(crate) fn check_effect_let_principal(
         }
         return;
     }
-    let Some(handler) = resolve_test_address(&sig, &method.name, args).cloned() else {
+    let Some(handler) = resolve_test_address(&sig, &method.name, args, ctx).cloned() else {
         if let Some(p) = principal
             && args.first().is_some_and(|a| is_asset_value(a, ctx))
         {
@@ -5246,6 +5583,9 @@ pub(crate) fn check_effect_let_principal(
     {
         let name = p.actor.name.as_str();
         let by = handler.by_clause.as_ref();
+        if by.is_some_and(|by| by.is_sum() && super::sum_bad_principal::check(p, bad, by, ctx)) {
+            return;
+        }
         let sig_seam =
             by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
         let bearer =
@@ -5265,6 +5605,15 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Expired, _) => {}
+            (BadCredential::Revoked, _)
+                if !by.is_some_and(|by| {
+                    crate::actors::by_clause_has_sessions(by, &ctx.test_actors)
+                }) =>
+            {
+                let err = super::session_calls::revoked_needs_sessions(p.span);
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            (BadCredential::Revoked, _) => {}
             (n, _) if !oidc && oidc_only_principal(n).is_some() => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
@@ -5325,6 +5674,10 @@ pub(crate) fn check_effect_let_principal(
             let _ = type_of(idv, None, ctx);
         }
         return;
+    }
+
+    if let Some(p) = principal {
+        check_principal_admitted(&handler, p, ctx);
     }
 
     // #2020: a sum (`by who: User | Visitor`) runs as whichever member
@@ -5537,9 +5890,57 @@ fn handler_binds_caller(handler: &TestHandler, ctx: &Ctx) -> bool {
     let name = &by.primary().name;
     matches!(handler.kind, bynk_syntax::ast::HandlerKind::Call)
         && !by.is_sum()
-        && !ctx.test_actors.contains_key(name)
-        && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+        && (!ctx.test_actors.contains_key(name)
+            && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+            // #3890: a refinement over `Caller` binds the same `CallerId`.
+            || ctx.test_actors.get(name).is_some_and(|d| {
+                crate::actors::caller_refinement(d, &ctx.test_actors).is_some()
+            }))
         && !handler.params.iter().any(|p| p.name.name == binder.name)
+}
+
+/// #3890: a call-site `by <Actor>("<context>")` names a calling context. When the
+/// handler's actor, or the named one, is a refinement over `Caller` whose
+/// predicate refuses that context, the case could never be admitted:
+/// `bynk.actor.caller_not_admitted`, as at a call site in the program.
+fn check_principal_admitted(
+    handler: &TestHandler,
+    p: &bynk_syntax::ast::CallSiteActor,
+    ctx: &mut Ctx,
+) {
+    let Some(idv) = &p.identity else {
+        return;
+    };
+    let ExprKind::StrLit(context) = &idv.kind else {
+        return;
+    };
+    let mut names = vec![p.actor.name.clone()];
+    if let Some(by) = handler.by_clause.as_ref().filter(|by| !by.is_sum()) {
+        names.push(by.primary().name.clone());
+    }
+    names.dedup();
+    for name in names {
+        let Some(pred) = ctx
+            .test_actors
+            .get(&name)
+            .and_then(|d| crate::actors::caller_refinement(d, &ctx.test_actors))
+        else {
+            continue;
+        };
+        if !pred.admits(context) {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.actor.caller_not_admitted",
+                    idv.span,
+                    format!("`{name}` does not admit calls from `{context}`"),
+                )
+                .with_note(format!(
+                    "the actor is `Caller` refined by `IsContext(…)`, which names the contexts that may call; this case names `{context}`"
+                )),
+            );
+            return;
+        }
+    }
 }
 
 /// Resolve a call-site principal actor for its own diagnostics (v0.182).
@@ -5564,7 +5965,14 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
             let CallSitePrincipal::BadCredential(bad) = kind else {
                 unreachable!("matched above")
             };
-            let err = if bad == BadCredential::Expired {
+            let err = if bad == BadCredential::Revoked {
+                CompileError::new(
+                    "bynk.test.revoked_needs_sessions_route",
+                    p.span,
+                    "`by Revoked` sends a cookie for a revoked session, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true`",
+                )
+                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`")
+            } else if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
@@ -5951,7 +6359,7 @@ fn check_event_address(
 /// dotted qualified name appearing in `consumes`), return the consumed
 /// context's qualified name. Otherwise None. Local bindings, types, and
 /// capabilities take precedence — those are checked at the call site.
-fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
+pub(super) fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
     let info = &ctx.input.cross_context;
     if info.consumed_contexts.is_empty() && info.aliases.is_empty() {
         return None;
@@ -5976,6 +6384,32 @@ fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
     info.resolve_prefix(candidate.as_str())
 }
 
+/// The sites of a qualified cross-context capability receiver (`B.Cap` / `Alias.Cap` /
+/// `ops.billing.Cap`): v0.25, the capability name-segment is the outermost field of the
+/// receiver chain; #4183, what precedes it is the consumed context's name.
+fn record_cross_capability_sites(receiver: &Expr, cap: &str, consumed: &str, ctx: &mut Ctx) {
+    if let ExprKind::FieldAccess {
+        receiver: prefix,
+        field,
+    } = &receiver.kind
+    {
+        ctx.refs
+            .record_in_unit(field.span, SymbolKind::Capability, cap, consumed);
+        record_unit_prefix(prefix, consumed, ctx);
+    }
+}
+
+/// #4183: a cross-context call whose prefix is the consumed context's full dotted name
+/// (`ops.billing.refunds(…)`) is a reference to that unit, so renaming the unit rewrites it.
+/// A prefix written as an alias (`consumes ops.billing as B`, `B.refunds(…)`) is the unit's own
+/// spelling for it, not the name, and is left alone.
+fn record_unit_prefix(prefix: &Expr, consumed: &str, ctx: &mut Ctx) {
+    if flatten_ident_chain(prefix).as_deref() == Some(consumed) {
+        ctx.refs
+            .record_in_unit(prefix.span, SymbolKind::Unit, consumed, consumed);
+    }
+}
+
 /// Flatten an `Ident`/`FieldAccess` chain into its dotted name, or None if
 /// any segment isn't a bare identifier.
 fn flatten_ident_chain(expr: &Expr) -> Option<String> {
@@ -5987,6 +6421,81 @@ fn flatten_ident_chain(expr: &Expr) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// A qualified capability call's type arguments, and the `(argument index, type)` pairs typed
+/// while inferring them.
+type CrossTypeArgs = (HashMap<String, TyId>, Vec<(usize, TyId)>);
+
+/// A qualified capability call's type arguments: the written ones bind the operation's leading
+/// type parameters; a left-out one is the type of the argument whose parameter is exactly that
+/// parameter (`key: K`), typed here once (#4116). `None` after reporting a mismatch, or a
+/// parameter no argument determines. The second result is the `(argument index, type)` pairs
+/// already typed, which the argument check skips.
+fn cross_context_type_args(
+    op: &crate::resolver::CrossContextCapabilityOp,
+    (consumed, cap, method): (&str, &str, &Ident),
+    type_args: &[TypeRef],
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<CrossTypeArgs> {
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut inferred_args: Vec<(usize, TyId)> = Vec::new();
+    if !op.type_params.is_empty() || !type_args.is_empty() {
+        if type_args.len() > op.type_params.len() {
+            ctx.errors.push(CompileError::new(
+                "bynk.generics.type_arg_mismatch",
+                method.span,
+                format!(
+                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
+                    method.name,
+                    op.type_params.len(),
+                    type_args.len()
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        for (tp, ta) in op.type_params.iter().zip(type_args) {
+            let ty = resolve_expr_type_ref(ta, ctx)?;
+            subst.insert(tp.clone(), ty);
+        }
+        // #4116: a type parameter the call leaves out is the type of the argument whose parameter
+        // is exactly that parameter (`key: K`); one no argument names is not inferable here.
+        for tp in op.type_params.iter().skip(type_args.len()) {
+            let named_by = op
+                .params
+                .iter()
+                .position(|(_, tr)| matches!(tr, TypeRef::Named(id) if id.name == *tp));
+            let Some(arg) = named_by.and_then(|i| args.get(i)) else {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.generics.uninferable_type_arg",
+                        method.span,
+                        format!(
+                            "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
+                            method.name
+                        ),
+                    )
+                    .with_note(format!(
+                        "give it explicitly: `{consumed}.{cap}.{}[T](…)`",
+                        method.name
+                    )),
+                );
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            };
+            let arg_ty = type_of(arg, None, ctx)?;
+            subst.insert(tp.clone(), arg_ty);
+            // Typed once: its parameter is now exactly this type, so it is not checked again.
+            inferred_args.push((named_by.unwrap_or_default(), arg_ty));
+        }
+    }
+    Some((subst, inferred_args))
 }
 
 /// Type-check a cross-context service call (v0.6 §4.2). `receiver` carries
@@ -6130,48 +6639,20 @@ fn check_cross_context_capability_call(
     // params/return vs. call-site type args in the local-capability path,
     // `check_static_call`). Explicit only, never inferred.
     let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-    let mut subst: HashMap<String, TyId> = HashMap::new();
-    if !op.type_params.is_empty() || !type_args.is_empty() {
-        if type_args.is_empty() {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.generics.uninferable_type_arg",
-                    method.span,
-                    format!(
-                        "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
-                        method.name
-                    ),
-                )
-                .with_note(format!(
-                    "a qualified cross-context call takes its type arguments explicitly: `{consumed}.{cap}.{}[T](…)`",
-                    method.name
-                )),
-            );
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
+    let (subst, inferred_args) =
+        cross_context_type_args(&op, (consumed, cap, method), type_args, args, ctx)?;
+    // #4116: each `Key` type parameter takes a key type (see the local path).
+    if !super::keying::check_declared_key_args(
+        &format!("{consumed}.{cap}.{}", method.name),
+        method.span,
+        &op.key_params,
+        &subst,
+        ctx,
+    ) {
+        for a in args {
+            let _ = type_of(a, None, ctx);
         }
-        if type_args.len() != op.type_params.len() {
-            ctx.errors.push(CompileError::new(
-                "bynk.generics.type_arg_mismatch",
-                method.span,
-                format!(
-                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
-                    method.name,
-                    op.type_params.len(),
-                    type_args.len()
-                ),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        }
-        for (tp, ta) in op.type_params.iter().zip(type_args) {
-            let ty = resolve_expr_type_ref(ta, ctx)?;
-            subst.insert(tp.clone(), ty);
-        }
+        return None;
     }
     // Slice 3: each `Codable` type parameter takes a codable type, and the call
     // records how it encodes the parameters that mention one.
@@ -6240,8 +6721,12 @@ fn check_cross_context_capability_call(
             .unwrap_or(tys.intern(Ty::Unit));
         let param_ty = substitute(param_ty, &subst, tys);
         // #2025: against the parameter's type; see `type_cross_context_arg`.
-        let (arg_ty, crosses) =
-            type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx);
+        let (arg_ty, crosses) = match inferred_args.iter().find(|(at, _)| *at == i) {
+            Some(&(_, ty)) => (Some(ty), true),
+            None => {
+                type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx)
+            }
+        };
         let Some(arg_ty) = arg_ty else {
             all_ok = false;
             continue;
@@ -6614,7 +7099,7 @@ fn check_signature_owners_consumed(
     refused
 }
 
-fn check_cross_context_call(
+pub(super) fn check_cross_context_call(
     receiver: &Expr,
     consumed: &str,
     method: &Ident,
@@ -6632,6 +7117,7 @@ fn check_cross_context_call(
             service: method.name.clone(),
         },
     );
+    record_unit_prefix(receiver, consumed, ctx);
     // The consuming context must be effectful at this call site (services
     // and agent handlers are; pure free fns are not).
     if !ctx.effectful {
@@ -6870,6 +7356,17 @@ fn record_capability_wire(
     untyped: Option<&[Expr]>,
     ctx: &mut Ctx,
 ) -> bool {
+    // #4382: written and inferred alike, in declaration order, whether or not the operation
+    // has a `Codable` parameter: a test build keys a `stub` and an observation on the leading
+    // ones.
+    let resolved: Vec<TyId> = op
+        .type_params
+        .iter()
+        .filter_map(|tp| subst.get(tp).copied())
+        .collect();
+    if let Some(Callee::Capability { type_args, .. }) = ctx.callees.get_mut(&expr_id) {
+        type_args.clone_from(&resolved);
+    }
     let Some(wire) = op_encoding(
         &op.type_params,
         &op.codable_params,
@@ -6898,6 +7395,8 @@ fn record_capability_wire(
             op: name.to_string(),
             wire: Some(wire),
             first_party: local_first_party(cap, ctx),
+            event: None,
+            type_args: resolved,
         },
     );
     true
@@ -7198,6 +7697,20 @@ mod tests {
         a.assert_reports("bynk.generics.uninferable_type_arg");
     }
 
+    /// #3941: `env(…)` in a handler body (which the resolver's walk never
+    /// reaches) is the same refusal as in a function body, reported once, with
+    /// no unknown-function or unknown-name echo.
+    #[test]
+    fn env_in_a_handler_body_is_not_an_initialiser() {
+        let a = context(
+            "service api from http {\n\ton GET(\"/x\") () -> Effect[HttpResult[String]] by Visitor {\n\t\tOk(env(APP_ORIGIN, \"x\"))\n\t}\n}\n",
+        );
+        a.assert_reports("bynk.env.not_initialiser");
+        let cats = a.categories();
+        assert!(!cats.contains(&"bynk.resolve.unknown_function"), "{cats:?}");
+        assert!(!cats.contains(&"bynk.resolve.unknown_name"), "{cats:?}");
+    }
+
     #[test]
     fn calling_an_undeclared_name_is_an_unknown_function() {
         let a = commons("fn bad() -> Int { nope(1) }\n");
@@ -7213,7 +7726,7 @@ mod tests {
     #[test]
     fn a_capability_op_call_has_the_op_s_return_type() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    Clock.now()\n  }}\n}}\n"
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    Clock.now()\n  }}\n}}\n"
         ));
         a.assert_clean();
         assert_eq!(a.type_at("demo.bynk", "Clock.now()"), "Effect[Int]");
@@ -7222,7 +7735,7 @@ mod tests {
     #[test]
     fn a_capability_op_called_with_an_extra_argument_is_an_arity_error() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    Clock.now(1)\n  }}\n}}\n"
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    Clock.now(1)\n  }}\n}}\n"
         ));
         a.assert_reports("bynk.capability.op_arity");
     }
@@ -7230,7 +7743,7 @@ mod tests {
     #[test]
     fn a_capability_called_inside_a_pure_lambda_is_rejected() {
         let a = context(&format!(
-            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] given Clock {{\n    \
+            "{CLOCK}\nservice probe {{\n  on call() -> Effect[Int] by Caller given Clock {{\n    \
              let f: (Int) -> Int = (n) => Clock.now()\n    Effect.pure(1)\n  }}\n}}\n"
         ));
         a.assert_reports("bynk.effect.capability_in_pure_context");
@@ -7284,8 +7797,8 @@ mod tests {
                         capability Store {\n  fn get() -> Effect[Box]\n  fn put(b: Box) -> Effect[Int]\n}\n\n\
                         provides Store = Shelf {\n  fn get() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n\n  \
                         fn put(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n\n\
-                        service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n\n\
-                        service take {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n";
+                        service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n\n\
+                        service take {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n";
 
     /// A `till` context consuming `shop`, declaring `decls`, with `body` as
     /// a service handler's body (given `shop.Store` when it calls it).
@@ -7297,7 +7810,7 @@ mod tests {
         };
         format!(
             "context till\n\nconsumes shop\n\n{decls}service total {{\n  \
-             on call() -> Effect[Int]{given} {{\n{body}\n  }}\n}}\n"
+             on call() -> Effect[Int] by Caller{given} {{\n{body}\n  }}\n}}\n"
         )
     }
 
@@ -7307,7 +7820,7 @@ mod tests {
     fn label_provider(max: u32) -> String {
         format!(
             "context shop\n\ntype Label = String where MaxLength({max})\n\n\
-             service label {{\n  on call() -> Effect[Result[Label, Int]] {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
+             service label {{\n  on call() -> Effect[Result[Label, Int]] by Caller {{\n    Effect.pure(Ok(\"a\"))\n  }}\n}}\n"
         )
     }
 
@@ -7349,14 +7862,14 @@ mod tests {
     fn opaque_provider(max: u32) -> String {
         format!(
             "context shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
-             service check {{\n  on call(t: Tag) -> Effect[Int] {{\n    Effect.pure(0)\n  }}\n}}\n"
+             service check {{\n  on call(t: Tag) -> Effect[Int] by Caller {{\n    Effect.pure(0)\n  }}\n}}\n"
         )
     }
 
     fn opaque_till(max: u32) -> String {
         format!(
             "context till\n\nconsumes shop\n\ntype Tag = opaque String where MaxLength({max})\n\n\
-             service total {{\n  on call(t: Tag) -> Effect[Int] {{\n    shop.check(t)\n  }}\n}}\n"
+             service total {{\n  on call(t: Tag) -> Effect[Int] by Caller {{\n    shop.check(t)\n  }}\n}}\n"
         )
     }
 
@@ -7381,12 +7894,12 @@ mod tests {
     #[test]
     fn equivalent_refinements_of_one_name_do_not_make_it_ambiguous() {
         let owner = "context shop\n\ntype Label = Int where Positive\n\n\
-                     service make {\n  on call() -> Effect[Result[Label, Int]] {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
-                     service take {\n  on call(l: Label) -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+                     service make {\n  on call() -> Effect[Result[Label, Int]] by Caller {\n    Effect.pure(Ok(1))\n  }\n}\n\n\
+                     service take {\n  on call(l: Label) -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
         let other = "context other\n\ntype Label = Int where Positive && NonNegative\n\n\
-                     service peek {\n  on call() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n";
+                     service peek {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(0)\n  }\n}\n";
         let till = "context till\n\nconsumes shop\n\nconsumes other\n\n\
-                    service total {\n  on call() -> Effect[Int] {\n    \
+                    service total {\n  on call() -> Effect[Int] by Caller {\n    \
                     let r <- shop.make()\n    match r {\n      Ok(l) => shop.take(l)\n      Err(_) => Effect.pure(0)\n    }\n  }\n}\n";
         analyse(&[
             ("shop.bynk", owner),
@@ -7469,14 +7982,14 @@ mod tests {
     #[test]
     fn an_ambiguous_unexported_name_explains_its_rejection() {
         let other = "context depot\n\ntype Box = { label: String }\n\n\
-                     service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { label: \"x\" })\n  }\n}\n";
+                     service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { label: \"x\" })\n  }\n}\n";
         let a = analyse(&[
             ("shop.bynk", SHOP),
             ("depot.bynk", other),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    shop.take(b)\n  }\n}\n",
             ),
         ]);
@@ -7510,11 +8023,11 @@ mod tests {
         };
         let shop = pair(
             "shop",
-            "service quote {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
+            "service quote {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
         );
         let depot = pair(
             "depot",
-            "service store {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n",
+            "service store {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n",
         );
         let a = analyse(&[
             ("shop.bynk", &shop),
@@ -7524,7 +8037,7 @@ mod tests {
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
                  type Amount = { dollars: Int }\n\n\
                  fn mine() -> Amount {\n  Amount { dollars: 1 }\n}\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
@@ -7537,14 +8050,14 @@ mod tests {
     fn caller_box_differs_inside(ret: &str, value: &str) {
         let shop = format!(
             "context shop\n\ntype Box = {{ a: Int }}\n\n\
-             service quote {{\n  on call() -> Effect[{ret}] {{\n    Effect.pure({value})\n  }}\n}}\n"
+             service quote {{\n  on call() -> Effect[{ret}] by Caller {{\n    Effect.pure({value})\n  }}\n}}\n"
         );
         let a = analyse(&[
             ("shop.bynk", &shop),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\ntype Box = { label: String }\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
@@ -7587,20 +8100,20 @@ mod tests {
             (
                 "shop.bynk",
                 "context shop\n\ntype Amount = { cents: Int }\n\ntype Box = { a: Amount }\n\n\
-                 service quote {\n  on call() -> Effect[Box] {\n    \
+                 service quote {\n  on call() -> Effect[Box] by Caller {\n    \
                  Effect.pure(Box { a: Amount { cents: 1 } })\n  }\n}\n",
             ),
             (
                 "depot.bynk",
                 "context depot\n\ntype Coins = { cents: Int }\n\ntype Box = { a: Coins }\n\n\
-                 service store {\n  on call(b: Box) -> Effect[Int] {\n    Effect.pure(b.a.cents)\n  }\n}\n",
+                 service store {\n  on call(b: Box) -> Effect[Int] by Caller {\n    Effect.pure(b.a.cents)\n  }\n}\n",
             ),
             (
                 "till.bynk",
                 "context till\n\nconsumes shop\n\nconsumes depot\n\n\
                  type Amount = { dollars: Int }\n\n\
                  fn mine() -> Amount {\n  Amount { dollars: 1 }\n}\n\n\
-                 service total {\n  on call() -> Effect[Int] {\n    \
+                 service total {\n  on call() -> Effect[Int] by Caller {\n    \
                  let b <- shop.quote()\n    depot.store(b)\n  }\n}\n",
             ),
         ]);

@@ -2,11 +2,15 @@
 name = "shop-orders"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 
 [[d1_databases]]
 binding = "D1_ORDERS"
 database_name = "shop-orders-orders"
 database_id = "<D1_ORDERS_ID>" # set at deploy time
 migrations_dir = "migrations/shop-orders-orders"
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
 

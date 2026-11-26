@@ -49,7 +49,10 @@ pub fn compute_is_uses_commons_type(
     types: &HashMap<String, Arc<TypeDecl>>,
     name: &str,
 ) -> bool {
-    matches!(imported_from_kind.get(name), Some(UnitKind::Commons)) && types.contains_key(name)
+    // #4231: the prelude `Ordering` is shared by every context as it is, not
+    // rebranded per context, so it is constructible anywhere.
+    matches!(imported_from_kind.get(name), Some(UnitKind::Commons))
+        && types.get(name).is_some_and(|t| !is_prelude_type(t))
 }
 
 #[cfg(test)]
@@ -63,6 +66,7 @@ mod compute_is_uses_commons_type_tests {
 
     fn bare_record_type(name: &str) -> Arc<TypeDecl> {
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),
@@ -110,6 +114,55 @@ mod compute_is_uses_commons_type_tests {
         assert!(
             !compute_is_uses_commons_type(&kinds, &types, "Local"),
             "absent from imported_from_kind entirely — a local declaration"
+        );
+    }
+
+    /// #4231: the prelude `Ordering` (declared by `bynk.ordering`) is not rebranded,
+    /// but a lookalike of the same name and variants declared in a user's file is.
+    #[test]
+    fn the_prelude_ordering_is_exempt_and_a_lookalike_is_not() {
+        use bynk_syntax::ast::{SumBody, Variant};
+        let sum = |file| {
+            let variant = |n: &str| Variant {
+                annotations: Vec::new(),
+                name: Ident {
+                    name: n.to_string(),
+                    span: Span::default(),
+                },
+                payload: Vec::new(),
+                documentation: None,
+                span: Span::default(),
+                trivia: Trivia::default(),
+            };
+            let mut decl = (*bare_record_type("Ordering")).clone();
+            decl.body = TypeBody::Sum(SumBody {
+                variants: ["Less", "Equal", "Greater"].map(variant).to_vec(),
+                trailing_comments: Default::default(),
+                span: Span::default(),
+                embeds: Vec::new(),
+            });
+            decl.span = Span::new_in(file, 0, 0);
+            Arc::new(decl)
+        };
+        let unit = crate::firstparty::UNITS
+            .iter()
+            .find(|u| u.name == bynk_std::ORDERING_UNIT)
+            .expect("bynk.ordering is registered");
+        let mut kinds = HashMap::new();
+        kinds.insert("Ordering".to_string(), UnitKind::Commons);
+        let mut types = HashMap::new();
+        types.insert(
+            "Ordering".to_string(),
+            sum(crate::project_model::firstparty_file_id(unit)),
+        );
+        assert!(
+            !compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "the first-party Ordering is shared by every context as it is"
+        );
+        types.insert("Ordering".to_string(), sum(bynk_syntax::span::FileId(0)));
+        assert!(
+            compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "a user's own Ordering with the same variants is rebranded like any commons type"
         );
     }
 }
@@ -349,6 +402,8 @@ pub struct CrossContextCapabilityOp {
     pub return_type: TypeRef,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #4116: the op's type parameters declared `Key`.
+    pub key_params: Vec<String>,
     /// #3458: what an undecodable reply means for a typed read, as declared.
     pub reply_policy: crate::checker::codable::ReplyPolicy,
 }
@@ -586,10 +641,63 @@ pub struct ShadowedImport {
     pub local: &'static str,
     /// The local declaration's name.
     pub local_span: Span,
+    /// #4045: for a name two used commons both declare (`imported` is
+    /// `"ambiguous"`), the qualified spelling of each, which the diagnostic lists.
+    pub ambiguous: Vec<crate::uses_view::AmbiguousProvider>,
+}
+
+/// #4045: `bynk.uses.ambiguous_name` for a bare reference to `name`, which
+/// more than one used commons declares.
+fn ambiguous_name_error(
+    name: &str,
+    span: Span,
+    providers: &[crate::uses_view::AmbiguousProvider],
+) -> CompileError {
+    let listed = providers
+        .iter()
+        .map(|p| format!("`{}`", p.form))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    let mut err = CompileError::new(
+        "bynk.uses.ambiguous_name",
+        span,
+        format!("`{name}` is declared by more than one used commons: write {listed}"),
+    )
+    .with_note(format!(
+        "alias one commons (`uses lib.y as Y`, then `Y.{name}`), or select the one you mean (`uses lib.y {{ {name} }}`)"
+    ));
+    // A fix edits the clause that brings the whole commons in, so it only offers
+    // itself where that clause is in the file the reference is in. Selecting the
+    // name from one commons outranks the rest, whatever their number; aliasing one
+    // commons settles it only when exactly two declare the name.
+    for p in providers {
+        let Some(at) = p.clause_end.filter(|at| at.file == span.file) else {
+            continue;
+        };
+        if providers.len() == 2 {
+            err = err.with_suggestion(
+                format!("alias `{}` as `{}`", p.target, p.alias),
+                vec![(at, format!(" as {}", p.alias))],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        err = err.with_suggestion(
+            format!(
+                "select `{name}` from `{}` (only the names you list stay in scope)",
+                p.target
+            ),
+            vec![(at, format!(" {{ {} }}", p.name))],
+            Applicability::MaybeIncorrect,
+        );
+    }
+    err
 }
 
 /// `bynk.uses.name_conflict` for a reference to `name`, a shadowed import.
 pub(crate) fn shadowed_import_error(name: &str, span: Span, s: &ShadowedImport) -> CompileError {
+    if !s.ambiguous.is_empty() {
+        return ambiguous_name_error(name, span, &s.ambiguous);
+    }
     CompileError::new(
         "bynk.uses.name_conflict",
         span,
@@ -692,14 +800,10 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             | CommonsItem::Const(_) => {}
             CommonsItem::Type(t) => {
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
+                } else if crate::prelude_record::is_reserved(t) {
+                    // #4192: `MapEntry[A, B]` is the prelude record, already declared.
+                    errors.push(crate::prelude_record::reserved_error(&t.name));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(
@@ -727,14 +831,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             CommonsItem::Event(e) => {
                 let t = e.as_type_decl();
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(
@@ -1728,6 +1825,9 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
         };
         check_key_bounds(field_refs.into_iter(), &t.type_params, errors);
     }
+    // #3958: the bounds this type's own parameters carry, for the bounded types
+    // its fields apply to them.
+    let type_scope = crate::checker::equality::EqScope::for_type(t);
     match &t.body {
         TypeBody::Refined { .. } => {
             // Refined-type bodies only reference base types directly.
@@ -1736,6 +1836,10 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
             // Opaque-type bodies only reference base types directly.
         }
         TypeBody::Record(r) => {
+            // #3793: the source-only rules for `replaces`.
+            for e in crate::field_renames::check_record(r) {
+                errors.push(e);
+            }
             let mut seen = HashMap::new();
             for f in &r.fields {
                 if let Some(prev_span) = seen.get(&f.name.name) {
@@ -1793,6 +1897,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     }
                 }
                 check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
             }
         }
         TypeBody::Sum(s) => {
@@ -1849,6 +1954,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     // in its variant payloads, resolving as rigid vars (empty set
                     // for a non-generic sum — the same reference walk as before).
                     check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                    check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
                 }
             }
             // v0.154 (ADR 0178): the `embeds E as V` clauses' source types must
@@ -1997,9 +2103,12 @@ fn check_fn_refs_with(
             errors.push(w);
         }
     }
+    // #3958: the bounds this signature's own parameters carry.
+    let fn_scope = crate::checker::equality::EqScope::for_fn_in(f, types);
     let mut seen_params: HashMap<&str, &Ident> = HashMap::new();
     for p in &f.params {
         check_type_ref_resolves_in(&p.type_ref, types, &type_params, errors);
+        check_applied_bounds_at(&p.type_ref, &type_params, &fn_scope, types, errors);
         if let Some(prev) = seen_params.get(p.name.name.as_str()) {
             errors.push(
                 CompileError::new(
@@ -2014,6 +2123,7 @@ fn check_fn_refs_with(
         }
     }
     check_type_ref_resolves_in(&f.return_type, types, &type_params, errors);
+    check_applied_bounds_at(&f.return_type, &type_params, &fn_scope, types, errors);
 
     // Build the initial scope: parameters plus `self` (for instance methods).
     let mut params: HashMap<String, ()> =
@@ -2038,6 +2148,7 @@ fn check_fn_refs_with(
         given: &f.given,
         cap_advice: &cap_advice,
         declared_caps,
+        eq_scope: Some(&fn_scope),
         scopes: Vec::new(),
         errors,
     };
@@ -2110,6 +2221,7 @@ fn check_const_refs_with(
         given: &[],
         cap_advice: "",
         declared_caps: &HashSet::new(),
+        eq_scope: None,
         scopes: Vec::new(),
         errors,
     };
@@ -2244,13 +2356,18 @@ impl Gate<'_> {
             }
             TypeRef::Option(t, _)
             | TypeRef::Effect(t, _)
-            | TypeRef::HttpResult(t, _)
             | TypeRef::List(t, _)
             | TypeRef::Set(t, _)
             | TypeRef::Query(t, _)
             | TypeRef::Stream(t, _)
             | TypeRef::Connection(t, _)
             | TypeRef::History(t, _) => self.type_ref(t),
+            TypeRef::HttpResult(t, e, _) => {
+                self.type_ref(t);
+                if let Some(e) = e {
+                    self.type_ref(e);
+                }
+            }
             TypeRef::Fn(params, ret, _) => {
                 for p in params {
                     self.type_ref(p);
@@ -2937,7 +3054,10 @@ fn shadowed_type_gate(
     let mut variants = std::collections::BTreeMap::new();
     for (name, s) in shadowed.iter().filter(|(_, s)| s.imported == "type") {
         gated.insert(name.clone(), s.unit.clone());
-        if let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body) {
+        // #4045: an ambiguous type's variants are not gated; only its name is.
+        if s.ambiguous.is_empty()
+            && let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body)
+        {
             for v in &sum.variants {
                 variants.insert(v.name.name.clone(), name.clone());
             }
@@ -3128,7 +3248,11 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
                     }
                 }
             }
-            StubRhs::Fails(_) | StubRhs::Never(_) => {}
+            StubRhs::Fails(_)
+            | StubRhs::Never(_)
+            | StubRhs::Rejected(..)
+            | StubRhs::Faulted(_)
+            | StubRhs::Unreachable(_) => {}
         }
         if let Some(a) = &s.after {
             g.expr(a);
@@ -3162,8 +3286,8 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
     }
 }
 
-fn unknown_type_error(id: &Ident) -> CompileError {
-    CompileError::new(
+pub(crate) fn unknown_type_error(id: &Ident) -> CompileError {
+    let err = CompileError::new(
         "bynk.resolve.unknown_type",
         id.span,
         format!("unknown type `{}`", id.name),
@@ -3172,7 +3296,16 @@ fn unknown_type_error(id: &Ident) -> CompileError {
         "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
          `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
          `ValidationError`, and the types this unit declares or imports",
-    )
+    );
+    // #4181: a capability is not a type, and a commons stays pure by naming
+    // none, so say that rather than leave the reader to guess.
+    if crate::implicit_uses::is_bynk_capability(&id.name) {
+        return err.with_note(format!(
+            "`{}` is a capability, not a type: a context uses one with `consumes bynk {{ {} }}` and `given`; a commons declares and names none",
+            id.name, id.name
+        ));
+    }
+    err
 }
 
 /// v0.157 (ADR 0183): a generic type named without its `[…]` arguments.
@@ -3191,6 +3324,20 @@ fn bare_generic_type_error(id: &Ident, arity: usize) -> CompileError {
     .with_note("a generic type is used only through a concrete instantiation")
 }
 
+/// #3958: report a bounded type applied to one of `type_params` that lacks a
+/// bound the type declares.
+fn check_applied_bounds_at(
+    r: &TypeRef,
+    type_params: &HashSet<String>,
+    scope: &crate::checker::equality::EqScope,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Sinks,
+) {
+    for e in crate::checker::applied_bounds::applied_bound_errors(r, type_params, scope, types) {
+        errors.push(e);
+    }
+}
+
 /// Recursively check that every type reference resolves.
 fn check_type_ref_resolves(
     r: &TypeRef,
@@ -3203,6 +3350,33 @@ fn check_type_ref_resolves(
 /// v0.20a: like [`check_type_ref_resolves`], with the enclosing function's
 /// type parameters in scope — a `Named` reference matching one is a type
 /// variable, not an unknown type.
+///
+/// #4394: the second argument of `HttpResult[T, E]` names what a `Streaming` body carries, which the
+/// router can frame: a `String`, or the `SseEvent` record `bynk` exports. Anything else is
+/// `bynk.types.streaming_element`. A name that does not resolve is already reported as unknown.
+fn check_streaming_element(
+    e: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    type_params: &HashSet<String>,
+    errors: &mut Sinks,
+) {
+    let allowed = match e {
+        TypeRef::Base(bynk_syntax::ast::BaseType::String, _) => true,
+        TypeRef::Named(id) if id.name == "SseEvent" => types
+            .get("SseEvent")
+            .is_some_and(|d| crate::context_checks::is_std_bynk_type("SseEvent", types, d)),
+        TypeRef::Named(id) => !types.contains_key(&id.name) && !type_params.contains(&id.name),
+        _ => false,
+    };
+    if !allowed {
+        errors.push(CompileError::new(
+            "bynk.types.streaming_element",
+            e.span(),
+            "the element of an `HttpResult` streaming body must be `String` or `SseEvent`, which the router can frame as server-sent events",
+        ));
+    }
+}
+
 fn check_type_ref_resolves_in(
     r: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -3235,7 +3409,7 @@ fn check_type_ref_resolves_in(
         // Validate existence, that the target is generic, and arity; then walk
         // the arguments.
         TypeRef::App { name, args, span } => {
-            match types.get(&name.name) {
+            match crate::prelude_record::lookup(&name.name, types).as_deref() {
                 None if type_params.contains(&name.name) => {
                     // A type parameter applied to arguments (`T[Int]`) — a type
                     // parameter is not itself generic (no higher-kinded types).
@@ -3293,9 +3467,9 @@ fn check_type_ref_resolves_in(
                         );
                     } else {
                         // A bound the type declares (`type Set2[T: Eq]`) is checked
-                        // against each argument written here. A bare type
-                        // parameter argument is not checked (slice 0: no body
-                        // requires a type's bound).
+                        // against each concrete argument written here; a type
+                        // parameter standing for (or inside) the argument is checked
+                        // by `check_applied_bounds_at` (#3958).
                         let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
                         for (tp, arg) in decl.type_params.iter().zip(args) {
                             // Slice 1: an `Ord` bound requires an orderable argument.
@@ -3371,6 +3545,13 @@ fn check_type_ref_resolves_in(
                     }
                 }
             }
+            // #4364: a generic type that holds its parameter under an `Effect` takes no `Effect`.
+            if let Some(decl) = crate::prelude_record::lookup(&name.name, types) {
+                for e in crate::checker::nested_wrapper::check_application(name, &decl, args, types)
+                {
+                    errors.push(e);
+                }
+            }
             for a in args {
                 check_type_ref_resolves_in(a, types, type_params, errors);
             }
@@ -3382,11 +3563,22 @@ fn check_type_ref_resolves_in(
         TypeRef::Option(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::Effect(t, _) => {
+        TypeRef::Effect(t, span) => {
+            // #4324: an effect of an effect cannot exist at runtime.
+            if let TypeRef::Effect(..) = **t {
+                errors.push(crate::checker::nested_effect::nested_effect_error(
+                    *span,
+                    "Effect[Effect[_]]",
+                ));
+            }
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::HttpResult(t, _) => {
+        TypeRef::HttpResult(t, e, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
+            if let Some(e) = e {
+                check_type_ref_resolves_in(e, types, type_params, errors);
+                check_streaming_element(e, types, type_params, errors);
+            }
         }
         TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
@@ -3514,7 +3706,7 @@ fn key_position_params<'p>(t: &TypeRef, params: &'p [TypeParam], out: &mut Vec<&
         TypeRef::Option(a, _)
         | TypeRef::List(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::Connection(a, _)
@@ -3804,8 +3996,22 @@ struct RefCheckCtx<'a, 'b> {
     /// #2868: every capability the context declares or consumes, for the note
     /// on a use the function's `given` does not cover.
     declared_caps: &'a HashSet<String>,
+    /// #3958: the bounds the enclosing function's parameters carry, for the
+    /// bounded types an annotation applies to them; none for a constant.
+    eq_scope: Option<&'a crate::checker::equality::EqScope>,
     scopes: Vec<HashMap<String, ()>>,
     errors: &'a mut Sinks<'b>,
+}
+
+impl RefCheckCtx<'_, '_> {
+    /// A type reference written in the body resolves, and (#3958) a bounded type
+    /// it applies to one of the function's type parameters finds the bound there.
+    fn check_type_ref(&mut self, r: &TypeRef) {
+        check_type_ref_resolves_in(r, self.types, self.type_params, self.errors);
+        if let Some(scope) = self.eq_scope {
+            check_applied_bounds_at(r, self.type_params, scope, self.types, self.errors);
+        }
+    }
 }
 
 fn check_block_references(block: &Block, cx: &mut RefCheckCtx) {
@@ -3822,7 +4028,7 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
         Statement::Let(l) | Statement::EffectLet(l) => {
             check_expr_references(&l.value, cx);
             if let Some(annot) = &l.type_annot {
-                check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
+                cx.check_type_ref(annot);
             }
             if let Some(prev) = cx.types.get(&l.name.name) {
                 cx.errors.push(
@@ -3946,6 +4152,26 @@ fn refuse_peek_in_fn(receiver: &Expr, method: &Ident, cx: &mut RefCheckCtx) -> b
     true
 }
 
+/// A call nothing in scope answers: an unknown function, or, for `env`, the
+/// refusal that says it is only ever a constant's whole initialiser (#3941).
+/// Returns whether the call was `env`, whose bare first argument is no reference.
+fn report_unknown_call(name: &bynk_syntax::ast::Ident, cx: &mut RefCheckCtx) -> bool {
+    if name.name == "env" {
+        cx.errors
+            .push(crate::env_consts::not_initialiser(name.span));
+        return true;
+    }
+    cx.errors.push(
+        CompileError::new(
+            "bynk.resolve.unknown_function",
+            name.span,
+            format!("unknown function `{}`", name.name),
+        )
+        .with_note(unknown_function_note(&name.name)),
+    );
+    false
+}
+
 #[allow(clippy::too_many_lines)]
 fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
     match &expr.kind {
@@ -3982,7 +4208,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::Lambda(lambda) => {
             for p in &lambda.params {
                 if let Some(tr) = &p.type_ref {
-                    check_type_ref_resolves_in(tr, cx.types, cx.type_params, cx.errors);
+                    cx.check_type_ref(tr);
                 }
             }
             let mut frame: HashMap<String, ()> = HashMap::new();
@@ -4179,8 +4405,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             // `fn`/method bodies are covered; the checker backstops handler
             // bodies (which never reach this walk).
             for ta in type_args {
-                check_type_ref_resolves_in(ta, cx.types, cx.type_params, cx.errors);
+                cx.check_type_ref(ta);
             }
+            let mut env_refused = false;
             match cx.fns.get(&name.name) {
                 Some(decl) => {
                     cx.errors.refs.record(name.span, SymbolKind::Fn, &name.name);
@@ -4242,18 +4469,12 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         // non-function-typed values) lives in the checker's
                         // call dispatch. Silent pass.
                     } else {
-                        cx.errors.push(
-                            CompileError::new(
-                                "bynk.resolve.unknown_function",
-                                name.span,
-                                format!("unknown function `{}`", name.name),
-                            )
-                            .with_note(unknown_function_note(&name.name)),
-                        );
+                        env_refused = report_unknown_call(name, cx);
                     }
                 }
             }
-            for a in args {
+            // #3941: `env(NAME, …)` names a variable bare; it is no reference.
+            for a in args.iter().skip(usize::from(env_refused)) {
                 check_expr_references(a, cx);
             }
         }
@@ -4304,7 +4525,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::RecordConstruction {
             type_name, fields, ..
         } => {
-            match cx.types.get(&type_name.name) {
+            match crate::prelude_record::lookup(&type_name.name, cx.types).as_deref() {
                 Some(decl) => {
                     cx.errors
                         .refs
@@ -4506,9 +4727,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 && !cx.types.contains_key(&id.name)
             {
                 let allowed: &[&str] = match id.name.as_str() {
-                    "List" | "Map" => &["empty"],
-                    // K6a (#2596): `Set.empty()` and `Set.of(xs)`.
-                    "Set" => &["empty", "of"],
+                    "List" => &["empty"],
+                    // K6a (#2596): `Set.empty()` and `Set.of(xs)`; #3961: `Map.of(entries)`.
+                    "Map" | "Set" => &["empty", "of"],
                     // P4c (#2628): `decodeSql`, `decode` with SQLite's `0`/`1` flags.
                     "Json" => &["encode", "encodePlain", "decode", "decodeSql"],
                     // #3214: decode only; there is no `Yaml.encode`.
@@ -4743,11 +4964,32 @@ pub(crate) fn bare_variant_owners<'a>(
             }
         }
     }
+    // #3955: the implicit `Ordering` names its variants only where the context
+    // says so, so a sum of the author's own that shares `Less`/`Equal`/`Greater`
+    // is never ambiguous with it.
+    if in_scope.len() > 1 {
+        in_scope.retain(|t| !is_prelude_type(t));
+    }
     if in_scope.is_empty() {
         left_out
     } else {
         in_scope
     }
+}
+
+/// #3955, #4231: whether `t` is a prelude type ([`bynk_std::PRELUDE_TYPES`]), the
+/// declaration of a first-party unit a unit reaches without writing `uses`. Its
+/// variants resolve only from context (an expected type, the other operand of a
+/// comparison, a `match`) unless nothing else in scope declares the name, and it
+/// is shared by every context as it is, not rebranded.
+pub(crate) fn is_prelude_type(t: &TypeDecl) -> bool {
+    bynk_std::PRELUDE_TYPES.iter().any(|p| {
+        p.name == t.name.name
+            && crate::firstparty::UNITS
+                .iter()
+                .find(|u| u.name == p.unit)
+                .is_some_and(|u| t.span.file == crate::project_model::firstparty_file_id(u))
+    })
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its
@@ -4953,5 +5195,38 @@ mod consumes_position_tests {
     fn a_header_not_followed_by_a_brace_gets_no_position() {
         let src = "suite s as unit\n\ncase \"c\" { }\n";
         assert!(insert(src, None, "as unit", true).is_none());
+    }
+}
+
+/// #4181: the unknown-type error tells a capability's name from a type's.
+#[cfg(test)]
+mod unknown_type_note_tests {
+    use super::unknown_type_error;
+    use bynk_syntax::ast::Ident;
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    #[test]
+    fn a_capability_name_gets_the_capability_note_and_a_type_name_does_not() {
+        let cap = unknown_type_error(&ident("Clock"));
+        assert!(
+            cap.notes
+                .iter()
+                .any(|n| n.contains("`Clock` is a capability, not a type")),
+            "{:?}",
+            cap.notes
+        );
+        let ty = unknown_type_error(&ident("Nope"));
+        assert!(
+            ty.notes.iter().all(|n| !n.contains("is a capability")),
+            "{:?}",
+            ty.notes
+        );
     }
 }

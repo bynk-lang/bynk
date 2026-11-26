@@ -10,7 +10,7 @@ services. Suppose a `payment` context offers an `authorise` service:
 context payment
 
 service authorise {
-	on call(amount: Int) -> Effect[Result[Int, Int]] {
+	on call(amount: Int) -> Effect[Result[Int, Int]] by Caller {
 		Ok(amount)
 	}
 }
@@ -27,7 +27,7 @@ context orders
 consumes payment
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
 		let _ <- payment.authorise(total)
 		Ok(total)
 	}
@@ -44,7 +44,7 @@ context orders
 consumes payment as Pay
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
 		let _ <- Pay.authorise(total)
 		Ok(total)
 	}
@@ -67,7 +67,7 @@ consumes bynk { Clock }
 consumes payment
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] given Clock {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller given Clock {
 		let _ <- payment.authorise(total)
 		Ok(total)
 	}
@@ -86,7 +86,7 @@ bynk check --fix=bynk.consumes.type_not_selected,bynk.consumes.capability_not_se
 ```
 
 A suite file consumes what it names in the same way: see
-[what a suite consumes](/book/reference/testing/#suite-consumes).
+[what a suite consumes](/reference/testing/#suite-consumes).
 
 ## Rename an exported type that clashes with one of yours
 
@@ -118,7 +118,7 @@ fn empty() -> Digest {
 }
 
 service hashing {
-	on call(token: String) -> Effect[Bytes] given Crypto {
+	on call(token: String) -> Effect[Bytes] by Caller given Crypto {
 		Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
 	}
 }
@@ -136,8 +136,8 @@ its name (`bynk.consumes.type_alias_capability`); alias a name the unit does not
 (`bynk.consumes.type_alias_unknown_export`), alias the same type twice or both
 bare and aliased (`bynk.consumes.type_alias_repeated`), or pick an alias that is
 already taken (`bynk.consumes.type_alias_conflict`), and the compiler refuses.
-In a context split across files, an alias written in any file applies to all of
-them.
+In a context split across files, an alias is in scope only in the file that
+writes it, like the rest of that file's `consumes`.
 
 An alias that appears in one of this context's own service signatures is part of
 that service's contract: renaming the alias changes the contract hash of every
@@ -159,7 +159,7 @@ consumes inventory as Stock
 consumes payment as Pay
 
 service placeOrder {
-	on call(sku: String, total: Int) -> Effect[Result[Int, String]] {
+	on call(sku: String, total: Int) -> Effect[Result[Int, String]] by Caller {
 		let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
 		let Ok(receipt) <- Pay.authorise(total) else {
 			let _ <- Stock.release(sku)
@@ -174,6 +174,96 @@ If `reserve` fails, nothing has happened yet, so the handler answers at once. If
 `authorise` fails, it releases the stock it reserved first. Either `else`
 produces the handler's result, in place of the rest of its body.
 
+This undoes the stock when the callee *answers* `Err`. If the call itself fails, with no
+answer at all, the call faults and the `else` never runs: the handler faults, and the stock
+stays reserved. To undo on every way a call can fail, see
+[`.outcome`](#handle-a-call-that-fails-with-outcome) below.
+
+## Handle a call that fails with `.outcome`
+
+A plain call has the handler's own type, and when the call itself fails (the callee
+refuses it, faults, or cannot be reached) the calling handler faults too. That is
+right for most calls. When the handler must do something about the failure, such as
+undo an earlier step, write `.outcome` after the service:
+
+```bynk,fragment
+context orders
+
+consumes bynk { CallOutcome }
+consumes inventory as Stock
+consumes payment as Pay
+
+service placeOrder {
+	on call(sku: String, total: Int) -> Effect[Result[Int, String]] by Caller {
+		let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
+		let o <- Pay.authorise.outcome(total)
+		match o {
+			Handled(Ok(receipt)) => Effect.pure(Ok(receipt)),
+			Handled(Err(_)) => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment declined"))
+			},
+			Rejected(_) => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment unavailable"))
+			},
+			Faulted => {
+				let _ <- Stock.release(sku)
+				Effect.pure(Err("payment unavailable"))
+			},
+			Unreachable(_) => Effect.pure(Err("payment pending")),
+		}
+	}
+}
+```
+
+`Pay.authorise.outcome(total)` is the same call, typed `Effect[CallOutcome[R]]` for the
+handler's `R`. The variants say whether the callee's handler ran, which is what decides
+whether to undo, reconcile or retry:
+
+- `Handled(result)`: it ran and answered. A `Result`'s `Err` is an answer, so the
+  `Handled(Err(_))` arm is where a declined payment lands.
+- `Rejected(reason)`: it was refused before it ran, so nothing happened there: `TooLarge`,
+  `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted` (the callee's
+  `by` did not admit this context), `StaleContract` or `Undecodable`.
+- `Faulted`: it ran and faulted. A faulting handler commits nothing itself.
+- `Unreachable(status)`: it is not known whether it ran. Retrying repeats work the callee
+  may have done, so pass an idempotency key in the arguments and have the callee check it
+  with `Idempotency.claim`.
+
+Each variant is logged once as the fault would have been, so handling `Rejected(StaleContract)`
+does not hide a bad deployment from whoever runs it. On the `bundle` target there is no wire:
+only `Handled` and `Faulted` occur.
+
+An agent call has the same form: `Basket(id).add.outcome(item)` returns the same
+`CallOutcome`, with `AgentBusy` as `Unreachable(None)` and a fault in the agent's handler as
+`Faulted`. See [Addressing and calling](/reference/agents/#outcome).
+
+To pass a failure up rather than handle it, `o.handled()` is a `Result[R, CallFailure]`, and
+`CallFailure` can be wrapped into your own error type with `embeds`:
+
+```bynk,fragment
+context orders
+
+consumes bynk { CallOutcome, CallFailure }
+consumes payment { Receipt, PaymentError }
+
+type OrderError =
+	| Payment(reason: PaymentError)
+	| Upstream(failure: CallFailure)
+	embeds PaymentError as Payment, CallFailure as Upstream
+
+fn settle(o: CallOutcome[Result[Receipt, PaymentError]]) -> Result[Receipt, OrderError] {
+	let paid = o.handled()?
+	let receipt = paid?
+	Ok(receipt)
+}
+```
+
+A deadline composes: `Pay.authorise.outcome(total).within(2.seconds)` is
+`Effect[Result[CallOutcome[…], TimedOut]]`. A `CallOutcome` cannot be written by hand:
+only `.outcome(…)` and a test `stub` make one.
+
 ## How it compiles
 
 The call is the same Bynk code on both targets, but the emitted wiring differs:
@@ -186,7 +276,12 @@ The call is the same Bynk code on both targets, but the emitted wiring differs:
 See [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/) for the
 target details.
 
+## Test a handler that calls another context
+
+A handler that calls a consumed service can be tested in-process by stubbing the
+service. See [Test a handler that calls another context](/book/guides/testing/test-a-handler-that-calls-another-context/).
+
 ## Related
 
-- Reference: [type system](/book/reference/types/).
-- Explanation: [How a Bynk program is shaped](/book/guides/program-structure/how-a-program-is-shaped/).
+- Reference: [type system](/reference/types/).
+- Explanation: [How a Bynk program is shaped](/book/concepts/program-structure/how-a-program-is-shaped/).

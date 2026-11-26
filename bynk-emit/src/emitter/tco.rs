@@ -267,17 +267,21 @@ fn self_call_args<'e>(
         | Callee::Unsafe(_)
         | Callee::Kernel { .. }
         | Callee::SignedCookie { .. }
+        | Callee::SessionRevokeAll { .. }
         | Callee::CookieField { .. }
         | Callee::Intrinsic { .. }
         | Callee::Fault { .. }
         | Callee::Capability { .. }
         | Callee::D1Select { .. }
+        | Callee::AnalyticsWrite { .. }
+        | Callee::AnalyticsSelect { .. }
         | Callee::D1Sql(_)
         | Callee::D1Peek { .. }
         | Callee::D1Decode(_)
         | Callee::CrossCap { .. }
         | Callee::Cross { .. }
         | Callee::AgentInit(_)
+        | Callee::AgentErase
         | Callee::Agent { .. }
         | Callee::TestService { .. }
         | Callee::TestAssetFetch { .. }

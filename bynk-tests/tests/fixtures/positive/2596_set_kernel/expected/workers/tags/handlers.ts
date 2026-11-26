@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkEq } from "../../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -10,8 +11,8 @@ export type Tag = string & { readonly __brand: "tags.Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(value.length >= 1)) {
-      return Err({ field: "Tag", message: "length must be at least 1", value });
+    if (!(__bynkCodePointLength(value) >= 1)) {
+      return Err({ field: "Tag", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     return Ok(value as Tag);
   },
@@ -39,12 +40,12 @@ export function decoded(text: string): boolean {
     try {
       __j = globalThis.JSON.parse(__s) as __JsonValue;
     } catch (__e) {
-      return Err({ kind: "Malformed", path: "$", message: String(__e) });
+      return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
     }
     const __r = __deserialise_Set_Int(__j, "$");
     if (__r.tag === "Ok") return Ok(__r.value as ReadonlySet<number>);
     const __be = __r.error;
-    return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+    return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
   })(text);
   switch (__r0.tag) {
     case "Ok": {

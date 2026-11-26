@@ -1,0 +1,28 @@
+commons demo.wrap
+
+// #4364: a generic type that holds its parameter under an `Effect` takes anything but an effect.
+type Wrap[T] = { v: Effect[T] }
+
+// A parameter held directly is fine with an effect: an effect in a record, as in a `List`.
+type Box[T] = { v: T }
+
+fn boxed(e: Effect[Int]) -> Box[Effect[Int]] {
+	Box { v: e }
+}
+
+fn wrapped(n: Int) -> Wrap[Int] {
+	Wrap { v: Effect.pure(n) }
+}
+
+// A generic signature stays legal; only an instantiation that nests is refused.
+fn lifts[T](x: T) -> Wrap[T] {
+	Wrap { v: Effect.pure(x) }
+}
+
+fn runWrap(w: Wrap[Int]) -> Effect[Int] {
+	w.v
+}
+
+fn runBox(b: Box[Effect[Int]]) -> Effect[Int] {
+	b.v
+}

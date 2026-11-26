@@ -1,0 +1,22 @@
+suite shop.orders as system {
+  case "the body sees which context or foreign producer signed the message" {
+    let a <- fulfil.message(Order { id: "o1", claims: "Legacy" }) by Internal("shop.fulfil")
+    let b <- fulfil.message(Order { id: "o2", claims: "Internal" }) by Legacy
+    expect a is Retry("signed as shop.fulfil, the body claims Legacy")
+    expect b is Retry("signed as Legacy, the body claims Internal")
+  }
+
+  case "either context the predicate names is admitted" {
+    let a <- fulfil.message(Order { id: "o3", claims: "" }) by Internal("shop.audit")
+    expect a is Retry("signed as shop.audit, the body claims ")
+  }
+}
+
+suite shop.orders {
+  case "the body sees which context or foreign producer sent the message" {
+    let a <- fulfil.message(Order { id: "o1", claims: "Legacy" }) by Internal("shop.fulfil")
+    let b <- fulfil.message(Order { id: "o2", claims: "Internal" }) by Legacy
+    expect a is Retry("signed as shop.fulfil, the body claims Legacy")
+    expect b is Retry("signed as Legacy, the body claims Internal")
+  }
+}

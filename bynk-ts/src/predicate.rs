@@ -4,7 +4,7 @@
 //! condition without depending on the emitter; behaviour is unchanged.
 
 use crate::program::{TsBinaryOp, TsExpr, TsLit};
-use bynk_syntax::ast::{BaseType, PredKind};
+use bynk_syntax::ast::{BaseType, PredBound, PredKind};
 
 /// Escapes a string for embedding in a TypeScript double-quoted string literal.
 /// The one definition: the printer's `TsLit::Str`, `bynk-emit`'s `escape_ts_string`
@@ -101,14 +101,33 @@ fn decimal_pred_condition(pred: &PredKind, recv: &TsExpr) -> Option<(TsExpr, Str
                 bynk_syntax::decimal::render(&b.coef, b.scale)
             ),
         )),
+        // #3948: a one-sided bound over a `Decimal`.
+        PredKind::AtLeast(PredBound::Decimal(b)) => Some((
+            decimal_bound_expr(recv, TsBinaryOp::GreaterThanEq, b),
+            format!(
+                "must be at least {}",
+                bynk_syntax::decimal::render(&b.coef, b.scale)
+            ),
+        )),
+        PredKind::AtMost(PredBound::Decimal(b)) => Some((
+            decimal_bound_expr(recv, TsBinaryOp::LessThanEq, b),
+            format!(
+                "must be at most {}",
+                bynk_syntax::decimal::render(&b.coef, b.scale)
+            ),
+        )),
         PredKind::Matches(_)
         | PredKind::InRange(..)
         | PredKind::InRangeF(..)
+        | PredKind::InRangeDur(..)
+        | PredKind::AtLeast(_)
+        | PredKind::AtMost(_)
         | PredKind::MinLength(_)
         | PredKind::MaxLength(_)
         | PredKind::Length(_)
         | PredKind::NonEmpty
-        | PredKind::IsoDate => None,
+        | PredKind::IsoDate
+        | PredKind::Cron => None,
     }
 }
 
@@ -126,7 +145,7 @@ fn paren(e: TsExpr) -> TsExpr {
 
 /// A `bigint` literal: `digits` plus the `n` suffix.
 fn bigint(digits: &str) -> TsExpr {
-    TsExpr::Lit(TsLit::Num(format!("{digits}n")))
+    TsExpr::bigint(digits)
 }
 
 /// `(recv).property`.
@@ -156,24 +175,27 @@ fn decimal_range_expr(
     lo: &bynk_syntax::ast::DecimalBound,
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> TsExpr {
-    let bound = |op, b: &bynk_syntax::ast::DecimalBound| {
-        let scaled_recv = binary(
-            TsBinaryOp::Mul,
-            decimal_member(recv, "coefficient"),
-            pow10(TsExpr::Lit(TsLit::Num(b.scale.to_string()))),
-        );
-        let scaled_bound = binary(
-            TsBinaryOp::Mul,
-            paren(bigint(&decimal_signed_coef(&b.coef))),
-            pow10(decimal_member(recv, "scale")),
-        );
-        paren(binary(op, scaled_recv, scaled_bound))
-    };
     paren(binary(
         TsBinaryOp::And,
-        bound(TsBinaryOp::GreaterThanEq, lo),
-        bound(TsBinaryOp::LessThanEq, hi),
+        decimal_bound_expr(recv, TsBinaryOp::GreaterThanEq, lo),
+        decimal_bound_expr(recv, TsBinaryOp::LessThanEq, hi),
     ))
+}
+
+/// `recv <op> bound` over a `Decimal` object, at a common scale (#3948: the
+/// one-sided form of [`decimal_range_expr`]'s halves).
+fn decimal_bound_expr(recv: &TsExpr, op: TsBinaryOp, b: &bynk_syntax::ast::DecimalBound) -> TsExpr {
+    let scaled_recv = binary(
+        TsBinaryOp::Mul,
+        decimal_member(recv, "coefficient"),
+        pow10(TsExpr::Lit(TsLit::Num(b.scale.to_string()))),
+    );
+    let scaled_bound = binary(
+        TsBinaryOp::Mul,
+        paren(bigint(&decimal_signed_coef(&b.coef))),
+        pow10(decimal_member(recv, "scale")),
+    );
+    paren(binary(op, scaled_recv, scaled_bound))
 }
 
 /// The `Decimal` range check as printed text — for `bynk-emit`'s `lower.rs`, which still
@@ -207,16 +229,24 @@ pub fn pred_condition_and_message_over(
     receiver: &TsExpr,
     base: Option<BaseType>,
 ) -> (crate::TsExpr, String) {
-    if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
+    if (base == Some(BaseType::Decimal)
+        || matches!(
+            pred,
+            PredKind::InRangeD(..)
+                | PredKind::AtLeast(PredBound::Decimal(_))
+                | PredKind::AtMost(PredBound::Decimal(_))
+        ))
         && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
     {
         return (cond, msg);
     }
 
     let recv = || receiver.clone();
-    let recv_length = || TsExpr::Member {
-        object: Box::new(recv()),
-        property: "length".to_string(),
+    // #3949: a `String` predicate counts code points, as the compile-time check
+    // and OpenAPI's `maxLength` do, not UTF-16 code units (`.length`).
+    let recv_length = || TsExpr::Call {
+        callee: Box::new(TsExpr::Ident("__bynkCodePointLength".to_string())),
+        args: vec![recv()],
     };
     let num = |n: String| TsExpr::Lit(TsLit::Num(n));
     let cmp = |op, left, right| TsExpr::Binary {
@@ -256,6 +286,33 @@ pub fn pred_condition_and_message_over(
                 format!("must be in range [{a}, {b}]"),
             )
         }
+        // #3948: a `Duration` is its milliseconds; the message names the span as written.
+        PredKind::InRangeDur(a, b) => (
+            cmp(
+                TsBinaryOp::And,
+                cmp(TsBinaryOp::GreaterThanEq, recv(), num(a.millis.to_string())),
+                cmp(TsBinaryOp::LessThanEq, recv(), num(b.millis.to_string())),
+            ),
+            format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        ),
+        // #3948: one-sided bounds, inclusive. A `Float` bound keeps its lexeme.
+        PredKind::AtLeast(b) | PredKind::AtMost(b) => {
+            let (op, word) = if matches!(pred, PredKind::AtLeast(_)) {
+                (TsBinaryOp::GreaterThanEq, "at least")
+            } else {
+                (TsBinaryOp::LessThanEq, "at most")
+            };
+            let operand = match b {
+                PredBound::Int(a) => a.value.to_string(),
+                PredBound::Float(a) => a.lexeme.clone(),
+                PredBound::Duration(a) => a.millis.to_string(),
+                PredBound::Decimal(_) => unreachable!("decimal predicates return early"),
+            };
+            (
+                cmp(op, recv(), num(operand)),
+                format!("must be {word} {}", b.lexeme()),
+            )
+        }
         // Handled above (a `Decimal` base); not reachable for another base.
         PredKind::InRangeD(..) => unreachable!("decimal predicates return early"),
         PredKind::NonEmpty => (
@@ -270,6 +327,14 @@ pub fn pred_condition_and_message_over(
             },
             "must be a calendar date (YYYY-MM-DD)".to_string(),
         ),
+        // #3873: the runtime helper owns the schedule grammar; callers `note_predicate`.
+        PredKind::Cron => (
+            TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("__bynkIsCron".to_string())),
+                args: vec![recv()],
+            },
+            "must be a valid cron schedule".to_string(),
+        ),
         PredKind::MinLength(n) => (
             cmp(TsBinaryOp::GreaterThanEq, recv_length(), num(n.to_string())),
             format!("length must be at least {n}"),
@@ -282,29 +347,36 @@ pub fn pred_condition_and_message_over(
             cmp(TsBinaryOp::StrictEq, recv_length(), num(n.to_string())),
             format!("length must be exactly {n}"),
         ),
-        PredKind::Matches(pat) => {
-            // The condition's own `RegExp` source uses `pat` raw, not
+        PredKind::Matches(literal) => {
+            // The condition's own `RegExp` source uses the pattern raw, not
             // `escaped` — `TsLit::Str`'s printer already applies the exact
             // same escaping as `escape_ts_literal`
             // (`bynk_check::wire_default::escape_ts_literal`, kept
             // deliberately identical — see `bynk-ts/src/printer.rs`'s own
-            // `render_lit`), so escaping `pat` here too would double-escape
-            // it, same bug class `msg`'s own doc above already argues
-            // against. `escaped` is still needed for `msg`, which is opaque
-            // text spliced with no further escaping.
-            let escaped = escape_ts_literal(pat);
+            // `render_lit`), so escaping it here too would double-escape it,
+            // same bug class `msg`'s own doc above already argues against.
+            // `escaped` is still needed for `msg`, which is opaque text
+            // spliced with no further escaping.
+            //
+            // #3950: the leading flag group moves into the flags and every
+            // pattern runs in Unicode mode (`u`). The `RegExp` is built once
+            // per source and flags, by the runtime's `__bynkRegExp`; a
+            // non-global, non-sticky `RegExp`'s `test` keeps no state, so the
+            // shared one is safe.
+            let escaped = escape_ts_literal(literal);
+            let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(literal);
             let pattern = cmp(
                 TsBinaryOp::Add,
                 cmp(
                     TsBinaryOp::Add,
                     TsExpr::Lit(TsLit::Str("^(?:".to_string())),
-                    TsExpr::Lit(TsLit::Str(pat.clone())),
+                    TsExpr::Lit(TsLit::Str(pat)),
                 ),
                 TsExpr::Lit(TsLit::Str(")$".to_string())),
             );
-            let regexp = TsExpr::New {
-                callee: Box::new(TsExpr::Ident("globalThis.RegExp".to_string())),
-                args: vec![pattern],
+            let regexp = TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("__bynkRegExp".to_string())),
+                args: vec![pattern, TsExpr::Lit(TsLit::Str(flags))],
             };
             let test_call = TsExpr::Call {
                 callee: Box::new(TsExpr::Member {
@@ -356,7 +428,7 @@ mod tests {
 
     #[test]
     fn decimal_sign_predicates_print_the_legacy_text() {
-        for recv in ["value", "json", "__v", "json[\"amount\"]"] {
+        for recv in ["value", "json", "__v"] {
             assert_eq!(
                 decimal_cond(&PredKind::NonNegative, recv),
                 format!("({recv}).coefficient >= 0n")
@@ -366,6 +438,23 @@ mod tests {
                 format!("({recv}).coefficient > 0n")
             );
         }
+        // A receiver that is an expression, not a name, goes through
+        // `pred_condition_and_message_over` (an `Ident` holds an identifier path only).
+        let indexed = crate::TsExpr::Index {
+            object: Box::new(crate::TsExpr::Ident("json".to_string())),
+            index: Box::new(crate::TsExpr::Lit(crate::program::TsLit::Str(
+                "amount".to_string(),
+            ))),
+        };
+        let (cond, _) = pred_condition_and_message_over(
+            &PredKind::NonNegative,
+            &indexed,
+            Some(BaseType::Decimal),
+        );
+        assert_eq!(
+            crate::print_expr(&cond),
+            "(json[\"amount\"]).coefficient >= 0n"
+        );
     }
 
     #[test]

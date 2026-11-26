@@ -2,14 +2,15 @@
 // commons app.model
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Name = string & { readonly __brand: "Name" };
 
 export const Name = {
   of(value: string): Result<Name, ValidationError> {
-    if (!(value.length > 0)) {
-      return Err({ field: "Name", message: "must be non-empty", value });
+    if (!(__bynkCodePointLength(value) > 0)) {
+      return Err({ field: "Name", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Name);
   },
@@ -19,8 +20,8 @@ export type Note = string & { readonly __brand: "Note" };
 
 export const Note = {
   of(value: string): Result<Note, ValidationError> {
-    if (!(value.length <= 20)) {
-      return Err({ field: "Note", message: "length must be at most 20", value });
+    if (!(__bynkCodePointLength(value) <= 20)) {
+      return Err({ field: "Note", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value });
     }
     return Ok(value as Note);
   },
@@ -38,8 +39,8 @@ export type Tag = string & { readonly __brand: "Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(value.length <= 8)) {
-      return Err({ field: "Tag", message: "length must be at most 8", value });
+    if (!(__bynkCodePointLength(value) <= 8)) {
+      return Err({ field: "Tag", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Tag);
   },

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.header_question_not_found",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`)."
+}

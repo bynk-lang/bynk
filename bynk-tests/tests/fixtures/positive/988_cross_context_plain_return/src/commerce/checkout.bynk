@@ -3,7 +3,7 @@ context commerce.checkout
 consumes commerce.payment
 
 service pay {
-  on call(id: String) -> Effect[Receipt] {
+  on call(id: String) -> Effect[Receipt] by Caller {
     commerce.payment.authorise(id)
   }
 }

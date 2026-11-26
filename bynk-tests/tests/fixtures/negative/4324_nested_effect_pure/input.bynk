@@ -1,0 +1,6 @@
+commons demo.nestedpure
+
+fn lift(e: Effect[Int]) -> Int {
+	let w = Effect.pure(e)
+	0
+}

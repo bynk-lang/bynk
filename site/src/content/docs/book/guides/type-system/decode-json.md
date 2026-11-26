@@ -55,7 +55,7 @@ the object has no other keys. A tagged object with an extra key, such as
 `{"kind": "Some", "value": "d", "note": "x"}`, is read as a bare value instead.
 A bare value is still checked as the inner type, so `"description": 7` is an
 error, and so is that extra-key object.
-See [the JSON codec](/book/reference/types/#the-json-codec) for the full rule.
+See [the JSON codec](/reference/types/#the-json-codec) for the full rule.
 
 ## Decode a third-party payload with reserved-word keys
 
@@ -88,7 +88,7 @@ commons hooks {
 A match pattern names the field the same way, `Account { type: t, .. }`. The
 shorthand `Account { type, .. }` would bind a variable called `type`, which a
 keyword cannot be, so it is an error with a fix to `type: type_`. See
-[reserved words as field names](/book/reference/types/#keyword-field-names).
+[reserved words as field names](/reference/types/#keyword-field-names).
 
 ## Decode straight into a refined type
 
@@ -137,12 +137,12 @@ commons orders {
 
 ## Report why a decode failed
 
-A `DecodeError` carries three `String` fields: `kind` (`Malformed`,
-`StructuralMismatch` or `RefinementViolation`), `path` (where in the document,
-such as `$.qty`) and `message`. The error itself has no string form, so
-interpolate the fields:
+A `DecodeError` carries a `kind`, a closed `DecodeErrorKind` (`Malformed`,
+`StructuralMismatch`, `RefinementViolation`, and the YAML decoder's refusals), a
+`path` (where in the document, such as `$.qty`) and a `message`. The error itself
+has no string form, so interpolate the fields; `kind` prints as its name:
 
-```bynk
+```bynk,fragment
 commons orders {
 	type Order = {
 		id: String,
@@ -153,6 +153,20 @@ commons orders {
 		match Json.decode[Order](raw) {
 			Ok(order) => "decoded \(order.id)",
 			Err(e) => "order did not decode: \(e.kind) at \(e.path): \(e.message)",
+		}
+	}
+}
+```
+
+To act on the kind, `match` on it. The match is checked for exhaustiveness:
+
+```bynk,fragment
+commons orders {
+	fn explain(e: DecodeError) -> String {
+		match e.kind {
+			Malformed => "not JSON",
+			RefinementViolation => "invalid value at \(e.path)",
+			_ => "\(e.path): \(e.message)",
 		}
 	}
 }
@@ -186,6 +200,35 @@ commons orders {
 }
 ```
 
+## Decode a webhook with an enum, a map and a timestamp
+
+A third-party payload writes an enum as a bare string, a map as an object and a
+time as an RFC 3339 string. `Json.decode` reads each of them, so the fields keep
+their types:
+
+```bynk
+commons hooks {
+	type Action = enum { Opened, Closed, Reopened }
+
+	type IssueHook = {
+		action: Action,
+		labels: Map[String, String],
+		created_at: Instant,
+	}
+
+	fn read(body: String) -> Result[IssueHook, DecodeError] {
+		Json.decode[IssueHook](body)
+	}
+}
+```
+
+`{"action":"Closed","labels":{"bug":"red"},"created_at":"2026-11-22T10:00:00Z"}`
+decodes. An enum matches a variant's name exactly, so `"closed"` is refused. A
+timestamp needs an explicit offset (`Z` or `+02:00`), because one without it names
+no instant. Bynk's own forms (`{"kind":"Closed"}`, an array of pairs, epoch
+milliseconds) still decode. `Json.encodePlain` writes the external shapes back. See
+[the wire format](/reference/wire-format/#encoding) for each accepted form.
+
 ## Write JSON for a non-Bynk API
 
 `Json.encode` writes an `Option` in Bynk's tagged form, which only Bynk reads back.
@@ -204,8 +247,8 @@ commons github {
 
 Pass the text as the `body` of a `Fetch.send` request. `Json.decode[NewComment]` reads
 it back, since the decoder accepts both forms. See
-[Plain JSON](/book/reference/types/#plain-json) for the two refusals.
+[Plain JSON](/reference/types/#plain-json) for the two refusals.
 
 **See also:** [Define a refined type and validate untrusted
 input](/book/guides/type-system/define-and-validate/) (the `.of` path, for values you already have in
-hand), and the [type-system reference](/book/reference/types/#the-json-codec).
+hand), and the [type-system reference](/reference/types/#the-json-codec).

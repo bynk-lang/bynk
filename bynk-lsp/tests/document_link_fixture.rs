@@ -177,7 +177,7 @@ fn first_party_capability_op_links_to_the_book() {
     .expect("a first-party name in scope links externally");
     assert!(
         url.as_str()
-            .starts_with("https://bynk-lang.org/book/reference/bynk-capabilities/#"),
+            .starts_with("https://bynk-lang.org/reference/bynk-capabilities/#"),
         "{url}"
     );
 }

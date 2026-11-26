@@ -1,0 +1,13 @@
+context api
+
+const Port: Int = 8080
+
+service api from http {
+  cors {
+    origins: [Port],
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

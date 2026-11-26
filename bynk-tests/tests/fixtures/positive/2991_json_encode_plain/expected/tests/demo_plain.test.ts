@@ -3,39 +3,13 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
-import type { __BoundaryError, __JsonValue } from "../__bynk_runtime/boundary.js";
+import type { DecodeError } from "../__bynk_runtime/errors.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_plain from "./../demo/plain.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-  }
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
-}
-
+<<bynk-shared: testing/expectation>>
 function __makeTestDeps() {
-  return {  };
+  return {};
 }
 
 // case tier: unit
@@ -72,7 +46,7 @@ async function test_a_plain_encoding_writes_the_shape_a_non_Bynk_API_sends() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -94,12 +68,12 @@ async function test_a_plain_encoding_round_trips_through_Json_decode() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Pull(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(((__pv = p): string => {
       const __g = globalThis as { __bynkPlainJson?: boolean };
       const __was = __g.__bynkPlainJson;
@@ -115,12 +89,12 @@ async function test_a_plain_encoding_round_trips_through_Json_decode() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Pull(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_plain.Pull);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(((__pv = p): string => {
         const __g = globalThis as { __bynkPlainJson?: boolean };
         const __was = __g.__bynkPlainJson;
@@ -135,7 +109,7 @@ async function test_a_plain_encoding_round_trips_through_Json_decode() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -158,7 +132,7 @@ async function test_Json_encode_still_writes_the_tagged_form() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -242,7 +216,7 @@ async function test_a_top_level_Option_and_a_list_of_them() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -272,7 +246,7 @@ async function test_a_plain_call_does_not_leak_into_a_later_tagged_one() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -313,7 +287,7 @@ async function test_an_encode_inside_the_argument_stays_tagged() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -353,7 +327,7 @@ async function test_a_None_literal_argument() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -457,10 +431,10 @@ export function __deserialise_Qty(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json > 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be positive", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be positive", rule: { tag: "Positive" }, value: json } });
   }
   return Ok(json as unknown as __ns_demo_plain.Qty);
 }
@@ -700,19 +674,7 @@ export function __deserialise_Option_Qty(json: __JsonValue, path: string = "$"):
   return __b;
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["a plain encoding writes the shape a non-Bynk API sends", "a plain encoding round-trips through Json.decode", "Json.encode still writes the tagged form", "a top-level Option and a list of them", "a plain call does not leak into a later tagged one", "an encode inside the argument stays tagged", "a None literal argument"];
 

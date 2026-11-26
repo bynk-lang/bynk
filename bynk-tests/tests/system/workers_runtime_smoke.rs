@@ -32,18 +32,6 @@ fn tool_exists(name: &str) -> bool {
     which::which(name).is_ok()
 }
 
-/// Route through `cmd /C` on Windows so npm's `npx.cmd` shim resolves
-/// (Rust's CreateProcess refuses batch scripts directly — BatBadBut).
-fn base_command(program: &str) -> Command {
-    if cfg!(windows) {
-        let mut c = Command::new("cmd");
-        c.arg("/C").arg(program);
-        c
-    } else {
-        Command::new(program)
-    }
-}
-
 /// Is this run required to actually reach workerd?
 ///
 /// Presence alone is not enough — empty counts as unset. The contract, and the
@@ -93,17 +81,24 @@ fn hello_world_serves_on_workerd() {
         "example layout changed — update this test's worker path"
     );
 
-    // A pid-derived port keeps parallel test binaries off each other.
-    let port = 20000 + (std::process::id() % 10000) as u16;
+    // #4174: a port the OS has just handed out, as for the other smokes (`wrangler::ports`).
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let child = wrangler::Wrangler::spawn(
-        base_command("npx")
-            .args(["-y", WRANGLER, "dev", "--port", &port.to_string()])
+        wrangler::npx()
+            .args([
+                "dev",
+                "--port",
+                &port.to_string(),
+                // wrangler's default inspector port is shared by every `wrangler dev` otherwise.
+                "--inspector-port",
+                &inspector_port.to_string(),
+            ])
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -119,6 +114,28 @@ fn hello_world_serves_on_workerd() {
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // #4174: a wrangler that has already exited will never serve; say so now (see
+        // `serve_smoke_with_args`).
+        if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its port ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
@@ -226,7 +243,7 @@ service api from http {
 
 #[test]
 fn agent_state_round_trips_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state", 30000) else {
+    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state") else {
         return;
     };
     let url = &served.url;
@@ -322,7 +339,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "migrate-v1",
-            31000,
             None,
             Some(&store),
         ) else {
@@ -335,7 +351,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
     let Some(served) = serve_smoke_with(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "migrate-v2",
-        31100,
         lock,
         Some(&store),
     ) else {
@@ -381,7 +396,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "sweep-v1",
-            31200,
             None,
             Some(&store),
         ) else {
@@ -398,7 +412,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     let Some(served) = serve_smoke_with_args(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "sweep-v2",
-        31300,
         lock,
         Some(&store),
         &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
@@ -442,6 +455,124 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     assert!(
         got.contains("owner=ada"),
         "the record carried `owner`: {got}"
+    );
+}
+
+/// #4390: `@unique(by: email)` added to a `Map` that already holds duplicates. The v1 build stores
+/// six people over three emails (held by 2, 3 and 1 key); the v2 build declares the constraint, and the
+/// sweep's wake reports the values more than one key holds, as holder counts: never a value.
+const UNIQUE_SWEEP_V1: &str = r#"context smoke
+
+type Person = { id: String, email: String }
+
+agent Directory {
+  key id: String
+  store people: Map[String, Person]
+
+  on call seed() -> Effect[()] {
+    let _ <- people.put("k1", Person { id: "k1", email: "a@x" })
+    let _ <- people.put("k2", Person { id: "k2", email: "a@x" })
+    let _ <- people.put("k3", Person { id: "k3", email: "b@x" })
+    let _ <- people.put("k4", Person { id: "k4", email: "b@x" })
+    let _ <- people.put("k5", Person { id: "k5", email: "b@x" })
+    let _ <- people.put("k6", Person { id: "k6", email: "c@x" })
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/seed") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Directory("d").seed()
+    Ok("seeded")
+  }
+}
+"#;
+
+const UNIQUE_SWEEP_V2: &str = r#"context smoke
+
+type Person = { id: String, email: String }
+
+agent Directory {
+  key id: String
+  store people: Map[String, Person] @unique(by: email)
+
+  on call size() -> Effect[Int] { people.size() }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}
+"#;
+
+#[test]
+fn the_migrate_route_reports_unique_duplicates_already_stored_on_workerd() {
+    use bynk_check::wire_format as wf;
+    let persist = std::env::temp_dir().join(format!("bynk-workerd-unique-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&persist);
+    fs::create_dir_all(&persist).unwrap();
+    let lock = {
+        let dir = persist.join("lock-src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("smoke.bynk"), UNIQUE_SWEEP_V1).unwrap();
+        bynk_driver::project::compile_project(
+            &bynk_testkit::compile_options_single(&dir)
+                .target(bynk_driver::project::BuildTarget::Workers)
+                .schema_registry(bynk_driver::project::SchemaLock::On { existing: None }),
+        )
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
+        .expect("the first build compiles")
+        .schema_lock
+    };
+    let store = persist.join("state");
+    {
+        let Some(served) = serve_smoke_with(
+            &[("smoke.bynk", UNIQUE_SWEEP_V1)],
+            "unique-v1",
+            None,
+            Some(&store),
+        ) else {
+            let _ = fs::remove_dir_all(&persist);
+            return;
+        };
+        fetch(&served.url, "/seed").expect("GET /seed stores the duplicates");
+    }
+    let id = stored_object_ids(&store.join("v3/do/smoke-Directory"))
+        .into_iter()
+        .next()
+        .expect("the v1 run persisted one Durable Object");
+    let key = "sweep-unique-key";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", UNIQUE_SWEEP_V2)],
+        "unique-v2",
+        lock,
+        Some(&store),
+        &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
+    ) else {
+        let _ = fs::remove_dir_all(&persist);
+        return;
+    };
+    let path = format!("{}Directory", wf::MIGRATE_PATH_PREFIX);
+    let body = format!("{{\"ids\":[\"{id}\"]}}");
+    let wake = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
+    drop(served);
+    let _ = fs::remove_dir_all(&persist);
+    assert!(
+        wake.contains("\"unique\":[{\"map\":\"people\",\"by\":\"email\",\"holders\":[2,3]}]"),
+        "the wake reports the two shared values by their holders: {wake}"
+    );
+    assert!(
+        !wake.contains("@x") && !wake.contains("k3"),
+        "no stored value or key is named: {wake}"
     );
 }
 
@@ -587,7 +718,7 @@ service api from http {
 
 #[test]
 fn agent_calls_use_the_boundary_codec_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec", 40000) else {
+    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec") else {
         return;
     };
     let body = fetch(&served.url, "/rt").expect("GET /rt round-trips values through an agent");
@@ -618,7 +749,11 @@ service api from http {
       None => false
     }
     let parsed = match Bytes.fromHex("807f") {
-      Some(x) => x.slice(0, 1).compare(x.slice(1, 2))
+      Some(x) => match x.slice(0, 1).compare(x.slice(1, 2)) {
+        Less => -1
+        Equal => 0
+        Greater => 1
+      }
       None => 0
     }
     Ok("hex=\(hex) url=\(url) back=\(back) order=\(parsed)")
@@ -628,7 +763,7 @@ service api from http {
 
 #[test]
 fn bytes_operations_run_on_workerd() {
-    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes", 10000) else {
+    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes") else {
         return;
     };
     let body = fetch(&served.url, "/bytes").expect("GET /bytes runs the Bytes operations");
@@ -694,7 +829,7 @@ service api from http {
 
 #[test]
 fn a_provider_calls_an_agent_on_workerd() {
-    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent", 55000) else {
+    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent") else {
         return;
     };
     let body = fetch(&served.url, "/yank").expect("GET /yank calls the agent through providers");
@@ -784,7 +919,7 @@ service api from http {
 
 #[test]
 fn a_context_split_across_files_serves_on_workerd() {
-    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split", 50000) else {
+    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split") else {
         return;
     };
     let first = fetch(&served.url, "/add").expect("GET /add reaches the sibling file's agent");
@@ -823,19 +958,19 @@ impl Drop for Served {
 }
 
 /// Compile `source` (a single-file `smoke` context) for Workers, strip it to JS
-/// and serve it with `wrangler dev` on a pid-derived port above `port_base`,
-/// with its own inspector port (wrangler's default 9229 is shared otherwise),
-/// so the tests in this binary can run concurrently. `None` when the test is
+/// and serve it with `wrangler dev` on ports the OS hands out (`wrangler::ports`), with its
+/// own inspector port (wrangler's default 9229 is shared otherwise), so the tests in this
+/// binary can run concurrently. `None` when the test is
 /// skipped: no `npx`/`node`, or wrangler did not boot (`skip` panics instead
 /// when `BYNK_REQUIRE_WORKERD` is set).
-fn serve_smoke(source: &str, tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_files(&[("smoke.bynk", source)], tag, port_base)
+fn serve_smoke(source: &str, tag: &str) -> Option<Served> {
+    serve_smoke_files(&[("smoke.bynk", source)], tag)
 }
 
 /// [`serve_smoke`] over several source files, each `(path under src/,
 /// source)`, which together declare the `smoke` context (#1820).
-fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_with(files, tag, port_base, None, None)
+fn serve_smoke_files(files: &[(&str, &str)], tag: &str) -> Option<Served> {
+    serve_smoke_with(files, tag, None, None)
 }
 
 /// [`serve_smoke_files`] against a committed schema lock (`lock`, `None` for a
@@ -845,11 +980,10 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
 fn serve_smoke_with(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
 ) -> Option<Served> {
-    serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
+    serve_smoke_with_args(files, tag, lock, persist, &[])
 }
 
 /// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
@@ -857,7 +991,6 @@ fn serve_smoke_with(
 fn serve_smoke_with_args(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
     extra: &[String],
@@ -897,11 +1030,11 @@ fn serve_smoke_with_args(
         "smoke layout changed — update this test's worker path"
     );
 
-    let port = port_base + (std::process::id() % 10000) as u16;
-    let inspector_port = port + 1;
+    // #4174: ports the OS has just handed out, not a pid-derived number. A pid-derived `base +
+    // pid % 10000` collided with another test's (`Address already in use`), wrangler exited
+    // at once, and the wait below polled the dead process for the whole boot window.
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let mut args: Vec<String> = [
-        "-y",
-        WRANGLER,
         "dev",
         "--port",
         &port.to_string(),
@@ -917,14 +1050,14 @@ fn serve_smoke_with_args(
     }
     args.extend(extra.iter().cloned());
     let child = wrangler::Wrangler::spawn(
-        base_command("npx")
+        wrangler::npx()
             .args(&args)
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -938,6 +1071,28 @@ fn serve_smoke_with_args(
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // A wrangler that has already exited will never serve: say so now, with what it said,
+        // instead of waiting out the boot window.
+        if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its ports ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return None;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
@@ -1022,6 +1177,10 @@ service live from websocket(in: Frame, out: Frame) {
     let _ <- Board("ci").join(user, connection)
     ()
   }
+
+  on close (user: String) -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Board {
@@ -1034,7 +1193,7 @@ agent Board {
   }
 
   on call post(text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
     ()
   }
 }
@@ -1063,6 +1222,10 @@ service live from websocket(in: Frame, out: Frame) {
     let _ <- Room(room).join(user, connection)
     ()
   }
+
+  on close (room: String, user: String) -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Room {
@@ -1075,7 +1238,7 @@ agent Room {
   }
 
   on call post(text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
     ()
   }
 }
@@ -1132,14 +1295,8 @@ const open = (query) => within(new Promise((resolve, reject) => {
 /// Serve `source`, run the clients (`queries`; the first `expected` share the
 /// broadcast's instance), and assert the frames each received: the one
 /// `hello` frame for those, none for the rest.
-fn broadcast_reaches_clients(
-    source: &str,
-    tag: &str,
-    port_base: u16,
-    expected: usize,
-    queries: &[&str],
-) {
-    let Some(served) = serve_smoke(source, tag, port_base) else {
+fn broadcast_reaches_clients(source: &str, tag: &str, expected: usize, queries: &[&str]) {
+    let Some(served) = serve_smoke(source, tag) else {
         return;
     };
     let port = served
@@ -1194,7 +1351,6 @@ fn a_broadcast_reaches_websockets_opened_through_a_literal_keyed_upgrade_on_work
     broadcast_reaches_clients(
         WS_LITERAL_KEY_SOURCE,
         "ws-literal",
-        15000,
         2,
         &["user=alice", "user=bob"],
     );
@@ -1207,13 +1363,740 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
     broadcast_reaches_clients(
         WS_ROUTE_KEY_SOURCE,
         "ws-route",
-        25000,
         2,
         &[
             "room=r1&user=alice",
             "room=r1&user=bob",
             "room=r2&user=carol",
         ],
+    );
+}
+
+/// #3902: a client leaving is released by `on close`, with the close code the client sent, and the
+/// close goes out before `on close` runs (so the client sees its own code echoed). `join` closes a banned user's connection with a code and
+/// reason of the agent's choosing; `leave` removes a departed client and records the code `on close`
+/// was given. A room that kept a dead connection (no `on close`) would raise on the next broadcast.
+const WS_CLOSE_SOURCE: &str = r#"context smoke
+
+consumes bynk { CloseInfo }
+
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (room: String, user: String) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).join(user, connection)
+    ()
+  }
+
+  on close (room: String, user: String, close: CloseInfo) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).leave(user, close.code)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store lastCode: Cell[Int]
+
+  on call join(user: String, conn: Connection[Frame]) -> Effect[()] {
+    if user == "banned" {
+      let _ <- conn.close(4001, "banned")
+      ()
+    } else {
+      let _ <- conns.put(user, conn)
+      ()
+    }
+  }
+
+  on call leave(user: String, code: Int) -> Effect[()] {
+    let _ <- conns.remove(user)
+    lastCode := code
+    ()
+  }
+
+  on call post(text: String) -> Effect[()] {
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
+    ()
+  }
+
+  on call last() -> Effect[Int] {
+    lastCode
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/post") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Room("r1").post("hello")
+    Ok("posted")
+  }
+
+  on GET("/last") () -> Effect[HttpResult[String]] by v: Visitor {
+    let code <- Room("r1").last()
+    Ok("\(code)")
+  }
+}
+"#;
+
+/// Real clients: `banned` is closed by the server with `4001 "banned"` and sees exactly that; `alice`
+/// and `bob` join; `alice` closes with `4002 "bye"` and, once the Durable Object has run `on close`,
+/// sees `4002 "bye"` echoed back; the room then records `4002`, and a broadcast reaches
+/// only `bob` (a dead connection would have raised on the way). Prints the observations as JSON.
+const WS_CLOSE_CLIENTS_JS: &str = r#"
+const [port] = process.argv.slice(2);
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const open = (user) => within(new Promise((resolve, reject) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/?room=r1&user=${user}`);
+  const frames = [];
+  const closed = new Promise((done) => {
+    ws.addEventListener("close", (e) => done({ code: e.code, reason: e.reason }));
+  });
+  ws.addEventListener("message", (e) => frames.push(String(e.data)));
+  ws.addEventListener("open", () => resolve({ ws, frames, closed }));
+  ws.addEventListener("error", () => reject(new Error(`upgrade failed: ${user}`)));
+}), 15000, `the upgrade for ${user}`);
+(async () => {
+  const banned = await open("banned");
+  const bannedClose = await within(banned.closed, 15000, "the server's close of the banned client");
+  const alice = await open("alice");
+  const bob = await open("bob");
+  alice.ws.close(4002, "bye");
+  const aliceClose = await within(alice.closed, 15000, "the close handshake reply for alice");
+  const last = await within(fetch(`http://127.0.0.1:${port}/last`).then((r) => r.text()), 15000, "/last");
+  const post = await within(fetch(`http://127.0.0.1:${port}/post`), 15000, "/post");
+  if (!post.ok) throw new Error(`the broadcast answered ${post.status}`);
+  await within(new Promise((resolve) => {
+    const tick = () => (bob.frames.length > 0 ? resolve() : setTimeout(tick, 50));
+    tick();
+  }), 15000, "the broadcast on bob");
+  console.log(JSON.stringify({ bannedClose, aliceClose, last, bob: bob.frames, alice: alice.frames }));
+  bob.ws.close();
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_departing_client_runs_on_close_with_its_code_and_the_handshake_completes_on_workerd() {
+    let Some(served) = serve_smoke(WS_CLOSE_SOURCE, "ws-close") else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-close-clients.js");
+    fs::write(&script, WS_CLOSE_CLIENTS_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the close clients must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["bannedClose"],
+        serde_json::json!({ "code": 4001, "reason": "banned" }),
+        "`connection.close(4001, \"banned\")` reaches the client with that code and reason\n{report}"
+    );
+    // The close goes out before `on close` runs, so the release `on close` performs (`conns.remove`
+    // closes the held connection with no code) cannot replace it: the client sees the code and reason
+    // it closed with echoed back (#4491).
+    assert_eq!(
+        seen["aliceClose"],
+        serde_json::json!({ "code": 4002, "reason": "bye" }),
+        "the close reply carries the client's own code and reason\n{report}"
+    );
+    assert_eq!(
+        seen["last"],
+        serde_json::json!("\"4002\""),
+        "`on close` ran with the code the client closed with\n{report}"
+    );
+    assert_eq!(
+        seen["bob"],
+        serde_json::json!(["{\"text\":\"hello\"}"]),
+        "a later broadcast reaches the remaining client\n{report}"
+    );
+    assert_eq!(
+        seen["alice"],
+        serde_json::json!([]),
+        "and not the one that left\n{report}"
+    );
+}
+
+/// #3903: a connection is closed when its credential expires. The upgrade records the Bearer token's
+/// `exp`, and a frame arriving after it closes the socket with `1008 authentication expired` and runs
+/// `on close` (once), without running `on message` for that frame. `heard` counts the frames
+/// `on message` ran for, and `lastCode` is the code `on close` was given.
+const WS_EXPIRY_SOURCE: &str = r#"context smoke
+
+consumes bynk { CloseInfo }
+
+type UserId = String where NonEmpty
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "WS_SECRET"), identity = UserId }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on message (room: String, frame: Frame) -> Effect[()] by user: Member {
+    let _ <- Room(room).heard()
+    ()
+  }
+
+  on close (room: String, close: CloseInfo) -> Effect[()] by user: Member {
+    let _ <- Room(room).left(close.code)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store count: Cell[Int]
+  store lastCode: Cell[Int]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    ()
+  }
+
+  on call heard() -> Effect[()] {
+    let _ <- count.update((c) => c + 1)
+    ()
+  }
+
+  on call left(code: Int) -> Effect[()] {
+    let _ <- conns.remove("c")
+    lastCode := code
+    ()
+  }
+
+  on call snapshot() -> Effect[String] {
+    "\(count):\(lastCode)"
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }
+}
+"#;
+
+/// A real client: it signs a token that expires a few seconds from now, opens the upgrade with
+/// `["bynk.bearer", token]`, sends one frame before the expiry (handled), waits past it, and sends
+/// another, which closes the connection. Prints the observations as JSON.
+const WS_EXPIRY_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const [port, secret, ttl] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const exp = Math.floor(Date.now() / 1000) + Number(ttl);
+const head = b64({ alg: "HS256", typ: "JWT" });
+const body = b64({ sub: "ada", exp });
+const sig = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+const token = `${head}.${body}.${sig}`;
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+(async () => {
+  const ws = await within(new Promise((resolve, reject) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}/?room=r1`, ["bynk.bearer", token]);
+    w.addEventListener("open", () => resolve(w));
+    w.addEventListener("error", () => reject(new Error("upgrade failed")));
+  }), 15000, "the upgrade");
+  const closed = new Promise((done) => ws.addEventListener("close", (e) => done({ code: e.code, reason: e.reason })));
+  ws.send(JSON.stringify({ text: "early" }));
+  await sleep(1000);
+  const before = await state();
+  // Past the credential's expiry (`exp < now`), plus a margin for clock rounding.
+  await sleep((exp + 2) * 1000 - Date.now());
+  ws.send(JSON.stringify({ text: "late" }));
+  const close = await within(closed, 15000, "the close after expiry");
+  const after = await state();
+  console.log(JSON.stringify({ before, close, after }));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_frame_after_the_credential_expires_closes_the_connection_on_workerd() {
+    let secret = "expiry-smoke-secret";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", WS_EXPIRY_SOURCE)],
+        "ws-expiry",
+        None,
+        None,
+        &["--var".to_string(), format!("WS_SECRET:{secret}")],
+    ) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-expiry-client.js");
+    fs::write(&script, WS_EXPIRY_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(secret)
+        .arg("5")
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the expiry client must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["before"],
+        serde_json::json!("\"1:0\""),
+        "a frame before the expiry is handled as usual, and nothing has closed\n{report}"
+    );
+    assert_eq!(
+        seen["close"],
+        serde_json::json!({ "code": 1008, "reason": "authentication expired" }),
+        "a frame after the expiry closes the socket with 1008\n{report}"
+    );
+    assert_eq!(
+        seen["after"],
+        serde_json::json!("\"1:1008\""),
+        "`on message` did not run for the late frame, and `on close` ran with 1008\n{report}"
+    );
+}
+
+/// #3904: a cookie-authenticated upgrade through the deployed Worker. The service lists one origin in
+/// `cors`; `joined` counts the connections the Durable Object accepted, so a refused upgrade that
+/// reached it would show.
+const WS_COOKIE_SOURCE: &str = r#"context smoke
+
+type UserId = String where NonEmpty
+type Frame = { text: String }
+
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 1.hour), identity = UserId }
+
+service live from websocket(in: Frame, out: Frame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on open (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on close (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).left()
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store joined: Cell[Int]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    let _ <- joined.update((c) => c + 1)
+    ()
+  }
+
+  on call left() -> Effect[()] {
+    let _ <- conns.remove("c")
+    ()
+  }
+
+  on call snapshot() -> Effect[String] {
+    "\(joined)"
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }
+}
+"#;
+
+/// A real client that sends raw upgrade requests, so it can set `Origin` and `Cookie` as a browser
+/// would, and reports the status of each. A `101` is the upgrade accepted.
+const WS_COOKIE_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const http = require("node:http");
+const [port, keyB64] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const key = Buffer.from(keyB64, "base64url");
+const kid = crypto.createHash("sha256").update(key).digest().subarray(0, 6).toString("base64url");
+const cookie = (aud, ttl, secret = key) => {
+  const iat = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: "HS256", typ: "bynk+session", kid });
+  const body = b64({ sub: "ada", aud, iat, exp: iat + ttl });
+  const mac = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+  return `${head}.${body}.${mac}`;
+};
+const upgrade = (origin, cookieValue) => new Promise((resolve, reject) => {
+  const headers = {
+    Connection: "Upgrade",
+    Upgrade: "websocket",
+    "Sec-WebSocket-Version": "13",
+    "Sec-WebSocket-Key": crypto.randomBytes(16).toString("base64"),
+  };
+  if (origin !== null) headers.Origin = origin;
+  if (cookieValue !== null) headers.Cookie = `__Host-session=${cookieValue}`;
+  const req = http.request({ host: "127.0.0.1", port, path: "/?room=r1", headers });
+  req.on("upgrade", (res, socket) => { socket.destroy(); resolve(res.statusCode); });
+  req.on("response", (res) => { res.resume(); resolve(res.statusCode); });
+  req.on("error", reject);
+  req.end();
+});
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+(async () => {
+  const good = cookie("Member", 3600);
+  const out = {};
+  out.listed = await upgrade("https://app.example.com", good);
+  await new Promise((r) => setTimeout(r, 500));
+  out.afterListed = await state();
+  out.noOrigin = await upgrade(null, good);
+  out.otherOrigin = await upgrade("https://evil.example", good);
+  out.nearOrigin = await upgrade("https://app.example.com.evil.example", good);
+  out.noOriginNoCookie = await upgrade(null, null);
+  out.noCookie = await upgrade("https://app.example.com", null);
+  out.foreignKey = await upgrade("https://app.example.com", cookie("Member", 3600, crypto.randomBytes(32)));
+  out.otherActor = await upgrade("https://app.example.com", cookie("Other", 3600));
+  await new Promise((r) => setTimeout(r, 500));
+  out.afterRefused = await state();
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_cookie_upgrade_needs_a_listed_origin_through_the_worker_on_workerd() {
+    let key = "c2Vzc2lvbi1rZXktZm9yLXRoZS13b3JrZXJkLXNtb2tlLXRlc3Q";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", WS_COOKIE_SOURCE)],
+        "ws-cookie",
+        None,
+        None,
+        &["--var".to_string(), format!("SESSION_KEY:{key}")],
+    ) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-cookie-client.js");
+    fs::write(&script, WS_COOKIE_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(key)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the cookie client must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["listed"], 101,
+        "a listed Origin with a valid cookie upgrades\n{report}"
+    );
+    assert_eq!(
+        seen["afterListed"],
+        serde_json::json!("\"1\""),
+        "the Durable Object accepted it\n{report}"
+    );
+    for case in ["noOrigin", "otherOrigin", "nearOrigin", "noOriginNoCookie"] {
+        assert_eq!(
+            seen[case], 403,
+            "{case}: a missing or unlisted Origin is 403\n{report}"
+        );
+    }
+    for case in ["noCookie", "foreignKey", "otherActor"] {
+        assert_eq!(
+            seen[case], 401,
+            "{case}: a listed Origin with a bad cookie is 401\n{report}"
+        );
+    }
+    assert_eq!(
+        seen["afterRefused"],
+        serde_json::json!("\"1\""),
+        "no refused upgrade reached the Durable Object\n{report}"
+    );
+}
+
+/// #3905: frame limits and binary frames through the deployed Worker. `heard` counts the frames
+/// `on message` ran for, so a frame refused before decoding shows as not heard. One service per
+/// source (the Worker routes an upgrade to the first), in a `Bytes` and a JSON form.
+fn ws_frame_source(in_ty: &str, handler_frame: &str, echo: &str) -> String {
+    format!(
+        r#"context smoke
+
+type UserId = String where NonEmpty
+type Frame = {{ text: String }}
+
+actor Member {{ auth = Bearer(secret = "WS_SECRET"), identity = UserId }}
+
+service live from websocket(in: {in_ty}, out: {in_ty}) {{
+  limits {{ maxFrame: 64 }}
+
+  on open (room: String) -> Effect[()] by user: Member {{
+    let _ <- Room(room).join(connection)
+    ()
+  }}
+
+  on message (room: String, frame: {handler_frame}) -> Effect[()] by user: Member {{
+    let _ <- Room(room).heard()
+    let _ <- connection.send({echo})
+    ()
+  }}
+
+  on close (room: String) -> Effect[()] by user: Member {{
+    let _ <- Room(room).left()
+    ()
+  }}
+}}
+
+agent Room {{
+  key id: String
+  store conns: Map[String, Connection[{in_ty}]]
+  store count: Cell[Int]
+
+  on call join(conn: Connection[{in_ty}]) -> Effect[()] {{
+    let _ <- conns.put("c", conn)
+    ()
+  }}
+
+  on call heard() -> Effect[()] {{
+    let _ <- count.update((c) => c + 1)
+    ()
+  }}
+
+  on call left() -> Effect[()] {{
+    let _ <- conns.remove("c")
+    ()
+  }}
+
+  on call snapshot() -> Effect[String] {{
+    "\(count)"
+  }}
+}}
+
+service api from http {{
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {{
+    Ok("up")
+  }}
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {{
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }}
+}}
+"#
+    )
+}
+
+/// A real client: it opens a socket with a Bearer pair, sends the frames its mode names and reports
+/// what came back (an echoed frame's kind and size, or the close code), then the service's `heard`.
+const WS_FRAMES_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const [port, secret, mode] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const exp = Math.floor(Date.now() / 1000) + 3600;
+const head = b64({ alg: "HS256", typ: "JWT" });
+const body = b64({ sub: "ada", exp });
+const sig = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+const token = `${head}.${body}.${sig}`;
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+// Open a socket, send `frame`, and report the first thing that happens: a frame back or the close.
+async function trial(frame) {
+  const ws = await within(new Promise((resolve, reject) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}/?room=r1`, ["bynk.bearer", token]);
+    w.binaryType = "arraybuffer";
+    w.addEventListener("open", () => resolve(w));
+    w.addEventListener("error", () => reject(new Error("upgrade failed")));
+  }), 15000, "the upgrade");
+  const outcome = within(new Promise((done) => {
+    ws.addEventListener("message", (e) => done(typeof e.data === "string"
+      ? { text: e.data.length }
+      : { binary: e.data.byteLength }));
+    ws.addEventListener("close", (e) => done({ close: e.code, reason: e.reason }));
+  }), 15000, "a reply");
+  ws.send(frame);
+  const result = await outcome;
+  try { ws.close(); } catch {}
+  await new Promise((r) => setTimeout(r, 300));
+  return result;
+}
+(async () => {
+  const out = {};
+  if (mode === "bytes") {
+    out.small = await trial(new Uint8Array(10).fill(7));
+    out.tooBig = await trial(new Uint8Array(65).fill(7));
+    out.text = await trial(JSON.stringify({ text: "hi" }));
+  } else {
+    out.small = await trial(JSON.stringify({ text: "hi" }));
+    out.tooBig = await trial(JSON.stringify({ text: "x".repeat(100) }));
+    out.binary = await trial(new Uint8Array(10).fill(7));
+  }
+  out.heard = await state();
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+fn run_ws_frames(source: &str, tag: &str, mode: &str) -> Option<serde_json::Value> {
+    let secret = "frames-smoke-secret";
+    let served = serve_smoke_with_args(
+        &[("smoke.bynk", source)],
+        tag,
+        None,
+        None,
+        &["--var".to_string(), format!("WS_SECRET:{secret}")],
+    )?;
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-frames-client.js");
+    fs::write(&script, WS_FRAMES_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(secret)
+        .arg(mode)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the frames client must run green:\n{report}"
+    );
+    Some(
+        serde_json::from_slice(&out.stdout)
+            .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}")),
+    )
+}
+
+#[test]
+fn a_bytes_service_echoes_binary_frames_and_refuses_text_and_oversize_on_workerd() {
+    let source = ws_frame_source("Bytes", "Bytes", "frame");
+    let Some(seen) = run_ws_frames(&source, "ws-bytes", "bytes") else {
+        return;
+    };
+    assert_eq!(
+        seen["small"],
+        serde_json::json!({ "binary": 10 }),
+        "a binary frame is echoed as binary\n{seen}"
+    );
+    assert_eq!(
+        seen["tooBig"],
+        serde_json::json!({ "close": 1009, "reason": "message too large" }),
+        "a frame over maxFrame is closed with 1009\n{seen}"
+    );
+    assert_eq!(
+        seen["text"],
+        serde_json::json!({ "close": 1003, "reason": "text frame not accepted" }),
+        "a text frame to a Bytes service is closed with 1003\n{seen}"
+    );
+    assert_eq!(
+        seen["heard"],
+        serde_json::json!("\"1\""),
+        "only the one admitted frame reached `on message`\n{seen}"
+    );
+}
+
+#[test]
+fn a_json_service_refuses_binary_and_oversize_frames_before_parsing_on_workerd() {
+    let source = ws_frame_source("Frame", "Frame", "frame");
+    let Some(seen) = run_ws_frames(&source, "ws-json-frames", "json") else {
+        return;
+    };
+    assert_eq!(
+        seen["small"],
+        serde_json::json!({ "text": 13 }),
+        "a JSON frame is echoed as text\n{seen}"
+    );
+    assert_eq!(
+        seen["tooBig"],
+        serde_json::json!({ "close": 1009, "reason": "message too large" }),
+        "a frame over maxFrame is closed with 1009\n{seen}"
+    );
+    assert_eq!(
+        seen["binary"],
+        serde_json::json!({ "close": 1003, "reason": "binary frame not accepted" }),
+        "a binary frame to a JSON service is closed with 1003\n{seen}"
+    );
+    assert_eq!(
+        seen["heard"],
+        serde_json::json!("\"1\""),
+        "only the one admitted frame reached `on message`\n{seen}"
     );
 }
 
@@ -1264,7 +2147,7 @@ service api from http {
 
 #[test]
 fn concurrent_handlers_on_one_agent_instance_all_count_on_workerd() {
-    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise", 45000) else {
+    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise") else {
         return;
     };
     let url = served.url.clone();

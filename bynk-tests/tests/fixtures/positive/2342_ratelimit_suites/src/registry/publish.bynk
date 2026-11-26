@@ -11,11 +11,11 @@ capability PublishLimit = RateLimit @limit(2) @period(60.seconds)
 capability ReadLimit = RateLimit @limit(1) @period(10.seconds)
 
 service publish {
-	on call(token: String) -> Effect[Bool] given PublishLimit { PublishLimit.allow(token) }
+	on call(token: String) -> Effect[Bool] by Caller given PublishLimit { PublishLimit.allow(token) }
 }
 
 service read {
-	on call(key: String) -> Effect[Bool] given ReadLimit { ReadLimit.allow(key) }
+	on call(key: String) -> Effect[Bool] by Caller given ReadLimit { ReadLimit.allow(key) }
 }
 
 service api from http {

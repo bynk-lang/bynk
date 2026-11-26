@@ -9,19 +9,19 @@ context ev.relay
 consumes ev.store
 
 service relay {
-  on call(b: Batch) -> Effect[Int] {
+  on call(b: Batch) -> Effect[Int] by Caller {
     Effect.pure(b.size)
   }
 }
 
 service echo {
-  on call(id: String) -> Effect[Batch] {
+  on call(id: String) -> Effect[Batch] by Caller {
     Effect.pure(Batch { id: id, size: 1 })
   }
 }
 
 service many {
-  on call(xs: List[Batch], o: Option[Batch]) -> Effect[Option[Batch]] {
+  on call(xs: List[Batch], o: Option[Batch]) -> Effect[Option[Batch]] by Caller {
     Effect.pure(o)
   }
 }
@@ -44,7 +44,7 @@ agent Shelf {
 }
 
 service shelve {
-  on call(b: Batch) -> Effect[Batch] {
+  on call(b: Batch) -> Effect[Batch] by Caller {
     Shelf("one").put(b)
   }
 }

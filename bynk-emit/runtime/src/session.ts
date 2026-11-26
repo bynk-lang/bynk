@@ -122,7 +122,8 @@ function hmacKey(bytes: Uint8Array, usage: KeyUsage): Promise<CryptoKey> {
  * Issue a session cookie value for `sub`, signed with `keys.secret`, valid for
  * `ttlSecs` from `nowMs`. `actor` is the declaring actor's name (the `aud`).
  * Throws `SessionKeyFault` for a bad key and `RangeError` for a bad `ttlSecs`
- * or an empty `sub`; the router turns either into a faulted request.
+ * or an empty `sub`; the router turns either into a faulted request. A `sid` (#3938,
+ * `sessions = true`) names the session the seam checks against the actor's session agent.
  */
 export async function signSessionCookie(
   keys: SessionKeys,
@@ -130,6 +131,7 @@ export async function signSessionCookie(
   sub: string,
   ttlSecs: number,
   nowMs: number = Date.now(),
+  sid?: string,
 ): Promise<string> {
   if (!Number.isSafeInteger(ttlSecs) || ttlSecs <= 0) {
     throw new RangeError("a session ttl must be a positive whole number of seconds");
@@ -138,7 +140,7 @@ export async function signSessionCookie(
   const { current } = await loadKeys(keys);
   const iat = Math.floor(nowMs / 1000);
   const head = toB64Url(enc.encode(JSON.stringify({ alg: "HS256", typ: SESSION_TYP, kid: current.kid })));
-  const body = toB64Url(enc.encode(JSON.stringify({ sub, aud: actor, iat, exp: iat + ttlSecs })));
+  const body = toB64Url(enc.encode(JSON.stringify(sid === undefined ? { sub, aud: actor, iat, exp: iat + ttlSecs } : { sub, aud: actor, iat, exp: iat + ttlSecs, sid })));
   const mac = new Uint8Array(
     await crypto.subtle.sign("HMAC", await hmacKey(current.bytes, "sign"), enc.encode(`${head}.${body}`) as BufferSource),
   );
@@ -163,7 +165,7 @@ function parseSegment(seg: string): Record<string, unknown> | null {
 }
 
 /**
- * Verify a presented session cookie for `actor`. `Ok({ sub })` only for a
+ * Verify a presented session cookie for `actor`. `Ok({ sub, exp })` only for a
  * well-formed cookie signed by `keys.secret` or `keys.previous` (selected by
  * its `kid`), made for this actor, issued no later than now (one second of
  * skew), unexpired, and whose lifetime (`exp - iat`) does not exceed
@@ -177,7 +179,7 @@ export async function verifySignedCookie(
   actor: string,
   ttlSecs: number,
   nowMs: number = Date.now(),
-): Promise<Result<{ readonly sub: string }, string>> {
+): Promise<Result<{ readonly sub: string; readonly sid?: string; readonly exp: number }, string>> {
   // The bound on a cookie's lifetime is the actor's `ttl`; one that is not a positive whole number
   // would turn it off (`NaN` compares false), so it is a fault, as it is for the signer.
   if (!Number.isSafeInteger(ttlSecs) || ttlSecs <= 0) {
@@ -211,7 +213,7 @@ export async function verifySignedCookie(
   if (!ok) return Err("bad signature");
   const body = parseSegment(bodyB64);
   if (body === null) return Err("malformed payload");
-  const { sub, aud, iat, exp } = body;
+  const { sub, aud, iat, exp, sid } = body;
   if (typeof sub !== "string" || sub.length === 0) return Err("missing sub");
   if (aud !== actor) return Err("wrong audience");
   if (typeof iat !== "number" || !Number.isInteger(iat)) return Err("malformed iat");
@@ -221,7 +223,9 @@ export async function verifySignedCookie(
   if (exp <= iat) return Err("malformed lifetime");
   if (exp - iat > ttlSecs) return Err("lifetime exceeds ttl");
   if (exp <= now) return Err("cookie expired");
-  return Ok({ sub });
+  if (sid === undefined) return Ok({ sub, exp });
+  if (typeof sid !== "string" || sid.length === 0) return Err("malformed sid");
+  return Ok({ sub, sid, exp });
 }
 
 // -- issuing and deleting the cookie (`Actor.issue(identity)`, `Actor.expire()`) ------------------
@@ -261,8 +265,17 @@ export async function issueSessionCookie(
   sub: string,
   ttlSecs: number,
   nowMs: number,
+  register?: (sid: string, expMs: number, nowMs: number) => Promise<unknown>,
 ): Promise<IssuedCookie> {
-  const value = await signSessionCookie(keys, actor, sub, ttlSecs, nowMs);
+  // #3938: with `sessions = true` the caller passes `register`, which records the new session in
+  // the actor's session agent. It runs before the cookie is signed, so a cookie never exists for a
+  // session the agent does not know (a failure there faults the request and issues nothing).
+  let sid: string | undefined;
+  if (register !== undefined) {
+    sid = toB64Url(crypto.getRandomValues(new Uint8Array(16)));
+    await register(sid, (Math.floor(nowMs / 1000) + ttlSecs) * 1000, nowMs);
+  }
+  const value = await signSessionCookie(keys, actor, sub, ttlSecs, nowMs, sid);
   return {
     name: cookie,
     value,
@@ -292,4 +305,11 @@ export function expireSessionCookie(cookie: string, sameSite: "Lax" | "Strict" |
     sameSite: { tag: sameSite },
     partitioned: false,
   };
+}
+
+/** #3938: the session the seam verified for this request, `{ sid, sub }`, threaded in `deps` by the edge
+ *  wrapper of a `sessions = true` actor; `null` in a handler the actor does not guard. */
+export function currentSession(deps: unknown): { readonly sid: string; readonly sub: string } | null {
+  const c = (deps as { __sessionOf?: { sid: string; sub: string } } | null | undefined)?.__sessionOf;
+  return c === undefined ? null : c;
 }

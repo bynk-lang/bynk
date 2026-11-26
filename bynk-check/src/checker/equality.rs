@@ -191,6 +191,12 @@ impl EqScope {
     /// The scope of `f`'s body: its own `T: Eq` / `T: Ord` bounds, `where A: C`
     /// entries, and the bounds its receiver type declares on its own parameters.
     pub(crate) fn for_fn(f: &FnDecl, input: &ResolvedCommons) -> Self {
+        Self::for_fn_in(f, &input.types)
+    }
+
+    /// [`Self::for_fn`] over the type table alone, for a caller that has no
+    /// [`ResolvedCommons`] yet (the resolver's signature walk, #3958).
+    pub(crate) fn for_fn_in(f: &FnDecl, types: &HashMap<String, Arc<TypeDecl>>) -> Self {
         let mut declared = HashSet::new();
         let mut ord = HashSet::new();
         let mut key = HashSet::new();
@@ -249,7 +255,7 @@ impl EqScope {
         let ret = f.return_type.span();
         fix.ret_end = Some(Span::new_in(ret.file, ret.end, ret.end));
         if let FnName::Method { type_name, .. } = &f.name
-            && let Some(decl) = input.types.get(&type_name.name)
+            && let Some(decl) = types.get(&type_name.name)
         {
             for tp in &decl.type_params {
                 if has_eq(&tp.bounds) {
@@ -277,6 +283,63 @@ impl EqScope {
             reported_codable: Rc::default(),
             fix,
         }
+    }
+
+    /// #3958: the scope of a type declaration's own parameters, where a field's
+    /// type applies another bounded type to one of them.
+    pub(crate) fn for_type(decl: &TypeDecl) -> Self {
+        let mut scope = EqScope::default();
+        for tp in &decl.type_params {
+            let name = &tp.name.name;
+            if has_eq(&tp.bounds) {
+                scope.declared.insert(name.clone());
+            }
+            if has_ord(&tp.bounds) {
+                scope.ord.insert(name.clone());
+            }
+            if has_key(&tp.bounds) {
+                scope.key.insert(name.clone());
+            }
+            if has_codable(&tp.bounds) {
+                scope.codable.insert(name.clone());
+            }
+            if let Some(eq) = tp.bounds.iter().find(|b| b.name == "Eq") {
+                scope.fix.eq_bound.insert(name.clone(), eq.span);
+            }
+            let end = tp.bounds.last().map_or(tp.name.span, |b| b.span);
+            scope.fix.own.insert(
+                name.clone(),
+                (
+                    Span::new_in(end.file, end.end, end.end),
+                    !tp.bounds.is_empty(),
+                ),
+            );
+        }
+        scope
+    }
+
+    /// #3958: whether `param` carries `constraint` (`Eq`, `Ord`, `Key` or
+    /// `Codable`) here.
+    pub(crate) fn carries(&self, param: &str, constraint: &str) -> bool {
+        match constraint {
+            "Eq" => self.declared.contains(param),
+            "Ord" => self.ord.contains(param),
+            "Key" => self.key.contains(param),
+            "Codable" => self.codable.contains(param),
+            _ => true,
+        }
+    }
+
+    /// #3958: record that `param`'s missing `constraint` is reported; `false`
+    /// when it already was, so a parameter is reported once per declaration.
+    pub(crate) fn first_report(&self, param: &str, constraint: &str) -> bool {
+        let seen = match constraint {
+            "Eq" => &self.reported,
+            "Ord" => &self.reported_ord,
+            "Key" => &self.reported_key,
+            _ => &self.reported_codable,
+        };
+        seen.borrow_mut().insert(param.to_string())
     }
 
     /// The edit that declares `constraint` (`Eq`, `Ord` or `Key`) on `param`. A
@@ -513,7 +576,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         }
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -684,6 +747,9 @@ pub(crate) enum NotComparable {
     /// A function, `Effect` or `Query` (`bynk.types.not_comparable`). The string
     /// names the offending part for the diagnostic.
     Computation(String),
+    /// A `bynk` `Secret` (`bynk.types.secret_not_comparable`, #4111): `==` on text would
+    /// compare in variable time, so a secret is compared with `matches`.
+    Secret,
 }
 
 /// The first part of `ty` that has no value equality, or `None` when `ty` is
@@ -703,7 +769,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_) => {
             Some(NotComparable::Computation(tys.display(ty)))
         }
-        Ty::Option(t) | Ty::List(t) | Ty::Set(t) | Ty::HttpResult(t) | Ty::HttpOutcome(t) => {
+        Ty::Option(t) | Ty::List(t) | Ty::Set(t) | Ty::HttpResult(t, _) | Ty::HttpOutcome(t) => {
             walk_ty(*t, ctx, visited)
         }
         Ty::Result(a, b) | Ty::Map(a, b) => {
@@ -712,6 +778,9 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         Ty::Named { name, args, .. } => {
             let args = args.clone();
             let name = name.clone();
+            if crate::context_checks::is_secret_type(&name, types) {
+                return Some(NotComparable::Secret);
+            }
             for a in &args {
                 if let Some(found) = walk_ty(*a, ctx, visited) {
                     return Some(found);
@@ -789,7 +858,7 @@ pub(crate) fn walk_ref(
         TypeRef::Option(a, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::History(a, _) => walk_ref(a, params, types, visited),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             walk_ref(a, params, types, visited).or_else(|| walk_ref(b, params, types, visited))
@@ -797,6 +866,9 @@ pub(crate) fn walk_ref(
         // A type parameter is checked through the applied argument at the use
         // site (`walk_ty`'s `Named` arm), not here.
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
+        TypeRef::Named(id) if crate::context_checks::is_secret_type(&id.name, types) => {
+            Some(NotComparable::Secret)
+        }
         TypeRef::Named(id) => walk_decl(&id.name, types, visited),
         TypeRef::App { name, args, .. } => args
             .iter()
@@ -828,7 +900,7 @@ pub(crate) fn render(t: &TypeRef) -> String {
         TypeRef::Map(a, b, _) => format!("Map[{}, {}]", render(a), render(b)),
         TypeRef::Option(a, _) => one("Option", a),
         TypeRef::Effect(a, _) => one("Effect", a),
-        TypeRef::HttpResult(a, _) => one("HttpResult", a),
+        TypeRef::HttpResult(a, _, _) => one("HttpResult", a),
         TypeRef::List(a, _) => one("List", a),
         TypeRef::Set(a, _) => one("Set", a),
         TypeRef::Query(a, _) => one("Query", a),
@@ -868,6 +940,13 @@ pub(crate) fn explain(blocker: NotComparable, top: bool) -> (&'static str, Strin
         NotComparable::Held(held) => (
             "bynk.types.held_not_comparable",
             format!("{it} a held `{held}`, which has identity, not value-equality"),
+        ),
+        NotComparable::Secret => (
+            "bynk.types.secret_not_comparable",
+            format!(
+                "{} a `Secret`, which is compared with `matches`, never `==`: comparing text is variable-time",
+                if top { "it is" } else { "it contains" }
+            ),
         ),
         NotComparable::Computation(part) if top => (
             "bynk.types.not_comparable",

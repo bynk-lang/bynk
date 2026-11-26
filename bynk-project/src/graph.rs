@@ -16,11 +16,45 @@ pub fn detect_consumes_cycles(
     sites: &HashMap<(String, String), (PathBuf, Span)>,
     errors: &mut Vec<(Option<PathBuf>, CompileError)>,
 ) {
+    detect_cycles(consumes, None, sites, errors);
+}
+
+/// #4044: the `consumes` cycle check over `consumes` and `uses` edges together,
+/// because a commons may `consumes` an adapter that `uses` it. Only a cycle with
+/// at least one `consumes` edge is reported, since a cycle of `uses` alone is the
+/// `uses` check's.
+pub fn detect_dependency_cycles(
+    consumes: &HashMap<String, Vec<String>>,
+    uses: &HashMap<String, Vec<String>>,
+    sites: &HashMap<(String, String), (PathBuf, Span)>,
+    errors: &mut Vec<(Option<PathBuf>, CompileError)>,
+) {
+    let mut union: HashMap<String, Vec<String>> = consumes.clone();
+    for (unit, targets) in uses {
+        let edges = union.entry(unit.clone()).or_default();
+        for t in targets {
+            if !edges.contains(t) {
+                edges.push(t.clone());
+            }
+        }
+    }
+    detect_cycles(&union, Some(consumes), sites, errors);
+}
+
+fn detect_cycles(
+    consumes: &HashMap<String, Vec<String>>,
+    must_include: Option<&HashMap<String, Vec<String>>>,
+    sites: &HashMap<(String, String), (PathBuf, Span)>,
+    errors: &mut Vec<(Option<PathBuf>, CompileError)>,
+) {
     // Tarjan / Kosaraju overkill — a simple DFS with a path stack catches
     // cycles and yields the cycle path for the diagnostic.
     let mut visited: HashSet<String> = HashSet::new();
     let mut reported: HashSet<Vec<String>> = HashSet::new();
-    for start in consumes.keys() {
+    // Sorted, so the cycle each run reports does not depend on hash order.
+    let mut starts: Vec<&String> = consumes.keys().collect();
+    starts.sort();
+    for start in starts {
         if visited.contains(start) {
             continue;
         }
@@ -29,6 +63,7 @@ pub fn detect_consumes_cycles(
         dfs_consumes(
             start,
             consumes,
+            must_include,
             sites,
             &mut visited,
             &mut stack,
@@ -43,6 +78,7 @@ pub fn detect_consumes_cycles(
 fn dfs_consumes(
     node: &str,
     consumes: &HashMap<String, Vec<String>>,
+    must_include: Option<&HashMap<String, Vec<String>>>,
     sites: &HashMap<(String, String), (PathBuf, Span)>,
     visited: &mut HashSet<String>,
     stack: &mut Vec<String>,
@@ -57,13 +93,27 @@ fn dfs_consumes(
         cycle.push(node.to_string());
         // Canonicalise the cycle for de-dup.
         let canon = canonicalise_cycle(&cycle);
+        // With a `consumes`-only filter, a cycle none of whose edges is a `consumes`
+        // edge is somebody else's to report. It is reported from the first unit
+        // (in canonical order) whose edge on the cycle is a `consumes` one, so the
+        // diagnostic anchors on a real `consumes` clause.
+        if let Some(c) = must_include {
+            let n = canon.len();
+            let Some(k) = (0..n).find(|&k| {
+                c.get(&canon[k])
+                    .is_some_and(|ts| ts.contains(&canon[(k + 1) % n]))
+            }) else {
+                return;
+            };
+            cycle = (0..=n).map(|d| canon[(k + d) % n].clone()).collect();
+        }
         if reported.insert(canon.clone()) {
             // Anchor the diagnostic on the clause forming the cycle's closing
-            // edge — `node` consuming the next unit on the path (#696) — when its
-            // site is known; fall back to the spanless, unattributed form
-            // otherwise. `cycle` is `[node, …, node]`, so `cycle[1]` is the unit
-            // `node` consumes on the cycle (itself, for a self-loop).
-            let edge = (node.to_string(), cycle[1].clone());
+            // edge — `cycle[0]` consuming the next unit on the path (#696) — when
+            // its site is known; fall back to the spanless, unattributed form
+            // otherwise. `cycle` is `[start, …, start]`, so `cycle[1]` is the unit
+            // `cycle[0]` consumes on the cycle (itself, for a self-loop).
+            let edge = (cycle[0].clone(), cycle[1].clone());
             let (file, span) = match sites.get(&edge) {
                 Some((path, span)) => (Some(path.clone()), *span),
                 None => (None, Span::default()),
@@ -91,7 +141,15 @@ fn dfs_consumes(
     if let Some(targets) = consumes.get(node) {
         for t in targets {
             dfs_consumes(
-                t, consumes, sites, visited, stack, on_stack, reported, errors,
+                t,
+                consumes,
+                must_include,
+                sites,
+                visited,
+                stack,
+                on_stack,
+                reported,
+                errors,
             );
         }
     }

@@ -1,0 +1,32 @@
+commons lib.y
+
+type Status = | On | Off
+
+type Shape = | Square(side: Int) | Blob
+
+type Point = {
+  a: Int,
+}
+
+type Level = Int where NonNegative
+
+type Box[T] = {
+  item: T,
+}
+
+type IoError = enum { Net }
+
+type AppError =
+  | Io(reason: IoError)
+  | Other
+  embeds IoError as Io
+
+fn describe(s: Status) -> String {
+  "y"
+}
+
+fn area(s: Shape) -> Int {
+  0
+}
+
+const Limit: Int = 2

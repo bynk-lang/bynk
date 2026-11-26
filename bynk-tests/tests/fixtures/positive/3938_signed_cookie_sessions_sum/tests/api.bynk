@@ -1,0 +1,112 @@
+suite shop.api as system {
+	// #3936: one route admits a browser session or an API token. The cookie arm's CSRF check
+	// applies only when that arm is tried and a cookie is present.
+
+	case "a valid session cookie is admitted" {
+		let r <- api.POST("/orders") by User("ada")
+		expect r is Ok("cookie ada")
+	}
+
+	case "a valid token is admitted" {
+		let r <- api.POST("/orders") by ApiClient("ci")
+		expect r is Ok("token ci")
+	}
+
+	case "a cross-site state-changing request carrying only a cookie is refused" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by User("ada")
+		expect r is Forbidden
+	}
+
+	case "the same cross-site request carrying a token is admitted" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by ApiClient("ci")
+		expect r is Ok("token ci")
+	}
+
+	case "a cross-site request from a listed origin carrying a cookie is admitted" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"])) by User("ada")
+		expect r is Ok("cookie ada")
+	}
+
+	case "a cross-site safe request carrying a cookie is not checked" {
+		let r <- api.GET("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by User("ada")
+		expect r is Ok("cookie ada")
+	}
+
+	case "no credential is refused as unauthenticated, not forbidden" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "the token-first route admits either arm" {
+		let cookie <- api.POST("/orders/token-first") by User("ada")
+		let token <- api.POST("/orders/token-first") by ApiClient("ci")
+		expect cookie is Ok("cookie ada")
+		expect token is Ok("token ci")
+	}
+
+	// A request carrying both credentials: each arm's failure falls through to the next, in order.
+	case "a bad cookie beside a valid token falls through to the token" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Cookie: __Host-session=garbage"])) by ApiClient("ci")
+		expect r is Ok("token ci")
+	}
+
+	case "a cross-site request with a bad cookie and a valid token is admitted by the token" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Cookie: __Host-session=garbage"])) by ApiClient("ci")
+		expect r is Ok("token ci")
+	}
+
+	case "a cross-site cookie is refused on either order, because no token arm admits it" {
+		let first <- api.POST("/orders", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by User("ada")
+		let second <- api.POST("/orders/token-first", RequestHeaders.of(["Sec-Fetch-Site: cross-site"])) by User("ada")
+		expect first is Forbidden
+		expect second is Forbidden
+	}
+
+	case "a valid cookie with a stray cookie of another name is admitted" {
+		let r <- api.POST("/orders", RequestHeaders.of(["Cookie: theme=dark"])) by User("ada")
+		expect r is Ok("cookie ada")
+	}
+
+	case "expire ends the session from a sum handler" {
+		let r <- api.POST("/logout") by User("ada")
+		expect r is NoContent
+	}
+
+	case "revokeAll answers for the acting identity in a sum handler" {
+		let r <- api.POST("/revoke-all") by User("ada")
+		expect r is NoContent
+	}
+
+	case "a session ended by expire from a sum handler is refused when replayed" {
+		let before <- api.GET("/orders") by User("ada")
+		expect before is Ok("cookie ada")
+		let out <- api.POST("/logout") by User("ada")
+		expect out is NoContent
+		let after <- api.GET("/orders") by User("ada")
+		expect after is Unauthorized
+	}
+
+	case "revokeAll from a sum handler refuses the identity's session and leaves another's valid" {
+		let ada <- api.GET("/orders") by User("ada")
+		expect ada is Ok("cookie ada")
+		let bob <- api.GET("/orders") by User("bob")
+		expect bob is Ok("cookie bob")
+		let revoked <- api.POST("/revoke-all") by User("ada")
+		expect revoked is NoContent
+		let adaAfter <- api.GET("/orders") by User("ada")
+		expect adaAfter is Unauthorized
+		let bobAfter <- api.GET("/orders") by User("bob")
+		expect bobAfter is Ok("cookie bob")
+	}
+
+	// #4385: a sum's cookie arm refuses each bad cookie, named by the member: forged, expired, and a
+	// correctly signed cookie for a session that was then revoked.
+	case "the cookie arm refuses a forged, an expired and a revoked session cookie" {
+		let forged <- api.GET("/orders") by Forged(User)
+		expect forged is Rejected(Unauthorized)
+		let expired <- api.GET("/orders") by Expired(User)
+		expect expired is Rejected(Unauthorized)
+		let revoked <- api.GET("/orders") by Revoked(User)
+		expect revoked is Rejected(Unauthorized)
+	}
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes` is for depending on a context, or on an adapter: it is how you call a service and use the capabilities the other unit exports. A commons has neither. It is shared types and functions, brought in with `uses`. Replace `consumes` with `uses`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.target_is_commons",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nconsumes money                   // ✗ `money` is a commons\nuses money                       // ✓ shared declarations come in with `uses`",
+  "severity": "error",
+  "summary": "`consumes` targets a `commons` instead of a context."
+}

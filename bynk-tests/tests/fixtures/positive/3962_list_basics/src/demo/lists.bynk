@@ -1,0 +1,32 @@
+---
+The `List` methods `bynk.list` used to hold, plus `contains`, `last` and `isEmpty` (#3962).
+---
+commons demo.lists
+
+type Rank = enum { A, B, C } derives Ord
+
+type Point = { x: Int, y: Int }
+
+fn newest(xs: List[Float]) -> Option[Float] {
+	xs.max()
+}
+
+fn has[T: Eq](xs: List[T], x: T) -> Bool {
+	xs.contains(x)
+}
+
+fn ordered[T: Ord](xs: List[T]) -> List[T] {
+	xs.sort()
+}
+
+fn ranks() -> List[Rank] {
+	[C, A, B, A]
+}
+
+fn points() -> List[Point] {
+	[Point { x: 1, y: 2 }, Point { x: 3, y: 4 }]
+}
+
+fn enrich(ids: List[Int]) -> Effect[List[Int]] {
+	ids.traverse((id) => Effect.pure(id * 10))
+}

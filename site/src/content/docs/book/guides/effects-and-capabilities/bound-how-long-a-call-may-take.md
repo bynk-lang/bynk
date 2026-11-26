@@ -19,7 +19,7 @@ capability Pricing {
 }
 
 service quotes {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		let r <- Pricing.quote(id).within(2.seconds)
 		match r {
 			Ok(q) => Effect.pure("quoted \(q)"),
@@ -49,7 +49,7 @@ A lambda written in the handler can use `within`, and a `par` block bounds each 
 bindings alone:
 
 ```bynk,fragment
-let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
+let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(1.second))
 ```
 
 ## Where it is allowed
@@ -93,7 +93,7 @@ suite shop.quote {
 
 The harness moves its clock to the deadline for you, but only while every call in flight
 is a stub waiting on `after` or `never`; a call into a real provider is waited for. See
-[testing](/book/reference/testing/#stub-latency).
+[testing](/reference/testing/#stub-latency).
 
 For what a timeout does and does not stop, read
-[what a timeout stops](/book/guides/effects-and-capabilities/what-a-timeout-stops/).
+[what a timeout stops](/book/concepts/effects-and-capabilities/what-a-timeout-stops/).

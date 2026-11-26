@@ -4,7 +4,7 @@ asset badge = "assets/badge.svg"
 asset robots = "assets/robots.txt" at "/robots.txt"
 
 service fragment {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Effect.pure("<img src=\"\(badge.url)\">")
   }
 }

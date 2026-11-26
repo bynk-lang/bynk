@@ -49,9 +49,21 @@ pub struct Book {
     pub sections: Vec<Section>,
 }
 
-/// The hosted URL of a Book source page: `reference/types.md` →
-/// `/book/reference/types/`.
+/// The trees `llms-full.txt` bundles, each served under a path of the same
+/// name: the Book, then the Reference (web presence slice 5).
+const TREES: [&str; 2] = ["book", "reference"];
+
+/// The tree and page of a bundle marker's source, `reference/types.md` →
+/// `("reference", "types.md")`, or `None` for a source in no known tree.
+fn split_source(source: &str) -> Option<(&str, &str)> {
+    let (tree, page) = source.split_once('/')?;
+    TREES.contains(&tree).then_some((tree, page))
+}
+
+/// The hosted URL of a bundled source page: `book/guides/agents/index.md` →
+/// `/book/guides/agents/`, `reference/types.md` → `/reference/types/`.
 fn page_url(source: &str) -> String {
+    let (tree, source) = split_source(source).unwrap_or(("book", source));
     let slug = source
         .strip_suffix(".mdx")
         .or_else(|| source.strip_suffix(".md"))
@@ -62,9 +74,9 @@ fn page_url(source: &str) -> String {
         slug.strip_suffix("/index").unwrap_or(slug)
     };
     if slug.is_empty() {
-        format!("{BOOK_BASE_URL}/book/")
+        format!("{BOOK_BASE_URL}/{tree}/")
     } else {
-        format!("{BOOK_BASE_URL}/book/{slug}/")
+        format!("{BOOK_BASE_URL}/{tree}/{slug}/")
     }
 }
 
@@ -113,11 +125,12 @@ pub fn parse(text: &str) -> Book {
         let is_marker = line.starts_with("# ─")
             && lines
                 .get(i + 1)
-                .is_some_and(|l| l.starts_with("# Source: book/"))
+                .and_then(|l| l.strip_prefix("# Source: "))
+                .is_some_and(|source| split_source(source).is_some())
             && lines.get(i + 2).is_some_and(|l| l.starts_with("# ─"));
         if is_marker {
             flush(&url, &trail, &mut body, &mut sections);
-            url = Some(page_url(&lines[i + 1]["# Source: book/".len()..]));
+            url = Some(page_url(&lines[i + 1]["# Source: ".len()..]));
             trail.clear();
             in_fence = false;
             i += 3;
@@ -352,7 +365,7 @@ mod tests {
     const RULE: &str = "# ────────────────────────────────────────────────────────────";
 
     fn page(source: &str, body: &str) -> String {
-        format!("{RULE}\n# Source: book/{source}\n{RULE}\n\n{body}\n")
+        format!("{RULE}\n# Source: {source}\n{RULE}\n\n{body}\n")
     }
 
     fn bundle() -> String {
@@ -362,8 +375,8 @@ mod tests {
         format!(
             "# Bynk — Full Documentation\n\nintro\n\n{}\n{}\n{}",
             page("reference/types.md", types),
-            page("guides/agents/index.md", agents),
-            page("index.md", "# The Bynk Book\n\nWelcome."),
+            page("book/guides/agents/index.md", agents),
+            page("book/index.md", "# The Bynk Book\n\nWelcome."),
         )
     }
 
@@ -373,15 +386,31 @@ mod tests {
 
     #[test]
     fn maps_a_source_page_to_its_hosted_url() {
+        // Slice 5: a Reference page is served under /reference/, a Book page
+        // under /book/.
         assert_eq!(
             page_url("reference/types.md"),
-            "https://bynk-lang.org/book/reference/types/"
+            "https://bynk-lang.org/reference/types/"
         );
         assert_eq!(
-            page_url("guides/agents/index.mdx"),
+            page_url("reference/index.md"),
+            "https://bynk-lang.org/reference/"
+        );
+        assert_eq!(
+            page_url("book/guides/agents/index.mdx"),
             "https://bynk-lang.org/book/guides/agents/"
         );
-        assert_eq!(page_url("index.md"), "https://bynk-lang.org/book/");
+        assert_eq!(page_url("book/index.md"), "https://bynk-lang.org/book/");
+    }
+
+    #[test]
+    fn a_marker_outside_both_trees_does_not_start_a_page() {
+        assert_eq!(split_source("blog/post.md"), None);
+        let book = parse(&format!(
+            "{}{RULE}\n# Source: blog/post.md\n{RULE}\n\n# Not a page\n",
+            page("book/a.md", "# A\n\ntext\n")
+        ));
+        assert_eq!(book.sections.len(), 1);
     }
 
     #[test]
@@ -402,14 +431,14 @@ mod tests {
         assert!(book.sections[1].text.contains("# not a heading"));
         assert_eq!(
             book.sections[1].url,
-            "https://bynk-lang.org/book/reference/types/"
+            "https://bynk-lang.org/reference/types/"
         );
     }
 
     #[test]
     fn a_skipped_heading_level_nests_under_what_is_open() {
         let book = parse(&page(
-            "a.md",
+            "book/a.md",
             "# A\n\ntop\n\n### C\n\nc\n\n#### E\n\ne\n\n### F\n\nf",
         ));
         let all: Vec<&Section> = book.sections.iter().collect();
@@ -450,9 +479,9 @@ mod tests {
             "Source: the Bynk Book v{}, from the installed toolchain.",
             env!("CARGO_PKG_VERSION")
         )));
-        assert!(out.contains(
-            "**1. Types › Refined types** — https://bynk-lang.org/book/reference/types/"
-        ));
+        assert!(
+            out.contains("**1. Types › Refined types** — https://bynk-lang.org/reference/types/")
+        );
         let none = render_markdown(&book, "zebra");
         assert!(none.starts_with("# Bynk Book: no match for \"zebra\""));
         assert!(none.contains(env!("CARGO_PKG_VERSION")));
@@ -474,7 +503,7 @@ mod tests {
             "filler line\n".repeat(400),
             "x\n".repeat(900)
         );
-        let book = parse(&page("a.md", &body));
+        let book = parse(&page("book/a.md", &body));
         let out = render_markdown_with(&book, "needle", 300);
         assert!(out.contains("needle here"), "{out}");
         assert!(out.chars().count() < 1_200, "{}", out.chars().count());

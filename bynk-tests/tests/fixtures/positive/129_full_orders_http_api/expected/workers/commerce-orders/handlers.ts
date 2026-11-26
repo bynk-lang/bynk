@@ -144,7 +144,7 @@ export function __deserialise_CreateOrderRequest(json: __JsonValue, path: string
   }
   const __amountMinor = obj["amountMinor"];
   if (!(__amountMinor >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.amountMinor`, violation: { field: "amountMinor", message: "must be non-negative", value: __amountMinor } });
+    return Err({ kind: "RefinementViolation", path: `${path}.amountMinor`, violation: { field: "amountMinor", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __amountMinor } });
   }
   const __r_currency = __deserialise_CurrencyCode(obj["currency"], `${path}.currency`);
   if (__r_currency.tag === "Err") return __r_currency;
@@ -164,6 +164,18 @@ export function __serialise_OrderError(value: OrderError): __JsonValue {
 }
 
 export function __deserialise_OrderError(json: __JsonValue, path: string = "$"): Result<OrderError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "PaymentDeclined":
+        return Ok({ tag: "PaymentDeclined" } as OrderError);
+      case "PaymentInsufficientFunds":
+        return Ok({ tag: "PaymentInsufficientFunds" } as OrderError);
+      case "PaymentInfrastructureError":
+        return Ok({ tag: "PaymentInfrastructureError" } as OrderError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -255,6 +267,18 @@ export function __serialise_PaymentError(value: commerce_payment.PaymentError): 
 }
 
 export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"): Result<commerce_payment.PaymentError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Declined":
+        return Ok({ tag: "Declined" } as commerce_payment.PaymentError);
+      case "InsufficientFunds":
+        return Ok({ tag: "InsufficientFunds" } as commerce_payment.PaymentError);
+      case "GatewayDown":
+        return Ok({ tag: "GatewayDown" } as commerce_payment.PaymentError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

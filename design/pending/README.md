@@ -111,6 +111,26 @@ summary: How a case addresses a handler and names its principal
   `design/greenfield-status.md` by hand does not avoid a `raises:`. Locally it
   defaults to `git merge-base HEAD origin/main`, and errors if no base is found.
 
+  **A PR's moves are its own (#4428).** The table gate and the growth gate above
+  excuse a probe when *any* pending file in the tree names it, and the tree holds
+  every increment merged since the last stamp. So a PR could move a probe without
+  naming it, be excused by another PR's file, pass CI and the merge queue, and go
+  red on the stamp that consumed that other file. The same `--check-growth` step
+  therefore also reads the PR's own moves: it runs the gated probes on a checkout
+  of the base revision and on the PR's tree, and requires every probe whose reading
+  differs to be named in `probes:` (and every growth probe whose count rose in
+  `raises:`) by a pending file **this PR adds or changes** against the base. A
+  probe only another increment's file names is not excused, and the failure says
+  so. Name every gated probe your PR moves in your own pending file. A stamp PR
+  deletes pending files and rewrites the table but changes no code, so it moves no
+  probe and owes nothing.
+  A stamp PR deletes the pending files whose `raises:` it consumes, so the check
+  also accepts a rise that `design/greenfield-status-raises.md` gained a row for
+  since the base revision, with exactly that probe's `from` and `to` (the stamp
+  writes the row, see above), but only when the base had a pending file raising
+  that probe which this tree no longer has: a hand-added ledger row in an
+  ordinary PR excuses nothing. A row already in the base ledger excuses nothing.
+
 - **`breaking`** — a one-line Markdown note for an increment that breaks
   existing programs: what breaks, the diagnostic a user will see, and the fix
   (`bynk check --fix` where it is machine-applicable). Omit it when nothing
@@ -156,8 +176,37 @@ filename order) and the next ADR number(s), and — with `--apply` — runs
 `scripts/bump-version.sh`, prepends the changelog row(s), writes the ADR file(s)
 and index row(s), and **deletes** the consumed pending file(s). Without
 `--apply` it prints the plan and changes nothing. Deleting what it consumes is
-what makes a re-run a no-op. An increment with `breaking:` also gets an entry on
+what makes a re-run a no-op, and the **ledger** is what makes it safe when a file
+comes back (below). An increment with `breaking:` also gets an entry on
 the Book's upgrading page.
+
+## The ledger: a stamped file is never stamped twice
+
+`design/stamped.txt` records each file the stamp has consumed: its slug, a hash of its
+bytes, the version it got and any ADR numbers. Only the stamp writes it, so no pull request
+touches it and it cannot conflict. A pending file whose slug **and** hash are on it is
+*already stamped*:
+
+- the stamp deletes it and assigns nothing (no version, no changelog row, no ADR), saying
+  which file and which version it got;
+- `cargo xtask check-pending`, which CI runs on the pull request's merge result and in the
+  merge queue, fails a branch that carries one, naming the slug and version.
+
+This is what makes it safe to merge `main` into a branch at any commit, including one where
+another increment's file is still pending and about to be consumed: a stale copy that merges
+back is caught on the PR, or dropped by the stamp, instead of stamping that increment twice
+(#4234, #4269). If a check fails, delete the named file from your branch: `main` has it.
+
+For stamps made before the ledger existed (the back-fill covers history up to when it
+landed, and the old stamp wrote no line for the few after), the stamp also asks git: a file
+that a commit from before the ledger deleted, with the same bytes, counts as consumed. That
+check is the stamp's alone; `check-pending` reads the ledger only, because a PR's checkout need
+not carry history. Once the ledger is in the tree it is the only authority, so a stamp that
+is reverted to be redone stamps again.
+
+The hash is part of the key so a slug can be reused: a branch name restarted for a new
+increment has different bytes and stamps normally. The ledger was back-filled from the
+history of deleted pending files, with the versions the stamp gave them.
 
 ## Lifecycle
 

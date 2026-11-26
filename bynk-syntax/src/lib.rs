@@ -19,6 +19,7 @@
 struct ReadmeDoctests;
 
 pub mod ast;
+pub mod cron;
 pub mod decimal;
 pub mod diagnostics;
 pub mod error;
@@ -27,6 +28,7 @@ pub mod keywords;
 pub mod lexer;
 pub mod parser;
 pub mod print;
+pub mod queue;
 pub mod semantic_tokens;
 pub mod span;
 

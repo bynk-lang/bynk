@@ -2,16 +2,16 @@
 // composition root for `reg.api` Worker.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256, __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __verifySignatureHmacSha256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {  };
+  const deps = {};
   return {
     async http_GET_whoami(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
       return handlers.api.http_GET_whoami(headers, deps);
@@ -20,12 +20,14 @@ export function compose(env: Env) {
       return handlers.api.http_PUT_packages_Param_name(name, body, headers, deps);
     },
     async http_POST_notes_Param_id(request: globalThis.Request, id: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }) {
-      let __raw: string;
+      let __bytes: globalThis.Uint8Array | undefined;
       try {
-        __raw = await request.text();
+        __bytes = await __readBodyCapped(request, 1048576);
       } catch {
         return HttpResult.BadRequest("Invalid request body");
       }
+      if (__bytes === undefined) return HttpResult.PayloadTooLarge("request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it");
+      const __raw = new globalThis.TextDecoder().decode(__bytes);
       let __who: any = undefined;
       if (__who === undefined) {
         const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
@@ -42,7 +44,7 @@ export function compose(env: Env) {
             const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
             if (__claims.tag === "Ok") {
               const __id = handlers.UserId.of(__claims.value.sub);
-              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
             }
           }
         }

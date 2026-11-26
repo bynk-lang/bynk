@@ -1,0 +1,92 @@
+suite media.store {
+	case "a byte range is read as a stream with the offset and length served" {
+		let _ <- put.call("v", "0123456789")
+		let mid <- range.call("v", 2, Some(4))
+		expect mid == Some("2345 @2+4 of 10")
+		let rest <- range.call("v", 7, None)
+		expect rest == Some("789 @7+3 of 10")
+	}
+
+	case "a length past the end is clamped, and a start past the end faults" {
+		let _ <- put.call("v", "0123456789")
+		let clamped <- range.call("v", 8, Some(50))
+		expect clamped == Some("89 @8+2 of 10")
+		expect range.call("v", 10, None) faults
+		expect range.call("v", 99, Some(1)) faults
+	}
+
+	case "a negative range faults, whatever the client sent" {
+		let _ <- put.call("v", "0123456789")
+		expect range.call("v", -3, None) faults
+		expect range.call("v", 2, Some(-1)) faults
+		expect tail.call("v", -5) faults
+	}
+
+	case "a suffix is the last bytes, clamped to the object" {
+		let _ <- put.call("v", "0123456789")
+		let last <- tail.call("v", 3)
+		expect last == Some("789 @7+3")
+		let whole <- tail.call("v", 50)
+		expect whole == Some("0123456789 @0+10")
+	}
+
+	case "a range of a missing key is None" {
+		let none <- range.call("absent", 0, None)
+		expect none is None
+	}
+
+	case "a read that needs the etag to match reads, or answers not modified" {
+		let etag <- put.call("v", "0123456789")
+		let hit <- readMatching.call("v", etag)
+		expect hit == "found 10"
+		let miss <- readMatching.call("v", "other")
+		expect miss == "not modified 10"
+	}
+
+	case "a read that needs the etag to differ reads, or answers not modified" {
+		let etag <- put.call("v", "0123456789")
+		let same <- readDiffering.call("v", etag)
+		expect same == "not modified 10"
+		let changed <- readDiffering.call("v", "other")
+		expect changed == "found 10"
+	}
+
+	case "an unconditional read reads, and a missing key is Missing under any condition" {
+		let _ <- put.call("v", "0123456789")
+		let always <- readAlways.call("v")
+		expect always == "found 10"
+		let none <- readAlways.call("absent")
+		expect none == "missing"
+		let none2 <- readMatching.call("absent", "x")
+		expect none2 == "missing"
+	}
+
+	case "a delimited listing folds the keys under a path into its prefixes" {
+		let _ <- put.call("photos/2024/a.jpg", "a")
+		let _ <- put.call("photos/2024/b.jpg", "b")
+		let _ <- put.call("photos/2025/c.jpg", "c")
+		let _ <- put.call("photos/cover.jpg", "d")
+		let _ <- put.call("notes.txt", "e")
+		let inside <- children.call("photos/")
+		expect inside == "photos/cover.jpg | photos/2024/,photos/2025/"
+		let top <- children.call("")
+		expect top == "notes.txt | photos/"
+	}
+
+	case "a listing with no delimiter has no prefixes" {
+		let _ <- put.call("a/1", "x")
+		let _ <- put.call("a/2", "y")
+		let n <- everything.call()
+		expect n == 2
+	}
+
+	case "EtagMatches stays R2Condition's, bound or not, beside the read-side conditions" {
+		let etag <- put.call("v", "one")
+		let stale <- swap.call("v", "not-the-etag", "two")
+		expect !stale
+		let fresh <- swap.call("v", etag, "three")
+		expect fresh
+		let same <- readDiffering.call("v", etag)
+		expect same == "found 5"
+	}
+}

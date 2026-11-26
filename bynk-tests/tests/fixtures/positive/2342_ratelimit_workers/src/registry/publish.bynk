@@ -11,7 +11,7 @@ consumes bynk.cloudflare { RateLimit }
 ---
 Publishes per token: 20 a minute.
 ---
-capability PublishLimit = RateLimit @limit(20) @period(1.minutes)
+capability PublishLimit = RateLimit @limit(20) @period(1.minute)
 
 capability ReadLimit = RateLimit @limit(1000) @period(10.seconds)
 
@@ -35,5 +35,5 @@ service api from http {
 }
 
 service read {
-	on call(key: String) -> Effect[Bool] given Gate { Gate.open(key) }
+	on call(key: String) -> Effect[Bool] by Caller given Gate { Gate.open(key) }
 }

@@ -1,0 +1,8 @@
+suite demo.basket {
+	stub Basket.add(_) unreachable
+
+	case "a busy basket is undone" {
+		let r <- place.call("a", 2)
+		expect r is Err("busy")
+	}
+}

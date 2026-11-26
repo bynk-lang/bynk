@@ -124,11 +124,11 @@ impl CrossContextViewsCache {
 /// *synthetic* harness maps, not `unit_info` — so it keeps its parallel-map
 /// signature. The per-file core only has `unit_info`, so this materialises
 /// the four views that one call needs, once per unit ahead of the file loop
-/// — but only for a context/adapter, `build_cross_context_info`'s only
-/// caller. `UnitTable` owns every declaration body in the unit, so for every
-/// other unit kind (including the seven injected first-party commons) this
-/// would otherwise be a whole-project deep clone, performed and discarded,
-/// once per unit.
+/// — but only for a context/adapter, or a commons that consumes something
+/// (#4181), `build_cross_context_info`'s only caller. `UnitTable` owns every
+/// declaration body in the unit, so for every other unit kind (including the
+/// seven injected first-party commons) this would otherwise be a
+/// whole-project deep clone, performed and discarded, once per unit.
 pub struct UnitCheckCtx {
     cross_context_views: Option<Arc<CrossContextViews>>,
     /// #907: the exact set of type names `emit_context_rebrands` rebrands for
@@ -179,7 +179,13 @@ pub fn prepare_unit_check_ctx(
     reached_types: &crate::project_model::ReachedTypes,
     policy: &Arc<crate::stability::StabilityPolicy>,
 ) -> UnitCheckCtx {
-    let cross_context_views = if kind == UnitKind::Context || kind == UnitKind::Adapter {
+    let cross_context_views = if kind == UnitKind::Context
+        || kind == UnitKind::Adapter
+        // #4181: a commons has the view only when it consumes something, which today
+        // is the type-only clause the toolchain adds for the `bynk` types it names.
+        || (kind == UnitKind::Commons
+            && unit_info.get(name).is_some_and(|i| !i.consumes.is_empty()))
+    {
         Some(views.get(unit_info))
     } else {
         None
@@ -704,7 +710,7 @@ pub fn check_file_core(
     // decided here, where the unit's full provenance is known.
     .with_extensible_enums(extensible_names(imported_from))
     // #3536: the first-party types this unit's braces leave out.
-    .with_unselected_types(unit_info[name].table.unselected_names())
+    .with_unselected_types(unit_info[name].table.unselected_names_in(imported_from))
     // S3 (#1963): the project's policy, and this unit's blocked imports. A
     // first-party unit's own bodies are the library's business, never the
     // project's opt-in, so they check under a policy that blocks nothing.
@@ -963,8 +969,8 @@ pub fn check_file_core(
     {
         let sql_errs = ours(d1_sql.check_unit(name, table, &typed.callees, Some(pf.source())));
         if !sql_errs.is_empty() {
+            failed |= any_is_error(&sql_errs);
             errors.extend_for(Some(&pf.identity_path()), sql_errs);
-            failed = true;
         }
     }
 
@@ -992,6 +998,13 @@ fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> 
         .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
         .map(|(n, _)| n.clone())
         .collect()
+}
+
+/// #4200: whether any of `errs` fails the build: a warning (a `Decimal` column's
+/// affinity, say) is reported without failing its file.
+fn any_is_error(errs: &[bynk_syntax::error::CompileError]) -> bool {
+    errs.iter()
+        .any(|e| bynk_syntax::error::Severity::for_error(e) == bynk_syntax::error::Severity::Error)
 }
 
 /// #3536: naming a type, capability or service this file's own `consumes` does
@@ -1099,11 +1112,11 @@ mod tests {
         assert!(Arc::ptr_eq(&first, &second));
     }
 
-    const PAYMENT: &str = "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+    const PAYMENT: &str = "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n";
 
     fn consumer(name: &str, arg: &str) -> String {
         format!(
-            "context shop.{name}\n\nconsumes shop.payment\n\nservice place {{\n  on call() -> Effect[Int] {{\n    let n <- shop.payment.charge({arg})\n    Effect.pure(n)\n  }}\n}}\n"
+            "context shop.{name}\n\nconsumes shop.payment\n\nservice place {{\n  on call() -> Effect[Int] by Caller {{\n    let n <- shop.payment.charge({arg})\n    Effect.pure(n)\n  }}\n}}\n"
         )
     }
 

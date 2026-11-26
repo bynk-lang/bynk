@@ -7,7 +7,7 @@ consumes bynk { Clock }
 
 const SessionTtl: Duration = 5.minutes
 const Retention: Duration = 30.days
-const Fresh: Duration = 1.hours
+const Fresh: Duration = 1.hour
 const MaxUpload: Int = 8
 const SchemaVersion: Int = 2
 const Blob: String = "application/octet-stream"

@@ -1,6 +1,6 @@
 suite relay
 
-consumes bynk { FetchError, Response, Secrets, Fetch }
+consumes bynk { FetchError, Response, Secret, Secrets, Fetch }
 
 // Every step of the handler runs on a platform capability, so each case drives
 // it against the deterministic test doubles `bynk test` provides: `Secrets`
@@ -14,7 +14,7 @@ case "an unconfigured relay target is a server error" {
 }
 
 case "a configured target forwards the event and logs it" {
-	stub Secrets.get("RELAY_TARGET_URL") returns Some("https://upstream.test/hook")
+	stub Secrets.get("RELAY_TARGET_URL") returns Some(Secret.of("https://upstream.test/hook"))
 	stub Fetch.send(_) returns Ok(Response { status: 202, headers: Map.empty(), body: "" })
 	let r <- api.POST("/hooks/event", Event { id: "evt_1", kind: "order.created" }) by Webhook
 	expect r is Ok(_)
@@ -23,7 +23,7 @@ case "a configured target forwards the event and logs it" {
 }
 
 case "an upstream failure is a server error" {
-	stub Secrets.get(_) returns Some("https://upstream.test/hook")
+	stub Secrets.get(_) returns Some(Secret.of("https://upstream.test/hook"))
 	stub Fetch.send(_) returns Err(Timeout)
 	let r <- api.POST("/hooks/event", Event { id: "evt_2", kind: "order.created" }) by Webhook
 	expect r is ServerError(_)

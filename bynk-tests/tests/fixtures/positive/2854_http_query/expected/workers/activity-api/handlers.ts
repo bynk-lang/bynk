@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -11,8 +12,8 @@ export type RepoName = string & { readonly __brand: "activity.api.RepoName" };
 
 export const RepoName = {
   of(value: string): Result<RepoName, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "^[^/]+/[^/]+$" + ")$").test(value))) {
-      return Err({ field: "RepoName", message: "must match /^[^/]+/[^/]+$/", value });
+    if (!(__bynkRegExp("^(?:" + "^[^/]+/[^/]+$" + ")$", "u").test(value))) {
+      return Err({ field: "RepoName", message: "must match /^[^/]+/[^/]+$/", rule: { tag: "Matches", pattern: "^[^/]+/[^/]+$" }, value });
     }
     return Ok(value as RepoName);
   },
@@ -22,8 +23,8 @@ export type Day = string & { readonly __brand: "activity.api.Day" };
 
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "^\\d{4}-\\d{2}-\\d{2}$" + ")$").test(value))) {
-      return Err({ field: "Day", message: "must match /^\\d{4}-\\d{2}-\\d{2}$/", value });
+    if (!(__bynkRegExp("^(?:" + "^\\d{4}-\\d{2}-\\d{2}$" + ")$", "u").test(value))) {
+      return Err({ field: "Day", message: "must match /^\\d{4}-\\d{2}-\\d{2}$/", rule: { tag: "Matches", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, value });
     }
     return Ok(value as Day);
   },
@@ -34,10 +35,10 @@ export type Limit = number & { readonly __brand: "activity.api.Limit" };
 export const Limit = {
   of(value: number): Result<Limit, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Limit", message: "must be a safe integer", value });
+      return Err({ field: "Limit", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 500)) {
-      return Err({ field: "Limit", message: "must be in range [1, 500]", value });
+      return Err({ field: "Limit", message: "must be in range [1, 500]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 500 } }, value });
     }
     return Ok(value as Limit);
   },
@@ -195,6 +196,16 @@ export function __serialise_Kind(value: Kind): __JsonValue {
 }
 
 export function __deserialise_Kind(json: __JsonValue, path: string = "$"): Result<Kind, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Push":
+        return Ok({ tag: "Push" } as Kind);
+      case "Issue":
+        return Ok({ tag: "Issue" } as Kind);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

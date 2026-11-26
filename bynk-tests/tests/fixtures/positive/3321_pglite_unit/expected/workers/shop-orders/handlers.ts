@@ -2,7 +2,7 @@
 // context shop.orders
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkPgRow } from "../../__bynk_runtime/time.js";
+import { __bynkPgRow, __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -45,7 +45,7 @@ export const find = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __fix = (__o: __JsonValue): void => __bynkPgRow(__o, ["placed"], ["id", "qty"]);
         if (globalThis.Array.isArray(__j)) __j.forEach(__fix);
@@ -53,7 +53,7 @@ export const find = {
         const __r = __deserialise_Order(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Order);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       };
       const __r = await deps.Main.first("SELECT \"id\", \"name\", \"qty\", \"placed\" FROM orders WHERE id = $1", [PgValue.PgInteger(id)]);
       if (__r.tag === "Err") return Err({ tag: "PgSql" as const, error: __r.error });
@@ -102,13 +102,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.qty`, expected: "safe integer", actual: String(obj["qty"]) });
   }
   const __qty = obj["qty"];
-  if (typeof obj["placed"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof obj["placed"] });
+  const __placed$ms = __bynkInstantFromWire(obj["placed"]);
+  if (typeof __placed$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof __placed$ms });
   }
-  if (!globalThis.Number.isSafeInteger(obj["placed"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(obj["placed"]) });
+  if (!globalThis.Number.isSafeInteger(__placed$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(__placed$ms) });
   }
-  const __placed = obj["placed"];
+  const __placed = __placed$ms;
   return Ok({ id: __id, name: __name, qty: __qty, placed: __placed } as Order);
 }
 

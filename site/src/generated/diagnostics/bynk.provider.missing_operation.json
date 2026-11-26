@@ -1,0 +1,12 @@
+{
+  "blurb": "A `provides` block implements a capability, so it must supply every operation the capability declares: callers are checked against the capability, and an operation the provider lacks would have nothing to run. The error is on the `provides` line and names the missing operation. Add it, with the signature the capability declares. An operation the capability does not declare is `bynk.provider.extra_operation`.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.missing_operation",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "capability Clock {\n    fn now() -> Effect[Int]\n    fn zone() -> Effect[String]\n}\n\nprovides Clock = Fixed {         // ✗ no `zone`\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\nprovides Clock = Fixed {         // ✓ every operation is provided\n    fn now() -> Effect[Int] { Effect.pure(0) }\n    fn zone() -> Effect[String] { Effect.pure(\"UTC\") }\n}",
+  "severity": "error",
+  "summary": "A `provides` block is missing a capability operation."
+}
