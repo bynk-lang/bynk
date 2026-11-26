@@ -446,6 +446,10 @@ kernel_ops! {
     SecretOp {
         Reveal = "reveal", "reveal() -> String";
         Matches = "matches", "matches(candidate: String) -> Bool";
+        // #4111: `token.bearer()` and `password.basic(user)` build the value of a request's
+        // `authorization`, without the secret ever being text in the program.
+        Bearer = "bearer", "bearer() -> Authorization";
+        Basic = "basic", "basic(user: String) -> Authorization";
     }
 /// `TestConnection[F]` (#3051): a case's recording handle for a `from
 /// websocket` connection; a test body only.

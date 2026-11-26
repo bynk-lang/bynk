@@ -1,0 +1,9 @@
+context shop.audit
+
+type Order = { id: String }
+
+service note {
+  on call(o: Order) -> Effect[()] by Caller {
+    Effect.pure(())
+  }
+}

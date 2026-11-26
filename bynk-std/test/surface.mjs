@@ -290,6 +290,46 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
       );
     });
 
+    t("FetchProvider.send: an Authorization built from a Secret goes out as Bearer or Basic, and never shows its text", async () => {
+      await withFetch(
+        () => new Response("ok", { status: 200 }),
+        async (calls) => {
+          const token = bynk.Secret.unsafe("tok-123");
+          const bearer = token.bearer();
+          // The credential is itself a secret: no string form shows its text.
+          assert.equal(String(bearer), "<secret>");
+          assert.ok(!JSON.stringify({ bearer }).includes("tok-123"));
+          const sent = await new b.FetchProvider().send(request({ authorization: Some(bearer) }));
+          assert.equal(sent.tag, "Ok");
+          assert.equal(new Headers(calls[0].init.headers).get("authorization"), "Bearer tok-123");
+
+          // RFC 7617: `Basic base64(user:password)`, here with a non-ASCII password.
+          const password = bynk.Secret.unsafe("pässword");
+          await new b.FetchProvider().send(request({ authorization: Some(password.basic("alice")) }));
+          const expected = Buffer.from("alice:pässword", "utf8").toString("base64");
+          assert.equal(new Headers(calls[1].init.headers).get("authorization"), `Basic ${expected}`);
+        },
+      );
+    });
+
+    t("FetchProvider.send: a Secret with a stray newline is InvalidHeader and nothing is sent", async () => {
+      await withFetch(
+        () => new Response("ok", { status: 200 }),
+        async (calls) => {
+          const smuggled = bynk.Secret.unsafe("tok\r\nx-injected: 1").bearer();
+          const res = await new b.FetchProvider().send(request({ authorization: Some(smuggled) }));
+          assert.equal(res.tag, "Err");
+          assert.equal(res.error.tag, "InvalidHeader");
+          assert.equal(calls.length, 0);
+        },
+      );
+    });
+
+    t("FetchProvider.send: a Basic user that holds a colon is refused before it reaches the header", async () => {
+      assert.throws(() => bynk.Secret.unsafe("pw").basic("a:b"), /Basic `Authorization` user/);
+      assert.throws(() => bynk.Secret.unsafe("pw").basic("a\nb"), /Basic `Authorization` user/);
+    });
+
     t("FetchProvider.send: a failed request is Err(Network)", async () => {
       await withFetch(
         () => { throw new TypeError("fetch failed"); },

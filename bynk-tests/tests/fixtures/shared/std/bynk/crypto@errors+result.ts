@@ -4,6 +4,8 @@
 import { Ok, type Result } from "../__bynk_runtime/result.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
+import { Secret } from "../bynk.js";
+
 /**
  * A hash function for `Crypto.digest`, `Crypto.hmac` and `Crypto.verifyHmac`.
  * The set is what every platform's Web Crypto supports. It may gain
@@ -114,6 +116,7 @@ export interface Crypto {
   verifyHmac(algorithm: Digest, key: globalThis.Uint8Array, data: globalThis.Uint8Array, mac: globalThis.Uint8Array): globalThis.Promise<boolean>;
   equal(a: globalThis.Uint8Array, b: globalThis.Uint8Array): globalThis.Promise<boolean>;
   importSigningKey(algorithm: Signature, pkcs8: globalThis.Uint8Array): globalThis.Promise<Result<SigningKey, CryptoError>>;
+  importSigningKeyFromSecret(algorithm: Signature, secret: Secret): globalThis.Promise<Result<SigningKey, CryptoError>>;
   importVerifyKey(algorithm: Signature, key: globalThis.Uint8Array): globalThis.Promise<Result<VerifyKey, CryptoError>>;
   importVerifyJwk(jwk: string): globalThis.Promise<Result<VerifyKey, CryptoError>>;
   sign(key: SigningKey, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;

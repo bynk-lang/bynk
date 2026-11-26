@@ -908,6 +908,13 @@ pub(super) fn observation_call_record_types(
             let fields: Vec<TsTypeMember> = op
                 .params
                 .iter()
+                // #4111: a `Secret` an operation takes is not recorded (see the checker's call
+                // record), and a caller that consumes no `bynk` type by name has no name for it.
+                .filter(|p| {
+                    !matches!(&p.type_ref, bynk_syntax::ast::TypeRef::Named(id)
+                        if matches!(id.name.as_str(), "Secret" | "Authorization")
+                            && !type_ns.contains_key(&id.name))
+                })
                 .map(|p| TsTypeMember::Prop {
                     name: p.name.name.clone(),
                     ty: {

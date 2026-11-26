@@ -3,14 +3,14 @@
 
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
 
-import { Method, Secret } from "../bynk.js";
+import { Authorization, Method, Secret } from "../bynk.js";
 
 import * as bynk from "../bynk.js";
 
 export const probe = {
   async call(url: string, deps: { Fetch: bynk.Fetch; Secrets: bynk.Secrets }): globalThis.Promise<number> {
     const auth = await deps.Secrets.get("PROBE_TOKEN");
-    const req = { method: Method.Get, url: url, contentType: None, authorization: ((__o: Option<Secret>, __f: (x: Secret) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(auth, (t: Secret) => t.reveal()), headers: new globalThis.Map<string, string>(), body: None };
+    const req = { method: Method.Get, url: url, contentType: None, authorization: ((__o: Option<Secret>, __f: (x: Secret) => Authorization) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(auth, (t: Secret) => t.bearer()), headers: new globalThis.Map<string, string>(), body: None };
     const res = await deps.Fetch.send(req);
     switch (res.tag) {
       case "Ok": {

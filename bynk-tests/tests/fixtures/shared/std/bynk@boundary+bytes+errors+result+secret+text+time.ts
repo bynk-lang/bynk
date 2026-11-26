@@ -31,6 +31,26 @@ export const Secret = {
 };
 
 /**
+ * The credential of a request's `Authorization` header: `token.bearer()` for
+ * `Bearer <token>` and `password.basic(user)` for `Basic <user:password>`,
+ * made from a `Secret`. It carries the secret without ever being text: it has
+ * no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored or
+ * sent (`bynk.types.secret_at_boundary`), and it has no reader of its own,
+ * because `Fetch` is the only place it is revealed. It is set on a request as
+ * `authorization: Some(token.bearer())`.
+ */
+export type Authorization = __BynkSecret & { readonly __brand: "Authorization" };
+
+export const Authorization = {
+  of(value: string): Result<Authorization, ValidationError> {
+    return Ok(__bynkSecret(value) as Authorization);
+  },
+  unsafe(value: string): Authorization {
+    return __bynkSecret(value) as Authorization;
+  },
+};
+
+/**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
  */
 export type Uuid = string & { readonly __brand: "Uuid" };
@@ -126,7 +146,7 @@ export interface Request {
   readonly method: Method;
   readonly url: string;
   readonly contentType: Option<string>;
-  readonly authorization: Option<string>;
+  readonly authorization: Option<Authorization>;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: Option<string>;
 }
@@ -670,6 +690,23 @@ export interface Events {
 }
 
 export const __EventsToken: symbol = globalThis.Symbol("Events");
+
+export function __serialise_Authorization(value: Authorization): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_Authorization(json: __JsonValue, path: string = "$"): Result<Authorization, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (Authorization as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (Authorization as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as Authorization) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as Authorization);
+}
 
 export function __serialise_BytesResponse(value: BytesResponse): __JsonValue {
   return {
@@ -1312,7 +1349,7 @@ export function __serialise_Request(value: Request): __JsonValue {
     method: __serialise_Method(value.method),
     url: value.url as __JsonValue,
     contentType: __serialise_Option_String(value.contentType),
-    authorization: __serialise_Option_String(value.authorization),
+    authorization: __serialise_Option_Authorization(value.authorization),
     headers: __serialise_Map_String_String(value.headers),
     body: __serialise_Option_String(value.body),
   };
@@ -1333,7 +1370,7 @@ export function __deserialise_Request(json: __JsonValue, path: string = "$"): Re
   const __r_contentType = __deserialise_Option_String(obj["contentType"], `${path}.contentType`);
   if (__r_contentType.tag === "Err") return __r_contentType;
   const __contentType = __r_contentType.value;
-  const __r_authorization = __deserialise_Option_String(obj["authorization"], `${path}.authorization`);
+  const __r_authorization = __deserialise_Option_Authorization(obj["authorization"], `${path}.authorization`);
   if (__r_authorization.tag === "Err") return __r_authorization;
   const __authorization = __r_authorization.value;
   const __r_headers = __deserialise_Map_String_String(obj["headers"], `${path}.headers`);
@@ -1711,6 +1748,46 @@ export function __deserialise_Option_String(json: __JsonValue, path: string = "$
   const __b = __option_value_String(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_Authorization(value: Option<Authorization>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_Authorization(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Authorization(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_Authorization(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Authorization(json: __JsonValue, path: string = "$"): Result<Option<Authorization>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<Authorization>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<Authorization>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Authorization(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as Authorization) as Option<Authorization>);
+    }
+  }
+  const __b = __option_value_Authorization(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as Authorization) as Option<Authorization>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });

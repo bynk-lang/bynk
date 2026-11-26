@@ -1954,6 +1954,7 @@
 /reference/diagnostics/bynk.queue.invalid_name/
 /reference/diagnostics/bynk.queue.message_type_mismatch/
 /reference/diagnostics/bynk.queue.no_dead_letter/
+/reference/diagnostics/bynk.queue.producer_never_sends/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.queue.undecodable_unreachable/
@@ -2158,6 +2159,7 @@
 /reference/diagnostics/bynk.transition.may_violate/
 /reference/diagnostics/bynk.transition.no_step_reference/
 /reference/diagnostics/bynk.transition.not_bool/
+/reference/diagnostics/bynk.types.analytics_point_shape/
 /reference/diagnostics/bynk.types.argument_mismatch/
 /reference/diagnostics/bynk.types.asset_at_boundary/
 /reference/diagnostics/bynk.types.bad_field_default/

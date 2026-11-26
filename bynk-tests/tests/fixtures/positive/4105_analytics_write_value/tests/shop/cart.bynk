@@ -1,0 +1,16 @@
+suite shop.cart
+
+// #4105: a typed point is written through the instance's `write`, so the unit
+// double checks it and observation sees it.
+
+case "a typed point is written once" {
+	let r <- api.POST("/signup/:plan", "pro") by Visitor
+	expect r is Created("counted")
+	expect Signups.write called once
+}
+
+case "a point with no index is written" {
+	let n <- hits.call("/home")
+	expect n == 1
+	expect Signups.write called once
+}
