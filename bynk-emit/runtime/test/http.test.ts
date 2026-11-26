@@ -10,7 +10,10 @@ import {
   matchPath,
   cfObject,
   httpResultToResponse,
+  ifRangeGuard,
+  withETag,
   withHeartbeat,
+  withLastModified,
   headResponse,
   claimStream,
   BodyTooLarge,
@@ -2177,4 +2180,62 @@ test("rateLimitAllowsKey: counts by the key it is given, the verified caller (#3
   assert.equal(await rateLimitAllowsKey(limiter, "ada"), true);
   assert.equal(await rateLimitAllowsKey(limiter, "bob"), false);
   assert.deepEqual(seen, ["ada", "bob"]);
+});
+
+// #4466: the handler's own validator on a 206 or 304, and the router's `If-Range` safety net.
+function partial(): ReturnType<typeof HttpResult.PartialContent> {
+  return HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: someRange(12) });
+}
+
+test("etag and lastModified reach a PartialContent and a NotModified", () => {
+  const r = httpResultToResponse(withLastModified(withETag(partial(), '"v2"'), 784111777000), id);
+  assert.equal(r.status, 206);
+  assert.equal(r.headers.get("etag"), '"v2"');
+  assert.equal(r.headers.get("last-modified"), "Sun, 06 Nov 1994 08:49:37 GMT");
+  const n = httpResultToResponse(withETag(HttpResult.NotModified, 'W/"v2"'), id);
+  assert.equal(n.status, 304);
+  assert.equal(n.headers.get("etag"), 'W/"v2"');
+});
+
+test("etag refuses a value that is not an entity tag, and lastModified a non-finite time", () => {
+  assert.throws(() => withETag(partial(), "v2"), /is not an entity tag/);
+  assert.throws(() => withETag(partial(), '"a"b"'), /is not an entity tag/);
+  assert.throws(() => withLastModified(partial(), Number.NaN), /outside the years an HTTP-date can write/);
+  assert.throws(() => withLastModified(partial(), 9e15), /outside the years/);
+  assert.throws(() => withLastModified(partial(), -62_167_219_200_001), /outside the years/);
+});
+
+function rangeRequest(ifRange?: string): Request {
+  return new Request("https://x/f", { headers: ifRange === undefined ? { range: "bytes=3-8" } : { range: "bytes=3-8", "if-range": ifRange } });
+}
+
+test("ifRangeGuard: a 206 with no If-Range passes, and a matching strong tag or date passes", () => {
+  const res = () => httpResultToResponse(withLastModified(withETag(partial(), '"v2"'), 784111777000), id);
+  assert.equal(ifRangeGuard(res(), rangeRequest()).status, 206);
+  assert.equal(ifRangeGuard(res(), rangeRequest('"v2"')).status, 206);
+  assert.equal(ifRangeGuard(res(), rangeRequest("Sun, 06 Nov 1994 08:49:37 GMT")).status, 206);
+});
+
+test("ifRangeGuard: a stale, weak or missing validator is a fault, never a 206", () => {
+  const withTag = () => httpResultToResponse(withETag(partial(), '"v2"'), id);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest('"v1"')), /PartialContent for a stale If-Range: check ifRangeHolds/);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest('W/"v2"')), /stale If-Range/);
+  assert.throws(() => ifRangeGuard(withTag(), rangeRequest("Sun, 06 Nov 1994 08:49:37 GMT")), /stale If-Range/);
+  const weak = httpResultToResponse(withETag(partial(), 'W/"v2"'), id);
+  assert.throws(() => ifRangeGuard(weak, rangeRequest('W/"v2"')), /stale If-Range/);
+  assert.throws(() => ifRangeGuard(httpResultToResponse(partial(), id), rangeRequest('"v2"')), /carries no validator/);
+});
+
+test("ifRangeGuard: only a 206 is guarded", () => {
+  const ok = httpResultToResponse(HttpResult.NotModified, id);
+  assert.equal(ifRangeGuard(ok, rangeRequest('"v1"')).status, 304);
+});
+
+test("notModifiedIfMatch: a matching If-None-Match is a 304 before a stale If-Range is judged", () => {
+  const res = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const req = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v2"', "if-range": '"v1"' } });
+  assert.equal(notModifiedIfMatch(res, req).status, 304);
+  const stale = httpResultToResponse(withETag(partial(), '"v2"'), id);
+  const noMatch = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v9"', "if-range": '"v1"' } });
+  assert.throws(() => notModifiedIfMatch(stale, noMatch), /stale If-Range/);
 });
