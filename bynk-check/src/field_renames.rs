@@ -21,11 +21,16 @@ pub const REPLACES_CONFLICT: &str = "bynk.field.replaces_conflict";
 /// `@indexed` index. A `Map` or `Set` is renamed (#4482), by moving its entries to the new name.
 pub const STORE_REPLACES_COLLECTION: &str = "bynk.store.replaces_collection";
 
-/// Whether `replaces` can rename this `store` field: a `Cell`, or a `Map` or `Set` that keeps no index.
+/// Whether `replaces` can rename this `store` field: a `Cell`, or a `Map` or `Set` that keeps no index
+/// (`@indexed` or `@unique`).
 fn renamable(f: &bynk_syntax::ast::StoreField) -> bool {
     match f.kind.head.name.as_str() {
         "Cell" | "Set" => true,
-        "Map" => !f.annotations.iter().any(|a| a.name.name == "indexed"),
+        // `@unique` keeps the same index postings `@indexed` does.
+        "Map" => !f
+            .annotations
+            .iter()
+            .any(|a| matches!(a.name.name.as_str(), "indexed" | "unique")),
         _ => false,
     }
 }
@@ -61,8 +66,8 @@ pub(crate) fn check_store(agent: &AgentDecl) -> Vec<CompileError> {
                 ),
             )
             .with_note(
-                "a `Cell`, a `Set` and a `Map` without `@indexed` are renamed by `replaces`; a \
-                 `Cache`, a `Log` and an indexed `Map` keep every entry, expiry or posting under \
+                "a `Cell`, a `Set` and a `Map` without `@indexed` or `@unique` are renamed by \
+                 `replaces`; a `Cache`, a `Log` and an indexed `Map` keep every entry, expiry or posting under \
                  a storage key of its own that carries the field's name. Keep the collection's \
                  name, or move its entries with a `migrate from` step into a new field",
             )

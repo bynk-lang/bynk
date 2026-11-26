@@ -317,10 +317,15 @@ fn a_cache_a_log_and_an_indexed_map_cannot_yet_be_renamed_with_replaces() {
         ("Cache[String, Int]", " @ttl(5.minutes)"),
         ("Log[Int]", ""),
         ("Map[String, Int]", " @indexed(by: id)"),
+        // `@unique` keeps the same postings `@indexed` does.
+        ("Map[String, Order]", " @unique(by: customer)"),
     ] {
-        let err = p.err(&cart(&format!(
-            "  store visited: {kind}{extra} replaces seen"
-        )));
+        let err = p.err(
+            &cart(&format!("  store visited: {kind}{extra} replaces seen")).replace(
+                "agent Cart",
+                "type Order = { customer: String, total: Int }\n\nagent Cart",
+            ),
+        );
         assert!(
             err.contains("bynk.store.replaces_collection"),
             "{kind}: {err}"

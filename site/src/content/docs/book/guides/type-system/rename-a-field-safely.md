@@ -59,7 +59,7 @@ records the rename and the change is additive, so no `migrate from` step is need
 a `Set` and a `Map`. A `Map` or `Set` keeps each entry under a storage key that carries its name, so the first
 load after the deploy moves its entries to the new name, in batches. That move is part of that load, so its
 cost grows with the collection, and a failure part-way leaves each entry under one name for the next load to
-continue. A `Cache`, a `Log` and a `Map` with `@indexed` are not renamed this way yet
+continue. A `Cache`, a `Log` and a `Map` with `@indexed` or `@unique` are not renamed this way yet
 (`bynk.store.replaces_collection`).
 
 ## Rename a field inside a stored record

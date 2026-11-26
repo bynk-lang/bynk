@@ -4940,7 +4940,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.store.replaces_collection",
-        blurb: "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
+        blurb: "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` or `@unique` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed or unique `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
         example: "store visited: Log[Int] replaces seen   // ✗ a `Log` cannot be renamed with `replaces`\n\nstore visited: Set[String] replaces seen   // ✓ a `Set` can",
     },
     Explain {
@@ -10531,7 +10531,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.store.replaces_collection",
-        "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an indexed `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet.",
+        "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet.",
         &["store_field"],
     ),
     warn(d(

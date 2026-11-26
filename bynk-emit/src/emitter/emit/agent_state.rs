@@ -156,7 +156,7 @@ pub(super) fn emit_agent_load_commit_state(
         }
         // #4482: a `Map` or `Set` renamed with `replaces` keeps its entries under keys that carry its
         // name, so they are moved to the new name before anything reads them.
-        if let Some(moves) = move_renamed_entries_stmt(a, agent_versions.as_ref()) {
+        if let Some(moves) = move_renamed_entries_stmt(a, agent_versions.as_ref(), step_plans) {
             stmts.push(moves);
         }
         // Per-entry storage (#3189): join the entries a per-entry record keeps
@@ -1415,6 +1415,7 @@ fn check_stored_version_stmt(
 fn move_renamed_entries_stmt(
     a: &AgentDecl,
     versions: Option<&bynk_check::schema_registry::AgentVersions>,
+    step_plans: &[bynk_check::schema_registry::MigrationStep],
 ) -> Option<bynk_ts::TsStmt> {
     let pairs: Vec<bynk_ts::TsExpr> = versions?
         .renames
@@ -1442,6 +1443,8 @@ fn move_renamed_entries_stmt(
             vec![
                 ident("this"),
                 ident("this.state.storage"),
+                ident("stored"),
+                step_ranges_expr(step_plans),
                 bynk_ts::TsExpr::array(pairs),
             ],
         ))),
