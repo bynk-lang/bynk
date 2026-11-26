@@ -17,6 +17,7 @@ use render::LabelHome;
 
 /// The name of the environment a build uses when `--env` is omitted (#3941).
 pub use bynk_project::vars::DEFAULT_ENVIRONMENT;
+pub mod check_json;
 pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;
@@ -756,6 +757,51 @@ pub fn project_check_short_lines(check: &project::ProjectCheck) -> Vec<String> {
         .collect()
 }
 
+/// #4123: record that an input could not be checked (see
+/// [`check_json::Collector::incomplete`]).
+fn mark_unchecked(sink: Option<&mut check_json::Collector>) {
+    if let Some(sink) = sink {
+        sink.incomplete = true;
+    }
+}
+
+/// #4123: a project check's diagnostics, hints included, for a machine format.
+/// Each is positioned against its own file's text; a secondary label against
+/// the file it lies in, as [`print_attributed`] draws it, and one whose file has
+/// no text is kept without positions.
+fn collect_project_check(check: &project::ProjectCheck, out: &mut Vec<check_json::Diagnostic>) {
+    use check_json::{Home, diagnostic};
+    for ae in &check.errors {
+        let label_names: Vec<Option<(String, &str)>> = (0..ae.error.labels.len())
+            .map(|i| match ae.label_file(i) {
+                project::LabelFile::Other(path) => check
+                    .snapshots
+                    .iter()
+                    .find(|(p, _)| p == path)
+                    .map(|(_, t)| (display_path(&check.display_root, path), t.as_str())),
+                project::LabelFile::FirstParty {
+                    identity_path,
+                    source,
+                } => Some(((*identity_path).to_string(), *source)),
+                _ => None,
+            })
+            .collect();
+        let primary = attributed_snapshot(ae, &check.snapshots, &check.display_root);
+        let primary = primary.as_ref().map(|(name, text)| Home::new(name, text));
+        let others: Vec<Option<Home<'_>>> = label_names
+            .iter()
+            .map(|n| n.as_ref().map(|(name, text)| Home::new(name, text)))
+            .collect();
+        let labels: Vec<Option<&Home<'_>>> = (0..ae.error.labels.len())
+            .map(|i| match ae.label_file(i) {
+                project::LabelFile::Primary => primary.as_ref(),
+                _ => others[i].as_ref(),
+            })
+            .collect();
+        out.push(diagnostic(&ae.error, primary.as_ref(), &labels));
+    }
+}
+
 /// [`print_project_check`] via [`project_check_short_lines`].
 pub fn print_project_check_short(check: &project::ProjectCheck) {
     for line in project_check_short_lines(check) {
@@ -1254,11 +1300,15 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 pub fn run_check(
     prog: &str,
     input: &Path,
-    short: bool,
+    output: CheckOutput,
     fix: Option<&[String]>,
     each: bool,
     environment: &str,
 ) -> ExitCode {
+    let short = output == CheckOutput::Short;
+    // #4123: a machine format collects every member's diagnostics and writes one
+    // document at the end, rather than printing as it goes.
+    let mut collected = output.is_machine().then(check_json::Collector::default);
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
         Err(message) => {
@@ -1302,11 +1352,19 @@ pub fn run_check(
             failed |= !fix::fix_all(prog, scope, &named);
         }
         for member in &members {
-            if !short {
+            if !short && collected.is_none() {
                 eprintln!("{}", member_header(member));
             }
-            failed |= !check_one(prog, member, short, Some(member), environment);
+            failed |= !check_one(
+                prog,
+                member,
+                short,
+                Some(member),
+                environment,
+                collected.as_mut(),
+            );
         }
+        emit_collected(output, collected);
         return if failed {
             ExitCode::FAILURE
         } else {
@@ -1316,10 +1374,51 @@ pub fn run_check(
     let fixed = scope
         .as_ref()
         .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
-    if check_one(prog, input, short, None, environment) && fixed {
+    let passed = check_one(prog, input, short, None, environment, collected.as_mut());
+    emit_collected(output, collected);
+    if passed && fixed {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
+    }
+}
+
+/// How `bynk check` reports its diagnostics (`--format`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CheckOutput {
+    /// Ariadne rendering with source context, on stderr.
+    Rich,
+    /// One `path:line:col: severity[category]: message` line each, on stderr.
+    Short,
+    /// #4123: one JSON document on stdout ([`check_json`]).
+    Json,
+    /// #4123: one JSON diagnostic per line, then a summary line, on stdout.
+    Ndjson,
+}
+
+impl CheckOutput {
+    /// Whether the output is a machine format, written to stdout when the run
+    /// ends, rather than printed to stderr as diagnostics are found.
+    pub fn is_machine(self) -> bool {
+        matches!(self, Self::Json | Self::Ndjson)
+    }
+}
+
+/// #4123: write the diagnostics a machine format collected. Nothing is written
+/// for the human formats, which printed as they went, nor when an input could
+/// not be checked at all: stderr has said why, and a document would read as
+/// "checked, nothing found".
+fn emit_collected(output: CheckOutput, collected: Option<check_json::Collector>) {
+    let Some(collected) = collected else {
+        return;
+    };
+    if collected.incomplete {
+        return;
+    }
+    let diagnostics = collected.diagnostics;
+    match output {
+        CheckOutput::Ndjson => print!("{}", check_json::render_ndjson(diagnostics)),
+        _ => print!("{}", check_json::render_json(diagnostics)),
     }
 }
 
@@ -1450,6 +1549,7 @@ fn check_one(
     short: bool,
     member: Option<&Path>,
     environment: &str,
+    mut sink: Option<&mut check_json::Collector>,
 ) -> bool {
     let prog = match member {
         Some(m) => format!("{prog}: {}", shown(m)),
@@ -1462,6 +1562,7 @@ fn check_one(
             Ok(o) => o.environment(environment),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
@@ -1473,12 +1574,15 @@ fn check_one(
             Ok(lock) => options.schema_registry(lock),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
         let check = project::check_project(&options);
         let has_errors = check.has_errors();
-        if short {
+        if let Some(sink) = sink {
+            collect_project_check(&check, &mut sink.diagnostics);
+        } else if short {
             print_project_check_short(&check);
         } else {
             print_project_check(&check);
@@ -1489,11 +1593,22 @@ fn check_one(
             Ok(s) => s,
             Err(e) => {
                 crate::emsg!("{prog}: error: could not read `{}`: {e}", shown(input));
+                mark_unchecked(sink.as_deref_mut());
                 return false;
             }
         };
         let filename = shown(input);
-        match bynk_emit::check_with_warnings(&source, &filename) {
+        let checked = bynk_emit::check_with_warnings(&source, &filename);
+        if let Some(sink) = sink {
+            // #4123: hints included; the diagnostics are the whole of the output.
+            let (found, passed) = match &checked {
+                Ok(warnings) => (warnings, true),
+                Err(errors) => (errors, false),
+            };
+            check_json::collect_source(found, &filename, &source, &mut sink.diagnostics);
+            return passed;
+        }
+        match checked {
             Ok(warnings) => {
                 let warnings = crate::render::without_hints(&warnings);
                 if !warnings.is_empty() {
