@@ -1,0 +1,46 @@
+context shop.cart
+
+// #4105: `AnalyticsSql.select[T]` reads a record back from an instance's dataset: the compiler
+// writes the `SELECT` list from the record `Signups.writeValue` writes, so the columns are never
+// counted by hand.
+
+consumes bynk
+consumes bynk.cloudflare { Analytics, AnalyticsReadError, AnalyticsSql }
+
+type Signup = {
+	@index plan: String,
+	country: String,
+	trial: Bool,
+	seats: Int,
+	amount: Float,
+}
+
+// Read back: `country` is a blob and `seats` a double; `n` is not written, so the tail computes it.
+type ByCountry = { country: String, n: Int }
+type Seats = { plan: String, seats: Int }
+
+capability Signups = Analytics
+
+service api from http {
+	on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+		let _ <- Signups.writeValue(Signup { plan: plan, country: "GB", trial: false, seats: 3, amount: 9.5 })
+		Created("counted")
+	}
+
+	on GET("/seats") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let res <- AnalyticsSql.select[Seats](Signups, "FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", [])
+		match res {
+			Ok(rows) => Ok(rows.length()),
+			Err(_) => ServerError("the query failed"),
+		}
+	}
+
+	on GET("/countries") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let res <- AnalyticsSql.select[ByCountry](Signups, ", count() AS n FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY country", [])
+		match res {
+			Ok(rows) => Ok(rows.length()),
+			Err(AnalyticsQuery(_)) => ServerError("the query failed"),
+			Err(AnalyticsDecode(_)) => ServerError("a row did not fit"),
+		}
+	}
+}

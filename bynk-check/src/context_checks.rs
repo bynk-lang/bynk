@@ -187,6 +187,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         },
         // #2865: a typed `D1` read decodes its row.
         Some(Callee::D1Select { row, .. }) => vec![*row],
+        // #4105: a typed Analytics read decodes its rows.
+        Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -909,6 +911,10 @@ pub fn check_context_declarations(
     );
 
     check_event_annotations(table, &mut errors);
+
+    // #4105: every handler body is checked, so each `AnalyticsSql.select[T]` can be written from the
+    // record its instance writes.
+    checker::analytics::resolve_selects(&mut typed.callees, &typed.types, tys, &mut errors);
 
     // State-migrations S3 (#2248): `replaces` / `removed agent` on their own
     // terms; what needs the schema lock is the reconcile's.

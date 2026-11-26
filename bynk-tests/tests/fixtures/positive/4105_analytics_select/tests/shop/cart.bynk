@@ -1,0 +1,31 @@
+suite shop.cart
+
+consumes bynk
+consumes bynk.cloudflare { AnalyticsSql, AnalyticsSqlResult, AnalyticsSqlStatistics }
+
+// #4105: a test never reads Analytics Engine; the typed read runs over `query`, so stubbing it
+// supplies the rows the read decodes.
+
+case "the written columns are selected by name and the rows decoded" {
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"plan\":\"pro\",\"seats\":3},{\"plan\":\"free\",\"seats\":1}]", rows: 2, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 2, bytesRead: 16 } })
+	let r <- api.GET("/seats") by Visitor
+	expect r is Ok(2)
+	expect AnalyticsSql.query called with sql == "SELECT index1 AS \"plan\", double1 AS \"seats\" FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY"
+}
+
+case "an alias the tail defines is selected after the columns" {
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"country\":\"GB\",\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 4, bytesRead: 32 } })
+	let r <- api.GET("/countries") by Visitor
+	expect r is Ok(1)
+	expect AnalyticsSql.query called with sql == "SELECT blob1 AS \"country\", count() AS n FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY country"
+}
+
+case "a row that does not fit the read type is a decode error" {
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"country\":\"GB\",\"n\":\"many\"}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 1, bytesRead: 8 } })
+	let r <- api.GET("/countries") by Visitor
+	expect r is ServerError("a row did not fit")
+}
+
+case "an unstubbed read faults" {
+	expect api.GET("/seats") by Visitor faults
+}
