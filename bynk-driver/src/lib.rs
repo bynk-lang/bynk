@@ -1028,6 +1028,35 @@ impl ManifestCache {
     }
 }
 
+/// #3826: the project a `bynk check` directory belongs to. A directory with no `bynk.toml` of
+/// its own, inside a project, is checked as that project, as `cargo` and `tsc` do, so a
+/// `bynk check src` reads the manifest (its `[unstable] allow`, its `[paths]`) rather than
+/// checking `src` as a bare tree. Returns the project root, as a path that reads from where the
+/// command ran (`.`, `..`, or a path under the working directory), and `None` when `input` is a
+/// file, has its own manifest, or sits in no project.
+pub fn enclosing_check_project(input: &Path) -> Option<PathBuf> {
+    if !input.is_dir() || input.join("bynk.toml").is_file() {
+        return None;
+    }
+    let abs = std::fs::canonicalize(input).ok()?;
+    let root = bynk_fmt::find_manifest(&abs)?.parent()?.to_path_buf();
+    let cwd = std::env::current_dir()
+        .ok()
+        .and_then(|c| std::fs::canonicalize(c).ok());
+    Some(match cwd {
+        Some(cwd) if cwd.starts_with(&root) => {
+            let depth = cwd.strip_prefix(&root).ok()?.components().count();
+            if depth == 0 {
+                PathBuf::from(".")
+            } else {
+                (0..depth).map(|_| "..").collect()
+            }
+        }
+        Some(cwd) if root.starts_with(&cwd) => root.strip_prefix(&cwd).ok()?.to_path_buf(),
+        _ => root,
+    })
+}
+
 /// #4124: the nearest ancestor of the working directory holding a `bynk.toml`,
 /// as a path relative to it (`.`, `..`, `../..`), so the files `fmt` names and
 /// reports read the way a typed `bynk fmt <dir>` would. The search is
@@ -1339,6 +1368,22 @@ pub fn run_check(
     environment: &str,
 ) -> ExitCode {
     let short = output == CheckOutput::Short;
+    // #3826: a directory inside a project is checked as the project, not as a bare tree.
+    let enclosing = if each {
+        None
+    } else {
+        enclosing_check_project(input)
+    };
+    if let Some(root) = &enclosing
+        && output == CheckOutput::Rich
+    {
+        crate::emsg!(
+            "{prog}: note: `{}` is inside the project at `{}`; checking the project",
+            shown(input),
+            shown(root)
+        );
+    }
+    let input = enclosing.as_deref().unwrap_or(input);
     // #4123: a machine format collects every member's diagnostics and writes one
     // document at the end, rather than printing as it goes.
     let mut collected = output.is_machine().then(check_json::Collector::default);

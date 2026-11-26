@@ -39,6 +39,12 @@ pub fn run(
         return ExitCode::FAILURE;
     }
     let checked = bynk_driver::run_check("bynk", &input, output, fix.as_deref(), each, environment);
+    // #3826: `--emit` builds the project a directory inside one belongs to, as the check did.
+    let input = if each {
+        input
+    } else {
+        bynk_driver::enclosing_check_project(&input).unwrap_or(input)
+    };
     // #3068: `--emit` type-checks the generated TypeScript, but only for a
     // program that passed the check; a failed check has nothing to emit.
     if emit && checked == ExitCode::SUCCESS {

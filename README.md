@@ -112,7 +112,7 @@ bynk dev             # compile and serve it locally
 `bynk new` only writes files (no toolchain needed), and `bynk dev` serves what it
 wrote unmodified. Prefer a worked example? The bundled
 [`examples/hello-world`](examples/hello-world/) is a complete project you can also
-`bynk check src`, `bynk test .`, and deploy.
+`bynk check`, `bynk test .`, and deploy.
 
 See [Start a new project](https://bynk-lang.org/book/guides/projects-build-and-deployment/start-a-project/)
 or [Compile your first program](https://bynk-lang.org/book/tutorials/first-program/).
