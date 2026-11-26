@@ -203,6 +203,14 @@ Bynk never deletes or moves an agent's data unless you declare it:
     it is not refused.
 - **A rename, once applied,** reads `already applied by an earlier deploy` in later
   plans, the same way: `bynk.deploy.lock` records the push that carried it.
+- **Changing an agent's `@jurisdiction`** mints different Durable Object ids, which orphans
+  every existing instance. The plan shows
+  `change jurisdiction of durable object shop.Learner (none → eu; …; needs --confirm-jurisdiction shop.Learner)`,
+  and the deploy won't push it until you confirm it by name, at the prompt or with
+  `--confirm-jurisdiction shop.Learner` (repeatable). `--yes` alone never confirms it. Bynk
+  records only the jurisdiction each class was last pushed under (`agent_jurisdictions` in
+  `bynk.deploy.lock`), never a claim that a namespace exists: a stale entry at worst asks for a
+  confirmation it did not need. See [data residency](/reference/agents/#jurisdiction).
 
 Keep each declaration until a deploy prints Cloudflare's `stale_tombstone` notice
 for it ("has no effect"), then delete it from your source. A renamed class gets a

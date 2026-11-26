@@ -260,7 +260,7 @@ pub(super) fn emit_integration_harness<'a>(
                 BindingSource::ForeignService { worker, .. } => {
                     foreign_service_double(&binding.name, worker)
                 }
-                BindingSource::Agent { class_name } => call(
+                BindingSource::Agent { class_name, .. } => call(
                     ident("__makeIntegrationDoNamespace"),
                     vec![member(ident(ns.clone()), class_name), ident(env.clone())],
                 ),

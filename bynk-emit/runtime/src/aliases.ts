@@ -6,7 +6,7 @@
 // The plain names stay exported for the runtime's own tests.
 import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
-import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
+import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
@@ -188,6 +188,7 @@ export {
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
   agentBusyAfter as __agentBusyAfter,
+  agentNamespace as __agentNamespace,
   agentBusyResponse as __agentBusyResponse,
   callAgentOutcome as __callAgentOutcome,
   stubAgents as __stubAgents,

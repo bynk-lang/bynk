@@ -1,6 +1,7 @@
 use super::run::DeployFormat;
 use super::run::DeployOptions;
 use crate::deploy::agent_move::agent_state_note;
+use crate::deploy::config::DurableObject;
 use crate::deploy::config::Resources;
 use crate::deploy::config::analytics_dataset_name;
 use crate::deploy::config::deployed_worker_name;
@@ -31,6 +32,7 @@ use crate::deploy::kind::short_kind_lines;
 use crate::deploy::kind::short_kind_orphans;
 use crate::deploy::ledger::DeployLock;
 use crate::deploy::ledger::Orphans;
+use crate::deploy::ledger::UNRESTRICTED_AGENT;
 use crate::deploy::ledger::confirm_deletion_prompt;
 use crate::deploy::ledger::find_orphans;
 use crate::deploy::secrets::Origin;
@@ -161,6 +163,14 @@ pub(crate) struct ContextPlan<'a> {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub(super) deleted_durable_objects: Vec<PlanDeletion>,
+    /// #3819: each agent class whose `@jurisdiction` differs from the one it was last pushed
+    /// under. Its Durable Object ids change, so every existing instance is orphaned:
+    /// destructive, and refused unless `--confirm-jurisdiction` names it.
+    #[serde(
+        rename = "durable_objects_jurisdiction_changed",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub(super) jurisdiction_changes: Vec<PlanJurisdictionChange>,
     /// One line per secret this run will set on this context, in name order.
     secrets: Vec<PlanSecret>,
     /// False when this context reads at least one secret the compiler cannot
@@ -264,6 +274,11 @@ pub(super) struct PlanDurableObject<'a> {
     /// The backend the config declares (`sqlite`), read from the file rather
     /// than assumed, so the plan and the upload can't disagree.
     pub(super) storage: &'a str,
+    /// #3819: the `@jurisdiction` the agent's ids are minted under, when it has one. Not in the
+    /// config the push reads: the Worker reaches the namespace through
+    /// `namespace.jurisdiction(…)`, and `deploy` records it per class.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) jurisdiction: Option<&'a str>,
     /// Always `Cloudflare`, and that is the point: the field names an owner
     /// other than `bynk`, which is the whole content of the advisory (ADR 0194
     /// D1's principle). A consumer reading the plan learns that this line is
@@ -293,6 +308,16 @@ pub(super) struct PlanDeletion {
     pub(super) already_applied: bool,
 }
 
+/// #3819: one agent class whose `@jurisdiction` changed since its last push: its name as
+/// `--confirm-jurisdiction` takes it (`<context>.<Class>`), and the jurisdiction before and
+/// after (`none` for the unrestricted namespace).
+#[derive(Debug, Serialize)]
+pub(super) struct PlanJurisdictionChange {
+    pub(super) class: String,
+    pub(super) from: String,
+    pub(super) to: String,
+}
+
 /// State-migrations S3 (#2248): a class's name as `--confirm-delete` takes it,
 /// `<context>.<Class>`. A Worker's directory name is its context's qualified
 /// name with `.` replaced by `-` (`worker_dir_name`), and an identifier holds
@@ -310,6 +335,7 @@ pub(super) fn confirm_destructive(
     lock: &DeployLock,
 ) -> bool {
     confirm_deletions(plan, &opts.confirm_delete, lock)
+        && confirm_jurisdiction_changes(plan, &opts.confirm_jurisdiction, lock)
         && confirm_address_removals(plan, opts.prune, opts.yes)
 }
 
@@ -407,6 +433,112 @@ pub(super) fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &De
         let mut answer = String::new();
         if io::stdin().read_line(&mut answer).is_err() || answer.trim() != name.as_str() {
             emsg!("bynk: error: `{name}` not confirmed; nothing was deployed");
+            return false;
+        }
+    }
+    true
+}
+
+/// #3819: each agent class of `worker` whose declared `@jurisdiction` differs from the one it was
+/// last pushed under. The ledger's record is what the last push hosted. A Worker that has been
+/// deployed but whose ledger holds no record of its classes at all (one from before `@jurisdiction`)
+/// was pushed unrestricted, since every agent was. Once the Worker has a record, a class missing
+/// from it is new, and so is a Worker never pushed: neither has instances to orphan. A class that
+/// is the target of a rename (`agent New replaces Old`) keeps its namespace and its instances, so
+/// it is compared with the old class's record, unless it has been pushed under its new name since.
+fn jurisdiction_changes(
+    lock: &DeployLock,
+    environment: &str,
+    worker: &str,
+    objects: &[DurableObject],
+    renames: &[(String, String)],
+) -> Vec<PlanJurisdictionChange> {
+    let deployed = lock.is_deployed(environment, worker);
+    let recorded_any = lock.has_agent_jurisdictions(environment, worker);
+    objects
+        .iter()
+        .filter_map(|object| {
+            let now = object.jurisdiction.as_deref().unwrap_or(UNRESTRICTED_AGENT);
+            let before = match lock.recorded_agent_jurisdiction(environment, worker, &object.class)
+            {
+                Some(recorded) => recorded,
+                None => match renames.iter().find(|(_, to)| *to == object.class) {
+                    // The rename's old class was deployed, so it was recorded, or, in a ledger
+                    // from before `@jurisdiction`, was unrestricted.
+                    Some((from, _)) => lock
+                        .recorded_agent_jurisdiction(environment, worker, from)
+                        .or(deployed.then_some(UNRESTRICTED_AGENT))?,
+                    None if deployed && !recorded_any => UNRESTRICTED_AGENT,
+                    None => return None,
+                },
+            };
+            (before != now).then(|| PlanJurisdictionChange {
+                class: qualified_class(worker, &object.class),
+                from: before.to_string(),
+                to: now.to_string(),
+            })
+        })
+        .collect()
+}
+
+/// #3819: a changed `@jurisdiction` orphans every instance of the class, so it must be confirmed
+/// by name — by `--confirm-jurisdiction`, or by typing it at an interactive prompt. `--yes` never
+/// stands in. A confirmation for a class this plan does not change is refused, so a stale CI flag
+/// cannot approve a different change, unless the ledger already records the class under this Worker:
+/// the change was applied by an earlier deploy (or a deploy that stopped part-way), which is harmless,
+/// as `--confirm-delete` treats a deletion already applied.
+pub(super) fn confirm_jurisdiction_changes(
+    plan: &Plan<'_>,
+    confirmed: &[String],
+    lock: &DeployLock,
+) -> bool {
+    let changes: Vec<&PlanJurisdictionChange> = plan
+        .contexts
+        .iter()
+        .flat_map(|c| c.jurisdiction_changes.iter())
+        .collect();
+    for name in confirmed {
+        let applied = name.rsplit_once('.').is_some_and(|(context, class)| {
+            lock.recorded_agent_jurisdiction(plan.environment, &context.replace('.', "-"), class)
+                .is_some()
+        });
+        if !changes.iter().any(|c| &c.class == name) && !applied {
+            emsg!(
+                "bynk: error: --confirm-jurisdiction {name} names no class whose jurisdiction this plan changes; refusing"
+            );
+            return false;
+        }
+    }
+    let unconfirmed: Vec<&&PlanJurisdictionChange> = changes
+        .iter()
+        .filter(|c| !confirmed.iter().any(|name| name == &c.class))
+        .collect();
+    if unconfirmed.is_empty() {
+        return true;
+    }
+    if !io::stdin().is_terminal() {
+        emsg!(
+            "bynk: error: this deploy changes the jurisdiction of a stored agent, which mints different Durable Object ids and orphans every existing instance; confirm each class with {}",
+            unconfirmed
+                .iter()
+                .map(|c| format!("--confirm-jurisdiction {}", c.class))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        return false;
+    }
+    for change in unconfirmed {
+        eprint!(
+            "Changing `{}` from {} to {} orphans all of its existing instances, irreversibly. Type `{}` to confirm: ",
+            change.class, change.from, change.to, change.class
+        );
+        let _ = io::stderr().flush();
+        let mut answer = String::new();
+        if io::stdin().read_line(&mut answer).is_err() || answer.trim() != change.class {
+            emsg!(
+                "bynk: error: `{}` not confirmed; nothing was deployed",
+                change.class
+            );
             return false;
         }
     }
@@ -547,8 +679,13 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         // claim that the namespace does or doesn't exist yet (#1796,
                         // ADR 0194 D1's principle).
                         for object in &context.durable_objects {
+                            // #3819: a pinned agent says where its ids are minted.
+                            let pinned = object
+                                .jurisdiction
+                                .map(|j| format!(", jurisdiction {j}"))
+                                .unwrap_or_default();
                             out.push_str(&format!(
-                                "durable object {} ({}; advisory — {} reconciles it)\n",
+                                "durable object {} ({}{pinned}; advisory — {} reconciles it)\n",
                                 object.class, object.storage, object.reconciled_by
                             ));
                         }
@@ -570,6 +707,13 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                             rename.from, rename.to
                         )
                     });
+                }
+                // #3819: a changed `@jurisdiction` mints different ids, so it strands the instances.
+                for change in &context.jurisdiction_changes {
+                    out.push_str(&format!(
+                        "change jurisdiction of durable object {} ({} → {}; its existing instances are orphaned, irreversibly; needs --confirm-jurisdiction {})\n",
+                        change.class, change.from, change.to, change.class
+                    ));
                 }
                 for deletion in &context.deleted_durable_objects {
                     out.push_str(&if deletion.already_applied {
@@ -826,6 +970,7 @@ pub(crate) fn derive_plan<'a>(
                         .map(|object| PlanDurableObject {
                             class: &object.class,
                             storage: &object.storage,
+                            jurisdiction: object.jurisdiction.as_deref(),
                             reconciled_by: "Cloudflare",
                         })
                         .collect(),
@@ -839,6 +984,13 @@ pub(crate) fn derive_plan<'a>(
                             already_applied: lock.has_renamed_class(environment, worker, from, to),
                         })
                         .collect(),
+                    jurisdiction_changes: jurisdiction_changes(
+                        lock,
+                        environment,
+                        worker,
+                        &declared.durable_objects,
+                        &declared.renamed_durable_objects,
+                    ),
                     deleted_durable_objects: declared
                         .deleted_durable_objects
                         .iter()
