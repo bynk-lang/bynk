@@ -109,7 +109,7 @@ fn shape_of(
         | checker::Ty::Never
         | checker::Ty::Base(_)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection

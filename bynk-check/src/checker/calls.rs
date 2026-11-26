@@ -3612,7 +3612,7 @@ fn check_method_call_inner(
             );
         }
         // #3277: an `HttpResult[T]` — `withCookie`, `clearCookie`, `cookies`.
-        Ty::HttpResult(_) => {
+        Ty::HttpResult(_, _) => {
             let kop = HttpResultOp::from_name(&method.name);
             let r = check_http_result_method(method, kop, receiver, recv_ty, args, span, ctx);
             return record_kernel(
@@ -4468,7 +4468,7 @@ fn check_test_service_address(
             );
             // `Raw(body, contentType)` or `NotFound`: no handler's `T` is involved.
             let unit = ctx.tys.intern(Ty::Unit);
-            return Some(effect_of(ctx.tys.intern(Ty::HttpResult(unit)), ctx));
+            return Some(effect_of(ctx.tys.intern(Ty::HttpResult(unit, None)), ctx));
         }
         let Some(EK::StrLit(path)) = args.first().map(|a| &a.kind) else {
             ctx.errors.push(
@@ -4921,7 +4921,7 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
         _ => outcome,
     };
     let t = match &*tys.get(inner) {
-        Ty::HttpResult(t) => *t,
+        Ty::HttpResult(t, _) => *t,
         _ => return outcome,
     };
     tys.intern(Ty::Effect(tys.intern(Ty::HttpOutcome(t))))

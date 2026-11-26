@@ -1004,7 +1004,7 @@ fn resolve_own_part(
 pub fn named_type_target(ty: TyId, tys: &Types) -> Option<String> {
     match &*tys.get(ty) {
         Ty::Named { name, .. } => Some(name.clone()),
-        Ty::Option(t) | Ty::Effect(t) | Ty::List(t) | Ty::HttpResult(t) => {
+        Ty::Option(t) | Ty::Effect(t) | Ty::List(t) | Ty::HttpResult(t, _) => {
             named_type_target(*t, tys)
         }
         _ => None,

@@ -2414,7 +2414,7 @@ pub fn nested_variant_completions(
             "Err" => variants_for_ty(*e, tys, doc_text, files),
             _ => Vec::new(),
         },
-        Ty::HttpResult(t) if outer_variant == "Ok" => variants_for_ty(*t, tys, doc_text, files),
+        Ty::HttpResult(t, _) if outer_variant == "Ok" => variants_for_ty(*t, tys, doc_text, files),
         Ty::Option(t) if outer_variant == "Some" => variants_for_ty(*t, tys, doc_text, files),
         Ty::Named {
             kind: NamedKind::Sum,

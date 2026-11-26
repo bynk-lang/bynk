@@ -1,0 +1,7 @@
+context feed
+
+service api from http {
+    on GET("/ticks") () -> Effect[HttpResult[(), Int]] by v: Visitor {
+        Streaming(Stream.of([1, 2]))
+    }
+}

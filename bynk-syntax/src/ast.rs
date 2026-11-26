@@ -4181,8 +4181,10 @@ pub enum TypeRef {
     Option(Box<TypeRef>, Span),
     /// `Effect[T]` — the built-in generic Effect type (v0.5).
     Effect(Box<TypeRef>, Span),
-    /// `HttpResult[T]` — the built-in HTTP-result sum (v0.9).
-    HttpResult(Box<TypeRef>, Span),
+    /// `HttpResult[T]` or `HttpResult[T, E]` — the built-in HTTP-result sum (v0.9). The optional
+    /// second argument is the element a `Streaming` body carries (`String` or `SseEvent`, #4394);
+    /// without it a `Streaming` body is the lenient `Stream[String]`-or-`Stream[SseEvent]` it always was.
+    HttpResult(Box<TypeRef>, Option<Box<TypeRef>>, Span),
     /// `QueueResult` — the built-in queue verdict sum (`Ack | Retry`),
     /// non-generic; the required return of a queue handler (v0.44).
     QueueResult(Span),
@@ -4275,7 +4277,7 @@ impl TypeRef {
             TypeRef::Result(_, _, s) => *s,
             TypeRef::Option(_, s) => *s,
             TypeRef::Effect(_, s) => *s,
-            TypeRef::HttpResult(_, s) => *s,
+            TypeRef::HttpResult(_, _, s) => *s,
             TypeRef::QueueResult(s) => *s,
             TypeRef::Asset(s) => *s,
             TypeRef::RequestHeaders(s) => *s,
@@ -4326,7 +4328,7 @@ pub fn stream_path(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Connection(a, _)
             | TypeRef::History(a, _) => walk(a, types, visited),
@@ -4404,6 +4406,10 @@ pub fn type_carries_stream(
 
 /// Every type name a type mentions (heads of applications and named types,
 /// descending through wrappers and generic arguments), pushed onto `out`.
+pub(crate) fn collect_type_heads(t: &TypeRef, out: &mut Vec<String>) {
+    heads(t, out)
+}
+
 fn heads(t: &TypeRef, out: &mut Vec<String>) {
     match t {
         TypeRef::Named(id) => out.push(id.name.clone()),
@@ -4421,11 +4427,16 @@ fn heads(t: &TypeRef, out: &mut Vec<String>) {
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::Connection(a, _)
         | TypeRef::History(a, _) => heads(a, out),
+        TypeRef::HttpResult(a, e, _) => {
+            heads(a, out);
+            if let Some(e) = e {
+                heads(e, out);
+            }
+        }
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             heads(a, out);
             heads(b, out);
@@ -4573,7 +4584,7 @@ pub fn recursive_generic_path(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Connection(a, _)
             | TypeRef::History(a, _) => walk(a, types, visited),
@@ -4658,7 +4669,7 @@ pub fn polymorphic_recursion_edges(
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _)
+            | TypeRef::HttpResult(a, _, _)
             | TypeRef::Query(a, _)
             | TypeRef::Stream(a, _)
             | TypeRef::Connection(a, _)

@@ -47,3 +47,38 @@ service api from http {
           (block
             (ok_expr
               (string_literal))))))))
+
+================================================================================
+#4394: HttpResult names the element a Streaming body carries
+================================================================================
+
+context shop
+
+service api from http {
+  on GET("/events") () -> Effect[HttpResult[(), SseEvent]] {
+    Ok(())
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol)
+      (handler
+        (http_handler
+          (http_method)
+          (string_literal)
+          (generic_type_ref
+            (builtin_type)
+            (generic_type_ref
+              (builtin_type)
+              (unit_type)
+              (identifier)))
+          (block
+            (ok_expr
+              (unit_literal))))))))

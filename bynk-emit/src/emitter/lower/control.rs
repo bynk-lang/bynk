@@ -47,7 +47,7 @@ fn embed_conversion(
 /// Is `ty` an `HttpResult`, or an `Effect` of one?
 fn peel_http_result(ty: bynk_check::checker::TyId, tys: &Types) -> bool {
     let node = tys.get(ty);
-    matches!(&*node, bynk_check::checker::Ty::HttpResult(_))
+    matches!(&*node, bynk_check::checker::Ty::HttpResult(_, _))
         || node
             .as_effect()
             .is_some_and(|inner| peel_http_result(inner, tys))

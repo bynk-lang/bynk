@@ -71,7 +71,7 @@ pub(crate) fn json_codable(
         | Ty::Stream(_)
         | Ty::TestConnection(_)
         | Ty::Connection(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::HttpOutcome(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection

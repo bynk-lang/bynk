@@ -150,7 +150,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::Base(BaseType::Decimal) => DECIMAL_METHODS,
         Ty::Base(BaseType::String) => STRING_METHODS,
         Ty::RequestHeaders => REQUEST_HEADERS_METHODS,
-        Ty::HttpResult(_) => HTTP_RESULT_METHODS,
+        Ty::HttpResult(_, _) => HTTP_RESULT_METHODS,
         Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::RequestCookies => REQUEST_COOKIES_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,

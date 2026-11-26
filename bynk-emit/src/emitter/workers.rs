@@ -1836,7 +1836,7 @@ pub(crate) fn named_types_in(r: &TypeRef) -> Vec<String> {
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _) => walk(a, out),
+            | TypeRef::HttpResult(a, _, _) => walk(a, out),
             TypeRef::Base(..)
             | TypeRef::QueueResult(_)
             | TypeRef::Asset(_)

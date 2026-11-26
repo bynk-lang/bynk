@@ -1232,11 +1232,23 @@ impl<'a> Parser<'a> {
                         }
                         self.bump();
                         let arg = self.parse_type_ref("as the `HttpResult` type argument")?;
+                        // #4394: an optional second argument, the element a `Streaming` body carries.
+                        let element = if self.eat(TokenKind::Comma).is_some() {
+                            Some(Box::new(self.parse_type_ref(
+                                "as the `HttpResult` streaming element type",
+                            )?))
+                        } else {
+                            None
+                        };
                         let close = self.expect(
                             TokenKind::RBracket,
-                            "to close the `HttpResult` type argument",
+                            "to close the `HttpResult` type arguments",
                         )?;
-                        return Ok(TypeRef::HttpResult(Box::new(arg), t.span.merge(close.span)));
+                        return Ok(TypeRef::HttpResult(
+                            Box::new(arg),
+                            element,
+                            t.span.merge(close.span),
+                        ));
                     }
                     // v0.44: `QueueResult` is a predeclared non-generic built-in.
                     if name == "QueueResult" {

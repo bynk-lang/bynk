@@ -372,7 +372,7 @@ pub enum Ty {
     /// `Effect[T]` (v0.5).
     Effect(TyId),
     /// `HttpResult[T]` (v0.9).
-    HttpResult(TyId),
+    HttpResult(TyId, Option<TyId>),
     /// `QueueResult` — the built-in queue verdict sum (v0.44). Non-generic.
     QueueResult,
     /// `HttpOutcome[T]` — what a `system`-tier case observes when it drives an
@@ -513,7 +513,10 @@ impl Ty {
             }
             Ty::Option(t) => format!("Option[{}]", types.display(*t)),
             Ty::Effect(t) => format!("Effect[{}]", types.display(*t)),
-            Ty::HttpResult(t) => format!("HttpResult[{}]", types.display(*t)),
+            Ty::HttpResult(t, None) => format!("HttpResult[{}]", types.display(*t)),
+            Ty::HttpResult(t, Some(e)) => {
+                format!("HttpResult[{}, {}]", types.display(*t), types.display(*e))
+            }
             Ty::QueueResult => "QueueResult".to_string(),
             Ty::HttpOutcome(t) => format!("HttpOutcome[{}]", types.display(*t)),
             Ty::BoundaryRejection => "BoundaryRejection".to_string(),
@@ -4114,7 +4117,13 @@ pub fn resolve_type_ref_in(
         ),
         TypeRef::Option(t, _) => Ty::Option(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref_in(t, types, vars, tys)?),
-        TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref_in(t, types, vars, tys)?),
+        TypeRef::HttpResult(t, e, _) => Ty::HttpResult(
+            resolve_type_ref_in(t, types, vars, tys)?,
+            match e {
+                Some(e) => Some(resolve_type_ref_in(e, types, vars, tys)?),
+                None => None,
+            },
+        ),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Set(t, _) => Ty::Set(resolve_type_ref_in(t, types, vars, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref_in(t, types, vars, tys)?),
@@ -4161,7 +4170,10 @@ pub(crate) fn substitute(t: TyId, subst: &HashMap<String, TyId>, tys: &Types) ->
         Ty::Result(a, b) => Ty::Result(substitute(*a, subst, tys), substitute(*b, subst, tys)),
         Ty::Option(a) => Ty::Option(substitute(*a, subst, tys)),
         Ty::Effect(a) => Ty::Effect(substitute(*a, subst, tys)),
-        Ty::HttpResult(a) => Ty::HttpResult(substitute(*a, subst, tys)),
+        Ty::HttpResult(a, e) => Ty::HttpResult(
+            substitute(*a, subst, tys),
+            e.map(|e| substitute(e, subst, tys)),
+        ),
         Ty::HttpOutcome(a) => Ty::HttpOutcome(substitute(*a, subst, tys)),
         Ty::List(a) => Ty::List(substitute(*a, subst, tys)),
         Ty::Set(a) => Ty::Set(substitute(*a, subst, tys)),
@@ -4216,7 +4228,7 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
         Ty::Result(a, b) | Ty::Map(a, b) => contains_var(*a, tys) || contains_var(*b, tys),
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -4245,6 +4257,26 @@ pub(crate) fn contains_var(t: TyId, tys: &Types) -> bool {
     }
 }
 
+/// #4394: the streaming element two `HttpResult` types carry agree. An `HttpResult[T]` that names none
+/// leaves a `Streaming` body as lenient as it has always been, so it is compatible with any element;
+/// two that name one must name the same.
+pub(crate) fn stream_elements_compatible(a: Option<TyId>, b: Option<TyId>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x == y,
+        _ => true,
+    }
+}
+
+/// #4394: the element of the merge of two `HttpResult` types: the one that names it, `None` for neither,
+/// and no merge when both name different ones.
+fn merge_stream_elements(a: Option<TyId>, b: Option<TyId>) -> Option<Option<TyId>> {
+    match (a, b) {
+        (None, None) => Some(None),
+        (Some(x), None) | (None, Some(x)) => Some(Some(x)),
+        (Some(x), Some(y)) => (x == y).then_some(Some(x)),
+    }
+}
+
 /// Merge two list element types that may still mention flexible variables of
 /// an enclosing generic call (`Result[Int, E]` and `Result[Int, String]` give
 /// `Result[Int, String]`). `None` when their concrete parts disagree.
@@ -4264,7 +4296,10 @@ fn merge_open(a: TyId, b: TyId, rigid: &HashSet<String>, tys: &Types) -> Option<
         (Ty::Option(x), Ty::Option(y)) => Ty::Option(merge_open(x, y, rigid, tys)?),
         (Ty::List(x), Ty::List(y)) => Ty::List(merge_open(x, y, rigid, tys)?),
         (Ty::Set(x), Ty::Set(y)) => Ty::Set(merge_open(x, y, rigid, tys)?),
-        (Ty::HttpResult(x), Ty::HttpResult(y)) => Ty::HttpResult(merge_open(x, y, rigid, tys)?),
+        (Ty::HttpResult(x, ex), Ty::HttpResult(y, ey)) => {
+            let element = merge_stream_elements(ex, ey)?;
+            Ty::HttpResult(merge_open(x, y, rigid, tys)?, element)
+        }
         (Ty::Effect(x), Ty::Effect(y)) => Ty::Effect(merge_open(x, y, rigid, tys)?),
         (Ty::Stream(x), Ty::Stream(y)) => Ty::Stream(merge_open(x, y, rigid, tys)?),
         (Ty::Query(x), Ty::Query(y)) => Ty::Query(merge_open(x, y, rigid, tys)?),
@@ -4337,7 +4372,7 @@ fn contains_flexible_var(t: TyId, rigid: &HashSet<String>, tys: &Types) -> bool 
         }
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -4403,7 +4438,7 @@ pub(crate) fn unify(
         }
         (Ty::Option(a1), Ty::Option(a2))
         | (Ty::Effect(a1), Ty::Effect(a2))
-        | (Ty::HttpResult(a1), Ty::HttpResult(a2))
+        | (Ty::HttpResult(a1, _), Ty::HttpResult(a2, _))
         | (Ty::HttpOutcome(a1), Ty::HttpOutcome(a2))
         | (Ty::List(a1), Ty::List(a2))
         | (Ty::Set(a1), Ty::Set(a2))
@@ -4450,7 +4485,7 @@ pub(crate) fn unify(
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -4513,13 +4548,18 @@ pub fn record_type_refs(
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _) => record_type_refs(t, types, skip, refs),
+        TypeRef::HttpResult(t, e, _) => {
+            record_type_refs(t, types, skip, refs);
+            if let Some(e) = e {
+                record_type_refs(e, types, skip, refs);
+            }
+        }
         // v0.157 (ADR 0183): a `Name[Arg, …]` application records the generic
         // type's name plus every argument.
         TypeRef::App { name, args, .. } => {
@@ -4616,13 +4656,16 @@ fn first_unresolved_type_name<'a>(
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => first_unresolved_type_name(t, types, vars),
+        TypeRef::HttpResult(t, e, _) => first_unresolved_type_name(t, types, vars).or_else(|| {
+            e.as_ref()
+                .and_then(|e| first_unresolved_type_name(e, types, vars))
+        }),
         TypeRef::Fn(params, ret, _) => params
             .iter()
             .find_map(|p| first_unresolved_type_name(p, types, vars))
@@ -4718,7 +4761,13 @@ pub fn resolve_type_ref(
         ),
         TypeRef::Option(t, _) => Ty::Option(resolve_type_ref(t, types, tys)?),
         TypeRef::Effect(t, _) => Ty::Effect(resolve_type_ref(t, types, tys)?),
-        TypeRef::HttpResult(t, _) => Ty::HttpResult(resolve_type_ref(t, types, tys)?),
+        TypeRef::HttpResult(t, e, _) => Ty::HttpResult(
+            resolve_type_ref(t, types, tys)?,
+            match e {
+                Some(e) => Some(resolve_type_ref(e, types, tys)?),
+                None => None,
+            },
+        ),
         TypeRef::List(t, _) => Ty::List(resolve_type_ref(t, types, tys)?),
         TypeRef::Set(t, _) => Ty::Set(resolve_type_ref(t, types, tys)?),
         TypeRef::Query(t, _) => Ty::Query(resolve_type_ref(t, types, tys)?),
@@ -4813,9 +4862,10 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
         }
         (Ty::Option(a), Ty::Option(b)) => compatible(*a, *b, tys),
         (Ty::Effect(a), Ty::Effect(b)) => compatible(*a, *b, tys),
-        (Ty::HttpResult(a), Ty::HttpResult(b)) | (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
-            compatible(*a, *b, tys)
+        (Ty::HttpResult(a, ea), Ty::HttpResult(b, eb)) => {
+            compatible(*a, *b, tys) && stream_elements_compatible(*ea, *eb)
         }
+        (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => compatible(*a, *b, tys),
         // v0.20b: collections are covariant in their element/value types;
         // Map keys must match exactly — key-position widening would split a
         // map's keys across refined/base identities at lookup time.
@@ -4870,7 +4920,7 @@ pub fn compatible(t: TyId, u: TyId, tys: &Types) -> bool {
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -4999,7 +5049,7 @@ pub(crate) fn contains_never(t: TyId, tys: &Types) -> bool {
         Ty::Result(a, b) | Ty::Map(a, b) => contains_never(*a, tys) || contains_never(*b, tys),
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -6258,8 +6308,17 @@ fn check_unbound_effects(e: &Expr, allowed: bool, ctx: &mut Ctx) {
 /// Peel one optional `Effect[_]` wrapper to expose an underlying `HttpResult[T]`.
 pub(crate) fn peel_to_http_result(ty: TyId, tys: &Types) -> Option<TyId> {
     match &*tys.get(ty) {
-        Ty::HttpResult(inner) => Some(*inner),
+        Ty::HttpResult(inner, _) => Some(*inner),
         Ty::Effect(inner) => peel_to_http_result(*inner, tys),
+        _ => None,
+    }
+}
+
+/// #4394: the streaming element an `HttpResult[T, E]` (under an optional `Effect[_]`) names, if it names one.
+pub(crate) fn peel_to_http_result_element(ty: TyId, tys: &Types) -> Option<TyId> {
+    match &*tys.get(ty) {
+        Ty::HttpResult(_, element) => *element,
+        Ty::Effect(inner) => peel_to_http_result_element(*inner, tys),
         _ => None,
     }
 }
@@ -6386,7 +6445,10 @@ pub(crate) fn rebrand_return_type(
         )),
         Ty::Option(t) => tys.intern(Ty::Option(rebrand_return_type(*t, caller_types, tys))),
         Ty::Effect(t) => tys.intern(Ty::Effect(rebrand_return_type(*t, caller_types, tys))),
-        Ty::HttpResult(t) => tys.intern(Ty::HttpResult(rebrand_return_type(*t, caller_types, tys))),
+        Ty::HttpResult(t, e) => tys.intern(Ty::HttpResult(
+            rebrand_return_type(*t, caller_types, tys),
+            e.map(|e| rebrand_return_type(e, caller_types, tys)),
+        )),
         Ty::HttpOutcome(t) => {
             tys.intern(Ty::HttpOutcome(rebrand_return_type(*t, caller_types, tys)))
         }
@@ -6488,7 +6550,7 @@ pub(crate) fn rebrand_conflict(
                 .then(|| name.clone())
         }
         Ty::Result(a, b) | Ty::Map(a, b) => walk(*a).or_else(|| walk(*b)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => walk(*a),
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a, _) | Ty::List(a) | Ty::Set(a) => walk(*a),
         // `Query`, `Stream` and `Connection` are non-boundary, so a
         // cross-context return never carries one.
         _ => None,
@@ -6620,7 +6682,7 @@ pub(crate) fn ambiguous_projection_note(
         }
         Ty::Result(a, b) | Ty::Map(a, b) => ambiguous_projection_note(*a, ambiguous, tys)
             .or_else(|| ambiguous_projection_note(*b, ambiguous, tys)),
-        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a) | Ty::List(a) | Ty::Set(a) => {
+        Ty::Option(a) | Ty::Effect(a) | Ty::HttpResult(a, _) | Ty::List(a) | Ty::Set(a) => {
             ambiguous_projection_note(*a, ambiguous, tys)
         }
         _ => None,
@@ -6656,7 +6718,11 @@ fn structurally_compatible_inner(
         (Ty::Effect(a), Ty::Effect(b)) => {
             structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
         }
-        (Ty::HttpResult(a), Ty::HttpResult(b)) | (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
+        (Ty::HttpResult(a, ea), Ty::HttpResult(b, eb)) => {
+            stream_elements_compatible(*ea, *eb)
+                && structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
+        }
+        (Ty::HttpOutcome(a), Ty::HttpOutcome(b)) => {
             structurally_compatible_inner(*a, *b, arg_types, param_types, tys, visited)
         }
         // The boundary-crossing collections walk their element types like
@@ -6728,7 +6794,7 @@ fn structurally_compatible_inner(
             | Ty::Result(..)
             | Ty::Option(_)
             | Ty::Effect(_)
-            | Ty::HttpResult(_)
+            | Ty::HttpResult(_, _)
             | Ty::HttpOutcome(_)
             | Ty::QueueResult
             | Ty::BoundaryRejection
@@ -7038,7 +7104,7 @@ pub fn variants_of(
                 })
                 .collect(),
         ),
-        Ty::HttpResult(t) => Some(
+        Ty::HttpResult(t, element) => Some(
             HTTP_VARIANTS
                 .iter()
                 .map(|v| VariantInfo {
@@ -7058,8 +7124,11 @@ pub fn variants_of(
                                 tys.intern(Ty::Base(BaseType::String)),
                             )]
                         }
+                        // #4394: the element the route declares (`HttpResult[T, E]`), `String`
+                        // when it names none.
                         HttpVariantPayload::Streamed => {
-                            let elem = tys.intern(Ty::Base(BaseType::String));
+                            let elem =
+                                element.unwrap_or_else(|| tys.intern(Ty::Base(BaseType::String)));
                             vec![("stream".to_string(), tys.intern(Ty::Stream(elem)))]
                         }
                         // v0.111: the first two-field payload. Field names are
@@ -7149,7 +7218,7 @@ pub fn variants_of(
             },
             VariantInfo {
                 name: "Handled".to_string(),
-                payload: vec![("value".to_string(), tys.intern(Ty::HttpResult(*t)))],
+                payload: vec![("value".to_string(), tys.intern(Ty::HttpResult(*t, None)))],
             },
         ]),
         Ty::BoundaryRejection => Some(
@@ -7763,7 +7832,7 @@ mod pure_helper_pins {
     fn peel_to_http_result_matches_and_misses() {
         let tys = &Types::new();
         assert_eq!(
-            peel_to_http_result(tys.intern(Ty::HttpResult(int(tys))), tys),
+            peel_to_http_result(tys.intern(Ty::HttpResult(int(tys), None)), tys),
             Some(int(tys)),
         );
         assert_eq!(peel_to_http_result(int(tys), tys), None);

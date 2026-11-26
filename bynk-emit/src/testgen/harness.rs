@@ -802,7 +802,7 @@ pub(super) fn numeric_or_scalar_base(
         | checker::Ty::Result(..)
         | checker::Ty::Option(_)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection

@@ -328,7 +328,7 @@ pub(crate) fn require_key_positions(
         Ty::Option(a)
         | Ty::List(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)

@@ -399,7 +399,7 @@ pub(crate) fn shape_of(
             Some(bound) => bound.clone(),
             None => named_shape(&id.name, types, seen, subst),
         },
-        TypeRef::HttpResult(a, _) => Shape::HttpResult(Box::new(go(a))),
+        TypeRef::HttpResult(a, _, _) => Shape::HttpResult(Box::new(go(a))),
         TypeRef::ValidationError(_) => Shape::Named("ValidationError".into()),
         TypeRef::DecodeError(_) => Shape::Named("DecodeError".into()),
         TypeRef::QueueResult(_) => Shape::Named("QueueResult".into()),

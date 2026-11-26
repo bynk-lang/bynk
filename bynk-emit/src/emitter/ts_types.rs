@@ -298,8 +298,13 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 TsType::named_with_args("globalThis.Promise", vec![inner])
             }
         }
-        TypeRef::HttpResult(t, _) => {
-            TsType::named_with_args("HttpResult", vec![ts_type_ref_to_ts_type(t, qualify)])
+        // #4394: a declared streaming element is the second type argument.
+        TypeRef::HttpResult(t, e, _) => {
+            let mut args = vec![ts_type_ref_to_ts_type(t, qualify)];
+            if let Some(e) = e {
+                args.push(ts_type_ref_to_ts_type(e, qualify));
+            }
+            TsType::named_with_args("HttpResult", args)
         }
         // v0.20b: collections lower to immutable TS shapes.
         TypeRef::List(t, _) => TsType::readonly_array(ts_type_ref_to_ts_type(t, qualify)),
@@ -495,7 +500,7 @@ mod ts_type_ref_tests {
 
     #[test]
     fn http_result_type() {
-        let r = TypeRef::HttpResult(Box::new(named("Order")), sp());
+        let r = TypeRef::HttpResult(Box::new(named("Order")), None, sp());
         assert_eq!(ts_type_ref(&r), "HttpResult<Order>");
     }
 
@@ -776,7 +781,13 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
                 TsType::named_with_args("globalThis.Promise", vec![ts_ty_to_ts_type(*t, tys)])
             }
         }
-        Ty::HttpResult(t) => TsType::named_with_args("HttpResult", vec![ts_ty_to_ts_type(*t, tys)]),
+        Ty::HttpResult(t, element) => {
+            let mut args = vec![ts_ty_to_ts_type(*t, tys)];
+            if let Some(e) = element {
+                args.push(ts_ty_to_ts_type(*e, tys));
+            }
+            TsType::named_with_args("HttpResult", args)
+        }
         Ty::List(t) => TsType::readonly_array(ts_ty_to_ts_type(*t, tys)),
         Ty::Set(t) => TsType::named_with_args("ReadonlySet", vec![ts_ty_to_ts_type(*t, tys)]),
         // v0.91 (ADR 0119): a `Query[T]` lowers to a deferred producer of its
@@ -955,7 +966,7 @@ mod ts_ty_tests {
             "globalThis.Promise<void>"
         );
 
-        let http_result = tys.intern(Ty::HttpResult(int));
+        let http_result = tys.intern(Ty::HttpResult(int, None));
         assert_eq!(
             ts_ty(http_result, TyRender::new(&tys, no_spellings())),
             "HttpResult<number>"
