@@ -1330,16 +1330,20 @@ export function __deserialise_Request(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path: `${path}.url`, expected: "string", actual: typeof obj["url"] });
   }
   const __url = obj["url"];
-  const __r_contentType = __deserialise_Option_String(obj["contentType"], `${path}.contentType`);
+  const __d_contentType: __JsonValue = "contentType" in obj ? obj["contentType"] : { kind: "None" };
+  const __r_contentType = __deserialise_Option_String(__d_contentType, `${path}.contentType`);
   if (__r_contentType.tag === "Err") return __r_contentType;
   const __contentType = __r_contentType.value;
-  const __r_authorization = __deserialise_Option_String(obj["authorization"], `${path}.authorization`);
+  const __d_authorization: __JsonValue = "authorization" in obj ? obj["authorization"] : { kind: "None" };
+  const __r_authorization = __deserialise_Option_String(__d_authorization, `${path}.authorization`);
   if (__r_authorization.tag === "Err") return __r_authorization;
   const __authorization = __r_authorization.value;
-  const __r_headers = __deserialise_Map_String_String(obj["headers"], `${path}.headers`);
+  const __d_headers: __JsonValue = "headers" in obj ? obj["headers"] : [];
+  const __r_headers = __deserialise_Map_String_String(__d_headers, `${path}.headers`);
   if (__r_headers.tag === "Err") return __r_headers;
   const __headers = __r_headers.value;
-  const __r_body = __deserialise_Option_String(obj["body"], `${path}.body`);
+  const __d_body: __JsonValue = "body" in obj ? obj["body"] : { kind: "None" };
+  const __r_body = __deserialise_Option_String(__d_body, `${path}.body`);
   if (__r_body.tag === "Err") return __r_body;
   const __body = __r_body.value;
   return Ok({ method: __method, url: __url, contentType: __contentType, authorization: __authorization, headers: __headers, body: __body } as Request);

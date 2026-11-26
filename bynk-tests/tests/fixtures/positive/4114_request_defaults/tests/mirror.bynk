@@ -1,0 +1,25 @@
+suite mirror
+
+consumes bynk { FetchError, Method, Response, Fetch }
+
+// #4114: the omitted fields are the empty request, not an absent one.
+
+case "a bare request sends no content type, authorisation, header or body" {
+	stub Fetch.send(_) returns Ok(Response { status: 204, headers: Map.empty(), body: "" })
+	let n <- probe.call("https://upstream.test/")
+	expect n == 204
+	expect Fetch.send called once with req.method == Get
+	expect Fetch.send called once with req.contentType == None
+	expect Fetch.send called once with req.authorization == None
+	expect Fetch.send called once with req.body == None
+	expect Fetch.send called once with req.headers.isEmpty()
+}
+
+case "a field written explicitly overrides its default" {
+	stub Fetch.send(_) returns Ok(Response { status: 201, headers: Map.empty(), body: "" })
+	let n <- poster.call("https://upstream.test/", "hi")
+	expect n == 201
+	expect Fetch.send called once with req.body == Some("hi")
+	expect Fetch.send called once with req.contentType == None
+	expect Fetch.send called once with req.headers.get("accept") == Some("text/plain")
+}

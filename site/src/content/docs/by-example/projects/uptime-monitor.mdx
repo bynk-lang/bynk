@@ -26,7 +26,7 @@ request that never completed). Both are unit-tested without `Fetch` or `Kv`.
 The cron entry point is `service checks from cron { on schedule("*/5 * * * *") (at:
 Int) … }`. Cron has no ambient clock, so the schedule-aligned instant arrives as the
 `at` parameter (epoch-ms). For each target the handler builds a
-`Request { method: Get, … }` — with `headers: Map.empty()`, since it sends no
+`Request { method: Get, url: … }` — the optional fields default, so it sends no
 extra headers — and calls `Fetch.send`, which returns a
 `Result[Response, FetchError]` — a network failure is a value, not an exception. A
 `match` reduces each outcome to an HTTP code (`0` on `Err`), `isHealthy` classifies

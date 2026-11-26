@@ -88,10 +88,10 @@ adapter bynk {
 	type Request = {
 		method: Method,
 		url: String,
-		contentType: Option[String],
-		authorization: Option[String],
-		headers: Map[String, String],
-		body: Option[String],
+		contentType: Option[String] = None,
+		authorization: Option[String] = None,
+		headers: Map[String, String] = Map.empty(),
+		body: Option[String] = None,
 	}
 
 	---
