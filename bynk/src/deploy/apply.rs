@@ -558,6 +558,18 @@ impl ApplyWorker<'_, '_, '_, '_, '_> {
                 "could not read `{worker}`'s generated configuration: {e}"
             ))
         })?;
+        // #3883: `addresses` is top-level only, so Wrangler applies the file's list to this
+        // environment too. It is the environment's own claim (nothing, unless `[deploy.email]`
+        // maps it), or `wrangler deploy --env` would take production's routing rules over.
+        let config_text = crate::deploy::email::set_top_level_addresses(
+            &config_text,
+            &self.declared.email_addresses,
+        )
+        .map_err(|e| {
+            DeployFailure::driver(format!(
+                "could not set the Email Routing addresses of `{worker}` for `{environment}`: {e}"
+            ))
+        })?;
         let foreign: BTreeSet<String> = self
             .declared
             .foreign_services

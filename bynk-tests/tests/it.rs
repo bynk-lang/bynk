@@ -371,6 +371,8 @@ mod system {
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]
     mod debug_inspect;
+    #[path = "deploy_email_environment.rs"]
+    mod deploy_email_environment;
     #[path = "deploy_worker_groups.rs"]
     mod deploy_worker_groups;
     #[path = "detach_workerd.rs"]

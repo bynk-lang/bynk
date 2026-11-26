@@ -135,6 +135,11 @@ struct DeployTable {
     /// Vectorize settings, keyed by the `Vectorize` capability's name
     /// (`capability Docs = Vectorize …` is `Docs`).
     vectorize: Option<std::collections::BTreeMap<String, DeployVectorizeEntry>>,
+    /// Inbound-email addresses per environment, keyed by an address a
+    /// `from email` service names (`from email("support@shop.example")` is
+    /// `support@shop.example`). A named environment claims no address unless
+    /// it is mapped here.
+    email: Option<std::collections::BTreeMap<String, DeployEmailEntry>>,
     /// Container settings, keyed by the `Container` capability's name
     /// (`capability Renderer = Container …` is `Renderer`).
     containers: Option<std::collections::BTreeMap<String, DeployContainerEntry>>,
@@ -184,6 +189,21 @@ struct DeployContainerEntry {
     /// here runs that image and is never built, so the deploy needs no Docker;
     /// without an entry the image is built from `@build`'s Dockerfile.
     image: std::collections::BTreeMap<String, String>,
+}
+
+/// One `from email` address, as a named environment claims it.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct DeployEmailEntry {
+    /// The address each deployment environment claims in place of this one,
+    /// by `--env` name (`default` is never mapped: it claims the address as
+    /// the source writes it). Wrangler applies `addresses` to a Worker at its
+    /// top level only, so an environment with no entry here claims nothing
+    /// and leaves production's routing rules alone. The Worker for a mapped
+    /// environment accepts mail to the mapped address, and the domain needs
+    /// Email Routing enabled.
+    address: std::collections::BTreeMap<String, String>,
 }
 
 /// One `Vectorize` capability's index at deploy.

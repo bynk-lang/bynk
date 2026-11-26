@@ -321,6 +321,11 @@ fn deploy(
             return Err(ExitCode::FAILURE);
         }
     };
+    // #3883: a named environment claims only the addresses `[deploy.email]` maps it to.
+    if let Err(e) = crate::deploy::email::claim(&mut resources, &model.layout, &opts.environment) {
+        emsg!("bynk: error: {e}");
+        return Err(ExitCode::FAILURE);
+    }
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
     // it should surface as one now rather than as a missing-secret failure

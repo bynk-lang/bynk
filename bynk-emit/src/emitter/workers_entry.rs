@@ -674,7 +674,7 @@ pub fn emit_worker_entry(
 
     // v0.10b: the queue (consumer) entry point; #3328: the email entry point.
     push_message_entries(
-        table,
+        (table, layout),
         &queue_routes,
         &fault_exec_params,
         &other_compose_args,
