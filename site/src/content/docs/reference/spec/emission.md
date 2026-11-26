@@ -1157,7 +1157,9 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   under Node with no Durable Object.
 - **Workers** — the Worker authenticates the upgrade at the edge (the same JWT
   verifier the HTTP seam uses, reading the Bearer token from the
-  `Sec-WebSocket-Protocol` subprotocol) and forwards it to the addressed Durable
+  `Sec-WebSocket-Protocol` subprotocols, the pair `["bynk.bearer", token]`: the
+  offering of the token alone is `400`, a missing or bad token `401`, and the `101`
+  selects `bynk.bearer`) and forwards it to the addressed Durable
   Object, which accepts the socket via the **hibernatable-WebSocket** API
   (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). A held
   `Map[K, Connection]` cannot be JSON-persisted (a live socket), so it lives in an

@@ -177,8 +177,56 @@ export function newWebSocketPair(): WorkersWebSocketPair {
 // Build the `101 Switching Protocols` response that hands the client end of an
 // accepted `WebSocketPair` back to the caller — the Cloudflare upgrade
 // completion. `webSocket` is a Workers-specific `ResponseInit` extension.
-export function webSocketUpgradeResponse(client: WorkersWebSocket): Response {
-  return new Response(null, { status: 101, webSocket: client } as ResponseInit & {
-    webSocket: WorkersWebSocket;
-  });
+//
+// `protocol` is the subprotocol the response selects (#3900). A browser that offered subprotocols
+// fails the connection when the response selects none, so a Bearer upgrade selects `bynk.bearer`.
+// An upgrade that offered none is answered with none (the response is built as before).
+export function webSocketUpgradeResponse(client: WorkersWebSocket, protocol?: string): Response {
+  const init: ResponseInit & { webSocket: WorkersWebSocket } = { status: 101, webSocket: client };
+  if (protocol !== undefined) {
+    init.headers = { "Sec-WebSocket-Protocol": protocol };
+  }
+  return new Response(null, init);
+}
+
+// #3900: the subprotocol a Bearer WebSocket handshake selects. A browser cannot set a header on the
+// upgrade, so it offers `new WebSocket(url, ["bynk.bearer", token])`: the marker, then the token. The
+// response selects the marker only, so the credential is never echoed in a response header, where
+// proxies and logs may record it.
+export const BEARER_SUBPROTOCOL = "bynk.bearer";
+
+// What a Bearer upgrade's `Sec-WebSocket-Protocol` offers: no token (`Absent`), a token after the
+// marker (`Token`), or subprotocols without the marker (`Legacy`: the old `[token]` form, which only
+// clients that do not enforce the standard could use).
+export type WebSocketBearerOffer =
+  | { readonly tag: "Absent" }
+  | { readonly tag: "Legacy" }
+  | { readonly tag: "Token"; readonly token: string };
+
+export function webSocketBearerOffer(offered: string | null): WebSocketBearerOffer {
+  if (offered === null) {
+    return { tag: "Absent" };
+  }
+  const protocols = offered
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+  const at = protocols.indexOf(BEARER_SUBPROTOCOL);
+  if (at === -1) {
+    return protocols.length === 0 ? { tag: "Absent" } : { tag: "Legacy" };
+  }
+  const token = protocols[at + 1];
+  return token === undefined ? { tag: "Absent" } : { tag: "Token", token };
+}
+
+// The subprotocol the 101 selects: the marker when the client offered it, else none.
+export function webSocketBearerProtocol(offered: string | null): string | undefined {
+  const marked = (offered ?? "").split(",").some((p) => p.trim() === BEARER_SUBPROTOCOL);
+  return marked ? BEARER_SUBPROTOCOL : undefined;
+}
+
+// The refusal of the old single-element `[token]` form: `400`, and a fixed message naming the form
+// that works (a `401` would hide the cause). It never echoes what the client sent.
+export function webSocketBearerRefusal(): Response {
+  return new Response('Offer the subprotocols ["bynk.bearer", <token>]', { status: 400 });
 }
