@@ -804,7 +804,7 @@ it is checked for exhaustiveness (use `_` to opt out), and the variants name a
 type, the other side of `==` or `!=`), so a sum of your own with a `Malformed` variant is
 unaffected:
 
-```bynk
+```bynk,fragment
 fn explain(e: DecodeError) -> String {
 	match e.kind {
 		Malformed => "not JSON",

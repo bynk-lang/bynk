@@ -142,7 +142,7 @@ A `DecodeError` carries a `kind`, a closed `DecodeErrorKind` (`Malformed`,
 `path` (where in the document, such as `$.qty`) and a `message`. The error itself
 has no string form, so interpolate the fields; `kind` prints as its name:
 
-```bynk
+```bynk,fragment
 commons orders {
 	type Order = {
 		id: String,
@@ -160,7 +160,7 @@ commons orders {
 
 To act on the kind, `match` on it. The match is checked for exhaustiveness:
 
-```bynk
+```bynk,fragment
 commons orders {
 	fn explain(e: DecodeError) -> String {
 		match e.kind {

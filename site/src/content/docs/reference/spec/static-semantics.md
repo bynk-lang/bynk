@@ -726,7 +726,7 @@ became the error of every decoder (ADR 0047 is amended); `JsonError` remains a
 reserved, deprecated spelling of the same type, and a use of it is the warning
 `bynk.types.deprecated_json_error` with a machine-applicable fix.
 
-```bynk
+```bynk,fragment
 commons store {
 	type Item = {
 		sku: String,
