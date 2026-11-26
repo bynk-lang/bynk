@@ -855,8 +855,10 @@ Worker's `queue` entry. (Recommended.)**
   `EventTooLarge` (D3).
 - **`bynk dev`:** local delivery across two `wrangler dev` processes is an open risk (§12 R1),
   settled in slice 3 before the cut-over.
-- **The ordering harness** (`bynk-tests/tests/system/events_ordering_workerd.rs`, ADR 0290) is retired with
-  D4, or kept as a measurement that asserts nothing about order.
+- **The ordering harness** (`bynk-tests/tests/system/events_ordering_workerd.rs`, ADR 0290) is
+  **retired in slice 4**, per D4's ruling. Its assertions are the guarantees D4 withdraws, and
+  the cut-over removes the fan-out it measures, so it is deleted rather than kept as a
+  measurement that asserts nothing.
 
 ### D11 (#3545 part 2). Subscribers ignore repeats of the same `eventId`
 
@@ -921,7 +923,9 @@ about 3,300 deliveries a day, with D1's daily rows behind it. The options were:
     for a project with subscribers;
   - the events guide says that production event workloads need Workers Paid;
   - past the cap, the behaviour is D9's: a service faults, an agent's outbox defers to
-    00:00 UTC, and deduplication fails closed.
+    00:00 UTC, and deduplication fails closed. Until L11 settles retention on Free, a day over
+    the cap may lose events whose 24-hour retention runs out first, and the guide and
+    `bynk doctor` say so.
 - **B. A Free-plan fallback** to a lighter path, for example in-request delivery without a
   queue. Rejected: it would keep a second delivery mechanism with a weaker guarantee, and with
   different semantics to test and document, which is the shape this track removes.
@@ -1108,12 +1112,13 @@ cites this doc. Each slice that touches signing, verification or deduplication r
 
 **Slice 0: Front-loaded ADRs.** Depends on: this doc merging.
 - (a) The substrate: one compiler-owned queue and dead-letter queue per subscribing service;
-  supersedes ADR 0284, and supersedes ADR 0475 D2–D3 for events.
+  supersedes ADR 0284, and supersedes ADR 0475 D2–D3 for events. One delivery mechanism on
+  every Cloudflare plan, with no Free-plan fallback substrate; the Free plan's cap is accepted
+  and documented (D13).
 - (b) The guarantee as worded in §4.1, and release-at-commit by outbox for agents and by
   send-or-fault for services (D1).
 - (c) Ordering is best effort, and each event is one message; amends ADR 0290 (D4, ruled
-  option (ii)). The Free plan's cap is accepted and documented (D13), with no fallback
-  substrate.
+  option (ii)).
 - (d) Internal queues: reserved names, the #3899 v1 format for events, owner-only
   verification, and built-in deduplication (D2, D11).
 - (e) The outbox row format is versioned and part of the 1.0 stored-data promise, beside
@@ -1171,6 +1176,7 @@ two-context project in `default` and in a named environment; L5, L6 and L10 have
 - *Agents send after commit* in this slice, still at most once (a failed send is logged). The
   outbox is slice 5, so this slice stays reviewable.
 - `EventTooLarge` before commit on every target (D3).
+- `bynk-tests/tests/system/events_ordering_workerd.rs` is retired (D4's ruling, D10).
 - `__EventsFanout` is tombstoned; `events_fanout.rs`, `dispatchToEventsFanout`,
   `BindingSource::EventsFanout`, the fan-out bindings, `cycle_publishers` and the cycle
   refusal's event paragraph are deleted (D8). The structural guard in
