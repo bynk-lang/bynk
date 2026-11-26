@@ -745,7 +745,7 @@ commons store {
 	fn restoreError(s: String) -> String {
 		match Json.decode[Item](s) {
 			Ok(i) => i.sku,
-			Err(e) => e.kind.concat(" at ").concat(e.path),
+			Err(e) => "\(e.kind) at \(e.path)",
 		}
 	}
 }

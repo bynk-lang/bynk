@@ -1568,7 +1568,7 @@ test("formDecode: reads a form as formObject does, with a $-rooted DecodeError",
   const bad = formDecode("age=1&age=2", [F("age", "int")]);
   assert.equal(bad.tag, "Err");
   assert.deepEqual(bad.tag === "Err" ? { kind: bad.error.kind, path: bad.error.path } : null, {
-    kind: "StructuralMismatch",
+    kind: { tag: "StructuralMismatch" },
     path: "$.age",
   });
 });
