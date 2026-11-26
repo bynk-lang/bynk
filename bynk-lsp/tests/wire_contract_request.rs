@@ -671,3 +671,153 @@ fn raw_and_stream_bodies_are_opaque_and_unit_ones_are_null() {
         .expect("a boundary-implicit response");
     assert!(implicit["body"].is_null());
 }
+
+// -- #3687: `success` for an `on call` handler with a cross-context form.
+
+const CALL_SUCCESS_SRC: &str = r#"context billing
+
+type Quote = { amount: Int, currency: String }
+type Page[T] = { items: List[T], total: Int }
+
+service Pricing {
+  on call(sku: String, qty: Int) -> Effect[Quote] by Caller {
+    Quote { amount: qty * 100, currency: "USD" }
+  }
+}
+
+service Checked {
+  on call(sku: String) -> Effect[Result[Quote, String]] by Caller {
+    Effect.pure(Ok(Quote { amount: 1, currency: "USD" }))
+  }
+}
+
+service Listing {
+  on call(page: Int) -> Effect[Page[Quote]] by Caller {
+    Page { items: [], total: page }
+  }
+}
+
+service Ping {
+  on call(n: Int) -> Effect[()] by Caller {
+    Effect.pure(())
+  }
+}
+
+service api from http {
+  on GET("/quote") () -> Effect[HttpResult[Quote]] by Visitor {
+    Ok(Quote { amount: 1, currency: "USD" })
+  }
+}
+"#;
+
+/// The `bynk/wireContract` JSON for the `billing` handler whose header contains `needle`, in a
+/// project of `contexts` real contexts (`2` adds a consumer, so `on call` has a cross-context form).
+fn call_wire_json_at(test_name: &str, needle: &str, contexts: usize) -> serde_json::Value {
+    let mut files = vec![("billing.bynk", CALL_SUCCESS_SRC)];
+    if contexts > 1 {
+        files.push(("storefront.bynk", CONSUMER_SRC));
+    }
+    let root = setup_project(test_name, &files);
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let diag = bynk_ide::diagnose_project(&root, &sources);
+    let file = diag
+        .files
+        .iter()
+        .find(|f| f.source_path.to_string_lossy().ends_with("billing.bynk"))
+        .expect("billing.bynk analysed");
+    let (rel, text) = (file.source_path.clone(), file.text.clone());
+    let info = &diag.boundary_info["billing"];
+    let expr_types = diag
+        .expr_types
+        .get(&rel)
+        .map(|v| v.as_slice())
+        .unwrap_or(&[]);
+    let model = wire_contract_at(
+        "billing",
+        &text,
+        find_offset(&text, needle),
+        info,
+        expr_types,
+        &diag.ty_intern,
+        real_context_count(&diag.boundary_info, &diag.unit_sources),
+    )
+    .expect("a wire contract at the handler");
+    let snapshots: HashMap<PathBuf, String> = diag
+        .files
+        .iter()
+        .map(|f| (f.source_path.clone(), f.text.clone()))
+        .collect();
+    let search_order = diag.doc_scope.get("billing").cloned().unwrap_or_default();
+    let wire = to_wire(
+        &model,
+        &root,
+        &text,
+        &info.types,
+        &diag.index,
+        &snapshots,
+        &search_order,
+    );
+    serde_json::to_value(&wire).expect("the model serialises")
+}
+
+#[test]
+fn an_on_call_success_is_its_record_return_type() {
+    let wire = call_wire_json_at("call-success-record", "on call(sku: String, qty", 2);
+    assert_eq!(
+        wire["success"],
+        serde_json::json!({ "kind": "Named", "name": "Quote" })
+    );
+    assert!(
+        has_type(&wire, "Quote"),
+        "`success` must resolve against `types`"
+    );
+}
+
+#[test]
+fn an_on_call_result_return_is_kept_whole() {
+    let wire = call_wire_json_at(
+        "call-success-result",
+        "on call(sku: String) -> Effect[Result",
+        2,
+    );
+    // `Result[T, E]` is part of the contract: the caller decodes both arms, so `success` is the
+    // whole `Result`, not its `Ok` payload.
+    let key = wire["success"]["key"].as_str().expect("an Inst ref");
+    assert_eq!(wire["success"]["kind"], "Inst", "{}", wire["success"]);
+    assert!(key.starts_with("Result"), "{key}");
+    let insts = wire["instantiations"].as_array().expect("instantiations");
+    assert!(insts.iter().any(|i| i["key"] == key), "{key} in {insts:?}");
+}
+
+#[test]
+fn an_on_call_generic_return_resolves_through_instantiations() {
+    let wire = call_wire_json_at("call-success-generic", "on call(page: Int", 2);
+    let key = wire["success"]["key"].as_str().expect("an Inst ref");
+    assert_eq!(wire["success"]["kind"], "Inst");
+    let insts = wire["instantiations"].as_array().expect("instantiations");
+    assert!(insts.iter().any(|i| i["key"] == key), "{key} in {insts:?}");
+}
+
+#[test]
+fn an_on_call_unit_return_has_no_success() {
+    let wire = call_wire_json_at("call-success-unit", "on call(n: Int", 2);
+    assert!(wire["success"].is_null(), "{}", wire["success"]);
+}
+
+#[test]
+fn a_handler_with_no_cross_context_form_has_no_success() {
+    // One context: `on call` has nobody to be called by, so there is no cross-context form.
+    let single = call_wire_json_at("call-success-single", "on call(sku: String, qty", 1);
+    assert_eq!(single["noCrossContext"], "SingleContext");
+    assert!(single["success"].is_null(), "{}", single["success"]);
+}
+
+#[test]
+fn an_http_handlers_success_is_still_the_type_inside_its_http_result() {
+    let wire = call_wire_json_at("call-success-http", "GET(\"/quote\")", 2);
+    assert_eq!(
+        wire["success"],
+        serde_json::json!({ "kind": "Named", "name": "Quote" })
+    );
+}

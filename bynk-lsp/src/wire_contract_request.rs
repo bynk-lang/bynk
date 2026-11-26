@@ -91,9 +91,11 @@ pub struct WcModel {
     pub recursive: Vec<String>,
     /// Empty for a non-HTTP handler.
     pub responses: Vec<WcHttpResponse>,
-    /// #3609: the `T` of the handler's `HttpResult[T]`, resolved against
-    /// `types`/`instantiations`. `null` for a non-HTTP handler and for a raw or
-    /// unit-payload return.
+    /// The value a successful call returns, resolved against `types`/`instantiations`: for an
+    /// HTTP handler (#3609) the `T` of its `HttpResult[T]`; for an `on call` handler with a
+    /// cross-context form (#3687) its whole return type with `Effect` stripped, so a
+    /// `Result[T, E]` stays whole. Tell them apart by `kind`. `null` for any other handler,
+    /// when `noCrossContext` is set, and for a raw or unit-payload return.
     pub success: Option<WcRef>,
     #[serde(rename = "noCrossContext")]
     pub no_cross_context: Option<&'static str>,
