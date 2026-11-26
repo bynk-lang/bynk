@@ -34,7 +34,7 @@ export function compose(env: Env) {
       const __ns = deps.env.ROOM;
       const __stub = __ns.get(__ns.idFromName(__serialiseAgentKey(__r_export.value)));
       const __fwd = new globalThis.Headers(request.headers);
-      __fwd.set("X-Bynk-Ws-Open", globalThis.JSON.stringify({ args: [__r_export.value], identity: __id.value }));
+      __fwd.set("X-Bynk-Ws-Open", globalThis.JSON.stringify({ args: [__r_export.value], identity: __id.value, exp: __claims.value.claims.exp }));
       return __stub.fetch(new globalThis.Request("https://_bynk/_bynk/ws/open/ChatGateway", { method: request.method, headers: __fwd }));
     },
     async http_GET_lookup_Param_class(__id_class: string) {

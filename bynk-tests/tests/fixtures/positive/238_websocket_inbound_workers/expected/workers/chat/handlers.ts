@@ -9,7 +9,7 @@ import { __StoreMap, __StoreSet, __fillHeld, __fillSet, __wireEntries, __wireHel
 import { __readStored, __commitStored, __bynkThen } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export type RoomId = string & { readonly __brand: "chat.RoomId" };
 
@@ -197,8 +197,8 @@ export class Room {
     const url = new globalThis.URL(request.url);
     if (url.pathname === "/_bynk/ws/open/ChatGateway") {
       const __pair = __newWebSocketPair();
-      const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string };
-      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args });
+      const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
+      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
@@ -217,6 +217,12 @@ export class Room {
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<ServerFrame>(ws, __att.connId);
     const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    if (__webSocketAuthExpired(__att)) {
+      await __webSocketClosing(ws, __att, { code: 1008, reason: "authentication expired", clean: false }, async (__info) => {
+        await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId, ...{ env: env as never } });
+      });
+      return;
+    }
     let __raw: string;
     try {
       __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message);

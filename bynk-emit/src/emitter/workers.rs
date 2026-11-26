@@ -578,6 +578,12 @@ pub(super) fn emit_websocket_upgrade(
             .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
         {
             stmts.extend(bearer_offer_stmts(false));
+            stmts.push(TsStmt::let_stmt(
+                TsBindingName::Ident("__exp".to_string()),
+                Some(TsType::named("number | undefined")),
+                Some(ident("undefined")),
+                None,
+            ));
             stmts.push(if_(
                 strict_eq(member(ident("__offer"), "tag"), str_lit("Token")),
                 TsStmt::assign(ident("__token"), member(ident("__offer"), "token"), None),
@@ -602,63 +608,7 @@ pub(super) fn emit_websocket_upgrade(
                 SumMemberSeam::Bearer {
                     secret,
                     identity_type,
-                } => {
-                    let secret = crate::emitter::escape_ts_string(secret);
-                    vec![if_(
-                        strict_neq(ident("__token"), ident("undefined")),
-                        block(vec![
-                            const_("__secret", secret_probe_expr(&secret)),
-                            if_(
-                                strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
-                                block(vec![
-                                    const_(
-                                        "__claims",
-                                        await_expr(call(
-                                            ident("__verifyBearerJwtHs256"),
-                                            vec![ident("__token"), ident("__secret")],
-                                        )),
-                                    ),
-                                    if_(
-                                        strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
-                                        block(vec![
-                                            const_(
-                                                "__id",
-                                                method_call(
-                                                    member(
-                                                        ident("handlers"),
-                                                        identity_type.clone(),
-                                                    ),
-                                                    "of",
-                                                    vec![member(
-                                                        member(ident("__claims"), "value"),
-                                                        "sub",
-                                                    )],
-                                                ),
-                                            ),
-                                            if_(
-                                                strict_eq(
-                                                    member(ident("__id"), "tag"),
-                                                    str_lit("Ok"),
-                                                ),
-                                                TsStmt::assign(
-                                                    ident("__who"),
-                                                    TsExpr::object(vec![
-                                                        ("tag".to_string(), str_lit(tag)),
-                                                        (
-                                                            "identity".to_string(),
-                                                            member(ident("__id"), "value"),
-                                                        ),
-                                                    ]),
-                                                    None,
-                                                ),
-                                            ),
-                                        ]),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    )]
-                }
+                } => sum_bearer_member_stmts(&tag, secret, identity_type),
                 // Rejected at the WebSocket boundary (no body to sign), so a
                 // checked program has none; resolve nothing, fail closed.
                 // `Signature`, `Oidc` and `SignedCookie` are not WebSocket schemes (the checker
@@ -927,28 +877,14 @@ pub(super) fn emit_websocket_upgrade(
             vec![member(ident("request"), "headers")],
         ),
     ));
-    let mut fwd_entries = vec![("args".to_string(), TsExpr::array(args_json))];
-    if has_identity {
-        fwd_entries.push(("identity".to_string(), member(ident("__id"), "value")));
-    }
-    if sum.is_some() {
-        fwd_entries.push(("who".to_string(), ident("__who")));
-    }
-    // #1818: the hosting agent reads its key, so the upgrade carries it, encoded
-    // by the agent's key codec.
-    if key_readers.contains(target.agent) {
-        fwd_entries.push((
-            "key".to_string(),
-            method_call(
-                member(
-                    ident("handlers"),
-                    crate::emitter::emit::agent_key_codec_name(target.agent),
-                ),
-                "enc",
-                vec![key_ref.clone()],
-            ),
-        ));
-    }
+    let exp = ws_credential_exp(seam.is_some(), sum);
+    let key = key_readers.contains(target.agent).then(|| {
+        (
+            crate::emitter::emit::agent_key_codec_name(target.agent),
+            key_ref.clone(),
+        )
+    });
+    let fwd_entries = ws_forward_entries(args_json, has_identity, sum.is_some(), exp, key);
     stmts.push(expr_stmt(method_call(
         ident("__fwd"),
         "set",
@@ -1215,6 +1151,115 @@ pub(super) fn emit_http_wrapper(
         )))],
         span: None,
     }
+}
+
+/// One `Bearer` member of an actor sum at the WebSocket upgrade: verify the offered token against the
+/// member's secret and, when it verifies and mints the identity, resolve `__who` to this member. #3903:
+/// also records the token's `exp` in `__exp`, so the connection can be closed once the credential expires.
+fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
+    let secret = crate::emitter::escape_ts_string(secret);
+    vec![if_(
+        strict_neq(ident("__token"), ident("undefined")),
+        block(vec![
+            const_("__secret", secret_probe_expr(&secret)),
+            if_(
+                strict_eq(typeof_expr(ident("__secret")), str_lit("string")),
+                block(vec![
+                    const_(
+                        "__claims",
+                        await_expr(call(
+                            ident("__verifyBearerJwtHs256"),
+                            vec![ident("__token"), ident("__secret")],
+                        )),
+                    ),
+                    if_(
+                        strict_eq(member(ident("__claims"), "tag"), str_lit("Ok")),
+                        block(vec![
+                            const_(
+                                "__id",
+                                method_call(
+                                    member(ident("handlers"), identity_type),
+                                    "of",
+                                    vec![member(member(ident("__claims"), "value"), "sub")],
+                                ),
+                            ),
+                            if_(
+                                strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
+                                block(vec![
+                                    TsStmt::assign(
+                                        ident("__who"),
+                                        TsExpr::object(vec![
+                                            ("tag".to_string(), str_lit(tag)),
+                                            (
+                                                "identity".to_string(),
+                                                member(ident("__id"), "value"),
+                                            ),
+                                        ]),
+                                        None,
+                                    ),
+                                    TsStmt::assign(ident("__exp"), claims_exp(), None),
+                                ]),
+                            ),
+                        ]),
+                    ),
+                ]),
+            ),
+        ]),
+    )]
+}
+
+/// `__claims.value.claims.exp`: the verified token's expiry (#3903).
+fn claims_exp() -> TsExpr {
+    member(member(member(ident("__claims"), "value"), "claims"), "exp")
+}
+
+/// #3903: the expiry of the credential the upgrade verified, forwarded so the Durable Object can close
+/// the connection once it has passed. A lone `Bearer` seam reads it off its verified claims; an actor
+/// sum with a `Bearer` member recorded it in `__exp` when that member verified (it stays `undefined`
+/// when a `None` member resolved, so such a connection never expires). A `None` upgrade has none.
+fn ws_credential_exp(
+    bearer_seam: bool,
+    sum: Option<&[bynk_check::actors::SumMember]>,
+) -> Option<TsExpr> {
+    use bynk_check::actors::SumMemberSeam;
+    if bearer_seam {
+        return Some(claims_exp());
+    }
+    sum.filter(|members| {
+        members
+            .iter()
+            .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+    })
+    .map(|_| ident("__exp"))
+}
+
+/// The entries of the trusted `X-Bynk-Ws-Open` header: the route arguments, the verified identity (or
+/// the actor-sum member that verified), the credential's expiry, and, for a hosting agent that reads
+/// its own key, that key encoded by the agent's key codec (#1818).
+fn ws_forward_entries(
+    args: Vec<TsExpr>,
+    has_identity: bool,
+    is_sum: bool,
+    exp: Option<TsExpr>,
+    key: Option<(String, TsExpr)>,
+) -> Vec<(String, TsExpr)> {
+    let mut entries = vec![("args".to_string(), TsExpr::array(args))];
+    if has_identity {
+        entries.push(("identity".to_string(), member(ident("__id"), "value")));
+    }
+    if is_sum {
+        entries.push(("who".to_string(), ident("__who")));
+    }
+    if let Some(exp) = exp {
+        entries.push(("exp".to_string(), exp));
+    }
+    if let Some((codec, key_ref)) = key {
+        entries.push((
+            "key".to_string(),
+            method_call(member(ident("handlers"), codec), "enc", vec![key_ref]),
+        ));
+    }
+    entries
 }
 
 /// The scope of a verified identity's limiter key (#3926): `identity:<Actor>:` ahead of the

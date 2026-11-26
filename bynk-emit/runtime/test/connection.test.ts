@@ -7,6 +7,7 @@ import {
   TestConnection,
   WorkersConnection,
   closeArguments,
+  webSocketAuthExpired,
   webSocketClosing,
   webSocketErrored,
   webSocketBearerOffer,
@@ -217,4 +218,24 @@ test("an error reports the info on_close sees as code 1011, reason error, not cl
     console.error = log;
   }
   assert.deepEqual(seen, [{ code: 1011, reason: "error", clean: false }]);
+});
+
+// #3903: a connection whose credential has expired is closed at its next frame.
+test("a credential is expired once its exp is in the past, and not before", () => {
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 99), false);
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 100), false, "the HTTP Bearer bound is exp < now");
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 101), true);
+});
+
+test("a connection with no exp never expires", () => {
+  assert.equal(webSocketAuthExpired({ connId: "c" }, 1e12), false);
+  assert.equal(webSocketAuthExpired({ exp: undefined }, 1e12), false);
+  assert.equal(webSocketAuthExpired({ exp: "soon" }, 1e12), false, "a non-number exp is not an expiry");
+  assert.equal(webSocketAuthExpired(null, 1e12), false);
+});
+
+test("the default clock is the current time in seconds", () => {
+  const now = Date.now() / 1000;
+  assert.equal(webSocketAuthExpired({ exp: now - 60 }), true);
+  assert.equal(webSocketAuthExpired({ exp: now + 60 }), false);
 });
