@@ -2705,6 +2705,13 @@ pub struct HttpVariant {
     pub status: u16,
 }
 
+/// #4536 (D23 of the pass-through HTTP track): `HttpResult` is extensible. The
+/// RFC 9110 vocabulary below is curated, not complete, and grows in 1.x minor
+/// releases, so a `match` that covers an `HttpResult` needs a wildcard arm, as
+/// for the extensible first-party enums (`FetchError`, `Method`):
+/// `bynk.types.extensible_match_needs_wildcard`.
+pub const HTTP_RESULT_EXTENSIBLE: bool = true;
+
 /// All `HttpResult[T]` variants, in declaration order (ascending status). The
 /// vocabulary tracks the common, modern HTTP status codes (RFC 9110): success
 /// and created/accepted (`Value`), redirects carrying a `Location` URL, and

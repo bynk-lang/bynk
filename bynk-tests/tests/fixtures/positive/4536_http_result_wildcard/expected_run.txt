@@ -1,0 +1,2 @@
+# #4536: run by bynk-tests behaviour_fixtures; see that file for the format.
+passed=2 failed=0

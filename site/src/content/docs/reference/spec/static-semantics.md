@@ -1861,7 +1861,8 @@ MUST report `bynk.types.non_exhaustive_match` (asking for a wildcard arm) rather
 than accept it, and MUST NOT report an arm unreachable.
 
 **Extensible enums** (standard-library S3, #1963). A standard-library enum
-marked extensible in the first-party registry (`FetchError`, `Method`) may gain
+marked extensible in the first-party registry (`FetchError`, `Method`), and
+the built-in `HttpResult` (#4536, marked beside its variant registry), may gain
 variants in a minor release, so its coverage counts one more shape than its
 declared variants: a future variant that only an irrefutable pattern (`_` or a
 binding) covers. A `match` that covers an extensible enum at any depth
