@@ -35,7 +35,7 @@ async function test_threading__recipients__date_and_repeated_headers_reach_the_h
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const mail = { from: "a@b.example", to: "support@shop.example", inReplyTo: Some("<p@x>"), references: ["<a@x>", "<b@x>"], replyTo: ["help@b.example"], cc: ["ann@b.example", "bob@b.example"], date: Some(1767225600000), headerList: [{ name: "received", value: "from a" }, { name: "received", value: "from b" }], subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 };
+    const mail = { from: "a@b.example", to: "support@shop.example", inReplyTo: Some("<p@x>"), references: ["<a@x>", "<b@x>"], replyTo: ["help@b.example"], cc: ["ann@b.example", "bob@b.example"], date: Some(1767225600000), headerList: [{ name: "received", value: "from a" }, { name: "received", value: "from b" }], subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } };
     const r = await __sysdrive_message_support(mail);
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "<p@x> refs=2 cc=2 reply-to=1 received=2 dated"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:16:12", 755, 815, "expect r is Reject(\"<p@x> refs=2 cc=2 reply-to=1 received=2 dated\")", "r", () => __bynkShow(r)); }
     return { pass: true };
@@ -52,7 +52,7 @@ async function test_a_message_with_none_of_them_has_the_defaults() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "none refs=0 cc=0 reply-to=0 received=0 undated"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:21:12", 983, 1044, "expect r is Reject(\"none refs=0 cc=0 reply-to=0 received=0 undated\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

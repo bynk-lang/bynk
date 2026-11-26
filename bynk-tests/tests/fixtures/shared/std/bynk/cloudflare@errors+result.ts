@@ -602,13 +602,32 @@ export const InboundAttachment = {
 };
 
 /**
+ * One header occurrence of an `InboundEmail`: its lower-case `name` and its
+ * decoded `value`.
+ */
+export interface EmailHeader {
+  readonly name: string;
+  readonly value: string;
+}
+
+export const EmailHeader = {
+};
+
+/**
  * One email delivered to a `from email(...)` service's `on message` handler.
  * `from` is the **envelope** sender, a claim: anyone can write any address, so
  * trust it only when the `Sender` actor's `dmarc` is `DmarcPass`. `to` is the
  * envelope recipient the service was routed by. `headers` holds the message's
- * headers by lower-case name. `text`, `html` and `attachments` come from the
- * parsed MIME body (`None` or empty when the message has no such part); a test
- * builds them directly. `size` is the raw message in bytes. `subaddress` is the
+ * headers by lower-case name, the first occurrence of each; `headerList` holds
+ * every occurrence, in the order they appear. `inReplyTo` and `references` are
+ * the message ids the sender says this message answers, as `messageId` is
+ * written (`<id@host>`), `references` in the message's order; `replyTo` and `cc`
+ * are bare addresses, display names dropped; and `date` is the sender's own
+ * `Date` header, `None` when it is missing or cannot be read. All of these are
+ * the sender's claims, as `from` is: `date` is not when the message arrived.
+ * `text`, `html` and `attachments` come from the parsed MIME body (`None` or
+ * empty when the message has no such part); a test builds them directly. `size`
+ * is the raw message in bytes. `subaddress` is the
  * text after the first `+` of the envelope recipient's local part (RFC 5233, as
  * Email Routing defines it), so mail to `support+1234@shop.example` reaches the
  * service claiming `support@shop.example` with `subaddress = Some("1234")`; it
@@ -621,7 +640,13 @@ export interface InboundEmail {
   readonly to: string;
   readonly subject: string;
   readonly messageId: string;
+  readonly inReplyTo: Option<string>;
+  readonly references: readonly string[];
+  readonly replyTo: readonly string[];
+  readonly cc: readonly string[];
+  readonly date: Option<number>;
   readonly headers: ReadonlyMap<string, string>;
+  readonly headerList: readonly EmailHeader[];
   readonly text: Option<string>;
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
