@@ -1081,6 +1081,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(roomId).join(user.identity, connection)
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    ()
+  }
 }
 
 agent Room {
@@ -1117,15 +1121,15 @@ agent Room {
         sources(types_map)
     );
 
-    // Source (0-based) in room.bynk: line 3 = `on open`, line 9 = `agent Room`,
-    // line 13 = `on call join`. In types.bynk: line 2 = `type RoomId`.
+    // Source (0-based) in room.bynk: line 3 = `on open`, line 13 = `agent Room`,
+    // line 17 = `on call join`. In types.bynk: line 2 = `type RoomId`.
     let room_lines = decode(extract_field(room_map, "mappings"));
     let at_room =
         |g: usize| room_lines[g].unwrap_or_else(|| panic!("gen line {g} unmapped\n{room_ts}"));
-    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 9);
+    assert_eq!(at_room(gen_line_of(room_ts, "export class Room")), 13);
     assert_eq!(
         at_room(gen_line_of(room_ts, "async join(")),
-        13,
+        17,
         "the agent handler header maps to its own `on call` line in room.bynk"
     );
     assert_eq!(

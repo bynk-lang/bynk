@@ -17,4 +17,8 @@ service scores from websocket(in: Frame, out: Frame) {
     let _ <- Board("lobby").join(connection)
     ()
   }
+
+  on close () -> Effect[()] by v: Visitor {
+    ()
+  }
 }

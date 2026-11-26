@@ -96,7 +96,9 @@ when deployed a closed socket no longer resolves, so `get` on that key returns `
 ## Receive inbound frames and broadcast
 
 Inbound frames arrive through `on message`; `on close` fires when the client
-disconnects. Each delegates to the room agent, which broadcasts over its held map:
+disconnects, and every WebSocket service needs one: `on open` handed the connection to the
+room agent, and nothing else removes it when the client leaves (a service without `on close` is
+`bynk.ws.missing_close`). Each delegates to the room agent, which broadcasts over its held map:
 
 ```bynk,fragment
 service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
@@ -117,6 +119,29 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
   }
 }
 ```
+
+### Leaving a room
+
+A client that goes away must be removed from the room, or a later broadcast raises on its dead
+connection. `on close` is where that happens. To see why the connection ended, add a trailing
+`close: CloseInfo` parameter (`consumes bynk { CloseInfo }`): its `code` and `reason` are the
+client's close frame (`1000` is a normal closure, `1006` an abnormal disconnection with no frame),
+and `clean` is whether the close handshake completed:
+
+```bynk,ignore
+on close (roomId: RoomId, close: CloseInfo) -> Effect[()] by user: Participant {
+  let _ <- Room(roomId).leave(user.identity, close.code)
+  ()
+}
+```
+
+A connection that ends with a non-disconnection error runs `on close` once with
+`CloseInfo { code: 1011, reason: "error", clean: false }`, so the room releases it the same way.
+
+To close a connection from the server with a code the client can read, call
+`connection.close(4001, "room archived")` in the agent. The code is `1000` or `3000` to `4999`
+and the reason at most 123 bytes; a literal outside that is a compile error
+(`bynk.ws.bad_close_code`, `bynk.ws.bad_close_reason`).
 
 ```bynk,fragment
   on call post(sender: UserId, text: String) -> Effect[()] {

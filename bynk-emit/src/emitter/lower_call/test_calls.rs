@@ -20,7 +20,7 @@ use super::super::lower::{Pre, settle_helper, settle_with};
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{any_ty, take};
 use super::super::{Expr, ExprKind, Ident, TypeRef};
-use crate::ts_build::{arrow, call, ident, member, num_lit, paren, str_lit};
+use crate::ts_build::{arrow, bool_lit, call, ident, member, num_lit, paren, str_lit};
 use bynk_ts::TsParam;
 
 /// #2135, #4385: the bad-credential principal a `system` call drives: the driver's name (`"forged"`,
@@ -752,29 +752,44 @@ fn websocket_lifecycle_call(
                 ])
             }
         }
-        WsAddress::Close { params } => {
-            let n = params.unwrap_or(0);
-            {
-                let c = vec![tc];
-                let [tc] = take(c);
-                let mut parts = vec![ident("__c")];
-                for i in 0..n {
-                    parts.push(opened_cast("route", i, "close", i + 1));
-                }
-                parts.push(deps_cast("close", n + 1));
-                iife(vec![
-                    const_("__c", None, tc),
-                    const_(
-                        "__o",
-                        None,
-                        call(member(ident("__c"), "opened"), Vec::new()),
-                    ),
-                    const_("__a", Some(sig("close")), TsExpr::array(parts)),
-                    spread_call("close"),
-                ])
+        WsAddress::Close { params, info } => {
+            let total = params.unwrap_or(0);
+            let routes = total - usize::from(*info);
+            let close_info = match args.get(1) {
+                Some(a) => pre.lower_node(a, cx),
+                None => default_close_info(),
+            };
+            let c = vec![tc];
+            let [tc] = take(c);
+            let mut parts = vec![ident("__c")];
+            for i in 0..routes {
+                parts.push(opened_cast("route", i, "close", i + 1));
             }
+            if *info {
+                parts.push(close_info);
+            }
+            parts.push(deps_cast("close", total + 1));
+            iife(vec![
+                const_("__c", None, tc),
+                const_(
+                    "__o",
+                    None,
+                    call(member(ident("__c"), "opened"), Vec::new()),
+                ),
+                const_("__a", Some(sig("close")), TsExpr::array(parts)),
+                spread_call("close"),
+            ])
         }
     }
+}
+
+/// #3902: what `svc.close(tc)` hands the handler's `close: CloseInfo`: a normal, clean closure.
+fn default_close_info() -> bynk_ts::TsExpr {
+    TsExpr::object(vec![
+        ("code".to_string(), num_lit(1000)),
+        ("reason".to_string(), str_lit("")),
+        ("clean".to_string(), bool_lit(true)),
+    ])
 }
 
 /// Lower a local service call inside a test `case` body, or `None` when the call is not one.

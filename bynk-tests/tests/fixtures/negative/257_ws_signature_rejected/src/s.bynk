@@ -8,4 +8,8 @@ service Gw from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- connection.close()
     ()
   }
+
+  on close () -> Effect[()] by w: Webhook {
+    ()
+  }
 }

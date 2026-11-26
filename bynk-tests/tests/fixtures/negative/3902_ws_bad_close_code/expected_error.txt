@@ -1,0 +1,2 @@
+bynk.ws.bad_close_code `1006` is not a close code an application may send
+# exact

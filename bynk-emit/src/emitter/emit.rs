@@ -40,6 +40,7 @@ mod service;
 mod suite;
 mod types;
 mod websocket;
+mod websocket_close;
 
 pub(crate) use agent::*;
 use agent_dispatch::*;
