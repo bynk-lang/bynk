@@ -58,7 +58,7 @@ export default {
             }
             const body = __bytes;
             const result = await surface.http_POST_blob(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /blob" }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
         }
         {
@@ -69,7 +69,7 @@ export default {
               return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
             }
             const result = await surface.http_POST_either(request);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""])), __security_uploads);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /either" }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""])), __security_uploads);
           }
         }
         {
@@ -101,7 +101,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
             const body = __r_body.value;
             const result = await surface.http_POST_json(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /json" }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
         }
         {
@@ -131,7 +131,7 @@ export default {
             if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
             const body = __bytes;
             const result = await surface.http_POST_signed(body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""])), __security_uploads);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /signed" }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""])), __security_uploads);
           }
         }
         {
@@ -163,7 +163,7 @@ export default {
             }
             const body = __bytes;
             const result = await surface.http_PUT_api_Param_org_Param_package(org, __id_package, body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "PUT /api/:org/:package" }), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
         }
         if (__matchPath("/api/:org/:package", path) !== null) {

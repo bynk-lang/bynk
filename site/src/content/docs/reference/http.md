@@ -1400,7 +1400,10 @@ on the `206`: a handler that needs either cannot send it today.
 Both are answers to a `GET`. A route of another method that names either in its own body is
 [`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/). A variant built in a
 helper `fn` and returned from such a route is not seen at compile time: that route answers `500` and
-logs the fault. A `HEAD` is answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
+logs a fault that names the status and the route (`NotModified (304) is a GET answer, but POST /orders
+returned it: …`), so the handler to fix is in the log. That is the rule, not a gap: an `HttpResult` flows
+through `let`, `match`, arguments and lists, so a check through helpers would either miss cases or refuse
+programs that are valid on their `GET` paths. A `HEAD` is answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
 `Content-Range` header, and the generated client reads it as a raw body. A unit-tier test matches
 `PartialContent(body, contentType, range)`; at the system tier a `206` reads back as
 `PartialContent` with the range parsed from `Content-Range`, and a `304` as `NotModified`.

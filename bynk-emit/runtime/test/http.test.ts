@@ -352,7 +352,7 @@ test("httpResultToResponse: a PartialContent or NotModified returned from a non-
     HttpResult.NotModified,
     HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: noTotal }),
   ]) {
-    assert.throws(() => httpResultToResponse(result, id, { notGet: true }), /only a GET route serves/);
+    assert.throws(() => httpResultToResponse(result, id, { notGet: "POST /orders" }), /is a GET answer, but POST \/orders returned it/);
   }
 });
 

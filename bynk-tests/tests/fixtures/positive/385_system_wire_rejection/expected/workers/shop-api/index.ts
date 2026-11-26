@@ -69,7 +69,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_cart(request, body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: true }), request, ["Bearer realm=\"shop.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: "POST /cart" }), request, ["Bearer realm=\"shop.api\""])), __security_api);
           }
         }
         {
@@ -101,7 +101,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_reject(request, body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: true }), request, ["Bearer realm=\"shop.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: "POST /reject" }), request, ["Bearer realm=\"shop.api\""])), __security_api);
           }
         }
         {
@@ -141,7 +141,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_PUT_cart_Param_sku(request, sku, body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: true }), request, ["Bearer realm=\"shop.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item, { notGet: "PUT /cart/:sku" }), request, ["Bearer realm=\"shop.api\""])), __security_api);
           }
         }
         if (__matchPath("/cart", path) !== null) {

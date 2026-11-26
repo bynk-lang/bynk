@@ -1534,8 +1534,10 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
 /// answers its errors as problem details says so (#3916), and one that does not is unchanged.
 fn plain_response(route: &HttpRoute, ser_fn: TsExpr) -> TsExpr {
     // #4389: `notGet` makes the runtime fault a `PartialContent` or `NotModified` returned here, which
-    // answer a `GET` (the compiler refuses one named in this handler's own body).
-    let mut opts = vec![("notGet".to_string(), bool_lit(true))];
+    // answer a `GET` (the compiler refuses one named in this handler's own body). It names the route,
+    // so the log line says which handler to fix (#4467).
+    let route_label = format!("{} {}", route.method.as_str(), route.path);
+    let mut opts = vec![("notGet".to_string(), str_lit(route_label))];
     if route.error_problem {
         opts.push(("problem".to_string(), bool_lit(true)));
     }

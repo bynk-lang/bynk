@@ -55,7 +55,7 @@ export default {
           if (method === "POST" && __matchPath("/reset", path) !== null) {
             __route = "POST /reset";
             const result = await surface.http_POST_reset();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /reset" }), request, ["Bynk realm=\"api\""]), __security_api);
           }
         }
         if (__matchPath("/a", path) !== null) {
