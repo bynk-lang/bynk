@@ -3118,6 +3118,21 @@ fn member_candidates_from(
             }
         }
     }
+    // #4099: `Ai.generateValue[T]` and `AnalyticsSql.select[T]`, which the compiler lowers, are
+    // members of the bare capabilities once the capability's own operations are in scope.
+    if matches!(receiver, "Ai" | "AnalyticsSql") && !seen.is_empty() {
+        for member in ["generateValue", "select"] {
+            if let Some(sig) = crate::signature_help::typed_read(receiver, member)
+                && seen.insert(member.to_string())
+            {
+                out.push(Completion::item(
+                    member.to_string(),
+                    CompletionKind::Member,
+                    Some(format!("{sig} — operation of `{receiver}`")),
+                ));
+            }
+        }
+    }
     if let Some(base) = derived_base.filter(|b| !followed.contains(b)) {
         for c in member_candidates_from(&base, doc_text, files, followed) {
             if seen.insert(c.label.clone()) {
@@ -5262,6 +5277,24 @@ mod tests {
             "{:?}",
             select.detail
         );
+    }
+
+    /// #4099: `Ai.` offers `generateValue` beside the declared operations, with its signature, and
+    /// never the private `generateJson` it is lowered over.
+    #[test]
+    fn the_ai_name_offers_generate_value() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Ai }\n";
+        let items = complete("    Ai.", doc, None);
+        let gv = find(&items, "generateValue", CompletionKind::Member).expect("`generateValue`");
+        assert!(
+            gv.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("Result[T, AiError]")),
+            "{:?}",
+            gv.detail
+        );
+        assert!(find(&items, "generate", CompletionKind::Member).is_some());
+        assert!(find(&items, "generateJson", CompletionKind::Member).is_none());
     }
 
     #[test]
