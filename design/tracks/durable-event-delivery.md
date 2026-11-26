@@ -758,6 +758,39 @@ below. (Recommended.)**
   (P6), and all of it is in the publisher's request. The new model moves cost from the
   publisher's latency to background Queue operations, and filtering (D6) removes non-matching
   invocations. Accounting against real traffic is live check §9 L9.
+- **The Free plan.** Always-on deduplication (D11) costs about 3–5 D1 rows written per
+  delivery. Workers Free allows 100,000 rows written a day, and from 1 September 2026 D1
+  queries *"will fail when an account exceeds the daily row read or row write limits"* until
+  the limit resets at midnight UTC
+  ([changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/)).
+  So a Free-plan project can deliver about 20,000–33,000 events a day, shared with any other
+  `Idempotency` use in the account.
+  - **When the cap is hit,** the claim query fails, so `claimQueueMessage` throws. The entry
+    treats a thrown claim as it treats a fault (`queue_admit.ts:claimDatabase` *"fails the
+    message loudly rather than admitting it unchecked"*). Left at that, the message would be
+    retried after `retryDelay × attempts` and dead-lettered after `retries` + 1 attempts,
+    which would take seconds to minutes. A day's overflow would then pour into the
+    dead-letter queue, to be redriven by hand.
+  - **So the entry recognises the limit error** (D1's documented daily-limit messages) and
+    retries with a delay that runs to the next 00:00 UTC, capped at Cloudflare's 24-hour
+    maximum. Messages wait out the reset instead of spending their retries in a burst. Each
+    such retry still counts as an attempt, so a project that is over the cap every day
+    dead-letters after `retries` + 1 days, which is visible, rather than retrying for ever.
+    It logs `EventDelivery deferred: D1 daily limit` once per isolate.
+  - **Fail closed, not degrade.** The recommendation is that deduplication never degrades to
+    admitting unchecked. Admitting without a claim would reopen D2's replay defence: anyone
+    with account access could replay a captured message exactly when the account is over its
+    limit, and the platform's own duplicates would run twice. Delay is the cost; nothing is
+    lost while the queue retains the message, and nothing is handled unchecked. The rejected
+    alternative, degrading for platform redeliveries only, cannot be done safely: a replay
+    and a redelivery look identical at the entry.
+  - **One open risk,** checked live (§9 L11): on Free, queue retention is fixed at 24 hours
+    (§3), so a message delayed to midnight may meet its retention first if it already waited
+    hours. If L11 shows retention counts from the original send, the delay is capped at what
+    the message has left, minus a margin, and the plan warns a Free-plan project with events
+    that a day over the cap can lose events.
+  - `bynk doctor` and the deploy plan state the Free-plan figure for a project with
+    subscribers, so the cap is known before it bites.
 - **Throughput:** 5,000 messages per second per queue (§3) bounds one *subscriber*, not one
   publisher, since every subscriber has its own queue. Above that, `send` throws *Too Many
   Requests* ([limits](https://developers.cloudflare.com/queues/platform/limits/)):
@@ -1001,6 +1034,7 @@ them. Each check names the slice that needs its result before it lands.
 | L8 | The outbox's backstop: with the queue producer made to fail (a queue deleted out of band), the alarm retries past Cloudflare's 6 attempts by rescheduling, and delivers once the queue is back. | slice 5 |
 | L9 | Cost accounting over a day of synthetic traffic: queue operations, D1 rows written and DO requests, against D9's model. | slice 8 |
 | L10 | Trace continuity: a subscriber's logs carry the emission's trace id (#3895) through the queue. | slice 3 |
+| L11 | On the Free plan: a delivery whose claim fails on D1's daily row-write limit is retried with a delay to 00:00 UTC, and is delivered after the reset; whether a 24-hour-retention queue drops a message delayed past its original send plus 24 hours. | slice 3 |
 
 ---
 
@@ -1053,6 +1087,7 @@ changes for users yet: nothing sends to the new queues.
   skew**: an undecodable message is dead-lettered with its claim released, and the same
   message, delivered again once the subscriber decodes it, runs the handler once.
 - The compiler's `bynk.event.queue_name_collision` check (D2).
+- The D1 daily-limit deferral: a claim that fails on the limit retries with a delay to 00:00 UTC, failing closed (D9, the Free plan).
 - The size measurement in `Events.emit`, warning only (`EventNearLimit`), and the
   `bynk.event.unbounded_payload` warning (§8.1), so projects find their large events a release
   before the cap faults.
