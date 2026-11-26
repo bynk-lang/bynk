@@ -348,7 +348,9 @@
 /book/reference/diagnostics/bynk.d1.sql_invalid/
 /book/reference/diagnostics/bynk.d1.sql_param_count/
 /book/reference/diagnostics/bynk.dependency.path_outside_root/
+/book/reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /book/reference/diagnostics/bynk.deploy.agent_move_refused/
+/book/reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /book/reference/diagnostics/bynk.deploy.asset_path_conflict/
 /book/reference/diagnostics/bynk.deploy.binding_collision/
 /book/reference/diagnostics/bynk.deploy.context_in_two_groups/
@@ -1515,7 +1517,9 @@
 /reference/diagnostics/bynk.d1.sql_invalid/
 /reference/diagnostics/bynk.d1.sql_param_count/
 /reference/diagnostics/bynk.dependency.path_outside_root/
+/reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /reference/diagnostics/bynk.deploy.agent_move_refused/
+/reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
 /reference/diagnostics/bynk.deploy.binding_collision/
 /reference/diagnostics/bynk.deploy.context_in_two_groups/

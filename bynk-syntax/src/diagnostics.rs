@@ -8125,9 +8125,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.accept_fresh_agent_unused",
+        "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
+    warn(d(
+        "bynk.deploy.agent_starts_fresh",
+        "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
+    )),
     d(
         "bynk.deploy.asset_path_conflict",
         "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file.",
