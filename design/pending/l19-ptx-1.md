@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 changelog: A route's last segment may be a `*name` rest segment, which matches zero or more remaining segments and binds them, still percent-encoded, as a `String` (`on GET("/files/*key")`); it is the weakest segment when routes are ordered, never answers under `/_bynk/`, and is left out of `bynk client` and `bynk openapi`; experimental, behind `bynk.http.rest` in `[unstable] allow`. Two handlers of a service whose emitted names would collide (`/a-b` and `/a_b`) are now `bynk.http.handler_name_collision`
 breaking: Two HTTP routes of one service whose emitted handler names collide (`GET /a-b` beside `GET /a_b`, both `http_GET_a_b`), where one handler silently answered both paths, are now refused as `bynk.http.handler_name_collision`; spell one route differently, or move it to another service
 ---

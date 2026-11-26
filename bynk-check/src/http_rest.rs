@@ -39,7 +39,7 @@ pub(crate) fn check_rest_routes(
     errors: &mut Vec<CompileError>,
 ) {
     for service in table.services.values() {
-        let mut names: HashMap<String, &Handler> = HashMap::new();
+        let mut names: HashMap<String, (&Handler, &str)> = HashMap::new();
         for handler in &service.handlers {
             let HandlerKind::Http { method, path } = &handler.kind else {
                 continue;
@@ -47,9 +47,11 @@ pub(crate) fn check_rest_routes(
             check_rest(handler, path, stability, errors);
             let name = crate::emitted_names::http_handler_name(method.as_str(), path);
             match names.get(&name) {
-                Some(first) => errors.push(name_collision(handler, first, &name)),
+                // The same route spelt twice is `bynk.http.duplicate_route`'s.
+                Some((_, first_path)) if *first_path == path.as_str() => {}
+                Some((first, _)) => errors.push(name_collision(handler, first, &name)),
                 None => {
-                    names.insert(name, handler);
+                    names.insert(name, (handler, path));
                 }
             }
         }
@@ -103,7 +105,7 @@ fn name_collision(handler: &Handler, first: &Handler, name: &str) -> CompileErro
         format!("this route's handler would be emitted as `{name}`, the same name as another route's in this service"),
     )
     .with_label(first.span, "this route has that name too")
-    .with_note("characters outside `A-Z`, `a-z` and `0-9` are written `_` in the emitted name, so `/a-b` and `/a_b` collide; change one route's spelling, or move it to another service")
+    .with_note("`/` and every character outside `A-Z`, `a-z` and `0-9` are written `_` in the emitted name, so `/a-b`, `/a_b` and `/a/b` collide; change one route's spelling, or move it to another service")
 }
 
 #[cfg(test)]

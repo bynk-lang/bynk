@@ -1,12 +1,12 @@
 {
-  "blurb": "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b` and `/a_b` both give `http_GET_a_b`), and one handler would then answer both paths. The second such route in a service is refused. Spell one route differently, or move it to another service.",
+  "blurb": "Each HTTP handler becomes a method on its service, named from its method and route: `http_GET`, then one part per segment, `Param_id` for `:id` and `Rest_key` for `*key`, with every character outside `A-Z`, `a-z` and `0-9` written `_`. That spelling is not one-to-one, so two routes can share a name (`/a-b`, `/a_b` and `/a/b` all give `http_GET_a_b`), and one handler would then answer both paths. The second such route in a service is refused. Spell one route differently, or move it to another service.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.handler_name_collision",
   "constructs": [
     "http_handler"
   ],
-  "example": "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "example": "on GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a_b\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ both are `http_GET_a_b`\n\non GET(\"/a-b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/ab\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
   "severity": "error",
   "summary": "Two HTTP handlers of a service would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
 }
