@@ -27,6 +27,7 @@ const RESERVED: &[&str] = &[
     "connection",
     "content-disposition",
     "content-length",
+    "content-range",
     "content-security-policy",
     "content-type",
     "etag",
@@ -56,7 +57,7 @@ fn variants_of(op: HttpResultOp) -> &'static [&'static str] {
     match op {
         HttpResultOp::RetryAfter => &["TooManyRequests", "ServiceUnavailable"],
         HttpResultOp::At => &["Created", "RawCreated", "Accepted"],
-        HttpResultOp::Download => &["Raw", "RawTagged", "RawStreamed"],
+        HttpResultOp::Download => &["Raw", "RawTagged", "RawStreamed", "PartialContent"],
         HttpResultOp::Heartbeat => &["Streaming"],
         _ => &[],
     }

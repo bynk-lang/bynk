@@ -1,0 +1,73 @@
+suite files.ranges {
+  consumes bynk { ContentRange }
+
+  case "a PartialContent binds its body, content type and range" {
+    let r <- api.GET("/blob") by Visitor
+    match r {
+      PartialContent(body, contentType, range) => {
+        let parts <- body.collect()
+        expect parts.length() == 2
+        expect contentType == "text/plain"
+        expect range == ContentRange { start: 3, end: 8, total: Some(12) }
+      }
+      _ => expect false
+    }
+  }
+
+  case "a range with no total binds None" {
+    let r <- api.GET("/open") by Visitor
+    match r {
+      PartialContent(_, _, range) => expect range == ContentRange { start: 0, end: 4 }
+      _ => expect false
+    }
+  }
+
+  case "a PartialContent can be a download" {
+    let r <- api.GET("/download") by Visitor
+    expect r is PartialContent(_, _, _)
+  }
+
+  case "NotModified is a bodyless answer" {
+    let r <- api.GET("/same") by Visitor
+    expect r is NotModified
+  }
+}
+
+suite files.ranges as system {
+  case "a 206 arrives over HTTP and reads back as PartialContent, with the range it states" {
+    let r <- api.GET("/blob") by Visitor
+    match r {
+      PartialContent(_, contentType, range) => {
+        expect contentType == "text/plain"
+        expect range == ContentRange { start: 3, end: 8, total: Some(12) }
+      }
+      _ => expect false
+    }
+  }
+
+  case "an unknown total is written * and reads back as None" {
+    let r <- api.GET("/open") by Visitor
+    match r {
+      PartialContent(_, _, range) => {
+        expect range.start == 0
+        expect range.end == 4
+        expect range == ContentRange { start: 0, end: 4, total: None }
+      }
+      _ => expect false
+    }
+  }
+  case "a range that is not one is a 500, not a malformed Content-Range" {
+    let r <- api.GET("/broken") by Visitor
+    expect r is ServerError(_)
+  }
+
+  case "a 304 arrives over HTTP and reads back as NotModified" {
+    let r <- api.GET("/same") by Visitor
+    expect r is NotModified
+  }
+
+  case "a 304 built in a helper and returned from a POST route is a 500" {
+    let r <- api.POST("/helper", "x") by Visitor
+    expect r is ServerError(_)
+  }
+}

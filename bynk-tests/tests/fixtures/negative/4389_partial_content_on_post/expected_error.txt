@@ -1,0 +1,1 @@
+bynk.http.status_needs_get

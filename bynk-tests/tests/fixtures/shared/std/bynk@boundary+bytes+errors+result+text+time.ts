@@ -409,6 +409,23 @@ export const CloseInfo = {
 };
 
 /**
+ * The part of a representation a `PartialContent(...)` response carries, as the
+ * `Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+ * bytes in all (`None` when the total is not known, written `*`). `start` is at
+ * least 0 and at most `end`, and `end` is below `total` when there is one: a
+ * response whose range breaks this faults, so a malformed `Content-Range` is
+ * never sent.
+ */
+export interface ContentRange {
+  readonly start: number;
+  readonly end: number;
+  readonly total: Option<number>;
+}
+
+export const ContentRange = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -771,6 +788,40 @@ export function __deserialise_CloseInfo(json: __JsonValue, path: string = "$"): 
   }
   const __clean = obj["clean"];
   return Ok({ code: __code, reason: __reason, clean: __clean } as CloseInfo);
+}
+
+export function __serialise_ContentRange(value: ContentRange): __JsonValue {
+  return {
+    start: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.start),
+    end: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.end),
+    total: __serialise_Option_Int(value.total),
+  };
+}
+
+export function __deserialise_ContentRange(json: __JsonValue, path: string = "$"): Result<ContentRange, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["start"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.start`, expected: "number", actual: typeof obj["start"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["start"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.start`, expected: "safe integer", actual: String(obj["start"]) });
+  }
+  const __start = obj["start"];
+  if (typeof obj["end"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.end`, expected: "number", actual: typeof obj["end"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["end"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.end`, expected: "safe integer", actual: String(obj["end"]) });
+  }
+  const __end = obj["end"];
+  const __d_total: __JsonValue = "total" in obj ? obj["total"] : { kind: "None" };
+  const __r_total = __deserialise_Option_Int(__d_total, `${path}.total`);
+  if (__r_total.tag === "Err") return __r_total;
+  const __total = __r_total.value;
+  return Ok({ start: __start, end: __end, total: __total } as ContentRange);
 }
 
 export function __serialise_Cookie(value: Cookie): __JsonValue {

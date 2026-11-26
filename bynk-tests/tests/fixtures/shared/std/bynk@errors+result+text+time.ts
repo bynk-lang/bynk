@@ -407,6 +407,23 @@ export const CloseInfo = {
 };
 
 /**
+ * The part of a representation a `PartialContent(...)` response carries, as the
+ * `Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+ * bytes in all (`None` when the total is not known, written `*`). `start` is at
+ * least 0 and at most `end`, and `end` is below `total` when there is one: a
+ * response whose range breaks this faults, so a malformed `Content-Range` is
+ * never sent.
+ */
+export interface ContentRange {
+  readonly start: number;
+  readonly end: number;
+  readonly total: Option<number>;
+}
+
+export const ContentRange = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the

@@ -1,0 +1,58 @@
+// #4389: a handler answers a range read with `PartialContent` (206, with the
+// `Content-Range` its `ContentRange` states) and a conditional read it has
+// resolved itself with `NotModified` (304).
+context files.ranges
+
+consumes bynk { ContentRange }
+
+// A helper can build the answer. Called from a `GET` route it is the answer; returned from a route of
+// another method it is a fault at run time (500), since the compiler only reads a handler's own body.
+fn unchanged() -> HttpResult[()] {
+  NotModified
+}
+
+service api from http {
+  // Bytes 3 to 8 of a 12-byte representation.
+  on GET("/blob") () -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("lo, "), Bytes.fromUtf8("wo")]),
+      "text/plain",
+      ContentRange { start: 3, end: 8, total: Some(12) }
+    )
+  }
+
+  // A range whose total is not known.
+  on GET("/open") () -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("hello")]),
+      "text/plain",
+      ContentRange { start: 0, end: 4 }
+    )
+  }
+
+  // Not a range: `start` is past `end`, so the answer is a fault, never a malformed header.
+  on GET("/broken") () -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("x")]),
+      "text/plain",
+      ContentRange { start: 5, end: 4, total: Some(12) }
+    )
+  }
+
+  // A ranged download names the file it is a part of.
+  on GET("/download") () -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("hello")]),
+      "text/plain",
+      ContentRange { start: 0, end: 4, total: Some(5) }
+    ).download("hello.txt")
+  }
+
+  on GET("/same") () -> Effect[HttpResult[()]] by v: Visitor {
+    NotModified
+  }
+
+  on POST("/helper") (body: String) -> Effect[HttpResult[()]] by v: Visitor {
+    unchanged()
+  }
+}

@@ -1,7 +1,7 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
 import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
-import type { HttpResult, SseEvent } from "./httpresult.ts";
+import type { ContentRange, HttpResult, SseEvent } from "./httpresult.ts";
 
 // #3908: the path's segments, percent-decoded once (empty segments dropped, so
 // `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
@@ -82,9 +82,11 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Created: 201,
   Accepted: 202,
   NoContent: 204,
+  PartialContent: 206,
   MovedPermanently: 301,
   Found: 302,
   SeeOther: 303,
+  NotModified: 304,
   TemporaryRedirect: 307,
   PermanentRedirect: 308,
   BadRequest: 400,
@@ -445,7 +447,7 @@ export async function problemRejection(response: Response): Promise<Response> {
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: boolean },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -483,6 +485,7 @@ export const RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
   "connection",
   "content-disposition",
   "content-length",
+  "content-range",
   "content-security-policy",
   "content-type",
   "etag",
@@ -610,10 +613,43 @@ function appendResultHeaders(response: Response, result: object): void {
   }
 }
 
+// #4389: the body of a `PartialContent` answer, held to its range: a stream that yields more or fewer
+// bytes than `end - start + 1` errors, which aborts the response (as a fault mid-body does), so a client
+// stitching parts together never gets bytes the `Content-Range` does not describe.
+async function* rangeBody(body: AsyncIterable<Uint8Array>, range: ContentRange): AsyncGenerator<Uint8Array> {
+  const expected = range.end - range.start + 1;
+  let seen = 0;
+  for await (const chunk of body) {
+    seen += chunk.byteLength;
+    if (seen > expected) {
+      throw new Error(`PartialContent: the body is longer than its range (${expected} bytes)`);
+    }
+    yield chunk;
+  }
+  if (seen !== expected) {
+    throw new Error(`PartialContent: the body is ${seen} bytes, but its range covers ${expected}`);
+  }
+}
+
+// #4389: the `Content-Range` value of a `PartialContent` answer: `bytes first-last/total`, with
+// `*` for an unknown total (RFC 9110 §14.4).
+function contentRangeHeader(range: ContentRange): string {
+  const { start, end } = range;
+  const total = range.total.tag === "Some" ? range.total.value : undefined;
+  const whole = (n: number): boolean => Number.isSafeInteger(n) && n >= 0;
+  if (!whole(start) || !whole(end) || start > end || (total !== undefined && (!whole(total) || end >= total))) {
+    throw new Error(
+      `PartialContent: ${start}-${end}${total === undefined ? "" : `/${total}`} is not a byte range ` +
+        `(RFC 9110 §14.4: 0 <= start <= end, and end below the total when it is known)`,
+    );
+  }
+  return `bytes ${start}-${end}/${total === undefined ? "*" : total}`;
+}
+
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: boolean },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -623,6 +659,12 @@ function baseHttpResultToResponse<T>(
     });
   }
   const status = HTTP_STATUS[result.tag];
+  // #4389: a range or conditional answer belongs to a `GET`. The compiler refuses one named in a
+  // non-`GET` handler's own body; one built in a helper `fn` and returned from such a route is
+  // caught here, as a fault (`500`, logged), never sent.
+  if (opts?.notGet === true && (result.tag === "PartialContent" || result.tag === "NotModified")) {
+    throw new Error(`${result.tag} (${status}) answers a range or conditional read, which only a GET route serves`);
+  }
   switch (result.tag) {
     // 2xx with a body — the serialised value as JSON.
     case "Ok":
@@ -684,6 +726,15 @@ function baseHttpResultToResponse<T>(
         status: 200,
         headers: { "content-type": result.contentType },
       });
+    // #4389: 206 with a streamed body and the `Content-Range` its range states. A range
+    // that is not one (`start` past `end`, `end` at or past a known total, a negative or
+    // non-integer end) throws, so the dispatch's fault path answers `500` and logs the
+    // route: a malformed `Content-Range` is never sent.
+    case "PartialContent":
+      return new Response(byteStreamBody(rangeBody(result.body, result.range)), {
+        status: 206,
+        headers: { "content-type": result.contentType, "content-range": contentRangeHeader(result.range) },
+      });
     // 201 with a raw body — `Raw`'s writer at the creation status (#2403, L6).
     // It answers a write, so it carries no validator, whatever `weakEtag` says.
     case "RawCreated":
@@ -719,6 +770,7 @@ function baseHttpResultToResponse<T>(
         headers: { "content-type": "application/json" },
       });
     // Self-describing statuses — bodyless.
+    case "NotModified":
     case "NoContent":
     case "Unauthorized":
     case "Forbidden":
@@ -762,9 +814,11 @@ const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   201: "Created",
   202: "Accepted",
   204: "NoContent",
+  206: "PartialContent",
   301: "MovedPermanently",
   302: "Found",
   303: "SeeOther",
+  304: "NotModified",
   307: "TemporaryRedirect",
   308: "PermanentRedirect",
   400: "BadRequest",
@@ -924,6 +978,33 @@ async function decodeHttpResult<T>(
       }
       const value = (decoded.tag === "Ok" ? decoded.value : (json as unknown)) as T;
       return { tag, value };
+    }
+    // #4389: a 206 reads back as `PartialContent`, its range from `Content-Range`.
+    case "PartialContent": {
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const m = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec(response.headers.get("content-range") ?? "");
+      // The router always sends a valid `Content-Range` with a 206, so a missing or malformed one is
+      // the answer's fault, not a range to invent.
+      if (m === null) {
+        throw new globalThis.Error(
+          `the 206 answer's Content-Range is missing or malformed: ${JSON.stringify(response.headers.get("content-range"))}`,
+        );
+      }
+      const total = m[3] === "*" ? undefined : Number(m[3]);
+      const range = {
+        start: Number(m[1]),
+        end: Number(m[2]),
+        total: total === undefined ? ({ tag: "None" } as const) : ({ tag: "Some", value: total } as const),
+      };
+      const body = (async function* () {
+        yield bytes;
+      })();
+      return {
+        tag: "PartialContent",
+        body,
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+        range,
+      } as unknown as HttpResult<T>;
     }
     case "MovedPermanently":
     case "Found":

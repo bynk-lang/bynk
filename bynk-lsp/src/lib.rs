@@ -5019,6 +5019,17 @@ impl LanguageServer for Backend {
         let Some(text) = analysis.snapshots.get(&rel) else {
             return Ok(None);
         };
+        // #4455: a use of a declaration under an alias is not renameable as the declaration.
+        if crate::index_queries::alias_rename_refusal(
+            &analysis.index,
+            &analysis.snapshots,
+            &rel,
+            offset,
+        )
+        .is_some()
+        {
+            return Ok(None);
+        }
         // #4352: a name written through a `uses` qualifier highlights the name alone.
         let span = crate::index_queries::narrow_qualified_span(
             text,
@@ -5069,6 +5080,14 @@ impl LanguageServer for Backend {
         let Some(offset) = crate::position::position_to_offset(text, pos) else {
             return Ok(None);
         };
+        if let Some(why) = crate::index_queries::alias_rename_refusal(
+            &analysis.index,
+            &analysis.snapshots,
+            &rel,
+            offset,
+        ) {
+            return Err(refused(why));
+        }
         let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
         crate::index_queries::narrow_qualified_edits(&mut plan, &analysis.snapshots);

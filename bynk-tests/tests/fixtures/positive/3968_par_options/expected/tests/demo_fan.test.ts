@@ -16,12 +16,13 @@ async function test_parTraverseWith_keeps_input_order() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
     type EventEnvelope = __ns_bynk.EventEnvelope;
@@ -58,12 +59,13 @@ async function test_parForEachWith_runs_every_step() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
     type EventEnvelope = __ns_bynk.EventEnvelope;
@@ -98,12 +100,13 @@ async function test_parTraverseAllWith_collects_every_result() {
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
     type EventEnvelope = __ns_bynk.EventEnvelope;
@@ -138,12 +141,13 @@ async function test_parTraverseTryWith_returns_every_value_in_input_order_when_a
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
     type EventEnvelope = __ns_bynk.EventEnvelope;
@@ -178,12 +182,13 @@ async function test_parTraverseTryWith_returns_the_first_Err_in_input_order__and
   try {
     const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type CloseInfo = __ns_bynk.CloseInfo;
+    type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
     type EventEnvelope = __ns_bynk.EventEnvelope;

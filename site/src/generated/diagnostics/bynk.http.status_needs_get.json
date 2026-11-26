@@ -1,0 +1,10 @@
+{
+  "blurb": "`PartialContent` (206) answers a range request and `NotModified` (304) answers a conditional read, and only a `GET` route serves either: a range or a validator is how a client re-reads a representation it already knows, and `HEAD` is answered by the `GET` route. Return them from a `GET` handler; a write that fails a precondition answers `PreconditionFailed` (412) instead.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.status_needs_get",
+  "constructs": [],
+  "example": "service api from http {\n    on POST(\"/blob\") (body: String) -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✗ not a `GET` route\n    }\n}\n\nservice api from http {\n    on GET(\"/blob\") () -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✓\n    }\n}",
+  "severity": "error",
+  "summary": "`PartialContent` or `NotModified` is returned from a route that is not a `GET`."
+}

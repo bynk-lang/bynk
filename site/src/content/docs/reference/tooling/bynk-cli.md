@@ -752,13 +752,13 @@ fetched into it. With `--locked` it fails instead of writing the lock, as
 instead of fetching.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--env NAME] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short|json|ndjson] [--fix[=CODE,…]] [--emit] [--each] [--env NAME] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
 |---|---|---|
 | `INPUT` | `.` | A `.bynk` file, or a project root directory (a `bynk.toml` or `src/` subdir selects project mode; otherwise the directory is itself the source tree). |
-| `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. In both, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured as [`--color`](#colour) says: by default only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
+| `--format` | `rich` | `rich` is the source-context rendering; `short` emits one terse `path:line:col: severity[category]: message` line per diagnostic, for the VS Code problem-matcher, CI, and scripts. `json` and `ndjson` write the diagnostics as data on stdout: see [Machine-readable diagnostics](#machine-readable-diagnostics). In `rich` and `short`, `path` is the file as you'd type it from the working directory (the input you passed, joined with the file's place in it), the same path `fmt` reports. `rich` is coloured as [`--color`](#colour) says: by default only when stderr is a terminal and `NO_COLOR` is unset or empty; `FORCE_COLOR` or `CLICOLOR_FORCE` set to anything but empty or `0` colours it without a terminal (for `less -R` or a CI log); `0` doesn't turn colour off on a terminal, `NO_COLOR` does, and it wins over both. `rich` cuts a source line longer than 400 bytes to a window around its labels, marked `…`. |
 
 | `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
@@ -776,6 +776,92 @@ checks every member, in path order. `rich` heads each member's report with a
 to the working directory, so they stay unambiguous across members. Every member
 is checked even when an earlier one fails, and the exit code is non-zero if any
 member fails.
+
+### Machine-readable diagnostics
+
+`--format json` writes one JSON document to **stdout**, and `--format ndjson`
+writes the same diagnostics one per line, followed by a summary line. Stderr
+stays empty unless something other than a diagnostic went wrong, and the exit
+status is the one `rich` and `short` give: non-zero on any error, `0` on warnings
+and hints alone.
+
+```json
+{
+  "version": 1,
+  "diagnostics": [
+    {
+      "code": "bynk.given.undeclared_capability",
+      "severity": "error",
+      "file": "src/relay.bynk",
+      "start": { "line": 19, "column": 5, "byteOffset": 231 },
+      "end": { "line": 19, "column": 9, "byteOffset": 235 },
+      "message": "capability `Beta` is used but not listed in the handler's `given` clause",
+      "labels": [],
+      "notes": ["add `Beta` to the handler's `given` clause so the dependency surface is visible at the declaration site"],
+      "fixes": [
+        {
+          "message": "add `Beta` to the `given` clause",
+          "applicability": "machine",
+          "edits": [
+            {
+              "file": "src/relay.bynk",
+              "start": { "line": 18, "column": 32, "byteOffset": 224 },
+              "end": { "line": 18, "column": 32, "byteOffset": 224 },
+              "replacement": " given Beta"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "summary": { "errors": 1, "warnings": 0, "hints": 0 }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `version` | The schema version, `1`. A change that removes or reshapes a field bumps it; an added field does not, so read the fields you need and ignore the rest. |
+| `diagnostics` | Every diagnostic, **hints included** (a terminal hides them), in file order and then position order. A project-level problem with no file sorts last. |
+| `code` | The stable [diagnostic code](/reference/diagnostics/), such as `bynk.types.type_mismatch`. |
+| `severity` | `error`, `warning` or `hint`. |
+| `file` | The file as you'd type it from the working directory, with `/` on every platform, the same path `short` and `fmt` report. `null` for a diagnostic with no file. |
+| `start`, `end` | Where the diagnostic points, or `null` with no file. `line` and `column` are 1-based; `column` counts **UTF-16 code units**, the unit the Language Server Protocol and JavaScript string indices use, so an astral character such as `🦀` is two. `byteOffset` is the 0-based byte position in the file, for a consumer that slices the bytes. |
+| `message`, `notes` | The primary message and the further notes the `rich` rendering prints. |
+| `labels` | Secondary spans, each with `message` and its own `file`, `start` and `end`: a label can lie in another file of the same unit (a duplicate's "previously declared here"). A label into a built-in unit names it by its bare identity path (such as `bynk.bynk`), which is not a file on disk. They are `null` when that file's text isn't available. |
+| `fixes` | Suggested changes. Each has a `message`, an `applicability` and `edits`, each edit replacing the span `start`–`end` of its `file` with `replacement` (empty deletes; an empty span inserts). `machine` means the fix is exactly right in itself; `suggested` means a person should read it first, because it holds placeholder text or changes what the program means. `applicability` is the suggestion's own, not a promise that [`--fix`](#applying-fixes) takes it: `--fix` also skips a hint unless you name its code, and leaves alone a diagnostic that offers more than one candidate fix, where two alternatives would conflict. A tool that applies fixes itself should apply one per diagnostic. |
+| `summary` | The count of `errors`, `warnings` and `hints`, which add up to the length of `diagnostics`. |
+
+In `ndjson` each diagnostic line is the same object with `"type": "diagnostic"`
+and `"version": 1` ahead of its fields, and the last line is
+`{"type":"summary","version":1,"errors":…,"warnings":…,"hints":…}`. Every line is
+meaningful on its own, so a consumer can stream.
+
+At a [workspace root](/book/guides/projects-build-and-deployment/layout/#workspaces)
+the members' diagnostics come as one document, with paths relative to the
+working directory and no member headers. `--emit` has no machine format (its
+findings are `tsc`'s), so `--emit` with `json` or `ndjson` is refused. A run that
+cannot start on an input (a `bynk.toml` that doesn't read, a file that doesn't
+exist) writes its reason to stderr and **nothing** to stdout, so "nothing was
+checked" is never mistaken for "nothing was found". `--fix` runs first, as it
+does for every format, and the document reports what remains.
+
+#### Read diagnostics in CI
+
+Gate on the exit status, and read the document for the detail. With
+[`jq`](https://jqlang.org/), list only the errors as `file:line:column: code`:
+
+```sh
+bynk check --format json > diagnostics.json || status=$?
+jq -r '.diagnostics[] | select(.severity == "error")
+       | "\(.file):\(.start.line):\(.start.column): \(.code)"' diagnostics.json
+exit "${status:-0}"
+```
+
+Count the warnings a pull request leaves, without failing on them, with
+`jq '.summary.warnings' diagnostics.json`; list each diagnostic that offers a
+`machine` fix once with
+`select(any(.fixes[]; .applicability == "machine"))`. An `ndjson` stream pipes
+straight into `jq -c 'select(.type == "diagnostic")'`.
 
 ### A directory of projects
 
