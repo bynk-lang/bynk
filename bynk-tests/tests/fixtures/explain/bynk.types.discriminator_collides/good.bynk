@@ -1,0 +1,5 @@
+commons shapes
+
+@discriminator("type")
+type Event =
+    | Created(category: String)

@@ -1,0 +1,46 @@
+suite reg.accounts
+
+consumes bynk.crypto { Crypto }
+
+// #4118: a unit-tier test runs the real derivation and hashing through the Node binding, so
+// published known answers hold.
+
+case "HKDF-SHA-256 matches RFC 5869 test case 1" {
+	let okm <- kdf.call(
+		"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+		"000102030405060708090a0b0c",
+		"f0f1f2f3f4f5f6f7f8f9",
+		42
+	)
+	expect okm == "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+}
+
+case "HKDF-SHA-256 matches RFC 5869 test case 3, with no salt and no info" {
+	let okm <- kdf.call("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b", "", "", 42)
+	expect okm == "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8"
+}
+
+case "a hashed password verifies, a wrong one does not, and a hash is not stale" {
+	let stored <- hasher.call("correct horse")
+	let ok <- checker.call("correct horse", stored)
+	let wrong <- checker.call("correct horsf", stored)
+	let stale <- staleness.call(stored)
+	expect ok == true
+	expect wrong == false
+	expect stale == false
+}
+
+case "a hash made at a lower count verifies but needs a new hash" {
+	let old = "pbkdf2-sha256$4096$c2FsdFNBTFRzYWx0U0FMVHNhbHRTQUxUc2FsdFNBTFRzYWx0$NIyJ28vTKy8y2BS4EW6EzysXNH68GAAYHE4qH7jdU+HGNVGMfaxH6Q"
+	let ok <- checker.call("passwordPASSWORDpassword", old)
+	let stale <- staleness.call(old)
+	expect ok == true
+	expect stale == true
+}
+
+case "a string that is not a hash is never a match and always stale" {
+	let ok <- checker.call("x", "not a hash")
+	let stale <- staleness.call("not a hash")
+	expect ok == false
+	expect stale == true
+}

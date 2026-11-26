@@ -55,7 +55,7 @@ export const api = {
 
 export function __serialise_ResumeHeaders(value: ResumeHeaders): __JsonValue {
   return {
-    ifRange: __serialise_Option_String(value.ifRange),
+    "if-range": __serialise_Option_String(value.ifRange),
   };
 }
 
@@ -64,7 +64,7 @@ export function __deserialise_ResumeHeaders(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_ifRange = __deserialise_Option_String(obj["ifRange"], `${path}.ifRange`);
+  const __r_ifRange = __deserialise_Option_String(obj["if-range"], `${path}.if-range`);
   if (__r_ifRange.tag === "Err") return __r_ifRange;
   const __ifRange = __r_ifRange.value;
   return Ok({ ifRange: __ifRange } as ResumeHeaders);

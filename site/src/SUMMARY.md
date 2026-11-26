@@ -76,6 +76,7 @@
     - [Constructors for generic types](guides/type-system/constructors-for-generic-types.md)
     - [Recursive generic types](guides/type-system/recursive-generic-types.md)
     - [Rename a field safely](guides/type-system/rename-a-field-safely.md)
+    - [Decode a third-party webhook into typed values](guides/type-system/decode-a-third-party-webhook.md)
   - Structuring code
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
@@ -105,6 +106,7 @@
     - [Add an authorisation invariant](guides/actors/authorisation.md)
     - [Know which context called you](guides/actors/cross-context-callers.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
+    - [Store a password](guides/effects-and-capabilities/store-a-password.md)
   - Storing data
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)

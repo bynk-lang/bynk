@@ -72,6 +72,7 @@ export class LoggedAudit implements Audit {
 export const __LoggedAuditProvider = { token: __AuditToken, factory: (deps: { Logger: Logger }) => new LoggedAudit(deps) };
 
 export const chat = {
+  maxFrame: 1048576,
   async open(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await __makeRoom(roomId).join(deps.identity, connection, deps);
     return undefined;

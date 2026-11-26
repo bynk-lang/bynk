@@ -1,10 +1,10 @@
 {
-  "blurb": "A `limits { }` section sets the request-body ceilings of a service's routes, and only a `from http` service has routes that take requests, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
+  "blurb": "A `limits { }` section sets the request-body ceilings of an HTTP service's routes, or a WebSocket service's `maxFrame`, and only a `from http` or `from websocket` service has requests or frames to bound, so on a `cron` or other service it is refused. Move it to the service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.limits_not_http",
   "constructs": [],
   "example": "type Note = { text: String }\n\nservice jobs from cron {\n    limits { maxBody: 1_000_000 }   // ✗ a schedule takes no request body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }   // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
   "severity": "error",
-  "summary": "A `limits { }` policy appears on a service that is not `from http`."
+  "summary": "A `limits { }` policy appears on a service that is neither `from http` nor `from websocket`."
 }

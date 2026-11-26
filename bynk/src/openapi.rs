@@ -53,6 +53,7 @@ use serde_json::{Map, Value, json};
 
 mod partial;
 mod plain;
+mod wire_names;
 
 use crate::cli::OpenapiFormatArg;
 
@@ -782,8 +783,7 @@ fn path_parameter_schema(r: &Renderer, components: &mut Components, ty: &TypeRef
         && let Some(bynk_syntax::ast::TypeBody::Sum(sum)) = r.types.get(&id.name).map(|t| &t.body)
         && sum.variants.iter().all(|v| v.payload.is_empty())
     {
-        let names: Vec<&str> = sum.variants.iter().map(|v| v.name.name.as_str()).collect();
-        return json!({ "type": "string", "enum": names });
+        return json!({ "type": "string", "enum": wire_names::path_enum_names(sum) });
     }
     r.parameter_schema(components, ty)
 }
@@ -1429,9 +1429,9 @@ impl Renderer<'_> {
                         other => Map::from_iter([("allOf".to_string(), json!([other]))]),
                     };
                     refine(&mut fs, &f.predicates);
-                    props.insert(f.name.clone(), Value::Object(fs));
+                    props.insert(f.key.clone(), Value::Object(fs));
                     if f.default.is_none() {
-                        required.push(json!(f.name));
+                        required.push(json!(f.key));
                     }
                 }
                 let mut s = Map::new();
@@ -1460,10 +1460,10 @@ impl Renderer<'_> {
                                     }
                                 };
                                 refine(&mut fs, &f.predicates);
-                                (f.name.clone(), Value::Object(fs), f.default.is_none())
+                                (f.key.clone(), Value::Object(fs), f.default.is_none())
                             })
                             .collect();
-                        variant_schema(sum.wire_discriminant, &v.name, fields)
+                        variant_schema(&sum.wire_discriminant, &v.wire_name, fields)
                     })
                     .collect();
                 Map::from_iter([("oneOf".to_string(), Value::Array(variants))])
@@ -1558,9 +1558,10 @@ impl Renderer<'_> {
                     let mut props = Map::new();
                     let mut required = Vec::new();
                     for (fname, ty) in &fields {
-                        props.insert(fname.clone(), self.ref_schema(components, &shape(ty)));
+                        let key = wire_names::record_field_key(self.types, name, fname);
+                        props.insert(key.clone(), self.ref_schema(components, &shape(ty)));
                         if !defaulted.contains(fname.as_str()) {
-                            required.push(json!(fname));
+                            required.push(json!(key));
                         }
                     }
                     components.put(
@@ -1573,16 +1574,13 @@ impl Renderer<'_> {
             WireInst::SumInst { name, args } => {
                 let n = self.names.of(self.unit, key, self.plain);
                 if let Some(variants) = wire::sum_inst_variants(name, args, self.types) {
+                    let names = wire_names::SumNames::of(self.types, name);
                     let vs: Vec<Value> = variants
                         .iter()
                         .map(|(vname, fields)| {
-                            let fields = fields
-                                .iter()
-                                .map(|(f, t)| {
-                                    (f.clone(), self.ref_schema(components, &shape(t)), true)
-                                })
-                                .collect();
-                            variant_schema(wire::WIRE_DISCRIMINANT, vname, fields)
+                            let fields = names
+                                .payload(vname, fields, |t| self.ref_schema(components, &shape(t)));
+                            variant_schema(&names.discriminator, &names.variant_name(vname), fields)
                         })
                         .collect();
                     components.put(n.clone(), || json!({ "oneOf": vs }));

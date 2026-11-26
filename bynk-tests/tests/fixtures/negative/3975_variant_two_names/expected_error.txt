@@ -1,0 +1,2 @@
+bynk.types.field_name_duplicate
+variant `Created` has more than one `@name`

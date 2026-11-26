@@ -1,0 +1,3 @@
+commons test {
+  type Charge = { @name("old") captured: Int replaces old }
+}

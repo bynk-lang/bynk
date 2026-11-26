@@ -2708,6 +2708,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #3975: each `@name` / `@discriminator` wire-name annotation, as `decorator`.
+        dt.extend(
+            bynk_ide::wire_names::wire_annotation_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR)),
+        );
         // #3793: each field `replaces` clause's keyword, as `keyword`.
         dt.extend(
             bynk_ide::field_rename::replaces_keyword_spans(text)
@@ -4234,6 +4240,8 @@ impl LanguageServer for Backend {
         items.extend(fallback_completions(&text, offset, &line_prefix));
         // #3793: `replaces` after a field's type.
         items.extend(field_rename_completions(&line_prefix));
+        // #3975: `@name` before a field or variant, `@discriminator` before a sum's `type`.
+        items.extend(wire_name_completions(&line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
@@ -5906,24 +5914,40 @@ fn cache_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
 /// service-body item start, offer the `limits` section keyword. Both are lexical
 /// (offset-based), mirroring `security_completions`.
 fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    let websocket = completion::in_websocket_service_limits(text, offset);
     if completion::in_limits_field_position(text, offset) {
-        return completion::LIMITS_FIELDS
-            .iter()
-            .map(|(name, doc)| CompletionItem {
-                label: name.to_string(),
-                kind: Some(CompletionItemKind::FIELD),
-                detail: Some((*doc).to_string()),
-                insert_text: Some(format!("{name}: ")),
-                ..Default::default()
-            })
-            .collect();
+        return if websocket {
+            completion::WS_LIMITS_FIELDS
+        } else {
+            completion::LIMITS_FIELDS
+        }
+        .iter()
+        .map(|(name, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ")),
+            ..Default::default()
+        })
+        .collect();
     }
     if completion::in_service_body_item_position(text, offset, line) {
+        let (detail, snippet) = if websocket {
+            (
+                "the frame size limit for this WebSocket service",
+                "limits {\n\tmaxFrame: $0,\n}",
+            )
+        } else {
+            (
+                "request limits for this HTTP service",
+                "limits {\n\tmaxBody: $0,\n}",
+            )
+        };
         return vec![CompletionItem {
             label: "limits".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("request limits for this HTTP service".to_string()),
-            insert_text: Some("limits {\n\tmaxBody: $0,\n}".to_string()),
+            detail: Some(detail.to_string()),
+            insert_text: Some(snippet.to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
@@ -6210,6 +6234,36 @@ fn fallback_completions(text: &str, offset: usize, line: &str) -> Vec<Completion
         }];
     }
     Vec::new()
+}
+
+/// #3975: the wire-name annotations, offered at the `@` that can lead them.
+fn wire_name_completions(line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::wire_names::WirePosition;
+    let (label, detail, doc, snippet) =
+        match bynk_ide::wire_names::in_wire_annotation_position(line) {
+            Some(WirePosition::Member) => (
+                "name",
+                "the key or value this has on the wire",
+                bynk_ide::wire_names::NAME_DOC,
+                "name(\"${1:wireName}\")",
+            ),
+            Some(WirePosition::Item) => (
+                "discriminator",
+                "the key that carries a sum's variant",
+                bynk_ide::wire_names::DISCRIMINATOR_DOC,
+                "discriminator(\"${1:type}\")",
+            ),
+            None => return Vec::new(),
+        };
+    vec![CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::PROPERTY),
+        detail: Some(detail.to_string()),
+        documentation: Some(Documentation::String(doc.to_string())),
+        insert_text: Some(snippet.to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// #3793: the `replaces` clause, offered after a field's complete type.

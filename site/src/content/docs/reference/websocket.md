@@ -26,6 +26,8 @@ service <Name> from websocket(in: ClientFrame, out: ServerFrame) {
 - **Frame types:** `in` is the inbound frame type (delivered to `on message`),
   `out` is the type the server sends (`connection.send` and the held
   `Connection[out]`).
+- **`limits { maxFrame: <bytes> }`** — optional, the largest frame the service reads or sends; see
+  [Frame size and binary frames](#frame-size-and-binary-frames).
 - **`on open` — exactly one.** The upgrade handshake. It **must** name its actor
   with `by` (there is no anonymous upgrade — a WebSocket, like an HTTP route, has
   no safe default actor), and it receives a fresh, **owned** `connection:
@@ -149,6 +151,51 @@ releases the connection.
 - Use short-lived tokens for WebSocket connections, minutes to hours: a client reconnects with a
   fresh one when it is closed with `1008`.
 
+## Frame size and binary frames
+
+Frame decoding is generated, so an author cannot bound or skip it. A service declares its frame
+ceiling with `limits { maxFrame: <bytes> }`, a positive `Int` literal of at most `33_554_432`
+(32 MiB, Cloudflare's own limit on an inbound message). Without it the ceiling is **1 MiB**
+(`1_048_576`). A value outside that is `bynk.http.limits_invalid_field`, a field other than
+`maxFrame` is `bynk.http.limits_unknown_field`, and `maxFrame` on an HTTP service is the same.
+
+```bynk,fragment
+service Audio from websocket(in: Bytes, out: Bytes) {
+  limits { maxFrame: 262_144 }
+  on open (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).join(user.identity, connection)
+  }
+  on message (room: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+  }
+  on close (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).leave(user.identity)
+  }
+}
+```
+
+- **An inbound frame over `maxFrame` is closed with `1009` ("message too large")**, before it is decoded
+  or parsed and without running `on message`. The size is in bytes: a text frame counts its UTF-8. The
+  refusal is logged by size only, never by content.
+- **`Bytes` as a frame type** exchanges **binary** frames as they are. With `in: Bytes` an inbound
+  binary message arrives in `on message` as `Bytes`, and a **text** message is closed with `1003`
+  ("text frame not accepted"). With `out: Bytes`, `connection.send(bytes)` sends a binary message.
+  `in` and `out` are independent.
+- **Any other frame type stays JSON text.** A **binary** message to such a service is closed with `1003`
+  ("binary frame not accepted"); it used to be read as UTF-8 and parsed, which accepted a JSON
+  document sent as a binary message.
+- **`maxFrame` also bounds what the server sends.** A frame over it **faults the send**, so a server
+  bug cannot push oversized frames at clients. A JSON frame counts the UTF-8 of its JSON. The ceiling
+  is recorded in the socket's attachment at the upgrade, so it holds after the Durable Object has
+  hibernated; a connection accepted before it was recorded has no outbound ceiling until it reconnects.
+- In a test, `svc.open(tc, …)` hands the `TestConnection` the service's `maxFrame`, so an oversized
+  `connection.send` faults in a `unit` case as it does in production. A `TestConnection` an agent is
+  handed directly is not bounded.
+- **A per-connection frame *rate* limit is not provided.** A counter would not survive hibernation,
+  so any limit would be approximate.
+- A service whose clients send frames of 1 MiB to 32 MiB now sets `maxFrame` explicitly; they were
+  accepted before and are closed with `1009` after this change.
+
 ## Sending and broadcasting
 
 The agent that owns the connection sends with `connection.send(frame)`
@@ -196,7 +243,7 @@ agent Room {
 On the **bundle** target there is no Durable Object: a connection is a
 `TestConnection` — a capture-and-inspect channel that records every frame sent — so
 a WebSocket service is fully developable and testable with no Cloudflare runtime.
-A `TestConnection` exposes `sent()` (the frames sent to it), `closed()`, `closeCode()` and `closeReason()`.
+A `TestConnection[Bytes]` records `Bytes` frames. A `TestConnection` exposes `sent()` (the frames sent to it), `closed()`, `closeCode()` and `closeReason()`.
 In a `suite`, a case builds one with `TestConnection[F]()` and drives the
 service by address:
 
@@ -264,6 +311,8 @@ does not run it again.
 | `bynk.ws.missing_close` | a `from websocket` service has no `on close` |
 | `bynk.ws.bad_close_code` | a literal `connection.close` code outside `1000` and `3000`-`4999` |
 | `bynk.ws.bad_close_reason` | a literal `connection.close` reason over 123 bytes of UTF-8 |
+| `bynk.http.limits_invalid_field` | on a WebSocket, a `maxFrame` that is not a positive `Int` literal of at most `33_554_432` |
+| `bynk.http.limits_unknown_field` | on a WebSocket, a `limits` field other than `maxFrame` |
 | `bynk.ws.cookie_needs_origins` | a `SignedCookie` `on open` with no `cors` list of exact origins to check the upgrade's `Origin` against |
 | `bynk.ws.open_transfer_shape` | the `on open` does not transfer the connection to exactly one routable agent |
 | `bynk.ws.open_transfer_key` | on Workers, the transfer's key is not an `on open` parameter, a context `const` or a literal |

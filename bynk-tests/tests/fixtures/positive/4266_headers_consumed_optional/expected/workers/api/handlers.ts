@@ -87,7 +87,7 @@ export function __deserialise_Jar(json: __JsonValue, path: string = "$"): Result
 
 export function __serialise_Many(value: Many): __JsonValue {
   return {
-    credentials: __serialise_List_String(value.credentials),
+    Authorization: __serialise_List_String(value.credentials),
   };
 }
 
@@ -96,7 +96,7 @@ export function __deserialise_Many(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_credentials = __deserialise_List_String(obj["credentials"], `${path}.credentials`);
+  const __r_credentials = __deserialise_List_String(obj["Authorization"], `${path}.Authorization`);
   if (__r_credentials.tag === "Err") return __r_credentials;
   const __credentials = __r_credentials.value;
   return Ok({ credentials: __credentials } as Many);

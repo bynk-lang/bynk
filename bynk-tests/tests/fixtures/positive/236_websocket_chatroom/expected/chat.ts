@@ -48,6 +48,7 @@ export const ClientFrame = {
 };
 
 export const ChatGateway = {
+  maxFrame: 1048576,
   async open(connection: Connection<ServerFrame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await connection.send({ text: "welcome" });
     const __r1 = await __makeRoom(roomId).join(deps.identity, connection, deps);

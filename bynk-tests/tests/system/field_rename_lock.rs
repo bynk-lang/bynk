@@ -341,6 +341,82 @@ fn the_non_additive_refusal_names_replaces_for_a_cell() {
     assert!(err.contains("replaces owner"), "{err}");
 }
 
+// ---- wire names (#3975) -----------------------------------------------------
+
+#[test]
+fn an_event_field_is_recorded_under_its_wire_name() {
+    let p = event_project("wire-name-recorded");
+    p.ok(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int,",
+        "id: id, captured: 1",
+    ));
+    let lock = p.lock();
+    assert!(lock.contains("name = \"amount_captured\""), "{lock}");
+    assert!(
+        !lock.contains("name = \"captured\""),
+        "the Bynk name is not the recorded key: {lock}"
+    );
+}
+
+#[test]
+fn changing_an_event_fields_wire_name_is_a_rename_to_declare() {
+    let p = event_project("wire-name-change");
+    p.ok(&event(
+        "  id: String,\n  captured: Int,",
+        "id: id, captured: 1",
+    ));
+    let before = p.lock();
+
+    // The Bynk name is unchanged, but the key a payload carries is not: that is a removal and an
+    // addition without a default, as for any rename.
+    let refused = p.err(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int,",
+        "id: id, captured: 1",
+    ));
+    assert!(
+        refused.contains("bynk.event.non_additive_schema_change"),
+        "{refused}"
+    );
+    assert_eq!(p.lock(), before, "a refused build leaves the lock alone");
+
+    // Declared with `replaces`, which names the previous key, it is a recorded step.
+    p.ok(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int replaces captured,",
+        "id: id, captured: 1",
+    ));
+    let lock = p.lock();
+    assert_eq!(schema(&lock), "2", "{lock}");
+    assert!(lock.contains("renamed_from = [\"captured\"]"), "{lock}");
+    assert!(lock.contains("name = \"amount_captured\""), "{lock}");
+}
+
+#[test]
+fn a_clause_naming_the_fields_own_wire_name_is_refused() {
+    let p = event_project("wire-name-self");
+    let refused = p.err(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int replaces amount_captured,",
+        "id: id, captured: 1",
+    ));
+    assert!(refused.contains("replaces itself"), "{refused}");
+}
+
+#[test]
+fn a_wire_name_inside_a_stored_record_is_a_change_to_the_stored_shape() {
+    let p = agent_project("wire-name-store");
+    let source = |field: &str| {
+        format!(
+            "context shop\n\ntype Prefs = {{\n  {field}\n}}\n\nagent Cart {{\n  key id: String\n  store prefs: Cell[Prefs]\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+        )
+    };
+    p.ok(&source("size: Int = 1,"));
+    let before = p.lock();
+    // The stored value's key moves from `size` to `sz`: the lock sees the path go, as for a rename
+    // inside a stored record, and wants a `migrate` step.
+    let refused = p.err(&source("@name(\"sz\") size: Int = 1,"));
+    assert!(refused.contains("non_additive"), "{refused}");
+    assert_eq!(p.lock(), before);
+}
+
 // ---- a record field inside a stored value (#4483) ---------------------------
 
 /// A `Prefs` record with `width_field`, stored in a `Cell` and in a `Map` value.

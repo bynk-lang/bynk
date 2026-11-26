@@ -4688,6 +4688,44 @@ mod tests {
         assert!(!c.items[2].is_private());
     }
 
+    /// #3975: `@name("…")` before a variant (both forms) and a payload field, and
+    /// `@discriminator("…")` before a sum's `type`, with a doc above it and `private` after it.
+    #[test]
+    fn wire_name_annotations_attach_to_their_declarations() {
+        let src = "commons m\n\n--- An event.\n@discriminator(\"type\")\nprivate type Hook =\n\t| @name(\"a.b\") A(@name(\"k\") x: Int)\n\t| B\n\ntype Action = enum { @name(\"opened\") Opened, Closed }\n";
+        let c = parse_str(src).unwrap();
+        let hook = type_at(&c, 0);
+        assert_eq!(hook.discriminator().as_deref(), Some("type"));
+        assert!(hook.private.is_some());
+        assert_eq!(
+            doc_of(&hook.documentation),
+            Some(("An event.", DocForm::Lines))
+        );
+        assert_eq!(hook.span.start, src.find("@discriminator").unwrap());
+        let TypeBody::Sum(sum) = &hook.body else {
+            panic!("a sum");
+        };
+        assert_eq!(sum.variants[0].wire_name().as_deref(), Some("a.b"));
+        assert_eq!(sum.variants[0].payload[0].wire_name().as_deref(), Some("k"));
+        assert_eq!(sum.variants[1].wire_name(), None);
+        let TypeBody::Sum(action) = &type_at(&c, 1).body else {
+            panic!("an enum");
+        };
+        assert_eq!(action.variants[0].wire_name().as_deref(), Some("opened"));
+        assert_eq!(action.variants[1].wire_name(), None);
+    }
+
+    /// #3975: an annotation at item position that does not lead a `type` is a parse error.
+    #[test]
+    fn an_annotation_before_something_other_than_a_type_is_refused() {
+        let src = "commons m\n\n@discriminator(\"type\")\nfn f() -> Int { 1 }\n";
+        let err = parse_str(src).unwrap_err();
+        assert!(
+            err.iter().any(|e| e.category == "bynk.parse.expected_item"),
+            "{err:?}"
+        );
+    }
+
     /// `private` before `const` is the modifier too, its span folded into the
     /// constant's.
     #[test]

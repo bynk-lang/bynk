@@ -256,10 +256,11 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                // #3975: annotations may lead a `type` (`@discriminator("…")`).
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(true) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {
@@ -915,10 +916,11 @@ impl<'a> Parser<'a> {
                     }
                 }
                 // #3066: a suite-local `type`.
-                Some(TokenKind::Type) => {
+                // #3975: annotations may lead a `type` (`@discriminator("…")`).
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(false) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             t.trivia.leading = leading;
@@ -1577,10 +1579,10 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(true) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {
@@ -1997,10 +1999,10 @@ impl<'a> Parser<'a> {
                         Err(e) => self.handle_item_err(e)?,
                     }
                 }
-                Some(TokenKind::Type) => {
+                Some(TokenKind::Type | TokenKind::At) if self.leads_type_item() => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_type_decl() {
+                    match self.parse_type_decl_at_item(false) {
                         Ok(mut t) => {
                             t.documentation = doc;
                             if let Some(sp) = private {

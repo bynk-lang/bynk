@@ -59,6 +59,8 @@ module.exports = grammar({
     // #3932: after `capability X = K`, an `@…` is the derived capability's own
     // annotation or the first of an `agent`'s; the next token (`agent` or not) decides.
     [$.capability_decl],
+    // #3975: `@…` before a `type` or an `agent` in a context body; the next token decides.
+    [$.type_decl, $.agent_decl],
     [$.opaque_type],
     [$.refined_type],
     // #2654: `let (T { … })` is a parenthesised pattern either way; only the
@@ -426,6 +428,8 @@ module.exports = grammar({
 
     type_decl: ($) =>
       seq(
+        // #3975: `@discriminator("…")` before a sum's `type`.
+        repeat(field("annotation", $.store_annotation)),
         optional(field("visibility", $.visibility_modifier)),
         "type",
         field("name", $.identifier),
@@ -592,6 +596,8 @@ module.exports = grammar({
     sum_variant: ($) =>
       seq(
         "|",
+        // #3975: `| @name("charge.succeeded") ChargeSucceeded`.
+        repeat(field("annotation", alias($._variant_annotation, $.store_annotation))),
         field("name", $.constant_name),
         optional(
           seq(
@@ -604,6 +610,8 @@ module.exports = grammar({
       ),
     variant_payload_field: ($) =>
       seq(
+        // #3975: `@name("pull_request") pr: PullRequest`.
+        repeat(field("annotation", $.store_annotation)),
         field("name", $.identifier),
         ":",
         field("type", $._type_ref),
@@ -613,7 +621,16 @@ module.exports = grammar({
       seq(
         "enum",
         "{",
-        optional(sep1(field("variant", $.constant_name), ",")),
+        // #3975: a tag may carry its `@name("…")`.
+        optional(
+          sep1(
+            seq(
+              repeat(field("annotation", alias($._variant_annotation, $.store_annotation))),
+              field("variant", $.constant_name),
+            ),
+            ",",
+          ),
+        ),
         optional(","),
         "}",
       ),
@@ -1267,6 +1284,17 @@ module.exports = grammar({
     // matches the closed registry). An argument is an optional `label:` then a
     // value expression — `by: orderId`, `5.minutes`.
     store_annotation: ($) =>
+      seq(
+        "@",
+        field("name", $.identifier),
+        optional(
+          seq("(", optional(sep1($.annotation_arg, ",")), optional(","), ")"),
+        ),
+      ),
+    // #3975: the annotation before a variant or an enum tag. A rule of its own, so the parser
+    // state after it is not shared with the places an identifier follows an annotation (a field
+    // name), and a capitalised variant name is read as one. Shown as a `store_annotation`.
+    _variant_annotation: ($) =>
       seq(
         "@",
         field("name", $.identifier),

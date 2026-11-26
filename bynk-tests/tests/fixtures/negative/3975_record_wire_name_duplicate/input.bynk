@@ -1,0 +1,3 @@
+commons test {
+  type Charge = { id: String, @name("id") ident: String }
+}
