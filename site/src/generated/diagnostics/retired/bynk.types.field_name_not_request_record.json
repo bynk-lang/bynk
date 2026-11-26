@@ -1,0 +1,6 @@
+{
+  "code": "bynk.types.field_name_not_request_record",
+  "lastRelease": "0.661.1",
+  "replacement": "`@name(\"…\")` on any record field, which applies at every boundary",
+  "why": "A wire name (`@name`) is now part of a type's one encoding and legal on a field of any record (#3975), so it is no longer limited to a request record."
+}

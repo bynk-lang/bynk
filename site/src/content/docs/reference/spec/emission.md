@@ -1166,7 +1166,11 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). The upgrade forwards the verified
   credential's `exp`, which the attachment keeps, and `webSocketMessage` closes the connection with `1008
   authentication expired`, running `on close` once, when a frame arrives after it (`exp < now`),
-  before decoding the frame. The Durable Object's
+  before decoding the frame. Before anything else `webSocketMessage` admits the frame: one over the service's
+  `maxFrame` (the UTF-8 length of a text frame) closes the socket with `1009`, a text frame to an `in: Bytes`
+  service and a binary frame to any other service with `1003`, all before the frame is decoded; a `Bytes`
+  frame is passed to `on message` as received, and `Connection.send` writes a `Bytes` frame as a binary
+  message and faults a frame over the `maxFrame` the upgrade recorded in the socket's attachment. The Durable Object's
   `webSocketClose` completes the close handshake first, replying with the client's code and reason when
   that code can be sent (`1000`–`4999` except `1004`, `1005`, `1006`, `1015`) and with a bare
   `close()` otherwise, and then runs the service's `on close` with the client's `CloseInfo` (the close

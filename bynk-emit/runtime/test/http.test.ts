@@ -1195,7 +1195,7 @@ test("queryObject: reads each declared field off the query string", () => {
   const r = queryObject(queryRequest("?repo=a%2Fb&limit=100&fresh=true&kind=Push&tag=x&tag=y&utm=1"), fields);
   assert.deepEqual(r, {
     ok: true,
-    value: { repo: "a/b", limit: 100, fresh: true, kind: { kind: "Push" }, tag: ["x", "y"] },
+    value: { repo: "a/b", limit: 100, fresh: true, kind: "Push", tag: ["x", "y"] },
   });
 });
 
@@ -1239,7 +1239,7 @@ test("formObject: reads each declared field, ignoring unknown keys", () => {
   ]);
   assert.deepEqual(r, {
     ok: true,
-    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: "Pro", tags: ["x", "y z"], flag: true },
   });
 });
 
@@ -1332,7 +1332,7 @@ test("formString: the record's wire form as a body; formObject reads it back", (
   ]);
   assert.deepEqual(back, {
     ok: true,
-    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: { kind: "Pro" }, tags: ["x", "y z"], flag: true },
+    value: { email: "a@b.c", age: { kind: "Some", value: 41 }, plan: "Pro", tags: ["x", "y z"], flag: true },
   });
 });
 
@@ -1487,7 +1487,7 @@ test("cookieValue: every leaf kind decodes back to the value written", () => {
     { kind: "int", written: 0, read: 0 },
     { kind: "bool", written: true, read: true },
     { kind: "bool", written: false, read: false },
-    { kind: "enum", written: { tag: "Dark" }, read: { kind: "Dark" } },
+    { kind: "enum", written: { tag: "Dark" }, read: "Dark" },
     { kind: "string", written: "hello", read: "hello" },
     { kind: "string", written: "", read: "" },
     // a refined or opaque string, an `Int`-based refined type: their base text
@@ -1678,7 +1678,7 @@ test("a revalidation for one query is not answered 304 for another", async () =>
 
 test("queryObject: an Option field wraps a present value, so `None` is not the envelope", () => {
   const r = queryObject(queryRequest("?kind=None"), [{ name: "kind", kind: "enum", list: false, option: true }]);
-  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: { kind: "None" } } } });
+  assert.deepEqual(r, { ok: true, value: { kind: { kind: "Some", value: "None" } } });
 });
 
 test("formDecode: reads a form as formObject does, with a $-rooted DecodeError", () => {
@@ -1755,25 +1755,27 @@ test("requestCookies: get, all and names read a Cookie header, prefixed names in
 const R = (name: string, wire: string, kind: "string" | "int" = "string", option = false) =>
   ({ name, wire, kind, list: false, option }) as const;
 
-test("a renamed field is read from its wire key, and errors still name the field", () => {
+test("a renamed field is read from its wire key, and errors name that key", () => {
   const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int")];
   const ok = formObject("page-size=20&__Host-sid=abc&sid=ignored", fields);
-  assert.deepEqual(ok, { ok: true, value: { sid: { kind: "Some", value: "abc" }, pageSize: 20 } });
+  // #3975: the object is keyed by the wire key, which is what the record's codec reads.
+  assert.deepEqual(ok, { ok: true, value: { "__Host-sid": { kind: "Some", value: "abc" }, "page-size": 20 } });
   // The field's own name is not the key once it is renamed.
   assert.deepEqual(formObject("pageSize=20", fields), { ok: true, value: {} });
   const twice = formObject("page-size=1&page-size=2", fields);
   assert.equal(twice.ok, false);
-  assert.equal(twice.ok ? "" : twice.error.kind === "StructuralMismatch" ? twice.error.path : "", "body.pageSize");
+  assert.equal(twice.ok ? "" : twice.error.kind === "StructuralMismatch" ? twice.error.path : "", "body.page-size");
 });
 
 test("cookieObject reads a __Host- cookie into its renamed field", () => {
   const req = new Request("http://x/", { headers: { cookie: "__Host-sid=abc; theme=dark" } });
-  assert.deepEqual(cookieObject(req, [R("sid", "__Host-sid")]), { ok: true, value: { sid: "abc" } });
+  assert.deepEqual(cookieObject(req, [R("sid", "__Host-sid")]), { ok: true, value: { "__Host-sid": "abc" } });
 });
 
 test("the writers emit a renamed field under its wire key", () => {
   const fields = [R("sid", "__Host-sid", "string", true), R("pageSize", "page-size", "int"), F("q", "string")];
-  const wire = { sid: { kind: "Some", value: "abc" }, pageSize: 20, q: "x" };
+  // The wire form is already keyed by wire key (#3975).
+  const wire = { "__Host-sid": { kind: "Some", value: "abc" }, "page-size": 20, q: "x" };
   assert.equal(queryString(wire, fields), "?__Host-sid=abc&page-size=20&q=x");
   assert.equal(cookieString(wire, fields), "__Host-sid=abc; page-size=20; q=x");
   assert.equal(formString(wire, fields), "__Host-sid=abc&page-size=20&q=x");
@@ -1783,10 +1785,10 @@ test("the writers emit a renamed field under its wire key", () => {
 
 test("formDecode honours @name and keeps the $-rooted field path", () => {
   const ok = formDecode("page-size=20", [R("pageSize", "page-size", "int")]);
-  assert.deepEqual(ok, { tag: "Ok", value: { pageSize: 20 } });
+  assert.deepEqual(ok, { tag: "Ok", value: { "page-size": 20 } });
 });
 
-test("multipartObject reads a renamed text part and file part, and rejections name the field (#3343)", async () => {
+test("multipartObject reads a renamed text part and file part, and rejections name the wire key (#3343, #3975)", async () => {
   const fields = [
     { name: "title", wire: "doc-title", kind: "string", list: false, option: false },
     { name: "photo", wire: "photo-file", kind: "file", list: false, option: false },
@@ -1799,15 +1801,15 @@ test("multipartObject reads a renamed text part and file part, and rejections na
   );
   assert.equal(ok.ok, true);
   if (ok.ok) {
-    assert.equal((ok.value as Record<string, unknown>).title, "hi");
+    assert.equal((ok.value as Record<string, unknown>)["doc-title"], "hi");
     assert.equal(new TextDecoder().decode((ok.files.photo as { bytes: Uint8Array }).bytes), "PNG");
   }
-  // Text where a file is declared: the error names `photo`, not `photo-file`.
+  // Text where a file is declared: the error names the wire key, as the codec's own paths do.
   const bad = await multipartObject(mp(textPart("photo-file", "oops")), CT, fields, lim);
   assert.equal(bad.ok, false);
-  if (!bad.ok) assert.equal((bad.error as { path: string }).path, "body.photo");
+  if (!bad.ok) assert.equal((bad.error as { path: string }).path, "body.photo-file");
   // The writer sends each part under its wire name.
-  const form = multipartForm({ title: "hi", photo: { filename: { kind: "None" }, contentType: "image/png", bytes: "UE5H" } }, fields);
+  const form = multipartForm({ "doc-title": "hi", "photo-file": { filename: { kind: "None" }, contentType: "image/png", bytes: "UE5H" } }, fields);
   assert.equal(form.get("doc-title"), "hi");
   assert.notEqual(form.get("photo-file"), null);
   assert.equal(form.get("title"), null);
@@ -1981,7 +1983,7 @@ test("headersObject: names match without case, a List splits, others read whole 
   ]);
   assert.deepEqual(r, {
     ok: true,
-    value: { length: 42, tag: ["a", '"b,c"', "d"], date: "Tue, 15 Nov 1994 08:12:31 GMT" },
+    value: { "content-length": 42, "X-TAG": ["a", '"b,c"', "d"], date: "Tue, 15 Nov 1994 08:12:31 GMT" },
   });
 });
 
@@ -1991,14 +1993,14 @@ test("headersObject: an unreadable value passes on as text; a hidden header read
     { name: "length", wire: "content-length", kind: "int" as const, list: false, option: false },
     { name: "auth", wire: "authorization", kind: "string" as const, list: false, option: true },
   ];
-  assert.deepEqual(headersObject(req, spec), { ok: true, value: { length: "abc", auth: { kind: "Some", value: "Bearer t" } } });
-  assert.deepEqual(headersObject(req, spec, ["Authorization"]), { ok: true, value: { length: "abc" } });
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { "content-length": "abc", authorization: { kind: "Some", value: "Bearer t" } } });
+  assert.deepEqual(headersObject(req, spec, ["Authorization"]), { ok: true, value: { "content-length": "abc" } });
 });
 
 test("headerPairs: a record's wire form becomes header lines; a list joins; an enum is its name", () => {
   assert.deepEqual(
     headerPairs(
-      { length: 42, tag: ["a", "b"], key: { kind: "Some", value: "k" }, none: { kind: "None" }, s: { kind: "Open" } },
+      { "content-length": 42, tag: ["a", "b"], key: { kind: "Some", value: "k" }, none: { kind: "None" }, s: { kind: "Open" } },
       [{ name: "length", wire: "content-length", kind: "int", list: false, option: false }],
     ),
     { "content-length": "42", tag: "a, b", key: "k", s: "Open" },
@@ -2238,4 +2240,17 @@ test("notModifiedIfMatch: a matching If-None-Match is a 304 before a stale If-Ra
   const stale = httpResultToResponse(withETag(partial(), '"v2"'), id);
   const noMatch = new Request("https://x/f", { headers: { range: "bytes=3-8", "if-none-match": '"v9"', "if-range": '"v1"' } });
   assert.throws(() => notModifiedIfMatch(stale, noMatch), /stale If-Range/);
+});
+
+// #3975: a payload-less sum's wire form names its variant under the sum's `@discriminator`, so the
+// test drivers read the name off whatever key that is.
+test("queryString: an enum's variant name is read under any discriminator", () => {
+  assert.equal(queryString({ plan: { type: "pro" } } as unknown as JsonValue), "?plan=pro");
+  assert.equal(queryString({ plan: { kind: "Pro" } } as unknown as JsonValue), "?plan=Pro");
+});
+
+test("cookieValue: an enum is written under its wire name when a variant has one", () => {
+  assert.equal(cookieValue("enum", { tag: "Dark" }, { Dark: "dark" }), "dark");
+  assert.equal(cookieValue("enum", { tag: "Light" }, { Dark: "dark" }), "Light");
+  assert.equal(cookieValue("enum", { tag: "Dark" }), "Dark");
 });

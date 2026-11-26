@@ -936,13 +936,17 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
     if (typeof v === "object" && !globalThis.Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      // A payload-less sum's one value is its variant's wire name, under whatever key its
+      // `@discriminator` gave it.
+      const first = globalThis.Object.values(v)[0];
+      return typeof first === "string" ? first : undefined;
     }
     return globalThis.String(v);
   };
   if (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire)) {
     for (const f of fields) {
-      const value = wire[f.name];
+      // The wire form is keyed by wire name.
+      const value = wire[f.wire ?? f.name];
       if (value === undefined) continue;
       for (const item of globalThis.Array.isArray(value) ? value : [value]) {
         const text = leaf(item);
@@ -1006,7 +1010,7 @@ export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[])
   // A field is a list when its wire value is an array.
   const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
   const lists = new globalThis.Set(
-    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+    fields.filter((f) => globalThis.Array.isArray(record[f.wire ?? f.name])).map((f) => f.wire ?? f.name),
   );
   new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
     const bad = (expected: string): never => {
@@ -1727,7 +1731,7 @@ export function __deserialise_Qty(json: __JsonValue, path: string = "$"): Result
 export function __serialise_Search(value: __Wire_Search): __JsonValue {
   return {
     q: value.q as __JsonValue,
-    page: __serialise_Option_Int(value.page),
+    "x-page": __serialise_Option_Int(value.page),
   };
 }
 
@@ -1740,7 +1744,7 @@ export function __deserialise_Search(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path: `${path}.q`, expected: "string", actual: typeof obj["q"] });
   }
   const __q = obj["q"];
-  const __r_page = __deserialise_Option_Int(obj["page"], `${path}.page`);
+  const __r_page = __deserialise_Option_Int(obj["x-page"], `${path}.x-page`);
   if (__r_page.tag === "Err") return __r_page;
   const __page = __r_page.value;
   return Ok({ q: __q, page: __page } as __Wire_Search);
@@ -2060,7 +2064,7 @@ const __route_api_getOrderById: __Route = {
 const __route_api_getSearch: __Route = {
   method: "GET",
   path: "/search",
-  contract: "2d4544f1493d4088",
+  contract: "b24aaa695af85a25",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -2085,12 +2089,12 @@ const __route_api_deleteOrderById: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "761dcb2dd0ff7e23",
+    service: "76d9e01fecc11ea8",
     routes: {
       postOrders: "a0cd3f51d4395a9c",
       getOrders: "8ba5cacf5f1a167c",
       getOrderById: "963bc9758fe525f1",
-      getSearch: "2d4544f1493d4088",
+      getSearch: "b24aaa695af85a25",
       deleteOrderById: "4bcc28c604f336bc",
     },
   },
@@ -2126,7 +2130,7 @@ export function createClient(options: ClientOptions = {}) {
       getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> => __call(options, init, __route_api_getSearch, () => {
         const __w_query: { [k: string]: JsonValue } = {};
         __w_query["q"] = query.q as __JsonValue;
-        if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+        if (query.page !== undefined) __w_query["x-page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
         const __c_query = __checked(__w_query, __deserialise_Search, "query");
         if (__c_query.tag === "Err") return __c_query;
         return Ok({ params: {}, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });

@@ -30,6 +30,13 @@ export interface TraceStep {
   kind: TraceStepKind;
   target: string;
   span: TraceSpan | null;
+  /**
+   * When the step began, in milliseconds after its request began: the same clock as the request's
+   * `duration_ms`, so `[start_ms, start_ms + ms)` places the step on the request's timeline. Steps
+   * that overlap are concurrent; the gap between one step's end and the next's start is the handler's
+   * own time (#3787).
+   */
+  start_ms: number;
   ms: number;
   outcome: "ok" | "fault" | "pending";
   /** A cross-context call: the id its callee's own request record will carry. */
@@ -38,6 +45,8 @@ export interface TraceStep {
 
 interface TraceRecord {
   id: string;
+  /** `now()` when the request began, which each step's `start_ms` is measured from. */
+  started: number;
   /** The caller's request id, when an internal call carried one. */
   parent: string | null;
   /** The step begun most recently, which `traceBinding` reads its child id from. */
@@ -107,7 +116,7 @@ export function traceStep(
   const record = scope === null || scope === undefined ? undefined : scope.getStore();
   if (record === undefined) return (result) => result;
   const started = now();
-  const step: TraceStep = { kind, target, span, ms: 0, outcome: "pending" };
+  const step: TraceStep = { kind, target, span, start_ms: started - record.started, ms: 0, outcome: "pending" };
   if (record.steps.length >= TRACE_STEP_LIMIT) {
     record.truncated = true;
     record.last = undefined;
@@ -183,15 +192,16 @@ export async function traceFetch<E, C>(
   // The ids ride only on an internal call between Workers, so a request from
   // outside cannot choose its own id or claim a parent.
   const internal = url.pathname.startsWith("/_bynk/call/");
+  const started = now();
   const record: TraceRecord = {
     id: (internal ? request.headers.get(TRACE_REQUEST_HEADER) : null) ?? globalThis.crypto.randomUUID(),
+    started,
     parent: internal ? request.headers.get(TRACE_PARENT_HEADER) : null,
     last: undefined,
     steps: [],
     truncated: false,
     fault: null,
   };
-  const started = now();
   const flush = (status: number): void => {
     globalThis.console.log(
       TRACE_PREFIX +

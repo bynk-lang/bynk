@@ -1,0 +1,105 @@
+context demo.hooks
+
+---
+#3975: wire names. A field, a variant and a payload field are known by their `@name` on the wire,
+and by their own name in Bynk. A sum's `@discriminator` names the key that carries the variant.
+---
+type Charge = {
+	id: String,
+	@name("amount_captured") captured: Int,
+	@name("content-type") contentType: String,
+	@name("x-request-id") requestId: Option[String],
+}
+
+@discriminator("type")
+type Hook =
+	| @name("charge.succeeded") ChargeSucceeded(data: Charge)
+	| @name("charge.refunded") ChargeRefunded(@name("object") body: Charge)
+	| Ping
+
+type Action = enum { @name("opened") Opened, @name("closed") Closed }
+
+---
+A request-shaped record keeps working: its wire names are its keys on every boundary now.
+---
+type Box = {
+	@name("box-id") id: Int,
+}
+
+fn captured(s: String) -> Int {
+	match Json.decode[Charge](s) {
+		Ok(c) => c.captured,
+		Err(_) => -1,
+	}
+}
+
+fn contentType(s: String) -> String {
+	match Json.decode[Charge](s) {
+		Ok(c) => c.contentType,
+		Err(_) => "<undecodable>",
+	}
+}
+
+fn requestId(s: String) -> Option[String] {
+	match Json.decode[Charge](s) {
+		Ok(c) => c.requestId,
+		Err(_) => Some("<undecodable>"),
+	}
+}
+
+fn errorPath(s: String) -> String {
+	match Json.decode[Charge](s) {
+		Ok(_) => "<ok>",
+		Err(e) => e.path,
+	}
+}
+
+fn describe(s: String) -> String {
+	match Json.decode[Hook](s) {
+		Ok(h) => match h {
+			ChargeSucceeded(d) => "succeeded \(d.id)",
+			ChargeRefunded(b) => "refunded \(b.id)",
+			Ping => "ping",
+		},
+		Err(_) => "<undecodable>",
+	}
+}
+
+fn action(s: String) -> String {
+	match Json.decode[Action](s) {
+		Ok(a) => match a {
+			Opened => "Opened",
+			Closed => "Closed",
+		},
+		Err(_) => "<undecodable>",
+	}
+}
+
+fn sample() -> Charge {
+	Charge {
+		id: "ch_1",
+		captured: 700,
+		contentType: "text/plain",
+		requestId: None,
+	}
+}
+
+fn encodedCharge() -> String {
+	Json.encode(sample())
+}
+
+fn encodedHook() -> String {
+	Json.encode(ChargeRefunded(sample()))
+}
+
+fn encodedPing() -> String {
+	Json.encode(Ping)
+}
+
+fn encodedAction() -> String {
+	Json.encode(Opened)
+}
+
+fn encodedBox() -> String {
+	Json.encode(Box { id: 3 })
+}

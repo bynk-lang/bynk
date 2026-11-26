@@ -40,10 +40,10 @@ pub(crate) use admin::INSPECT_PREFIX;
 use admin::{admin_routes, inspect_registry_export};
 use call::{FOREIGN_CALLERS, call_dispatch};
 use events::events_delivery_route;
+pub(crate) use field_specs::{enum_wire_names, query_leaf_kind, record_field_specs};
 pub use field_specs::{
     field_spec_source, form_body_specs, renamed_specs_source, table_has_plain_json,
 };
-pub(crate) use field_specs::{query_leaf_kind, record_field_specs};
 use http::{collect_http_routes, emit_http_route_dispatch};
 use http_policy::{
     CorsService, PathMethods, SecurityService, build_cors_services, build_path_method_table,

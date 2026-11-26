@@ -498,7 +498,7 @@ fn field_text(f: &WireField) -> String {
         .as_ref()
         .map(|(e, _)| format!(" = {}", bynk_fmt::expr_to_string(e)))
         .unwrap_or_default();
-    format!("`{}`: {}{default}", f.name, ref_text(&f.shape))
+    format!("`{}`: {}{default}", f.key, ref_text(&f.shape))
 }
 
 /// A boundary type's body: a scalar or sum leads on the type's line; a record
@@ -538,7 +538,7 @@ fn body_lines(body: &WireBody) -> Vec<String> {
                 let payload = v
                     .payload
                     .iter()
-                    .map(|f| format!("{}: {}", f.name, ref_text(&f.shape)))
+                    .map(|f| format!("{}: {}", f.key, ref_text(&f.shape)))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let payload = if payload.is_empty() {
@@ -546,7 +546,7 @@ fn body_lines(body: &WireBody) -> Vec<String> {
                 } else {
                     format!("({payload})")
                 };
-                lines.push(format!("  - `{}`{payload}", v.name));
+                lines.push(format!("  - `{}`{payload}", v.wire_name));
             }
             lines
         }

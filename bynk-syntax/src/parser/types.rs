@@ -90,6 +90,78 @@ impl<'a> Parser<'a> {
         Ok(out)
     }
 
+    /// #3975: zero or more `@name(args)` annotations at the current position.
+    pub(crate) fn parse_leading_annotations(&mut self) -> Result<Vec<Annotation>, CompileError> {
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            annotations.push(self.parse_annotation()?);
+        }
+        Ok(annotations)
+    }
+
+    /// #3975: whether the item at the cursor is a `type`: the keyword itself, or annotations (and
+    /// then an optional `private`) before it. Reads ahead over each `@name(args)` by its brackets.
+    pub(crate) fn leads_type_item(&self) -> bool {
+        let kind = |i: usize| self.nth(i).map(|t| t.kind);
+        let mut i = 0;
+        loop {
+            match kind(i) {
+                Some(TokenKind::Type) => return true,
+                Some(TokenKind::At) => {
+                    i += 2;
+                    if kind(i) == Some(TokenKind::LParen) {
+                        let mut depth = 0;
+                        loop {
+                            match kind(i) {
+                                Some(TokenKind::LParen) => depth += 1,
+                                Some(TokenKind::RParen) => {
+                                    depth -= 1;
+                                    if depth == 0 {
+                                        i += 1;
+                                        break;
+                                    }
+                                }
+                                None => return false,
+                                _ => {}
+                            }
+                            i += 1;
+                        }
+                    }
+                }
+                Some(TokenKind::Ident)
+                    if i > 0 && self.nth(i).is_some_and(|t| self.slice(t.span) == "private") =>
+                {
+                    i += 1;
+                }
+                _ => return false,
+            }
+        }
+    }
+
+    /// #3975: a type declaration at item position, after its annotations when it has them
+    /// (`@discriminator("type") private type E = …`). `allow_private` is whether the unit may
+    /// declare a `private` type, as for the modifier before the annotations.
+    pub(crate) fn parse_type_decl_at_item(
+        &mut self,
+        allow_private: bool,
+    ) -> Result<TypeDecl, CompileError> {
+        if self.peek_kind() != Some(TokenKind::At) {
+            return self.parse_type_decl();
+        }
+        let annotations = self.parse_leading_annotations()?;
+        let private = self.take_private_modifier(allow_private)?;
+        let mut decl = self.parse_type_decl()?;
+        if let Some(first) = annotations.first() {
+            decl.span = first.span.merge(decl.span);
+        }
+        decl.annotations = annotations;
+        if let Some(sp) = private {
+            decl.private = Some(sp);
+            decl.span = sp.merge(decl.span);
+        }
+        Ok(decl)
+    }
+
     pub(crate) fn parse_type_decl(&mut self) -> Result<TypeDecl, CompileError> {
         let kw = self.expect(TokenKind::Type, "to start a type declaration")?;
         let name = self.expect_ident("after `type`")?;
@@ -185,6 +257,7 @@ impl<'a> Parser<'a> {
             derives,
             derives_kw,
             documentation: None,
+            annotations: Vec::new(),
             span: kw.span.merge(end_span),
             trivia: Trivia::default(),
             private: None,
@@ -258,10 +331,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn parse_record_field(&mut self) -> Result<RecordField, CompileError> {
         // #3343: annotations before the field name.
-        let mut annotations = Vec::new();
-        while self.peek_kind() == Some(TokenKind::At) {
-            annotations.push(self.parse_annotation()?);
-        }
+        let annotations = self.parse_leading_annotations()?;
         let name = self.expect_label("as a record field name")?;
         self.expect(TokenKind::Colon, "after the field name")?;
         let type_ref = self.parse_type_ref("as the field type")?;
@@ -360,6 +430,8 @@ impl<'a> Parser<'a> {
             let (lead, documentation) = self.collect_member_lead(TokenKind::RBrace);
             leading.extend(lead);
             let bar = self.expect(TokenKind::Pipe, "to start a sum variant")?;
+            // #3975: annotations between the `|` and the variant name.
+            let annotations = self.parse_leading_annotations()?;
             let name = self.expect_variant_name("after `|` in a sum variant")?;
             let mut payload = Vec::new();
             let mut end_span = name.span;
@@ -391,6 +463,7 @@ impl<'a> Parser<'a> {
                 None
             };
             variants.push(Variant {
+                annotations,
                 name,
                 payload,
                 span: v_span,
@@ -497,10 +570,14 @@ impl<'a> Parser<'a> {
                 eq_line = leading;
                 break;
             }
+            let annotations = self.parse_leading_annotations()?;
             let name = self.expect_variant_name("as an enum tag name")?;
-            let span = name.span;
+            let span = annotations
+                .first()
+                .map_or(name.span, |a| a.span.merge(name.span));
             let comma = self.eat(TokenKind::Comma);
             variants.push(Variant {
+                annotations,
                 name,
                 payload: Vec::new(),
                 span,
@@ -532,6 +609,8 @@ impl<'a> Parser<'a> {
     /// with the lead, and `bynk fmt`'s comment-loss guard refuses rather than
     /// lose it.
     fn parse_variant_field(&mut self) -> Result<VariantField, CompileError> {
+        // #3975: annotations before the payload field name.
+        let annotations = self.parse_leading_annotations()?;
         let name = self.expect_label("as a variant payload field name")?;
         self.expect(TokenKind::Colon, "after the variant payload field name")?;
         let type_ref = self.parse_type_ref("as the variant payload field type")?;
@@ -552,8 +631,12 @@ impl<'a> Parser<'a> {
                  field, or hold the optional values in a record with defaults",
             ));
         }
-        let span = name.span.merge(type_ref.span());
+        let span = annotations
+            .first()
+            .map_or(name.span, |a| a.span)
+            .merge(type_ref.span());
         Ok(VariantField {
+            annotations,
             name,
             type_ref,
             span,
