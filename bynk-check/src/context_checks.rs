@@ -189,6 +189,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::D1Select { row, .. }) => vec![*row],
         // #4105: a typed Analytics read decodes its rows.
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
+        // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
+        Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -533,7 +535,7 @@ fn walk_expr_for_constraints(
             // reported where they wrote it — at the pattern, below.
             let hidden_record = matches!(&discriminant.kind, ExprKind::Ident(i) if bynk_syntax::ast::is_generated_binding(&i.name))
                 && matches!(
-                    arms.first().map(|a| &a.pattern),
+                    arms.first().map(|a| a.pattern.peel_as()),
                     Some(Pattern::Record { .. })
                 );
             if !hidden_record && let Some(ty) = typed.expr_ty(discriminant.id).as_deref() {
@@ -624,7 +626,9 @@ fn opaque_record_patterns(
                 opaque_record_patterns(a, consumed, top, errors);
             }
         }
-        Pattern::Refined { inner, .. } => opaque_record_patterns(inner, consumed, top, errors),
+        Pattern::Refined { inner, .. } | Pattern::As { inner, .. } => {
+            opaque_record_patterns(inner, consumed, top, errors)
+        }
         Pattern::Wildcard(_)
         | Pattern::Binding(_)
         | Pattern::Literal { .. }

@@ -72,6 +72,12 @@
       "summary": "A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183)."
     }
   ],
+  "as_pattern": [
+    {
+      "code": "bynk.match.as_on_wildcard",
+      "summary": "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable)."
+    }
+  ],
   "base_type": [
     {
       "code": "bynk.parse.expected_base_type",
@@ -1372,6 +1378,10 @@
     {
       "code": "bynk.race.outside_handler",
       "summary": "`a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
+    },
+    {
+      "code": "bynk.types.ai_value_shape",
+      "summary": "`Ai.generateValue[T]` asks the model for a type that has no JSON Schema: one that contains itself, a generic type, or a `Map` with a key that is not a `String` (#4099)."
     },
     {
       "code": "bynk.types.analytics_point_shape",

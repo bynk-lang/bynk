@@ -1169,6 +1169,15 @@ pub fn combine_guards(a: &BTreeSet<String>, b: &BTreeSet<String>) -> BTreeSet<St
     BTreeSet::from([format!("{} || {}", side(a), side(b))])
 }
 
+/// A `_` or a name, however many `as` bindings wrap it (#3971).
+fn plain_catch_all(p: &Pattern) -> bool {
+    match p {
+        Pattern::Wildcard(_) | Pattern::Binding(_) => true,
+        Pattern::As { inner, .. } => plain_catch_all(inner),
+        _ => false,
+    }
+}
+
 /// The constructors a pattern may match, and those it matches whatever
 /// the payload: `Square(n)` must-matches `Square`, `Square(1)` only
 /// may-match it, and a refined `_ where p` may match anything but must
@@ -1188,9 +1197,7 @@ fn pattern_sets(pattern: &Pattern, states: &[String]) -> PatternStates {
                 .position(|s| *s == variant.name)
                 .into_iter()
                 .collect();
-            let irrefutable = bindings
-                .iter()
-                .all(|b| matches!(b.pattern(), Pattern::Wildcard(_) | Pattern::Binding(_)));
+            let irrefutable = bindings.iter().all(|b| plain_catch_all(b.pattern()));
             let must = if irrefutable {
                 may.clone()
             } else {
@@ -1198,6 +1205,8 @@ fn pattern_sets(pattern: &Pattern, states: &[String]) -> PatternStates {
             };
             PatternStates { may, must }
         }
+        // #3971: `as` binds; it never narrows what its pattern matches.
+        Pattern::As { inner, .. } => pattern_sets(inner, states),
         Pattern::Refined { inner, .. } => PatternStates {
             may: pattern_sets(inner, states).may,
             must: BTreeSet::new(),

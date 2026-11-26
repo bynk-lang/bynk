@@ -2453,7 +2453,7 @@ impl Gate<'_> {
                     self.pattern(e);
                 }
             }
-            Pattern::Refined { inner, .. } => self.pattern(inner),
+            Pattern::Refined { inner, .. } | Pattern::As { inner, .. } => self.pattern(inner),
             Pattern::Or(alts, _) => {
                 for a in alts {
                     self.pattern(a);
@@ -4877,28 +4877,33 @@ fn collect_is_pattern_binding_names(pattern: &Pattern, into: &mut HashMap<String
     match pattern {
         Pattern::Variant { bindings, .. } => {
             for b in bindings {
-                if let Pattern::Binding(name) = b.pattern() {
+                if let Some(name) = b.pattern().flat_binder() {
                     into.insert(name.name.clone(), ());
                 }
             }
         }
+        // #3971: an `as` name binds the whole value, then what its pattern binds.
+        Pattern::As { inner, name, .. } => {
+            into.insert(name.name.clone(), ());
+            collect_is_pattern_binding_names(inner, into);
+        }
         Pattern::Record { fields, .. } => {
             for (name, sub) in fields {
-                match sub {
+                match sub.as_ref().map(Pattern::flat_binder) {
                     None => {
                         into.insert(name.name.clone(), ());
                     }
-                    Some(Pattern::Binding(n)) => {
+                    Some(Some(n)) => {
                         into.insert(n.name.clone(), ());
                     }
-                    Some(_) => {}
+                    Some(None) => {}
                 }
             }
         }
         // #2680: a list pattern's elements that are bare names, and its `..rest`.
         Pattern::List { elems, rest, .. } => {
             for e in elems {
-                if let Pattern::Binding(n) = e {
+                if let Some(n) = e.flat_binder() {
                     into.insert(n.name.clone(), ());
                 }
             }

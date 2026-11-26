@@ -546,11 +546,15 @@ pub enum DefaultValue {
         coefficient: String,
         scale: u32,
     },
-    /// A value of the refined type `name` (#3759): its base value, which the checker has
-    /// already found satisfies the refinement. The emitter brands the field that holds it.
-    Refined {
+    /// A value of the refined or opaque type `name` (#3759, #3842): its base value, which the
+    /// checker has already found satisfies the refinement, or is the literal of
+    /// `name.unsafe(<literal>)`. The emitter brands the field that holds it. `opaque` says which:
+    /// test scaffolding brands an opaque value through `name.unsafe(…)` and a refined one with a
+    /// cast, since a refined type has no `unsafe`.
+    Branded {
         name: String,
         value: Box<DefaultValue>,
+        opaque: bool,
     },
     /// A record: every declared field, in declaration order.
     Record(Vec<(String, DefaultValue)>),
@@ -569,16 +573,16 @@ pub enum DefaultValue {
 }
 
 impl DefaultValue {
-    /// Whether the value holds a refined value anywhere (#3759): its field then needs a cast to
-    /// the field's declared type, which brands it.
-    pub fn holds_refined(&self) -> bool {
+    /// Whether the value holds a refined or opaque value anywhere (#3759, #3842): its field then
+    /// needs a cast to the field's declared type, which brands it.
+    pub fn holds_branded(&self) -> bool {
         match self {
-            DefaultValue::Refined { .. } => true,
+            DefaultValue::Branded { .. } => true,
             DefaultValue::Record(fields) | DefaultValue::Sum { fields, .. } => {
-                fields.iter().any(|(_, v)| v.holds_refined())
+                fields.iter().any(|(_, v)| v.holds_branded())
             }
-            DefaultValue::Some(v) | DefaultValue::Ok(v) | DefaultValue::Err(v) => v.holds_refined(),
-            DefaultValue::List(items) => items.iter().any(DefaultValue::holds_refined),
+            DefaultValue::Some(v) | DefaultValue::Ok(v) | DefaultValue::Err(v) => v.holds_branded(),
+            DefaultValue::List(items) => items.iter().any(DefaultValue::holds_branded),
             DefaultValue::Num(_)
             | DefaultValue::Str(_)
             | DefaultValue::Bool(_)
@@ -629,13 +633,19 @@ fn value_in(
                 return Err(DefaultReason::UnresolvedType(id.name.clone()));
             };
             match &decl.body {
-                TypeBody::Refined { base, .. } => Ok(DefaultValue::Refined {
+                TypeBody::Refined { base, .. } => Ok(DefaultValue::Branded {
                     name: id.name.clone(),
                     value: Box::new(base_value(*base, init)?),
+                    opaque: false,
                 }),
                 TypeBody::Opaque { base, .. } => match qualified_call(init) {
+                    // #3842: a value of the opaque type, which its field must be branded as.
                     Some((type_name, "unsafe", [lit])) if type_name == id.name => {
-                        base_value(*base, lit)
+                        Ok(DefaultValue::Branded {
+                            name: id.name.clone(),
+                            value: Box::new(base_value(*base, lit)?),
+                            opaque: true,
+                        })
                     }
                     _ => Err(DefaultReason::from(format!(
                         "an opaque type's default must be `{}.unsafe(<literal>)`",
@@ -780,9 +790,17 @@ mod tests {
         }
     }
     fn refined(name: &str, v: DefaultValue) -> DefaultValue {
-        DefaultValue::Refined {
+        DefaultValue::Branded {
             name: name.to_string(),
             value: Box::new(v),
+            opaque: false,
+        }
+    }
+    fn opaque(name: &str, v: DefaultValue) -> DefaultValue {
+        DefaultValue::Branded {
+            name: name.to_string(),
+            value: Box::new(v),
+            opaque: true,
         }
     }
     fn sum(variant: &str, fields: Vec<(&str, DefaultValue)>) -> DefaultValue {
@@ -838,7 +856,13 @@ mod tests {
             ),
             // #3759: a refined default is marked; the emitter brands the field that holds it.
             ("Age", "3", refined("Age", num("3")), "3"),
-            ("Tok", "Tok.unsafe(\"k\")", text("k"), "\"k\""),
+            // #3842: an opaque value is branded as its field is, like a refined one.
+            (
+                "Tok",
+                "Tok.unsafe(\"k\")",
+                opaque("Tok", text("k")),
+                "\"k\"",
+            ),
             (
                 "Inner",
                 "Inner { }",
@@ -975,11 +999,13 @@ mod tests {
         )
     }
 
-    /// #3759: only a value with a refined part needs its field branded.
+    /// #3759, #3842: only a value with a refined or opaque part needs its field branded.
     #[test]
-    fn holds_refined_finds_a_refined_value_at_any_depth() {
+    fn holds_branded_finds_a_refined_or_opaque_value_at_any_depth() {
         let r = refined("Age", num("3"));
         for v in [
+            opaque("Tok", text("k")),
+            some(opaque("Tok", text("k"))),
             r.clone(),
             some(r.clone()),
             DefaultValue::Err(Box::new(r.clone())),
@@ -987,7 +1013,7 @@ mod tests {
             record(vec![("a", num("1")), ("b", r.clone())]),
             sum("V", vec![("x", r)]),
         ] {
-            assert!(v.holds_refined(), "{v:?}");
+            assert!(v.holds_branded(), "{v:?}");
         }
         for v in [
             num("3"),
@@ -997,7 +1023,7 @@ mod tests {
             record(vec![("a", text("x"))]),
             DefaultValue::EmptyMap,
         ] {
-            assert!(!v.holds_refined(), "{v:?}");
+            assert!(!v.holds_branded(), "{v:?}");
         }
     }
 

@@ -1,0 +1,8 @@
+suite demo.holder {
+  // #3842: built where `Tok` is declared, the omitted default is still a `Tok`.
+
+  case "a record built beside its opaque type takes the default" {
+    expect isK(own().tok)
+    expect isN(own().inner.tok)
+  }
+}

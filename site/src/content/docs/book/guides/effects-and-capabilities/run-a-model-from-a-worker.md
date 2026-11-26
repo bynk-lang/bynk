@@ -175,17 +175,65 @@ An `AiError` is a platform refusal a handler can act on:
 Cloudflare adds error codes over time, so a `match` over `AiError` needs a
 wildcard.
 
+## Ask for structured data
+
+To get a value and not text, name the type you want: `generateValue[T]` gives the model `T`'s JSON
+Schema, asks for JSON that matches it, and decodes the reply as `T`, refinements included. There
+is no prompt to word about the shape, and no reply to strip a code fence from:
+
+```bynk,fragment
+type Severity = enum { Low, Medium, High }
+
+type Triage = {
+	severity: Severity,
+	summary: String where MaxLength(200),
+	tags: List[String],
+}
+
+service triage from http {
+	on POST("/triage") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let request = GenerateRequest {
+			messages: [
+				ChatMessage { role: ChatRole.System, content: "Classify the ticket." },
+				ChatMessage { role: ChatRole.User, content: body },
+			],
+		}
+		let reply <- Ai.generateValue[Triage]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", request)
+		match reply {
+			Ok(triage) => Ok(triage.summary),
+			Err(BadReply(why)) => ServerError(why),
+			Err(_) => ServerError("the assistant is unavailable"),
+		}
+	}
+}
+```
+
+A model does not always follow a schema, so a reply that is not JSON, or does not decode as `T`, is
+`Err(BadReply(why))` and never a fault. `why` names the kind of failure and the path, such as
+`the reply is not a Triage (StructuralMismatch at $.severity)`, and never the model's text, which
+may echo what a user wrote. A model that does not take a schema is refused by the platform, and that
+refusal is the `Err` as it comes (usually `InvalidInput`); Bynk does not fall back to asking in
+prose. The reply is still untrusted: it matched a shape, which does not make it true.
+
 ## Test without the network
 
 A test never reaches Workers AI: every `Ai` operation faults until you stub it,
 and there is no fake model, since a made-up reply would make a test pass for the
-wrong reason:
+wrong reason. `generateValue` is tested through `generate`: stub it with the JSON
+the model answered in `text`, and the case runs the same decode a real reply goes
+through:
 
 ```bynk,fragment
 case "a bad reply is a value the handler matches" {
 	stub Ai.generate(_, _) returns Err(BadReply("generate: the reply has no text `response`"))
 	let r <- ask.POST("/ask", "why?") by Visitor
 	expect r is ServerError("the assistant is unavailable")
+}
+
+case "a structured reply is decoded, and one that is not the shape is a BadReply" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"severity\":\"High\",\"summary\":\"disk full\",\"tags\":[]}", usage: None })
+	let ok <- triage.POST("/triage", "the disk is full") by Visitor
+	expect ok is Ok("disk full")
 }
 
 case "a streamed reply is re-served" {

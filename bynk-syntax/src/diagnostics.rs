@@ -3171,6 +3171,11 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.match.as_on_wildcard",
+        blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
+        example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
+    },
+    Explain {
         code: "bynk.match.refined_pattern_is_range",
         blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
@@ -5874,6 +5879,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
     },
     Explain {
+        code: "bynk.types.ai_value_shape",
+        blurb: "`Ai.generateValue[T]` gives the model `T`'s JSON Schema, so `T` must be a type a schema can describe: records, enums, sums, lists, `Option`, `String`-keyed maps and refined base types. A type that contains itself (a tree whose nodes list their children), a generic type, or a `Map` whose key is not a `String` has no schema, so the call is refused naming the field. Flatten the type, or ask for a flat one and build the nested value yourself.",
+        example: "type Node = { label: String, children: List[Node] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✗ `Node` contains itself\n\ntype Node = { label: String, parent: Option[String] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✓",
+    },
+    Explain {
         code: "bynk.types.analytics_point_shape",
         blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
         example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
@@ -8182,6 +8192,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
+        "bynk.deploy.account_name_conflict",
+        "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
@@ -8246,6 +8260,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.hyperdrive_settings_unreadable",
+        "`[deploy.hyperdrive]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
+    d(
+        "bynk.deploy.hyperdrive_unresolved",
+        "A Hyperdrive binding's connection string or settings did not resolve, so `bynk deploy` stopped before planning. The message names the binding and the variable or setting it needs.",
+    ),
+    d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
@@ -8262,6 +8284,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.pins_unreadable",
+        "`bynk deploy` could not read `bynk.foreign.toml`, the contract hashes each declared foreign caller is pinned at, so it stopped before planning. The message names the problem; fix the file (it is plain TOML) and run again.",
+    ),
+    d(
         "bynk.deploy.preflight_failed",
         "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
     ),
@@ -8274,8 +8300,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
     d(
+        "bynk.deploy.recreate_needs_yes",
+        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` prints the plan but will not apply it without `--yes` (a `--dry-run` only shows it); move the data first, then re-run with `--yes`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_file_passthrough",
+        "A `--secrets-file` was passed through to Wrangler after `--` while the run includes a Worker's first deploy, which uploads its secrets with `bynk deploy`'s own secrets file, so Wrangler would get two. `bynk deploy` stopped before planning; pass the file to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.",
     ),
     d(
         "bynk.deploy.secrets_source_unreadable",
@@ -8284,6 +8318,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.service_name_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_shared",
+        "`--strict-environments` found that the environment shares values with `default`, which the flag forbids. The refusal names the environment; give it values of its own.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_unchecked",
+        "`--strict-environments` could not compare the environment with `default`, because `default` could not be built, so nothing was checked. The refusal names the environment; fix the build and run again.",
     ),
     d(
         "bynk.deploy.unknown_context",
@@ -9524,6 +9566,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
+    warn(dg(
+        "bynk.match.as_on_wildcard",
+        "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable).",
+        &["as_pattern"],
     )),
     warn(dg(
         "bynk.match.refined_pattern_is_range",
@@ -11145,6 +11192,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.transition.not_bool",
         "A transition predicate does not have type `Bool`.",
+    ),
+    dg(
+        "bynk.types.ai_value_shape",
+        "`Ai.generateValue[T]` asks the model for a type that has no JSON Schema: one that contains itself, a generic type, or a `Map` with a key that is not a `String` (#4099).",
+        &["method_call"],
     ),
     dg(
         "bynk.types.analytics_point_shape",
