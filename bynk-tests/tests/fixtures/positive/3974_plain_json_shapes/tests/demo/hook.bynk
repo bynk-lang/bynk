@@ -1,0 +1,61 @@
+---
+#3974: the decoder reads an enum as its variant's name, a `String`-keyed `Map` as an object and an
+`Instant` as an RFC 3339 timestamp, after the tagged forms; plain mode writes them.
+---
+suite demo.hook
+
+case "a webhook body decodes into typed values" {
+  let body = "{\"action\":\"Closed\",\"labels\":{\"bug\":\"red\"},\"created_at\":\"2026-11-22T10:00:00Z\",\"wait\":2000}"
+  match Json.decode[Hook](body) {
+    Ok(h) => {
+      expect h.action == Closed
+      expect h.labels.get("bug") == Some("red")
+      expect h.created_at == Instant.fromEpochMillis(1_795_341_600_000)
+    }
+    Err(_) => expect false
+  }
+}
+
+case "the tagged forms still decode, and win" {
+  let body = "{\"action\":{\"kind\":\"Closed\"},\"labels\":[[\"bug\",\"red\"]],\"created_at\":1795341600000,\"wait\":2000}"
+  expect Json.decode[Hook](body) == Ok(Hook { action: Closed, labels: Map.empty().insert("bug", "red"), created_at: Instant.fromEpochMillis(1_795_341_600_000), wait: Duration.millis(2000) })
+}
+
+case "plain mode writes the external shapes and decodes back" {
+  expect plain(sample()) == "{\"action\":\"Opened\",\"labels\":{\"bug\":\"red\",\"ui\":\"blue\"},\"created_at\":\"2026-11-22T10:00:00.000Z\",\"wait\":2000}"
+  expect Json.decode[Hook](plain(sample())) == Ok(sample())
+}
+
+case "Json.encode is unchanged" {
+  expect Json.encode(sample()) == "{\"action\":{\"kind\":\"Opened\"},\"labels\":[[\"bug\",\"red\"],[\"ui\",\"blue\"]],\"created_at\":1795341600000,\"wait\":2000}"
+}
+
+case "a timestamp needs an offset and a real date" {
+  let no_offset = "{\"action\":\"Opened\",\"labels\":{},\"created_at\":\"2026-11-22T10:00:00\",\"wait\":0}"
+  expect Json.decode[Hook](no_offset).isErr()
+  let bad_date = "{\"action\":\"Opened\",\"labels\":{},\"created_at\":\"2026-02-30T10:00:00Z\",\"wait\":0}"
+  expect Json.decode[Hook](bad_date).isErr()
+}
+
+case "an unknown variant name is refused" {
+  let body = "{\"action\":\"Nope\",\"labels\":{},\"created_at\":0,\"wait\":0}"
+  expect Json.decode[Hook](body).isErr()
+}
+
+case "a sum with a payload variant keeps its object form" {
+  expect Json.encodePlain(Circle(2)) == "{\"kind\":\"Circle\",\"radius\":2}"
+  expect Json.decode[Shape]("\"Dot\"").isErr()
+  expect Json.decode[Shape]("{\"kind\":\"Dot\"}") == Ok(Dot)
+}
+
+case "a refined String key is checked, and another key type keeps pairs" {
+  expect Json.decode[Keyed]("{\"by_slug\":{\"ab\":1},\"by_id\":[[1,\"x\"]]}").isOk()
+  expect Json.decode[Keyed]("{\"by_slug\":{\"a\":1},\"by_id\":[]}").isErr()
+  expect Json.decode[Keyed]("{\"by_slug\":{},\"by_id\":{\"1\":\"x\"}}").isErr()
+}
+
+case "a generic String-keyed map reads an object too" {
+  let want: Map[String, Int] = Map.empty().insert("a", 1).insert("b", 2)
+  expect read_map[Int]("{\"a\":1,\"b\":2}") == Ok(want)
+  expect read_map[Int]("[[\"a\",1]]").isOk()
+}

@@ -121,6 +121,9 @@ export function __serialise_Map_String_Line(value: ReadonlyMap<string, __Commons
 }
 
 export function __deserialise_Map_String_Line(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, __CommonsLine>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Line(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }
@@ -156,6 +159,9 @@ export function __serialise_Map_String_List_Line(value: ReadonlyMap<string, read
 }
 
 export function __deserialise_Map_String_List_Line(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, readonly __CommonsLine[]>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_List_Line(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

@@ -141,6 +141,14 @@ export function __serialise_CounterError(value: CounterError): __JsonValue {
 }
 
 export function __deserialise_CounterError(json: __JsonValue, path: string = "$"): Result<CounterError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Overflow":
+        return Ok({ tag: "Overflow" } as CounterError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
