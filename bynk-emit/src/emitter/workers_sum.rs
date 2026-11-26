@@ -326,6 +326,14 @@ fn sum_bearer_arm(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
                     TsExpr::object(vec![
                         ("tag".to_string(), str_lit(tag.clone())),
                         ("identity".to_string(), member(ident("__id"), "value")),
+                        // #4344: and the verified token's claims, which the arm's second binder reads.
+                        (
+                            "claims".to_string(),
+                            call(
+                                ident("__tokenClaims"),
+                                vec![member(member(ident("__claims"), "value"), "claims")],
+                            ),
+                        ),
                     ]),
                     None,
                 ),

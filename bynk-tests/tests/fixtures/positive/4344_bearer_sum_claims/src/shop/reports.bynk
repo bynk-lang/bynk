@@ -1,0 +1,26 @@
+context shop.reports
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+	// A `Bearer` arm of an actor sum reads its verified claims through a second binder, `c`, beside the
+	// identity. The arm's one-name form, `User(u)`, is unchanged.
+	on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
+		match who {
+			User(u, c) => {
+				let tenant = c.get("tenant").getOrElse("default")
+				Ok("\(u) \(tenant) \(c.has("beta"))")
+			}
+			Visitor => Ok("anonymous")
+		}
+	}
+
+	on GET("/plain") () -> Effect[HttpResult[String]] by who: User | Visitor {
+		match who {
+			User(u) => Ok("user \(u)")
+			Visitor => Ok("anonymous")
+		}
+	}
+}

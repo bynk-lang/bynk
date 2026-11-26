@@ -52,7 +52,8 @@ on GET("/reports") () -> Effect[HttpResult[String]] by a: Admin {
 `has(name)` whether the claim is present. In a test, pass them in the principal:
 `by Admin("root", TokenClaims.of(["tenant: acme"]))`. A claim says what the token asserts, so an
 object-level check (is this report this tenant's?) stays in the handler. See
-[Reading claims](/reference/actors/#reading-claims).
+[Reading claims](/reference/actors/#reading-claims). In an actor sum, a `Bearer` arm reads them with a
+second binder, `User(u, c)`; see [Several kinds of caller](/book/guides/actors/multiple-callers/).
 
 ## The predicate vocabulary
 

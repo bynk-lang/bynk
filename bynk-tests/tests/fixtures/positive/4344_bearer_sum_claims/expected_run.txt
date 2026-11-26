@@ -1,0 +1,2 @@
+# #4344: a Bearer arm of an actor sum reads its verified claims through a second pattern binder.
+passed=8 failed=0

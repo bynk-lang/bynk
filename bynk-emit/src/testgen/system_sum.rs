@@ -42,12 +42,17 @@ impl SumAuth {
         )];
         for (name, cred) in &self.members {
             let set: Vec<TsStmt> = match cred {
+                // #4344: beside the principal's claims (`__claims`, which `sub` and `exp` override).
                 SumCredential::Bearer(secret_read) => vec![assign(
                     auth("authorization"),
                     bearer_token(
-                        object_of(vec![
-                            ("sub", ident("__sub")),
-                            ("exp", binary(TsBinaryOp::Add, now_secs(), num_lit("3600"))),
+                        TsExpr::object_entries(vec![
+                            TsObjectEntry::Spread(ident("__claims")),
+                            TsObjectEntry::prop("sub", ident("__sub")),
+                            TsObjectEntry::prop(
+                                "exp",
+                                binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
+                            ),
                         ]),
                         secret_read.clone(),
                     ),

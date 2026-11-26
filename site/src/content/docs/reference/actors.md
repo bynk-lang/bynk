@@ -240,7 +240,8 @@ body matches on. Each arm runs its own seam, so the cookie arm's cross-site chec
   when clients may hold both, so an explicit token wins over an ambient cookie, and a cross-site
   page cannot succeed through the cookie by attaching a forged token.
 
-An arm's identity is its `identity`, as in any sum. A sum arm does not read `.claims` yet (#4344). Two
+An arm's identity is its `identity`, as in any sum, and a `Bearer` arm reads its verified claims through a
+second binder ([In an actor sum](#in-an-actor-sum)). Two
 cookie members, or two members of one scheme, are still refused (`bynk.actor.duplicate_sum_scheme`), as is
 a refinement in a sum (`bynk.actor.refinement_in_sum`).
 
@@ -283,7 +284,27 @@ read where the token arrives and never kept: a `TokenClaims` can't be a field, o
 cross a call, a message or an agent (`bynk.types.claims_at_boundary`). Read the
 claim you need and keep that `String`. Only the binder of an `Oidc` or a `Bearer`
 actor has `.claims` (not another scheme's, and not a sum's: the binder of `by who: A | B` is the
-resolved arm).
+resolved arm, which reads claims as below).
+
+### In an actor sum
+
+The binder of an actor sum is the resolved arm, so it has no `.claims`. A `Bearer` arm of an `http`
+handler's sum binds the verified claims with a **second pattern binder**, beside its identity:
+
+```bynk,fragment
+on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
+	match who {
+		User(u, c) => Ok("\(u) \(c.get("tenant").getOrElse("default"))")   // c: TokenClaims
+		Visitor => Ok("anonymous")
+	}
+}
+```
+
+The one-name form, `User(u)`, is unchanged, and an arm that binds no claims reads none. The claims are the
+verified token's, as for a lone `Bearer` binder, and a `Visitor` or any other arm has none. Only a `Bearer`
+arm of an `http` sum has the second binder: a second binder on any other arm, or a third on a `Bearer` one,
+is `bynk.types.pattern_arity`. (`Oidc` is refused in a sum, `bynk.actor.oidc_not_in_sum`.) A test supplies the
+claims as the principal's second argument, as for a lone actor: `by User("ada", TokenClaims.of([…]))`.
 
 A claim says what the token asserts, not whose data the handler may touch: an object-level check
 (*is this report this tenant's?*) stays in the handler. See [Who, not whose](#who-not-whose).

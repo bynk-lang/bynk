@@ -5094,20 +5094,35 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             };
             // Clone the payload so the immutable borrow of `ctx.input` (via
             // `expected_variants`) is released before we recurse with `&mut ctx`.
-            let payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            let mut payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            // #4344: a `Bearer` arm of an HTTP actor sum also carries its verified claims, bound by a
+            // second binder, `User(u, c)`. The one-binder form is unchanged.
+            let claims_arm = bindings.len() >= 2
+                && payload.len() == 1
+                && matches!(&*tys.get(ty), Ty::ActorSum(_))
+                && ctx.bearer_sum_arms.contains(&variant.name);
+            if claims_arm {
+                payload.push(("claims".to_string(), tys.intern(Ty::TokenClaims)));
+            }
             if bindings.is_empty() {
                 // Nullary pattern (or "don't bind the payload"): matches the tag.
                 return;
             }
             if payload.is_empty() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
                         "variant `{}` has no payload, but the pattern binds fields",
                         variant.name
                     ),
-                ));
+                );
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "an open arm such as `Visitor` carries no identity and no claims; write it without bindings",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
                 return;
             }
@@ -5147,7 +5162,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                     }
                 }
             } else if bindings.len() != payload.len() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
@@ -5156,7 +5171,14 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                         payload.len(),
                         bindings.len()
                     ),
-                ));
+                );
+                // #4344: only a `Bearer` arm of an http actor sum carries claims beside its identity.
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "an actor-sum arm binds its identity, `User(u)`; only a `Bearer` arm also binds its verified claims, `User(u, c)`",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
             } else {
                 for (b, (_, field_ty)) in bindings.iter().zip(payload.iter()) {

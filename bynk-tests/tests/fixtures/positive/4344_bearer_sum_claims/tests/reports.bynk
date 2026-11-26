@@ -1,0 +1,45 @@
+suite shop.reports {
+	case "the arm reads a string claim and the presence of another" {
+		let r <- api.GET("/who") by User("ada", TokenClaims.of(["tenant: acme", "beta: yes"]))
+		expect r == Ok("ada acme true")
+	}
+
+	case "unit: no claims given reads as none" {
+		let r <- api.GET("/who") by User("ada")
+		expect r == Ok("ada default false")
+	}
+
+	case "the visitor arm is unchanged" {
+		let r <- api.GET("/who") by Visitor
+		expect r == Ok("anonymous")
+	}
+
+	case "the one-name arm is unchanged" {
+		let r <- api.GET("/plain") by User("ada")
+		expect r == Ok("user ada")
+	}
+}
+
+suite shop.reports as integration {
+	case "in process, claims reach the arm" {
+		let r <- api.GET("/who") by User("ada", TokenClaims.of(["tenant: acme"]))
+		expect r == Ok("ada acme false")
+	}
+}
+
+suite shop.reports as system {
+	case "the signed token carries the claims" {
+		let r <- api.GET("/who") by User("ada", TokenClaims.of(["tenant: acme", "beta: yes"]))
+		expect r == Ok("ada acme true")
+	}
+
+	case "at system, a token without the claim reads as none" {
+		let r <- api.GET("/who") by User("ada")
+		expect r == Ok("ada default false")
+	}
+
+	case "at system, the visitor arm is unchanged" {
+		let r <- api.GET("/who") by Visitor
+		expect r == Ok("anonymous")
+	}
+}

@@ -484,6 +484,21 @@ pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     bearer_seam_for(handler, actors)?.binder
 }
 
+/// #4344: the `Bearer` arms of an HTTP handler's actor sum (`by who: User | Visitor`), whose pattern
+/// may bind the verified token's claims beside the identity, `User(u, c)`. Empty for every other
+/// handler. (`Oidc` is refused in a sum, `bynk.actor.oidc_not_in_sum`.)
+pub fn bearer_sum_arms_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return Vec::new();
+    }
+    sum_members_for(handler, actors)
+        .into_iter()
+        .flatten()
+        .filter(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+        .map(|m| m.actor_name)
+        .collect()
+}
+
 /// v0.54: the binder of a cross-context `on call … by c: Caller` handler that
 /// captures a live `CallerId` (the calling context's name, Q7). `None` unless
 /// the handler binds an identity whose contract is `CallerId` — i.e. the

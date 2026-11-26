@@ -700,6 +700,18 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 ));
             }
         }
+        // #4344: a `Bearer` arm of an http actor sum, recorded under a `claimsarm:` key (route,
+        // then actor), so an in-process call gives that arm `claims` beside its identity.
+        for h in &decl.handlers {
+            if let bynk_model::IrHandlerKind::Http { method, path } =
+                bynk_model::lower_handler_kind_ir(&h.kind)
+            {
+                let route = crate::emitter::http_handler_method_name_ir(method, &path);
+                for arm in bynk_check::actors::bearer_sum_arms_for(h, &t.actors) {
+                    out.insert((name.clone(), ["claimsarm", &route, &arm].join(":")));
+                }
+            }
+        }
     }
     out
 }
