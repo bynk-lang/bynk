@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { Vectorize, QueryOptions }
+
+capability Docs = Vectorize @dimensions(32) @metric("cosine")
+
+service probe {
+    on call(vector: List[Float]) -> Effect[Bool] by Caller given Docs {
+        let _ <- Docs.queryValue[()](vector, QueryOptions {})
+        true
+    }
+}

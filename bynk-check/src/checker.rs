@@ -107,6 +107,7 @@ mod response_headers;
 mod string_more;
 mod usefulness;
 mod validation_rule;
+pub mod vector;
 
 use calls::*;
 use expressions::*;
@@ -942,6 +943,14 @@ pub enum Callee {
         aliases: Vec<String>,
         sql: Option<String>,
         span: Span,
+    },
+    /// #4101: `Cap.queryValue[M](vector, options)` or `Cap.getByIdsValue[M](ids)` on a derived
+    /// `Vectorize` instance: the text operation, then each match's metadata read as `meta` on its own.
+    VectorValueRead {
+        cap: String,
+        meta: TyId,
+        /// `getByIdsValue` (over `getByIds`), not `queryValue` (over `query`).
+        by_ids: bool,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so

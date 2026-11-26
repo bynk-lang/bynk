@@ -1199,6 +1199,18 @@ mod tests {
         })
     }
 
+    /// #4101: hovering `Docs.queryValue` shows its signature, the per-match result type included.
+    #[test]
+    fn a_typed_vectorize_read_hovers_with_its_signature() {
+        let src = "context demo.m\n\nconsumes bynk.cloudflare { Vectorize, QueryOptions }\n\ncapability Docs = Vectorize @dimensions(32) @metric(\"cosine\")\n\ntype Meta = { category: String }\n\nservice s {\n  on call() -> Effect[()] by Caller given Docs {\n    let a <- Docs.queryValue[Meta]([], QueryOptions {})\n    ()\n  }\n}\n";
+        let h = hover_at(src, "queryValue", 0).expect("hovers");
+        assert!(
+            h.contains("queryValue[M](vector: List[Float], options: QueryOptions)"),
+            "{h}"
+        );
+        assert!(h.contains("VectorMatchOf[M]"), "{h}");
+    }
+
     /// #3889: the constant named in `from email(Support)` hovers with the address it denotes.
     #[test]
     fn an_email_address_constant_hovers_with_its_address() {

@@ -1,0 +1,39 @@
+suite shop.docs
+
+consumes bynk.cloudflare { Vector, VectorOf }
+
+// #4101: the typed reads round-trip what `upsertValue` writes against the in-memory index; a vector
+// written with metadata of an older shape is an `Err` for that match alone; and a vector with no
+// metadata, or a query that omits it, reads as `None`.
+
+case "typed metadata round-trips through queryValue and getByIdsValue" {
+	let _ <- store.call([VectorOf { id: "a", values: at(1.0), metadata: Some(Meta { category: "faq", year: 2025 }) }, VectorOf { id: "b", values: at(2.0), metadata: Some(Meta { category: "guide", year: 2024 }) }])
+	let q <- categories.call(at(0.0))
+	expect q == Ok(["faq", "guide"])
+	let g <- fetch.call(["b", "a"])
+	expect g == Ok(["guide", "faq"])
+}
+
+case "a stale vector is one Err among the Oks" {
+	let _ <- store.call([VectorOf { id: "a", values: at(1.0), metadata: Some(Meta { category: "faq", year: 2025 }) }])
+	let _ <- raw.call([Vector { id: "old", values: at(2.0), metadata: Some("{\"category\":\"legacy\"}") }, Vector { id: "junk", values: at(3.0), metadata: Some("{\"category\":5,\"year\":\"x\"}") }])
+	let q <- categories.call(at(0.0))
+	expect q == Ok(["faq", "?", "?"])
+	let g <- fetch.call(["old", "a"])
+	expect g == Ok(["?", "faq"])
+}
+
+case "no metadata is None, and a query that omits it gives None" {
+	let _ <- raw.call([Vector { id: "bare", values: at(1.0) }])
+	let q <- categories.call(at(0.0))
+	expect q == Ok(["-"])
+	let _ <- store.call([VectorOf { id: "a", values: at(2.0), metadata: Some(Meta { category: "faq", year: 2025 }) }])
+	let omitted <- omitted.call(at(0.0))
+	expect omitted == Ok(["-", "-"])
+}
+
+case "the text operations still read the metadata as written" {
+	let _ <- store.call([VectorOf { id: "a", values: at(1.0), metadata: Some(Meta { category: "faq", year: 2025 }) }])
+	let g <- fetch.call(["missing"])
+	expect g == Ok([])
+}
