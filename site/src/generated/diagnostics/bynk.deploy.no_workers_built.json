@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.no_workers_built",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` found nothing to deploy: the build produced no Workers, because the project defines no contexts. Add a context, or check `[paths] include` in `bynk.toml`."
+}

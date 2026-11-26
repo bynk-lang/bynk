@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.preflight_failed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list."
+}
