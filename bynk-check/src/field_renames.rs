@@ -22,10 +22,20 @@ pub const STORE_REPLACES_COLLECTION: &str = "bynk.store.replaces_collection";
 
 /// The clauses of one record (a type or an event body).
 pub(crate) fn check_record(body: &RecordBody) -> Vec<CompileError> {
-    let fields: Vec<(&Ident, Option<&Ident>)> = body
+    // #3975: a field is known on the wire, in the lock and in storage by its wire name (its
+    // `@name`, or its own name), so a clause is judged against those names.
+    let keys: Vec<Ident> = body
         .fields
         .iter()
-        .map(|f| (&f.name, f.replaces.as_ref()))
+        .map(|f| Ident {
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
+            span: f.name.span,
+        })
+        .collect();
+    let fields: Vec<(&Ident, Option<&Ident>)> = keys
+        .iter()
+        .zip(&body.fields)
+        .map(|(k, f)| (k, f.replaces.as_ref()))
         .collect();
     check(&fields, "record")
 }

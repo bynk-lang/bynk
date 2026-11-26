@@ -74,7 +74,8 @@ fn snapshot(event: &EventDecl) -> Vec<FieldShape> {
         .fields
         .iter()
         .map(|f| FieldShape {
-            name: f.name.name.clone(),
+            // #3975: an event field is recorded under its wire name, the key a payload carries.
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             ty: canon_type(&f.type_ref),
             default: f.init.is_some(),
             renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),

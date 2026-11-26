@@ -1,0 +1,3 @@
+commons shapes
+
+type Event = { id: String }

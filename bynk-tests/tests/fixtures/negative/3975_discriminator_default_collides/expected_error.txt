@@ -1,0 +1,2 @@
+bynk.types.discriminator_collides
+which is `Event`'s discriminator

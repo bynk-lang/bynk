@@ -224,7 +224,7 @@ pub enum WcBody {
     },
     Sum {
         #[serde(rename = "wireDiscriminant")]
-        wire_discriminant: &'static str,
+        wire_discriminant: String,
         #[serde(rename = "memoryDiscriminant")]
         memory_discriminant: &'static str,
         variants: Vec<WcVariant>,
@@ -234,6 +234,8 @@ pub enum WcBody {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WcField {
     pub name: String,
+    /// #3975: the key the field has on the wire (its `@name`, else `name`).
+    pub key: String,
     pub shape: WcRef,
     #[serde(rename = "pathSegment")]
     pub path_segment: String,
@@ -245,6 +247,9 @@ pub struct WcField {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct WcVariant {
     pub name: String,
+    /// #3975: the value the discriminator takes on the wire (its `@name`, else `name`).
+    #[serde(rename = "wireName")]
+    pub wire_name: String,
     pub payload: Vec<WcField>,
 }
 
@@ -448,6 +453,7 @@ fn wc_ref(r: &WireRef) -> WcRef {
 fn wc_field(f: &WireField) -> WcField {
     WcField {
         name: f.name.clone(),
+        key: f.key.clone(),
         shape: wc_ref(&f.shape),
         path_segment: f.path_segment.clone(),
         default: f
@@ -482,12 +488,13 @@ fn wc_body(b: &WireBody) -> WcBody {
             memory_discriminant,
             variants,
         }) => WcBody::Sum {
-            wire_discriminant,
+            wire_discriminant: wire_discriminant.clone(),
             memory_discriminant,
             variants: variants
                 .iter()
                 .map(|v| WcVariant {
                     name: v.name.clone(),
+                    wire_name: v.wire_name.clone(),
                     payload: v.payload.iter().map(wc_field).collect(),
                 })
                 .collect(),

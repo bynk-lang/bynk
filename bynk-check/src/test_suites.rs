@@ -4230,6 +4230,7 @@ pub fn register_call_record_types(
             resolved.types.insert(
                 name.clone(),
                 Arc::new(TypeDecl {
+                    annotations: Vec::new(),
                     derives: Vec::new(),
                     derives_kw: None,
                     type_params: Vec::new(),
@@ -5429,6 +5430,7 @@ pub fn check_history_binding(
     resolved.types.insert(
         state_name.clone(),
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),
@@ -5455,6 +5457,7 @@ pub fn check_history_binding(
         .map(|h| {
             let hname = h.method_name.as_ref().expect("call handler has a name");
             Variant {
+                annotations: Vec::new(),
                 documentation: None,
                 trivia: Default::default(),
                 name: Ident {
@@ -5465,6 +5468,7 @@ pub fn check_history_binding(
                     .params
                     .iter()
                     .map(|p| VariantField {
+                        annotations: Vec::new(),
                         documentation: None,
                         name: p.name.clone(),
                         type_ref: p.type_ref.clone(),
@@ -5478,6 +5482,7 @@ pub fn check_history_binding(
     resolved.types.insert(
         call_name.clone(),
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),
@@ -5570,6 +5575,7 @@ pub fn check_history_binding(
     resolved.types.insert(
         step_name.clone(),
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),

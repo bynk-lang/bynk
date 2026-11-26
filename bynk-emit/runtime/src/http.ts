@@ -1391,14 +1391,13 @@ export function requestQuerySearch(view: RequestQuery): string {
  *  when every field is absent. A list repeats its key, an `Option` is its value
  *  or nothing, and an enum is its variant's name. Test drivers use it. */
 export function queryString(wire: JsonValue, fields?: readonly QueryField[]): string {
-  wire = renamedWire(wire, fields);
   const params = new URLSearchParams();
   const leaf = (v: JsonValue): string | undefined => {
     if (v === null) return undefined;
     if (typeof v === "object" && !Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      return variantWireName(v);
     }
     return String(v);
   };
@@ -1431,8 +1430,8 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
     return v;
   };
   for (const f of fields) {
-    const value = wire[f.name];
     const key = wireName(f);
+    const value = wire[key];
     if (value === undefined || value === null) continue;
     for (const item of f.list && Array.isArray(value) ? value : [value]) {
       const v = some(item);
@@ -1444,7 +1443,8 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
         const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
         form.append(key, new Blob([bytes], { type: file.contentType }), typeof name === "string" ? name : "");
       } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
-        if (typeof v.kind === "string") form.append(key, v.kind);
+        const name = variantWireName(v);
+        if (name !== undefined) form.append(key, name);
       } else {
         form.append(key, String(v));
       }
@@ -1453,24 +1453,16 @@ export function multipartForm(wire: JsonValue, fields: readonly QueryField[]): F
   return form;
 }
 
+/** #3975: the variant name in a payload-less sum's wire form, `{ "<discriminator>": "Name" }`: the
+ *  object's one value, whatever key the sum's `@discriminator` gave it (`kind` by default). */
+function variantWireName(v: { readonly [key: string]: JsonValue | undefined }): string | undefined {
+  const first = Object.values(v)[0];
+  return typeof first === "string" ? first : undefined;
+}
+
 /** #3343: the key a field is read from and written to on the wire. */
 function wireName(f: QueryField): string {
   return f.wire ?? f.name;
-}
-
-/** #3343: `wire` (a record's JSON form, keyed by field name) with each renamed
- *  field's key replaced by its `@name`, so the writers below emit what the readers
- *  look for. Fields without a rename, and a `fields` that is absent, pass through. */
-function renamedWire(wire: JsonValue, fields?: readonly QueryField[]): JsonValue {
-  if (fields === undefined || typeof wire !== "object" || wire === null || Array.isArray(wire)) {
-    return wire;
-  }
-  const renames = new Map<string, string>();
-  for (const f of fields) if (f.wire !== undefined) renames.set(f.name, f.wire);
-  if (renames.size === 0) return wire;
-  const out: { [key: string]: JsonValue } = {};
-  for (const [name, value] of Object.entries(wire)) out[renames.get(name) ?? name] = value;
-  return out;
 }
 
 /** #2854: how one field of a handler's typed `query` record reads off the wire. */
@@ -1747,7 +1739,7 @@ export function headersObject(
   hideCookie?: string,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const hide = new Set((hidden ?? []).map((h) => h.toLowerCase()));
-  const lowered = fields.map((f) => ({ ...f, wire: wireName(f).toLowerCase() }));
+  const lowered = fields.map((f) => ({ ...f, key: wireName(f), wire: wireName(f).toLowerCase() }));
   const search = new URLSearchParams();
   for (const f of lowered) {
     let raw = hide.has(f.wire) ? null : request.headers.get(f.wire);
@@ -1805,16 +1797,23 @@ export function requestCookiesHeader(view: RequestCookies): string {
 
 /** #3446: the text a typed cookie write gives `value` — the inverse of `fieldsObject`'s leaf
  *  rules, so a cookie the write produces decodes back to the value written: an `Int` its
- *  digits, a `Bool` `true`/`false`, an enum (in memory `{ tag }`) its variant's name, and
+ *  digits, a `Bool` `true`/`false`, an enum (in memory `{ tag }`) its variant's wire name, and
  *  anything else (a `String`, a refined or opaque type over one, a `Decimal` already
  *  rendered) its text. `kind` is the field's `QueryField` kind. */
-export function cookieValue(kind: QueryField["kind"], value: unknown): string {
+export function cookieValue(
+  kind: QueryField["kind"],
+  value: unknown,
+  names?: Readonly<Record<string, string>>,
+): string {
   switch (kind) {
     case "int":
     case "bool":
       return String(value);
-    case "enum":
-      return (value as { readonly tag: string }).tag;
+    case "enum": {
+      // #3975: `names` maps a variant to its `@name` on the wire, when any variant has one.
+      const tag = (value as { readonly tag: string }).tag;
+      return names?.[tag] ?? tag;
+    }
     default:
       return value as string;
   }
@@ -1930,7 +1929,9 @@ function leafValue(kind: QueryField["kind"], raw: string, form: boolean): JsonVa
       }
       return raw === "true" ? true : raw === "false" ? false : raw;
     case "enum":
-      return { kind: raw };
+      // #3975: the text is the variant's wire name, which is how a payload-less sum's codec reads
+      // a bare string (whatever its `@discriminator`); the object form would hard-code the key.
+      return raw;
     default:
       return raw;
   }
@@ -1945,33 +1946,37 @@ export function pathLeaf(kind: QueryField["kind"], raw: string): JsonValue {
 
 function fieldsObject(
   search: URLSearchParams,
-  fields: readonly QueryField[],
+  fields: readonly (QueryField & { readonly key?: string })[],
   prefix: string,
   form: boolean,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const out: Record<string, JsonValue> = {};
   const leaf = (kind: QueryField["kind"], raw: string): JsonValue => leafValue(kind, raw, form);
   for (const f of fields) {
+    // #3975: the record's codec reads each field under its wire key, so that is the key the object
+    // is built under; `key` is the declared spelling where the request is matched another way (a
+    // header's name is matched without case).
+    const key = f.key ?? wireName(f);
     // A browser sends an unfilled input as `name=`: absent, except for a plain
     // `String`, whose `""` the field's own refinements judge.
     const skipEmpty = form && (f.option || f.kind !== "string");
     const values = search.getAll(wireName(f)).filter((v) => !(skipEmpty && v === ""));
     if (values.length === 0) continue;
     if (f.list) {
-      out[f.name] = values.map((v) => leaf(f.kind, v));
+      out[key] = values.map((v) => leaf(f.kind, v));
     } else if (values.length > 1) {
       return {
         ok: false,
         error: {
           kind: "StructuralMismatch",
-          path: `${prefix}.${f.name}`,
+          path: `${prefix}.${key}`,
           expected: "a single value",
           actual: `${values.length} values`,
         },
       };
     } else {
       const v = leaf(f.kind, values[0]);
-      out[f.name] = f.option ? { kind: "Some", value: v } : v;
+      out[key] = f.option ? { kind: "Some", value: v } : v;
     }
   }
   return { ok: true, value: out };
@@ -2053,12 +2058,11 @@ export async function multipartObject(
     if (list === undefined) uploaded.set(name, [value]);
     else list.push(value);
   }
-  // #3343: a rejection names the field the author wrote, not its `@name` wire key.
-  const fieldOf = new Map(fields.map((f) => [wireName(f), f.name] as const));
+  // #3975: a rejection names the field's wire key, as the codec's own error paths do.
   const mismatch = (name: string, expected: string, actual: string): MultipartRead => ({
     ok: false,
     status: 400,
-    error: { kind: "StructuralMismatch", path: `body.${fieldOf.get(name) ?? name}`, expected, actual },
+    error: { kind: "StructuralMismatch", path: `body.${name}`, expected, actual },
   });
   const textFields = fields.filter((f) => f.kind !== "file");
   const fileNames = new Set(fields.filter((f) => f.kind === "file").map(wireName));
@@ -2087,10 +2091,10 @@ export async function multipartObject(
       })),
     );
     if (f.list) {
-      value[f.name] = read.map(() => FILE_PLACEHOLDER);
+      value[wireName(f)] = read.map(() => FILE_PLACEHOLDER);
       files[f.name] = read;
     } else if (read.length === 1) {
-      value[f.name] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
+      value[wireName(f)] = f.option ? { kind: "Some", value: FILE_PLACEHOLDER } : FILE_PLACEHOLDER;
       files[f.name] = f.option ? { tag: "Some", value: read[0] } : read[0];
     } else if (f.option) {
       files[f.name] = { tag: "None" };

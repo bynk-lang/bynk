@@ -212,7 +212,7 @@ pub(crate) fn event_errors(plan: &RenamePlan, event: &EventDecl, key: &str) -> V
             .body
             .fields
             .iter()
-            .find(|f| f.name.name == new)
+            .find(|f| f.wire_name().unwrap_or_else(|| f.name.name.clone()) == new)
             .and_then(|f| f.replaces.as_ref())
             .map(|r| r.span)
     })

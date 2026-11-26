@@ -1,0 +1,4 @@
+commons shapes
+
+@discriminator("type")
+type Event = { id: String }

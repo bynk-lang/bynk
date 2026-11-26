@@ -1705,6 +1705,20 @@ pub fn check_record_in(
 
     // 1b. #2617: check each constant declared in this file — its name, its
     // initialiser's static-ness and type — and the cycles through it.
+    // #3975: the wire names (`@name`, `@discriminator`) this unit's own types declare.
+    crate::wire_names::validate_wire_names(
+        input.commons.items.iter().filter_map(|i| match i {
+            CommonsItem::Type(t) => Some(t),
+            _ => None,
+        }),
+        &input.consts,
+        &mut errors,
+    );
+    for item in &input.commons.items {
+        if let CommonsItem::Event(e) = item {
+            crate::wire_names::validate_record(&e.name.name, &e.body, &input.consts, &mut errors);
+        }
+    }
     let local_consts: Vec<&ConstDecl> = input
         .commons
         .items
@@ -7735,6 +7749,7 @@ mod pure_helper_pins {
     }
     fn refined_decl(name: &str, base: BaseType, refinement: Option<Refinement>) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),
@@ -7752,6 +7767,7 @@ mod pure_helper_pins {
     }
     fn record_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),

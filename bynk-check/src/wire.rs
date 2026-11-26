@@ -215,12 +215,16 @@ pub struct WireScalar {
 /// JSON key order).
 #[derive(Debug, Clone)]
 pub struct WireField {
+    /// The field's Bynk name: the property of the in-memory value, and what every Bynk-side
+    /// reference uses.
     pub name: String,
+    /// #3975: the key the field has on the wire, its `@name` or else its own name. The JSON key
+    /// a codec reads and writes, in OpenAPI and in the generated client.
+    pub key: String,
     pub shape: WireRef,
     /// The JSON path segment this field contributes to a validation error's
-    /// `path` (`` `${path}.<segment>` ``) — equal to `name` today; kept
-    /// distinct because a future field-rename annotation would move the wire
-    /// key without moving the path segment a hover/error should still name.
+    /// `path` (`` `${path}.<segment>` ``): the wire key, so an error names the key the
+    /// sender wrote (`$.amount_captured`).
     pub path_segment: String,
     /// The field's default initialiser, if any, carried as raw AST — its
     /// *wire-JSON literal* rendering is `wire_default_node` (`bynk-emit`,
@@ -235,13 +239,13 @@ pub struct WireField {
     pub predicates: Vec<PredKind>,
     /// #3793: the key this field was renamed from (`new: T replaces old`), read on input when
     /// the field's own key is absent. Empty for a field never renamed and for every sum-variant
-    /// payload field. The value is written under `name` only.
+    /// payload field. The value is written under `key` only.
     pub renamed_from: Vec<String>,
 }
 
 /// #1969: the JSON key a sum value's variant name travels under (`{"kind":
-/// "Circle", …}`). Part of the published wire format, version 1
-/// ([`crate::wire_format`]); the in-memory discriminant is `tag`.
+/// "Circle", …}`) when the sum declares no `@discriminator`. Part of the published wire format,
+/// version 1 ([`crate::wire_format`]); the in-memory discriminant is `tag`.
 pub const WIRE_DISCRIMINANT: &str = "kind";
 
 /// A boundary sum type. The wire and in-memory discriminants are carried
@@ -251,8 +255,9 @@ pub const WIRE_DISCRIMINANT: &str = "kind";
 /// alone is a one-field change if a reviewer objects.
 #[derive(Debug, Clone)]
 pub struct WireSum {
-    /// Always [`WIRE_DISCRIMINANT`].
-    pub wire_discriminant: &'static str,
+    /// The JSON key the variant's name travels under: the sum's `@discriminator` (#3975), else
+    /// [`WIRE_DISCRIMINANT`].
+    pub wire_discriminant: String,
     pub memory_discriminant: &'static str,
     pub variants: Vec<WireVariant>,
 }
@@ -261,7 +266,11 @@ pub struct WireSum {
 /// `switch` arm order).
 #[derive(Debug, Clone)]
 pub struct WireVariant {
+    /// The variant's Bynk name, which the in-memory value's tag carries.
     pub name: String,
+    /// #3975: the value the discriminator takes on the wire, the variant's `@name` or else its
+    /// own name.
+    pub wire_name: String,
     pub payload: Vec<WireField>,
 }
 
@@ -1516,8 +1525,9 @@ fn wire_fields(fields: &[RecordField], types: &HashMap<String, Arc<TypeDecl>>) -
         .iter()
         .map(|f| WireField {
             name: f.name.name.clone(),
+            key: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             shape: wire_ref(&f.type_ref, types),
-            path_segment: f.name.name.clone(),
+            path_segment: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             default: f.init.as_ref().map(|e| (e.clone(), f.type_ref.clone())),
             predicates: field_predicates(f),
             renamed_from: field_renamed_from(f),
@@ -1541,22 +1551,28 @@ pub fn field_predicates(f: &RecordField) -> Vec<PredKind> {
         .unwrap_or_default()
 }
 
-fn wire_sum(body: &SumBody, types: &HashMap<String, Arc<TypeDecl>>) -> WireSum {
+fn wire_sum(
+    body: &SumBody,
+    discriminator: Option<String>,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> WireSum {
     WireSum {
-        wire_discriminant: WIRE_DISCRIMINANT,
+        wire_discriminant: discriminator.unwrap_or_else(|| WIRE_DISCRIMINANT.to_string()),
         memory_discriminant: "tag",
         variants: body
             .variants
             .iter()
             .map(|v| WireVariant {
                 name: v.name.name.clone(),
+                wire_name: v.wire_name().unwrap_or_else(|| v.name.name.clone()),
                 payload: v
                     .payload
                     .iter()
                     .map(|f| WireField {
                         name: f.name.name.clone(),
+                        key: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                         shape: wire_ref(&f.type_ref, types),
-                        path_segment: f.name.name.clone(),
+                        path_segment: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                         // Sum-variant payload fields carry no default in the
                         // surface grammar (`VariantField` has no `init`).
                         default: None,
@@ -1631,7 +1647,7 @@ pub fn wire_type(
         TypeBody::Record(r) => WireBody::Record {
             fields: wire_fields(&r.fields, types),
         },
-        TypeBody::Sum(s) => WireBody::Sum(wire_sum(s, types)),
+        TypeBody::Sum(s) => WireBody::Sum(wire_sum(s, decl.discriminator(), types)),
     };
     Some(WireType {
         name: name.to_string(),

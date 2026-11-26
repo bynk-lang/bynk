@@ -58,7 +58,7 @@ export const api = {
 export function __serialise_Probe(value: Probe): __JsonValue {
   return {
     authorization: __serialise_Option_String(value.authorization),
-    trace: __serialise_Option_String(value.trace),
+    "x-trace": __serialise_Option_String(value.trace),
   };
 }
 
@@ -70,7 +70,7 @@ export function __deserialise_Probe(json: __JsonValue, path: string = "$"): Resu
   const __r_authorization = __deserialise_Option_String(obj["authorization"], `${path}.authorization`);
   if (__r_authorization.tag === "Err") return __r_authorization;
   const __authorization = __r_authorization.value;
-  const __r_trace = __deserialise_Option_String(obj["trace"], `${path}.trace`);
+  const __r_trace = __deserialise_Option_String(obj["x-trace"], `${path}.x-trace`);
   if (__r_trace.tag === "Err") return __r_trace;
   const __trace = __r_trace.value;
   return Ok({ authorization: __authorization, trace: __trace } as Probe);

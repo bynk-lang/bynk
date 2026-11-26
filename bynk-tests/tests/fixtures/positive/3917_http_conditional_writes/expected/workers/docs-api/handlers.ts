@@ -35,7 +35,7 @@ export const api = {
 
 export function __serialise_DocHeaders(value: DocHeaders): __JsonValue {
   return {
-    ifMatch: __serialise_Option_String(value.ifMatch),
+    "if-match": __serialise_Option_String(value.ifMatch),
   };
 }
 
@@ -44,7 +44,7 @@ export function __deserialise_DocHeaders(json: __JsonValue, path: string = "$"):
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_ifMatch = __deserialise_Option_String(obj["ifMatch"], `${path}.ifMatch`);
+  const __r_ifMatch = __deserialise_Option_String(obj["if-match"], `${path}.if-match`);
   if (__r_ifMatch.tag === "Err") return __r_ifMatch;
   const __ifMatch = __r_ifMatch.value;
   return Ok({ ifMatch: __ifMatch } as DocHeaders);
