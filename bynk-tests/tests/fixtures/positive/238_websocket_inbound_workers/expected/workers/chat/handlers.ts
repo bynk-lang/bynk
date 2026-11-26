@@ -220,7 +220,7 @@ export class Room {
     if (__webSocketAuthExpired(__att)) {
       await __webSocketClosing(ws, __att, { code: 1008, reason: "authentication expired", clean: false }, async (__info) => {
         await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId, ...{ env: env as never } });
-      }, "first");
+      });
       return;
     }
     let __raw: string;
