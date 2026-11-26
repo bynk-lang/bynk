@@ -44,7 +44,8 @@ pub fn describe_ws_open_at(source: &str, offset: usize) -> Option<String> {
                      ```js\nnew WebSocket(url, [\"bynk.bearer\", token])\n```\n\n\
                      The `101` response selects `bynk.bearer`, never the token, so a browser keeps \
                      the connection and the credential is not echoed in a header. A missing or bad \
-                     token is `401`; the token offered alone, `[token]`, is `400`.",
+                     token is `401` (unless a `None` member of a sum admits the request); the token offered \
+                     alone, `[token]`, is `400`.",
                 );
                 if let Some(sum) = crate::actor_sum::describe_sum_at(source, offset) {
                     out.push_str("\n\n---\n\n");

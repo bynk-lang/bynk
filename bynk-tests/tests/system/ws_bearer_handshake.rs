@@ -141,6 +141,7 @@ let res = await upgrade(`bynk.bearer, ${good}`);
 assert(res.status === 200 && (await res.text()) === "hosted", "the pair with a valid token is forwarded");
 assert(forwarded.length === 1, "exactly one request reached the Durable Object");
 assert(forwarded[0].open !== null && JSON.parse(forwarded[0].open).identity === "ada", "the verified identity rides along");
+assert(forwarded[0].protocol !== null && forwarded[0].protocol.split(",").map((p) => p.trim()).includes("bynk.bearer"), "the offered marker reaches the Durable Object, which selects it");
 
 // The old single-element form is a 400 naming the pair, and is never forwarded.
 res = await upgrade(good);
@@ -186,8 +187,104 @@ const TSCONFIG_JSON: &str = r#"{
 }
 "#;
 
-#[test]
-fn the_bearer_handshake_offers_the_marker_then_the_token() {
+/// #3900: the actor-sum path (`by who: User | Visitor`). The marker with a valid token forwards the
+/// `User`; the marker with a bad or no token falls through to the `None` member `Visitor`; the old
+/// single-element `[token]` form is still a `400`, even though a catch-all member exists.
+const SUM_DRIVER_TS: &str = r#"
+import worker from "./workers/room/index.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const SECRET = "sum-handshake-secret";
+
+function b64url(s: string): string {
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function sign(payload: Record<string, unknown>, secret: string): Promise<string> {
+  const h = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const p = b64url(JSON.stringify(payload));
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret) as BufferSource,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource));
+  let bin = "";
+  for (const b of sig) bin += String.fromCharCode(b);
+  return `${h}.${p}.${btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+
+const forwarded: { protocol: string | null; who: { tag: string; identity?: string } | null }[] = [];
+const ROOM = {
+  idFromName: (name: string) => ({ toString: () => name }),
+  idFromString: (id: string) => ({ toString: () => id }),
+  get: () => ({
+    fetch: async (req: Request) => {
+      const open = req.headers.get("X-Bynk-Ws-Open");
+      forwarded.push({
+        protocol: req.headers.get("Sec-WebSocket-Protocol"),
+        who: open === null ? null : JSON.parse(open).who ?? null,
+      });
+      return new Response("hosted", { status: 200 });
+    },
+  }),
+};
+const env = { USER_SECRET: SECRET, ROOM };
+
+async function upgrade(protocol: string | null): Promise<Response> {
+  const headers: Record<string, string> = { Upgrade: "websocket", Connection: "Upgrade" };
+  if (protocol !== null) {
+    headers["Sec-WebSocket-Protocol"] = protocol;
+  }
+  return worker.fetch(new Request("https://room.example/?room=lobby", { headers }), env);
+}
+
+const now = Math.floor(Date.now() / 1000);
+const good = await sign({ sub: "ada", exp: now + 3600 }, SECRET);
+
+// A valid pair is forwarded as the User member, with the marker still on the request.
+let res = await upgrade(`bynk.bearer, ${good}`);
+assert(res.status === 200, `a valid pair is forwarded, got ${res.status}`);
+assert(forwarded.length === 1 && forwarded[0].who?.tag === "User", "the verified member is User");
+assert(forwarded[0].who?.identity === "ada", "the User carries the verified identity");
+assert(forwarded[0].protocol !== null && forwarded[0].protocol.split(",").map((p) => p.trim()).includes("bynk.bearer"), "the marker reaches the Durable Object");
+
+// A bad token, a foreign-secret token and no token after the marker fall through to the None member.
+for (const offer of [
+  "bynk.bearer, not.a.jwt",
+  `bynk.bearer, ${await sign({ sub: "ada", exp: now + 3600 }, "another-secret")}`,
+  "bynk.bearer",
+  null,
+] as (string | null)[]) {
+  const before = forwarded.length;
+  res = await upgrade(offer);
+  assert(res.status === 200, `${offer} falls through to Visitor, got ${res.status}`);
+  assert(forwarded.length === before + 1 && forwarded[before].who?.tag === "Visitor", `${offer} resolves to Visitor`);
+  assert(forwarded[before].who?.identity === undefined, "Visitor carries no identity");
+}
+
+// The old single-element form is a 400 naming the pair, never forwarded, never echoing the token.
+const count = forwarded.length;
+res = await upgrade(good);
+assert(res.status === 400, `the old [token] form is a 400, got ${res.status}`);
+const message = await res.text();
+assert(message === 'Offer the subprotocols ["bynk.bearer", <token>]', `the refusal names the pair: ${message}`);
+assert(!message.includes(good), "the refusal never echoes the token");
+assert(forwarded.length === count, "the old form is not forwarded");
+
+console.log("ALL OK");
+"#;
+
+/// Compile `fixture` (a Workers fixture) and run `driver` against its emitted Worker under Node.
+fn drive(fixture_name: &str, driver: &str) {
     let runner = match discover_tsc() {
         Some(r) => r,
         None => {
@@ -210,7 +307,9 @@ fn the_bearer_handshake_offers_the_marker_then_the_token() {
 
     // Compile the chat-room Workers fixture in-process.
     let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/positive/237_websocket_chatroom_workers/src");
+        .join("tests/fixtures/positive")
+        .join(fixture_name)
+        .join("src");
     let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(fixture)
             .target(bynk_check::project_model::BuildTarget::Workers),
@@ -218,7 +317,10 @@ fn the_bearer_handshake_offers_the_marker_then_the_token() {
     .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the chat-room Workers fixture must compile");
 
-    let tmp = std::env::temp_dir().join(format!("bynk-ws-handshake-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!(
+        "bynk-ws-handshake-{fixture_name}-{}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
     for (path, doc) in &out.artefacts.docs {
@@ -231,7 +333,7 @@ fn the_bearer_handshake_offers_the_marker_then_the_token() {
         }
         fs::write(&target_path, doc.text()).unwrap();
     }
-    fs::write(tmp.join("driver.ts"), DRIVER_TS).unwrap();
+    fs::write(tmp.join("driver.ts"), driver).unwrap();
     fs::write(tmp.join("tsconfig.json"), TSCONFIG_JSON).unwrap();
     fs::write(tmp.join("package.json"), "{ \"type\": \"module\" }").unwrap();
 
@@ -245,4 +347,14 @@ fn the_bearer_handshake_offers_the_marker_then_the_token() {
     );
 
     let _ = fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn the_bearer_handshake_offers_the_marker_then_the_token() {
+    drive("237_websocket_chatroom_workers", DRIVER_TS);
+}
+
+#[test]
+fn an_actor_sum_upgrade_resolves_the_pair_first_wins() {
+    drive("3041_ws_open_actor_sum", SUM_DRIVER_TS);
 }
