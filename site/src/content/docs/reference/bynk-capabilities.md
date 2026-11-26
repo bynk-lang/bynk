@@ -117,10 +117,7 @@ Set it as `authorization: Some(token.bearer())`:
 let res <- Fetch.send(Request {
 	method: Get,
 	url: "https://api.example.test/me",
-	contentType: None,
 	authorization: Some(token.bearer()),
-	headers: Map.empty(),
-	body: None,
 })
 ```
 
@@ -329,10 +326,10 @@ type Authorization = opaque String  // made from a Secret: see "The Secret type"
 type Request = {
   method: Method,
   url: String,
-  contentType: Option[String],
-  authorization: Option[Authorization],
-  headers: Map[String, String],
-  body: Option[String],
+  contentType: Option[String] = None,
+  authorization: Option[Authorization] = None,
+  headers: Map[String, String] = Map.empty(),
+  body: Option[String] = None,
 }
 
 type Response = {
@@ -357,19 +354,18 @@ type EventEnvelope = {
 `contentType` and `authorization` are typed slots for the two common request
 headers. `authorization` takes an [`Authorization`](#the-secret-type), which is
 made from a `Secret` (`token.bearer()`, `password.basic("alice")`), so a
-credential never has to be text. Any other header goes in `headers`; a record field has no default, so a
-request that sends none says so with `headers: Map.empty()`:
+credential never has to be text. Any other header goes in `headers`. All four
+optional fields of a `Request` (`contentType`, `authorization`, `headers` and
+`body`) default to `None` or an empty map, so a request that sends none of
+them is just `Request { method: Get, url: "…" }`:
 
 ```bynk,fragment
 let req = Request {
-  method:        Get,
-  url:           "https://api.github.com/repos/bynk-lang/bynk",
-  contentType:   None,
-  authorization: None,
-  headers:       Map.empty()
-                   .insert("user-agent", "bynk-examples/1.0")
-                   .insert("accept", "application/vnd.github+json"),
-  body:          None,
+  method:  Get,
+  url:     "https://api.github.com/repos/bynk-lang/bynk",
+  headers: Map.empty()
+             .insert("user-agent", "bynk-examples/1.0")
+             .insert("accept", "application/vnd.github+json"),
 }
 ```
 
@@ -399,7 +395,7 @@ value, joined with `", "`. That includes `set-cookie`, and there the join is
 lossy: a cookie's `Expires` attribute contains a comma
 (`Expires=Wed, 09 Jun 2027 10:18:14 GMT`), so a joined `set-cookie` cannot be
 split back into its cookies reliably. A `stub Fetch.send(_) returns Ok(Response { … })` in a test
-gives it `headers: Map.empty()` (or the headers the case needs), and an
+gives it `headers: Map.empty()` (or the headers the case needs; a `Response`, unlike a `Request`, has no defaults), and an
 `expect Fetch.send called once with req.headers.get("user-agent") == Some("…")`
 matches on what was sent.
 
@@ -2052,10 +2048,6 @@ service orders from http {
 		let req = Request {
 			method: Get,
 			url: "https://orders.acme.example/v1/orders",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Backend.send(req)
 		match res {
@@ -2206,10 +2198,6 @@ service render from http {
 		let req = Request {
 			method: Get,
 			url: "http://renderer/render",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Renderer.send("tenant-\(tenant)", req)
 		match res {
@@ -2728,14 +2716,7 @@ consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Network) => Effect.pure("network"),
@@ -2756,14 +2737,7 @@ consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Timeout) => Effect.pure("retry later"),
@@ -2860,7 +2834,7 @@ A `Fetch` caller usually needs only `formatQuery`:
 
 ```bynk,fragment
 let q = formatQuery([QueryParam { name: "q", value: term }])
-let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q), contentType: None, authorization: None, headers: Map.empty(), body: None })
+let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q) })
 ```
 
 `Url` is a record in a commons, not a built-in type, so a project's own `Url`

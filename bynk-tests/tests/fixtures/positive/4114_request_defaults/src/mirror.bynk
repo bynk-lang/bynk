@@ -1,0 +1,32 @@
+context mirror
+
+// #4114: a `Request` needs only `method` and `url`. The four optional fields default
+// to `None` and an empty `headers` map, so a bare request sends no extra header and
+// no body; a field written explicitly still overrides its default.
+
+consumes bynk { Fetch, Request, Method }
+
+service probe {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
+		let res <- Fetch.send(Request { method: Get, url: url })
+		match res {
+			Ok(r) => Effect.pure(r.status),
+			Err(_) => Effect.pure(-1),
+		}
+	}
+}
+
+service poster {
+	on call(url: String, body: String) -> Effect[Int] by Caller given Fetch {
+		let res <- Fetch.send(Request {
+			method: Post,
+			url: url,
+			body: Some(body),
+			headers: Map.empty().insert("accept", "text/plain"),
+		})
+		match res {
+			Ok(r) => Effect.pure(r.status),
+			Err(_) => Effect.pure(-1),
+		}
+	}
+}
