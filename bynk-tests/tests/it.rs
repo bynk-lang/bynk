@@ -327,6 +327,8 @@ mod system {
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
     mod bearer_auth;
+    #[path = "bearer_claims_seam.rs"]
+    mod bearer_claims_seam;
     #[path = "behaviour_fixtures.rs"]
     mod behaviour_fixtures;
     #[path = "binding_behaviour.rs"]
