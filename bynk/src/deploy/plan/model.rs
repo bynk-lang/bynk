@@ -55,6 +55,12 @@ use std::path::Path;
 #[derive(Debug, Serialize)]
 pub(crate) struct Plan<'a> {
     environment: &'a str,
+    /// #3797: why the run cannot go ahead, as entries a client reads without matching stderr. A
+    /// plan that is printed with entries here exits non-zero. Always present, so a client reads
+    /// one shape.
+    refusals: Vec<super::Entry>,
+    /// #3797: what the run says about itself but goes ahead with.
+    warnings: Vec<super::Entry>,
     /// Slice 5: every ledger entry this environment no longer declares, by
     /// its ledger key, which is what `--prune` deletes by. Not serialised:
     /// the plan shows [`Plan::shown_orphans`].
@@ -880,6 +886,17 @@ impl<'a> Plan<'a> {
         &self.account_notes
     }
 
+    /// #3797: the refusals and warnings the run found so far, which the JSON plan lists.
+    pub(crate) fn with_report(
+        mut self,
+        refusals: Vec<super::Entry>,
+        warnings: Vec<super::Entry>,
+    ) -> Self {
+        self.refusals = refusals;
+        self.warnings = warnings;
+        self
+    }
+
     /// #3943: what the environment takes from `default`, listed after the plan.
     pub(crate) fn with_shared(mut self, shared: Vec<super::shared::SharedWithDefault>) -> Self {
         self.shared_with_default = shared;
@@ -932,6 +949,8 @@ pub(crate) fn derive_plan<'a>(
     let orphans = find_orphans(lock, environment, resources);
     Plan {
         environment,
+        refusals: Vec::new(),
+        warnings: Vec::new(),
         account_notes: Vec::new(),
         shared_with_default: Vec::new(),
         shown_orphans: orphans.as_named_in(environment),

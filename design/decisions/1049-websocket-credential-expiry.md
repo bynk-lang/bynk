@@ -1,0 +1,15 @@
+# 1049 — A WebSocket connection is closed when its credential expires
+
+- **Status:** Accepted (v0.786.2)
+
+**Context.** The identity is minted once at `on open`, stored in the socket's attachment (`{ connId, identity, args }`) and reused for every later `on message` and `on close`. A connection can live for days, since it survives hibernation, and a Bearer JWT's `exp` was only checked at the upgrade. So a credential kept acting through an open socket indefinitely, long after it expired, which contradicts what `by` promises (ADR 0082): a verified identity before the body runs (#3903).
+
+**Decision A — the runtime closes the connection; the handler does not decide.** Running a handler for a frame sent after the credential expired would act on an identity that is no longer verified. Rejected: an `on expired` hook, which adds a lifecycle event to reach the same outcome.
+
+**Decision B — the expiry stored is the credential's own.** A JWT's `exp` for `Bearer` (and `Oidc` and a cookie's expiry once those are admitted to WebSocket upgrades), stored in the attachment as a number. A credential without one never expires the connection; `None` connections, and a `None` member of an actor sum, are unaffected. For an actor sum the expiry is that of the member that verified.
+
+**Decision C — checked at each frame, not by a timer.** An idle expired connection that sends nothing can do nothing, and Cloudflare answers pings without waking the Durable Object, so a timer would wake hibernating objects only to close sockets that are doing nothing. The check closes with `1008 authentication expired` through the same once-only path as `webSocketClose` (#3902), sending the close first and then running `on close`: the release `on close` performs (removing a held connection) closes the socket with no code, which would otherwise reach the client in place of `1008`, so `on close` runs once with `CloseInfo { code: 1008, reason: "authentication expired", clean: false }`, and the platform's later close for the same socket only replies.
+
+**Decision D — the bound is the Bearer check's.** The connection is expired once `exp < now` with `now` in whole seconds, the comparison `__verifyBearerJwtHs256` makes for an HTTP request with the same token, so a connection is not closed sooner than an HTTP request would be refused.
+
+**Consequences.** Only the expiry is re-checked: a revoked token, or one signed with a secret that has since been rotated, is bounded by its own `exp`. Clients with short-lived tokens reconnect often, which is the point of short-lived tokens: the reference recommends minutes to hours. A connection accepted before this ships has no `exp` in its attachment and is treated as non-expiring until it reconnects. The upgrade forwards `exp` in the trusted `X-Bynk-Ws-Open` header; the DO writes it into the attachment and `webSocketMessage` checks it before decoding the frame. The behavioural proof is a workerd smoke that sends one frame before and one after the expiry; driving the upgrade through the deployed Worker as a `system` case is #3901.

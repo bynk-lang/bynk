@@ -42,6 +42,7 @@ export const Frame = {
 };
 
 export const Gateway = {
+  maxFrame: 1048576,
   async open(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await __makeRoom(roomId).join(deps.identity, connection, deps);
     return undefined;

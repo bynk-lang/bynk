@@ -176,6 +176,65 @@ fn lock(app: &Path) -> String {
     std::fs::read_to_string(app.join("bynk.lock")).unwrap_or_default()
 }
 
+/// `bynk registry init <root>/<dir> --id <id>`, its key at `<root>/<dir>.key`.
+fn init_with_id(root: &Path, dir: &str, id: &str) -> (i32, String, PathBuf) {
+    let reg = root.join(dir);
+    let key = root.join(format!("{dir}.key"));
+    let (code, out) = bynk(
+        root,
+        &root.join("home"),
+        &[
+            "registry",
+            "init",
+            reg.to_str().unwrap(),
+            "--id",
+            id,
+            "--key-out",
+            key.to_str().unwrap(),
+        ],
+    );
+    (code, out, reg)
+}
+
+#[test]
+fn init_accepts_the_first_party_id_bynk() {
+    // #4512: a registry's id is not a `[registries]` key, which is what reserves `bynk`.
+    let root = scratch("init-bynk");
+    let (code, out, reg) = init_with_id(&root, "first-party", "bynk");
+    assert_eq!(code, 0, "{out}");
+    let config = std::fs::read_to_string(reg.join("config.json")).unwrap();
+    assert!(config.contains("\"id\": \"bynk\""), "{config}");
+    assert!(root.join("first-party.key").exists());
+}
+
+#[test]
+fn init_refuses_a_malformed_id_and_names_the_fault() {
+    let root = scratch("init-bad-id");
+    for (n, (id, fault)) in [
+        ("", "is empty"),
+        ("1acme", "start with a lowercase letter"),
+        ("Acme", "start with a lowercase letter"),
+        ("ac me", "can't contain ` `"),
+        ("acme_labs", "did you mean `acme-labs`"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Each case has its own directory, so "nothing is written" is checked independently.
+        let (code, out, reg) = init_with_id(&root, &format!("bad-{n}"), id);
+        assert_ne!(code, 0, "`{id}` must be refused: {out}");
+        assert!(
+            out.contains(&format!("`{id}` isn't a registry id")),
+            "{out}"
+        );
+        assert!(out.contains(fault), "`{id}` should say `{fault}`: {out}");
+        assert!(
+            !reg.join("config.json").exists(),
+            "nothing is written for `{id}`"
+        );
+    }
+}
+
 #[test]
 fn a_registry_package_is_selected_verified_locked_and_run() {
     let root = scratch("e2e");

@@ -8,5 +8,5 @@
   ],
   "example": "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
   "severity": "error",
-  "summary": "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name)."
+  "summary": "A `@name` is not a valid name for where it stands (a cookie or header name that is not a token, or an empty name)."
 }

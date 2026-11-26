@@ -1143,6 +1143,7 @@ pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String
         .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
         .or_else(|| crate::email_fallback::describe_fallback_at(source, offset))
         .or_else(|| crate::field_rename::describe_replaces_at(source, offset))
+        .or_else(|| crate::wire_names::describe_wire_annotation_at(source, offset))
         .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 
@@ -1602,6 +1603,14 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
                 bynk_syntax::ast::TypeBody::Record(r) => {
                     for f in &r.fields {
                         push_refinement(&mut spans, &f.refinement);
+                        // #4502: a field's own annotation (`@index`, `@name("…")`).
+                        for ann in &f.annotations {
+                            spans.push(Span {
+                                file: ann.span.file,
+                                start: ann.span.start,
+                                end: ann.name.span.end,
+                            });
+                        }
                     }
                 }
                 bynk_syntax::ast::TypeBody::Sum(_) => {}
@@ -4137,7 +4146,18 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     }
     // v0.142 (ADR 0165): the request-limits policy, if declared, renders similarly.
     if let Some(limits) = &s.limits {
-        out.push_str(&format!("\tlimits {{ {} }}\n", limits_summary(limits)));
+        // #3905: a WebSocket service's one field is `maxFrame`; the hover says its default and ceiling.
+        let summary = if matches!(s.protocol, ServiceProtocol::WebSocket { .. }) {
+            format!(
+                "maxFrame: {} bytes  // default {}, at most {}",
+                limits.max_frame(),
+                bynk_syntax::ast::DEFAULT_MAX_FRAME,
+                bynk_syntax::ast::MAX_FRAME_CEILING
+            )
+        } else {
+            limits_summary(limits)
+        };
+        out.push_str(&format!("\tlimits {{ {summary} }}\n"));
     }
     // #2858: the response-JSON policy, if declared, renders its mode.
     if let Some(json) = &s.json {
@@ -5979,6 +5999,16 @@ mod tests {
     }
 
     #[test]
+    fn hover_on_a_websocket_service_shows_its_frame_limit_default_and_ceiling() {
+        // #3905
+        let src = "context a\ntype F = { t: String }\nservice live from websocket(in: Bytes, out: F) {\n  limits { maxFrame: 4096 }\n  on open (r: String) -> Effect[()] by v: Visitor { () }\n}\n";
+        let hover = describe_symbol(src, "live").expect("hovers the service");
+        assert!(hover.contains("maxFrame: 4096 bytes"), "{hover}");
+        assert!(hover.contains("default 1048576"), "{hover}");
+        assert!(hover.contains("at most 33554432"), "{hover}");
+    }
+
+    #[test]
     fn hover_on_form_annotation_shows_the_decoding_rule_and_effective_cap() {
         let svc = "context api\ntype Q = { q: String }\nservice api from http {\n  limits { maxBody: 4096 }\n  @form\n  on POST(\"/s\") (body: Q) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(body.q)\n  }\n}\n";
         let hover = describe_handler_annotation_at(svc, svc.find("form").unwrap() + 1)
@@ -6086,6 +6116,17 @@ mod tests {
         // A service with no annotations yields nothing.
         let plain = "context api\nservice api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
         assert!(handler_annotation_token_spans(plain).is_empty());
+    }
+
+    /// #4502: a record field's own annotation (`@index`) is tokenised as a decorator.
+    #[test]
+    fn annotation_token_spans_cover_an_index_field() {
+        let src = "commons shop\n\ntype Signup = { @index plan: String, seats: Int }\n";
+        let texts: Vec<&str> = handler_annotation_token_spans(src)
+            .iter()
+            .map(|s| &src[s.start..s.end])
+            .collect();
+        assert_eq!(texts, ["@index"]);
     }
 
     #[test]

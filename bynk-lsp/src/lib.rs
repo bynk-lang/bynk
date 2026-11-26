@@ -148,6 +148,9 @@ struct Analysis {
     /// and service/agent tables the `bynk/wireContract` request resolves a
     /// handler's boundary shape and cross-context hash against.
     boundary_info: std::collections::HashMap<String, bynk_ide::ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, behind the hover on a written field and a typed read's completion.
+    analytics: std::collections::BTreeMap<String, bynk_ide::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets — backs intra-doc-link resolution in `document_link` and
@@ -1088,6 +1091,7 @@ impl Backend {
                 sequence_info: result.sequence_info,
                 architecture_facts: result.architecture_facts,
                 boundary_info: result.boundary_info,
+                analytics: result.analytics,
                 doc_scope: result.doc_scope,
                 contract_diff: result.contract_diff,
             });
@@ -2660,6 +2664,17 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR))
                 .collect();
+        // #4451: each `{dataset}` placeholder in an Analytics SQL literal, as `keyword` over the string.
+        dt.extend(
+            bynk_ide::analytics_tooling::dataset_token_spans(text)
+                .into_iter()
+                .map(|(s, e)| {
+                    (
+                        bynk_syntax::span::Span::new(s, e),
+                        crate::semantic_tokens::TOK_KEYWORD,
+                    )
+                }),
+        );
         // Constraint names in a bound (`T: Eq`, `where A: Eq`), as `interface`.
         dt.extend(
             crate::symbols::constraint_token_spans(text)
@@ -2692,6 +2707,12 @@ impl Backend {
             bynk_ide::queue_delivery::delivery_keyword_spans(text)
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
+        // #3975: each `@name` / `@discriminator` wire-name annotation, as `decorator`.
+        dt.extend(
+            bynk_ide::wire_names::wire_annotation_token_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR)),
         );
         // #3793: each field `replaces` clause's keyword, as `keyword`.
         dt.extend(
@@ -3451,6 +3472,7 @@ impl LanguageServer for Backend {
                     &a.boundary_info,
                     &a.unit_sources,
                 ),
+                analytics: &a.analytics,
             });
         // #2842: a `matches snapshot` claim hovers with the stored snapshot, read
         // from the project's `snapshots/` folder (or "not yet recorded").
@@ -4101,6 +4123,26 @@ impl LanguageServer for Backend {
             let items = items.into_iter().map(to_completion_item).collect();
             return Ok(Some(CompletionResponse::Array(items)));
         }
+        // #4451: the first argument of `AnalyticsSql.query` / `select` names an `Analytics` instance.
+        if let Some(items) =
+            bynk_ide::analytics_tooling::instance_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #4502: a field-name position of the record an `AnalyticsSql.select[R]` reads offers the
+        // fields its instance was written with.
+        if let Some(a) = self.project_analysis_for(&uri).await
+            && let Some(items) = bynk_ide::analytics_tooling::read_field_candidates_at(
+                &text,
+                offset,
+                files.as_deref(),
+                &a.analytics,
+            )
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
         if completion::in_env_name_position(&text, offset) {
@@ -4198,6 +4240,8 @@ impl LanguageServer for Backend {
         items.extend(fallback_completions(&text, offset, &line_prefix));
         // #3793: `replaces` after a field's type.
         items.extend(field_rename_completions(&line_prefix));
+        // #3975: `@name` before a field or variant, `@discriminator` before a sum's `type`.
+        items.extend(wire_name_completions(&line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
@@ -5870,24 +5914,40 @@ fn cache_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
 /// service-body item start, offer the `limits` section keyword. Both are lexical
 /// (offset-based), mirroring `security_completions`.
 fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    let websocket = completion::in_websocket_service_limits(text, offset);
     if completion::in_limits_field_position(text, offset) {
-        return completion::LIMITS_FIELDS
-            .iter()
-            .map(|(name, doc)| CompletionItem {
-                label: name.to_string(),
-                kind: Some(CompletionItemKind::FIELD),
-                detail: Some((*doc).to_string()),
-                insert_text: Some(format!("{name}: ")),
-                ..Default::default()
-            })
-            .collect();
+        return if websocket {
+            completion::WS_LIMITS_FIELDS
+        } else {
+            completion::LIMITS_FIELDS
+        }
+        .iter()
+        .map(|(name, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ")),
+            ..Default::default()
+        })
+        .collect();
     }
     if completion::in_service_body_item_position(text, offset, line) {
+        let (detail, snippet) = if websocket {
+            (
+                "the frame size limit for this WebSocket service",
+                "limits {\n\tmaxFrame: $0,\n}",
+            )
+        } else {
+            (
+                "request limits for this HTTP service",
+                "limits {\n\tmaxBody: $0,\n}",
+            )
+        };
         return vec![CompletionItem {
             label: "limits".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("request limits for this HTTP service".to_string()),
-            insert_text: Some("limits {\n\tmaxBody: $0,\n}".to_string()),
+            detail: Some(detail.to_string()),
+            insert_text: Some(snippet.to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
@@ -6174,6 +6234,36 @@ fn fallback_completions(text: &str, offset: usize, line: &str) -> Vec<Completion
         }];
     }
     Vec::new()
+}
+
+/// #3975: the wire-name annotations, offered at the `@` that can lead them.
+fn wire_name_completions(line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::wire_names::WirePosition;
+    let (label, detail, doc, snippet) =
+        match bynk_ide::wire_names::in_wire_annotation_position(line) {
+            Some(WirePosition::Member) => (
+                "name",
+                "the key or value this has on the wire",
+                bynk_ide::wire_names::NAME_DOC,
+                "name(\"${1:wireName}\")",
+            ),
+            Some(WirePosition::Item) => (
+                "discriminator",
+                "the key that carries a sum's variant",
+                bynk_ide::wire_names::DISCRIMINATOR_DOC,
+                "discriminator(\"${1:type}\")",
+            ),
+            None => return Vec::new(),
+        };
+    vec![CompletionItem {
+        label: label.to_string(),
+        kind: Some(CompletionItemKind::PROPERTY),
+        detail: Some(detail.to_string()),
+        documentation: Some(Documentation::String(doc.to_string())),
+        insert_text: Some(snippet.to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// #3793: the `replaces` clause, offered after a field's complete type.

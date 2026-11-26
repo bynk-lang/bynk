@@ -1,0 +1,2 @@
+bynk.types.discriminator_bad_arg
+has more than one `@discriminator`

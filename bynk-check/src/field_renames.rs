@@ -17,53 +17,36 @@ use bynk_syntax::error::CompileError;
 /// The code every rule here reports.
 pub const REPLACES_CONFLICT: &str = "bynk.field.replaces_conflict";
 
-/// A collection `store` field cannot be renamed by `replaces`.
-pub const STORE_REPLACES_COLLECTION: &str = "bynk.store.replaces_collection";
-
 /// The clauses of one record (a type or an event body).
 pub(crate) fn check_record(body: &RecordBody) -> Vec<CompileError> {
-    let fields: Vec<(&Ident, Option<&Ident>)> = body
+    // #3975: a field is known on the wire, in the lock and in storage by its wire name (its
+    // `@name`, or its own name), so a clause is judged against those names.
+    let keys: Vec<Ident> = body
         .fields
         .iter()
-        .map(|f| (&f.name, f.replaces.as_ref()))
+        .map(|f| Ident {
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
+            span: f.name.span,
+        })
+        .collect();
+    let fields: Vec<(&Ident, Option<&Ident>)> = keys
+        .iter()
+        .zip(&body.fields)
+        .map(|(k, f)| (k, f.replaces.as_ref()))
         .collect();
     check(&fields, "record")
 }
 
 /// The clauses of one agent's `store` fields.
 pub(crate) fn check_store(agent: &AgentDecl) -> Vec<CompileError> {
-    // A `Map`, `Set`, `Cache` or `Log` keeps every entry under a key of its own that carries the
-    // field's name, so a rename moves storage keys rather than reading an old one. Refused for
-    // every layout: which layout a record is in is not the author's to see.
-    let mut errors: Vec<CompileError> = agent
-        .store_fields
-        .iter()
-        .filter(|f| f.kind.head.name != "Cell")
-        .filter_map(|f| f.replaces.as_ref().map(|old| (f, old)))
-        .map(|(f, old)| {
-            CompileError::new(
-                STORE_REPLACES_COLLECTION,
-                old.span,
-                format!(
-                    "`store {}` is a `{}`, which `replaces` cannot rename",
-                    f.name.name, f.kind.head.name
-                ),
-            )
-            .with_note(
-                "only a `Cell` field is renamed by `replaces`: a collection keeps every entry \
-                 under a storage key of its own that carries the field's name. Keep the \
-                 collection's name, or move its entries with a `migrate from` step into a new \
-                 field",
-            )
-        })
-        .collect();
+    // Every storage kind is renamed by `replaces` (#3793, #4482): a `Cell` is read under its old
+    // key, and a `Map`, `Set`, `Cache` or `Log` has its per-entry keys moved on the first load.
     let fields: Vec<(&Ident, Option<&Ident>)> = agent
         .store_fields
         .iter()
         .map(|f| (&f.name, f.replaces.as_ref()))
         .collect();
-    errors.extend(check(&fields, "agent"));
-    errors
+    check(&fields, "agent")
 }
 
 fn check(fields: &[(&Ident, Option<&Ident>)], owner: &str) -> Vec<CompileError> {

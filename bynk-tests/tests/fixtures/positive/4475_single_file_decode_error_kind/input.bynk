@@ -1,0 +1,21 @@
+commons demo.kind
+
+// #4475: a single-file program reads `e.kind` (a `DecodeErrorKind`), matched and interpolated, with no
+// `uses`: the first-party unit behind the prelude type is merged into the program.
+fn why(s: String) -> String {
+  match Json.decode[Int](s) {
+    Ok(_) => "ok",
+    Err(e) => match e.kind {
+      Malformed => "malformed",
+      StructuralMismatch => "wrong shape",
+      _ => "other: \(e.kind)",
+    },
+  }
+}
+
+fn is_malformed(s: String) -> Bool {
+  match Json.decode[Int](s) {
+    Ok(_) => false,
+    Err(e) => e.kind == Malformed,
+  }
+}

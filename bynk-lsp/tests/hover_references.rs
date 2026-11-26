@@ -140,6 +140,7 @@ fn hover_at(
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((text, offset)),
         path: uri.to_file_path().ok().as_deref(),

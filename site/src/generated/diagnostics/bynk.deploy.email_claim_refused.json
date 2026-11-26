@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.email_claim_refused",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`."
+}

@@ -69,6 +69,67 @@ pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
     }
 }
 
+/// #4475: the single-file counterpart of `add_implicit_uses`. A single-file program has no other
+/// unit to `uses`, so the prelude units it needs are merged into it instead: for each prelude type
+/// ([`bynk_std::PRELUDE_TYPES`]) the program names (or writes a spelling that yields), the items of its
+/// first-party commons are appended to the program's own, parsed with that unit's reserved file id so the
+/// checker still knows them for the prelude type they are (`resolver::is_prelude_type`). The same
+/// table and the same words decide it as in a project, so a new prelude type is one row and its unit, and
+/// a program that mentions none is left alone. A type the program declares itself shadows the prelude's:
+/// that declaration is kept and the unit's of the same name is left out.
+pub fn inline_prelude_units(commons: &mut bynk_syntax::ast::Commons, source: &str) {
+    use bynk_syntax::ast::SourceUnit;
+    let declares = |commons: &bynk_syntax::ast::Commons, name: &str| {
+        commons
+            .items
+            .iter()
+            .any(|item| matches!(item, CommonsItem::Type(t) if t.name.name == name))
+    };
+    let mut reached: Vec<&'static str> = Vec::new();
+    for prelude in PRELUDE_TYPES {
+        if reached.contains(&prelude.unit) || declares(commons, prelude.name) {
+            continue;
+        }
+        if std::iter::once(&prelude.name)
+            .chain(prelude.triggers)
+            .any(|w| mentions_word(source, w))
+        {
+            reached.push(prelude.unit);
+        }
+    }
+    for name in reached {
+        let Some(unit) = crate::firstparty::UNITS.iter().find(|u| u.name == name) else {
+            continue;
+        };
+        let file = crate::project_model::firstparty_file_id(unit);
+        let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+            + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+        let parsed = bynk_syntax::lexer::tokenize_in(unit.source, file)
+            .ok()
+            .and_then(|tokens| {
+                bynk_syntax::parser::parse_unit_with_warnings_from(
+                    &tokens,
+                    unit.source,
+                    &mut next_id,
+                )
+                .ok()
+            });
+        let Some((SourceUnit::Commons(unit_commons), _)) = parsed else {
+            continue;
+        };
+        // A unit's types refer to each other (`ValidationRule` holds a `Bound`), so a program
+        // type that shares a name with any of them keeps the whole unit out: merging the rest
+        // would resolve the unit's own references to the program's type.
+        let clashes = unit_commons
+            .items
+            .iter()
+            .any(|item| matches!(item, CommonsItem::Type(t) if declares(commons, &t.name.name)));
+        if !clashes {
+            commons.items.extend(unit_commons.items);
+        }
+    }
+}
+
 /// The names the `bynk` adapter exports under `kind`, read from its own source,
 /// so a name added there is reached with no second edit. Empty if the source
 /// does not parse (`every_first_party_source_parses` rejects that in CI).
@@ -228,7 +289,77 @@ fn mentions_word(source: &str, word: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{identifier_set, mentions_word};
+    use super::{identifier_set, inline_prelude_units, mentions_word};
+
+    /// The `commons` `source` parsed, then `inline_prelude_units` over it.
+    fn inlined(source: &str) -> bynk_syntax::ast::Commons {
+        let tokens = bynk_syntax::lexer::tokenize(source).expect("lexes");
+        let mut commons = bynk_syntax::parser::parse(&tokens, source).expect("parses");
+        inline_prelude_units(&mut commons, source);
+        commons
+    }
+
+    fn declares(commons: &bynk_syntax::ast::Commons, name: &str) -> bool {
+        commons
+            .items
+            .iter()
+            .any(|i| matches!(i, bynk_syntax::ast::CommonsItem::Type(t) if t.name.name == name))
+    }
+
+    /// #4475: a single-file program that names a prelude type (or yields one) has its unit merged in; one
+    /// that mentions none is left alone.
+    #[test]
+    fn a_single_file_gets_the_units_behind_the_prelude_types_it_names() {
+        let ord =
+            inlined("commons a.b\n\nfn f(a: Int, b: Int) -> Bool {\n  a.compare(b) == Less\n}\n");
+        assert!(declares(&ord, "Ordering"));
+        assert!(!declares(&ord, "ValidationRule") && !declares(&ord, "DecodeErrorKind"));
+        let kind =
+            inlined("commons a.b\n\nfn f(e: DecodeError) -> String {\n  \"\\(e.kind)\"\n}\n");
+        assert!(declares(&kind, "DecodeErrorKind"));
+        let rule =
+            inlined("commons a.b\n\nfn f(e: ValidationError) -> Bool {\n  e.rule == NonEmpty\n}\n");
+        assert!(declares(&rule, "ValidationRule") && declares(&rule, "Bound"));
+        let none = inlined("commons a.b\n\nfn f(n: Int) -> Int {\n  n + 1\n}\n");
+        assert_eq!(
+            none.items.len(),
+            1,
+            "a program that mentions none is left alone"
+        );
+    }
+
+    /// A type of the program's own named like a prelude type keeps its declaration, and the unit's is not
+    /// merged over it.
+    #[test]
+    fn a_single_file_that_declares_the_name_keeps_its_own() {
+        let own = inlined(
+            "commons a.b\n\ntype Ordering = enum { Up, Down }\n\nfn f(a: Int, b: Int) -> Ordering {\n  Up\n}\n",
+        );
+        let n = own
+            .items
+            .iter()
+            .filter(|i| matches!(i, bynk_syntax::ast::CommonsItem::Type(t) if t.name.name == "Ordering"))
+            .count();
+        assert_eq!(n, 1, "one `Ordering`: the program's");
+    }
+
+    /// A program's own `Bound` must not capture the `Bound` inside the merged `ValidationRule`: the
+    /// unit stays out whole, so `ValidationRule` is not declared at all.
+    #[test]
+    fn a_program_type_named_like_another_type_of_the_unit_keeps_the_whole_unit_out() {
+        let out = inlined(
+            "commons a.b\n\ntype Bound = enum { Open, Shut }\n\nfn f(s: String) -> String {\n  match Json.decode[Int](s) {\n    Ok(_) => \"ok\",\n    Err(e) => \"\\(e.rule)\",\n  }\n}\n",
+        );
+        let names: Vec<&str> = out
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                bynk_syntax::ast::CommonsItem::Type(t) => Some(t.name.name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, ["Bound"], "only the program's own type: {names:?}");
+    }
 
     /// #4181: a name counts only as an identifier token, not in prose or a string.
     #[test]

@@ -246,6 +246,7 @@ Type declarations and the type references that appear in signatures.
 
 {{#grammar type_decl}}
 
+Zero or more `@name(args)` **annotations** (#3975), before the optional `private` modifier,
 `type`, a name, an optional `[A, B]` **type-parameter list** (v0.157 — only a
 record or sum body may be generic; a parameter is a name, optionally bounded
 (§4.3.1b), scoped to the declaration), `=`, a type body, and an optional
@@ -256,7 +257,9 @@ only `Ord`. `Eq`, `Key` and `Codable` are derived automatically, so naming one i
 `bynk.types.derives_automatic` (its fix removes it), and any other name is
 `bynk.generics.unknown_constraint`. Every field and payload type of a type that
 derives `Ord` MUST be `Ord` (`bynk.types.derives_field_not_orderable`).
-Well-formedness: §5; the type system: §6.
+The grammar admits any annotation before `type`; the checker admits only
+`@discriminator("…")`, and only on a sum (`bynk.types.annotation_unknown`,
+`bynk.types.discriminator_not_sum`). Well-formedness: §5; the type system: §6.
 
 ### §4.2.2 type_body
 
@@ -308,24 +311,33 @@ keywords here. Well-formedness: §5.
 
 {{#grammar sum_variant}}
 
-A `|`, a constant name, and an optional parenthesised payload. A doc on the lines
-above the `|` documents the variant (#1888); the first variant's doc follows the
-`=`.
+A `|`, zero or more `@name(args)` annotations (#3975), a constant name, and an optional
+parenthesised payload. A doc on the lines above the `|` documents the variant (#1888); the
+first variant's doc follows the `=`. The checker admits only `@name("…")`, the variant's value
+on the wire.
 
 ### §4.2.9 variant_payload_field
 
 {{#grammar variant_payload_field}}
 
-A named field in a sum-variant payload: an identifier, `:`, and a type. A doc on
-the lines above it, inside the parentheses, documents it (#1888).
+A named field in a sum-variant payload: zero or more `@name(args)` annotations (#3975), an
+identifier, `:`, and a type. A doc on the lines above it, inside the parentheses, documents it
+(#1888). The checker admits only `@name("…")`, the field's key on the wire.
+
+### §4.2.9a variant_annotation
+
+{{#grammar _variant_annotation}}
+
+The annotation before a sum variant or an enum tag (#3975), shown as a `store_annotation`: `@`, a
+name, and an optional parenthesised argument list.
 
 ### §4.2.10 enum_type
 
 {{#grammar enum_type}}
 
 `enum` and a brace-delimited list of constant names — a sum type whose variants
-all carry no payload. A doc on the lines above a name documents that variant
-(#1888).
+all carry no payload — each of which may be preceded by `@name(args)` annotations (#3975). A doc
+on the lines above a name documents that variant (#1888).
 
 ```bynk
 type Shape =

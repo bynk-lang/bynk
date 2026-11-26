@@ -10,9 +10,10 @@ use super::shared::{
     SharedWithDefault, comparison_skipped, has_comparable_bindings, shared_bindings,
     shared_constants, strict_refusal, without_deliberate,
 };
+use super::{Entry, Stop, code, refused_report};
 use crate::cloudflare::Wrangler;
 use crate::deploy::LOCK_FILE;
-use crate::deploy::agent_move::checked_agent_moves;
+use crate::deploy::agent_move::{AgentGate, checked_agent_moves};
 use crate::deploy::apply::LedgerWriter;
 use crate::deploy::apply::PlanApply;
 use crate::deploy::apply::apply_plan;
@@ -301,7 +302,21 @@ pub fn run(
 ) -> ExitCode {
     match deploy(tb, project_root, node_floor, opts) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(code) => code,
+        Err(stop) => {
+            // #3797: a client that asked for JSON reads the refusals from the document.
+            if opts.format == DeployFormat::Json && !stop.refusals.is_empty() {
+                print!(
+                    "{}",
+                    refused_report(
+                        &opts.environment,
+                        &stop.order,
+                        &stop.refusals,
+                        &stop.warnings
+                    )
+                );
+            }
+            stop.code
+        }
     }
 }
 
@@ -312,12 +327,12 @@ fn deploy(
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DeployOptions,
-) -> Result<(), ExitCode> {
+) -> Result<(), Stop> {
     preflight(tb, project_root, node_floor, opts)?;
 
     // `_scratch` removes a dry run's build when the run ends (#3796).
     let Some((build_dir, _scratch)) = build_dir_for(project_root, opts.dry_run) else {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     };
     let Some(model) = workers::compile_built(
         project_root,
@@ -327,17 +342,14 @@ fn deploy(
             .environment(&opts.environment),
         bynk_driver::progress::terminal_sink(),
     ) else {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     };
     // Slice 2: every context, ordered — not the one context slice 0 demanded.
     let workers_dir = build_dir.join("workers");
     let available = workers::discover_workers(&workers_dir);
     let selected = match select_workers(opts, project_root, &available) {
         Ok(selected) => selected,
-        Err(e) => {
-            emsg!("bynk: error: {e}");
-            return Err(ExitCode::FAILURE);
-        }
+        Err(entry) => return Err(Stop::error(entry)),
     };
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
@@ -345,14 +357,18 @@ fn deploy(
     let mut resources = match project_resources(&workers_dir, &available, &model) {
         Ok(resources) => resources,
         Err(e) => {
-            emsg!("bynk: error: {e}");
-            return Err(ExitCode::FAILURE);
+            return Err(Stop::error(Entry::new(
+                code::WORKERS_UNREADABLE,
+                e.to_string(),
+            )));
         }
     };
     // #3883: a named environment claims only the addresses `[deploy.email]` maps it to.
     if let Err(e) = crate::deploy::email::claim(&mut resources, &model.layout, &opts.environment) {
-        emsg!("bynk: error: {e}");
-        return Err(ExitCode::FAILURE);
+        return Err(Stop::error(
+            Entry::new(code::EMAIL_CLAIM_REFUSED, e.to_string())
+                .with("environment", opts.environment.as_str()),
+        ));
     }
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
@@ -361,8 +377,10 @@ fn deploy(
     let secret_source = match SecretSource::read(opts) {
         Ok(source) => source,
         Err(e) => {
-            emsg!("bynk: error: {e}");
-            return Err(ExitCode::FAILURE);
+            return Err(Stop::error(Entry::new(
+                code::SECRETS_SOURCE_UNREADABLE,
+                e.to_string(),
+            )));
         }
     };
     let lock_path = project_root.join(LOCK_FILE);
@@ -370,8 +388,13 @@ fn deploy(
     let mut lock = match read_lock(&lock_path) {
         Ok(lock) => lock,
         Err(e) => {
-            emsg!("bynk: error: could not read {}: {e}", lock_path.display());
-            return Err(ExitCode::FAILURE);
+            return Err(Stop::error(
+                Entry::new(
+                    code::LEDGER_UNREADABLE,
+                    format!("could not read {}: {e}", lock_path.display()),
+                )
+                .with("path", lock_path.display().to_string()),
+            ));
         }
     };
 
@@ -395,9 +418,23 @@ fn deploy(
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
-    let Some(moves) = checked_agent_moves(&lock, opts, &resources, &order, &groups) else {
-        return Err(ExitCode::FAILURE);
-    };
+    let agents = checked_agent_moves(&lock, opts, &resources, &order, &groups);
+    agents.eprint();
+    if !agents.may_go_on() {
+        // #3797: the refusals, with what the run knew, for a client that asked for JSON.
+        return Err(Stop {
+            order: order
+                .iter()
+                .map(|worker| deployed_worker_name(&opts.environment, worker))
+                .collect(),
+            refusals: agents.refusals,
+            warnings: agents.warnings,
+            ..Stop::from(ExitCode::FAILURE)
+        });
+    }
+    let AgentGate {
+        moves, warnings, ..
+    } = agents;
 
     check_foreign_pins(project_root, &workers_dir, &order, opts)?;
 
@@ -407,11 +444,11 @@ fn deploy(
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
     if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         emsg!("bynk: error: {message}");
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
@@ -421,7 +458,7 @@ fn deploy(
         secrets_file_passthrough_refusal(&opts.wrangler_args, &order, &lock, &opts.environment)
     {
         colour::eprint(&refusal);
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
 
     // #3319: each `Postgres` binding's connection string is read now, from the
@@ -432,7 +469,7 @@ fn deploy(
     let Some(hyperdrive_wants) =
         hyperdrive::wants_for_run(project_root, &order, &resources, &opts.environment)
     else {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     };
     let plan = derive_plan(
         &order,
@@ -448,11 +485,12 @@ fn deploy(
         &lock,
         Lives::for_plan(&hyperdrive_wants),
     )
-    .checked_against_account();
+    .checked_against_account()
+    .with_report(Vec::new(), warnings);
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
     let Ok(shared) = shared_with_default(project_root, opts, &model, &own_scripts) else {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     };
     let plan = plan.with_shared(shared);
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
@@ -463,7 +501,7 @@ fn deploy(
     // whose objects do not move, so it is only made on an explicit `--yes`.
     if let Some(refusal) = recreate_refusal(&plan, opts.yes) {
         emsg!("bynk: error: {refusal}");
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
 
     let AccountChecked {
@@ -486,10 +524,10 @@ fn deploy(
     // State-migrations S3 (#2248): a deletion is confirmed by name, apart
     // from — and before — the ordinary confirmation.
     if !confirm_destructive(&plan, opts, &lock) {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
     if !confirm(opts.yes) {
-        return Err(ExitCode::FAILURE);
+        return Err(ExitCode::FAILURE.into());
     }
 
     let api = Wrangler::new(&probe.provenance, project_root);
@@ -573,32 +611,43 @@ fn select_workers(
     opts: &DeployOptions,
     project_root: &Path,
     available: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, Entry> {
+    // #3797: the name a refusal is about, for the entries that have one.
+    let not_found = |message: String| {
+        Entry::new(code::CONTEXT_NOT_FOUND, message).with("requested", opts.context.clone())
+    };
     let Some(name) = opts.context.as_deref().filter(|_| opts.by_worker) else {
         let found = workers::select_contexts(available, opts.context.as_slice());
         return found.map_err(|e| match (e, &opts.context) {
             (workers::SelectError::NotFound { .. }, Some(context)) => {
                 match GroupNames::of(project_root).holding(context) {
-                    Some(worker) => format!(
+                    Some(worker) => not_found(format!(
                         "context `{context}` is in Worker `{worker}`, which deploys as a unit: use `--worker {worker}`"
+                    ))
+                    .with("worker", worker),
+                    None => not_found(
+                        workers::SelectError::NotFound {
+                            requested: context.clone(),
+                            available: available.to_vec(),
+                        }
+                        .to_string(),
                     ),
-                    None => workers::SelectError::NotFound {
-                        requested: context.clone(),
-                        available: available.to_vec(),
-                    }
-                    .to_string(),
                 }
             }
-            (e, _) => e.to_string(),
+            // An empty build is no `--context` problem: it has its own code.
+            (e @ workers::SelectError::NoneBuilt, _) => {
+                Entry::new(code::NO_WORKERS_BUILT, e.to_string())
+            }
+            (e, _) => not_found(e.to_string()),
         });
     };
     if available.iter().any(|worker| worker == name) {
         return Ok(vec![name.to_string()]);
     }
-    Err(format!(
+    Err(not_found(format!(
         "no Worker `{name}` was built (available: {})",
         available.join(", ")
-    ))
+    )))
 }
 
 /// #3941 decision H: each `env(…)` constant with its resolved value and where it

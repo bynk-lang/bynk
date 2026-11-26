@@ -67,6 +67,8 @@ mod integration {
     mod contract_hash;
     #[path = "contracts_lock.rs"]
     mod contracts_lock;
+    #[path = "cors_origin_shapes.rs"]
+    mod cors_origin_shapes;
     #[path = "cross_context_nodes.rs"]
     mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
@@ -347,6 +349,8 @@ mod system {
     mod check_warning_reporting_behaviour;
     #[path = "cli_rooting.rs"]
     mod cli_rooting;
+    #[path = "collection_rename_workerd.rs"]
+    mod collection_rename_workerd;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
     #[path = "compatibility_flags_cli.rs"]

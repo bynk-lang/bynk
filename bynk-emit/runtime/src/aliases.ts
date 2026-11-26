@@ -10,13 +10,13 @@ import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBu
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
-import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
+import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { admitQueueBody } from "./queue_admit.ts";
 import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
-import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
+import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
@@ -145,6 +145,7 @@ export {
   multipartForm as __multipartForm,
   multipartMediaTypeMatches as __multipartMediaTypeMatches,
   multipartObject as __multipartObject,
+  moveRenamedEntries as __moveRenamedEntries,
   readStored as __readStored,
   readsLazily as __readsLazily,
   then as __bynkThen,
@@ -212,6 +213,7 @@ export {
   tokenClaims as __tokenClaims,
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
+  webSocketAdmit as __webSocketAdmit,
   webSocketAuthExpired as __webSocketAuthExpired,
   webSocketBearerOffer as __webSocketBearerOffer,
   webSocketBearerProtocol as __webSocketBearerProtocol,

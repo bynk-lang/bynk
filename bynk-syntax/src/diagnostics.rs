@@ -2600,8 +2600,8 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
-        example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The comparison is exact, and a browser sends an origin only as `scheme://host[:port]`: the scheme and host in lower case, no path, query, fragment or trailing slash, and no port that is the scheme's default (`:443` for `https`, `:80` for `http`). An entry in any other shape (`\"https://app.example.com/\"`, `\"https://App.example.com\"`, `\"app.example.com\"`, `\"https://*.example.com\"`) can never equal a header a browser sends, so every request from that site would be refused and nothing would say why; it is refused here, with the form to write instead. There is no subdomain wildcard: list each origin. `\"null\"`, the origin a browser sends from a sandboxed frame, is compared like any other entry (but see `bynk.http.cors_wildcard_credentials`). A constant is checked as the value it was read as, and an `env(…)` constant as the value `bynk.toml` gives it in the environment being built, so a bad value for one environment is refused when that environment is built. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: \"https://app.example.com\" }       // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com/\"] }     // ✗ a browser sends no trailing slash\n\ncors { origins: [\"https://app.example.com\"] }      // ✓",
     },
     Explain {
         code: "bynk.http.cors_not_http",
@@ -2615,8 +2615,8 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
-        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
-        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service. The origin `\"null\"` is refused beside `credentials: true` for the same reason in effect: a browser sends `Origin: null` from a sandboxed frame or a `data:` page, which any other site can create, so naming it admits any page, and the visitor\'s cookies would go to it. Without credentials `\"null\"` is an ordinary entry.",
+        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\", \"null\"], credentials: true }   // ✗ any page can claim `null`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_expose_credentials",
@@ -2796,17 +2796,17 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.limits_invalid_field",
-        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody` and `maxFile` are byte counts, and `maxParts` counts parts. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the three is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
+        blurb: "Every `limits { }` field is a positive `Int` literal: `maxBody`, `maxFile` and a WebSocket service's `maxFrame` are byte counts, and `maxParts` counts parts. `maxFrame` is also at most 33_554_432, Cloudflare's own limit on an inbound message. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the set is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: \"1MB\" }       // ✗ a byte count, not a string\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_048_576 }   // ✓ 1 MiB\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_not_http",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service's routes, and only a `from http` service has routes that take requests, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of an HTTP service's routes, or a WebSocket service's `maxFrame`, and only a `from http` or `from websocket` service has requests or frames to bound, so on a `cron` or other service it is refused. Move it to the service it was meant for, or delete it. The `cors`, `security` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.json_not_http`.",
         example: "type Note = { text: String }\n\nservice jobs from cron {\n    limits { maxBody: 1_000_000 }   // ✗ a schedule takes no request body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }   // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.limits_unknown_field",
-        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
+        blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`; on a `from websocket` service the one field is `maxFrame`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -4939,11 +4939,6 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
     },
     Explain {
-        code: "bynk.store.replaces_collection",
-        blurb: "`store name: Cell[T] replaces old` reads a stored value under its old key. A `Map`, `Set`, `Cache` or `Log` keeps every entry, posting and expiry under a storage key of its own that carries the field's name, so renaming one moves keys rather than reading an old one, and `replaces` does not do that. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
-        example: "store visited: Map[String, Int] replaces seen   // ✗ a `Map` cannot be renamed with `replaces`\n\nstore visited: Cell[Int] replaces seen         // ✓ a `Cell` can",
-    },
-    Explain {
         code: "bynk.store.unique_implies_indexed",
         blurb: "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
         example: "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
@@ -5864,6 +5859,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
     },
     Explain {
+        code: "bynk.types.annotation_unknown",
+        blurb: "A `type` takes `@discriminator(\"…\")` (on a sum), and a sum's variant takes `@name(\"…\")`. Any other annotation in those places would do nothing, so it is refused rather than ignored. Remove it, or use one of the two.",
+        example: "type Shape =\n    | @label(\"round\") Circle(r: Int)    // ✗ not a variant annotation\n    | Square(side: Int)\n\ntype Shape =\n    | @name(\"round\") Circle(r: Int)    // ✓\n    | Square(side: Int)",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -5992,6 +5992,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_bad_arg",
+        blurb: "`@discriminator` names the JSON key that carries a sum's variant, and the compiler reads that key at compile time, so it takes exactly one non-empty string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A sum may carry one `@discriminator`. Write the key as a literal, as in `@discriminator(\"type\")`.",
+        example: "@discriminator(1)    // ✗ not a string literal\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)\n\n@discriminator(\"type\")    // ✓\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)",
+    },
+    Explain {
+        code: "bynk.types.discriminator_collides",
+        blurb: "A sum value is one JSON object: the discriminator key holds the variant's name, and the payload fields are the other keys of the same object. A payload field whose wire name is the discriminator would be written twice. A field's wire name is its `@name`, or its own name when it has none, and the discriminator is `kind` unless the sum has a `@discriminator`. Rename the field with `@name`, or choose another discriminator.",
+        example: "@discriminator(\"type\")\ntype Event =\n    | Created(@name(\"type\") category: String)    // ✗ `type` is the discriminator\n\n@discriminator(\"type\")\ntype Event =\n    | Created(category: String)                    // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_not_sum",
+        blurb: "`@discriminator` names the key that tells a sum's variants apart on the wire. A record, a refined type or an opaque type has no variants, so the annotation would do nothing. Remove it, or put it on the sum.",
+        example: "@discriminator(\"type\")    // ✗ a record has no variants\ntype Event = { id: String }\n\ntype Event = { id: String }    // ✓",
     },
     Explain {
         code: "bynk.types.duplicate_example",
@@ -6131,7 +6146,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_bad_arg",
-        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
+        blurb: "`@name` names the key a field, a sum variant or a variant's payload field has on the wire, and the compiler reads that name at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
         example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\nconst PageKey: String = \"page-size\"\n\ntype Filter = {\n    @name(PageKey) pageSize: Option[Int],       // ✓ a `String` constant bound to a literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
     },
     Explain {
@@ -6141,23 +6156,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_duplicate",
-        blurb: "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+        blurb: "A wire name is the key a reader looks a field up by (or, for a sum variant, the value the discriminator takes), so two fields of one record, two payload fields of one variant, or two variants of one sum cannot share one: both would read the same value. A wire name is the `@name`, or the Bynk name when there is none. A field or variant may also carry only one `@name`. Give each its own name. Names differing only in case are `bynk.types.field_name_case_conflict`.",
         example: "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
     },
     Explain {
         code: "bynk.types.field_name_invalid",
         blurb: "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
         example: "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_not_request_record",
-        blurb: "`@name` renames the key a request reader looks for. Only a record that is the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler is read that way, so on any other record the annotation would do nothing. Remove it, or make the record that parameter. A record used as a JSON body or result may not carry `@name` either: `bynk.types.field_name_record_not_boundary`.",
-        example: "type Plain = {\n    @name(\"x-y\") a: String,    // ✗ `Plain` is not read from a request\n}\n\ntype Plain = {\n    a: String,                // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_record_not_boundary",
-        blurb: "A record with `@name` fields is read off a request by those names, but its JSON form uses the field names, so using it as a JSON body, a result, a store field, an event or a call argument would make the two forms disagree. It may only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter. Use a second record, without `@name`, for the other position.",
-        example: "type Filter = {\n    @name(\"page-size\") pageSize: Option[Int],\n}\n\ntype FilterView = {\n    pageSize: Option[Int],\n}\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[Filter]] by v: Visitor { … }        // ✗\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor { … }    // ✓",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -7286,6 +7291,18 @@ pub const RETIRED: &[Retired] = &[
         ),
     },
     Retired {
+        code: "bynk.types.field_name_not_request_record",
+        last_release: "0.661.1",
+        why: "A wire name (`@name`) is now part of a type's one encoding and legal on a field of any record (#3975), so it is no longer limited to a request record.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
+        code: "bynk.types.field_name_record_not_boundary",
+        last_release: "0.661.1",
+        why: "A record's `@name` fields now name its keys at every boundary (#3975), so the record may be a body, a result, a store field, an event or a call argument.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
         code: "bynk.uses.second_spelling",
         last_release: "0.661.1",
         why: "Every spelling of a used declaration (`Status`, `Y.Status`, `lib.y.Status`) now resolves to the one declaration (#4352), so reading it by a second spelling is no longer an error.",
@@ -8125,9 +8142,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.accept_fresh_agent_unused",
+        "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
+    warn(d(
+        "bynk.deploy.agent_starts_fresh",
+        "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
+    )),
     d(
         "bynk.deploy.asset_path_conflict",
         "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file.",
@@ -8141,16 +8166,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
     ),
     d(
+        "bynk.deploy.context_not_found",
+        "`bynk deploy --context NAME` (or `--worker NAME`) named a context or Worker the build did not produce, or a context that is a member of a `[deploy.workers.<key>]` group, which deploys as a unit (use `--worker <key>`). With `--format json` the plan's `refusals` carries it with the `requested` name.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.contracts_lock_unwritable",
+        "`bynk deploy --accept-compatible-skew` could not write the older contracts it records in `bynk.contracts.lock`, so it stopped before building or pushing anything. Fix the file's permissions or path and run it again. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.contracts_manifest_unreadable",
+        "`bynk deploy` could not read the contracts manifest the build wrote for a Worker (in its directory under `.bynk/deploy/`), so it cannot check the Worker against the live contracts and stopped before pushing anything. Rebuild (`bynk build --target workers`) and run it again. With `--format json` the plan's `refusals` carries it with the `worker`.",
+    ),
+    d(
+        "bynk.deploy.dependency_not_deployed",
+        "`bynk deploy --context NAME` selected a Worker that binds to Workers the ledger has never recorded as deployed in this environment. A Service Binding to a Worker that does not exist fails at upload, so `bynk` stops first: deploy the whole project once to bring the topology up. With `--format json` the plan's `refusals` carries it with the `worker` and its `dependencies`.",
     ),
     d(
         "bynk.deploy.duplicate_hostname",
         "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
     ),
     d(
+        "bynk.deploy.email_claim_refused",
+        "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
+    ),
+    d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
+        "bynk.deploy.env_passthrough_conflict",
+        "`bynk deploy --env NAME` was given a second, contradictory `--env` or `--environment` after `--`, which would reach `wrangler deploy` as two flags and let wrangler's last-wins parsing pick silently while the ledger recorded the other. Pass one or the other. With `--format json` the plan's `refusals` carries it with the `environment` and the conflicting `flag`.",
     ),
     d(
         "bynk.deploy.foreign_contract_skew",
@@ -8161,16 +8210,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.ledger_unreadable",
+        "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.multiple_websocket_members",
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
+    ),
+    d(
+        "bynk.deploy.no_workers_built",
+        "`bynk deploy` found nothing to deploy: the build produced no Workers, because the project defines no contexts. Add a context, or check `[paths] include` in `bynk.toml`.",
     ),
     d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.preflight_failed",
+        "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
+    ),
+    d(
+        "bynk.deploy.project_undeployable",
+        "`bynk deploy` refused the project before preparing anything: its `[deploy.workers]` table does not read, or its build profile checks contracts, which a deployment does not. The message says which. With `--format json` the plan's `refusals` carries it.",
+    ),
+    d(
+        "bynk.deploy.rebuild_failed",
+        "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_source_unreadable",
+        "`bynk deploy` could not read the secrets source named by `--secrets-file` (a malformed or unreadable dotenv-style file), so it stopped before planning rather than fail on a missing secret partway through a run that has already pushed a Worker.",
     ),
     d(
         "bynk.deploy.service_name_conflict",
@@ -8181,6 +8254,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     d(
+        "bynk.deploy.upload_order_cycle",
+        "The Workers a run deploys cannot be ordered, because the Service Bindings between them form a cycle (often through event delivery: a publishing context binds to each subscriber, and a subscriber on the cycle calls back into it). Cloudflare rejects a Worker uploaded before its binding target, so there is no valid upload order; move the services a subscriber calls out of the publishing context. With `--format json` the plan's `refusals` carries it with the `cycle`.",
+    ),
+    d(
         "bynk.deploy.worker_cycle",
         "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
@@ -8188,6 +8265,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.workers_ignored_on_bundle",
         "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",
     )),
+    d(
+        "bynk.deploy.workers_unreadable",
+        "`bynk deploy` could not read what each built Worker declares from its generated `wrangler.toml` and manifests, so it stopped before planning. Rebuild and run it again; the message names the file.",
+    ),
     dg(
         "bynk.detach.in_agent_handler",
         "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",
@@ -9100,11 +9181,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.limits_invalid_field",
-        "A `limits` policy field (`maxBody`) has the wrong value shape.",
+        "A `limits` policy field (`maxBody`, `maxFrame`) has the wrong value shape.",
     ),
     d(
         "bynk.http.limits_not_http",
-        "A `limits { }` policy appears on a service that is not `from http`.",
+        "A `limits { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.limits_unknown_field",
@@ -10534,11 +10615,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
     ),
-    dg(
-        "bynk.store.replaces_collection",
-        "`replaces` renames a `Cell` store field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry the field's name, so it cannot be renamed this way.",
-        &["store_field"],
-    ),
     warn(d(
         "bynk.store.unique_implies_indexed",
         "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning).",
@@ -11040,6 +11116,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     dg(
+        "bynk.types.annotation_unknown",
+        "A type or a sum variant carries an annotation other than `@discriminator(\"…\")` on a type or `@name(\"…\")` on a variant.",
+        &["type_decl", "sum_variant"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11108,6 +11189,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.types.derives_field_not_orderable",
         "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_bad_arg",
+        "A sum's `@discriminator` does not take exactly one non-empty string literal, or a `String` constant bound to one, or there is more than one.",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_collides",
+        "A payload field's wire name is its sum's discriminator.",
+        &["variant_payload_field", "type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_not_sum",
+        "`@discriminator` is on a type that is not a sum.",
         &["type_decl"],
     ),
     dg(
@@ -11207,22 +11303,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.field_name_duplicate",
-        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        "A field, variant or payload field has more than one `@name`, or two fields of a record, two variants of a sum or two payload fields of a variant have the same wire name.",
         &["record_field"],
     ),
     dg(
         "bynk.types.field_name_invalid",
-        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_not_request_record",
-        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_record_not_boundary",
-        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        "A `@name` is not a valid name for where it stands (a cookie or header name that is not a token, or an empty name).",
         &["record_field"],
     ),
     dg(

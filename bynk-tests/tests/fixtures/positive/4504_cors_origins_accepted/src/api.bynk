@@ -1,0 +1,37 @@
+context api
+
+// #4504: each of these is an origin a browser sends, so the policy builds.
+service local from http {
+  // A port is part of the origin.
+  cors { origins: ["http://localhost:8787", "http://127.0.0.1:8787", "http://[::1]:8787"] }
+
+  on GET("/local") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("local")
+  }
+}
+
+service app from http {
+  // Schemes other than `http` and `https` that a browser sends: a Capacitor or Ionic shell.
+  cors { origins: ["capacitor://localhost", "ionic://localhost", "https://app.example.com"] }
+
+  on GET("/app") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("app")
+  }
+}
+
+service open from http {
+  // The wildcard, and `null`, are unchanged without credentials.
+  cors { origins: ["*"] }
+
+  on GET("/open") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("open")
+  }
+}
+
+service sandboxed from http {
+  cors { origins: ["https://app.example.com", "null"] }
+
+  on GET("/sandboxed") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("sandboxed")
+  }
+}

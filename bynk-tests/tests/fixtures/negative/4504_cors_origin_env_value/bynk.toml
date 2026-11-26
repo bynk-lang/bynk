@@ -1,0 +1,9 @@
+[project]
+name = "cors-origin-env-value"
+version = "0.1.0"
+[paths]
+include = ["src", "tests"]
+
+# #4504: a value `bynk.toml` gives the constant is checked as the origin it is.
+[vars]
+APP_ORIGIN = "https://app.example.com/"

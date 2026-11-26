@@ -55,9 +55,11 @@ agent Cart {
 ```
 
 A record stored under `customer` loads as `owner`, and the first commit writes `owner` alone. The lock
-records the rename and the change is additive, so no `migrate from` step is needed. This works for a `Cell`
-field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry its name and is not renamed
-this way (`bynk.store.replaces_collection`).
+records the rename and the change is additive, so no `migrate from` step is needed. This works for every
+storage kind. A `Map`, `Set`, `Cache` or `Log` keeps each entry (and a `Cache`'s expiry, and an index's
+postings) under a storage key that carries its name, so the first load after the deploy moves them to the new
+name, in batches. That move is part of that load, so its cost grows with the collection, and a failure
+part-way leaves each entry under one name for the next load to continue.
 
 ## Rename a field inside a stored record
 

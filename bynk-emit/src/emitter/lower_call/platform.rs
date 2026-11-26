@@ -708,12 +708,14 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         } else {
             value
         };
-        typed_cookie_node(
-            &name,
-            call(ident("__cookieValue"), vec![str_lit(kind), value]),
-            none(),
-            none(),
-        )
+        let mut args = vec![str_lit(kind), value];
+        // #3975: an enum with wire-named variants is written under those names.
+        if kind == "enum"
+            && let Some(names) = crate::emitter::workers_entry::enum_wire_names(leaf, types)
+        {
+            args.push(names);
+        }
+        typed_cookie_node(&name, call(ident("__cookieValue"), args), none(), none())
     })
 }
 
