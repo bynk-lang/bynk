@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(witness_of(&ts, "b"), "__bynkCodecList(__codec_T)");
         assert_eq!(witness_of(&ts, "c"), "__bynkCodecOption(__codec_T)");
         assert!(witness_of(&ts, "d").starts_with("__bynkCodecMap({ encode: "));
-        assert!(witness_of(&ts, "d").ends_with(", __codec_T)"));
+        assert!(witness_of(&ts, "d").ends_with(", __codec_T, true)"));
         assert!(witness_of(&ts, "e").starts_with("__bynkCodecResult(__codec_T, { encode: "));
         for h in [
             "__bynkCodecList",
