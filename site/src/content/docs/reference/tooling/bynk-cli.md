@@ -129,6 +129,15 @@ in. `--dry-run` never installs: it reports what it would install, and with which
 tool. A failed install stops with the tool's error, the command and the
 directory, so it can be run by hand.
 
+## Wrangler telemetry
+
+`bynk dev`, `bynk deploy` and the other commands that run Wrangler leave its own
+settings as they are, so Wrangler may report anonymous usage data to Cloudflare as it
+does when you run it yourself. To turn that off for them, set
+`WRANGLER_SEND_METRICS=false` in the environment (or `send_metrics = false` in a
+Wrangler configuration); Wrangler reads it in the process Bynk starts, which inherits
+it. Bynk's own test suite sets the variable for every Wrangler it starts.
+
 ## Exit codes and diagnostics
 
 A diagnostic's **severity** decides whether it fails a build. An **`Error`**
