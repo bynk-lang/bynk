@@ -170,6 +170,16 @@ export function __serialise_Plan(value: Plan): __JsonValue {
 }
 
 export function __deserialise_Plan(json: __JsonValue, path: string = "$"): Result<Plan, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Free":
+        return Ok({ tag: "Free" } as Plan);
+      case "Pro":
+        return Ok({ tag: "Pro" } as Plan);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

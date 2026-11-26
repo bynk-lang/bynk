@@ -113,6 +113,18 @@ export function __serialise_Rank(value: __ns_demo_shapes.Rank): __JsonValue {
 }
 
 export function __deserialise_Rank(json: __JsonValue, path: string = "$"): Result<__ns_demo_shapes.Rank, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Two":
+        return Ok({ tag: "Two" } as __ns_demo_shapes.Rank);
+      case "Three":
+        return Ok({ tag: "Three" } as __ns_demo_shapes.Rank);
+      case "Jack":
+        return Ok({ tag: "Jack" } as __ns_demo_shapes.Rank);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

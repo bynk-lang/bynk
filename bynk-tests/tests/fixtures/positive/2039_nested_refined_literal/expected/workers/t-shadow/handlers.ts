@@ -180,6 +180,9 @@ export function __serialise_Map_String_t_pay__Cents(value: ReadonlyMap<string, t
 }
 
 export function __deserialise_Map_String_t_pay__Cents(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, t_pay.Cents>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_t_pay__Cents(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

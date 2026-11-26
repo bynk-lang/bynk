@@ -99,6 +99,16 @@ export function __serialise_Light(value: Light): __JsonValue {
 }
 
 export function __deserialise_Light(json: __JsonValue, path: string = "$"): Result<Light, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Red":
+        return Ok({ tag: "Red" } as Light);
+      case "Green":
+        return Ok({ tag: "Green" } as Light);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

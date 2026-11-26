@@ -173,6 +173,18 @@ export function __serialise_Digest(value: Digest): __JsonValue {
 }
 
 export function __deserialise_Digest(json: __JsonValue, path: string = "$"): Result<Digest, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Sha256":
+        return Ok({ tag: "Sha256" } as Digest);
+      case "Sha384":
+        return Ok({ tag: "Sha384" } as Digest);
+      case "Sha512":
+        return Ok({ tag: "Sha512" } as Digest);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -202,6 +214,18 @@ export function __serialise_Signature(value: Signature): __JsonValue {
 }
 
 export function __deserialise_Signature(json: __JsonValue, path: string = "$"): Result<Signature, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Ed25519":
+        return Ok({ tag: "Ed25519" } as Signature);
+      case "EcdsaP256Sha256":
+        return Ok({ tag: "EcdsaP256Sha256" } as Signature);
+      case "RsaPkcs1Sha256":
+        return Ok({ tag: "RsaPkcs1Sha256" } as Signature);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
