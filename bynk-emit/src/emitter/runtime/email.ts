@@ -72,12 +72,30 @@ export interface InboundAttachment {
   readonly inline: boolean;
 }
 
+/** One header occurrence (#3886): its lower-case name and decoded value. */
+export interface EmailHeader {
+  readonly name: string;
+  readonly value: string;
+}
+
 export interface InboundEmail {
   readonly from: string;
   readonly to: string;
   readonly subject: string;
   readonly messageId: string;
+  /** #3886: the message id the sender says this answers (`<id@host>`, as `messageId` is written). */
+  readonly inReplyTo: Option<string>;
+  /** The `References` ids (`<id@host>`), in the message's order. */
+  readonly references: readonly string[];
+  /** Bare `Reply-To` addresses, display names dropped. */
+  readonly replyTo: readonly string[];
+  /** Bare `Cc` addresses, display names dropped. */
+  readonly cc: readonly string[];
+  /** The sender's `Date` in epoch milliseconds: `None` when missing or unreadable. A claim, not the arrival time. */
+  readonly date: Option<number>;
   readonly headers: ReadonlyMap<string, string>;
+  /** Every header occurrence, in order, by lower-case name. */
+  readonly headerList: readonly EmailHeader[];
   readonly text: Option<string>;
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
@@ -111,10 +129,21 @@ interface ParsedAttachment {
   readonly content: unknown;
 }
 
+/** The part of `postal-mime`'s `Address` this module reads: a mailbox, or a group of them. */
+interface ParsedAddress {
+  readonly address?: string;
+  readonly group?: readonly { readonly address?: string }[];
+}
+
 /** The part of `postal-mime`'s `Email` this module reads. */
 interface ParsedEmail {
   readonly subject?: string;
   readonly messageId?: string;
+  readonly inReplyTo?: string;
+  readonly references?: string;
+  readonly replyTo?: readonly ParsedAddress[];
+  readonly cc?: readonly ParsedAddress[];
+  readonly date?: string;
   readonly text?: string;
   readonly html?: string;
   readonly headers: readonly ParsedHeader[];
@@ -345,6 +374,21 @@ function headerMap(headers: readonly ParsedHeader[]): Map<string, string> {
   return map;
 }
 
+/** Bare addresses of a parsed list, groups unwrapped, in order. */
+function bareAddresses(list: readonly ParsedAddress[] | undefined): string[] {
+  const out: string[] = [];
+  for (const a of list ?? []) {
+    for (const m of a.group ?? [a]) if (typeof m.address === "string" && m.address !== "") out.push(m.address);
+  }
+  return out;
+}
+
+/** The sender's `Date` in epoch milliseconds, or `None` when it is missing or not a date. */
+function sentAt(date: string | undefined): Option<number> {
+  const ms = date === undefined ? Number.NaN : Date.parse(date);
+  return Number.isSafeInteger(ms) ? Some(ms) : None;
+}
+
 function attachmentBytes(content: unknown): Uint8Array {
   if (content instanceof Uint8Array) return content;
   if (content instanceof ArrayBuffer) return new Uint8Array(content);
@@ -388,7 +432,13 @@ export async function parseInbound(
     to: envelope.to,
     subject: parsed.subject ?? "",
     messageId: parsed.messageId ?? "",
+    inReplyTo: present(messageIds(parsed.inReplyTo)[0]),
+    references: messageIds(parsed.references),
+    replyTo: bareAddresses(parsed.replyTo),
+    cc: bareAddresses(parsed.cc),
+    date: sentAt(parsed.date),
     headers: headerMap(parsed.headers),
+    headerList: parsed.headers.map((h) => ({ name: h.key, value: h.value })),
     text: present(parsed.text),
     html: present(parsed.html),
     attachments,
@@ -564,7 +614,7 @@ export function replyMime(mail: InboundEmail, reply: EmailReply, receivedAt: str
     text: reply.text.tag === "Some" ? reply.text.value : undefined,
     html: reply.html.tag === "Some" ? reply.html.value : undefined,
     inReplyTo: mail.messageId,
-    references: mail.headers.get("references"),
+    references: mail.references.join(" "),
     date: now,
     messageId: `<${id}@${domainOf(receivedAt)}>`,
     boundary: `=_bynk_${id}`,

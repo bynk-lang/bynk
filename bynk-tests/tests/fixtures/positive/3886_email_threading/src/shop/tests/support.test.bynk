@@ -1,0 +1,23 @@
+// #3886: a `system` case posts the message as raw MIME to the Worker's real `email()` entry, which
+// parses it with `postal-mime`; the handler reads the new fields back.
+suite shop.support as system {
+  case "threading, recipients, date and repeated headers reach the handler" {
+    let mail = InboundEmail {
+      from: "a@b.example",
+      to: "support@shop.example",
+      inReplyTo: Some("<p@x>"),
+      references: ["<a@x>", "<b@x>"],
+      replyTo: ["help@b.example"],
+      cc: ["ann@b.example", "bob@b.example"],
+      date: Some(Instant.fromEpochMillis(1767225600000)),
+      headerList: [EmailHeader { name: "received", value: "from a" }, EmailHeader { name: "received", value: "from b" }],
+    }
+    let r <- support.message(mail)
+    expect r is Reject("<p@x> refs=2 cc=2 reply-to=1 received=2 dated")
+  }
+
+  case "a message with none of them has the defaults" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example" })
+    expect r is Reject("none refs=0 cc=0 reply-to=0 received=0 undated")
+  }
+}

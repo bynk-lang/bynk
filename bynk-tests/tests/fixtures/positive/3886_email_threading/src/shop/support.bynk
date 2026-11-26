@@ -1,0 +1,23 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailHeader,
+}
+
+// #3886: the handler reads threading, where to answer, who else received the message, when the
+// sender wrote it and every header occurrence, as typed fields rather than by re-parsing `headers`.
+// It rejects with what it read, so a case sees what the Worker's real parse produced.
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    let answers = mail.inReplyTo.getOrElse("none")
+    let chain = mail.references.length()
+    let received = mail.headerList.filter((h) => h.name == "received").length()
+    let when = match mail.date {
+      Some(at) => "dated"
+      None => "undated"
+    }
+    Reject("\(answers) refs=\(chain) cc=\(mail.cc.length()) reply-to=\(mail.replyTo.length()) received=\(received) \(when)")
+  }
+}

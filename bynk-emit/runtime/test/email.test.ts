@@ -563,7 +563,13 @@ test("replyMime: an explicit subject is used as written", () => {
     to: "support@shop.example",
     subject: "hello",
     messageId: "<m@x>",
+    inReplyTo: None,
+    references: [],
+    replyTo: [],
+    cc: [],
+    date: None,
     headers: new Map(),
+    headerList: [],
     text: None,
     html: None,
     attachments: [],
@@ -729,4 +735,53 @@ test("a failure building the routes is a fixed reject, not a throw", async () =>
   );
   assert.deepEqual(f.calls.rejects, ["message could not be processed"]);
   assert.ok(!f.calls.logs.join("").includes("SECRET"));
+});
+
+// -------------------------------------------------------- threading and headers (#3886)
+
+async function parsed(headers: string) {
+  const r = await parseInbound({ from: "a@example.org", to: "support@shop.example" }, enc.encode(mime({ headers: `${CF}${headers}` })));
+  assert.ok(r.ok);
+  return r.mail;
+}
+
+test("parseInbound: the threading ids are the message ids, in the message's order", async () => {
+  const m = await parsed("In-Reply-To: <p@x>\r\nReferences: <a@x> <b@x>\r\n <c@x>\r\n");
+  assert.deepEqual(m.inReplyTo, Some("<p@x>"));
+  assert.deepEqual(m.references, ["<a@x>", "<b@x>", "<c@x>"]);
+});
+
+test("parseInbound: a message with none of the new headers has the defaults", async () => {
+  const m = await parsed("");
+  assert.deepEqual([m.inReplyTo, m.references, m.replyTo, m.cc, m.date], [None, [], [], [], None]);
+});
+
+test("parseInbound: Reply-To and Cc are bare addresses, names dropped, groups unwrapped, lists joined", async () => {
+  const m = await parsed('Reply-To: "Help Desk" <help@shop.example>\r\nCc: Ann <ann@x.example>, Team: bob@x.example, cy@x.example;\r\nCc: dee@x.example\r\n');
+  assert.deepEqual(m.replyTo, ["help@shop.example"]);
+  assert.deepEqual(m.cc, ["ann@x.example", "bob@x.example", "cy@x.example", "dee@x.example"]);
+});
+
+test("parseInbound: Date is epoch milliseconds, and None when it is missing or cannot be read", async () => {
+  const ok = await parsed("Date: Thu, 01 Jan 2026 00:00:00 +0000\r\n");
+  assert.deepEqual(ok.date, Some(Date.UTC(2026, 0, 1)));
+  for (const bad of ["Date: not a date\r\n", "Date: \r\n", ""]) {
+    assert.deepEqual((await parsed(bad)).date, None, bad);
+  }
+});
+
+test("parseInbound: headerList holds every occurrence in order, headers the first", async () => {
+  const m = await parsed("Received: from a\r\nReceived: from b\r\nX-Tag: one\r\nX-Tag: two\r\n");
+  const names = m.headerList.map((h) => h.name);
+  assert.deepEqual(m.headerList.filter((h) => h.name === "received").map((h) => h.value), ["from a", "from b"]);
+  assert.deepEqual(m.headerList.filter((h) => h.name === "x-tag").map((h) => h.value), ["one", "two"]);
+  assert.ok(names.indexOf("received") < names.indexOf("x-tag"), "in the order they appear");
+  assert.equal(m.headers.get("x-tag"), "one");
+});
+
+test("replyMime: a reply to a threaded message carries the chain from `references`", async () => {
+  const m = await parsed("References: <a@x> <b@x>\r\n");
+  const out = replyMime({ ...m, messageId: "<m@x>" }, replyOf("t"), "support@shop.example");
+  assert.match(out, /^In-Reply-To: <m@x>$/m);
+  assert.match(out, /^References: <a@x> <b@x> <m@x>$/m);
 });

@@ -84,7 +84,7 @@ address before a catch-all.
 
 ## The message
 
-`InboundEmail`, `EmailVerdict`, `EmailReply`, `InboundAttachment`,
+`InboundEmail`, `EmailHeader`, `EmailVerdict`, `EmailReply`, `InboundAttachment`,
 `DmarcVerdict` and `SenderIdentity` are exported by `bynk.cloudflare`; import
 what the handler names:
 
@@ -97,8 +97,14 @@ consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
 | `from` | `String` | The **envelope** sender. A claim: anyone can write any address. |
 | `to` | `String` | The envelope recipient the service was routed by. |
 | `subject` | `String` | The `Subject` header. |
-| `messageId` | `String` | The `Message-ID` header. |
-| `headers` | `Map[String, String]` | The headers, by lower-case name. |
+| `messageId` | `String` | The `Message-ID` header, as written (`<id@host>`). |
+| `inReplyTo` | `Option[String]` | The message id the sender says this answers, as `messageId` is written. A claim. |
+| `references` | `List[String]` | The `References` message ids, in the message's order. A claim. |
+| `replyTo` | `List[String]` | The `Reply-To` addresses, bare (display names dropped). A claim: where to answer. |
+| `cc` | `List[String]` | The `Cc` addresses, bare. A claim: who else received it, as the sender wrote it. |
+| `date` | `Option[Instant]` | The sender's `Date` header. A claim, not the arrival time; `None` when it is missing or cannot be read. |
+| `headers` | `Map[String, String]` | The headers, by lower-case name, the first occurrence of each. |
+| `headerList` | `List[EmailHeader]` | Every header occurrence, in the order they appear, by lower-case name. |
 | `text` | `Option[String]` | The plain-text body, if there is one. |
 | `html` | `Option[String]` | The HTML body, if there is one. |
 | `attachments` | `List[InboundAttachment]` | The files attached. |
@@ -109,7 +115,7 @@ it cares about. On a Worker the runtime fills the rest by parsing the raw
 message with [`postal-mime`](https://github.com/postalsys/postal-mime) before
 the handler runs; a test builds the fields directly.
 
-`headers` keeps the first occurrence of each header. `attachments` carries each
+`headers` keeps the first occurrence of each header, so a repeated one (`Received`) is read from `headerList`, an `EmailHeader` of `name` and `value`. Changing `headers` to hold every occurrence would break every handler that reads it, so it stays. `replyTo` and `cc` hold the address part only: a display name is dropped, as `from` and `to` are envelope addresses, and an address group is unwrapped. Every one of these is something the sender wrote, so treat it as a claim as you do `from`. They count toward the limits below: `headerList` cannot grow past the header-byte cap, and nothing new is logged. `attachments` carries each
 part's decoded bytes. A message with no `Message-ID` has an empty `messageId`,
 and a reply to it carries no `In-Reply-To` or `References`.
 
