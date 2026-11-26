@@ -14,8 +14,17 @@ fn required() -> bool {
 }
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
-        .arg("--version")
+    // npm installs `tsc` as `tsc.cmd` on Windows, which `Command` will not run
+    // directly (see bynk-tests' tsc_verify `base_command`), so route it through
+    // `cmd /C` there.
+    let mut cmd = if cfg!(windows) {
+        let mut c = Command::new("cmd");
+        c.arg("/C").arg(tool);
+        c
+    } else {
+        Command::new(tool)
+    };
+    cmd.arg("--version")
         .output()
         .is_ok_and(|o| o.status.success())
 }
