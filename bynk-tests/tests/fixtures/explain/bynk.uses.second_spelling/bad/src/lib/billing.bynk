@@ -1,3 +1,0 @@
-commons lib.billing
-
-type Amount = Int where Positive

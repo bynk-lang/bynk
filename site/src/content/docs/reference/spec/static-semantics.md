@@ -65,8 +65,8 @@ public names of the commons: all of them (`uses lib.y`), those listed, each opti
 renamed (`uses lib.y { Status as YStatus, describe }`; a name that is not public is
 `bynk.uses.unknown_name`), or none bare but all qualified by an alias (`uses lib.y as Y`,
 then `Y.Status`). A commons' full name (`lib.y.Status`) qualifies as well, and a one-segment
-commons name is not a qualifier. A declaration MUST be read by one spelling in a unit
-(`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
+commons name is not a qualifier. Every spelling of one declaration (`Status`, `Y.Status`, `lib.y.Status`) is that declaration: one
+type, one function or constant, whichever spelling a value was typed with. Two used commons that
 declare one name do not collide at the `uses`: the name MUST NOT be written bare
 (`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
 unit's own wins over a used name, and a name a braced list selects wins over the same name

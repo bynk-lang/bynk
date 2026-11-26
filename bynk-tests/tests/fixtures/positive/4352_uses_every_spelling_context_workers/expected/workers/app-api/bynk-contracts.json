@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "flipper": "79fa2ea461cb2c0a",
+    "hold": "280df646f0029a28"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "flipper": "Svc(\"flipper\",P(\"s\",N(\"lib.y.Status\")),Ret(Sum(\"Status\",V(\"Off\"),V(\"On\"))))",
+    "hold": "Svc(\"hold\",P(\"h\",Rec(\"Holder\",F(\"a\",Sum(\"Status\",V(\"Off\"),V(\"On\"))),F(\"b\",N(\"lib.y.Status\")),F(\"p\",Rec(\"Point\",F(\"a\",B(\"Int\")))),F(\"q\",N(\"lib.y.Point\")))),Ret(Rec(\"Holder\",F(\"a\",Sum(\"Status\",V(\"Off\"),V(\"On\"))),F(\"b\",N(\"lib.y.Status\")),F(\"p\",Rec(\"Point\",F(\"a\",B(\"Int\")))),F(\"q\",N(\"lib.y.Point\")))))"
+  }
+}
