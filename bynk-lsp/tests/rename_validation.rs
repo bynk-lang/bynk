@@ -38,7 +38,14 @@ struct Analysed {
 }
 
 fn analyse(root: &Path, overlay: &HashMap<PathBuf, String>) -> Analysed {
-    let result = bynk_ide::diagnose_project(root, overlay);
+    // A project with a manifest is analysed through it, as the server does: its include
+    // roots (`src/`) decide where a unit's file should be.
+    let roots = if root.join("bynk.toml").exists() {
+        bynk_ide::AnalysisRoots::Project(root.to_path_buf())
+    } else {
+        bynk_ide::AnalysisRoots::SingleTree(root.to_path_buf())
+    };
+    let result = bynk_ide::diagnose_project_with(&roots, overlay, &bynk_ide::SchemaLock::Off);
     Analysed {
         index: result.index,
         snapshots: result
@@ -581,5 +588,229 @@ fn only_a_unit_rename_expects_the_layout_diagnostic() {
         diags,
         "another rename's layout diagnostic is a collision as ever"
     );
+    assert!(index_queries::layout_warnings(&plan, &pre.snapshots).is_empty());
+}
+
+// ---- #4183 review: the other places a unit name is written, and a `src/` layout ----
+
+const TIME: &str = "\
+context platform.time
+
+exports capability { Clock }
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = SystemClock {
+  fn now() -> Effect[Int] {
+    0
+  }
+}
+";
+
+const STOCK_RESERVE: &str = "\
+context shop.stock
+
+service reserve {
+  on call(sku: String) -> Effect[Result[(), String]] by Caller {
+    Effect.pure(Ok(()))
+  }
+}
+";
+
+const STOCK_RELEASE: &str = "\
+context shop.stock
+
+service release {
+  on call(sku: String) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}
+";
+
+const CATALOG_UNIT: &str = "\
+commons lib.catalog
+
+type Sku = String
+";
+
+const ORDERS: &str = "\
+context shop.orders
+
+uses lib.catalog
+consumes platform.time
+consumes shop.stock
+consumes bynk { CallOutcome }
+
+service place {
+  on call(sku: String) -> Effect[Int] by Caller given platform.time.Clock {
+    let t <- platform.time.Clock.now()
+    let o <- shop.stock.reserve.outcome(sku)
+    let _ <- shop.stock.release(sku)
+    Effect.pure(t)
+  }
+}
+";
+
+const ORDERS_SUITE: &str = "\
+suite shop.orders {
+  case \"holds\" {
+    expect 1 == 1
+  }
+}
+";
+
+/// A conventional `src/` project exercising every spelling the checker or the pass records.
+fn src_project(test_name: &str) -> (PathBuf, Analysed) {
+    let root = setup_project(
+        test_name,
+        &[
+            (
+                "bynk.toml",
+                "[project]\nname = \"unit-rename\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+            ),
+            ("src/platform/time.bynk", TIME),
+            ("src/shop/stock/reserve.bynk", STOCK_RESERVE),
+            ("src/shop/stock/release.bynk", STOCK_RELEASE),
+            ("src/lib/catalog.bynk", CATALOG_UNIT),
+            ("src/shop/orders.bynk", ORDERS),
+            ("src/tests/orders.test.bynk", ORDERS_SUITE),
+        ],
+    );
+    let pre = analyse(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::Project(root.clone())),
+    );
+    (root, pre)
+}
+
+fn renamed_from(
+    test: &str,
+    file: &str,
+    anchor: &str,
+    name: &str,
+    new: &str,
+) -> HashMap<PathBuf, String> {
+    let (root, pre) = src_project(test);
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+    let start = offset_of(&pre.snapshots, file, anchor, 0) + anchor.find(name).unwrap();
+    try_rename(&root, &pre, (file, start), new)
+        .unwrap_or_else(|e| panic!("rename `{name}` from {file}: {e}"))
+}
+
+#[test]
+fn renaming_a_context_rewrites_its_capability_call_and_given_spellings() {
+    let edited = renamed_from(
+        "unit-cap",
+        "src/shop/orders.bynk",
+        "consumes platform.time",
+        "platform.time",
+        "platform.clock",
+    );
+    let orders = &edited[Path::new("src/shop/orders.bynk")];
+    assert!(orders.contains("consumes platform.clock\n"), "{orders}");
+    assert!(orders.contains("platform.clock.Clock.now()"), "{orders}");
+    assert!(orders.contains("given platform.clock.Clock"), "{orders}");
+    assert!(!orders.contains("platform.time"), "{orders}");
+}
+
+#[test]
+fn renaming_a_context_rewrites_an_outcome_call_prefix() {
+    let edited = renamed_from(
+        "unit-outcome",
+        "src/shop/orders.bynk",
+        "shop.stock.reserve.outcome",
+        "shop.stock",
+        "shop.inventory",
+    );
+    let orders = &edited[Path::new("src/shop/orders.bynk")];
+    assert!(
+        orders.contains("shop.inventory.reserve.outcome(sku)"),
+        "{orders}"
+    );
+    assert!(orders.contains("shop.inventory.release(sku)"), "{orders}");
+}
+
+#[test]
+fn renaming_a_split_context_rewrites_every_file_header_and_warns_per_file() {
+    let (root, pre) = src_project("unit-split");
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+    let at = offset_of(
+        &pre.snapshots,
+        "src/shop/orders.bynk",
+        "consumes shop.stock",
+        0,
+    ) + "consumes ".len();
+    let edited =
+        try_rename(&root, &pre, ("src/shop/orders.bynk", at), "shop.inventory").expect("renames");
+    for file in ["src/shop/stock/reserve.bynk", "src/shop/stock/release.bynk"] {
+        assert!(
+            edited[Path::new(file)].starts_with("context shop.inventory\n"),
+            "{file}"
+        );
+    }
+    let plan = index_queries::plan_rename(
+        &pre.index,
+        Path::new("src/shop/orders.bynk"),
+        at,
+        "shop.inventory",
+    )
+    .expect("plans");
+    let warnings = index_queries::layout_warnings(&plan, &pre.snapshots);
+    assert_eq!(warnings.len(), 2, "one per file: {warnings:?}");
+    for w in &warnings {
+        // The include root is kept: moving the file out of `src/` would break the project.
+        assert!(w.contains("src/shop/inventory.bynk"), "{w}");
+        assert!(w.contains("src/shop/inventory/"), "{w}");
+    }
+}
+
+#[test]
+fn renaming_a_commons_through_a_uses_rewrites_its_header() {
+    let edited = renamed_from(
+        "unit-commons",
+        "src/shop/orders.bynk",
+        "uses lib.catalog",
+        "lib.catalog",
+        "lib.items",
+    );
+    assert!(edited[Path::new("src/lib/catalog.bynk")].starts_with("commons lib.items\n"));
+    assert!(edited[Path::new("src/shop/orders.bynk")].contains("uses lib.items\n"));
+}
+
+#[test]
+fn renaming_a_context_from_a_suite_target_rewrites_the_suite_and_the_header() {
+    let edited = renamed_from(
+        "unit-suite",
+        "src/tests/orders.test.bynk",
+        "suite shop.orders",
+        "shop.orders",
+        "shop.checkout",
+    );
+    assert!(edited[Path::new("src/tests/orders.test.bynk")].starts_with("suite shop.checkout {"));
+    assert!(edited[Path::new("src/shop/orders.bynk")].starts_with("context shop.checkout\n"));
+}
+
+#[test]
+fn a_layout_warning_is_silent_when_the_include_root_stripped_path_still_fits() {
+    let (_, pre) = src_project("unit-layout-src");
+    let at = offset_of(
+        &pre.snapshots,
+        "src/shop/orders.bynk",
+        "consumes shop.stock",
+        0,
+    ) + "consumes ".len();
+    // `shop.stock` in `src/shop/stock/*.bynk`: renaming to `shop.stock` is no change, but a
+    // name the (root-stripped) directory already matches must not warn. Here the file
+    // `src/platform/time.bynk` declares `platform.time`; asking about that name matches.
+    let mut plan = index_queries::plan_rename(
+        &pre.index,
+        Path::new("src/shop/orders.bynk"),
+        at,
+        "shop.inventory",
+    )
+    .expect("plans");
+    plan.new_name = "shop.stock".to_string();
     assert!(index_queries::layout_warnings(&plan, &pre.snapshots).is_empty());
 }

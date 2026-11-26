@@ -1,7 +1,7 @@
 //! #4183: contexts and commons are index symbols, so hover, go to definition,
 //! find references and semantic tokens work on a unit name at each place one is
 //! written: the unit's own header, a `consumes`, a `uses`, and `IsContext(…)`.
-//! Rename of a unit is the next step and is refused until then.
+//! Renaming a unit as one whole dotted name is covered in `rename_validation.rs`.
 //!
 //! Each test analyses a real scratch project with `diagnose_project` and drives
 //! the real hover ladder and index queries over its output.

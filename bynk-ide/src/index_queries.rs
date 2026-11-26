@@ -1506,13 +1506,23 @@ pub fn layout_warnings(
         else {
             continue;
         };
-        if declared != plan.key.name || bynk_project::paths::unit_path_matches(path, &plan.new_name)
-        {
+        if declared != plan.key.name {
+            continue;
+        }
+        // Paths are project-relative and still carry the include root (`src/`); the
+        // layout check wants them root-stripped. A file that did not sit where the
+        // old name put it was already inconsistent, so it is not this rename's to warn on.
+        let Some(root) = bynk_project::paths::include_prefix_of_unit(path, &plan.key.name) else {
+            continue;
+        };
+        let stripped = path.strip_prefix(&root).unwrap_or(path);
+        if bynk_project::paths::unit_path_matches(stripped, &plan.new_name) {
             continue;
         }
         let shown = path.to_string_lossy().replace('\\', "/");
+        let at = root.join(&layout).to_string_lossy().replace('\\', "/");
         out.push(format!(
-            "`{}` is now `{}`, but `{shown}` is still where `{}` was: move it to `{layout}.bynk` (or into `{layout}/`) so the layout matches, or `bynk check` reports `bynk.project.inconsistent_commons_name`",
+            "`{}` is now `{}`, but `{shown}` is still where `{}` was: move it to `{at}.bynk` (or into `{at}/`) so the layout matches, or `bynk check` reports `bynk.project.inconsistent_commons_name`",
             plan.key.name, plan.new_name, plan.key.name
         ));
     }
