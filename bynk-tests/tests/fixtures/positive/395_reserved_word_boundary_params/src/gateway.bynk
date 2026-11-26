@@ -84,6 +84,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(export).join(user.identity, connection)
     ()
   }
+
+  on close (export: RoomId) -> Effect[()] by user: Member {
+    ()
+  }
 }
 
 agent Room {

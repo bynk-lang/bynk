@@ -10,7 +10,7 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __webSocketBearerProtocol } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export type Tag = string & { readonly __brand: "gateway.Tag" };
 
@@ -212,12 +212,16 @@ export class Room {
     return undefined;
   }
 
+  async __wsClose_ChatGateway(connection: Connection<ServerFrame>, __id_export: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
+    return undefined;
+  }
+
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     if (url.pathname === "/_bynk/ws/open/ChatGateway") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string };
-      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server);
+      const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
@@ -229,6 +233,26 @@ export class Room {
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__RoomWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
     return new globalThis.Response("Not Found", { status: 404 });
+  }
+
+  async webSocketClose(ws: { deserializeAttachment(): unknown; serializeAttachment(value: unknown): void; send(data: string): void; close(code?: number, reason?: string): void }, code: number, reason: string, wasClean: boolean): globalThis.Promise<void> {
+    const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[] } | null;
+    if (__att === null) { ws.close(1011, "no session"); return; }
+    const connection = new __WorkersConnection<ServerFrame>(ws, __att.connId);
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    await __webSocketClosing(ws, __att, { code: code, reason: reason, clean: wasClean }, async (__info) => {
+      await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId, ...{ env: env as never } });
+    });
+  }
+
+  async webSocketError(ws: { deserializeAttachment(): unknown; serializeAttachment(value: unknown): void; send(data: string): void; close(code?: number, reason?: string): void }, error: unknown): globalThis.Promise<void> {
+    const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[] } | null;
+    if (__att === null) { ws.close(1011, "no session"); return; }
+    const connection = new __WorkersConnection<ServerFrame>(ws, __att.connId);
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    await __webSocketErrored(ws, __att, error, async (__info) => {
+      await this.__wsClose_ChatGateway(connection, __att.args[0] as RoomId, { identity: __att.identity as UserId, ...{ env: env as never } });
+    });
   }
 }
 

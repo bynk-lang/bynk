@@ -10,6 +10,10 @@ service live from websocket(in: Frame, out: Frame) {
     let _ <- Board("ci").join(user, connection)
     ()
   }
+
+  on close (user: String) -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Board {

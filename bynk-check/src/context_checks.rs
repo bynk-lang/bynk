@@ -1541,7 +1541,7 @@ pub(crate) fn check_service_protocols(
                             service.name.name
                         ),
                     )
-                    .with_note("a `from websocket` service holds exactly one `on open`, and optionally one `on message` (inbound) and one `on close`"),
+                    .with_note("a `from websocket` service holds exactly one `on open`, and one `on close` (the departure), and optionally one `on message` (inbound)"),
                 );
             } else if opens.len() > 1 {
                 errors.push(CompileError::new(
@@ -1618,16 +1618,7 @@ pub(crate) fn check_service_protocols(
                     ),
                 ));
             }
-            if closes.len() > 1 {
-                errors.push(CompileError::new(
-                    "bynk.service.websocket_open_arity",
-                    closes[1].span,
-                    format!(
-                        "the `from websocket` service `{}` has more than one `on close` handler — it needs at most one",
-                        service.name.name
-                    ),
-                ));
-            }
+            check_ws_close_arity(service, opens.len(), &closes, errors);
             for message in &messages {
                 let frame_params = message
                     .params
@@ -1689,7 +1680,7 @@ pub(crate) fn check_service_protocols(
                     }
                 }
                 if let [close] = closes.as_slice() {
-                    for (i, p) in close.params.iter().enumerate() {
+                    for (i, p) in close_route_params(close, visible_types).iter().enumerate() {
                         if op
                             .get(i)
                             .is_none_or(|o| resolve_ty(&p.type_ref) != resolve_ty(&o.type_ref))
@@ -7370,6 +7361,70 @@ pub fn is_std_bynk_type(
     types.get(name).is_some_and(|d| d.span == decl.span)
         && crate::firstparty::unit(bynk_std::BYNK_UNIT)
             .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
+/// A `from websocket` service holds exactly one `on close` (#3902: it is required). `on open` always
+/// hands its connection to an agent's state, and the runtime cannot tell which store entry holds it,
+/// so nothing else removes a departed client's connection. A second `on close` is
+/// `bynk.service.websocket_open_arity`. A missing one is only judged on a service with exactly one
+/// `on open`: one with none or several already has that error.
+fn check_ws_close_arity(
+    service: &ServiceDecl,
+    opens: usize,
+    closes: &[&Handler],
+    errors: &mut Vec<CompileError>,
+) {
+    if let Some(second) = closes.get(1) {
+        errors.push(CompileError::new(
+            "bynk.service.websocket_open_arity",
+            second.span,
+            format!(
+                "the `from websocket` service `{}` has more than one `on close` handler — it needs at most one",
+                service.name.name
+            ),
+        ));
+    }
+    if closes.is_empty() && opens == 1 {
+        errors.push(
+            CompileError::new(
+                "bynk.ws.missing_close",
+                service.name.span,
+                format!(
+                    "the `from websocket` service `{}` has no `on close` handler — it needs one, to release the connection `on open` handed over",
+                    service.name.name
+                ),
+            )
+            .with_note(
+                "`on open` transfers the connection into an agent's state, so a departed client's connection stays held, and a later broadcast to it raises; add `on close (…) -> Effect[()]` that removes it (a trailing `close: CloseInfo` parameter carries the code and reason)",
+            ),
+        );
+    }
+}
+
+/// #3902: whether `p` is the `close: CloseInfo` parameter of an `on close` handler: the `CloseInfo`
+/// record `bynk` exports, found by its first-party declaration (as `is_std_file_type` finds `File`),
+/// so a user type that happens to be called `CloseInfo` is a route value, not this.
+pub fn is_close_info_param(
+    p: &Param,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    ts_type_ref_display(&p.type_ref) == "CloseInfo"
+        && types.get("CloseInfo").is_some_and(|decl| {
+            crate::firstparty::unit(bynk_std::BYNK_UNIT).is_some_and(|unit| {
+                decl.span.file == crate::project_model::firstparty_file_id(unit)
+            })
+        })
+}
+
+/// #3902: the route parameters of an `on close`: its parameters less a trailing `close: CloseInfo`.
+pub fn close_route_params<'a>(
+    close: &'a Handler,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> &'a [Param] {
+    match close.params.split_last() {
+        Some((last, rest)) if is_close_info_param(last, types) => rest,
+        _ => &close.params,
+    }
 }
 
 /// #4111: `bynk.types.secret_at_boundary` for a `Secret` written at `span` in `what`.

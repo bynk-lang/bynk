@@ -1,0 +1,23 @@
+context s
+
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+// #3902: `on open` hands the connection to an agent, so the service must say what happens when the
+// client leaves.
+service Gw from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (room: String) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[ServerFrame]]
+
+  on call join(conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    ()
+  }
+}

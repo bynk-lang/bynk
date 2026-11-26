@@ -80,6 +80,9 @@ export const chat = {
     const __r0 = await warn(frame.text, deps);
     return undefined;
   },
+  async close(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
+    return undefined;
+  },
 };
 
 export const api = {

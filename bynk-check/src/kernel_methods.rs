@@ -24,8 +24,8 @@ use bynk_syntax::ast::BaseType;
 
 pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
-    BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp, InstantOp,
-    IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
+    BytesOp, ConnectionOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp,
+    InstantOp, IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
     RequestQueryOp, ResultOp, SecretOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
 };
 
@@ -82,6 +82,9 @@ pub const REQUEST_QUERY_METHODS: &[KernelMethod] = RequestQueryOp::TABLE;
 pub const REQUEST_COOKIES_METHODS: &[KernelMethod] = RequestCookiesOp::TABLE;
 /// An `Oidc` binder's claims (#2380).
 pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = TokenClaimsOp::TABLE;
+/// A held `Connection[F]` (#3902): `send(frame)` and `close(code?, reason?)`, so `.`-completion
+/// offers them and signature help reads the optional close code and reason.
+pub const CONNECTION_METHODS: &[KernelMethod] = ConnectionOp::TABLE;
 /// A `bynk` `Secret` (#4111): `reveal` and `matches`, the only two readers.
 pub const SECRET_METHODS: &[KernelMethod] = SecretOp::TABLE;
 /// A case's recording `TestConnection[F]` (#3051).
@@ -136,6 +139,7 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("RequestQuery", REQUEST_QUERY_METHODS),
     ("RequestCookies", REQUEST_COOKIES_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
+    ("Connection", CONNECTION_METHODS),
     ("TestConnection", TEST_CONNECTION_METHODS),
     ("Secret", SECRET_METHODS),
 ];
@@ -157,6 +161,7 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         Ty::RequestQuery => REQUEST_QUERY_METHODS,
         Ty::RequestCookies => REQUEST_COOKIES_METHODS,
         Ty::TokenClaims => TOKEN_CLAIMS_METHODS,
+        Ty::Connection(_) => CONNECTION_METHODS,
         Ty::TestConnection(_) => TEST_CONNECTION_METHODS,
         Ty::List(_) => LIST_METHODS,
         Ty::Map(_, _) => MAP_METHODS,

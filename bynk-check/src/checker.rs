@@ -1116,9 +1116,10 @@ impl HandlerAddress {
     }
 
     /// A `ws close` address once its handler is matched.
-    pub fn ws_close(params: usize) -> HandlerAddress {
+    pub fn ws_close(params: usize, info: bool) -> HandlerAddress {
         HandlerAddress::Ws(WsAddress::Close {
             params: Some(params),
+            info,
         })
     }
 
@@ -1150,8 +1151,15 @@ impl HandlerAddress {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WsAddress {
     Open,
-    Message { frame: Option<WsMessageShape> },
-    Close { params: Option<usize> },
+    Message {
+        frame: Option<WsMessageShape>,
+    },
+    /// `params` counts every parameter of the handler; `info` is whether the last is the trailing
+    /// `close: CloseInfo` (#3902), which the driver fills rather than recovering from the connection.
+    Close {
+        params: Option<usize>,
+        info: bool,
+    },
 }
 
 /// The shape of a `ws message` handler: which parameter takes the inbound frame

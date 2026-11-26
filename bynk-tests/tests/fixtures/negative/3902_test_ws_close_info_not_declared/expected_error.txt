@@ -1,0 +1,2 @@
+bynk.test.service_call_arity `ChatGateway`'s `on close` takes no `CloseInfo`
+# exact
