@@ -75,16 +75,19 @@ pub(crate) fn agent_moves(
     moves
 }
 
+/// Whether `--accept-fresh-agent` names this move's context (a `-` stands for a `.`).
+fn is_named(context: &str, accepted: &[String]) -> bool {
+    accepted
+        .iter()
+        .any(|a| a == context || a.replace('-', ".") == context)
+}
+
 /// Why a move is refused: it is not named in `accepted`, or it is but cannot be accepted.
 ///
 /// #3797: each as an entry of the JSON plan's `refusals` (`reason` says which way it is refused;
 /// only a move not yet named carries the flag that would let it through).
 pub(crate) fn refusals(moves: &[AgentMove], accepted: &[String]) -> Vec<Entry> {
-    let named = |m: &AgentMove| {
-        accepted
-            .iter()
-            .any(|a| a == &m.context || a.replace('-', ".") == m.context)
-    };
+    let named = |m: &AgentMove| is_named(&m.context, accepted);
     moves
         .iter()
         .filter_map(|m| {
@@ -144,7 +147,7 @@ pub(crate) fn unused_accepts(moves: &[AgentMove], accepted: &[String]) -> Vec<St
         .filter(|a| {
             !moves
                 .iter()
-                .any(|m| *a == &m.context || a.replace('-', ".") == m.context)
+                .any(|m| is_named(&m.context, std::slice::from_ref(*a)))
         })
         .cloned()
         .collect()
@@ -202,12 +205,10 @@ pub(crate) fn record_fresh_moves(
     moves: &[AgentMove],
 ) {
     let accepted = &opts.accept_fresh_agent;
-    for m in moves.iter().filter(|m| {
-        m.to_worker == worker
-            && accepted
-                .iter()
-                .any(|a| a == &m.context || a.replace('-', ".") == m.context)
-    }) {
+    for m in moves
+        .iter()
+        .filter(|m| m.to_worker == worker && is_named(&m.context, accepted))
+    {
         lock.record_fresh_agents(&opts.environment, &m.from_worker, &m.context, &m.classes);
     }
 }
