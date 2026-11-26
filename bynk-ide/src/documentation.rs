@@ -124,6 +124,22 @@ fn page_parts(unit: &SourceUnit) -> Option<PageParts<'_>> {
     }
 }
 
+/// #4393: whether a file of the same unit as `unit` declares an actor named `name`. `others` are
+/// candidate files, any of which may belong to another unit and are then skipped.
+pub(crate) fn unit_siblings_declare(unit: &SourceUnit, others: &[&str], name: &str) -> bool {
+    let Some((kind, unit_name, _, _, _)) = page_parts(unit) else {
+        return false;
+    };
+    others.iter().any(|text| {
+        let Some(other) = parse(text) else {
+            return false;
+        };
+        page_parts(&other).is_some_and(|(k, n, _, _, items)| {
+            k == kind && n == unit_name && crate::actor_refinement::declares_actor(items, name)
+        })
+    })
+}
+
 fn parse(text: &str) -> Option<SourceUnit> {
     let tokens = tokenize(text).ok()?;
     parse_unit_with_recovery(&tokens, text).0
@@ -143,8 +159,9 @@ pub fn documentation_model(text: &str) -> Option<DocModel> {
     let unit = parse(text)?;
     let (unit_kind, unit_name, unit_span, unit_doc, items) = page_parts(&unit)?;
     let mut entries = Vec::new();
+    let declares = |n: &str| crate::actor_refinement::declares_actor(items, n);
     for item in items {
-        push_item(&mut entries, item, items);
+        push_item(&mut entries, item, &declares);
     }
     Some(DocModel {
         unit_name,
@@ -180,24 +197,41 @@ pub fn documentation_model_merged<'a>(
     }
     all.sort_by(|a, b| a.0.cmp(b.0));
     all.dedup_by(|a, b| a.0 == b.0);
-    let mut unit_doc: Option<String> = None;
-    let mut entries = Vec::new();
+    // The unit's files first, so an actor that shadows the prelude `Sender` / `Producer` in one
+    // file is seen when another file's refinement is rendered (the checker's actor table is the
+    // whole unit's).
+    let mut parsed: Vec<(&Path, SourceUnit)> = Vec::new();
     for (path, text) in all {
         let Some(unit) = parse(text) else {
             continue;
         };
-        let Some((kind, name, _, _, items)) = page_parts(&unit) else {
+        let Some((kind, name, _, _, _)) = page_parts(&unit) else {
             continue;
         };
         if kind != unit_kind || name != unit_name {
             continue;
         }
+        parsed.push((path, unit));
+    }
+    let declares = |n: &str| {
+        parsed.iter().any(|(_, unit)| {
+            page_parts(unit).is_some_and(|(_, _, _, _, items)| {
+                crate::actor_refinement::declares_actor(items, n)
+            })
+        })
+    };
+    let mut unit_doc: Option<String> = None;
+    let mut entries = Vec::new();
+    for (path, unit) in &parsed {
+        let Some((_, _, _, _, items)) = page_parts(unit) else {
+            continue;
+        };
         if unit_doc.is_none() {
             unit_doc = unit.module_doc().map(str::to_string);
         }
         let start = entries.len();
         for item in items {
-            push_item(&mut entries, item, items);
+            push_item(&mut entries, item, &declares);
         }
         for e in &mut entries[start..] {
             e.file = Some(path.to_path_buf());
@@ -219,7 +253,7 @@ pub fn documentation_model_merged<'a>(
 /// will not compile until it is given a page entry, which is the guard against
 /// the "silently-missed declaration kind" risk. Nested members reuse the same
 /// discipline against their own child lists.
-fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem, unit_items: &[CommonsItem]) {
+fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem, declares: &dyn Fn(&str) -> bool) {
     match item {
         CommonsItem::Type(t) => {
             out.push(DocEntry {
@@ -332,7 +366,7 @@ fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem, unit_items: &[CommonsI
             name: a.name.name.clone(),
             kind: "actor",
             depth: 0,
-            markdown: crate::actor_refinement::describe_actor_in(a, unit_items),
+            markdown: crate::actor_refinement::describe_actor_in(a, declares),
             documented: a.documentation.is_some(),
             span: a.name.span,
             file: None,

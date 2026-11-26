@@ -25,10 +25,12 @@ use bynk_check::actors::{
 use bynk_syntax::ast::{ActorDecl, CommonsItem};
 
 /// `a` as hover renders an actor, plus what a `Sender` or `Producer` refinement admits.
-/// `items` are the declaring unit's items, to see whether a local actor shadows the prelude base.
-pub(crate) fn describe_actor_in(a: &ActorDecl, items: &[CommonsItem]) -> String {
+/// `declares` says whether the declaring *unit* declares an actor of a given name, to see
+/// whether a local actor shadows the prelude base. A context may span files and the checker's
+/// actor table is the whole unit's, so the callers answer for every file of the unit.
+pub(crate) fn describe_actor_in(a: &ActorDecl, declares: &dyn Fn(&str) -> bool) -> String {
     let mut out = crate::symbols::describe_actor(a);
-    if let Some(note) = refinement_note(a, items) {
+    if let Some(note) = refinement_note(a, declares) {
         out.push('\n');
         out.push_str(&note);
         out.push('\n');
@@ -38,10 +40,10 @@ pub(crate) fn describe_actor_in(a: &ActorDecl, items: &[CommonsItem]) -> String 
 
 /// The note for a refinement of the prelude `Sender` or `Producer`; `None` for any other actor,
 /// for a base the unit shadows, and for a predicate the checker rejects (it reports that itself).
-fn refinement_note(a: &ActorDecl, items: &[CommonsItem]) -> Option<String> {
+fn refinement_note(a: &ActorDecl, declares: &dyn Fn(&str) -> bool) -> Option<String> {
     let r = a.refinement.as_ref()?;
     let base = r.base.name.as_str();
-    if !matches!(base, "Sender" | "Producer") || declares_actor(items, base) {
+    if !matches!(base, "Sender" | "Producer") || declares(base) {
         return None;
     }
     match base {
@@ -50,7 +52,8 @@ fn refinement_note(a: &ActorDecl, items: &[CommonsItem]) -> Option<String> {
     }
 }
 
-fn declares_actor(items: &[CommonsItem], name: &str) -> bool {
+/// Whether `items` declare an actor named `name`.
+pub(crate) fn declares_actor(items: &[CommonsItem], name: &str) -> bool {
     items
         .iter()
         .any(|i| matches!(i, CommonsItem::Actor(x) if x.name.name == name))
