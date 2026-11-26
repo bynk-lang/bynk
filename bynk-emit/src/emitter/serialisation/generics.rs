@@ -479,6 +479,16 @@ pub fn emit_generic_helpers_qualified(
                             predicates,
                             path_segment: n.clone(),
                             default: init.map(|e| (e.clone(), t.clone())),
+                            // #3793: a `replaces` on the generic declaration's field.
+                            renamed_from: match types.get(name.as_str()).map(|d| &d.body) {
+                                Some(bynk_syntax::ast::TypeBody::Record(r)) => r
+                                    .fields
+                                    .iter()
+                                    .find(|f| f.name.name == n)
+                                    .map(bynk_check::wire::field_renamed_from)
+                                    .unwrap_or_default(),
+                                _ => Vec::new(),
+                            },
                             name: n,
                         }
                     })
@@ -530,6 +540,7 @@ pub fn emit_generic_helpers_qualified(
                                     name: fname,
                                     default: None,
                                     predicates: Vec::new(),
+                                    renamed_from: Vec::new(),
                                 })
                                 .collect(),
                         })

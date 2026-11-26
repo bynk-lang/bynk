@@ -1343,6 +1343,27 @@ impl<'a> Parser<'a> {
         self.expect_ident(ctx)
     }
 
+    /// #3793: the optional `replaces old` clause after a field's type — the field was renamed
+    /// from `old`. `replaces` is contextual, so a field, a type or a value named `replaces`
+    /// elsewhere is unaffected. `label` reads `old` as a record field's label (a keyword
+    /// is a field name there); a `store` field's name is a plain identifier.
+    pub(crate) fn parse_field_replaces(
+        &mut self,
+        label: bool,
+    ) -> Result<Option<Ident>, CompileError> {
+        if !matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "replaces")
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let ctx = "as the field name `replaces` renames";
+        Ok(Some(if label {
+            self.expect_label(ctx)?
+        } else {
+            self.expect_ident(ctx)?
+        }))
+    }
+
     /// The targeted refusal for a keyword written as field shorthand (#2837):
     /// `Account { type, .. }` as a pattern would bind a variable named `type`,
     /// and `Account { type }` as a construction would read one. `None` when the

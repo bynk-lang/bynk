@@ -469,6 +469,7 @@ mod tests {
                 version: 4,
                 oldest_readable: 4,
                 steps: vec![step(3, 3)],
+                renames: Vec::new(),
             },
         )]);
         let deployed = BTreeMap::from([(

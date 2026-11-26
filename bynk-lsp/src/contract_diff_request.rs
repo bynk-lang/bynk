@@ -402,6 +402,7 @@ refund = "bbbb"
                 ty: Shape::Base("Bool".into()),
                 preds: Vec::new(),
                 defaulted: false,
+                renamed_from: Vec::new(),
             }];
             if extra {
                 fields.push(Field {
@@ -409,6 +410,7 @@ refund = "bbbb"
                     ty: Shape::Base("Int".into()),
                     preds: Vec::new(),
                     defaulted: false,
+                    renamed_from: Vec::new(),
                 });
                 fields.sort_by_key(|f| f.name.clone());
             }

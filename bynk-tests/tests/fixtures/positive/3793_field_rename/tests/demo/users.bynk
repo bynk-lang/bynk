@@ -1,0 +1,35 @@
+---
+#3793: a renamed field is read under either name, written under the new one.
+---
+suite demo.users
+
+case "the new key decodes" {
+	expect displayName("{\"displayName\": \"Ada\", \"age\": 36}") == "Ada"
+}
+
+case "the old key decodes as the renamed field" {
+	expect displayName("{\"name\": \"Ada\", \"age\": 36}") == "Ada"
+	expect age("{\"displayName\": \"Ada\", \"years\": 36}") == 36
+	expect nickname(
+		"{\"displayName\": \"Ada\", \"handle\": {\"kind\": \"Some\", \"value\": \"ada\"}}"
+	) == Some("ada")
+}
+
+case "the new key wins when both arrive" {
+	expect displayName("{\"displayName\": \"New\", \"name\": \"Old\", \"age\": 1}") == "New"
+	expect age("{\"displayName\": \"a\", \"age\": 5, \"years\": 9}") == 5
+}
+
+case "an absent key still takes the default, or None for an Option" {
+	expect age("{\"displayName\": \"Ada\"}") == 18
+	expect nickname("{\"displayName\": \"Ada\"}") == None
+}
+
+case "a key under neither name does not decode" {
+	expect displayName("{\"title\": \"Ada\", \"age\": 36}") == "<undecodable>"
+}
+
+case "a value is written under the new keys only" {
+	expect writtenUnderNewKeys(sample())
+	expect !writtenUnderOldKey(sample())
+}
