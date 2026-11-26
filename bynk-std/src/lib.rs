@@ -85,6 +85,7 @@ pub const BYNK_SURFACE_CAPABILITIES: &[&str] = &[
     "Locale",
     "Idempotency",
     "Events",
+    "Upstream",
 ];
 
 /// What reaches a first-party npm dependency (see [`FirstPartyNpm::reached_by`]),
@@ -2067,6 +2068,8 @@ mod tests {
         assert_eq!(
             kinds,
             [
+                // #3752: an upstream origin; it is reached with `fetch`, never bound.
+                ("bynk", "Upstream", "UPSTREAM"),
                 ("bynk.cloudflare", "Kv", "KV"),
                 ("bynk.cloudflare", "Service", "SERVICE"),
                 ("bynk.cloudflare", "R2", "R2"),
@@ -2229,6 +2232,11 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
+                "bynk.Upstream",
+                "bynk.InboundRequest",
+                "bynk.Forwarded",
+                "bynk.PassThrough",
+                "bynk.UpstreamError",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -2276,6 +2284,7 @@ mod tests {
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
                 ("bynk", "Redirect"),
+                ("bynk", "UpstreamError"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.cloudflare", "R2GetIf"),
                 ("bynk.cloudflare", "KvExpiration"),

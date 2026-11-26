@@ -3803,7 +3803,11 @@ fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
         }
     }
     let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
-    for (r, covering) in crate::route_order::shadowed(&keys) {
+    // #3752 (D5): an `ANY` route is beaten by an ordinary route of any method.
+    let found = crate::route_order::shadowed(&keys)
+        .into_iter()
+        .chain(crate::route_order::pass_through_shadowed(&keys));
+    for (r, covering) in found {
         let (method, path, span) = routes[r];
         let mut err = CompileError::new(
             "bynk.http.unreachable_route",
@@ -9584,6 +9588,8 @@ mod secret_kind_tests {
     /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
     /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
     /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
+    /// #3752: `InboundRequest` and `Forwarded` are opaque and not secrets; their own rules are
+    /// `crate::http_pass_through`'s (`held_in`).
     #[test]
     fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
         let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
@@ -9595,16 +9601,17 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["Authorization", "Secret"],
+            ["Authorization", "Forwarded", "InboundRequest", "Secret"],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );
         for (name, kind) in opaque {
             let want = match name {
-                "Secret" => SecretKind::Secret,
-                _ => SecretKind::Authorization,
+                "Secret" => Some(SecretKind::Secret),
+                "Authorization" => Some(SecretKind::Authorization),
+                _ => None,
             };
-            assert_eq!(kind, Some(want), "{name}");
+            assert_eq!(kind, want, "{name}");
         }
     }
 }
