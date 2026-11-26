@@ -188,11 +188,14 @@ pub fn instance_candidates_at(
     offset: usize,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Option<Vec<Completion>> {
-    let call = analytics_calls(text).into_iter().find(|c| {
+    let in_first_argument = analytics_calls(text).iter().any(|c| {
         c.args
             .first()
             .is_some_and(|&(s, e)| offset >= s && offset <= e)
-    })?;
+    });
+    if !in_first_argument {
+        return None;
+    }
     let names = analytics_instances(text, files);
     if names.is_empty() {
         return None;
