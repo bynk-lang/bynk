@@ -6705,6 +6705,8 @@ fn lsp_symbol_kind(kind: bynk_check::index::SymbolKind) -> SymbolKind {
         bynk_check::index::SymbolKind::Embed => SymbolKind::CONSTANT,
         // #2617: a named constant.
         bynk_check::index::SymbolKind::Const => SymbolKind::CONSTANT,
+        // #4183: a unit is a module the project is built from.
+        bynk_check::index::SymbolKind::Unit => SymbolKind::MODULE,
     }
 }
 
