@@ -27,6 +27,8 @@ use std::process::ExitCode;
 pub const PLACEHOLDER: &str = "appname";
 
 const STARTER_BYNK: &str = include_str!("templates/starter.bynk");
+/// #4125: the starter's own test, so `bynk test` passes on a fresh project.
+const STARTER_TEST: &str = include_str!("templates/starter.test.bynk");
 const BYNK_TOML: &str = include_str!("templates/bynk.toml");
 const GITIGNORE: &str = include_str!("templates/gitignore");
 /// #1763: `*.bynk text eol=lf`, so a Windows checkout keeps `fmt`'s LF form.
@@ -122,6 +124,12 @@ pub fn starter_source(name: &str) -> String {
     render(STARTER_BYNK, name)
 }
 
+/// The rendered starter test for `name`, written to `tests/<name>.test.bynk`:
+/// one case that drives the starter's route and checks its answer (#4125).
+pub fn starter_test_source(name: &str) -> String {
+    render(STARTER_TEST, name)
+}
+
 /// Does the target exist and hold anything that isn't [`SCAFFOLD_IGNORES`]
 /// cruft? A missing or cruft-only directory is fine to scaffold into (D5).
 fn target_is_nonempty(target: &Path) -> io::Result<bool> {
@@ -140,7 +148,7 @@ fn target_is_nonempty(target: &Path) -> io::Result<bool> {
     Ok(false)
 }
 
-/// Create the directory tree and write the four files. Never overwrites: the
+/// Create the directory tree and write the files. Never overwrites: the
 /// clobber check has already cleared the target of everything except
 /// [`SCAFFOLD_IGNORES`] cruft. `.gitignore` and `.gitattributes` (#1763) are
 /// the members of that set the scaffold also writes — a hand-written one (e.g.
@@ -148,7 +156,9 @@ fn target_is_nonempty(target: &Path) -> io::Result<bool> {
 /// when none is present rather than clobbering the user's.
 fn write_scaffold(target: &Path, name: &str) -> io::Result<()> {
     let src_dir = target.join("src");
+    let tests_dir = target.join("tests");
     fs::create_dir_all(&src_dir)?;
+    fs::create_dir_all(&tests_dir)?;
     fs::write(target.join("bynk.toml"), render(BYNK_TOML, name))?;
     let gitignore = target.join(".gitignore");
     if !gitignore.exists() {
@@ -160,6 +170,10 @@ fn write_scaffold(target: &Path, name: &str) -> io::Result<()> {
         fs::write(gitattributes, render(GITATTRIBUTES, name))?;
     }
     fs::write(src_dir.join(format!("{name}.bynk")), starter_source(name))?;
+    fs::write(
+        tests_dir.join(format!("{name}.test.bynk")),
+        starter_test_source(name),
+    )?;
     Ok(())
 }
 
@@ -179,6 +193,7 @@ pub fn next_steps_message(dir: &str) -> String {
          \n\
          Next steps:\n  \
          cd {dir}\n  \
+         bynk test         # run the starter test\n  \
          bynk dev          # build and serve it locally\n\
          \n\
          New to Bynk? `bynk doctor` checks your toolchain is ready.\n"
