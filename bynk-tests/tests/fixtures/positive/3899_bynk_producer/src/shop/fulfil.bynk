@@ -1,0 +1,34 @@
+context shop.fulfil
+
+type Order = { id: String }
+
+agent Tally {
+  key id: String
+  store n: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    let _ <- n.update((x) => x + 1)
+    n
+  }
+}
+
+// #3899: a Bynk context is admitted by what it is, as a `call` handler admits one: only a message
+// signed by `shop.orders` reaches the body. Anything else on the queue, from another context or from
+// no one, is refused and never handled. The handler counts the times a message reaches it (`Tally`),
+// so a case sees whether a refused message was handled: it was not if the next delivery of that
+// order is the first.
+actor FromOrders = Producer where IsContext(shop.orders)
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by FromOrders {
+    let n <- Tally(order.id).bump()
+    if order.id == "flaky" {
+      if n == 1 { Retry("try again") } else { Ack }
+    } else if n > 1 {
+      Retry("handled twice")
+    } else {
+      Ack
+    }
+  }
+}

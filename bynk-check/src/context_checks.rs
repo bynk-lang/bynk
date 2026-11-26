@@ -2153,6 +2153,7 @@ fn check_by_clause_contracts(
                 a.refinement.is_some()
                     && !is_caller_refinement(a, table)
                     && !is_sender_refinement(a, table)
+                    && !is_producer_refinement(a, table)
             })
         {
             errors.push(
@@ -2200,7 +2201,7 @@ fn check_by_clause_contracts(
                     is_sender_refinement(a, table),
                 )
             }),
-            by_mixes_foreign(by, table, &actor_ref.name),
+            by_mixes_signed(by, table, &actor_ref.name),
         ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
@@ -2769,15 +2770,15 @@ pub(crate) fn is_producer_refinement(
         .is_some_and(|r| r.base.name == "Producer" && !table.actors.contains_key("Producer"))
 }
 
-/// #3899: a queue consumer may name a `Producer` refinement or a `Foreign`
-/// actor, but nothing yet enforces either on delivery (the signed message
-/// format is a later part of #3899), so naming one is refused rather than
-/// accepted unenforced.
+/// #3899: a queue consumer may name a `Producer` refinement or a `Foreign` actor, and delivery
+/// enforces either: the consumer admits only messages signed by one of them. A sum that also names
+/// an unsigned actor, or a lone signed actor with a binder, is not enforced, so it is refused rather
+/// than accepted unenforced.
 fn actor_narrowing_refusal(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
     refinement: Option<(bool, bool)>,
-    mixes_foreign: bool,
+    mixes_signed: bool,
 ) -> Option<CompileError> {
     let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
     // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
@@ -2818,40 +2819,45 @@ fn actor_narrowing_refusal(
             ),
         );
     }
-    // #3899: a `Foreign` actor on its own is enforced: the consumer admits only messages signed
-    // under its secret, and so is a sum of only `Foreign` actors (3c-2a). A `Producer` refinement, a
-    // `Foreign` actor beside an unsigned one, or a lone `Foreign` actor with a binder is not yet.
-    if !on_queue || !(producer_refinement || mixes_foreign) {
+    // #3899: a signed actor (a `Foreign` actor, or a `Producer` refinement) is enforced: the
+    // consumer admits only messages signed by one. Beside an unsigned actor, or with a binder on a
+    // lone one (nothing binds an identity for it), it is not.
+    if !on_queue || !mixes_signed {
         return None;
     }
     Some(
         CompileError::new(
             "bynk.actor.queue_actor_not_enforced",
             by.span,
-            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, is not enforced on `on message`",
+            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement or a `Foreign` actor beside an unsigned one, or with a binder, is not enforced on `on message`",
         )
         .with_note(
-            "nothing verifies who sent such a message yet, so accepting this `by` would admit \
-             unsigned messages while reading as if it did not — write `by Producer`, or \
-             name only `Foreign` actors, a lone one with no binder",
+            "a signed message carries no identity beyond its actor, and an unsigned one carries \
+             none to tell it from a signed one, so accepting this `by` would admit unsigned \
+             messages while reading as if it did not — write `by Producer`, or name only \
+             `Foreign` actors and `Producer` refinements, a lone one with no binder",
         ),
     )
 }
 
-/// #3899: whether `actor` is the first `Foreign` member of a `by` clause that names it in a form a
-/// queue consumer cannot enforce yet: a sum that also names an unsigned actor (its messages carry no
-/// signature to tell them from the signed ones), or a single `Foreign` actor with a binder (it
-/// identifies no one beyond itself, so nothing binds a value for the body). A sum of only `Foreign`
-/// actors resolves by the message's signer, and a lone `Foreign` actor with no binder needs nothing.
-/// Said once, on the first `Foreign` member, not on each.
-fn by_mixes_foreign(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
+/// #3899: whether `actor` is the first signed member (a `Foreign` actor or a `Producer` refinement)
+/// of a `by` clause that names it in a form a queue consumer cannot enforce: a sum that also names an
+/// unsigned actor (its messages carry no signature to tell them from the signed ones), or a single
+/// signed actor with a binder (it identifies no one beyond itself, so nothing binds a value for the
+/// body). A sum of only signed actors resolves by the message's signer, and a lone signed actor with
+/// no binder needs nothing. Said once, on the first signed member, not on each.
+fn by_mixes_signed(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
     use crate::actors::Scheme;
-    let foreign = |name: &str| {
-        by_actor_contract(name, table.actors.get(name), table)
-            .is_some_and(|c| c.scheme == Scheme::Foreign)
+    let signed = |name: &str| {
+        table
+            .actors
+            .get(name)
+            .is_some_and(|a| is_producer_refinement(a, table))
+            || by_actor_contract(name, table.actors.get(name), table)
+                .is_some_and(|c| c.scheme == Scheme::Foreign)
     };
     let refused = if by.is_sum() {
-        !by.actors.iter().all(|a| foreign(&a.name))
+        !by.actors.iter().all(|a| signed(&a.name))
     } else {
         by.binder.is_some()
     };
@@ -2859,7 +2865,7 @@ fn by_mixes_foreign(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &
         && by
             .actors
             .iter()
-            .find(|a| foreign(&a.name))
+            .find(|a| signed(&a.name))
             .is_some_and(|a| a.name == actor)
 }
 
@@ -4029,7 +4035,9 @@ fn actor_identity_ty_guarded<'a>(
                 return actor_identity_ty_guarded(key.as_str(), table, resolved, seen, tys);
             }
             // #3890: a refinement over the prelude `Caller` yields a `CallerId`.
-            if is_caller_refinement(local, table) {
+            // #3899: and one over `Producer` the context that signed the message, as a sum member
+            // carries it.
+            if is_caller_refinement(local, table) || is_producer_refinement(local, table) {
                 return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
             }
             // #3888: a refinement over the prelude `Sender` yields its identity.

@@ -626,10 +626,35 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
             call.into_iter().chain(queue).map(|f| f.secret)
         })
         .filter(|secret| !secret.is_empty())
+        .chain(queue_producer_keys(p, unit_tables))
         .collect();
     secrets.sort();
     secrets.dedup();
     secrets
+}
+
+/// #3899: the edge keys participant `p`'s queue consumers verify a Bynk producer under, which the
+/// harness sets on its `env` so a case acting as `by Orders("shop.orders")` signs as that context:
+/// one for each context a `Producer` refinement admits.
+fn queue_producer_keys(p: &str, unit_tables: &HashMap<String, UnitTable>) -> Vec<String> {
+    let Some(t) = unit_tables.get(p) else {
+        return Vec::new();
+    };
+    t.services
+        .values()
+        .flat_map(|s| s.handlers.iter().map(move |h| (s, h)))
+        .filter_map(|(s, h)| bynk_check::actors::queue_admission_for(h, &s.protocol, &t.actors))
+        .flat_map(|a| a.producers)
+        .flat_map(|(_, pred)| {
+            let mut contexts: Vec<&str> = unit_tables.keys().map(String::as_str).collect();
+            contexts.extend(pred.mentioned());
+            contexts.retain(|c| pred.admits(c));
+            contexts
+                .into_iter()
+                .filter_map(wire_format::edge_key_from)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// v0.118: one `system`-tier case paired with the fragment file it was declared
