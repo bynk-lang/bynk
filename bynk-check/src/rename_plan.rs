@@ -337,8 +337,9 @@ pub(crate) fn store_renames(
 /// the lock, judged as a top-level `store` rename is. `previous` is the class's recorded fields
 /// before this build, `current` the live ones, `entry` the reconciled entry whose retained shapes
 /// say which stored versions may still hold an old name. A clause deleted while a retained
-/// version keeps the value under the old name is `bynk.field.replaces_needed`, and a clause no
-/// retained version needs is `bynk.field.replaces_settled`.
+/// version keeps the value under the old name is `bynk.field.replaces_needed`. There is no
+/// `replaces_settled` for these: a record field's clause also lets its decoders accept the old key
+/// from a wire client, which the lock cannot see, so it is never called unneeded.
 pub(crate) fn nested_renames(
     agent: &AgentDecl,
     entry: &AgentEntry,
@@ -350,12 +351,21 @@ pub(crate) fn nested_renames(
         path.rsplit_once('.')
             .map(|(parent, _)| format!("{parent}.{old}"))
     };
-    let retained = |field: &str, path: &str| {
-        entry.shapes.iter().any(|s| {
-            s.fields
-                .iter()
-                .any(|f| f.name == field && f.paths.iter().any(|p| p.path == path))
-        })
+    // Whether a retained shape holds `path` of the store field `live`, under any name `live` has
+    // had: an older shape records a field renamed by a top-level `replaces` under its old name,
+    // and its paths start with that name.
+    let retained = |live: &StoreShape, path: &str| {
+        let rest = path.strip_prefix(live.name.as_str()).unwrap_or(path);
+        std::iter::once(&live.name)
+            .chain(&live.renamed_from)
+            .any(|name| {
+                let at = format!("{name}{rest}");
+                entry.shapes.iter().any(|s| {
+                    s.fields
+                        .iter()
+                        .any(|f| &f.name == name && f.paths.iter().any(|p| p.path == at))
+                })
+            })
     };
     let span_of = |field: &str| {
         agent
@@ -374,7 +384,7 @@ pub(crate) fn nested_renames(
                 .paths
                 .iter()
                 .any(|l| l.path == p.path && l.renamed_from.is_none());
-            let Some(held) = old_path(&p.path, old).filter(|o| retained(&prev.name, o)) else {
+            let Some(held) = old_path(&p.path, old).filter(|o| retained(live, o)) else {
                 continue;
             };
             if !clause_gone {
@@ -395,26 +405,6 @@ pub(crate) fn nested_renames(
                     "keep `replaces {old}` on the record field until `bynk migrate` has raised the \
                      class's floor past those versions ({held} is what they hold)"
                 )),
-            );
-        }
-    }
-    for c in current {
-        for p in c.paths.iter().filter(|p| p.renamed_from.is_some()) {
-            let old = p.renamed_from.as_deref().unwrap_or_default();
-            if old_path(&p.path, old).is_some_and(|o| retained(&c.name, &o)) {
-                continue;
-            }
-            let at = span_of(&c.name).map(|(s, _)| s).unwrap_or_default();
-            errors.push(
-                CompileError::new(
-                    "bynk.field.replaces_settled",
-                    at,
-                    format!(
-                        "no stored version the lock holds still keeps `{}.{}` under `{old}`",
-                        agent.name.name, p.path
-                    ),
-                )
-                .with_note("the clause is no longer read; delete `replaces` from the record field"),
             );
         }
     }

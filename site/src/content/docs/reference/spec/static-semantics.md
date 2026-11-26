@@ -1343,9 +1343,12 @@ field holds the record, in a `Cell` or in the value of a `Map`, `Cache` or `Log`
 - **What loading does.** The record's decoder accepts the old key, so a value stored
   before the rename reads as `New`.
 - **How long the clause stays.** As for a `Cell`: the clause MUST stay while a snapshot at or
-  above the class's floor records the old path (`bynk.field.replaces_needed`), and when none
-  does a build warns that it can be deleted (`bynk.field.replaces_settled`). The lock keeps
-  `renamed_from` on the renamed path to judge it by.
+  above the class's floor records the old path, under any name the `store` field has had
+  (`bynk.field.replaces_needed`). The lock keeps `renamed_from` on the renamed path to judge it
+  by. A record field's clause also lets its decoders accept the old key from a wire client, so
+  a build never says that it can be deleted. A rename beneath a key position (a `Set`'s
+  element, a `Map`'s or `Cache`'s key, an `@indexed(by:)` composite) is refused, as an added
+  field there is: the key's encoding names the field.
 
 ### §5.4.4 Erasing an instance (#3931) {#erase}
 

@@ -703,11 +703,25 @@ fn classify_agent_change_keyed(
     let AgentChange::Additive { nested, .. } = &change else {
         return change;
     };
+    // A rename (#4483) beneath a key is the same hazard: the key's canonical encoding names the
+    // field, so every stored key would change. `nested` records it as `old → new renamed`.
     let under_key: Vec<String> = nested
         .iter()
-        .filter_map(|n| n.strip_suffix(" added with a default"))
-        .filter(|p| roots.iter().any(|r| is_under(p, r)))
-        .map(|p| format!("{p} (added beneath a key: it would change every stored key's encoding)"))
+        .filter_map(|n| {
+            n.strip_suffix(" added with a default")
+                .map(|p| (p, "added"))
+                .or_else(|| {
+                    let renamed = n.strip_suffix(" renamed")?;
+                    Some((
+                        renamed.split_once(" → ").map_or(renamed, |(_, new)| new),
+                        "renamed",
+                    ))
+                })
+        })
+        .filter(|(p, _)| roots.iter().any(|r| is_under(p, r)))
+        .map(|(p, what)| {
+            format!("{p} ({what} beneath a key: it would change every stored key's encoding)")
+        })
         .collect();
     if under_key.is_empty() {
         return change;

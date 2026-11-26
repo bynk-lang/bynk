@@ -85,8 +85,10 @@ agent Cart {
 The lock reads the recorded `width` as `size`, so the change is additive and needs no `migrate from` step,
 and a `Prefs` stored under `width` reads back as `size`. A rename that also changes the field's type is
 still refused. As for a stored field, deleting the clause is refused while a stored version the lock holds
-keeps the value under the old name (`bynk.field.replaces_needed`), and once `bynk migrate` has raised the
-class's floor past those versions the build warns that the clause can go (`bynk.field.replaces_settled`).
+keeps the value under the old name (`bynk.field.replaces_needed`). The build never says that such a clause can
+go, because the same clause lets the record's decoders accept the old key from an HTTP client or an event. A
+rename beneath a key (a `Set` element, a `Map` key or an `@indexed(by:)` composite) is refused, as adding a
+field there is: the key's encoding names the field, so every stored key would change.
 
 ## When the clause can go
 

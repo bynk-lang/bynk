@@ -365,12 +365,10 @@ fn deleting_a_nested_clause_while_an_older_version_is_held_is_refused() {
 }
 
 #[test]
-fn a_nested_clause_no_held_version_needs_warns_that_it_can_go() {
+fn a_nested_clause_no_held_version_needs_can_go_without_a_hint() {
     let p = agent_project("nested-settled");
     p.ok(&prefs_cart("width: Int"));
-    // While version 1 is held, the clause is needed and says nothing.
-    let held = p.ok(&prefs_cart("size: Int replaces width"));
-    assert!(!held.contains("replaces_settled"), "{held}");
+    p.ok(&prefs_cart("size: Int replaces width"));
 
     // `bynk migrate` raises the floor past version 1, the only version that held `width`.
     let mut lock =
@@ -379,11 +377,58 @@ fn a_nested_clause_no_held_version_needs_warns_that_it_can_go() {
     bynk_driver::schema_lock::write(&p.root, &bynk_project::schema_registry::serialize(&lock))
         .unwrap();
 
-    let warnings = p.ok(&prefs_cart("size: Int replaces width"));
-    assert!(
-        warnings.contains("bynk.field.replaces_settled"),
-        "{warnings}"
-    );
+    // The clause also serves a wire client, which the lock cannot see, so it is never called
+    // unneeded.
+    let kept = p.ok(&prefs_cart("size: Int replaces width"));
+    assert!(!kept.contains("replaces_settled"), "{kept}");
     // And deleting it now is accepted.
     p.ok(&prefs_cart("size: Int"));
+}
+
+/// A `Prefs` stored in a `Cell` named `cell`, with `width_field`.
+fn named_prefs_cart(cell: &str, cell_clause: &str, width_field: &str) -> String {
+    format!(
+        "context shop\n\ntype Prefs = {{ {width_field} }}\n\nagent Cart {{\n  key id: String\n\n  store {cell}: Cell[Prefs]{cell_clause}\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+#[test]
+fn a_nested_clause_is_judged_under_the_names_its_store_field_has_had() {
+    // The store field and the record field are renamed in one build: version 1 records the value
+    // under `p.width`, and the guard must look there, not under `prefs.width` alone.
+    let p = agent_project("nested-both");
+    p.ok(&named_prefs_cart("p", "", "width: Int"));
+    p.ok(&named_prefs_cart(
+        "prefs",
+        " replaces p",
+        "size: Int replaces width",
+    ));
+    let before = p.lock();
+    let err = p.err(&named_prefs_cart("prefs", " replaces p", "size: Int"));
+    assert!(err.contains("bynk.field.replaces_needed"), "{err}");
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+/// An agent holding `Prefs` at a key position (`kind`, such as `Set[Prefs]` or `Map[Prefs, Int]`).
+fn keyed_cart(kind: &str, width_field: &str) -> String {
+    format!(
+        "context shop\n\ntype Prefs = {{ {width_field} }}\n\nagent Cart {{\n  key id: String\n\n  store keyed: {kind}\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+#[test]
+fn a_rename_beneath_a_key_is_refused_as_an_added_field_is() {
+    // A key's canonical encoding names the field, so renaming it would strand every stored key.
+    for kind in ["Set[Prefs]", "Map[Prefs, Int]"] {
+        let p = agent_project(&format!("nested-key-{}", kind.split('[').next().unwrap()));
+        p.ok(&keyed_cart(kind, "width: Int"));
+        let before = p.lock();
+        let err = p.err(&keyed_cart(kind, "size: Int replaces width"));
+        assert!(
+            err.contains("bynk.agent.non_additive_state_change"),
+            "{kind}: {err}"
+        );
+        assert!(err.contains("beneath a key"), "{kind}: {err}");
+        assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+    }
 }
