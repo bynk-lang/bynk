@@ -78,6 +78,13 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotKey>
                     float: true,
                 });
             }
+            // #4111: a `Secret` is not `Key` (`==` on text is variable-time).
+            if crate::context_checks::is_secret_type(name, &ctx.input.types) {
+                return Some(NotKey {
+                    part: "Secret".to_string(),
+                    float: false,
+                });
+            }
             let args = args.clone();
             let name = name.clone();
             for a in &args {
@@ -151,6 +158,13 @@ fn walk_ref(
         }),
         TypeRef::Option(a, _) | TypeRef::List(a, _) => walk_ref(a, params, types, visited),
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
+        // #4111: a `Secret` is not `Key`.
+        TypeRef::Named(id) if crate::context_checks::is_secret_type(&id.name, types) => {
+            Some(NotKey {
+                part: "Secret".to_string(),
+                float: false,
+            })
+        }
         // An unresolved name is reported by the resolver, not here.
         TypeRef::Named(id) => walk_decl(&id.name, types, visited),
         TypeRef::App { name, args, .. } => args
