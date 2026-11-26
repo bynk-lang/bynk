@@ -75,6 +75,18 @@ export function __serialise_Ordering(value: Ordering): __JsonValue {
 }
 
 export function __deserialise_Ordering(json: __JsonValue, path: string = "$"): Result<Ordering, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Less":
+        return Ok({ tag: "Less" } as Ordering);
+      case "Equal":
+        return Ok({ tag: "Equal" } as Ordering);
+      case "Greater":
+        return Ok({ tag: "Greater" } as Ordering);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

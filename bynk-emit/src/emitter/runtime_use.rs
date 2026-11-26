@@ -190,6 +190,12 @@ impl RuntimeUse {
         self.note_cmp(name);
     }
 
+    /// Record that the module references the `Instant` wire helper `name`
+    /// (`time.ts`, #3974). Rides the comparator group's import run too.
+    pub fn note_time(&self, name: &'static str) {
+        self.note_cmp(name);
+    }
+
     /// The comparator helpers to import, as a `", a, b"` run (empty when the
     /// module uses none), in the shape the other conditional groups take.
     pub fn cmp_imports(&self) -> String {

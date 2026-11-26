@@ -122,6 +122,14 @@ export function __serialise_LoginError(value: LoginError): __JsonValue {
 }
 
 export function __deserialise_LoginError(json: __JsonValue, path: string = "$"): Result<LoginError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Invalid":
+        return Ok({ tag: "Invalid" } as LoginError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
