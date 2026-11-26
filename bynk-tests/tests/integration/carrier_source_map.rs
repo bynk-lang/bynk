@@ -328,6 +328,8 @@ const WALLET_MAP: &str = "\
 // `__webSocketClosing`/`__webSocketErrored`, so the trailing run of `33`s (the dispatch methods' span)
 // is eight lines longer: the new `webSocketError` joins `webSocketClose`, each calling `on close`
 // through an arrow. No mapping moved.
+// #3905: `webSocketMessage` starts with the frame admission (`__webSocketAdmit`), one more line in the
+// same run of `33`s. No mapping moved.
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2
 2 2 2 2 3 3 3 3 3 3 3 3 3 4 4 4
@@ -347,7 +349,7 @@ const CHAT_MAP: &str = "\
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
-33 33 33 33 33 33 33 33
+33 33 33 33 33 33 33 33 33
 ";
 
 const MONEY: &str = "commons commerce.money {

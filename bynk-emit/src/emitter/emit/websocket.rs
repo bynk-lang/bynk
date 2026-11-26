@@ -12,7 +12,9 @@ use crate::emitter::lower_stmt::function_body_stmts;
 use crate::emitter::serialisation;
 use crate::emitter::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use crate::emitter::{RuntimeUse, TyRender, UnitFacts, ts_ident, ty_to_type_ref};
-use crate::ts_build::{ident, member, num_lit};
+use crate::ts_build::{
+    as_expr, bool_lit, call, ident, if_, member, new, not_expr, num_lit, return_,
+};
 use bynk_check::actors::ActorDecl;
 use bynk_check::checker::{TyId, TypedCommons};
 use bynk_check::firstparty::FirstPartyCap;
@@ -48,6 +50,13 @@ pub(super) struct WsOpenHost<'a> {
     pub(super) seam: Option<bynk_check::actors::BearerSeam>,
     /// #3904: the credential is an `Oidc` token, offered after `bynk.oidc` rather than `bynk.bearer`.
     pub(super) oidc: bool,
+    /// #3905: the service's `limits { maxFrame }` (or the default), the largest frame in bytes the
+    /// Durable Object reads or sends.
+    pub(super) max_frame: i64,
+    /// #3905: the `in:` frame type is `Bytes`, so inbound frames are binary and not JSON text.
+    pub(super) in_bytes: bool,
+    /// #3905: the `out:` frame type is `Bytes`, so the connection sends binary messages.
+    pub(super) out_bytes: bool,
     /// An actor-sum `by who: A | B`: the members in first-wins order. The edge
     /// forwards which one verified (`{ tag, identity? }`) and the DO rebuilds
     /// `deps.who` from it. Mutually exclusive with `seam`, which a sum never has.
@@ -151,6 +160,12 @@ pub(super) fn ws_open_hosts_for<'a>(
                     } else {
                         bynk_check::actors::ws_principal_seam_for(h, actors)
                     },
+                    max_frame: s
+                        .limits
+                        .as_ref()
+                        .map_or(bynk_syntax::ast::DEFAULT_MAX_FRAME, |l| l.max_frame()),
+                    in_bytes: is_plain_bytes(commons, in_ty),
+                    out_bytes: is_plain_bytes(commons, out_ty),
                     oidc: h
                         .by_clause
                         .as_ref()
@@ -242,6 +257,122 @@ fn ws_decode_attempt(target: &str, value: bynk_ts::TsExpr, reason: &str) -> bynk
         bynk_ts::TsStmt::inline_block(vec![close, bynk_ts::TsStmt::return_stmt(None, None)], None),
         None,
     )
+}
+
+/// #3905: whether a frame type is exactly `Bytes`. Both directions key on this one rule: a plain `Bytes`
+/// frame is a binary message and any other frame type is JSON text, so an opaque or refined type over
+/// `Bytes` is JSON in both.
+fn is_plain_bytes(commons: &TypedCommons, ty: TyId) -> bool {
+    matches!(
+        &*commons.tys().get(ty),
+        bynk_check::checker::Ty::Base(bynk_syntax::ast::BaseType::Bytes)
+    )
+}
+
+/// #3905: the socket attachment's send settings: the frame ceiling `maxFrame` and, for an `out: Bytes`
+/// service, `bin`, so `send` reads both after any wake, whatever handlers the service declares.
+fn ws_send_meta(host: &WsOpenHost<'_>) -> Vec<(String, bynk_ts::TsExpr)> {
+    let mut meta = vec![("max".to_string(), num_lit(host.max_frame))];
+    if host.out_bytes {
+        meta.push(("bin".to_string(), bool_lit(true)));
+    }
+    meta
+}
+
+/// #3905: `if (!__webSocketAdmit(ws, message, <maxFrame>, <binary>)) return;`: the first thing an
+/// inbound frame meets. A frame over `maxFrame` is closed with `1009` and one of the wrong kind with
+/// `1003`, before it is decoded or parsed.
+fn ws_admit_stmt(host: &WsOpenHost<'_>) -> bynk_ts::TsStmt {
+    if_(
+        not_expr(call(
+            ident("__webSocketAdmit"),
+            vec![
+                ident("ws"),
+                ident("message"),
+                num_lit(host.max_frame),
+                bool_lit(host.in_bytes),
+            ],
+        )),
+        return_(None),
+    )
+}
+
+/// #3905: `new globalThis.Uint8Array(message as globalThis.ArrayBuffer)`: a binary frame as `Bytes`.
+fn ws_frame_bytes_expr() -> bynk_ts::TsExpr {
+    new(
+        ident("globalThis.Uint8Array"),
+        vec![as_expr(
+            ident("message"),
+            bynk_ts::TsType::named("globalThis.ArrayBuffer"),
+        )],
+    )
+}
+
+/// The statements that read a text frame into its decoded value `__dec`: the text, the JSON, and the
+/// codec, each failure closing the socket (`1003` for an unreadable or malformed frame, `1008` for
+/// one the codec refuses).
+#[allow(clippy::vec_init_then_push)]
+fn ws_text_decode_stmts(decode: bynk_ts::TsExpr) -> Vec<bynk_ts::TsStmt> {
+    let mut out = Vec::new();
+    out.push(bynk_ts::TsStmt::let_stmt(
+        bynk_ts::TsBindingName::Ident("__raw".to_string()),
+        Some(bynk_ts::TsType::named("string")),
+        None,
+        None,
+    ));
+    out.push(ws_decode_attempt(
+        "__raw",
+        ws_frame_text_expr(),
+        "unreadable frame",
+    ));
+    out.push(bynk_ts::TsStmt::let_stmt(
+        bynk_ts::TsBindingName::Ident("__json".to_string()),
+        Some(bynk_ts::TsType::named("__JsonValue")),
+        None,
+        None,
+    ));
+    out.push(ws_decode_attempt(
+        "__json",
+        ws_frame_json_expr(),
+        "malformed frame",
+    ));
+    out.push(bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__dec".to_string()),
+        None,
+        decode,
+        None,
+    ));
+    out.push(bynk_ts::TsStmt::if_stmt(
+        bynk_ts::TsExpr::Binary {
+            op: bynk_ts::TsBinaryOp::StrictEq,
+            left: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(bynk_ts::TsExpr::Ident("__dec".to_string())),
+                property: "tag".to_string(),
+            }),
+            right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("Err".to_string()))),
+        },
+        bynk_ts::TsStmt::inline_block(
+            vec![
+                bynk_ts::TsStmt::expr_stmt(
+                    bynk_ts::TsExpr::Call {
+                        callee: Box::new(bynk_ts::TsExpr::Member {
+                            object: Box::new(bynk_ts::TsExpr::Ident("ws".to_string())),
+                            property: "close".to_string(),
+                        }),
+                        args: vec![
+                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1008".to_string())),
+                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("invalid frame".to_string())),
+                        ],
+                    },
+                    None,
+                ),
+                bynk_ts::TsStmt::return_stmt(None, None),
+            ],
+            None,
+        ),
+        None,
+    ));
+    out
 }
 
 /// Emit the DO method that runs a hosted `from websocket` lifecycle body (`on
@@ -849,6 +980,8 @@ pub(super) fn ws_open_fetch_branch_stmt(
                 },
             ));
         }
+        // #3905: the frame ceiling and kind, which `send` reads from the socket after any wake.
+        meta.extend(ws_send_meta(host));
         // #3903: and the credential's expiry, which a waking `webSocketMessage` checks.
         if host.reads_bearer_token() {
             meta.push((
@@ -871,6 +1004,8 @@ pub(super) fn ws_open_fetch_branch_stmt(
             ));
         }
         accept_args.push(bynk_ts::TsExpr::object(meta));
+    } else {
+        accept_args.push(bynk_ts::TsExpr::object(ws_send_meta(host)));
     }
     // #1818: the edge forwards the agent's key with the upgrade.
     if let Some((codec, key_ty)) = &host.agent_key {
@@ -1184,9 +1319,11 @@ pub(super) fn emit_ws_dispatch_handlers(
                  codec-eligible"
             )
         });
-        let decode =
-            serialisation::deserialise_expr(&in_type, &ident("__json"), "frame", runtime_use);
-        let mut stmts = Vec::new();
+        // A `Bytes` frame is binary and is never decoded, so its codec is not built (nor its imports noted).
+        let decode = (!host.in_bytes).then(|| {
+            serialisation::deserialise_expr(&in_type, &ident("__json"), "frame", runtime_use)
+        });
+        let mut stmts = vec![ws_admit_stmt(host)];
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());
         // #3903: a frame after the credential's expiry closes the connection before `on message` runs.
@@ -1195,66 +1332,10 @@ pub(super) fn emit_ws_dispatch_handlers(
                 host, c, types, &deps_arg,
             ));
         }
-        stmts.push(bynk_ts::TsStmt::let_stmt(
-            bynk_ts::TsBindingName::Ident("__raw".to_string()),
-            Some(bynk_ts::TsType::named("string")),
-            None,
-            None,
-        ));
-        stmts.push(ws_decode_attempt(
-            "__raw",
-            ws_frame_text_expr(),
-            "unreadable frame",
-        ));
-        stmts.push(bynk_ts::TsStmt::let_stmt(
-            bynk_ts::TsBindingName::Ident("__json".to_string()),
-            Some(bynk_ts::TsType::named("__JsonValue")),
-            None,
-            None,
-        ));
-        stmts.push(ws_decode_attempt(
-            "__json",
-            ws_frame_json_expr(),
-            "malformed frame",
-        ));
-        stmts.push(bynk_ts::TsStmt::const_stmt(
-            bynk_ts::TsBindingName::Ident("__dec".to_string()),
-            None,
-            decode,
-            None,
-        ));
-        stmts.push(bynk_ts::TsStmt::if_stmt(
-            bynk_ts::TsExpr::Binary {
-                op: bynk_ts::TsBinaryOp::StrictEq,
-                left: Box::new(bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Ident("__dec".to_string())),
-                    property: "tag".to_string(),
-                }),
-                right: Box::new(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("Err".to_string()))),
-            },
-            bynk_ts::TsStmt::inline_block(
-                vec![
-                    bynk_ts::TsStmt::expr_stmt(
-                        bynk_ts::TsExpr::Call {
-                            callee: Box::new(bynk_ts::TsExpr::Member {
-                                object: Box::new(bynk_ts::TsExpr::Ident("ws".to_string())),
-                                property: "close".to_string(),
-                            }),
-                            args: vec![
-                                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num("1008".to_string())),
-                                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
-                                    "invalid frame".to_string(),
-                                )),
-                            ],
-                        },
-                        None,
-                    ),
-                    bynk_ts::TsStmt::return_stmt(None, None),
-                ],
-                None,
-            ),
-            None,
-        ));
+        // #3905: a `Bytes` frame is binary and is handed over as it arrived; any other frame is JSON text.
+        if let Some(decode) = decode {
+            stmts.extend(ws_text_decode_stmts(decode));
+        }
         // The decoded frame fills the param typed as the service `in`; the rest are
         // route values recovered (positionally) from the attachment args.
         let mut call_args = vec![ident("connection")];
@@ -1273,7 +1354,11 @@ pub(super) fn emit_ws_dispatch_handlers(
         };
         for p in &m.params {
             if resolve_ty(&p.type_ref) == host.in_ty {
-                call_args.push(member(ident("__dec"), "value"));
+                call_args.push(if host.in_bytes {
+                    ws_frame_bytes_expr()
+                } else {
+                    member(ident("__dec"), "value")
+                });
             } else {
                 call_args.push(ws_arg_cast("__att", route_idx, &p.type_ref));
                 route_idx += 1;

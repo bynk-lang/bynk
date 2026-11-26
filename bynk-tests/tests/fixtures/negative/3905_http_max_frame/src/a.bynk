@@ -1,0 +1,6 @@
+context a
+
+service api from http {
+	limits { maxFrame: 1024 }
+	on GET("/") () -> Effect[HttpResult[String]] by v: Visitor { Ok("x") }
+}

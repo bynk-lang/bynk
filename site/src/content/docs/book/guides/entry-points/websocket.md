@@ -144,6 +144,27 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 }
 ```
 
+### Binary frames and frame limits
+
+A frame is JSON text by default. For audio, images or a compact protocol, make the frame type `Bytes`:
+`in: Bytes` delivers each inbound binary message to `on message` as `Bytes`, and `out: Bytes` sends
+binary messages. A service declares the largest frame it reads or sends with `limits { maxFrame }`, in
+bytes (1 MiB if you say nothing, at most 32 MiB):
+
+```bynk,fragment
+service Audio from websocket(in: Bytes, out: Bytes) {
+  limits { maxFrame: 262_144 }
+  on message (roomId: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+    ()
+  }
+}
+```
+
+A frame over `maxFrame` closes the connection with `1009` before it is parsed, a text frame to a `Bytes`
+service and a binary frame to a JSON one with `1003`, and a frame your code sends over `maxFrame`
+faults the send. The [reference](/reference/websocket/#frame-size-and-binary-frames) has the rules.
+
 ### Leaving a room
 
 A client that goes away must be removed from the room, or a later broadcast raises on its dead
