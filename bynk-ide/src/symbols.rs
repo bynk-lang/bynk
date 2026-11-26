@@ -75,6 +75,14 @@ pub fn find_declaration_span(source: &str, name: &str) -> Option<Span> {
 /// Build a Markdown summary of a named declaration suitable for an LSP
 /// hover response. Returns `None` if no declaration matches.
 pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
+    describe_symbol_with(source, name, &[])
+}
+
+/// [`describe_symbol`] with the project's other files in view (#4393): an actor that refines the
+/// prelude `Sender` / `Producer` is described as a refinement only when no file of the unit
+/// declares a shadowing actor of that name, as the checker's whole-unit actor table decides.
+/// `others` may hold files of other units; they are skipped.
+pub fn describe_symbol_with(source: &str, name: &str, others: &[&str]) -> Option<String> {
     let tokens = tokenize(source).ok()?;
     let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
     let unit = unit?;
@@ -117,6 +125,17 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
         return Some(describe_fixture(f));
     }
     for item in items {
+        // #4393: an actor is rendered with its siblings in view, to tell a refinement of the
+        // prelude `Sender` / `Producer` from one of a local actor that shadows it.
+        if let CommonsItem::Actor(a) = item
+            && a.name.name == name
+        {
+            let declares = |n: &str| {
+                crate::actor_refinement::declares_actor(items, n)
+                    || crate::documentation::unit_siblings_declare(&unit, others, n)
+            };
+            return Some(crate::actor_refinement::describe_actor_in(a, &declares));
+        }
         if let Some(summary) = describe_item(item, name) {
             return Some(summary);
         }
@@ -136,9 +155,20 @@ pub fn describe_key(
     source: &str,
     name: &str,
 ) -> Option<String> {
+    describe_key_with(kind, source, name, &[])
+}
+
+/// [`describe_key`] with the project's other files in view, for what depends on the rest of the
+/// declaring unit ([`describe_symbol_with`]).
+pub fn describe_key_with(
+    kind: bynk_check::index::SymbolKind,
+    source: &str,
+    name: &str,
+    others: &[&str],
+) -> Option<String> {
     match kind {
         bynk_check::index::SymbolKind::Unit => describe_unit(std::iter::once(source), name),
-        _ => describe_symbol(source, name),
+        _ => describe_symbol_with(source, name, others),
     }
 }
 
