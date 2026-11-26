@@ -585,21 +585,11 @@ export async function readStored<S extends object>(
 // shaped it (the old name, which the join below gives it), and the commit that follows writes the
 // entries under the new name and deletes the old keys.
 
-/**
- * One collection rename: `from` is the field's earlier name, `to` its name now. `kind` says which key
- * families the field has, and `indexed` that it keeps index postings (`@indexed` or `@unique`).
- */
+/** One collection rename: `from` is the field's earlier name, `to` its name now, `kind` its storage kind. */
 export interface CollectionRename {
   readonly kind: "map" | "set" | "cache" | "log";
-  readonly indexed?: boolean;
   readonly from: string;
   readonly to: string;
-}
-
-/** The key tags a collection's entries sit under: entries first, then a `Cache`'s expiries and index postings. */
-function renameTags(r: CollectionRename): string[] {
-  const entries = r.kind === "set" ? "s" : r.kind === "log" ? "l" : "m";
-  return [entries, ...(r.kind === "cache" ? ["x"] : []), ...(r.indexed === true ? ["i"] : [])];
 }
 
 /** How many entries one batch moves: Cloudflare's limit on keys per batched write. */
@@ -628,7 +618,16 @@ export async function moveRenamedEntries(
   renamesDone.set(self, true);
 }
 
-type Meta = { size?: number; seq?: number } & Record<string, unknown>;
+type Meta = { size?: number; seq?: number; skew?: number; ix?: string } & Record<string, unknown>;
+
+// Delete every key under `prefix`, a batch at a time.
+async function deletePrefix(storage: DurableObjectStorage, prefix: string, batch: number): Promise<void> {
+  for (;;) {
+    const page = await storage.list<unknown>({ prefix, limit: batch });
+    if (page.size === 0) return;
+    await storage.delete([...page.keys()]);
+  }
+}
 
 async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename, batch: number): Promise<void> {
   const oldMeta = await storage.get<Meta>(metaKey(r.from));
@@ -636,43 +635,64 @@ async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename,
   // Entries under both names (a rolled-back deploy wrote under the old one): the old entries take
   // insertion sequences after the new field's, so none collides with one the new field hands out.
   const offset = newMeta === undefined ? 0 : (newMeta.seq ?? 0);
+  const tag = r.kind === "set" ? "s" : r.kind === "log" ? "l" : "m";
+  const oldPrefix = `${tag}/${encodeKeyPart(r.from)}/`;
+  const newPrefix = `${tag}/${encodeKeyPart(r.to)}/`;
   let movedEntries = 0;
-  for (const [at, tag] of renameTags(r).entries()) {
-    const oldPrefix = `${tag}/${encodeKeyPart(r.from)}/`;
-    const newPrefix = `${tag}/${encodeKeyPart(r.to)}/`;
-    for (;;) {
-      const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
-      if (page.size === 0) break;
-      const oldKeys = [...page.keys()];
-      const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
-      const present = await storage.get<unknown>(newKeys);
-      const moved: Record<string, unknown> = {};
-      oldKeys.forEach((k, i) => {
-        if (present.has(newKeys[i]!)) return;
-        const value = page.get(k) as { i?: number };
-        moved[newKeys[i]!] =
-          offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
-      });
-      // Only the entries count: an expiry or a posting is not one.
-      if (at === 0) movedEntries += Object.keys(moved).length;
-      await storage.transaction(async (txn) => {
-        if (Object.keys(moved).length > 0) await txn.put(moved);
-        await txn.delete(oldKeys);
-      });
-    }
+  for (;;) {
+    const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
+    if (page.size === 0) break;
+    const oldKeys = [...page.keys()];
+    const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
+    const present = await storage.get<unknown>(newKeys);
+    const moved: Record<string, unknown> = {};
+    oldKeys.forEach((k, at) => {
+      if (present.has(newKeys[at]!)) return;
+      const value = page.get(k) as { i?: number; exp?: unknown };
+      moved[newKeys[at]!] =
+        offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
+      movedEntries += 1;
+      // A `Cache`'s expiry entry is derived from the entry that moved, in the same transaction, never
+      // copied: an expiry left under the old name for an entry the new name already held would reap
+      // the live one at the old entry's time.
+      if (r.kind === "cache" && typeof value.exp === "number") {
+        moved[expiryKey(r.to, value.exp, decodeKeyPart(k.slice(oldPrefix.length)))] = 1;
+      }
+    });
+    await storage.transaction(async (txn) => {
+      if (Object.keys(moved).length > 0) await txn.put(moved);
+      await txn.delete(oldKeys);
+    });
+  }
+  // What the old name leaves behind is deleted, never moved: an expiry is derived from its entry
+  // above, and an index posting is rebuilt from the entries by the handle (the moved metadata drops
+  // its index signature), so a posting for an entry the merge dropped cannot survive. Postings are
+  // swept whatever the field declares now, since the old field may have been indexed when this one is
+  // not.
+  if (r.kind !== "set" && r.kind !== "log") {
+    await deletePrefix(storage, `x/${encodeKeyPart(r.from)}/`, batch);
+    await deletePrefix(storage, `i/${encodeKeyPart(r.from)}/`, batch);
   }
   if (oldMeta === undefined) return;
   // The metadata (the entry count and the next insertion sequence) moves with the entries. When the
-  // new name has its own, it counts the entries that moved in, and the next sequence clears both.
+  // new name has its own, it counts the entries that moved in, and the next sequence clears both. A
+  // `Log`'s skew (how far a key's time is above its entry's) is the larger of the two, or unknown
+  // when either is, so a window or a prune cannot miss the older entries.
+  const { ix: _oldIx, ...rest } = oldMeta;
   await storage.transaction(async (txn) => {
     if (newMeta === undefined) {
-      await txn.put(metaKey(r.to), oldMeta);
+      await txn.put(metaKey(r.to), rest);
     } else {
-      await txn.put(metaKey(r.to), {
-        ...newMeta,
+      const { ix: _newIx, skew: newSkew, ...own } = newMeta;
+      const merged: Record<string, unknown> = {
+        ...own,
         size: (newMeta.size ?? 0) + movedEntries,
         seq: offset + (oldMeta.seq ?? 0),
-      });
+      };
+      if (r.kind === "log" && typeof newSkew === "number" && typeof oldMeta.skew === "number") {
+        merged["skew"] = Math.max(newSkew, oldMeta.skew);
+      }
+      await txn.put(metaKey(r.to), merged);
     }
     await txn.delete(metaKey(r.from));
   });

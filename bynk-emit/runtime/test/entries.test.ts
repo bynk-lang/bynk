@@ -891,7 +891,7 @@ test("a collection larger than a batch moves in batches, and a crash between the
   assert.deepEqual(await storage.get(metaKey("visited")), { size: n, seq: n });
 });
 
-test("a renamed Cache moves its entries and its expiry entries", async () => {
+test("a renamed Cache moves its entries and derives their expiry entries", async () => {
   const storage = new InMemoryStorage();
   await storage.put({
     [mapKey("sessions", "a")]: { v: 1, exp: 100, i: 0 },
@@ -904,49 +904,101 @@ test("a renamed Cache moves its entries and its expiry entries", async () => {
   assert.equal(storage.size, 3, "the entry, its expiry and the metadata");
 });
 
+test("a Cache merge never lets an old expiry reap the entry that won", async () => {
+  // Both names hold `k` (a rolled-back deploy wrote under the old one) with different expiries.
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [mapKey("live", "k")]: { v: 2, exp: 900, i: 0 },
+    [expiryKey("live", 900, "k")]: 1,
+    [metaKey("live")]: { size: 1, seq: 1 },
+    [mapKey("sessions", "k")]: { v: 1, exp: 100, i: 0 },
+    [expiryKey("sessions", 100, "k")]: 1,
+    [mapKey("sessions", "j")]: { v: 3, exp: 300, i: 1 },
+    [expiryKey("sessions", 300, "j")]: 1,
+    [metaKey("sessions")]: { size: 2, seq: 2 },
+  });
+  await move({}, storage, [{ kind: "cache", from: "sessions", to: "live" }]);
+  assert.deepEqual(await storage.get(mapKey("live", "k")), { v: 2, exp: 900, i: 0 }, "the new name's entry wins");
+  assert.deepEqual(
+    [...(await storage.list({ prefix: "x/" })).keys()],
+    [expiryKey("live", 300, "j"), expiryKey("live", 900, "k")],
+    "no expiry at the old entry's time (100) is left for the winner",
+  );
+  assert.deepEqual(await storage.get(metaKey("live")), { size: 2, seq: 3 });
+});
+
 test("a renamed Log moves its entries, whose keys carry a time and a sequence", async () => {
   const storage = new InMemoryStorage();
   await storage.put({
     [logKey("events", 5, 0)]: { t: 5, v: "a" },
     [logKey("events", 6, 1)]: { t: 6, v: "b" },
-    [metaKey("events")]: { size: 2, seq: 2 },
+    [metaKey("events")]: { size: 2, seq: 2, skew: 0 },
   });
   await move({}, storage, [{ kind: "log", from: "events", to: "journal" }]);
   assert.deepEqual(
     [...(await storage.list({ prefix: "l/" })).keys()],
     [logKey("journal", 5, 0), logKey("journal", 6, 1)],
   );
-  assert.deepEqual(await storage.get(metaKey("journal")), { size: 2, seq: 2 });
+  assert.deepEqual(await storage.get(metaKey("journal")), { size: 2, seq: 2, skew: 0 });
 });
 
-test("a renamed indexed Map moves its index postings with its entries", async () => {
+test("a Log merge keeps the larger skew, or none when either side has none", async () => {
+  const make = async (newSkew: number | undefined, oldSkew: number | undefined) => {
+    const storage = new InMemoryStorage();
+    await storage.put({
+      [logKey("journal", 5, 0)]: { t: 5, v: "a" },
+      [metaKey("journal")]: { size: 1, seq: 1, ...(newSkew === undefined ? {} : { skew: newSkew }) },
+      [logKey("events", 9, 0)]: { t: 9, v: "b" },
+      [metaKey("events")]: { size: 1, seq: 1, ...(oldSkew === undefined ? {} : { skew: oldSkew }) },
+    });
+    await move({}, storage, [{ kind: "log", from: "events", to: "journal" }]);
+    return storage.get(metaKey("journal"));
+  };
+  assert.deepEqual(await make(2, 7), { size: 2, seq: 2, skew: 7 });
+  assert.deepEqual(await make(7, 2), { size: 2, seq: 2, skew: 7 });
+  assert.deepEqual(await make(2, undefined), { size: 2, seq: 2 }, "unknown stays unknown");
+  assert.deepEqual(await make(undefined, 2), { size: 2, seq: 2 });
+});
+
+test("a renamed indexed Map drops its old postings and its index signature, for the handle to rebuild", async () => {
   const storage = new InMemoryStorage();
   await storage.put({
     [mapKey("orders", "o1")]: { i: 0, v: 1 },
     [postingKey("orders", "byCustomer", "ada", "o1")]: 1,
-    [metaKey("orders")]: { size: 1, seq: 1 },
+    [metaKey("orders")]: { size: 1, seq: 1, ix: "byCustomer" },
   });
-  await move({}, storage, [{ kind: "map", indexed: true, from: "orders", to: "purchases" }]);
-  assert.deepEqual(
-    [...(await storage.list({ prefix: "i/" })).keys()],
-    [postingKey("purchases", "byCustomer", "ada", "o1")],
-  );
-  assert.equal((await storage.list({ prefix: "m/orders/" })).size, 0);
-  assert.equal((await storage.list({ prefix: "i/orders/" })).size, 0);
+  await move({}, storage, [{ kind: "map", from: "orders", to: "purchases" }]);
+  assert.deepEqual([...(await storage.list({ prefix: "m/" })).keys()], [mapKey("purchases", "o1")]);
+  assert.equal((await storage.list({ prefix: "i/" })).size, 0, "no posting is copied or left behind");
+  assert.deepEqual(await storage.get(metaKey("purchases")), { size: 1, seq: 1 }, "no index signature, so the handle rebuilds");
 });
 
-test("postings moved beside entries that merge do not change the entry count", async () => {
-  // Both names hold entries (a rolled-back deploy): only the moved entries are counted, not the
-  // postings that came with them.
+test("a merge leaves no stale posting for an entry the merge dropped", async () => {
+  // `o1` is under both names with a different indexed value; the new name's entry wins.
   const storage = new InMemoryStorage();
   await storage.put({
-    [mapKey("purchases", "o1")]: { i: 0, v: 1 },
-    [metaKey("purchases")]: { size: 1, seq: 1 },
-    [mapKey("orders", "o2")]: { i: 0, v: 2 },
-    [postingKey("orders", "byCustomer", "bob", "o2")]: 1,
-    [metaKey("orders")]: { size: 1, seq: 1 },
+    [mapKey("purchases", "o1")]: { i: 0, v: "bob" },
+    [postingKey("purchases", "byCustomer", "bob", "o1")]: 1,
+    [metaKey("purchases")]: { size: 1, seq: 1, ix: "byCustomer" },
+    [mapKey("orders", "o1")]: { i: 0, v: "ada" },
+    [postingKey("orders", "byCustomer", "ada", "o1")]: 1,
+    [metaKey("orders")]: { size: 1, seq: 1, ix: "byCustomer" },
   });
-  await move({}, storage, [{ kind: "map", indexed: true, from: "orders", to: "purchases" }]);
-  assert.deepEqual(await storage.get(metaKey("purchases")), { size: 2, seq: 2 });
-  assert.equal((await storage.list({ prefix: "i/purchases/" })).size, 1);
+  await move({}, storage, [{ kind: "map", from: "orders", to: "purchases" }]);
+  assert.equal((await storage.list({ prefix: "i/orders/" })).size, 0);
+  assert.deepEqual(await storage.get(mapKey("purchases", "o1")), { i: 0, v: "bob" });
+  const meta = (await storage.get(metaKey("purchases"))) as { size: number; ix?: string };
+  assert.equal(meta.size, 1);
+  assert.equal(meta.ix, undefined, "the signature is dropped, so the postings are rebuilt from the entries");
+});
+
+test("postings are swept even when the rename drops the index", async () => {
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [mapKey("orders", "o1")]: { i: 0, v: 1 },
+    [postingKey("orders", "byCustomer", "ada", "o1")]: 1,
+    [metaKey("orders")]: { size: 1, seq: 1, ix: "byCustomer" },
+  });
+  await move({}, storage, [{ kind: "map", from: "orders", to: "plain" }]);
+  assert.equal((await storage.list({ prefix: "i/" })).size, 0);
 });

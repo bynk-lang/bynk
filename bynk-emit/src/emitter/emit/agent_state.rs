@@ -1410,9 +1410,8 @@ fn check_stored_version_stmt(
     )
 }
 
-/// #4482: `await __moveRenamedEntries(this, this.state.storage, stored, steps, [{ kind, indexed, from, to }, …]);`, one
-/// entry per collection field (a `Map`, `Set`, `Cache` or `Log`) a `replaces` renamed, `indexed` when it
-/// keeps index postings (`@indexed` or `@unique`).
+/// #4482: `await __moveRenamedEntries(this, this.state.storage, stored, steps, [{ kind, from, to }, …]);`, one
+/// entry per collection field (a `Map`, `Set`, `Cache` or `Log`) a `replaces` renamed.
 fn move_renamed_entries_stmt(
     a: &AgentDecl,
     versions: Option<&bynk_check::schema_registry::AgentVersions>,
@@ -1430,20 +1429,10 @@ fn move_renamed_entries_stmt(
                 "Log" => "log",
                 _ => return None,
             };
-            let indexed = field
-                .annotations
-                .iter()
-                .any(|a| matches!(a.name.name.as_str(), "indexed" | "unique"));
             let mut entries = vec![bynk_ts::TsObjectEntry::prop(
                 "kind",
                 str_lit(kind.to_string()),
             )];
-            if indexed {
-                entries.push(bynk_ts::TsObjectEntry::prop(
-                    "indexed",
-                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-                ));
-            }
             entries.push(bynk_ts::TsObjectEntry::prop("from", str_lit(old.clone())));
             entries.push(bynk_ts::TsObjectEntry::prop("to", str_lit(new.clone())));
             Some(bynk_ts::TsExpr::object_entries(entries))
