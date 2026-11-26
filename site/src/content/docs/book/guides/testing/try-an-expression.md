@@ -59,10 +59,6 @@ service notify {
     let res <- Fetch.send(Request {
       method: Post,
       url: url,
-      contentType: None,
-      authorization: None,
-      headers: Map.empty(),
-      body: None,
     })
     match res {
       Ok(r) => Effect.pure(r.status)
@@ -148,7 +144,7 @@ sending a request with no stub:
 
 ```sh
 bynk eval --unit shop.orders --expr 'consumes bynk { Fetch, Request, Method, Response }
-let res <- Fetch.send(Request { method: Get, url: "https://example.com", contentType: None, authorization: None, headers: Map.empty(), body: None })
+let res <- Fetch.send(Request { method: Get, url: "https://example.com" })
 res'
 ```
 
@@ -161,7 +157,7 @@ Stub it in the snippet's leading lines, as in a suite, and it answers:
 ```text
 consumes bynk { Fetch, Request, Method, Response }
 stub Fetch.send(_) returns Ok(Response { status: 204, headers: Map.empty(), body: "" })
-let res <- Fetch.send(Request { method: Get, url: "https://example.com", contentType: None, authorization: None, headers: Map.empty(), body: None })
+let res <- Fetch.send(Request { method: Get, url: "https://example.com" })
 res
 ```
 

@@ -9,9 +9,9 @@ What it shows:
 - **A cron entry point** — `service checks from cron { on schedule("*/5 * * * *") (at: Instant) … }`.
   Cron has no ambient clock, so the schedule-aligned instant arrives as the `at`
   parameter (epoch-ms).
-- **Outbound HTTP** — `Fetch.send(Request { method: Get, … })` returns a
+- **Outbound HTTP** — `Fetch.send(Request { method: Get, url: … })` returns a
   `Result[Response, FetchError]`; a network failure is a value, not an exception.
-  The request sends no extra headers (`headers: Map.empty()`).
+  The request's optional fields default, so it sends no extra headers.
 - **Capabilities live on handlers** — the effectful fetch/store work stays in the
   cron handler (a free function can't hold `given`, and `Request` can only be
   built where it's used); the pure health policy (`isHealthy`) and key helper

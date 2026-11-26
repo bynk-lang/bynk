@@ -40,8 +40,6 @@ service charge {
 			method: Post,
 			url: "https://legacy-billing/charges",
 			contentType: Some("application/json"),
-			authorization: None,
-			headers: Map.empty(),
 			body: Some("{\"order\":\"\(order)\"}"),
 		}
 		let res <- Billing.send(req)

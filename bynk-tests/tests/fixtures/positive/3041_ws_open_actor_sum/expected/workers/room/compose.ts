@@ -21,6 +21,7 @@ export function compose(env: Env) {
       let __token: string | undefined = undefined;
       const __offer = __webSocketBearerOffer(request.headers.get("Sec-WebSocket-Protocol"));
       if (__offer.tag === "Legacy") return __webSocketBearerRefusal();
+      let __exp: number | undefined = undefined;
       if (__offer.tag === "Token") __token = __offer.token;
       let __who: { tag: string; identity?: string } | undefined = undefined;
       if (__who === undefined) {
@@ -30,7 +31,10 @@ export function compose(env: Env) {
             const __claims = await __verifyBearerJwtHs256(__token, __secret);
             if (__claims.tag === "Ok") {
               const __id = handlers.UserId.of(__claims.value.sub);
-              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok") {
+                __who = { tag: "User", identity: __id.value };
+                __exp = typeof __claims.value.claims.exp === "number" ? __claims.value.claims.exp : undefined;
+              }
             }
           }
         }
@@ -44,7 +48,7 @@ export function compose(env: Env) {
       const __ns = deps.env.ROOM;
       const __stub = __ns.get(__ns.idFromName(__serialiseAgentKey(__r_room.value)));
       const __fwd = new globalThis.Headers(request.headers);
-      __fwd.set("X-Bynk-Ws-Open", globalThis.JSON.stringify({ args: [__r_room.value], who: __who }));
+      __fwd.set("X-Bynk-Ws-Open", globalThis.JSON.stringify({ args: [__r_room.value], who: __who, exp: __exp }));
       return __stub.fetch(new globalThis.Request("https://_bynk/_bynk/ws/open/chat", { method: request.method, headers: __fwd }));
     },
   };

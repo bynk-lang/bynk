@@ -1161,7 +1161,10 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   offering of the token alone is `400`, a missing or bad token `401`, and the `101`
   selects `bynk.bearer`) and forwards it to the addressed Durable
   Object, which accepts the socket via the **hibernatable-WebSocket** API
-  (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). The Durable Object's
+  (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). The upgrade forwards the verified
+  token's `exp`, which the attachment keeps, and `webSocketMessage` closes the connection with `1008
+  authentication expired`, running `on close` once, when a frame arrives after it (`exp < now`),
+  before decoding the frame. The Durable Object's
   `webSocketClose` runs the service's `on close` with the client's `CloseInfo` and then
   completes the close handshake, replying with the client's code and reason when that code can
   be sent (`1000`–`4999` except `1004`, `1005`, `1006`, `1015`) and with a bare `close()`
