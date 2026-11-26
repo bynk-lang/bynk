@@ -68,27 +68,30 @@ pub fn npx_command() -> std::process::Command {
 #[allow(dead_code)]
 pub const BOOT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(180);
 
-/// The line `wrangler dev` logs once its Worker is serving on the port.
+/// The line `wrangler dev` logs once its Worker is serving on `port`.
 #[allow(dead_code)]
-pub const READY_LINE: &str = "Ready on http";
+pub fn ready_line(port: u16) -> String {
+    format!("Ready on http://localhost:{port}")
+}
 
-/// Wait until `wrangler dev`, logging to `log_path`, is serving its Worker:
-/// it has logged [`READY_LINE`] **and** `probe` (a request the Worker must
-/// answer) succeeds, within [`BOOT_DEADLINE`]. The log line is the gate because
-/// the port answers before the Worker does: under load a probe that accepts any
-/// HTTP reply took wrangler's own `403 Forbidden` from its start-up for the
+/// Wait until `wrangler dev`, logging to `log_path`, is serving its Worker on `port`:
+/// it has logged [`ready_line`] for that port **and** `probe` (a request the Worker answers,
+/// with whatever status its boot route gives) succeeds, within [`BOOT_DEADLINE`]. The log line
+/// is the gate, and it names the port, because the port answering is not the Worker answering:
+/// under load a probe that accepts any HTTP reply took another server's `403 Forbidden` for the
 /// Worker (#4479). The error says which of the two waits expired.
 #[allow(dead_code)]
 pub fn wait_until_ready(
     log_path: &std::path::Path,
+    port: u16,
     probe: &dyn Fn() -> bool,
 ) -> Result<(), String> {
+    let ready = ready_line(port);
     let deadline = std::time::Instant::now() + BOOT_DEADLINE;
     let mut logged_ready = false;
     loop {
         if !logged_ready {
-            logged_ready =
-                std::fs::read_to_string(log_path).is_ok_and(|log| log.contains(READY_LINE));
+            logged_ready = std::fs::read_to_string(log_path).is_ok_and(|log| log.contains(&ready));
         }
         if logged_ready && probe() {
             return Ok(());
@@ -96,12 +99,12 @@ pub fn wait_until_ready(
         if std::time::Instant::now() > deadline {
             return Err(if logged_ready {
                 format!(
-                    "wrangler logged `{READY_LINE}` but its Worker did not answer the boot \
+                    "wrangler logged `{ready}` but its Worker did not answer the boot \
                      probe within the {BOOT_DEADLINE:?} boot deadline"
                 )
             } else {
                 format!(
-                    "wrangler had not logged `{READY_LINE}` within the {BOOT_DEADLINE:?} boot \
+                    "wrangler had not logged `{ready}` within the {BOOT_DEADLINE:?} boot \
                      deadline"
                 )
             });

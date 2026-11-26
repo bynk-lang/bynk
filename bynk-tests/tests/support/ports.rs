@@ -35,8 +35,8 @@
 //! band below it, which no connection and no `bind(":0")` is ever given, and
 //! which the fixed per-test bands in `system/` do not use. A port in it is
 //! tried for being bound, claimed across processes by a file in the temp
-//! directory (nextest runs each test in its own process; the claim goes stale
-//! after [`CLAIM_FOR`]), and recorded in the process-wide set.
+//! directory (nextest runs each test in its own process; the claim ends with its
+//! owner, or after [`CLAIM_FOR`] where that cannot be told), and recorded in the process-wide set.
 
 // Each test binary includes this whole module and uses part of it.
 #![allow(dead_code)]
@@ -51,10 +51,9 @@ use std::time::{Duration, SystemTime};
 /// their process id (20 000 + 2·pid, 30 000 + 4·pid, and the rest).
 const BAND: std::ops::Range<u16> = 28_000..30_000;
 
-/// How long a port claimed by a process stays claimed against the others: a
-/// test's whole run, with room to spare. A claim file left behind by a process
-/// that has gone is taken over after this.
-const CLAIM_FOR: Duration = Duration::from_secs(15 * 60);
+/// How long a claim stays valid where a dead owner cannot be told (off Linux, which has no
+/// `/proc`): a test's whole run, with room to spare. On Linux a claim also ends with its owner.
+const CLAIM_FOR: Duration = Duration::from_secs(10 * 60);
 
 /// Ports this process has already handed out.
 fn issued() -> &'static Mutex<HashSet<u16>> {
@@ -62,28 +61,56 @@ fn issued() -> &'static Mutex<HashSet<u16>> {
     ISSUED.get_or_init(Default::default)
 }
 
-/// Claim `port` against the other processes: the claim file is created, or an
-/// older one than [`CLAIM_FOR`] is taken over. `false` if another holds it.
+/// Whether the process `pid` can still be running. Where that cannot be told, it can.
+fn alive(pid: u32) -> bool {
+    let proc = std::path::Path::new("/proc");
+    !proc.join("self").exists() || proc.join(pid.to_string()).exists()
+}
+
+/// When the claim file at `path` was made, as nanoseconds since the epoch.
+fn made(path: &std::path::Path) -> Option<u128> {
+    let at = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    Some(at.duration_since(SystemTime::UNIX_EPOCH).ok()?.as_nanos())
+}
+
+/// Claim `port` against the other test processes. A claim is a file named for its owner's pid in
+/// a directory of the port's own, so a claim needs no takeover: one whose owner is gone (or whose
+/// age passes [`CLAIM_FOR`]) is simply ignored, and removed. Two processes that claim at once
+/// each see the other's file, and the earlier one (then the lower pid) keeps the port. `false`
+/// if another process holds it.
 fn claim(port: u16) -> bool {
-    let dir = std::env::temp_dir().join("bynk-test-ports");
+    let dir = std::env::temp_dir()
+        .join("bynk-test-ports")
+        .join(port.to_string());
     let _ = std::fs::create_dir_all(&dir);
-    let file = dir.join(port.to_string());
-    let create = || {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&file)
-            .is_ok()
-    };
-    if create() {
-        return true;
+    let me = std::process::id();
+    let mine = dir.join(me.to_string());
+    if std::fs::File::create(&mine).is_err() {
+        return false;
     }
-    let stale = std::fs::metadata(&file)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| SystemTime::now().duration_since(t).ok())
-        .is_some_and(|age| age > CLAIM_FOR);
-    stale && std::fs::remove_file(&file).is_ok() && create()
+    let mine_key = (made(&mine).unwrap_or(0), me);
+    for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        if pid == me {
+            continue;
+        }
+        let path = entry.path();
+        let at = made(&path).unwrap_or(0);
+        let age = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |now| now.as_nanos().saturating_sub(at));
+        if !alive(pid) || age > CLAIM_FOR.as_nanos() {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        if (at, pid) < mine_key {
+            let _ = std::fs::remove_file(&mine);
+            return false;
+        }
+    }
+    true
 }
 
 /// A start for the scan of [`BAND`] that differs between processes and calls.
@@ -121,6 +148,12 @@ pub fn free_ports<const N: usize>() -> [u16; N] {
             ports[held.len()] = port;
             held.push(listener);
         }
+    }
+    if held.len() < N {
+        eprintln!(
+            "ports: the band {BAND:?} has no port left to give; taking the rest from the OS, \
+             whose ephemeral range can collide with a booting wrangler (#4479)"
+        );
     }
     let mut attempts = 0;
     while held.len() < N {

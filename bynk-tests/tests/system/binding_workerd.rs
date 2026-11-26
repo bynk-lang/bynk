@@ -328,7 +328,7 @@ fn run_smoke_awaiting(
         return None;
     };
 
-    if let Err(why) = wrangler::wait_until_ready(&log_path, &|| get(port, boot).is_ok()) {
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| get(port, boot).is_ok()) {
         let log = read_log(&log_path);
         drop(server);
         skip(&format!(

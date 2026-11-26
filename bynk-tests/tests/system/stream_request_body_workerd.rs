@@ -323,7 +323,7 @@ fn a_streamed_raw_body_is_counted_left_unread_and_sent_to_r2_on_workerd() {
     };
     let wrangler = Wranglers(vec![child]);
 
-    if let Err(why) = wrangler::wait_until_ready(&log_path, &|| {
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
         request(port, "GET", "/ready", None).is_ok_and(|r| r.status == 200)
     }) {
         let log = read_log(&log_path);
