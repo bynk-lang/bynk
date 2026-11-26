@@ -13,10 +13,11 @@ pub(crate) const BUCKETS: &str = "/r2/buckets";
 /// The header that names a bucket's jurisdiction.
 pub(crate) const JURISDICTION: &str = "cf-r2-jurisdiction";
 
-/// Whether `name` can be a bucket name: 3 to 64 lowercase ASCII letters, digits and hyphens, as
-/// Cloudflare's create accepts. Anything else is refused before it can reach a request path.
+/// Whether `name` can be a bucket name: 3 to 63 lowercase ASCII letters, digits and hyphens,
+/// R2's naming rule (the one `r2_bucket_name_problem` checks at plan time). Anything else is
+/// refused before it can reach a request path.
 pub(crate) fn is_bucket_name(name: &str) -> bool {
-    (3..=64).contains(&name.len())
+    (3..=63).contains(&name.len())
         && name
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
@@ -78,6 +79,7 @@ mod tests {
         for bad in ["ab", "Shop", "a/b", "../x", "a?b", "a_b", "a b", ""] {
             assert!(!is_bucket_name(bad), "{bad:?}");
         }
-        assert!(!is_bucket_name(&"a".repeat(65)));
+        assert!(is_bucket_name(&"a".repeat(63)));
+        assert!(!is_bucket_name(&"a".repeat(64)));
     }
 }

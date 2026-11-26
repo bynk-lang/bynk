@@ -434,7 +434,15 @@ pub(crate) fn create_r2_bucket(
 ) -> Result<bool, CloudflareError> {
     match api.r2_create(name, jurisdiction) {
         Ok(()) => Ok(false),
-        Err(e) if e.is_refusal() && api.r2_owned(name, jurisdiction).unwrap_or(false) => Ok(true),
+        Err(e) if e.is_refusal() => match api.r2_owned(name, jurisdiction) {
+            Ok(true) => Ok(true),
+            Ok(false) => Err(e),
+            // "We could not check" must not read as "another account owns it".
+            Err(lookup) => Err(format!(
+                "{e} (asking the account for the bucket by name also failed: {lookup})"
+            )
+            .into()),
+        },
         Err(e) => Err(e),
     }
 }
@@ -487,6 +495,25 @@ mod tests {
         let (got, calls) = run((403, r#"[{"code":10000}]"#), "owned");
         assert!(got.is_err());
         assert_eq!(calls, ["r2 bucket create shop-files --jurisdiction eu"]);
+        // An ownership check that fails says so, after the create's own error, rather than
+        // reading as another account's bucket.
+        let api = Recording::new(|op| -> Result<String, CloudflareError> {
+            match op {
+                Op::R2Create { .. } => {
+                    Err(
+                        RestError::answered("POST", "/r2/buckets", 409, r#"[{"code":10073}]"#)
+                            .into(),
+                    )
+                }
+                _ => Err(RestError::answered("GET", "/r2/buckets/shop-files", 500, "[]").into()),
+            }
+        });
+        assert_eq!(
+            create_r2_bucket(&api, "shop-files", None)
+                .unwrap_err()
+                .to_string(),
+            r#"POST /r2/buckets: Cloudflare answered 409 [{"code":10073}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: Cloudflare answered 500 [])"#
+        );
     }
 
     // ---- 1D.1b (#3929): the `R2` impl ----

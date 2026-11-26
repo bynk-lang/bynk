@@ -796,7 +796,7 @@
    -> error POST /r2/buckets: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
 == R2 create (REST) · 404 with errors
    request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
-   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: io: Connection refused (os error N))
 == R2 create (REST) · 403 with errors
    request: POST /accounts/acct/r2/buckets {"name":"shop-files"}
    -> error POST /r2/buckets: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
@@ -828,7 +828,7 @@
    -> error POST /r2/buckets: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
 == R2 create (REST, jurisdiction eu) · 404 with errors
    request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
-   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+   -> error POST /r2/buckets: Cloudflare answered 404 [{"code":10007,"message":"not found"}] (asking the account for the bucket by name also failed: GET /r2/buckets/shop-files: io: Connection refused (os error N))
 == R2 create (REST, jurisdiction eu) · 403 with errors
    request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
    -> error POST /r2/buckets: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]

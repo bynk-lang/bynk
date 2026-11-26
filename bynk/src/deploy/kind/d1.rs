@@ -273,7 +273,7 @@ impl ResourceKind for D1 {
         // Cloudflare does not say which it has, so the ledger is never told it is pinned.
         if let (true, Some(jurisdiction)) = (adopted, db.jurisdiction.as_deref()) {
             return Err(DeployFailure::driver(format!(
-                "the D1 database `{physical}` for `{worker}`'s `{}` already exists on the account, so it was not created with `--jurisdiction {jurisdiction}`, and Bynk cannot read the jurisdiction of an existing database back; it will not record one it did not apply. Check the database in the Cloudflare dashboard, then either remove `@jurisdiction` to adopt it as it is, or delete it so the next deploy creates it in `{jurisdiction}`",
+                "the D1 database `{physical}` for `{worker}`'s `{}` already exists on the account, so it was not created in jurisdiction `{jurisdiction}`, and Bynk cannot read the jurisdiction of an existing database back; it will not record one it did not apply. Check the database in the Cloudflare dashboard, then either remove `@jurisdiction` to adopt it as it is, or delete it so the next deploy creates it in `{jurisdiction}`",
                 db.binding
             )));
         }

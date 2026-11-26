@@ -421,6 +421,9 @@ impl Wrangler<'_> {
 mod tests {
     use super::*;
 
+    /// The tee copies stderr through and keeps it, through a line that is not UTF-8, with the
+    /// kept text readable afterwards. Unix: it runs `sh`.
+    #[cfg(unix)]
     #[test]
     fn the_tee_keeps_everything_wrangler_says_even_past_invalid_utf8() {
         let mut child = Command::new("sh")
