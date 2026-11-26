@@ -559,3 +559,149 @@ fn a_rename_beneath_a_key_is_refused_as_an_added_field_is() {
         assert_eq!(p.lock(), before, "a refused build must not touch the lock");
     }
 }
+
+// ---- a record inside an event payload (#4523) ------------------------------
+
+/// An event `Paid` carrying a `Money` record with `money`'s fields, emitted with `values` for them.
+fn paid(money: &str, values: &str) -> String {
+    format!(
+        "context shop\n\nconsumes bynk {{ Events }}\n\ntype Money = {{\n{money}\n}}\n\nevent Paid = {{\n  id: String,\n  amount: Money,\n}}\n\nservice pay {{\n  on call(id: String) -> Effect[()] by Caller given Events {{\n    Events.emit[Paid](Paid {{ id: id, amount: Money {{ {values} }} }})\n  }}\n}}\n"
+    )
+}
+
+const MONEY: &str = "  value: Int,\n  currency: String,";
+const MONEY_VALUES: &str = "value: 1, currency: \"GBP\"";
+
+fn refused(err: &str) {
+    assert!(
+        err.contains("bynk.event.non_additive_schema_change"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_nested_field_removed_or_retyped_in_an_event_payload_is_refused() {
+    let p = event_project("payload-removed");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    let before = p.lock();
+    assert!(
+        before.contains("amount.currency"),
+        "paths are recorded: {before}"
+    );
+    // Removed.
+    let err = p.err(&paid("  value: Int,", "value: 1"));
+    refused(&err);
+    assert!(err.contains("amount.currency removed"), "{err}");
+    // Retyped.
+    let err = p.err(&paid(
+        "  value: Int,\n  currency: Int,",
+        "value: 1, currency: 2",
+    ));
+    refused(&err);
+    assert!(err.contains("amount.currency retyped"), "{err}");
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+#[test]
+fn a_nested_wire_name_change_is_refused_unless_replaces_names_the_old_key() {
+    let p = event_project("payload-wire");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    // The payload key moves from `currency` to `cur`: an older envelope no longer decodes.
+    let renamed = "  value: Int,\n  @name(\"cur\") currency: String,";
+    refused(&p.err(&paid(renamed, MONEY_VALUES)));
+    // `replaces currency` keeps the old key readable.
+    p.ok(&paid(
+        "  value: Int,\n  @name(\"cur\") currency: String replaces currency,",
+        MONEY_VALUES,
+    ));
+    let lock = p.lock();
+    assert_eq!(schema(&lock), "2", "a nested rename is a step: {lock}");
+    assert!(lock.contains("renamed_from = \"currency\""), "{lock}");
+}
+
+#[test]
+fn a_nested_replaces_in_an_event_payload_is_honoured() {
+    let p = event_project("payload-replaces");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    // Without the clause it is a removal and an addition.
+    refused(&p.err(&paid(
+        "  value: Int,\n  code: String,",
+        "value: 1, code: \"GBP\"",
+    )));
+    p.ok(&paid(
+        "  value: Int,\n  code: String replaces currency,",
+        "value: 1, code: \"GBP\"",
+    ));
+    assert_eq!(schema(&p.lock()), "2");
+    // The clause stays: no change.
+    p.ok(&paid(
+        "  value: Int,\n  code: String replaces currency,",
+        "value: 1, code: \"GBP\"",
+    ));
+    assert_eq!(schema(&p.lock()), "2");
+}
+
+#[test]
+fn a_nested_additive_change_in_an_event_payload_stays_additive() {
+    let p = event_project("payload-additive");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    // A new field with a default.
+    p.ok(&paid(
+        "  value: Int,\n  currency: String,\n  note: String = \"\",",
+        MONEY_VALUES,
+    ));
+    assert_eq!(schema(&p.lock()), "2");
+    // A new field without one is not.
+    refused(&p.err(&paid(
+        "  value: Int,\n  currency: String,\n  note: String = \"\",\n  scale: Int,",
+        "value: 1, currency: \"GBP\", scale: 2",
+    )));
+}
+
+#[test]
+fn a_renamed_record_type_with_the_same_fields_is_not_a_retype() {
+    // The wire carries the record's fields, not its name, so the type's name is no part of an
+    // event's compatibility.
+    let p = event_project("payload-type-name");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    let renamed = paid(MONEY, MONEY_VALUES).replace("Money", "Cash");
+    p.ok(&renamed);
+}
+
+#[test]
+fn an_event_lock_with_no_recorded_paths_reconciles_unchanged_and_gains_them() {
+    let p = event_project("payload-backfill");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    let with_paths = p.lock();
+    // A lock written before paths were recorded: the field has its type name alone.
+    let old: String = with_paths
+        .split("\n[[")
+        .map(|block| block.to_string())
+        .filter(|block| !block.contains("paths"))
+        .collect::<Vec<_>>()
+        .join("\n[[");
+    assert!(!old.contains("paths"), "{old}");
+    std::fs::write(p.root.join("bynk.schema.lock"), &old).unwrap();
+    // The same source: no change, so the schema number stays.
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    let after = p.lock();
+    assert_eq!(schema(&after), schema(&old), "unchanged: {after}");
+    assert_eq!(after, with_paths, "the paths are backfilled");
+    // And a change inside the record is now seen.
+    refused(&p.err(&paid("  value: Int,", "value: 1")));
+}
+
+#[test]
+fn a_recursive_payload_type_is_locked_with_the_same_cut_off() {
+    let tree = |extra: &str, extra_value: &str| {
+        format!(
+            "context shop\n\nconsumes bynk {{ Events }}\n\ntype Tree = {{\n  label: String,\n  kids: List[Tree],{extra}\n}}\n\nevent Grown = {{\n  tree: Tree,\n}}\n\nservice grow {{\n  on call(label: String) -> Effect[()] by Caller given Events {{\n    Events.emit[Grown](Grown {{ tree: Tree {{ label: label, kids: []{extra_value} }} }})\n  }}\n}}\n"
+        )
+    };
+    let p = event_project("payload-recursive");
+    p.ok(&tree("", ""));
+    // A new field with a default, anywhere in the recursion, is additive.
+    p.ok(&tree("\n  weight: Int = 0,", ""));
+    // One without is not.
+    refused(&p.err(&tree("\n  weight: Int = 0,\n  depth: Int,", ", depth: 1")));
+}

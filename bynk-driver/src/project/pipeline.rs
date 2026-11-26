@@ -399,8 +399,12 @@ fn reconcile_lock(
     match bynk_check::schema_registry::parse_or_diagnose(existing.as_deref(), project_root) {
         Ok(existing_reg) => {
             let mut schema_errors: Vec<CompileError> = Vec::new();
-            let (mut updated, effective) =
-                bynk_check::schema_registry::reconcile(&existing_reg, units.0, &mut schema_errors);
+            let (mut updated, effective) = bynk_check::schema_registry::reconcile(
+                &existing_reg,
+                units.0,
+                units.1,
+                &mut schema_errors,
+            );
             errors.extend_for(None, schema_errors);
             // State-migrations S0 (#2204) and #3956: agent state shapes and the order of each
             // `derives Ord` type, in the same document.

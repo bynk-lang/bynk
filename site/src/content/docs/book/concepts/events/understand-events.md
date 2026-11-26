@@ -262,7 +262,11 @@ registry last recorded:
   annotation is required for this; it happens for every event, annotated or
   not.
 - **Anything else** — a field removed, retyped, added *without* a default,
-  or one that lost a default it used to have — fails the build with
+  or one that lost a default it used to have, **at any depth**: the registry
+  looks inside a record an event carries (and inside an `Option`, a `List` or a
+  sum that holds one), so a nested field removed or retyped counts, and a
+  nested `@name` change does too unless the field says `replaces` the old key —
+  fails the build with
   `bynk.event.non_additive_schema_change`. The registry is not guessing at
   intent here: none of these are safe for a subscriber still holding an
   older wire event to decode. Give the new shape a new event type name
