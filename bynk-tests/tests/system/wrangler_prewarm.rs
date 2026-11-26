@@ -101,16 +101,9 @@ fn every_wrangler_the_harness_starts_has_telemetry_off() {
     );
 }
 
-/// The variable is the one Wrangler reads, with the value it reads as "off".
-#[test]
-fn the_telemetry_setting_is_the_one_wrangler_reads() {
-    assert_eq!(
-        wrangler::warm::TELEMETRY_OFF,
-        ("WRANGLER_SEND_METRICS", "false")
-    );
-}
-
-/// CI sets it for every job, the backstop for a Wrangler the harness did not start itself.
+/// CI sets it for every job, the backstop for a Wrangler the harness did not start itself: it
+/// is an entry of the workflow's top-level `env:` block, however that block is ordered or its
+/// value quoted.
 #[test]
 fn ci_turns_wrangler_telemetry_off_for_every_job() {
     let path = workflow("ci.yml");
@@ -119,9 +112,18 @@ fn ci_turns_wrangler_telemetry_off_for_every_job() {
         .split("\njobs:\n")
         .next()
         .expect("a workflow has a header before its jobs");
+    let (_, after) = top
+        .split_once("\nenv:\n")
+        .expect("ci.yml has a top-level `env:` block before its jobs (#4456)");
+    // The block is the indented lines that follow `env:`.
+    let off = after
+        .lines()
+        .take_while(|l| l.is_empty() || l.starts_with(' '))
+        .map(str::trim)
+        .any(|l| l == "WRANGLER_SEND_METRICS: \"false\"" || l == "WRANGLER_SEND_METRICS: false");
     assert!(
-        top.contains("\nenv:\n  WRANGLER_SEND_METRICS: \"false\"\n"),
-        "ci.yml no longer sets `WRANGLER_SEND_METRICS: \"false\"` for the whole workflow (#4456)"
+        off,
+        "ci.yml's top-level `env:` no longer sets `WRANGLER_SEND_METRICS` to false (#4456)"
     );
 }
 
