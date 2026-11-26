@@ -2193,6 +2193,7 @@ pub fn check_handler_body(
             ..Default::default()
         },
         in_test_body: false,
+        lambda_depth: 0,
         claims_binder,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
@@ -2369,6 +2370,7 @@ pub fn check_body(
         fold_init_expected: None,
         caps,
         in_test_body: true,
+        lambda_depth: 0,
         claims_binder: None,
         test_services,
         test_actors,
@@ -2743,6 +2745,7 @@ pub fn check_invariants(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
@@ -2901,6 +2904,7 @@ pub(crate) fn check_contracts(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
@@ -3144,6 +3148,7 @@ pub fn check_transitions(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
@@ -3339,6 +3344,7 @@ pub fn check_migrations(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
@@ -3792,6 +3798,10 @@ pub(crate) struct Ctx<'a> {
     /// True when the body being checked is a test case body. Permits
     /// `expect` statements (v0.7; renamed from `assert` in v0.112).
     pub in_test_body: bool,
+    /// #3982: how many lambdas deep the expression being typed is, inside the body of the
+    /// function or test case being checked. A `?` in a test body fails the case only at depth
+    /// 0: inside a lambda it returns from the lambda, by the lambda's own return type.
+    pub lambda_depth: u32,
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
     pub claims_binder: Option<String>,

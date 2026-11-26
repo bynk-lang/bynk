@@ -953,14 +953,34 @@ and a failed `_ => expect false` arm [reports the value it matched](#expect).
 ### `?` in a case {#question-in-case}
 
 A `case` body returns no `Result`, so `?` has nowhere to propagate to. Instead,
-`?` on a `Result` whose error is a `ValidationError` (what a refined type's `.of`
-returns) **fails the case** when the operand is `Err`: the failure reports the
-`?` expression, the error value and the `?`'s `file:line:col`, as a failed
-`expect` does. On `Ok` it yields the value. This holds anywhere in the case,
-including inside `if` and `match` arms; a `?` inside a lambda keeps its normal
-meaning (it returns from the lambda). Any other error type is
-`bynk.types.question_error_mismatch`, and an `Option` operand is refused as it is
-outside a handler.
+`?` **fails the case**: on a `Result`, when the operand is `Err`, whatever its error
+type; on an `Option`, when it is `None`. On `Ok` or `Some` it yields the value. The
+failure reports the `?` expression, what the operand was and the `?`'s
+`file:line:col`, as a failed `expect` does; an `Err` shows its error value (a string as itself, anything else as tagged JSON), and
+a `None` reports `the operand was None`.
+
+```bynk,fragment
+case "an order round-trips" {
+  let o = Order.from(draft)?            // Result[Order, OrderError]
+  let saved <- place.call(o)
+  let id = saved?                       // Result[OrderId, PlaceError]
+  let line = o.lines.first()?           // Option[Line]
+  expect line.qty > 0
+}
+```
+
+```text
+✗ an order round-trips
+    saved?
+  the operand was Err: {"tag":"OutOfStock","sku":"w","left":0}
+  at tests/orders.test.bynk:4:12
+```
+
+This holds anywhere in the case, including inside `if` and `match` arms, and in a
+`property` body, where it fails the property for that input and the shrinker treats
+it as it treats a failed `expect`. Two things keep their ordinary meaning: a `?`
+inside a **lambda** returns from the lambda, by the lambda's own return type, and a
+`?` in a suite's **helper `fn`** follows that function's return type.
 
 ### Claiming a fault — `expect <call> faults` {#faults}
 
