@@ -166,10 +166,14 @@ impl Stop {
         Self::refused(entry)
     }
 
-    /// The upload order, for a stop made after the run had one and which did not carry it.
-    pub(crate) fn with_order(mut self, order: &[String]) -> Self {
+    /// What the run knew when it stopped: the upload order and the warnings it had gathered
+    /// (stderr has printed them), for a stop that did not carry them.
+    pub(crate) fn with_run(mut self, order: &[String], warnings: &[Entry]) -> Self {
         if self.order.is_empty() {
             self.order = order.to_vec();
+        }
+        if self.warnings.is_empty() {
+            self.warnings = warnings.to_vec();
         }
         self
     }

@@ -29,19 +29,22 @@ use std::path::PathBuf;
 /// Vectorize indexes, then the container images.
 ///
 /// #3797: `Ok` carries the notes it printed (an entry that adopts nothing for this environment),
-/// `Err` the refusal, each as a plan entry as well.
+/// `Err` the refusal and the notes printed before it, each as a plan entry as well.
 pub(crate) fn apply_adoptions(
     project_root: &Path,
     resources: &mut BTreeMap<String, Resources>,
     environment: &str,
-) -> Result<Vec<plan::Entry>, plan::Entry> {
-    let mut notes = apply_vectorize_adoptions(project_root, resources, environment)?;
-    notes.extend(apply_container_adoptions(
-        project_root,
-        resources,
-        environment,
-    )?);
-    Ok(notes)
+) -> Result<Vec<plan::Entry>, (Vec<plan::Entry>, plan::Entry)> {
+    let mut notes = apply_vectorize_adoptions(project_root, resources, environment)
+        .map_err(|refusal| (Vec::new(), refusal))?;
+    match apply_container_adoptions(project_root, resources, environment) {
+        Ok(more) => {
+            notes.extend(more);
+            Ok(notes)
+        }
+        // The notes the first step printed are kept with the refusal.
+        Err(refusal) => Err((notes, refusal)),
+    }
 }
 
 /// Name the images `bynk.toml` adopts for `environment` on the declarations

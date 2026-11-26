@@ -416,7 +416,7 @@ fn deploy(
         .iter()
         .map(|worker| deployed_worker_name(&opts.environment, worker))
         .collect();
-    let with_order = |stop: Stop| stop.with_order(&order_names);
+    let run_stop = |stop: Stop, warnings: &[Entry]| stop.with_run(&order_names, warnings);
 
     // #3562 (G5): a context with agent state that would change scripts is refused before
     // anything is pushed, `--dry-run` included.
@@ -435,7 +435,8 @@ fn deploy(
         moves, warnings, ..
     } = agents;
 
-    check_foreign_pins(project_root, &workers_dir, &order, opts).map_err(&with_order)?;
+    check_foreign_pins(project_root, &workers_dir, &order, opts)
+        .map_err(|stop| run_stop(stop, &warnings))?;
 
     // Review of #1974: names the account scopes (a namespace's title, a
     // bucket's, a database's, a dataset's) can coincide, so they are refused
@@ -445,12 +446,16 @@ fn deploy(
     let mut warnings = warnings;
     match apply_adoptions(project_root, &mut resources, &opts.environment) {
         Ok(notes) => warnings.extend(notes),
-        Err(refusal) => return Err(with_order(Stop::refused(refusal))),
+        Err((notes, refusal)) => {
+            warnings.extend(notes);
+            return Err(run_stop(Stop::refused(refusal), &warnings));
+        }
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
-        return Err(with_order(Stop::error(refusals::account_name_conflict(
-            message,
-        ))));
+        return Err(run_stop(
+            Stop::error(refusals::account_name_conflict(message)),
+            &warnings,
+        ));
     }
     // #2055: a first deploy hands `wrangler deploy` Bynk's own
     // `--secrets-file`, so a passthrough one would be a second, with
@@ -460,9 +465,10 @@ fn deploy(
         secrets_file_passthrough_refusal(&opts.wrangler_args, &order, &lock, &opts.environment)
     {
         colour::eprint(&refusal);
-        return Err(with_order(Stop::refused(
-            refusals::secrets_file_passthrough(&refusal),
-        )));
+        return Err(run_stop(
+            Stop::refused(refusals::secrets_file_passthrough(&refusal)),
+            &warnings,
+        ));
     }
 
     // #3319: each `Postgres` binding's connection string is read now, from the
@@ -477,6 +483,7 @@ fn deploy(
                 return Err(Stop {
                     refusals,
                     order: order_names.clone(),
+                    warnings: warnings.clone(),
                     ..Stop::from(ExitCode::FAILURE)
                 });
             }
@@ -497,11 +504,11 @@ fn deploy(
     )
     .checked_against_account()
     .noting_unchecked_kv(!opts.dry_run)
-    .with_report(Vec::new(), warnings);
+    .with_report(Vec::new(), warnings.clone());
     let own_scripts: BTreeSet<String> =
         script_names(&workers_dir, &available).into_keys().collect();
-    let shared =
-        shared_with_default(project_root, opts, &model, &own_scripts).map_err(&with_order)?;
+    let shared = shared_with_default(project_root, opts, &model, &own_scripts)
+        .map_err(|stop| run_stop(stop, &warnings))?;
     let mut plan = plan.with_shared(shared);
     // P5 (#2323): a changed `@jurisdiction` is a new bucket beside the old,
     // whose objects do not move, so it is only made on an explicit `--yes`. #3797: known before

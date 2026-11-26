@@ -297,24 +297,36 @@ pub(crate) fn print_plan_then_forward_warnings<'a>(
     resources: &BTreeMap<String, Resources>,
     project_root: &Path,
 ) -> Plan<'a> {
-    let forwards = if any_email_handlers(order, resources) {
-        let groups = super::plan::GroupNames::of(project_root);
-        let dir_of = |context: &str| groups.dir(context);
-        forward_warnings_for_run(&project_forwards(project_root), order, &dir_of)
-    } else {
-        Vec::new()
+    let lookup = || {
+        if any_email_handlers(order, resources) {
+            let groups = super::plan::GroupNames::of(project_root);
+            let dir_of = |context: &str| groups.dir(context);
+            forward_warnings_for_run(&project_forwards(project_root), order, &dir_of)
+        } else {
+            Vec::new()
+        }
     };
+    // The JSON document carries the forward warnings, which ask the account, so it waits for
+    // them; the human plan is printed first, as it always was, and does not wait on the lookup.
+    if opts.format != DeployFormat::Json {
+        print_plan(&plan, opts.format);
+        for note in plan.account_notes() {
+            colour::eprintln(note);
+        }
+        let forwards = lookup();
+        for warning in &forwards {
+            colour::eprintln(warning);
+        }
+        return plan.with_warnings(forward_entries(&forwards));
+    }
+    let forwards = lookup();
     // #3494: what checking the plan against the account found.
     let mut entries: Vec<super::plan::Entry> = plan
         .account_notes()
         .iter()
         .map(|note| super::plan::refusals::account_note(note))
         .collect();
-    entries.extend(
-        forwards
-            .iter()
-            .map(|w| super::plan::refusals::email_forward_destination(w)),
-    );
+    entries.extend(forward_entries(&forwards));
     let plan = plan.with_warnings(entries);
     print_plan(&plan, opts.format);
     for note in plan.account_notes() {
@@ -324,6 +336,14 @@ pub(crate) fn print_plan_then_forward_warnings<'a>(
         colour::eprintln(warning);
     }
     plan
+}
+
+/// The forward warnings as plan entries.
+fn forward_entries(warnings: &[String]) -> Vec<super::plan::Entry> {
+    warnings
+        .iter()
+        .map(|w| super::plan::refusals::email_forward_destination(w))
+        .collect()
 }
 
 /// Whether any Worker of `order` has an inbound email address, so a project
