@@ -1297,7 +1297,7 @@ pub(super) fn strip_effect_httpresult(
     } else {
         t
     };
-    if let TypeRef::HttpResult(payload, _) = inner {
+    if let TypeRef::HttpResult(payload, _, _) = inner {
         Some(payload.as_ref())
     } else {
         None

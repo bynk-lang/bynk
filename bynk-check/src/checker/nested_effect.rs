@@ -38,7 +38,7 @@ pub(crate) fn has_nested_effect(t: TyId, tys: &Types) -> bool {
             has_nested_effect(*a, tys) || has_nested_effect(*b, tys)
         }
         Ty::Option(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)

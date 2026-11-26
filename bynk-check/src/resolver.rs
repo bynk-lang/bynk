@@ -2350,13 +2350,18 @@ impl Gate<'_> {
             }
             TypeRef::Option(t, _)
             | TypeRef::Effect(t, _)
-            | TypeRef::HttpResult(t, _)
             | TypeRef::List(t, _)
             | TypeRef::Set(t, _)
             | TypeRef::Query(t, _)
             | TypeRef::Stream(t, _)
             | TypeRef::Connection(t, _)
             | TypeRef::History(t, _) => self.type_ref(t),
+            TypeRef::HttpResult(t, e, _) => {
+                self.type_ref(t);
+                if let Some(e) = e {
+                    self.type_ref(e);
+                }
+            }
             TypeRef::Fn(params, ret, _) => {
                 for p in params {
                     self.type_ref(p);
@@ -3339,6 +3344,33 @@ fn check_type_ref_resolves(
 /// v0.20a: like [`check_type_ref_resolves`], with the enclosing function's
 /// type parameters in scope — a `Named` reference matching one is a type
 /// variable, not an unknown type.
+///
+/// #4394: the second argument of `HttpResult[T, E]` names what a `Streaming` body carries, which the
+/// router can frame: a `String`, or the `SseEvent` record `bynk` exports. Anything else is
+/// `bynk.types.streaming_element`. A name that does not resolve is already reported as unknown.
+fn check_streaming_element(
+    e: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    type_params: &HashSet<String>,
+    errors: &mut Sinks,
+) {
+    let allowed = match e {
+        TypeRef::Base(bynk_syntax::ast::BaseType::String, _) => true,
+        TypeRef::Named(id) if id.name == "SseEvent" => types
+            .get("SseEvent")
+            .is_some_and(|d| crate::context_checks::is_std_bynk_type("SseEvent", types, d)),
+        TypeRef::Named(id) => !types.contains_key(&id.name) && !type_params.contains(&id.name),
+        _ => false,
+    };
+    if !allowed {
+        errors.push(CompileError::new(
+            "bynk.types.streaming_element",
+            e.span(),
+            "the element of an `HttpResult` streaming body must be `String` or `SseEvent`, which the router can frame as server-sent events",
+        ));
+    }
+}
+
 fn check_type_ref_resolves_in(
     r: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -3535,8 +3567,12 @@ fn check_type_ref_resolves_in(
             }
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::HttpResult(t, _) => {
+        TypeRef::HttpResult(t, e, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
+            if let Some(e) = e {
+                check_type_ref_resolves_in(e, types, type_params, errors);
+                check_streaming_element(e, types, type_params, errors);
+            }
         }
         TypeRef::QueueResult(_)
         | TypeRef::Asset(_)
@@ -3664,7 +3700,7 @@ fn key_position_params<'p>(t: &TypeRef, params: &'p [TypeParam], out: &mut Vec<&
         TypeRef::Option(a, _)
         | TypeRef::List(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::Connection(a, _)

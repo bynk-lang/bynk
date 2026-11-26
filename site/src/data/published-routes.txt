@@ -1064,6 +1064,7 @@
 /book/reference/diagnostics/bynk.types.sql_statement_at_boundary/
 /book/reference/diagnostics/bynk.types.stream_at_boundary/
 /book/reference/diagnostics/bynk.types.stream_not_comparable/
+/book/reference/diagnostics/bynk.types.streaming_element/
 /book/reference/diagnostics/bynk.types.type_mismatch/
 /book/reference/diagnostics/bynk.types.uninferable_element_type/
 /book/reference/diagnostics/bynk.types.unknown_annotation/
@@ -2277,6 +2278,7 @@
 /reference/diagnostics/bynk.types.sql_statement_at_boundary/
 /reference/diagnostics/bynk.types.stream_at_boundary/
 /reference/diagnostics/bynk.types.stream_not_comparable/
+/reference/diagnostics/bynk.types.streaming_element/
 /reference/diagnostics/bynk.types.type_mismatch/
 /reference/diagnostics/bynk.types.uninferable_element_type/
 /reference/diagnostics/bynk.types.unknown_annotation/

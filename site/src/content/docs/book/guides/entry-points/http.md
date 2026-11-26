@@ -206,7 +206,9 @@ the framing rules and the mid-stream-error pattern.
 A browser's `EventSource` reconnects when a stream drops and sends the last `id` it
 saw as `Last-Event-ID`. To give it something to resume from, stream `SseEvent`
 records (from `bynk`) instead of plain strings: `id` names the event, `event` picks
-the name it is dispatched under, and `retry` sets the reconnection delay.
+the name it is dispatched under, and `retry` sets the reconnection delay. Declare the route as
+`HttpResult[(), SseEvent]` (a second type argument naming what it streams) so the compiler holds
+the body to a `Stream[SseEvent]` and a test reads its events as `SseEvent`s.
 
 ```bynk
 context updates

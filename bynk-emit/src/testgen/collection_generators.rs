@@ -58,7 +58,7 @@ fn shape(ty: checker::TyId, tys: &Arc<Types>) -> Option<Shape> {
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection
@@ -312,7 +312,7 @@ fn elem_shrink_ts(
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection

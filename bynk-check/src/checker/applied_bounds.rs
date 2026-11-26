@@ -84,7 +84,7 @@ fn walk(
         }
         TypeRef::Option(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Query(a, _)

@@ -1313,13 +1313,18 @@ fn signature_types(
             }
             TypeRef::Option(t, _)
             | TypeRef::Effect(t, _)
-            | TypeRef::HttpResult(t, _)
             | TypeRef::List(t, _)
             | TypeRef::Set(t, _)
             | TypeRef::Query(t, _)
             | TypeRef::Stream(t, _)
             | TypeRef::Connection(t, _)
             | TypeRef::History(t, _) => names(t, out),
+            TypeRef::HttpResult(t, e, _) => {
+                names(t, out);
+                if let Some(e) = e {
+                    names(e, out);
+                }
+            }
             TypeRef::Fn(params, ret, _) => {
                 params.iter().for_each(|p| names(p, out));
                 names(ret, out);
@@ -3079,13 +3084,18 @@ pub fn rename_type_ref(r: &mut TypeRef, subst: &HashMap<String, String>) {
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => rename_type_ref(t, subst),
+        TypeRef::HttpResult(t, e, _) => {
+            rename_type_ref(t, subst);
+            if let Some(e) = e {
+                rename_type_ref(e, subst);
+            }
+        }
         TypeRef::Fn(params, ret, _) => {
             for p in params {
                 rename_type_ref(p, subst);

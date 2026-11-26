@@ -297,7 +297,7 @@ fn shape_of(id: TyId, scope_unit: &str, sc: &mut Scopes, open: &mut Open) -> Ent
         Ty::Error
         | Ty::Never
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection

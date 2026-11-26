@@ -394,7 +394,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | Variant | Status | Payload |
 |---|---|---|
 | `Ok(value)` | 200 | the value, as JSON |
-| `Streaming(stream)` | 200 | a `Stream[String]` or `Stream[SseEvent]`, SSE-framed (see [Streamed responses](#streamed-responses) and [Structured events](#structured-events)) |
+| `Streaming(stream)` | 200 | a `Stream[String]` or `Stream[SseEvent]`, SSE-framed, or exactly the `Stream[E]` of `HttpResult[T, E]` (see [Streamed responses](#streamed-responses), [Structured events](#structured-events) and [Naming what a route streams](#naming-what-a-route-streams)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
 | `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
 | `RawStreamed(body, contentType)` | 200 | a `Stream[Bytes]` body, streamed chunk by chunk (see [Streamed raw responses](#streamed-raw-responses)) |
@@ -1212,8 +1212,41 @@ exactly as before. A value the wire cannot carry is an error, not a quiet change
 a whole number of milliseconds errors the body at that event, as any failure mid-stream
 does.
 
-A unit-tier test that matches `Streaming(s)` can drain `s` and count its events; `s` is typed
-`Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String` (tracked in #4394).
+#### Naming what a route streams
+
+`HttpResult[T]` takes an optional second argument, `HttpResult[T, E]`, that says what a
+`Streaming` body carries: `String`, or `SseEvent`. A route that names it has a body that is
+exactly a `Stream[E]`, so a `Stream[String]` under `HttpResult[(), SseEvent]` is a type error, and
+a unit-tier test that matches `Streaming(s)` reads `s` as a `Stream[E]`, with the fields of an
+`SseEvent` to hand:
+
+```bynk,fragment
+on GET("/events") () -> Effect[HttpResult[(), SseEvent]] by v: Visitor {
+	Streaming(Stream.of([SseEvent { data: "hello", event: Some("greeting") }]))
+}
+```
+
+```bynk,fragment
+case "the events are read as events" {
+	let r <- Events.GET("/events") by Visitor
+	match r {
+		Streaming(s) => {
+			let events <- s.collect()
+			expect events.map((e) => e.data) == ["hello"]
+		}
+		_ => expect false
+	}
+}
+```
+
+Name `SseEvent` for a route that streams `SseEvent`s. A route that names nothing,
+`HttpResult[T]`, keeps what it has always done: its `Streaming` body may be either, and a test
+that matches `Streaming(s)` reads `s` as a `Stream[String]` whatever the route streams, so do not
+read an `SseEvent` element of such a route as a `String`. A route that never streams may still name
+an element (`HttpResult[String, SseEvent]` with only `Ok(...)`); it is only what `Streaming` would
+carry. Any element other than `String` or `SseEvent` is
+[`bynk.types.streaming_element`](/reference/diagnostics/bynk.types.streaming_element/), since the router can frame
+nothing else.
 
 ### Heartbeats
 

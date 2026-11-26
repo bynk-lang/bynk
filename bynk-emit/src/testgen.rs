@@ -789,7 +789,11 @@ mod tests {
             "Result<T, E>"
         );
         assert_eq!(
-            ts_type_ref(&TypeRef::HttpResult(Box::new(named("T")), Span::default())),
+            ts_type_ref(&TypeRef::HttpResult(
+                Box::new(named("T")),
+                None,
+                Span::default()
+            )),
             "HttpResult<T>"
         );
         assert_eq!(
