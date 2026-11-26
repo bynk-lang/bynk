@@ -192,6 +192,51 @@ pub fn phase_container_builds(
     }
 }
 
+/// Why `name` cannot be a container's `@instances(by: …)` key, or `None` when it can: the type
+/// must be declared in the context, and be a refined type with a refinement or an opaque type, over
+/// `String`. The key's construction (`.of`, an opaque constructor) is where an author bounds the set
+/// of names, so a plain alias of `String` that adds no check does not qualify.
+pub fn instance_key_problem(
+    name: &str,
+    types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<String> {
+    use bynk_syntax::ast::{BaseType, TypeBody};
+    let Some(decl) = types.get(name) else {
+        return Some(format!("`{name}` is not a type declared in this context"));
+    };
+    match &decl.body {
+        TypeBody::Refined {
+            base: BaseType::String,
+            refinement: Some(_),
+            ..
+        }
+        | TypeBody::Opaque {
+            base: BaseType::String,
+            ..
+        } => None,
+        _ => Some(format!(
+            "`{name}` is not a refined or opaque type over `String`, so it would not bound the names"
+        )),
+    }
+}
+
+/// Re-types the first parameter of the operations that name an instance, from `String` to the
+/// instance's key type `key` (`@instances(by: key)`).
+pub fn key_instance_operations(ops: &mut [bynk_syntax::ast::CapabilityOp], key: &str) {
+    for op in ops
+        .iter_mut()
+        .filter(|op| INSTANCE_OPERATIONS.contains(&op.name.name.as_str()))
+    {
+        if let Some(first) = op.params.first_mut() {
+            let span = first.type_ref.span();
+            first.type_ref = bynk_syntax::ast::TypeRef::Named(bynk_syntax::ast::Ident {
+                name: key.to_string(),
+                span,
+            });
+        }
+    }
+}
+
 /// The `Container` operations whose first argument names the instance.
 const INSTANCE_OPERATIONS: &[&str] = &["send", "receiveBytes", "sendBytes"];
 
@@ -323,7 +368,9 @@ pub fn phase_container_instance_names(
         let containers: HashSet<String> = table
             .derived
             .iter()
-            .filter(|(_, d)| d.is_container())
+            // A keyed instance (`@instances(by: K)`, #4112) takes the key type, whose construction is
+            // where the names are bounded: it is not warned about.
+            .filter(|(_, d)| d.is_container() && d.instance_key().is_none())
             .map(|(cap, _)| cap.clone())
             .collect();
         if containers.is_empty() {
