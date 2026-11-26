@@ -847,3 +847,49 @@ fn every_deploy_of_an_index_calls_the_account() {
     assert!(!call(&["plain"], &[orphan(false)], false));
     assert!(!call(&["plain"], &[orphan(true)], true));
 }
+
+/// 1D.4c (#4056): "listed" matches the property and its type. A refused create whose property
+/// turns out to be listed with another type fails at once, naming both types, without waiting
+/// for the timeout.
+#[test]
+fn a_metadata_index_listed_with_another_type_fails_at_once() {
+    let fake = Fake::new("retyped", "[]", MATCHING, "[]");
+    fake.metadata_index_exists();
+    fake.after(
+        None,
+        r#"[{"propertyName":"category","indexType":"number"}]"#,
+    );
+    let mut lock = DeployLock::default();
+    let failure = fake
+        .run_paced(
+            &resources(&["category:string"]),
+            &mut lock,
+            "default",
+            Pacing {
+                first: Duration::from_millis(1),
+                longest: Duration::from_millis(4),
+                // A timeout this long would fail the test if the deploy waited for it.
+                timeout: Duration::from_secs(600),
+            },
+        )
+        .unwrap_err();
+    assert!(
+        failure.message.contains("is listed as `category:number`")
+            && failure.message.contains("declares `category:string`")
+            && failure
+                .message
+                .contains("delete-metadata-index shop-docs --propertyName category"),
+        "{}",
+        failure.message
+    );
+    assert_eq!(fake.polls(), 2, "the pre-create listing and one wait poll");
+}
+
+#[test]
+fn a_retyped_listing_is_found_only_for_the_same_property() {
+    let wanted = vec!["category:string".to_string()];
+    assert!(retyped_message("i", &wanted, &["category:number".to_string()]).is_some());
+    assert!(retyped_message("i", &wanted, &["category:string".to_string()]).is_none());
+    assert!(retyped_message("i", &wanted, &["year:number".to_string()]).is_none());
+    assert!(retyped_message("i", &wanted, &[]).is_none());
+}

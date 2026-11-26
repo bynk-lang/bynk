@@ -147,6 +147,11 @@ fn wait_for_metadata_indexes(
     let mut announced = false;
     loop {
         let listed = existing_metadata_indexes(api, name)?;
+        // Listed means the property *and* its type: one of another type is not what was wanted,
+        // and waiting will not change it.
+        if let Some(message) = retyped_message(name, wanted, &listed) {
+            return Err(message);
+        }
         let pending: Vec<&String> = wanted.iter().filter(|w| !listed.contains(*w)).collect();
         if pending.is_empty() {
             if announced {
@@ -195,6 +200,24 @@ fn wait_for_metadata_indexes(
         std::thread::sleep(delay);
         delay = (delay * 2).min(pacing.longest);
     }
+}
+
+/// The failure for a wanted metadata index (`property:type`) that the listing shows under the
+/// same property with another type: Cloudflare cannot retype one, so the deploy fails at once,
+/// naming both types and the manual delete that clears it. `None` when no listed property has
+/// another type than wanted. Pure.
+fn retyped_message(name: &str, wanted: &[String], listed: &[String]) -> Option<String> {
+    let (want, have) = wanted.iter().find_map(|want| {
+        let (property, _) = want.split_once(':')?;
+        let have = listed.iter().find(|have| {
+            have.split_once(':').is_some_and(|(p, _)| p == property) && *have != want
+        })?;
+        Some((want, have))
+    })?;
+    let property = want.split_once(':').map_or(want.as_str(), |(p, _)| p);
+    Some(format!(
+        "the metadata index for `{property}` on `{name}` is listed as `{have}`, but the source declares `{want}`; Cloudflare cannot change a metadata index's type, so the Worker was not pushed. Delete it by hand (`wrangler vectorize delete-metadata-index {name} --propertyName {property}`) and deploy again, or declare `{have}`"
+    ))
 }
 
 /// Delete the index `name` (`--prune`, after its confirmation). One already
