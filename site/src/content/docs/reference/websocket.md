@@ -45,11 +45,19 @@ constructors at the edge (`400` on failure), exactly as HTTP route params are.
 The upgrade is authenticated **before** the connection is accepted — fail-closed,
 exactly like an HTTP route. The WebSocket boundary admits `None` and `Bearer`
 actors and **rejects `Signature`**: a browser `WebSocket` cannot set an
-`Authorization` header, so a Bearer token is read from the first
-**`Sec-WebSocket-Protocol`** subprotocol element (a browser sets it with `new
-WebSocket(url, [token])`). On Workers the Worker verifies the token with the same
+`Authorization` header, so a Bearer token is read from the **`Sec-WebSocket-Protocol`**
+subprotocols the client offers: the marker `bynk.bearer`, then the token (a browser sets it
+with `new WebSocket(url, ["bynk.bearer", token])`). The `101` response selects `bynk.bearer`
+and never the token, so the credential is not echoed in a response header, where proxies and
+logs may record it, and a browser, which fails a connection whose response selects none of the
+subprotocols it offered, keeps the connection. On Workers the Worker verifies the token with the same
 audited JWT verifier HTTP uses, runs any refinement-actor authorization predicate
 (`403`), and only on success forwards the upgrade to the Durable Object.
+
+A request that offers no token, or a bad one, is `401`. The old form, `new WebSocket(url,
+[token])`, offering the token alone, is refused with `400` and a fixed message naming the pair:
+it only worked for clients that do not enforce the standard, and a `401` would hide the cause.
+An upgrade to a `None` actor offers no subprotocol and is answered with none.
 
 ## Sending and broadcasting
 

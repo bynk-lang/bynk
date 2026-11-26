@@ -4,6 +4,7 @@
 import { __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __serialiseAgentKey, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __webSocketBearerOffer, __webSocketBearerRefusal } from "../../__bynk_runtime/connection.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -18,9 +19,10 @@ export function compose(env: Env) {
   return {
     async ws_chat_open(request: globalThis.Request, room: string) {
       if (request.headers.get("Upgrade") !== "websocket") return new globalThis.Response("Expected a WebSocket upgrade", { status: 426 });
-      const __proto = request.headers.get("Sec-WebSocket-Protocol");
-      if (__proto === null) return new globalThis.Response("Unauthorized", { status: 401 });
-      const __token = __proto.split(",")[0].trim();
+      const __offer = __webSocketBearerOffer(request.headers.get("Sec-WebSocket-Protocol"));
+      if (__offer.tag === "Legacy") return __webSocketBearerRefusal();
+      if (__offer.tag !== "Token") return new globalThis.Response("Unauthorized", { status: 401 });
+      const __token = __offer.token;
       const __secret = (env as unknown as globalThis.Record<string, unknown>)["USER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["USER_SECRET"];
       if (typeof __secret !== "string") return new globalThis.Response("Unauthorized", { status: 401 });
       const __claims = await __verifyBearerJwtHs256(__token, __secret);
