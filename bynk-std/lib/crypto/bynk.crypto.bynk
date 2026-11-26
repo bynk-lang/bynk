@@ -1,4 +1,5 @@
 adapter bynk.crypto {
+	consumes bynk { Secrets, Secret }
 	exports capability { Crypto }
 	exports transparent { Digest, Signature, CryptoError }
 	exports opaque { SigningKey, VerifyKey }
@@ -74,6 +75,10 @@ adapter bynk.crypto {
 		fn importSigningKey(
 			algorithm: Signature,
 			pkcs8: Bytes
+		) -> Effect[Result[SigningKey, CryptoError]]
+		fn importSigningKeyFromSecret(
+			algorithm: Signature,
+			secret: Secret
 		) -> Effect[Result[SigningKey, CryptoError]]
 		fn importVerifyKey(
 			algorithm: Signature,

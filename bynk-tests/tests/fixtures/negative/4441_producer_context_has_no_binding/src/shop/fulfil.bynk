@@ -1,0 +1,13 @@
+context shop.fulfil
+
+type Order = { id: String }
+
+// #4441: `shop.orders` is a context of the project, but it declares no `Queue` for `order-events`,
+// so it never signs a message for this consumer: the refinement admits a context that cannot send.
+actor FromOrders = Producer where IsContext(shop.orders)
+
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] by FromOrders {
+    Ack
+  }
+}

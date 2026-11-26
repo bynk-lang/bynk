@@ -287,7 +287,7 @@ export class FetchProvider implements Fetch {
         headers.set("content-type", req.contentType.value);
       }
       if (req.authorization.tag === "Some") {
-        headers.set("authorization", req.authorization.value);
+        headers.set("authorization", req.authorization.value.reveal());
       }
       const seen = new Set<string>();
       for (const [name, value] of req.headers) {

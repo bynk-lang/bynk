@@ -49,6 +49,7 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub mod analytics;
 pub(crate) mod applied_bounds;
 mod call_outcome;
 mod calls;
@@ -109,6 +110,7 @@ mod validation_rule;
 
 use calls::*;
 use expressions::*;
+pub(crate) use kernels::std_type_decls;
 use kernels::*;
 use refinements::*;
 
@@ -914,6 +916,13 @@ pub enum Callee {
         /// quotes columns with backticks, decodes MySQL's text forms (the
         /// Postgres pass over `Int` fields) and fails as a `MySqlReadError`.
         mysql: bool,
+    },
+    /// #4105: `Cap.writeValue[T](value)` on a derived `Analytics` instance. Not a declared
+    /// operation: the emitter lowers it over `write(DataPoint)` from `mapping`, which the checker
+    /// computed from the record `T`.
+    AnalyticsWrite {
+        cap: String,
+        mapping: analytics::AnalyticsMapping,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so

@@ -135,10 +135,11 @@ carries the full ambient set:
 | `Secrets` | `get(name: String) -> Effect[Option[String]]` | env-backed per platform |
 
 `Fetch`'s `Request` carries `method` (`Method` enum), `url`,
-`contentType`/`authorization`/`body` as `Option[String]` fields, and
-`headers: Map[String, String]` for any other request header. `headers` is a
-required field, so a request that sends no extra headers says
-`headers: Map.empty()`. `Response` carries `status`, `headers` (keys
+`contentType`/`body` as `Option[String]` fields, `authorization` as an
+`Option[Authorization]` (made from a `Secret`), and
+`headers: Map[String, String]` for any other request header. All four are
+optional (`None`, or an empty map), so a request needs only `method` and `url`.
+`Response` carries `status`, `headers` (keys
 lowercased) and `body`. See
 [the `bynk` capabilities reference](/reference/bynk-capabilities/#request-and-response-headers)
 for the conflict and forbidden-header rules, which return `Err(InvalidHeader)`.

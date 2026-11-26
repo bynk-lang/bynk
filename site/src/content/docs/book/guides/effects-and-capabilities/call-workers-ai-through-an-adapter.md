@@ -81,7 +81,7 @@ export class WorkersAi implements Ai {
       method: Method.Post,
       url: `https://api.cloudflare.com/client/v4/accounts/${account.value.reveal()}/ai/run/${model}`,
       contentType: Some("application/json"),
-      authorization: Some(`Bearer ${token.value.reveal()}`),
+      authorization: Some(token.value.bearer()),
       headers: new Map(),
       body: Some(JSON.stringify({ prompt })),
     });
@@ -165,8 +165,7 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 							method: Post,
 							url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
 							contentType: Some("application/json"),
-							authorization: Some("Bearer \(t.reveal())"),
-							headers: Map.empty(),
+							authorization: Some(t.bearer()),
 							body: Some(body),
 						}
 					)

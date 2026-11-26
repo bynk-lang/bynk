@@ -55,14 +55,7 @@ service checks from cron {
 			},
 		]
 		do targets.forEach((t: Target) => {
-			let res <- Fetch.send(Request {
-				method: Get,
-				url: t.url,
-				contentType: None,
-				authorization: None,
-				headers: Map.empty(),
-				body: None,
-			})
+			let res <- Fetch.send(Request { method: Get, url: t.url })
 			let code = match res {
 				Ok(r) => r.status,
 				Err(_) => 0,

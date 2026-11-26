@@ -767,6 +767,15 @@ pub(in crate::emitter) fn lower_capability_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    // #4105: `Cap.writeValue[T](value)` is lowered over the instance's `write`.
+    if let Some(Callee::AnalyticsWrite { cap, mapping }) = cx.commons().callee(e.id).cloned() {
+        let value = pre.lower_node(args.first()?, cx);
+        let point = analytics_point(value, &mapping, cx);
+        let deps = deps_receiver(cx.in_test_case(), cx);
+        let call = capability_op_call(deps, &cap, "write", Vec::new(), vec![point]);
+        let target = format!("{cap}.writeValue");
+        return Some(cx.trace_step_node("capability", &target, e.span.start, call));
+    }
     // #1975: a capability call in a test `case` body (`Greeter.hello("ann")`)
     // reaches the case's own `deps`, built by `__makeTestDeps`: the checker
     // puts the target's capabilities in scope there, so it records the call
@@ -950,6 +959,60 @@ fn name_analytics_dataset(
         );
         lowered[0] = TsExpr::Await(Box::new(table));
     }
+}
+
+/// #4105: the `DataPoint` a record is, from the mapping the checker computed: `((__v) => ({ index,
+/// blobs, doubles }))(value)`, so the value is evaluated once however many columns read it.
+fn analytics_point(
+    value: TsExpr,
+    mapping: &bynk_check::checker::analytics::AnalyticsMapping,
+    cx: &mut LowerCtx,
+) -> TsExpr {
+    use bynk_check::checker::analytics::ColumnKind;
+    let v = || ident("__v");
+    let column = |f: &bynk_check::checker::analytics::ColumnField, cx: &mut LowerCtx| {
+        let field = member(v(), &f.field);
+        match f.kind {
+            ColumnKind::Text | ColumnKind::Number => field,
+            ColumnKind::Variant => member(field, "tag"),
+            ColumnKind::Flag => call(ident("String"), vec![field]),
+            ColumnKind::Decimal => {
+                cx.note_decimal("__bynkDecimalToFloat");
+                call(ident("__bynkDecimalToFloat"), vec![field])
+            }
+        }
+    };
+    let index = match &mapping.index {
+        Some(f) => call(ident("Some"), vec![member(v(), f)]),
+        None => ident("None"),
+    };
+    let blobs = mapping.blobs.iter().map(|f| column(f, cx)).collect();
+    let doubles = mapping.doubles.iter().map(|f| column(f, cx)).collect();
+    let point = object(vec![
+        ("index", index),
+        (
+            "blobs",
+            TsExpr::Array {
+                items: blobs,
+                multiline: false,
+            },
+        ),
+        (
+            "doubles",
+            TsExpr::Array {
+                items: doubles,
+                multiline: false,
+            },
+        ),
+    ]);
+    call(
+        paren(arrow_with(
+            vec![TsParam::new("__v", None)],
+            false,
+            paren(point),
+        )),
+        vec![value],
+    )
 }
 
 fn capability_op_call(

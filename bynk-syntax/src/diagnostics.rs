@@ -4339,6 +4339,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
+        code: "bynk.queue.producer_never_sends",
+        blurb: "A refinement of `Producer`, such as `actor FromOrders = Producer where IsContext(shop.orders)`, names the Bynk contexts that may send to a queue's consumer. A context sends to a queue through a `Queue @name(\"…\")` instance it declares, and that instance is what signs its messages under the edge key between the two contexts. A named context that declares no instance of the queue never signs a message for it, so the name is dead configuration or a stand-in for the context that does send, and the messages that do arrive from the intended producer would be refused only at run time. Name a context that has a `Queue` for this queue, or declare the `Queue` in the context you meant. A dead-letter queue's consumer names the producers of the queue it dead-letters from, since a dead letter keeps the signed envelope its source received. A name that is no context of the project is `bynk.actor.unknown_context`.",
+        example: "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n\x20 delivery { deadLetter: None }\n\x20 on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
+    },
+    Explain {
         code: "bynk.queue.retry_delay_out_of_range",
         blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
         example: "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
@@ -5821,6 +5826,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
     },
     Explain {
+        code: "bynk.types.analytics_point_shape",
+        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
+        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -6659,7 +6669,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.secret_at_boundary",
         blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
-                stored, sent or encoded form: putting one in a record, event or `store` field, \
+                stored, sent or encoded form (nor has the `Authorization` made from one): putting one in a record, event or `store` field, \
                 or passing one into or out of a handler, would write the secret into data that \
                 is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
                 or a function parameter and use it where it is read, with `matches(candidate)` \
@@ -6673,7 +6683,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.secret_not_comparable",
         blurb: "`==` on text stops at the first character that differs, so how long it takes \
                 tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
-                never compared with `==` or `!=`, nor held in a type that is (a record or sum \
+                never compared with `==` or `!=` (and an `Authorization` not at all), nor held in a type that is (a record or sum \
                 that derives equality). Compare with `secret.matches(candidate)`, which takes \
                 the same time however the two differ, or call `reveal()` where the text itself \
                 is needed.",
@@ -10010,6 +10020,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["delivery_policy"],
     )),
     d(
+        "bynk.queue.producer_never_sends",
+        "A `Producer` refinement admits a context that declares no `Queue` for the queue, so it never sends to it.",
+    ),
+    d(
         "bynk.queue.retry_delay_out_of_range",
         "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",
     ),
@@ -10954,6 +10968,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A transition predicate does not have type `Bool`.",
     ),
     dg(
+        "bynk.types.analytics_point_shape",
+        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11472,11 +11491,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.secret_at_boundary",
-        "A `bynk` `Secret` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+        "A `bynk` `Secret` or `Authorization` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
     ),
     d(
         "bynk.types.secret_not_comparable",
-        "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
+        "`==` or `!=` on a `bynk` `Secret` or `Authorization`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",

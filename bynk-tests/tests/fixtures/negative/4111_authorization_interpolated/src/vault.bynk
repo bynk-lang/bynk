@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Authorization }
+
+fn banner(a: Authorization) -> String {
+    "credential: \(a)"
+}

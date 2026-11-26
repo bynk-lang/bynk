@@ -1,0 +1,20 @@
+context signer
+
+consumes bynk.crypto { Crypto, CryptoError, Signature }
+
+// The project's own `Secret` is an ordinary type. `bynk.crypto` takes `bynk`'s `Secret`, so a value
+// of this one is not that, however alike the names are.
+type Secret = String where NonEmpty
+
+service sign {
+	on call(own: Secret) -> Effect[Result[String, CryptoError]] by Caller given Crypto {
+		let imported <- Crypto.importSigningKeyFromSecret(Ed25519, own)
+		match imported {
+			Err(e) => Effect.pure(Err(e)),
+			Ok(key) => {
+				let signature <- Crypto.sign(key, Bytes.fromUtf8("x"))
+				Effect.pure(Ok(signature.toBase64()))
+			},
+		}
+	}
+}

@@ -85,6 +85,7 @@ pub mod packages;
 pub mod pg_sql;
 pub mod phase_timing;
 pub(crate) mod prelude_record;
+pub mod producer_admission;
 pub mod project_model;
 pub mod queue_consumers;
 pub mod queue_delivery;

@@ -747,7 +747,13 @@ pub(super) fn ws_open_fetch_branch_stmt(
     } else {
         ""
     };
-    let payload_ty = format!("{{ args: unknown[]{id_field}{key_field} }}");
+    // #3903: a Bearer upgrade forwards the credential's expiry, which the attachment keeps.
+    let exp_field = if host.reads_bearer_token() {
+        "; exp?: number"
+    } else {
+        ""
+    };
+    let payload_ty = format!("{{ args: unknown[]{id_field}{key_field}{exp_field} }}");
     let mut stmts = vec![
         bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__pair".to_string()),
@@ -834,6 +840,16 @@ pub(super) fn ws_open_fetch_branch_stmt(
                 bynk_ts::TsExpr::Member {
                     object: Box::new(bynk_ts::TsExpr::Ident("__payload".to_string())),
                     property: "who".to_string(),
+                },
+            ));
+        }
+        // #3903: and the credential's expiry, which a waking `webSocketMessage` checks.
+        if host.reads_bearer_token() {
+            meta.push((
+                "exp".to_string(),
+                bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Ident("__payload".to_string())),
+                    property: "exp".to_string(),
                 },
             ));
         }
@@ -1152,6 +1168,12 @@ pub(super) fn emit_ws_dispatch_handlers(
         let mut stmts = Vec::new();
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());
+        // #3903: a frame after the credential's expiry closes the connection before `on message` runs.
+        if let Some(c) = host.close.filter(|_| host.reads_bearer_token()) {
+            stmts.push(super::websocket_close::expiry_check(
+                host, c, types, &deps_arg,
+            ));
+        }
         stmts.push(bynk_ts::TsStmt::let_stmt(
             bynk_ts::TsBindingName::Ident("__raw".to_string()),
             Some(bynk_ts::TsType::named("string")),

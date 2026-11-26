@@ -2681,8 +2681,12 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Type(t) => match &t.body {
                 TypeBody::Record(r) => {
                     check_polymorphic_recursion(t, types, errors);
-                    for f in &r.fields {
-                        reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                    // #4111: `bynk`'s own `Request` holds an `Authorization`, which is how a secret
+                    // reaches `Fetch`; its fields are not the ones a program declares.
+                    if !crate::context_checks::is_firstparty_decl(t) {
+                        for f in &r.fields {
+                            reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                        }
                     }
                 }
                 TypeBody::Sum(s) => {
@@ -5927,6 +5931,8 @@ pub fn phase_bundle_composition_unprovided(
         tys,
         errors,
     );
+    // #4441: a `Producer` refinement names only contexts that produce to the queue.
+    crate::producer_admission::phase_producer_admission(parsed, groups, kinds, unit_tables, errors);
     // #3890: the whole-program call checks share this entry point, which both
     // pipelines call once the per-unit checks are done: a call the callee's
     // `Caller` refinement does not admit, and an `IsContext(…)` name that is no

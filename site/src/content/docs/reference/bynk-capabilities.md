@@ -99,12 +99,31 @@ a value read from the platform's secret store, built so it cannot leak by accide
   body (`bynk.context.external_construction` in a context), where it stands in for a secret the
   platform would supply. Its `of` returns the `Secret` directly: there is no predicate to fail.
 
-Two methods read one:
+Four methods use one:
 
 | Method | Result |
 |---|---|
-| `reveal()` | the secret's text, as a `String`. The one deliberate exit: write it where the value has to leave, such as an `Authorization` header or a key import. |
+| `reveal()` | the secret's text, as a `String`. The one deliberate exit: write it where the value has to leave. |
 | `matches(candidate: String)` | `true` if `candidate` is the secret. It takes the same time however the two differ, and never returns early on a length mismatch. |
+| `bearer()` | the `Authorization` `Bearer <secret>`, to set as a request's `authorization`. |
+| `basic(user: String)` | the `Authorization` `Basic <user:secret>` (RFC 7617), with this secret as the password. A `user` holding `:` or a control character is not a Basic user and faults. |
+
+An `Authorization` carries a secret into `Fetch` without ever being text. It has every
+restriction a `Secret` has (no string form, not `Eq`, a `Key` or `Codable`, never stored,
+sent or returned) and no reader at all: `Fetch.send` is the one place it is revealed.
+Set it as `authorization: Some(token.bearer())`:
+
+```bynk,fragment
+let res <- Fetch.send(Request {
+	method: Get,
+	url: "https://api.example.test/me",
+	authorization: Some(token.bearer()),
+})
+```
+
+A secret with a stray newline makes `Fetch.send` return `Err(InvalidHeader)` before anything is
+sent. Header values in `Request.headers` stay `String`, so a credential put there is written
+with a visible `reveal()`.
 
 At run time a `Secret` is a wrapper whose `toString`, `toJSON` and inspection all render
 as `<secret>`, so one that reaches a log line or a thrown error's message through a path
@@ -283,7 +302,7 @@ emitting handler itself commits, so an aborted handler emits nothing. See
 model, the subscriber side (`from Events(E)`, `on event`), and how delivery
 differs between Cloudflare and Bundle targets.
 
-The `bynk` unit also exports the transparent types these operations use:
+The `bynk` unit also exports the types these operations use (`Authorization` is opaque):
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -302,13 +321,15 @@ type ParOptions = {
   limit: Int,
 }
 
+type Authorization = opaque String  // made from a Secret: see "The Secret type"
+
 type Request = {
   method: Method,
   url: String,
-  contentType: Option[String],
-  authorization: Option[String],
-  headers: Map[String, String],
-  body: Option[String],
+  contentType: Option[String] = None,
+  authorization: Option[Authorization] = None,
+  headers: Map[String, String] = Map.empty(),
+  body: Option[String] = None,
 }
 
 type Response = {
@@ -331,19 +352,20 @@ type EventEnvelope = {
 ### Request and response headers
 
 `contentType` and `authorization` are typed slots for the two common request
-headers. Any other header goes in `headers`; a record field has no default, so a
-request that sends none says so with `headers: Map.empty()`:
+headers. `authorization` takes an [`Authorization`](#the-secret-type), which is
+made from a `Secret` (`token.bearer()`, `password.basic("alice")`), so a
+credential never has to be text. Any other header goes in `headers`. All four
+optional fields of a `Request` (`contentType`, `authorization`, `headers` and
+`body`) default to `None` or an empty map, so a request that sends none of
+them is just `Request { method: Get, url: "…" }`:
 
 ```bynk,fragment
 let req = Request {
-  method:        Get,
-  url:           "https://api.github.com/repos/bynk-lang/bynk",
-  contentType:   None,
-  authorization: None,
-  headers:       Map.empty()
-                   .insert("user-agent", "bynk-examples/1.0")
-                   .insert("accept", "application/vnd.github+json"),
-  body:          None,
+  method:  Get,
+  url:     "https://api.github.com/repos/bynk-lang/bynk",
+  headers: Map.empty()
+             .insert("user-agent", "bynk-examples/1.0")
+             .insert("accept", "application/vnd.github+json"),
 }
 ```
 
@@ -373,7 +395,7 @@ value, joined with `", "`. That includes `set-cookie`, and there the join is
 lossy: a cookie's `Expires` attribute contains a comma
 (`Expires=Wed, 09 Jun 2027 10:18:14 GMT`), so a joined `set-cookie` cannot be
 split back into its cookies reliably. A `stub Fetch.send(_) returns Ok(Response { … })` in a test
-gives it `headers: Map.empty()` (or the headers the case needs), and an
+gives it `headers: Map.empty()` (or the headers the case needs; a `Response`, unlike a `Request`, has no defaults), and an
 `expect Fetch.send called once with req.headers.get("user-agent") == Some("…")`
 matches on what was sent.
 
@@ -994,6 +1016,52 @@ on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor
 - `blobs` are text dimensions, at most 20 and at most 16 KB in total
   (`blob1`…`blob20`, in order).
 - `doubles` are numbers, at most 20, each finite (`double1`…`double20`).
+
+#### Typed points: `writeValue`
+
+A record type can be the data point's schema, so the order of the columns is
+written once, in the type, and not in every `DataPoint`:
+
+```bynk,fragment
+type Signup = {
+	@index plan: String,
+	channel: String,
+	country: String,
+	amount: Decimal,
+	seconds: Duration,
+}
+```
+
+```bynk,fragment
+on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+	let _ <- Signups.writeValue(Signup { plan: plan, channel: "web", country: "GB", amount: 9.99d, seconds: 2.seconds })
+	Created("counted")
+}
+```
+
+`writeValue` is lowered over the instance's `write`, so a point that is over a limit faults the
+same way and a test stubs and observes `Signups.write`. The type argument is the argument's record
+type unless you write it (`Signups.writeValue[Signup](…)`). The compiler computes the mapping from
+the record, in declaration order:
+
+| Field | Column |
+| --- | --- |
+| `String`, or a refined or opaque `String` | `blob1`, `blob2`, … |
+| a payload-less enum | a blob, the variant's name |
+| `Bool` | a blob, `"true"` or `"false"` |
+| `Int`, `Float` | `double1`, `double2`, … |
+| `Decimal` | a double, its float value (a double cannot hold every `Decimal` exactly) |
+| `Duration`, `Instant` | a double, in milliseconds (`Instant` since the epoch) |
+| one `@index` field, a `String` | `index1` |
+
+A record with over 20 blob or 20 double fields, a second `@index`, an `@index` that is not a
+`String`, or a field of any other type (a `List`, an `Option`, a nested record, `Bytes`) is
+`bynk.types.analytics_point_shape`, naming the field. Reordering the fields changes what each column
+holds, so keep a point's fields in the order its reports were written against; appending a field is
+safe. Use `write` for a point whose shape is not a record.
+
+The typed read, `AnalyticsSql.select[T]`, and the schema lock that refuses a reorder follow in later
+changes (#4105).
 
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the
@@ -1980,10 +2048,6 @@ service orders from http {
 		let req = Request {
 			method: Get,
 			url: "https://orders.acme.example/v1/orders",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Backend.send(req)
 		match res {
@@ -2134,10 +2198,6 @@ service render from http {
 		let req = Request {
 			method: Get,
 			url: "http://renderer/render",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Renderer.send("tenant-\(tenant)", req)
 		match res {
@@ -2545,6 +2605,7 @@ No third-party crypto runs and nothing is polyfilled.
 | `verifyHmac(algorithm: Digest, key: Bytes, data: Bytes, mac: Bytes)` | `Effect[Bool]`, compared in constant time. |
 | `equal(a: Bytes, b: Bytes)` | `Effect[Bool]`, compared in constant time for equal lengths. |
 | `importSigningKey(algorithm: Signature, pkcs8: Bytes)` | `Effect[Result[SigningKey, CryptoError]]`. |
+| `importSigningKeyFromSecret(algorithm: Signature, secret: Secret)` | `Effect[Result[SigningKey, CryptoError]]`. The key is the base64 PKCS#8 a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. A secret that is not base64, or not a key for the algorithm, is `InvalidKey`, and the failure names none of its text. |
 | `importVerifyKey(algorithm: Signature, key: Bytes)` | `Effect[Result[VerifyKey, CryptoError]]` — SPKI, or the 32 raw bytes of an Ed25519 key. |
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
@@ -2567,7 +2628,8 @@ the key non-extractable, so its bytes can't be read back. Like a `Stream`, a key
 lives for the call that imported it. It can't be stored, serialised, logged or
 sent, so using one in a `store`, a record or event field, a handler parameter or
 result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
-[`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify.
+[`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify
+(`importSigningKeyFromSecret` takes the secret itself).
 
 **Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
 differing byte, so they are the way to compare a secret, a MAC, a signature or a
@@ -2654,14 +2716,7 @@ consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Network) => Effect.pure("network"),
@@ -2682,14 +2737,7 @@ consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Timeout) => Effect.pure("retry later"),
@@ -2786,7 +2834,7 @@ A `Fetch` caller usually needs only `formatQuery`:
 
 ```bynk,fragment
 let q = formatQuery([QueryParam { name: "q", value: term }])
-let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q), contentType: None, authorization: None, headers: Map.empty(), body: None })
+let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q) })
 ```
 
 `Url` is a record in a commons, not a built-in type, so a project's own `Url`

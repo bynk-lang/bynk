@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Request }
+
+fn same(a: Request, b: Request) -> Bool {
+    a == b
+}

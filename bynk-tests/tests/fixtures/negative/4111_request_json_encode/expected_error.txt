@@ -1,0 +1,2 @@
+bynk.types.json_uncodable
+`Request` cannot be encoded as JSON
