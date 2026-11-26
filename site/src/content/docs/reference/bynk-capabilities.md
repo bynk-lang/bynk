@@ -326,10 +326,10 @@ type Authorization = opaque String  // made from a Secret: see "The Secret type"
 type Request = {
   method: Method,
   url: String,
-  contentType: Option[String],
-  authorization: Option[Authorization],
-  headers: Map[String, String],
-  body: Option[String],
+  contentType: Option[String] = None,
+  authorization: Option[Authorization] = None,
+  headers: Map[String, String] = Map.empty(),
+  body: Option[String] = None,
 }
 
 type Response = {
@@ -395,7 +395,7 @@ value, joined with `", "`. That includes `set-cookie`, and there the join is
 lossy: a cookie's `Expires` attribute contains a comma
 (`Expires=Wed, 09 Jun 2027 10:18:14 GMT`), so a joined `set-cookie` cannot be
 split back into its cookies reliably. A `stub Fetch.send(_) returns Ok(Response { … })` in a test
-gives it `headers: Map.empty()` (a `Response`, unlike a `Request`, has no defaults; or the headers the case needs), and an
+gives it `headers: Map.empty()` (or the headers the case needs; a `Response`, unlike a `Request`, has no defaults), and an
 `expect Fetch.send called once with req.headers.get("user-agent") == Some("…")`
 matches on what was sent.
 
