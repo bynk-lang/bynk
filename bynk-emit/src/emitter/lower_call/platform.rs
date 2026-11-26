@@ -599,7 +599,7 @@ pub(in crate::emitter) fn lower_ai_generate_value_call(
             ty: TsType::named("unknown"),
         }),
         ty: TsType::named(
-            "{ generateJson(model: unknown, request: unknown, schema: string): Promise<Result<string, unknown>> }",
+            "{ generateJson(model: unknown, request: unknown, schema: string): globalThis.Promise<Result<string, unknown>> }",
         ),
     };
     let bad_reply = TsExpr::TemplateLit {

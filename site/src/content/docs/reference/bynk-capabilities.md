@@ -1391,15 +1391,17 @@ decoded and checked as `T` by the ordinary decoder, refinements included.
 ```bynk,fragment
 type Severity = enum { Low, Medium, High }
 type Triage = { severity: Severity, summary: String where MaxLength(200), tags: List[String] }
+```
 
+```bynk,fragment
 let t <- Ai.generateValue[Triage]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", GenerateRequest {
 	messages: [ChatMessage { role: ChatRole.System, content: "Classify the ticket." },
 	           ChatMessage { role: ChatRole.User, content: body }],
 })
 match t {
-	Ok(triage) => …,
-	Err(BadReply(why)) => …,   // did not decode as Triage; `why` is the path, never the text
-	Err(_) => …,
+	Ok(triage) => Ok(triage.summary),
+	Err(BadReply(why)) => ServerError(why),   // did not decode as Triage; `why` is the path, never the text
+	Err(_) => ServerError("the model is unavailable"),
 }
 ```
 
