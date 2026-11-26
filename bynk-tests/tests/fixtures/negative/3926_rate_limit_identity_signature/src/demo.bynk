@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+actor Webhook { auth = Signature(secret = "WEBHOOK_SECRET", header = "X-Signature", timestamp = "X-Timestamp", tolerance = 300) }
+
+capability HookLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  // A `Signature` sender is a service, not a person: there is no caller identity to count by.
+  @rateLimit(HookLimit, key: identity)
+  on POST("/hooks/event") (body: String) -> Effect[HttpResult[String]] by Webhook {
+    Ok("received")
+  }
+}

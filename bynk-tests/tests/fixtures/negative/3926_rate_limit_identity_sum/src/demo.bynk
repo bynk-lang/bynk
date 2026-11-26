@@ -1,0 +1,21 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+type UserId = String where NonEmpty
+
+actor Member { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor Hook { auth = Signature(secret = "WH_SECRET", header = "X-Signature") }
+
+capability IngestLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  // An actor sum has no one identity to count by.
+  @rateLimit(IngestLimit, key: identity)
+  on POST("/ingest") (body: String) -> Effect[HttpResult[String]] by who: Member | Hook {
+    match who {
+      Member(u) => Ok(u)
+      Hook => Ok(body)
+    }
+  }
+}

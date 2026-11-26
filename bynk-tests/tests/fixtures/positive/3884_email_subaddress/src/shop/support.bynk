@@ -1,0 +1,31 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+// #3884: mail to `support+1234@shop.example` is dispatched to the service claiming
+// `support@shop.example`, and the handler reads the tag as `mail.subaddress`.
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    match mail.subaddress {
+      Some(ticket) => Forward("tickets@shop.example"),
+      None => Accept,
+    }
+  }
+}
+
+// Claiming a tagged address stays legal: an exact claim wins over the base address.
+service vip from email("support+vip@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Reject("vip mail goes elsewhere")
+  }
+}
+
+// A tagged recipient with no claim on its base address falls to the catch-all.
+service rest from email("*@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Reject("no such mailbox")
+  }
+}

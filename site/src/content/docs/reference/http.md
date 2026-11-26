@@ -2094,9 +2094,10 @@ service api from http {
 }
 ```
 
-The router asks the limiter first of all, ahead of the media-type check, the body-size check
-and authentication, so a flood costs a counter and a `429`, and a request whose body is over
-its cap still gets `429` once the limit is spent. The answer is `429 Too Many Requests` with
+With `key: clientIp` the router asks the limiter first of all, ahead of the media-type check, the
+body-size check and authentication, so a flood costs a counter and a `429`, and a request whose
+body is over its cap still gets `429` once the limit is spent. With `key: identity` it verifies the
+caller first and asks then, still before anything else is read. The answer is `429 Too Many Requests` with
 `Retry-After` set to the limiter's period in seconds and a `{ "kind": "RateLimited" }` body
 (problem details under [`errors { format: problem }`](#error-bodies)). It is the rejection
 `RateLimited(detail)`, so [`on rejected`](#rendering-rejections) can render it and a `system`
@@ -2106,9 +2107,16 @@ test can assert `Rejected(RateLimited(_))`.
   Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without
   the header (under `bynk dev`, or a test that sets none) every request counts as one client,
   `unknown`.
-- `key: identity`, counting by the verified caller after authentication and before the body,
-  is not available yet: it is `bynk.http.rate_limit_key_unavailable`. A limit keyed on the
-  caller stays a call to the limiter's `allow(key)` in the handler.
+- `key: identity` counts by the verified caller (`sub`), scoped to the route's actor, so two actors' users never share a count even on one limiter. The router verifies the route's actor
+  first, then asks the limiter about the caller, then reads the body, so an unverified caller never
+  touches the limiter: a missing, forged or expired credential, a cross-site request to a
+  `SignedCookie` route and a revoked session each get the `401` or `403` they always got, and a
+  limit cannot be spent by someone else's forged requests. Only after that is the caller counted, and a
+  caller over the limit gets `429` before any `415`, `413` or body read. It needs a single actor that
+  carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. On a `Visitor`, a `Signature`
+  sender or an actor sum it is `bynk.http.rate_limit_key_unavailable`; use `clientIp`, or call the
+  limiter's `allow(key)` in the handler for a key only the handler knows. The verification runs once:
+  the handler receives the principal it produced.
 - The limiter is a named instance the route's context declares; the route needs no `given`.
   A route carries at most one `@rateLimit` (`bynk.http.rate_limit_duplicate`), and a limiter named
   by several routes counts across all of them, by key. An unknown limiter is
@@ -2156,13 +2164,13 @@ flowchart TD
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
 on method **and** path. On a match, path parameters are bound (a path that is not valid percent-encoding is a
 `400 MalformedPath`, never a `500`) and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@rateLimit` route's limiter is asked first of all (`429`, [below](#rate-limiting)); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@rateLimit(…, key: clientIp)` route's limiter is asked first of all (`429`, [below](#rate-limiting)), and a `key: identity` route's actor is verified, then its limiter asked, before any of the following; a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs; then the handler's `by` actor is checked (`401` or `403`, see
 [Actors](/reference/actors/)) by the handler's wrapper. (A multi-actor `by` and a `Signature` route's wrapper read the
 body themselves, verifying over the raw bytes first.) So a rate limit is the only check that runs ahead of the body read
-on every route. The handler then runs as an
+on every route, and a `key: identity` limit runs the actor's verification ahead of it. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
