@@ -153,6 +153,7 @@
 /book/guides/type-system/recursion-and-iteration/
 /book/guides/type-system/recursive-generic-types/
 /book/guides/type-system/refined-literal-admission/
+/book/guides/type-system/rename-a-field-safely/
 /book/guides/type-system/result-and-optionals/
 /book/guides/type-system/use-a-literal/
 /book/introduction/anatomy-of-a-service/
@@ -848,9 +849,9 @@
 /book/reference/diagnostics/bynk.store.kind_arity/
 /book/reference/diagnostics/bynk.store.kind_unsupported/
 /book/reference/diagnostics/bynk.store.log_needs_clock/
+/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unkeyable_key/
 /book/reference/diagnostics/bynk.store.unknown_annotation/
-/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unknown_kind/
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
@@ -1601,6 +1602,10 @@
 /reference/diagnostics/bynk.exports.undeclared_capability/
 /reference/diagnostics/bynk.exports.undeclared_type/
 /reference/diagnostics/bynk.fault.todo/
+/reference/diagnostics/bynk.field.replaces_conflict/
+/reference/diagnostics/bynk.field.replaces_needed/
+/reference/diagnostics/bynk.field.replaces_settled/
+/reference/diagnostics/bynk.field.replaces_unknown/
 /reference/diagnostics/bynk.fixture.binary_content/
 /reference/diagnostics/bynk.fixture.duplicate/
 /reference/diagnostics/bynk.fixture.invalid_encoding/
@@ -2049,9 +2054,10 @@
 /reference/diagnostics/bynk.store.kind_arity/
 /reference/diagnostics/bynk.store.kind_unsupported/
 /reference/diagnostics/bynk.store.log_needs_clock/
+/reference/diagnostics/bynk.store.replaces_collection/
+/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
-/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/
