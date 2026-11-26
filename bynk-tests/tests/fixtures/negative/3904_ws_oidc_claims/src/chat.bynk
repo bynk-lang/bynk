@@ -1,0 +1,28 @@
+context chat
+
+type RoomId = opaque String
+type UserId = String where NonEmpty && MaxLength(64)
+type Frame = { text: String }
+
+actor Member {
+  auth = Oidc(issuer = "https://id.example", audience = "chat", jwks = "https://id.example/jwks"),
+  identity = UserId
+}
+
+service gateway from websocket(in: Frame, out: Frame) {
+  on open (room: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(user.claims.get("email").getOrElse("x"), connection)
+    ()
+  }
+  on close (room: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(room).leave("x")
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[String, Connection[Frame]]
+  on call join(u: String, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(u, conn) () }
+  on call leave(u: String) -> Effect[()] { let _ <- conns.remove(u) () }
+}

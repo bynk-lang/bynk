@@ -1,0 +1,40 @@
+context chat
+
+type RoomId = opaque String
+type UserId = String where NonEmpty && MaxLength(64)
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+// A client holding an identity provider's token offers it as the subprotocol after `bynk.oidc`.
+actor Member {
+	auth = Oidc(issuer = "https://id.example", audience = "chat", jwks = "https://id.example/jwks"),
+	identity = UserId
+}
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  on open (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- connection.send(ServerFrame { text: "welcome" })
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(roomId).leave(user.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}
