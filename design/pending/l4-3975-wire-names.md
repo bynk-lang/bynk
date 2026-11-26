@@ -1,6 +1,7 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
+probes: emit_diagnostics, diagnostic_coverage, explained_codes, ts_writes
+raises: ts_writes — `object_key` quotes a wire name that is not an identifier as a TypeScript string literal, with one `format!` for a control character's escape; the name is data from the declaration, not authored TypeScript text
 changelog: `@name("…")` names a field, a sum variant or a payload field on the wire at every boundary, and `@discriminator("…")` names the key that carries a sum's variant, so a third-party payload decodes into a typed value
 breaking: a decode failure on a `@name`d field of a `cookies`, `headers`, `query` or `@form`/`@multipart` `body` record now reports the wire name in its error path (`query.page-size`), not the Bynk name (`query.pageSize`), as every other codec path does; and an enum read from a path, query, header or cookie value is read by its variant's wire name. A client that matches the path text should read the wire name. The codes `bynk.types.field_name_not_request_record` and `bynk.types.field_name_record_not_boundary` are retired, because the restriction they enforced is lifted.
 ---
