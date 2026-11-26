@@ -1211,6 +1211,7 @@ pub(super) fn bearer_verify_args(
                 secret_probe_expr(&crate::emitter::escape_ts_string(var)),
                 lit(&claims.issuer).unwrap_or_else(undefined_node),
                 lit(&claims.audience).unwrap_or_else(undefined_node),
+                str_lit(crate::emitter::escape_ts_string(var)),
             ],
         ),
         None => TsExpr::object(

@@ -333,6 +333,9 @@ actor Internal { auth = Bearer(secret = "AUTH_SECRET", audience = "agilearn-inte
 - **`trustFrom = "<ENV>"`** names an environment variable whose JSON `{ "issuer"?, "audience"? }`, when set,
   replaces the declared values, exactly as for [`Oidc`](#trust-roots-from-the-environment) (unset leaves the
   declaration, set but malformed refuses every request). It must name a variable other than the `secret`.
+  An actor with `trustFrom` and **no** literal `issuer` or `audience` fails closed when the variable is unset,
+  empty or supplies neither: every request is refused, and one log line names the variable, so a forgotten
+  production variable is never a silent accept. With a literal on either claim, an unset variable keeps it.
 - **Two `Bearer` actors on one secret** must each declare an `audience`, and different ones
   (`bynk.actor.bearer_secret_shared`); otherwise a token minted for one is accepted by the other. Declare a
   distinct `audience` on each and mint each actor's tokens with its own, which `bynk token <Actor>` does. A

@@ -38,7 +38,7 @@ export function compose(env: Env) {
       if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
       const __secret = (env as unknown as globalThis.Record<string, unknown>)["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["PARTNER_SECRET"];
       if (typeof __secret !== "string") return HttpResult.Unauthorized;
-      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret, __bearerTrust((env as unknown as globalThis.Record<string, unknown>)["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["PARTNER_TRUST"], "partner", "partner-api"));
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret, __bearerTrust((env as unknown as globalThis.Record<string, unknown>)["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["PARTNER_TRUST"], "partner", "partner-api", "PARTNER_TRUST"));
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.LearnerId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;

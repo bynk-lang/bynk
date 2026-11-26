@@ -420,8 +420,18 @@ export function oidcTrust(
 // `{"issuer"?, "audience"?}`, replaces the declared `issuer` and `audience`, so staging and production can
 // differ without a rebuild. Unset leaves the declared values. Set but malformed is `null`, and the seam then
 // refuses every request (fail closed) rather than fall back to the declaration.
-export function bearerTrust(raw: unknown, issuer?: string, audience?: string): BearerExpect | null {
-  if (raw === undefined || raw === null || raw === "") return { issuer, audience };
+//
+// An actor that declares `trustFrom` wants a claim enforced. When neither a literal `issuer` or `audience` nor
+// the variable supplies one, nothing would be checked, so that is `null` too (fail closed, with one line
+// naming the variable) rather than a silent accept, for example a production variable that was never set.
+export function bearerTrust(raw: unknown, issuer?: string, audience?: string, variable?: string): BearerExpect | null {
+  const named = variable === undefined ? "a Bearer actor's trustFrom variable" : `the trustFrom variable ${variable}`;
+  const enforcing = (expect: BearerExpect): BearerExpect | null => {
+    if (expect.issuer !== undefined || expect.audience !== undefined) return expect;
+    console.error(`bynk: ${named} supplies no issuer or audience and none is declared, so nothing would be checked; every request is refused`);
+    return null;
+  };
+  if (raw === undefined || raw === null || raw === "") return enforcing({ issuer, audience });
   if (typeof raw !== "string") {
     console.error("bynk: a Bearer actor's trustFrom variable isn't a string; every request is refused");
     return null;
@@ -444,10 +454,10 @@ export function bearerTrust(raw: unknown, issuer?: string, audience?: string): B
       return null;
     }
   }
-  return {
+  return enforcing({
     issuer: (parsed.issuer as string | undefined) ?? issuer,
     audience: (parsed.audience as string | undefined) ?? audience,
-  };
+  });
 }
 
 // #1653: the `__` aliases emitted code imports.

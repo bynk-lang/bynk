@@ -433,8 +433,19 @@ test("Bearer trustFrom: unset leaves the declaration, a JSON object replaces it,
   assert.deepEqual(bearerTrust('{"audience":"stg-api"}', "i", "a"), { issuer: "i", audience: "stg-api" });
   assert.deepEqual(bearerTrust('{"audience":"stg-api"}'), { issuer: undefined, audience: "stg-api" });
   const log = console.error;
-  console.error = () => {};
+  const lines: string[] = [];
+  console.error = (m: string) => lines.push(m);
   try {
+    // No literal and nothing from the variable: nothing would be checked, so refuse (fail closed) and name it.
+    assert.equal(bearerTrust(undefined, undefined, undefined, "TRUST"), null);
+    assert.equal(bearerTrust("", undefined, undefined, "TRUST"), null);
+    assert.equal(bearerTrust("{}"), null);
+    assert.equal(lines.length, 3);
+    assert.match(lines[0], /TRUST/);
+    // A literal on either claim keeps the fallback.
+    assert.deepEqual(bearerTrust(undefined, "i"), { issuer: "i", audience: undefined });
+    assert.deepEqual(bearerTrust("", undefined, "a", "TRUST"), { issuer: undefined, audience: "a" });
+    assert.deepEqual(bearerTrust("{}", "i"), { issuer: "i", audience: undefined });
     for (const bad of ["not json", "[]", "7", '{"issuer":3}', '{"audience":""}', 42]) {
       assert.equal(bearerTrust(bad, "i", "a"), null, String(bad));
     }
