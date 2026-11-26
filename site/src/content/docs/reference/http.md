@@ -1947,7 +1947,8 @@ origin — a browser rejects that combination at runtime. Bynk catches it at **c
 time** (`bynk.http.cors_wildcard_credentials`): with `credentials: true`, list the exact
 origins instead of `["*"]`.
 
-A `cors { }` block is only valid on a `from http` service
+A `cors { }` block is only valid on a `from http` service, or a `from websocket` one, where its `origins`
+are the pages allowed to open a cookie-authenticated socket ([WebSocket](/reference/websocket/#authenticate-with-a-session-cookie))
 (`bynk.http.cors_not_http`), and a service declares at most one.
 
 ## Security headers

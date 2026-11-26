@@ -1,0 +1,41 @@
+context chat
+
+type RoomId = opaque String
+type UserId = String where NonEmpty && MaxLength(64)
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+// A browser signs in with a session cookie and opens the socket from the page. A cookie rides on a
+// cross-site upgrade too, so the service lists the origins it trusts in `cors` and the upgrade is
+// refused unless its `Origin` is exactly one of them.
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+  cors { origins: ["https://app.example.com"], credentials: true, maxAge: 1.hour }
+
+  on open (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- connection.send(ServerFrame { text: "welcome" })
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(roomId).leave(user.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[ServerFrame]]
+
+  on call join(u: UserId, conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}

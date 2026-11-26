@@ -1062,7 +1062,14 @@ holds, so keep a point's fields in the order its reports were written against; a
 safe. Use `write` for a point whose shape is not a record.
 
 The typed read, [`AnalyticsSql.select[T]`](#typed-reads-selectt), reads a record back by the same
-mapping. The schema lock that refuses a reorder follows in a later change (#4105).
+mapping.
+
+**The lock.** Points already written keep their column positions, so the mapping of each
+instance is recorded in `bynk.schema.lock` under `[analytics]`, and a build refuses a change to it
+(`bynk.analytics.mapping_changed`): a field moved, retyped (text to number, a `Bool` to a `String`)
+or removed, or a different `@index`. Appending a field, and renaming one in place, are allowed and
+the lock follows. If the change is intended, `bynk lock accept-analytics <Instance>` rewrites the
+entry; commit the lock with the change.
 
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the

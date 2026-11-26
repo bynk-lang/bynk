@@ -366,6 +366,8 @@ pub struct StoragePath {
     pub structure: String,
     pub full: String,
     pub default: bool,
+    /// #4483: the old name of a record field that declares `replaces`, on its own path.
+    pub renamed_from: Option<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -390,6 +392,7 @@ fn paths_in(
             full: with_inline(ty.clone()),
             structure: ty,
             default,
+            renamed_from: None,
         });
     };
     // A leaf: both renderings of the whole type.
@@ -400,6 +403,7 @@ fn paths_in(
             full: with_inline(full),
             structure,
             default,
+            renamed_from: None,
         });
     };
     match t {
@@ -442,6 +446,7 @@ fn paths_in(
                             ty: f.type_ref.clone(),
                             default: f.init.is_some(),
                             inline: f.refinement.clone(),
+                            replaces: f.replaces.as_ref().map(|o| o.name.clone()),
                         })
                         .collect();
                     record_paths(name, &fields, path, default, types, seen, out);
@@ -494,6 +499,7 @@ fn paths_in(
                             ty,
                             default,
                             inline,
+                            replaces: None,
                         }
                     })
                     .collect();
@@ -514,6 +520,8 @@ struct StoredField {
     ty: TypeRef,
     default: bool,
     inline: Option<Refinement>,
+    /// #4483: the field's `replaces` clause.
+    replaces: Option<String>,
 }
 
 /// The back-reference [`canon_named_in`] writes on revisiting `name`, if it is
@@ -539,6 +547,7 @@ fn record_paths(
             full: back.clone(),
             structure: back,
             default,
+            renamed_from: None,
         });
         return;
     }
@@ -547,11 +556,19 @@ fn record_paths(
         structure: "{}".to_string(),
         full: "{}".to_string(),
         default,
+        renamed_from: None,
     });
     seen.push(name.to_string());
     for f in fields {
         let at = format!("{path}.{}", f.name);
+        let start = out.len();
         paths_in(&f.ty, &at, f.default, f.inline.as_ref(), types, seen, out);
+        // #4483: the rename belongs to the field's own position.
+        if let Some(old) = &f.replaces
+            && let Some(own) = out[start..].iter_mut().find(|p| p.path == at)
+        {
+            own.renamed_from = Some(old.clone());
+        }
     }
     seen.pop();
 }
@@ -571,6 +588,7 @@ fn sum_paths(
             full: back.clone(),
             structure: back,
             default,
+            renamed_from: None,
         });
         return;
     }
@@ -579,6 +597,7 @@ fn sum_paths(
         structure: "|".to_string(),
         full: "|".to_string(),
         default,
+        renamed_from: None,
     });
     seen.push(name.to_string());
     for (variant, payload) in variants {
@@ -588,6 +607,7 @@ fn sum_paths(
             structure: "variant".to_string(),
             full: "variant".to_string(),
             default: false,
+            renamed_from: None,
         });
         for (field, ty) in payload {
             paths_in(ty, &format!("{at}.{field}"), false, None, types, seen, out);

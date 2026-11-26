@@ -74,7 +74,8 @@ pub use bynk_emit::emit_model::{
     node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
 pub use entry::{
-    D1SqlRef, EmailForward, ProjectCheck, check_project, compile_project, parse_own_units,
+    D1SqlRef, EmailForward, ProjectCheck, check_project, checked_callees, compile_project,
+    parse_own_units,
 };
 pub use env_report::env_const_report;
 pub use in_memory::{
