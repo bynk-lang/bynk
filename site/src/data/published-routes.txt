@@ -2269,6 +2269,7 @@
 /reference/diagnostics/bynk.types.field_refinement_not_base/
 /reference/diagnostics/bynk.types.field_value_mismatch/
 /reference/diagnostics/bynk.types.file_at_boundary/
+/reference/diagnostics/bynk.types.float_literal_pattern/
 /reference/diagnostics/bynk.types.form_uncodable/
 /reference/diagnostics/bynk.types.function_at_boundary/
 /reference/diagnostics/bynk.types.guard_not_bool/

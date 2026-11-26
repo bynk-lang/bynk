@@ -1727,11 +1727,19 @@ impl<'a> Parser<'a> {
                 return Ok(Pattern::Range(self.parse_int_range()?));
             }
             match t.kind {
-                TokenKind::IntLit | TokenKind::StrLit | TokenKind::True | TokenKind::False => {
+                TokenKind::IntLit
+                | TokenKind::StrLit
+                | TokenKind::True
+                | TokenKind::False
+                | TokenKind::DecimalLit
+                | TokenKind::FloatLit => {
                     return self.parse_literal_pattern();
                 }
                 TokenKind::Minus
-                    if self.tokens.get(self.pos + 1).map(|t| t.kind) == Some(TokenKind::IntLit) =>
+                    if matches!(
+                        self.tokens.get(self.pos + 1).map(|t| t.kind),
+                        Some(TokenKind::IntLit | TokenKind::DecimalLit | TokenKind::FloatLit)
+                    ) =>
                 {
                     return self.parse_literal_pattern();
                 }
@@ -2231,6 +2239,24 @@ impl<'a> Parser<'a> {
             }
             TokenKind::True => (LiteralValue::Bool(true), t.span),
             TokenKind::False => (LiteralValue::Bool(false), t.span),
+            // #3973: a `Decimal` literal matches by value; a `Float` literal is admitted so the
+            // checker can say why it cannot be matched.
+            TokenKind::DecimalLit => {
+                let slice = self.slice(t.span);
+                let body = crate::lexer::strip_digit_separators(&slice[..slice.len() - 1]);
+                let scale = body.split_once('.').map_or(0, |(_, f)| f.len() as u32);
+                text = Some(format!("{}{slice}", if neg.is_some() { "-" } else { "" }));
+                (
+                    LiteralValue::decimal(neg.is_some(), &body.replace('.', ""), scale),
+                    t.span,
+                )
+            }
+            TokenKind::FloatLit => {
+                let slice = self.slice(t.span);
+                let written = format!("{}{slice}", if neg.is_some() { "-" } else { "" });
+                text = Some(written.clone());
+                (LiteralValue::Float(written), t.span)
+            }
             _ => unreachable!("parse_literal_value called on a non-literal token"),
         };
         let span = neg.map(|m| m.span).unwrap_or(t.span).merge(end_span);

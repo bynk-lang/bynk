@@ -218,12 +218,14 @@ fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
     crate::violates::describe_at(text, a.offset, Some(a.snapshots))
 }
 
-/// A bare keyword's one-line doc, or the string of a `@name("…")` / `@discriminator("…")`
-/// annotation (#3975), where the cursor is on no identifier.
+/// A bare keyword's one-line doc, the string of a `@name("…")` / `@discriminator("…")`
+/// annotation (#3975), or a `Decimal` literal pattern (#3973), where the cursor is on no
+/// identifier.
 fn describe_keyword_or_wire_annotation(text: &str, offset: usize) -> Option<String> {
     crate::symbols::describe_keyword_at(text, offset)
         .map(str::to_string)
         .or_else(|| crate::wire_names::describe_wire_annotation_at(text, offset))
+        .or_else(|| crate::decimal_patterns::describe_at(text, offset))
 }
 
 /// The hover Markdown for the cursor, or `None` when no rung resolves it.

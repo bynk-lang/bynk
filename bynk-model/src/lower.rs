@@ -582,6 +582,11 @@ fn lower_event_pattern_ir(pattern: &EventPattern) -> EventPatternIr {
                             LiteralValue::Int(n) => ConstVal::Int(*n),
                             LiteralValue::Str(s) => ConstVal::Str(s.clone()),
                             LiteralValue::Bool(b) => ConstVal::Bool(*b),
+                            // A subscription pattern's value is an `Int`, `String` or `Bool`
+                            // literal; `Decimal` and `Float` are match-pattern forms (#3973).
+                            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                                unreachable!("an events pattern value is an Int, String or Bool")
+                            }
                         })
                     }
                     EventPatternValue::Variant { variant, .. } => EventPatternValueIr::Variant {

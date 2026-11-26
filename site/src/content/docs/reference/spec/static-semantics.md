@@ -1919,6 +1919,20 @@ In `[p₁, …, pₙ]` and `[p₁, …, pₙ, ..]` / `[p₁, …, pₙ, ..rest]`
 - After `is`, the names bound by a list pattern in scope are its elements that
   are bare names and the named rest, like a variant's flat payload bindings.
 
+**Decimal and Float literal patterns** (#3973, [§4.7.7](/reference/spec/syntactic-grammar/#477-literal_pattern)).
+
+- A `Decimal` literal pattern (`20d`, `20.0d`, `-1.5d`) MUST match a `Decimal`
+  scrutinee, or a refinement of one, and matches by value: `20d`, `20.0d` and
+  `20.00d` are one pattern, as `==` treats them.
+- Like a `String` literal, a `Decimal` literal never completes its type: a `match`
+  over `Decimal` literals needs a `_` arm or a name (`bynk.types.non_exhaustive_match`).
+- An arm whose literal is equal by value to an earlier unguarded arm's (`20d` after
+  `20.0d`) is `bynk.types.unreachable_arm`.
+- A `Float` literal MUST NOT be a pattern, at any depth: floating-point equality is
+  exact and `NaN` never equals itself (`bynk.types.float_literal_pattern`, at the
+  literal). A `Float` is not otherwise a `match` scrutinee.
+- A refined pattern (`_ where …`) is not offered for a `Decimal`.
+
 **Range patterns** (patterns track, slice 5, #2699, [§4.7.13](/reference/spec/syntactic-grammar/#4713-int_range)).
 In `lo..hi`, `lo..` and `..hi`:
 

@@ -7819,6 +7819,14 @@
           "named": true
         },
         {
+          "type": "decimal_literal",
+          "named": true
+        },
+        {
+          "type": "float_literal",
+          "named": true
+        },
+        {
           "type": "number_literal",
           "named": true
         },
