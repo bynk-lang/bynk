@@ -36,6 +36,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `binding_kind_homes` | yes | 1 |
 | `wrangler_key_literals` | yes | 0 |
 | `cloudflare_client_sites` | yes | 0 |
+| `wrangler_resource_ops` | yes | 12 (QueueCreate, QueueInfo, QueueDelete, D1Create, D1List, R2Create, VectorizeList, VectorizeGet, VectorizeCreate, VectorizeListMetadataIndex, VectorizeCreateMetadataIndex, VectorizeDelete); kept on wrangler: D1MigrationsApply, D1MigrationsApplyLocal, NamedSecret, Push, Rollback, SecretList, SecretPut, SecretsStoreListLocal, TriggersDeploy, Whoami, WorkerDeployments |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
 | `diagnostic_coverage` | yes | unasserted=37 (asserted 968/1005) |

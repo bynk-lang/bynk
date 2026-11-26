@@ -522,8 +522,8 @@ pub(crate) fn need_api<'a>(
     })
 }
 
-/// The run's Hyperdrive inputs, or `None` after printing why not (a missing
-/// variable, an unreadable string, a binding with no settings). Reads the
+/// The run's Hyperdrive inputs, or `Err` with one entry per problem after printing them (a
+/// missing variable, an unreadable string, a binding with no settings). Reads the
 /// process environment; `bynk.toml` is read from `project_root`. Asks nothing
 /// of the account.
 pub(crate) fn wants_for_run(
@@ -531,25 +531,28 @@ pub(crate) fn wants_for_run(
     order: &[String],
     resources: &BTreeMap<String, Resources>,
     environment: &str,
-) -> Option<Wants> {
+) -> Result<Wants, Vec<plan::Entry>> {
     if !order.iter().any(|w| !resources[w].hyperdrive.is_empty()) {
-        return Some(Wants::new());
+        return Ok(Wants::new());
     }
     let settings = match bynk_project::hyperdrive::try_read_hyperdrive_deploy(project_root) {
         Ok(settings) => settings,
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return None;
+            return Err(vec![plan::refusals::hyperdrive_settings_unreadable(&e)]);
         }
     };
     let lookup = |name: &str| std::env::var(name).ok();
     match resolve_wants(order, resources, &settings, environment, &lookup) {
-        Ok(wants) => Some(wants),
+        Ok(wants) => Ok(wants),
         Err(problems) => {
-            for problem in problems {
+            for problem in &problems {
                 emsg!("bynk: error: {problem}");
             }
-            None
+            Err(problems
+                .into_iter()
+                .map(|p| plan::refusals::hyperdrive_unresolved(&p))
+                .collect())
         }
     }
 }
@@ -640,7 +643,10 @@ pub(crate) fn provision(
     let project = BTreeMap::new();
     let site = Site {
         tools: Tools {
-            api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+            api: &crate::cloudflare::Account::new(Wrangler::new(
+                &provenance,
+                Path::new("/nonexistent"),
+            )),
             project_root: Path::new("/nonexistent"),
         },
         environment,
@@ -681,7 +687,10 @@ pub(crate) fn prune(
         ..Lives::default()
     };
     let tools = Tools {
-        api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+        api: &crate::cloudflare::Account::new(Wrangler::new(
+            &provenance,
+            Path::new("/nonexistent"),
+        )),
         project_root: Path::new("/nonexistent"),
     };
     for orphan in orphans.iter().filter(|o| Hyperdrive::prunable(o)) {

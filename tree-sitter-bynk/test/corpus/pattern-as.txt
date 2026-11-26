@@ -1,0 +1,251 @@
+==========================
+as pattern — a record in a variant payload
+==========================
+
+commons d {
+	fn f(o: Option[Order]) -> Int {
+		match o {
+			Some(Order { status: Paid, .. } as paid) => 1
+			_ => 0
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (identifier)))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (variant_pattern
+              (identifier)
+              (as_pattern
+                (record_pattern
+                  (identifier)
+                  (record_pattern_field
+                    (identifier)
+                    (variant_pattern
+                      (identifier))))
+                (identifier)))
+            (number_literal))
+          (match_arm
+            (wildcard_pattern)
+            (number_literal)))))))
+
+==========================
+as pattern — binds tighter than the or-pattern
+==========================
+
+commons d {
+	fn f(e: Event) -> Int {
+		match e {
+			A | B as x => 1
+			(C | D) as y => 2
+		}
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (match_expr
+          (identifier)
+          (match_arm
+            (or_pattern
+              (variant_pattern
+                (identifier))
+              (as_pattern
+                (variant_pattern
+                  (identifier))
+                (identifier)))
+            (number_literal))
+          (match_arm
+            (as_pattern
+              (paren_pattern
+                (or_pattern
+                  (variant_pattern
+                    (identifier))
+                  (variant_pattern
+                    (identifier))))
+              (identifier))
+            (number_literal)))))))
+
+==========================
+as pattern — a list element in let else
+==========================
+
+commons d {
+	fn f(jobs: List[Job]) -> Int {
+		let [first as head, ..] = jobs else { 0 }
+		1
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (identifier)))
+      (base_type)
+      (block
+        (let_else_stmt
+          (list_pattern
+            (as_pattern
+              (variant_pattern
+                (identifier))
+              (identifier))
+            (list_rest))
+          (identifier)
+          (block
+            (number_literal)))
+        (number_literal)))))
+
+==========================
+as pattern — parenthesised after is
+==========================
+
+commons d {
+	fn f(e: Event) -> Bool {
+		if e is (Shipped(tracking: t) as s) { true } else { false }
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (if_expr
+          (is_expr
+            (identifier)
+            (paren_pattern
+              (as_pattern
+                (variant_pattern
+                  (identifier)
+                  (named_binding
+                    (identifier)
+                    (variant_pattern
+                      (identifier))))
+                (identifier))))
+          (block
+            (boolean_literal))
+          (block
+            (boolean_literal)))))))
+
+==========================
+as pattern — after is, a record needs its parentheses
+==========================
+
+commons d {
+	fn f(o: Order) -> Bool {
+		if o is (Order { status: Paid, .. } as p) { true } else { false }
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (if_expr
+          (is_expr
+            (identifier)
+            (paren_pattern
+              (as_pattern
+                (record_pattern
+                  (identifier)
+                  (record_pattern_field
+                    (identifier)
+                    (variant_pattern
+                      (identifier))))
+                (identifier))))
+          (block
+            (boolean_literal))
+          (block
+            (boolean_literal)))))))
+
+==========================
+as pattern — a lambda's record-pattern parameter
+==========================
+
+commons d {
+	fn f(orders: List[Order]) -> List[Int] {
+		orders.map((Order { id, .. } as item) => 1)
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (identifier)))
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (lambda_expr
+            (lambda_param
+              (as_pattern
+                (record_pattern
+                  (identifier)
+                  (record_pattern_field
+                    (identifier)))
+                (identifier)))
+            (number_literal)))))))

@@ -246,9 +246,14 @@ fn is_expect_false(body: &MatchBody) -> bool {
 /// variant payload's, record field's or list element's own name (depth one).
 fn binds_only_first_level(p: &Pattern) -> bool {
     let shallow = |sub: &Pattern| {
-        matches!(sub, Pattern::Binding(_) | Pattern::Wildcard(_)) || sub.bound_names().is_empty()
+        matches!(sub, Pattern::Binding(_) | Pattern::Wildcard(_))
+            || sub.bound_names().is_empty()
+            // #3971: `is` binds an `as` name at this depth, so long as the
+            // pattern inside binds nothing deeper.
+            || matches!(sub, Pattern::As { inner, .. } if inner.bound_names().is_empty())
     };
     match p {
+        Pattern::As { inner, .. } => binds_only_first_level(inner),
         Pattern::Wildcard(_) | Pattern::Binding(_) => false,
         Pattern::Literal { .. } | Pattern::Range(_) => true,
         Pattern::Variant { bindings, .. } => bindings.iter().all(|b| shallow(b.pattern())),

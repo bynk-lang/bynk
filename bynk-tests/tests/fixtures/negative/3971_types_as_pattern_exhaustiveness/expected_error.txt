@@ -1,0 +1,2 @@
+bynk.types.non_exhaustive_match non-exhaustive `match` on `Order` — `Order { status: Open, .. }` is not covered
+bynk.types.unreachable_arm this match arm is unreachable because a wildcard arm precedes it

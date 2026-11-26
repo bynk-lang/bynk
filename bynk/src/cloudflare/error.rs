@@ -49,15 +49,14 @@ impl Exit {
     }
 }
 
-/// Which call failed, as far as its error's predicates need to know.
+/// Which wrangler call failed, as far as its error's predicates need to know: one variant per
+/// operation that still runs as a wrangler process. A kind that moves to REST (1D.4, #4056)
+/// takes its variants with it, so the `wrangler_resource_ops` probe reads what is left here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OpKind {
     QueueCreate,
     QueueInfo,
     QueueDelete,
-    KvCreate,
-    KvList,
-    KvDelete,
     D1MigrationsApply,
     D1Create,
     D1List,
@@ -107,7 +106,8 @@ pub(crate) enum Failure {
 /// A wrangler call that failed.
 #[derive(Debug)]
 pub(crate) struct WranglerError {
-    op: OpKind,
+    /// `None` only for a call that runs over REST, which never builds one (a test's misuse).
+    op: Option<OpKind>,
     failure: Failure,
 }
 
@@ -265,10 +265,14 @@ impl WranglerError {
         };
         let lower = said.to_ascii_lowercase();
         match self.op {
-            OpKind::QueueCreate => lower.contains("already exists"),
-            OpKind::R2Create => lower.contains("already exists") && lower.contains("you own it"),
-            OpKind::D1Create => lower.contains("database with that name already exists"),
-            OpKind::VectorizeCreateMetadataIndex => said.contains("metadata index already exists"),
+            Some(OpKind::QueueCreate) => lower.contains("already exists"),
+            Some(OpKind::R2Create) => {
+                lower.contains("already exists") && lower.contains("you own it")
+            }
+            Some(OpKind::D1Create) => lower.contains("database with that name already exists"),
+            Some(OpKind::VectorizeCreateMetadataIndex) => {
+                said.contains("metadata index already exists")
+            }
             _ => false,
         }
     }
@@ -276,19 +280,15 @@ impl WranglerError {
     /// Whether this delete failed only because what it deletes is already gone, so a re-run
     /// `--prune` is safe (#839).
     ///
-    /// - A KV namespace: `code: 10013`, or "namespace not found" (`namespace not found [code:
-    ///   10013]`, confirmed against a real account). The code is the more durable half.
     /// - A queue: "does not exist" (`Queue "<name>" does not exist. To create it, …`).
+    ///
+    /// (A KV namespace's delete runs over REST since 1D.4a, read by its code, 10013.)
     pub(crate) fn already_gone(&self) -> bool {
         let Some(said) = self.exit_said() else {
             return false;
         };
-        let lower = said.to_ascii_lowercase();
         match self.op {
-            OpKind::KvDelete => {
-                said.contains("code: 10013") || lower.contains("namespace not found")
-            }
-            OpKind::QueueDelete => lower.contains("does not exist"),
+            Some(OpKind::QueueDelete) => said.to_ascii_lowercase().contains("does not exist"),
             _ => false,
         }
     }
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn a_failure_says_both_streams_trimmed_or_its_exit() {
-        let op = Op::KvList;
+        let op = Op::D1List;
         assert_eq!(exit(&op, 1, " out \n", "\n err ").said(), "err\nout");
         assert_eq!(exit(&op, 1, "", "err").said(), "err");
         assert_eq!(exit(&op, 3, "", "").said(), "wrangler exited 3");
@@ -375,19 +375,17 @@ mod tests {
         assert!(!exit(&meta, 1, "", "Metadata Index Already Exists").already_exists());
         // Only a failed exit is ever benign, and only for a create.
         assert!(!WranglerError::missing(&queue).already_exists());
-        assert!(!exit(&Op::KvList, 1, "already exists", "").already_exists());
+        assert!(!exit(&Op::D1List, 1, "already exists", "").already_exists());
     }
 
     #[test]
     fn already_gone_is_read_per_operation() {
-        let kv = Op::KvDelete { id: "i" };
-        assert!(exit(&kv, 1, "", "namespace not found [code: 10013]").already_gone());
-        assert!(exit(&kv, 1, "", "code: 10013").already_gone());
-        assert!(exit(&kv, 1, "", "Namespace Not Found").already_gone());
-        assert!(!exit(&kv, 1, "", "Authentication error [code: 10000]").already_gone());
         let queue = Op::QueueDelete { name: "q" };
         assert!(exit(&queue, 1, "", "Queue \"q\" does not exist.").already_gone());
-        assert!(!WranglerError::missing(&kv).already_gone());
+        assert!(!exit(&queue, 1, "", "Authentication error [code: 10000]").already_gone());
+        assert!(!WranglerError::missing(&queue).already_gone());
+        // Only a delete is ever already gone.
+        assert!(!exit(&Op::D1List, 1, "", "does not exist").already_gone());
     }
 
     use super::super::api::VectorizeOp;

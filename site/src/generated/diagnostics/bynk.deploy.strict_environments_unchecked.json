@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.strict_environments_unchecked",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`--strict-environments` could not compare the environment with `default`, because `default` could not be built, so nothing was checked. The refusal names the environment; fix the build and run again."
+}

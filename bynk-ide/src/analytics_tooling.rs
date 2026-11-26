@@ -33,6 +33,22 @@ struct AnalyticsCall {
     args: Vec<(usize, usize)>,
 }
 
+/// Whether `text` consumes `name` from `bynk.cloudflare` (`consumes bynk.cloudflare { Ai, … }`), so
+/// a name that is the project's own capability, not the first-party one, is not taken for it.
+pub(crate) fn consumes_cloudflare(text: &str, name: &str) -> bool {
+    text.match_indices("consumes bynk.cloudflare")
+        .any(|(at, _)| {
+            let rest = text[at + "consumes bynk.cloudflare".len()..].trim_start();
+            let Some(inner) = rest.strip_prefix('{') else {
+                return false;
+            };
+            let inner = inner.split('}').next().unwrap_or("");
+            inner
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .any(|word| word == name)
+        })
+}
+
 /// The byte just past a string literal that starts at `from` (a `"` or a `"""`), or the end.
 fn skip_string(text: &str, from: usize) -> usize {
     let bytes = text.as_bytes();
@@ -555,6 +571,17 @@ mod tests {
             "{:?}",
             calls[0].args
         );
+    }
+
+    #[test]
+    fn consuming_a_name_from_the_cloudflare_unit_is_read_from_the_header() {
+        let src = "context a\n\nconsumes bynk.cloudflare {\n  Ai,\n  AnalyticsSql\n}\n";
+        assert!(consumes_cloudflare(src, "Ai") && consumes_cloudflare(src, "AnalyticsSql"));
+        assert!(!consumes_cloudflare(src, "Kv"));
+        assert!(!consumes_cloudflare(
+            "context a\n\ncapability Ai {\n}\n",
+            "Ai"
+        ));
     }
 
     #[test]

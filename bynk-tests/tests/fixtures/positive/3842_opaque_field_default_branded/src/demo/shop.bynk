@@ -1,0 +1,16 @@
+commons demo.shop
+
+uses demo.holder
+
+---
+#3842: a record literal that leaves out opaque fields takes their defaults as values of the
+opaque type. This unit imports `Holder` but not `Tok`, so the defaults must be branded without
+naming `Tok`.
+---
+fn plain() -> Holder {
+  Holder { name: "n" }
+}
+
+fn sameTok(a: Holder, b: Holder) -> Bool {
+  a.tok == b.tok
+}

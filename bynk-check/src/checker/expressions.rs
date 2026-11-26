@@ -1729,7 +1729,7 @@ fn pattern_param_is_generic(type_name: &Ident, ctx: &Ctx) -> bool {
 /// annotation, or a record pattern naming a non-generic type. Such a lambda
 /// grounds a generic call's type variables itself.
 pub(crate) fn lambda_param_is_typed(p: &LambdaParam, ctx: &Ctx) -> bool {
-    match &p.pattern {
+    match p.pattern.as_ref().map(Pattern::peel_as) {
         Some(Pattern::Record { type_name, .. }) => !pattern_param_is_generic(type_name, ctx),
         _ => p.type_ref.is_some(),
     }
@@ -1811,7 +1811,9 @@ pub(crate) fn check_lambda(
                 // generic, whose type arguments only an expected function type
                 // can supply (a pattern never writes them).
                 None if p.pattern.is_some() => {
-                    let Some(Pattern::Record { type_name, .. }) = &p.pattern else {
+                    let Some(Pattern::Record { type_name, .. }) =
+                        p.pattern.as_ref().map(Pattern::peel_as)
+                    else {
                         unreachable!("a pattern parameter is a record pattern");
                     };
                     if pattern_param_is_generic(type_name, ctx) {
@@ -4454,7 +4456,7 @@ pub(crate) fn check_match(
     ) && arms.iter().any(|a| {
         pattern_alternatives(&a.pattern)
             .iter()
-            .any(|p| matches!(p, Pattern::Record { .. }))
+            .any(|p| matches!(p.peel_as(), Pattern::Record { .. }))
     }) {
         MatchKind::Record
     } else if matches!(&*tys.get(disc_ty), Ty::List(_))
@@ -4862,7 +4864,9 @@ fn let_else_unreachable(
                 disc_ty.display(ctx.tys)
             ),
         );
-        if matches!(arms[0].pattern, Pattern::Record { .. }) && arms[0].pattern.is_irrefutable() {
+        if matches!(arms[0].pattern.peel_as(), Pattern::Record { .. })
+            && arms[0].pattern.is_irrefutable()
+        {
             // #2654: an irrefutable record pattern has a `let` form with no
             // `else`, so the fix is to delete it (and any parentheses). It is
             // gated on syntactic irrefutability, not on coverage (#2665): a
@@ -4876,7 +4880,7 @@ fn let_else_unreachable(
                 .collect();
             err.with_note("a record pattern that cannot fail needs no `else`: drop it")
                 .with_suggestion("remove the `else`", edits, Applicability::MachineApplicable)
-        } else if matches!(arms[0].pattern, Pattern::Record { .. }) {
+        } else if matches!(arms[0].pattern.peel_as(), Pattern::Record { .. }) {
             err.with_note(
                 "the fields' patterns cover every value, but a `let` drops its `else` only when each field is a name or `_`; match them with names, then drop the `else`",
             )
@@ -4926,6 +4930,12 @@ fn record_record_pattern_locals(arm: &MatchArm, ctx: &mut Ctx) {
     fn collect<'p>(p: &'p Pattern, under_record: bool, out: &mut Vec<&'p Ident>) {
         match p {
             Pattern::Binding(id) if under_record => out.push(id),
+            // #3971: an `as` name is a local wherever it sits, so hover shows
+            // its type and semantic tokens colour it as a variable.
+            Pattern::As { inner, name, .. } => {
+                out.push(name);
+                collect(inner, under_record, out);
+            }
             Pattern::Record { fields, .. } => {
                 for (name, sub) in fields {
                     match sub {
@@ -5265,6 +5275,14 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         }
         Pattern::Record { .. } => check_record_pattern(pat, ty, ctx),
         Pattern::List { .. } => check_list_pattern(pat, ty, ctx),
+        // #3971: `p as name` checks `p`, then binds `name` to the whole value
+        // at this position's type.
+        Pattern::As { inner, name, .. } => {
+            check_pattern(inner, ty, ctx);
+            ctx.pattern_binding_types.insert(name.span, ty);
+            ctx.bind(name.name.clone(), ty);
+            ctx.errors.extend(super::pattern_as::as_on_wildcard(pat));
+        }
         // #474: an or-pattern. Each alternative is checked against the same
         // `ty` in turn — this reuses every existing per-kind check above
         // (including nested payloads) and populates `ctx.expr_types`/binds
@@ -5553,6 +5571,7 @@ fn patterns_equal(a: &Pattern, b: &Pattern) -> bool {
     if a.is_irrefutable() && b.is_irrefutable() {
         return true;
     }
+    let (a, b) = (a.peel_as(), b.peel_as());
     match (a, b) {
         (Pattern::Literal { value: x, .. }, Pattern::Literal { value: y, .. }) => x == y,
         (
@@ -5611,6 +5630,7 @@ fn patterns_equal(a: &Pattern, b: &Pattern) -> bool {
 fn describe_pattern(pat: &Pattern) -> String {
     match pat {
         Pattern::Wildcard(_) | Pattern::Binding(_) => "_".to_string(),
+        Pattern::As { inner, .. } => describe_pattern(inner),
         Pattern::Literal { value, .. } => value.describe(),
         Pattern::Range(r) => r.describe(),
         Pattern::Refined {
@@ -5961,6 +5981,9 @@ fn check_is_pattern(
             let payload = info.payload.clone();
             validate_is_nested_payloads(bindings, &payload, ctx);
         }
+        // #3971: `p as name` after `is` is `p` plus a name for the whole value
+        // (bound by `gather_pattern_bindings`).
+        Pattern::As { inner, .. } => check_is_pattern(inner, value_ty, variants, ctx),
         // #2641: a record pattern after `is` (parenthesised in source) is
         // checked like a `match` arm's, in a scratch scope: its depth-1 names
         // are collected separately by `gather_pattern_bindings`.
@@ -6030,6 +6053,8 @@ fn check_is_pattern(
 /// leaves (wildcard / name binding / literal) are inert here.
 fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
+    // #3971: `as` names the value; the inner pattern is what is tested.
+    let pattern = pattern.peel_as();
     // #2641: a nested record pattern is checked in full, in a scratch scope.
     if let Pattern::Record { .. } | Pattern::List { .. } = pattern {
         ctx.push_scope();
@@ -6086,7 +6111,7 @@ fn validate_is_nested_payloads(
     ctx: &mut Ctx,
 ) {
     for (i, b) in bindings.iter().enumerate() {
-        let sub = b.pattern();
+        let sub = b.pattern().peel_as();
         // A record pattern with only irrefutable fields is irrefutable, but
         // its field names still need checking (#2641).
         if sub.is_irrefutable() && !matches!(sub, Pattern::Record { .. } | Pattern::List { .. }) {
@@ -6253,6 +6278,12 @@ fn gather_pattern_bindings(
         }
         return;
     }
+    // #3971: `p as name` binds the whole value, then what `p` binds.
+    if let Pattern::As { inner, name, .. } = pattern {
+        gather_pattern_bindings(value_ty, inner, types, out, tys);
+        out.push((name.name.clone(), value_ty));
+        return;
+    }
     // #2641: a record pattern binds its depth-1 names — shorthand fields and
     // `f: name` — at the field types, like a variant's flat payload bindings.
     if let Pattern::Record {
@@ -6274,8 +6305,7 @@ fn gather_pattern_bindings(
         for (fname, sub) in fields {
             let bound = match sub {
                 None => Some(fname),
-                Some(Pattern::Binding(n)) => Some(n),
-                Some(_) => None,
+                Some(p) => p.flat_binder(),
             };
             let Some(bound) = bound else { continue };
             let ty = record
@@ -6298,7 +6328,7 @@ fn gather_pattern_bindings(
             _ => None,
         };
         for e in elems {
-            if let Pattern::Binding(n) = e {
+            if let Some(n) = e.flat_binder() {
                 out.push((n.name.clone(), elem_ty.unwrap_or(error)));
             }
         }
@@ -6336,7 +6366,7 @@ fn gather_pattern_bindings(
             info.payload.iter().map(|(n, t)| (n.as_str(), *t)).collect();
         for b in bindings {
             if let PatternBindingKind::Named { field, pattern } = &b.kind
-                && let Pattern::Binding(name) = pattern
+                && let Some(name) = pattern.flat_binder()
             {
                 match payload_map.get(field.name.as_str()) {
                     Some(ty) => out.push((name.name.clone(), *ty)),
@@ -6346,7 +6376,7 @@ fn gather_pattern_bindings(
         }
     } else {
         for (b, (_, ty)) in bindings.iter().zip(info.payload.iter()) {
-            if let Pattern::Binding(name) = b.pattern() {
+            if let Some(name) = b.pattern().flat_binder() {
                 out.push((name.name.clone(), *ty));
             }
         }

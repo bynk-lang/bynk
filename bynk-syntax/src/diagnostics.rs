@@ -104,6 +104,11 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.bearer_bad_arg",
+        blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_identity_not_string_constructible",
         blurb: "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a \
                 string, so the identity type must be one a string can become: a refined or \
@@ -130,6 +135,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\n\n\
                   actor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\n\
                   actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
+    },
+    Explain {
+        code: "bynk.actor.bearer_secret_shared",
+        blurb: "Two `Bearer` actors that read one secret accept each other's tokens: a token is only a signature over its claims, so one minted for `Learner` verifies at a route that names `Internal`, and a learner who can obtain their own token can replay it there (RFC 8725, cross-JWT confusion). Bind each token to its purpose: declare a different `audience` on each actor and mint each actor's tokens with its own, which `bynk token <Actor>` does. Or give each actor its own secret. A refinement of an actor shares its base's secret by design and is exempt.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }                          // ✗ shares its secret with `Internal`, and says nothing of who a token is for\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\n\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"api\"), identity = UserId }          // ✓\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"internal\"), identity = UserId }",
+    },
+    Explain {
+        code: "bynk.actor.bearer_unknown_key",
+        blurb: "A `Bearer` actor's config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other key is refused rather than ignored, because an ignored key is a check you believed you had written: a misspelt `iss` or `aud` would leave tokens that share the secret interchangeable. Use `issuer` and `audience`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", iss = \"web\"), identity = UserId }      // ✗ not a key of `Bearer`\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
     },
     Explain {
         code: "bynk.actor.binder_shadows_param",
@@ -3151,6 +3166,11 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.match.as_on_wildcard",
+        blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
+        example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
+    },
+    Explain {
         code: "bynk.match.refined_pattern_is_range",
         blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
@@ -5790,13 +5810,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.wrong_audience_needs_oidc_route",
-        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ a `Bearer` token has no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
+        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor, or a `Bearer` actor that declares an `audience`, has an audience to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ this `Bearer` actor declares no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
     },
     Explain {
         code: "bynk.test.wrong_issuer_needs_oidc_route",
-        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor has an issuer to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ a `Bearer` token has no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
+        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor, or a `Bearer` actor that declares an `issuer`, has an issuer to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ this `Bearer` actor declares no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
     },
     Explain {
         code: "bynk.test.ws_lifecycle_by",
@@ -5852,6 +5872,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.transition.not_bool",
         blurb: "A `transition` is a claim about a step, from `old` to `new`, that is either kept or broken, so its predicate must be a `Bool`. A bare `new.count` is a value, not a claim. Compare it with the old state: `new.count >= old.count`. An `invariant` is held to the same rule (`bynk.invariant.not_bool`).",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
+    },
+    Explain {
+        code: "bynk.types.ai_value_shape",
+        blurb: "`Ai.generateValue[T]` gives the model `T`'s JSON Schema, so `T` must be a type a schema can describe: records, enums, sums, lists, `Option`, `String`-keyed maps and refined base types. A type that contains itself (a tree whose nodes list their children), a generic type, or a `Map` whose key is not a `String` has no schema, so the call is refused naming the field. Flatten the type, or ask for a flat one and build the nested value yourself.",
+        example: "type Node = { label: String, children: List[Node] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✗ `Node` contains itself\n\ntype Node = { label: String, parent: Option[String] }\nlet _ <- Ai.generateValue[Node](model, ask)    // ✓",
     },
     Explain {
         code: "bynk.types.analytics_point_shape",
@@ -6319,7 +6344,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.key_at_boundary",
-        blurb: "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform \
+        blurb: "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` is a handle to a key the platform \
                 holds non-extractable, and it lives only for the call that imported it. \
                 Storing, serialising, logging or sending it would either leak the secret or \
                 mean nothing on the other side, so one cannot be a `store` field, a record or \
@@ -7359,12 +7384,24 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
+        "bynk.actor.bearer_bad_arg",
+        "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
+    ),
+    d(
         "bynk.actor.bearer_identity_not_string_constructible",
         "A `Bearer` actor's identity is not a string-constructible type.",
     ),
     d(
         "bynk.actor.bearer_missing_secret",
         "A `Bearer` actor does not name its signing secret.",
+    ),
+    d(
+        "bynk.actor.bearer_secret_shared",
+        "Two `Bearer` actors read one secret without each declaring a different `audience`, so a token minted for one is accepted by the other (#3821).",
+    ),
+    d(
+        "bynk.actor.bearer_unknown_key",
+        "A `Bearer` actor's config has a key other than `secret`, `issuer`, `audience` and `trustFrom`, which would have been ignored (#3821).",
     ),
     d(
         "bynk.actor.binder_shadows_param",
@@ -8146,6 +8183,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
+        "bynk.deploy.account_name_conflict",
+        "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
@@ -8210,6 +8251,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.hyperdrive_settings_unreadable",
+        "`[deploy.hyperdrive]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
+    d(
+        "bynk.deploy.hyperdrive_unresolved",
+        "A Hyperdrive binding's connection string or settings did not resolve, so `bynk deploy` stopped before planning. The message names the binding and the variable or setting it needs.",
+    ),
+    d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
@@ -8226,6 +8275,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.pins_unreadable",
+        "`bynk deploy` could not read `bynk.foreign.toml`, the contract hashes each declared foreign caller is pinned at, so it stopped before planning. The message names the problem; fix the file (it is plain TOML) and run again.",
+    ),
+    d(
         "bynk.deploy.preflight_failed",
         "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
     ),
@@ -8238,8 +8291,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
     d(
+        "bynk.deploy.recreate_needs_yes",
+        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` prints the plan but will not apply it without `--yes` (a `--dry-run` only shows it); move the data first, then re-run with `--yes`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_file_passthrough",
+        "A `--secrets-file` was passed through to Wrangler after `--` while the run includes a Worker's first deploy, which uploads its secrets with `bynk deploy`'s own secrets file, so Wrangler would get two. `bynk deploy` stopped before planning; pass the file to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.",
     ),
     d(
         "bynk.deploy.secrets_source_unreadable",
@@ -8248,6 +8309,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.service_name_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_shared",
+        "`--strict-environments` found that the environment shares values with `default`, which the flag forbids. The refusal names the environment; give it values of its own.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_unchecked",
+        "`--strict-environments` could not compare the environment with `default`, because `default` could not be built, so nothing was checked. The refusal names the environment; fix the build and run again.",
     ),
     d(
         "bynk.deploy.unknown_context",
@@ -9488,6 +9557,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
+    warn(dg(
+        "bynk.match.as_on_wildcard",
+        "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable).",
+        &["as_pattern"],
     )),
     warn(dg(
         "bynk.match.refined_pattern_is_range",
@@ -11111,6 +11185,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A transition predicate does not have type `Bool`.",
     ),
     dg(
+        "bynk.types.ai_value_shape",
+        "`Ai.generateValue[T]` asks the model for a type that has no JSON Schema: one that contains itself, a generic type, or a `Map` with a key that is not a `String` (#4099).",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.analytics_point_shape",
         "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
         &["method_call"],
@@ -11417,7 +11496,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.key_at_boundary",
-        "A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
+        "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
     ),
     dg(
         "bynk.types.key_not_orderable",

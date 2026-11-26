@@ -1730,9 +1730,11 @@ export class WorkersAi implements Ai {
     return wire;
   }
 
-  async generate(model: string, request: GenerateRequest): Promise<Result<Generation, AiError>> {
+  // The `messages` request body of `generate` and `generateJson`: the checks that make a call valid
+  // at all (a fault), then the conversation and the sampling options.
+  private static chatBody(op: string, model: string, request: GenerateRequest): Record<string, unknown> {
     WorkersAi.checkModel(model);
-    if (request.messages.length === 0) WorkersAi.fault("`generate` needs at least one message in `messages`");
+    if (request.messages.length === 0) WorkersAi.fault(`\`${op}\` needs at least one message in \`messages\``);
     const body: Record<string, unknown> = {
       messages: request.messages.map((m) => ({ role: WorkersAi.role(m.role.tag), content: m.content })),
     };
@@ -1740,6 +1742,11 @@ export class WorkersAi implements Ai {
     if (request.temperature.tag === "Some") body.temperature = request.temperature.value;
     if (request.topP.tag === "Some") body.top_p = request.topP.value;
     if (request.seed.tag === "Some") body.seed = request.seed.value;
+    return body;
+  }
+
+  async generate(model: string, request: GenerateRequest): Promise<Result<Generation, AiError>> {
+    const body = WorkersAi.chatBody("generate", model, request);
     const reply = await this.call(model, body);
     if (reply.tag === "Err") return reply;
     const out = await WorkersAi.asObject(reply.value);
@@ -1752,6 +1759,29 @@ export class WorkersAi implements Ai {
     const text = typeof out.response === "string" ? out.response : WorkersAi.choiceText(out.choices);
     if (text === undefined) return WorkersAi.badReply("generate: the reply has neither a text `response` nor `choices[0].message.content`");
     return Ok({ text, usage: WorkersAi.usage(out.usage) });
+  }
+
+  // #4099: the call behind `Ai.generateValue[T]`, which the compiler lowers to it: `generate` with
+  // the platform's JSON mode (`response_format`), asking for JSON that matches `schema` (the
+  // compiler's JSON Schema of `T`, as text). The reply is the JSON text, which the call site decodes
+  // as `T`. A model that does not take `response_format` is refused by the platform, and that
+  // refusal is the `Err` as it comes (`InvalidInput` with the platform's message): there is no
+  // fallback to asking in prose. Not an operation of `Ai`: nothing but the compiler supplies a
+  // schema.
+  async generateJson(model: string, request: GenerateRequest, schema: string): Promise<Result<string, AiError>> {
+    const body = WorkersAi.chatBody("generateValue", model, request);
+    body.response_format = { type: "json_schema", json_schema: JSON.parse(schema) };
+    const reply = await this.call(model, body);
+    if (reply.tag === "Err") return reply;
+    const out = await WorkersAi.asObject(reply.value);
+    if (typeof out === "string") return WorkersAi.badReply(`generateValue: ${out}`);
+    // In JSON mode a model may answer with the parsed object in `response` rather than text.
+    const response = out.response;
+    if (typeof response === "string") return Ok(response);
+    if (response !== null && typeof response === "object") return Ok(JSON.stringify(response));
+    const text = WorkersAi.choiceText(out.choices);
+    if (text === undefined) return WorkersAi.badReply("generateValue: the reply has neither a `response` nor `choices[0].message.content`");
+    return Ok(text);
   }
 
   async embed(model: string, texts: readonly string[]): Promise<Result<readonly (readonly number[])[], AiError>> {
