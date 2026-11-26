@@ -205,9 +205,10 @@ All three fields have defaults, so a `Route` with nothing to do is `Accept`.
   is more likely a bug than a design.
 - **Tags.** Each `tag` entry is a header added to every forward: its name starts with `X-` (or
   `x-`) and holds only letters, digits and `-`, and its value has no line break. A literal map
-  written in a handler body that breaks this is `bynk.email.bad_tag`; one built elsewhere, in a
-  helper function or at run time, has the bad entry dropped, with its name logged and never its
-  value, and so does an entry whose value `Headers` refuses (a NUL, a character outside Latin-1). Tags apply to forwards only, because a reply's headers are the
+  that breaks this is `bynk.email.bad_tag`, wherever it is written: in a handler body, in a helper
+  function that builds the `EmailActions`, or in a helper function a `tag:` calls by name and that
+  returns the literal map. One built at run time has the bad entry dropped, with its name logged and
+  never its value, and so does an entry whose value `Headers` refuses (a NUL, a character outside Latin-1). Tags apply to forwards only, because a reply's headers are the
   runtime's. At the `system` tier a case reads the tags it sees on the forwards, in lower case.
 - **Verified destinations.** `bynk deploy` checks every literal destination of a `Route` as it
   does a `Forward`.
