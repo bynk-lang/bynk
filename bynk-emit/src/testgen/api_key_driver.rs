@@ -178,7 +178,7 @@ pub(super) fn push_api_key_drivers(
         request_init(verb, headers, body.clone())
     };
     for (bad, _) in BAD_KEYS {
-        let name = format!("key{bad}");
+        let name = ["key", bad].concat();
         let sign = const_(
             "__key",
             call(
@@ -250,7 +250,7 @@ fn principal_driver(
     keys: &[&str],
 ) -> TsStmt {
     let driver = |kind: &str| sysdrive_name(SysdriveKind { raw, kind }, sname, key);
-    let first = driver(&format!("key{}", keys[0]));
+    let first = driver(&["key", keys[0]].concat());
     let mut body = Vec::new();
     for (i, bad) in keys.iter().enumerate() {
         let (all, dummy) = BAD_KEYS
@@ -258,8 +258,8 @@ fn principal_driver(
             .find(|(k, _)| k == bad)
             .map(|(_, w)| *w)
             .expect("every principal's key is a bad key");
-        let out = format!("__out{i}");
-        let before = format!("__before{i}");
+        let out = ["__out", &i.to_string()].concat();
+        let before = ["__before", &i.to_string()].concat();
         body.push(const_(
             &before,
             TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::Spread(ident(
@@ -269,7 +269,7 @@ fn principal_driver(
         body.push(const_(
             &out,
             await_expr(call(
-                ident(driver(&format!("key{bad}"))),
+                ident(driver(&["key", bad].concat())),
                 vec![TsExpr::Spread(Box::new(ident("__a")))],
             )),
         ));

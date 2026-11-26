@@ -1544,10 +1544,14 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
     if let Some(s) = bynk_check::api_key::api_key_seam_for(h, &table.actors) {
         return vec![match &s.header {
             None => bearer(),
-            Some(header) => format!(
-                "Bynk-ApiKey realm=\"{realm}\", header=\"{}\"",
-                crate::emitter::escape_ts_string(header)
-            ),
+            Some(header) => [
+                "Bynk-ApiKey realm=\"",
+                &realm,
+                "\", header=\"",
+                &crate::emitter::escape_ts_string(header),
+                "\"",
+            ]
+            .concat(),
         }];
     }
     vec![format!("Bynk realm=\"{realm}\"")]
