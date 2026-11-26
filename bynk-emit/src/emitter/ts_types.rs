@@ -266,6 +266,13 @@ pub(crate) fn asset_ts_type() -> TsType {
     )])
 }
 
+/// #4352: a name a `uses` qualifier reads (`lib.y.Status`, `Y.Status`) as it is written in
+/// TypeScript after a module namespace (`handlers.`): the qualifier's binding and the name
+/// (`__use_lib_y.Status`, `Y.Status`), never the dotted key, which names no member.
+fn spelled_through_qualifier(name: &str) -> String {
+    bynk_check::emitted_names::use_qualified_name(name).unwrap_or_else(|| name.to_string())
+}
+
 pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>) -> TsType {
     match r {
         TypeRef::Base(b, _) => TsType::named(ts_base(*b)),
@@ -273,7 +280,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             let name = if let Some(f) = qualify
                 && let Some(ns) = f(&id.name)
             {
-                format!("{ns}.{}", id.name)
+                format!("{ns}.{}", spelled_through_qualifier(&id.name))
             } else {
                 bynk_check::emitted_names::use_qualified_name(&id.name)
                     .unwrap_or_else(|| id.name.clone())
@@ -394,7 +401,7 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             let head = if let Some(f) = qualify
                 && let Some(ns) = f(&name.name)
             {
-                format!("{ns}.{}", name.name)
+                format!("{ns}.{}", spelled_through_qualifier(&name.name))
             } else {
                 bynk_check::emitted_names::use_qualified_name(&name.name)
                     .unwrap_or_else(|| name.name.clone())

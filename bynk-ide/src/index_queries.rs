@@ -1234,6 +1234,41 @@ pub fn validate_new_name(name: &str) -> Result<(), String> {
     }
 }
 
+/// #4352: a site written through a `uses` qualifier (`Y.Status`, `lib.y.Status`) is one span over
+/// the whole qualified name, but the rename replaces the name alone: the edit narrows to the
+/// segment after the last dot, so the qualifier stays.
+pub fn narrow_qualified_edits(
+    plan: &mut RenamePlan,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+) {
+    let old = key_segment(&plan.key.name).to_string();
+    for (path, spans) in plan.edits.iter_mut() {
+        let Some(text) = snapshots.get(path) else {
+            continue;
+        };
+        for s in spans.iter_mut() {
+            *s = narrow_qualified_span(text, *s, &old);
+        }
+        spans.sort();
+        spans.dedup();
+    }
+}
+
+/// #4352: `span` of `text`, narrowed to the segment after the last dot when it is `name` written
+/// through a qualifier (`Y.Status`), else unchanged. The one place both `prepareRename`'s range
+/// and a rename's edits take the name alone.
+pub fn narrow_qualified_span(text: &str, span: Span, name: &str) -> Span {
+    match text
+        .get(span.start..span.end)
+        .and_then(|w| w.rfind('.').map(|d| (w, d)))
+    {
+        Some((written, dot)) if &written[dot + 1..] == name => {
+            Span::new_in(span.file, span.start + dot + 1, span.end)
+        }
+        _ => span,
+    }
+}
+
 /// Apply one file's edits (spans ascending) to its snapshot text.
 pub fn apply_edits(text: &str, spans: &[Span], new_name: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -1258,10 +1293,12 @@ pub fn remap_site(site: &SiteRef, plan: &RenamePlan) -> SiteRef {
     let delta = plan.new_name.len() as isize - key_segment(&plan.key.name).len() as isize;
     let shift: isize = spans.iter().filter(|s| s.end <= site.span.start).count() as isize * delta;
     let start = (site.span.start as isize + shift) as usize;
+    // An edited span inside the site (the name after a qualifier, #4352) moves its end too.
+    let end_shift: isize = spans.iter().filter(|s| s.end <= site.span.end).count() as isize * delta;
     let end = if spans.binary_search(&site.span).is_ok() {
         start + plan.new_name.len()
     } else {
-        (site.span.end as isize + shift) as usize
+        (site.span.end as isize + end_shift) as usize
     };
     SiteRef {
         path: site.path.clone(),
@@ -1315,7 +1352,7 @@ fn renamed_key_name(old: &str, new_segment: &str) -> String {
 
 /// The member segment of a (possibly compound) key name — the text the rename
 /// actually edits (every site span covers exactly this).
-fn key_segment(name: &str) -> &str {
+pub fn key_segment(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
 }
 
@@ -1345,6 +1382,35 @@ pub fn no_new_diagnostics(
 
 #[cfg(test)]
 mod tests {
+    /// #4352: a qualified site narrows to the name after the last dot; a bare one is unchanged.
+    #[test]
+    fn a_qualified_site_narrows_to_its_name() {
+        let text = "fn f(a: Y.Status, b: lib.y.Status, c: Status) {}";
+        let at = |needle: &str| {
+            let start = text.find(needle).unwrap();
+            Span::new(start, start + needle.len())
+        };
+        let seg = |s: Span| &text[s.start..s.end];
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Status")),
+            "Status"
+        );
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("lib.y.Status"), "Status")),
+            "Status"
+        );
+        let bare = Span::new(
+            text.rfind("Status").unwrap(),
+            text.rfind("Status").unwrap() + 6,
+        );
+        assert_eq!(narrow_qualified_span(text, bare, "Status"), bare);
+        // A qualified name that is not the symbol's own is left whole.
+        assert_eq!(
+            seg(narrow_qualified_span(text, at("Y.Status"), "Other")),
+            "Y.Status"
+        );
+    }
+
     /// Context-free resolution, as the unit-scope tests read it.
     fn resolve_doc_link(
         index: &ProjectIndex,

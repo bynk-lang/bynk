@@ -85,9 +85,10 @@ fn f(s: Status, t: Y.Status, m: Money) -> String {
 Two used commons that declare one name are fine until the file writes it bare; then
 `bynk.uses.ambiguous_name` names the spellings that would resolve it. Selecting the name
 (`uses lib.y { Status }`) settles it too: a selected name outranks the same name from a whole
-`uses`, though only the names you list stay in scope from that commons. A declaration is read by
-one spelling in a unit (`bynk.uses.second_spelling`), and a name the commons does not export
-publicly cannot be listed (`bynk.uses.unknown_name`).
+`uses`, though only the names you list stay in scope from that commons. A declaration may be written by any
+of its spellings, in one unit or across it: `Status`, `Y.Status` and `lib.y.Status` are one type, so
+a value of one is a value of the others. A name the commons does not export publicly cannot be
+listed (`bynk.uses.unknown_name`).
 
 A qualified name reads the same wherever it is written: in a record's field types, in a
 generic's arguments, in `Val[lib.y.Status]` in a test, and across a Workers boundary, where the

@@ -1646,7 +1646,7 @@ pub(super) fn platform_double(
         }
         // #3513 B: a test never reads the account's datasets, so `query` faults until it is
         // stubbed. A fabricated result set would pass for the wrong reason.
-        ("bynk.cloudflare", "AnalyticsSql") => "  return {\n    async query() {\n      throw new globalThis.Error(\"bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _) returns …`\");\n    },\n  };\n".to_string(),
+        ("bynk.cloudflare", "AnalyticsSql") => "  return {\n    async query() {\n      throw new globalThis.Error(\"bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _, _) returns …`\");\n    },\n  };\n".to_string(),
         // #3479: the real `WorkersVectorize` over an exact in-memory index built
         // from the instance's declaration, so a retrieval flow (store, filter,
         // rank) runs in a test. Ranking is exact and a write is visible at once,

@@ -417,8 +417,8 @@ type leaves its variants' names as they are. Two commons that declare one name c
 together: writing the name bare is `bynk.uses.ambiguous_name`, which lists the qualified
 spellings, so alias one (`uses lib.y as Y`) or select the one you mean, which outranks the same
 name from a whole `uses` (two selections of one name are still ambiguous). A commons' full name
-(`lib.y.Status`) qualifies as well as an alias does. A declaration is read by one spelling in a
-unit: a second is `bynk.uses.second_spelling`.
+(`lib.y.Status`) qualifies as well as an alias does. Every spelling of a declaration
+(`Status`, `Y.Status`, `lib.y.Status`) is the one declaration.
 
 **Static semantics.**
 {{#grammar-semantics uses_decl}}
@@ -1415,6 +1415,40 @@ is on a `from queue` service.
 {{#grammar delivery_field}}
 
 One `name: value` field inside a `delivery { }` policy.
+
+### fallback_policy {#rule-fallback_policy}
+
+{{#grammar fallback_policy}}
+
+The optional fallback of a `from email` service (#3885), in header position after
+`delivery`. `fallback` is a contextual keyword, so it stays an ordinary identifier
+elsewhere.
+
+**Example.**
+```bynk
+context shop.support
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+service support from email("support@shop.example") {
+	fallback {
+		forward: "ops@shop.example",
+	}
+
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+		Accept
+	}
+}
+```
+
+The checker validates the closed key set (`forward`), that its value is an address and
+that the section is on a `from email` service.
+
+### fallback_field {#rule-fallback_field}
+
+{{#grammar fallback_field}}
+
+One `name: value` field inside a `fallback { }` policy.
 
 ### handler {#rule-handler}
 

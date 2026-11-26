@@ -73,7 +73,7 @@ messages_decl ::= visibility_modifier? "messages" string_literal store_annotatio
 message_entry ::= string_literal "=>" string_literal ","?
 provider_decl ::= "provides" identifier "=" identifier given_clause? ("{" provider_op* "}")?
 provider_op ::= "fn" identifier "(" (param ("," param)*)? ","? ")" "->" type_ref block
-service_decl ::= "service" identifier service_protocol? by_clause? given_clause? "{" cors_policy? security_policy? limits_policy? json_policy? errors_policy? delivery_policy? (store_annotation* handler)* "}"
+service_decl ::= "service" identifier service_protocol? by_clause? given_clause? "{" cors_policy? security_policy? limits_policy? json_policy? errors_policy? delivery_policy? fallback_policy? (store_annotation* handler)* "}"
 cors_policy ::= "cors" "{" (cors_field ","?)* "}"
 cors_field ::= identifier ":" expression
 security_policy ::= "security" "{" (security_field ","?)* "}"
@@ -86,6 +86,8 @@ errors_policy ::= "errors" "{" (errors_field ","?)* "}"
 errors_field ::= identifier ":" expression
 delivery_policy ::= "delivery" "{" (delivery_field ","?)* "}"
 delivery_field ::= identifier ":" expression
+fallback_policy ::= "fallback" "{" (fallback_field ","?)* "}"
+fallback_field ::= identifier ":" expression
 service_protocol ::= "from" ("http" | "cron" | "queue" "(" string_literal ")" | "email" "(" (string_literal | identifier) ")" | "websocket" "(" "in" ":" type_ref "," "out" ":" type_ref ","? ")" | "Events" "(" type_ref event_pattern? ")" schema_dispatch_clause?)
 event_pattern ::= "{" (event_pattern_field ",")* ".." "}"
 schema_dispatch_clause ::= "via" "schema" "(" (int_range | "-"? number_literal | wildcard_pattern) ")"

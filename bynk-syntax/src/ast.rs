@@ -1273,6 +1273,10 @@ pub struct ServiceDecl {
     /// keeps Cloudflare's defaults, except that a missing dead-letter queue is
     /// warned about (`bynk.queue.no_dead_letter`).
     pub delivery: Option<DeliveryPolicy>,
+    /// The optional email fallback (#3885) — a `fallback { forward: "<address>" }` section a
+    /// `from email` service may declare: mail its handler faulted on, or that could not be
+    /// parsed, is forwarded there instead of rejected. Validated by the checker.
+    pub fallback: Option<FallbackPolicy>,
     pub handlers: Vec<Handler>,
     pub documentation: Option<Doc>,
     pub span: Span,
@@ -1747,6 +1751,38 @@ pub struct DeliveryPolicy {
 /// One `name: value` field inside a `delivery { }` policy.
 #[derive(Debug, Clone)]
 pub struct DeliveryField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// An email service's fallback (#3885): the `fallback { }` section in a `from email` service body.
+/// Fields are parsed as `name: expr` pairs (as `delivery { }`); the checker validates the closed
+/// key set (`forward`), the address and the protocol.
+#[derive(Debug, Clone)]
+pub struct FallbackPolicy {
+    pub fields: Vec<FallbackField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+impl FallbackPolicy {
+    /// The raw value expression for a field, by name (the last one wins if a field is repeated;
+    /// the checker flags the duplicate).
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+}
+
+/// One `name: value` field inside a `fallback { }` policy.
+#[derive(Debug, Clone)]
+pub struct FallbackField {
     pub name: Ident,
     pub value: Expr,
     pub span: Span,

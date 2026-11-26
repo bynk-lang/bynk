@@ -1,0 +1,1 @@
+bynk.given.undeclared_capability

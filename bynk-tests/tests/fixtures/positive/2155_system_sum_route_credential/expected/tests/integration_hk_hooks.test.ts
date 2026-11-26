@@ -88,7 +88,7 @@ async function __sysdrive_rawstale_api_http_POST_hook(body: string, __extraHeade
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_POST_notify(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_POST_notify(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Processor") {
@@ -97,14 +97,14 @@ async function __sysdrive_api_http_POST_notify(body: string, __extraHeaders: { g
     __auth["X-Ts"] = __sig.timestamp;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notify`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: __body });
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_notify(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_raw_api_http_POST_notify(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Processor") {
     const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
@@ -112,7 +112,7 @@ async function __sysdrive_raw_api_http_POST_notify(body: string, __extraHeaders:
     __auth["X-Ts"] = __sig.timestamp;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notify`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: body });
@@ -224,10 +224,10 @@ async function __sysdrive_rawsumbad_api_http_POST_notify(body: string, __extraHe
   const __res = await __h.env.HK_HOOKS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_greet(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_GET_greet(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/greet`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
@@ -309,7 +309,7 @@ async function test_a_notice_to_the_sum_route_as_the_processor_is_signed() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", "Processor");
+    const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", {}, "Processor");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "signed hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:16:10", 526, 546, "expect r is Ok(\"signed hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -325,7 +325,7 @@ async function test_a_notice_to_the_sum_route_as_a_user_carries_a_token() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_notify("hi", undefined, ("bob" as any), "User");
+    const r = await __sysdrive_api_http_POST_notify("hi", undefined, ("bob" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bob: hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:21:10", 674, 692, "expect r is Ok(\"bob: hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -393,7 +393,7 @@ async function test_a_Bearer_primary_s_public_member_is_reached_with_no_token() 
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_greet(undefined, "", "Visitor");
+    const r = await __sysdrive_api_http_GET_greet(undefined, "", {}, "Visitor");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1485, 1510, "expect r is Ok(\"hello stranger\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -409,7 +409,7 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_greet(undefined, ("ann" as any), "User");
+    const r = await __sysdrive_api_http_GET_greet(undefined, ("ann" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:50:10", 1625, 1645, "expect r is Ok(\"hello ann\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

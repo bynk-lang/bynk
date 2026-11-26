@@ -52,7 +52,7 @@ export function compose(env: Env) {
             const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
             if (__claims.tag === "Ok") {
               const __id = handlers.UserId.of(__claims.value.sub);
-              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
             }
           }
         }

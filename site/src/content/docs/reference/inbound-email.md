@@ -226,12 +226,39 @@ body.
 Every outcome is settled by the runtime; nothing escapes as a throw, because the
 platform does not document what a throw does, so Bynk defines the behaviour:
 
-| What happened | Outcome | Logged |
-|---|---|---|
-| The handler faulted, or returned something that is not a verdict | `Reject("message could not be processed")` | the fault's class name |
-| The message could not be parsed, or is over a limit | `Reject("message could not be read")` or `message too large` | the parser's error code |
-| A `Reply` the platform refuses (the sender failed DMARC, a second reply) | `Reject("reply refused")` | the error's class name |
-| A `Forward` the platform refuses (the destination is not verified) | `Reject("forward refused")` | the error's class name |
+| What happened | Without a `fallback` | With a `fallback` | Logged |
+|---|---|---|---|
+| The handler faulted, or returned something that is not a verdict | `Reject("message could not be processed")` | forwarded, `X-Bynk-Fallback: handler-fault` | the fault's class name |
+| The message could not be parsed, or is over a parser limit | `Reject("message could not be read")` | forwarded, `X-Bynk-Fallback: unreadable` | the parser's error code |
+| The message is over the 25 MiB size cap | `Reject("message too large")` | rejected as without one: the platform's own cap is the same, so nothing would accept it | the fixed string |
+| A `Reply` the platform refuses (the sender failed DMARC, a second reply) | `Reject("reply refused")` | rejected as without one: the handler chose to reply | the error's class name |
+| A `Forward` the platform refuses (the destination is not verified) | `Reject("forward refused")` | rejected as without one: the fallback would be refused for the same reason | the error's class name |
+| The fallback forward itself is refused | the rejection above | the rejection above | the error's class name, `fallback forward refused` |
+
+### A fallback instead of a bounce
+
+A reject is a permanent SMTP error, and an Email Worker has no way to ask for a temporary one,
+so a few seconds' outage of something the handler depends on would bounce a customer's mail for
+good. A `fallback { forward: "<address>" }` block on the service forwards what it could not
+process to a verified address instead, labelled so a person or another system can tell why:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    fallback { forward: "ops@shop.example" }
+
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { … }
+}
+```
+
+`forward` is a string literal holding one bare address. It must be a verified destination address
+on the account (`bynk deploy` warns of one that is not, as it does for a `Forward` verdict), and
+not an address a `from email` service of the project claims, or two Bynk services could forward
+faults to each other forever (`bynk.email.fallback_claimed`). The block is valid only on a
+`from email` service (`bynk.email.fallback_not_email`), once (`bynk.parse.duplicate_fallback`),
+with the one key (`bynk.email.fallback_bad_option`). The forward adds only the `X-Bynk-Fallback`
+header, whose value is `handler-fault` or `unreadable`: nothing from the message is read or
+logged. Treat the fallback mailbox as untrusted input, because the messages that reach it may
+include ones that could not be parsed, and hostile ones.
 
 **Nothing in the message is ever logged**: not its body, headers, attachments or
 envelope. A log line is a fixed string, the address the service claims, and an

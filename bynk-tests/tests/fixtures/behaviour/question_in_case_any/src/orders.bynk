@@ -1,0 +1,19 @@
+commons orders
+
+type PlaceError = | OutOfStock(sku: String, left: Int) | Closed
+
+fn parse(s: String) -> Result[Int, String] {
+	if s == "7" { Ok(7) } else { Err("not a number: \(s)") }
+}
+
+fn place(left: Int) -> Result[Int, PlaceError] {
+	if left > 0 { Ok(left) } else { Err(OutOfStock("w", left)) }
+}
+
+fn first_line(lines: List[Int]) -> Option[Int] { lines.first() }
+
+// A helper is ordinary code: `?` here follows the helper's own return type.
+fn twice(s: String) -> Result[Int, String] {
+	let n = parse(s)?
+	Ok(n + n)
+}

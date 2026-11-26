@@ -1,0 +1,11 @@
+context shop.support
+
+consumes bynk.cloudflare {
+    InboundEmail,
+    EmailVerdict,
+}
+
+service support from email("support@shop.example") {
+    fallback { forward: "Ops <ops@ops.example>", to: "x@y.example" }
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }
+}

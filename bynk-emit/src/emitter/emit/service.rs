@@ -384,7 +384,7 @@ pub(crate) fn emit_service(
             // stays opaque text" precedent this track uses elsewhere, not a
             // gap this slice leaves unclosed.
             ActorSeamIr::Sum(members) => {
-                append_deps_field(&mut deps_members, "who", actor_sum_ts_union(members));
+                append_deps_field(&mut deps_members, "who", sum_who_ts_type(protocol, members));
             }
             // I3 (#1971): a `call` sum. `Caller` carries the calling context's
             // name; a foreign caller is its actor alone.
@@ -1346,6 +1346,44 @@ pub(super) fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> b
             .map(|m| match m.identity_type() {
                 Some(id) => tag_member(&m.actor_name, Some(bynk_ts::TsType::named(id))),
                 None => tag_member(&m.actor_name, None),
+            })
+            .collect(),
+    )
+}
+
+/// The `who` type of a sum handler's `deps`: an http sum's `Bearer` and `Oidc` members also carry their
+/// verified `claims` (#4344).
+fn sum_who_ts_type(
+    protocol: &ProtocolIr,
+    members: &[bynk_check::actors::SumMember],
+) -> bynk_ts::TsType {
+    if matches!(protocol, ProtocolIr::Http) {
+        http_actor_sum_ts_union(members)
+    } else {
+        actor_sum_ts_union(members)
+    }
+}
+
+/// #4344: an http sum's `who` union, whose `Bearer` and `Oidc` members also carry their verified `claims`.
+fn http_actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> bynk_ts::TsType {
+    bynk_ts::TsType::union(
+        members
+            .iter()
+            .map(|m| {
+                let mut ty =
+                    tag_member(&m.actor_name, m.identity_type().map(bynk_ts::TsType::named));
+                if let (
+                    bynk_check::actors::SumMemberSeam::Bearer { .. }
+                    | bynk_check::actors::SumMemberSeam::Oidc(_),
+                    bynk_ts::TsType::Object(props),
+                ) = (&m.seam, &mut ty)
+                {
+                    props.push(bynk_ts::TsTypeMember::prop(
+                        "claims",
+                        crate::emitter::ts_types::token_claims_ts_type(),
+                    ));
+                }
+                ty
             })
             .collect(),
     )

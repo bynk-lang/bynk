@@ -1,0 +1,9 @@
+# 1028 — Every spelling of a used declaration is that declaration
+
+- **Status:** Accepted (v0.765)
+
+**Context.** #4045 let a unit read a used commons' names bare, through an alias or by the commons' full name, but reached each declaration by one spelling: a second spelling of the same declaration was `bynk.uses.second_spelling`, because type identity is the declared name and two spellings would have been two types.
+
+**Decision.** A unit's view of a used commons files the one declaration under every spelling the unit writes (the bare or selected name, `Y.Status`, `lib.y.Status`), each filing naming the declaration by a single key: the bare spelling if there is one, else the first qualified spelling written, in `uses` clause order. Type, function, constant, asset and embed identity is therefore that key, whatever spelling a value was typed with, so values flow between spellings and a match reads the variants of any. `bynk.uses.second_spelling` is retired. The emitter reads each spelling as written (a named import, the alias namespace, the full-name namespace), all of the one module, and the language server renames a declaration through every spelling's site, keeping each qualifier.
+
+**Consequences.** A program that was refused for reading one declaration by two spellings now compiles; no program that compiled behaves differently. A spelling's emitted TypeScript is still its own import form, so a unit that mixes spellings imports one module in more than one form (a named import and a namespace), which is harmless and erased. Renaming through a braced `uses` list's own item is not yet a rename site: the validator refuses the rename rather than leaving the list stale.
