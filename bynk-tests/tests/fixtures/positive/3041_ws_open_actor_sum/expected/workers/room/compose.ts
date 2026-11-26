@@ -4,6 +4,7 @@
 import { __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __serialiseAgentKey } from "../../__bynk_runtime/agent.js";
 import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __webSocketBearerOffer, __webSocketBearerRefusal } from "../../__bynk_runtime/connection.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -17,9 +18,10 @@ export function compose(env: Env) {
   return {
     async ws_chat_open(request: globalThis.Request, room: string) {
       if (request.headers.get("Upgrade") !== "websocket") return new globalThis.Response("Expected a WebSocket upgrade", { status: 426 });
-      const __proto = request.headers.get("Sec-WebSocket-Protocol");
       let __token: string | undefined = undefined;
-      if (__proto !== null) __token = __proto.split(",")[0].trim();
+      const __offer = __webSocketBearerOffer(request.headers.get("Sec-WebSocket-Protocol"));
+      if (__offer.tag === "Legacy") return __webSocketBearerRefusal();
+      if (__offer.tag === "Token") __token = __offer.token;
       let __who: { tag: string; identity?: string } | undefined = undefined;
       if (__who === undefined) {
         if (__token !== undefined) {

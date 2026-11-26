@@ -575,6 +575,8 @@ mod system {
     mod workers_runtime_smoke;
     #[path = "wrangler_prewarm.rs"]
     mod wrangler_prewarm;
+    #[path = "ws_bearer_handshake.rs"]
+    mod ws_bearer_handshake;
     #[path = "ws_behaviour.rs"]
     mod ws_behaviour;
 }
