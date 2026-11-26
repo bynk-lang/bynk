@@ -85,6 +85,20 @@ fn render_known_unexplained(code: &str, summary: &str) -> String {
     )
 }
 
+/// The error for a code the compiler does not emit: the nearest real code when
+/// one is close (the search `check --fix=<code>` uses), else the list.
+fn unknown_message(code: &str) -> String {
+    let mut message = format!("error: `{code}` is not a diagnostic code the compiler emits.");
+    if let Some(real) = bynk_driver::fix::nearest_code(code) {
+        message.push_str(&format!("\ndid you mean `{real}`?"));
+    }
+    message.push_str(&format!(
+        "\nDiagnostic codes look like `bynk.resolve.unknown_type`; see {} for the full list.",
+        diagnostics::href("")
+    ));
+    message
+}
+
 /// Run `bynk explain <code>`. Exits `0` for a recognised code (explained or
 /// not) and non-zero for an unrecognised one.
 pub fn run(code: &str) -> ExitCode {
@@ -102,12 +116,7 @@ pub fn run(code: &str) -> ExitCode {
             ExitCode::SUCCESS
         }
         Lookup::Unknown => {
-            emsg!(
-                "error: `{code}` is not a diagnostic code the compiler emits.\n\
-                 Diagnostic codes look like `bynk.resolve.unknown_type`; see \
-                 {} for the full list.",
-                diagnostics::href("")
-            );
+            emsg!("{}", unknown_message(code));
             ExitCode::FAILURE
         }
     }
@@ -116,6 +125,29 @@ pub fn run(code: &str) -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_misspelt_code_gets_the_nearest_real_one() {
+        // The slip is built at run time: a literal of it would read as a code the
+        // source emits, and the registry check would ask for an entry for it.
+        let slip = "bynk.types.not_orderable".replace("able", "abel");
+        let msg = unknown_message(&slip);
+        assert!(
+            msg.contains("did you mean `bynk.types.not_orderable`?"),
+            "{msg}"
+        );
+        assert!(
+            msg.contains("is not a diagnostic code the compiler emits"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn a_code_far_from_any_real_one_keeps_the_plain_message() {
+        let msg = unknown_message("zzzz.nothing.like.a.code");
+        assert!(!msg.contains("did you mean"), "{msg}");
+        assert!(msg.contains("for the full list"), "{msg}");
+    }
 
     #[test]
     fn explained_code_prints_blurb_example_and_href() {
