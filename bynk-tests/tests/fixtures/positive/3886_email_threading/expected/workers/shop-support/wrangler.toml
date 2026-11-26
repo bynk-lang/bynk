@@ -2,7 +2,7 @@
 name = "shop-support"
 main = "index.ts"
 compatibility_date = "2026-08-11"
-compatibility_flags = ["global_fetch_strictly_public"]
+compatibility_flags = ["global_fetch_strictly_public", "nodejs_als"]
 addresses = ["audit@shop.example", "support@shop.example"]
 
 [observability]
