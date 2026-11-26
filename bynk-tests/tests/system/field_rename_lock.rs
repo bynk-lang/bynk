@@ -350,3 +350,40 @@ fn a_nested_rename_beside_a_retype_or_without_a_clause_is_still_refused() {
     );
     assert_eq!(p.lock(), before, "a refused build must not touch the lock");
 }
+
+#[test]
+fn deleting_a_nested_clause_while_an_older_version_is_held_is_refused() {
+    // #4483: the guard `replaces_needed` gives a `Cell`, for a record field inside a stored value.
+    let p = agent_project("nested-needed");
+    p.ok(&prefs_cart("width: Int"));
+    p.ok(&prefs_cart("size: Int replaces width"));
+    let before = p.lock();
+    let err = p.err(&prefs_cart("size: Int"));
+    assert!(err.contains("bynk.field.replaces_needed"), "{err}");
+    assert!(err.contains("renamed from `width`"), "{err}");
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
+
+#[test]
+fn a_nested_clause_no_held_version_needs_warns_that_it_can_go() {
+    let p = agent_project("nested-settled");
+    p.ok(&prefs_cart("width: Int"));
+    // While version 1 is held, the clause is needed and says nothing.
+    let held = p.ok(&prefs_cart("size: Int replaces width"));
+    assert!(!held.contains("replaces_settled"), "{held}");
+
+    // `bynk migrate` raises the floor past version 1, the only version that held `width`.
+    let mut lock =
+        bynk_project::schema_registry::parse(Some(&p.lock()), &p.root).expect("the lock parses");
+    lock.raise_floor("shop.Cart", 2).unwrap();
+    bynk_driver::schema_lock::write(&p.root, &bynk_project::schema_registry::serialize(&lock))
+        .unwrap();
+
+    let warnings = p.ok(&prefs_cart("size: Int replaces width"));
+    assert!(
+        warnings.contains("bynk.field.replaces_settled"),
+        "{warnings}"
+    );
+    // And deleting it now is accepted.
+    p.ok(&prefs_cart("size: Int"));
+}

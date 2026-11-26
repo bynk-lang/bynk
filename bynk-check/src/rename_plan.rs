@@ -331,6 +331,93 @@ pub(crate) fn store_renames(
     reads
 }
 
+/// #4483: what the `replaces` clauses on record fields *inside* an agent's stored values ask of
+/// the lock, judged as a top-level `store` rename is. `previous` is the class's recorded fields
+/// before this build, `current` the live ones, `entry` the reconciled entry whose retained shapes
+/// say which stored versions may still hold an old name. A clause deleted while a retained
+/// version keeps the value under the old name is `bynk.field.replaces_needed`, and a clause no
+/// retained version needs is `bynk.field.replaces_settled`.
+pub(crate) fn nested_renames(
+    agent: &AgentDecl,
+    entry: &AgentEntry,
+    previous: &[StoreShape],
+    current: &[StoreShape],
+    errors: &mut Vec<CompileError>,
+) {
+    let old_path = |path: &str, old: &str| {
+        path.rsplit_once('.')
+            .map(|(parent, _)| format!("{parent}.{old}"))
+    };
+    let retained = |field: &str, path: &str| {
+        entry.shapes.iter().any(|s| {
+            s.fields
+                .iter()
+                .any(|f| f.name == field && f.paths.iter().any(|p| p.path == path))
+        })
+    };
+    let span_of = |field: &str| {
+        agent
+            .store_fields
+            .iter()
+            .find(|f| f.name.name == field)
+            .map(|f| (f.name.span, f.replaces.is_some()))
+    };
+    for prev in previous {
+        let Some(live) = current.iter().find(|c| c.name == prev.name) else {
+            continue;
+        };
+        for p in prev.paths.iter().filter(|p| p.renamed_from.is_some()) {
+            let old = p.renamed_from.as_deref().unwrap_or_default();
+            let clause_gone = live
+                .paths
+                .iter()
+                .any(|l| l.path == p.path && l.renamed_from.is_none());
+            let Some(held) = old_path(&p.path, old).filter(|o| retained(&prev.name, o)) else {
+                continue;
+            };
+            if !clause_gone {
+                continue;
+            }
+            let at = span_of(&prev.name).map(|(s, _)| s).unwrap_or_default();
+            errors.push(
+                CompileError::new(
+                    "bynk.field.replaces_needed",
+                    at,
+                    format!(
+                        "`{}.{}` was renamed from `{old}`, and a stored version the lock still \
+                         holds keeps its value under that name",
+                        agent.name.name, p.path
+                    ),
+                )
+                .with_note(format!(
+                    "keep `replaces {old}` on the record field until `bynk migrate` has raised the \
+                     class's floor past those versions ({held} is what they hold)"
+                )),
+            );
+        }
+    }
+    for c in current {
+        for p in c.paths.iter().filter(|p| p.renamed_from.is_some()) {
+            let old = p.renamed_from.as_deref().unwrap_or_default();
+            if old_path(&p.path, old).is_some_and(|o| retained(&c.name, &o)) {
+                continue;
+            }
+            let at = span_of(&c.name).map(|(s, _)| s).unwrap_or_default();
+            errors.push(
+                CompileError::new(
+                    "bynk.field.replaces_settled",
+                    at,
+                    format!(
+                        "no stored version the lock holds still keeps `{}.{}` under `{old}`",
+                        agent.name.name, p.path
+                    ),
+                )
+                .with_note("the clause is no longer read; delete `replaces` from the record field"),
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

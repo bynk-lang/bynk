@@ -1342,9 +1342,10 @@ field holds the record, in a `Cell` or in the value of a `Map`, `Cache` or `Log`
   non-additive change it was.
 - **What loading does.** The record's decoder accepts the old key, so a value stored
   before the rename reads as `New`.
-- **Not guarded.** The lock keeps no history for these renames, so deleting the clause is
-  not refused while a stored version still holds the old name. Keep the clause until every
-  value written before the rename has been rewritten.
+- **How long the clause stays.** As for a `Cell`: the clause MUST stay while a snapshot at or
+  above the class's floor records the old path (`bynk.field.replaces_needed`), and when none
+  does a build warns that it can be deleted (`bynk.field.replaces_settled`). The lock keeps
+  `renamed_from` on the renamed path to judge it by.
 
 ### §5.4.4 Erasing an instance (#3931) {#erase}
 

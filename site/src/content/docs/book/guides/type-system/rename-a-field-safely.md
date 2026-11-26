@@ -84,9 +84,9 @@ agent Cart {
 
 The lock reads the recorded `width` as `size`, so the change is additive and needs no `migrate from` step,
 and a `Prefs` stored under `width` reads back as `size`. A rename that also changes the field's type is
-still refused. The lock keeps no history for these renames, so deleting the clause is not refused while a
-stored value still holds the old name: keep `replaces` until every value written before the rename has been
-rewritten.
+still refused. As for a stored field, deleting the clause is refused while a stored version the lock holds
+keeps the value under the old name (`bynk.field.replaces_needed`), and once `bynk migrate` has raised the
+class's floor past those versions the build warns that the clause can go (`bynk.field.replaces_settled`).
 
 ## When the clause can go
 

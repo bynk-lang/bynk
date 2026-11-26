@@ -1322,6 +1322,8 @@ pub fn reconcile_agents(
             }
             // #3793: `replaces` clauses the lock records no name for (`None`: a baseline).
             let mut unrecorded: Option<Vec<String>> = None;
+            // #4483: the class's recorded fields before this build, for the clauses inside them.
+            let mut previous: Vec<StoreShape> = Vec::new();
             let entry = match history {
                 None => AgentEntry {
                     version: 1,
@@ -1341,6 +1343,7 @@ pub fn reconcile_agents(
                         .current()
                         .map(|s| s.fields.as_slice())
                         .expect("a parsed agent entry has a snapshot at its version");
+                    previous = recorded.to_vec();
                     let (change, rename) =
                         classify_renamed(agent, &types, &key, &mut current, recorded, errors);
                     unrecorded = Some(rename.unrecorded.clone());
@@ -1441,6 +1444,10 @@ pub fn reconcile_agents(
                 unrecorded.as_deref(),
                 errors,
             );
+            // #4483: a class with a recorded history judges the clauses inside its stored values.
+            if unrecorded.is_some() {
+                crate::rename_plan::nested_renames(agent, &entry, &previous, &current, errors);
+            }
             // A rename applied by this build is remembered on the entry.
             let mut entry = entry;
             if let Some(old) = renamed_now
