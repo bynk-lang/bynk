@@ -67,6 +67,16 @@ export function __serialise_StockError(value: StockError): __JsonValue {
 }
 
 export function __deserialise_StockError(json: __JsonValue, path: string = "$"): Result<StockError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "NotFound":
+        return Ok({ tag: "NotFound" } as StockError);
+      case "OutOfStock":
+        return Ok({ tag: "OutOfStock" } as StockError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

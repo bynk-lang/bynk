@@ -100,7 +100,13 @@ export function __bynkCodecSet<T>(c: __BynkCodec<T>): __BynkCodec<ReadonlySet<T>
   };
 }
 
-export function __bynkCodecMap<K, V>(ck: __BynkCodec<K>, cv: __BynkCodec<V>): __BynkCodec<ReadonlyMap<K, V>> {
+// `stringKey` (#3974): the key is a `String`, or a refined or opaque `String`, so a JSON object is
+// also read, as its `[key, value]` pairs in `Object.entries` order, as the monomorphised helper does.
+export function __bynkCodecMap<K, V>(
+  ck: __BynkCodec<K>,
+  cv: __BynkCodec<V>,
+  stringKey: boolean = false,
+): __BynkCodec<ReadonlyMap<K, V>> {
   return {
     encode: (m) => {
       const entries: JsonValue[] = [];
@@ -108,6 +114,9 @@ export function __bynkCodecMap<K, V>(ck: __BynkCodec<K>, cv: __BynkCodec<V>): __
       return entries;
     },
     decode: (json, path) => {
+      if (stringKey && typeof json === "object" && json !== null && !Array.isArray(json)) {
+        json = Object.entries(json as { [k: string]: JsonValue }) as JsonValue;
+      }
       if (!Array.isArray(json)) return mismatch(path, "array", typeof json);
       let out: Map<K, V> | undefined;
       for (let i = 0; i < json.length; i++) {

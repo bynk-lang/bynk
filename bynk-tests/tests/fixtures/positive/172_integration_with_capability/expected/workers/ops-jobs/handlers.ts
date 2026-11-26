@@ -28,6 +28,14 @@ export function __serialise_TickError(value: TickError): __JsonValue {
 }
 
 export function __deserialise_TickError(json: __JsonValue, path: string = "$"): Result<TickError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Unavailable":
+        return Ok({ tag: "Unavailable" } as TickError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

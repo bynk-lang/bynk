@@ -59,6 +59,16 @@ export function __serialise_Region(value: Region): __JsonValue {
 }
 
 export function __deserialise_Region(json: __JsonValue, path: string = "$"): Result<Region, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Domestic":
+        return Ok({ tag: "Domestic" } as Region);
+      case "International":
+        return Ok({ tag: "International" } as Region);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

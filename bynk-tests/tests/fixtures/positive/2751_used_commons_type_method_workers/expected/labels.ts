@@ -76,6 +76,16 @@ export function __serialise_Shade(value: Shade): __JsonValue {
 }
 
 export function __deserialise_Shade(json: __JsonValue, path: string = "$"): Result<Shade, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Light":
+        return Ok({ tag: "Light" } as Shade);
+      case "Dark":
+        return Ok({ tag: "Dark" } as Shade);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
