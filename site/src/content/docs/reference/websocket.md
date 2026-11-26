@@ -185,17 +185,18 @@ a parameter of `on open`, a `const` of the context, or a literal
 (`Room(roomId)`, `Room(LOBBY)`, `Room("lobby")`). A key bound in the body or
 computed from the actor's identity is `bynk.ws.open_transfer_key`.
 
-The Durable Object's `webSocketClose` runs the service's `on close` with the client's
-`CloseInfo`, then **completes the close handshake**: it replies with the client's code and
-reason when that code can be sent (`1000` to `4999`, except `1004`, `1005`, `1006` and `1015`),
-and with a bare `close()` otherwise (an abnormal `1006` has no close frame to acknowledge). The
-reply is sent even if `on close` faults, and is harmless where the platform replies
-automatically (`web_socket_auto_reply_to_close`), so the handshake always completes whichever
-way the platform is configured. `webSocketError` handles a non-disconnection error: it logs the
-error's class name (never a frame's contents), closes the socket with `1011` and runs `on
-close` with `CloseInfo { code: 1011, reason: "error", clean: false }`, so the agent releases
-the connection exactly once; the `webSocketClose` that follows replies but does not run it
-again.
+The Durable Object's `webSocketClose` **completes the close handshake first**, then runs the
+service's `on close` with the client's `CloseInfo`. It replies with the client's code and reason when
+that code can be sent (`1000` to `4999`, except `1004`, `1005`, `1006` and `1015`), and with a bare
+`close()` otherwise (an abnormal `1006` has no close frame to acknowledge). The reply goes out
+before `on close` because the release `on close` performs (removing a held connection from the
+room) closes the socket with no code, which would otherwise reach the client in place of its own.
+It is harmless where the platform has already replied (`web_socket_auto_reply_to_close`), and the
+close completes even if `on close` then faults. `webSocketError` handles a non-disconnection error
+the same way: it logs the error's class name (never a frame's contents), closes the socket with
+`1011` and runs `on close` with `CloseInfo { code: 1011, reason: "error", clean: false }`, so the
+agent releases the connection exactly once; the `webSocketClose` that follows sends nothing new and
+does not run it again.
 
 ## Diagnostics
 

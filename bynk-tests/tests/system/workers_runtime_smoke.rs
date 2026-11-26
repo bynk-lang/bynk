@@ -1373,7 +1373,7 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
 }
 
 /// #3902: a client leaving is released by `on close`, with the close code the client sent, and the
-/// platform's close handshake completes. `join` closes a banned user's connection with a code and
+/// close goes out before `on close` runs (so the client sees its own code echoed). `join` closes a banned user's connection with a code and
 /// reason of the agent's choosing; `leave` removes a departed client and records the code `on close`
 /// was given. A room that kept a dead connection (no `on close`) would raise on the next broadcast.
 const WS_CLOSE_SOURCE: &str = r#"context smoke
@@ -1444,7 +1444,7 @@ service api from http {
 
 /// Real clients: `banned` is closed by the server with `4001 "banned"` and sees exactly that; `alice`
 /// and `bob` join; `alice` closes with `4002 "bye"` and, once the Durable Object has run `on close`,
-/// sees its close complete; the room then records `4002`, and a broadcast reaches
+/// sees `4002 "bye"` echoed back; the room then records `4002`, and a broadcast reaches
 /// only `bob` (a dead connection would have raised on the way). Prints the observations as JSON.
 const WS_CLOSE_CLIENTS_JS: &str = r#"
 const [port] = process.argv.slice(2);
@@ -1517,13 +1517,13 @@ fn a_departing_client_runs_on_close_with_its_code_and_the_handshake_completes_on
         serde_json::json!({ "code": 4001, "reason": "banned" }),
         "`connection.close(4001, \"banned\")` reaches the client with that code and reason\n{report}"
     );
-    // The handshake completes: the client sees its close event rather than waiting. Which code the
-    // reply carries is the platform's when it replies automatically (`web_socket_auto_reply_to_close`,
-    // on under the emitted compatibility date), so only completion is asserted here; the code Bynk's
-    // own reply sends is pinned in `bynk-emit/runtime/test/connection.test.ts`.
-    assert!(
-        seen["aliceClose"]["code"].is_number(),
-        "the close handshake completes for the client that left\n{report}"
+    // The close goes out before `on close` runs, so the release `on close` performs (`conns.remove`
+    // closes the held connection with no code) cannot replace it: the client sees the code and reason
+    // it closed with echoed back (#4491).
+    assert_eq!(
+        seen["aliceClose"],
+        serde_json::json!({ "code": 4002, "reason": "bye" }),
+        "the close reply carries the client's own code and reason\n{report}"
     );
     assert_eq!(
         seen["last"],

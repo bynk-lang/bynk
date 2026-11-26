@@ -133,7 +133,6 @@ pub(super) fn expiry_check(
                 ("clean".to_string(), bool_lit(false)),
             ]),
             run_close_arrow(host, close, types, deps_arg),
-            str_lit("first"),
         ],
     )));
     if_(
