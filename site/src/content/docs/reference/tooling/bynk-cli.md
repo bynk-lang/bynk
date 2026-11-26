@@ -1870,6 +1870,14 @@ current version. An instance already current is read and not written.
   many minutes remain. The deploy time comes from Cloudflare's deployments API.
   Changes to the sweep's own key are secret changes, not deploys, so they don't count.
 - **The lock.** A raised floor rewrites `bynk.schema.lock`; commit it.
+- **Duplicates under `@unique`.** A [`@unique(by: k)`](/reference/agents/#unique) added to a `Map`
+  that already holds data is enforced only on new commits, so a value two keys already hold stays
+  until a commit touches it. The wake reads each `@unique` index and the sweep reports what it
+  finds under the class's line, for example
+  `@unique(by: email) on `people`: 3 values are held by more than one key: 2, 2 and 4 holders (in 2 instances)`.
+  The report is the map, the field, how many values are shared and how many keys hold each. It
+  never names a stored value, a hash of one or the keys that hold it. It is information: it
+  neither fails the sweep nor holds a class's floor.
 
 **Exit code:** `0` when every selected instance woke; non-zero otherwise.
 

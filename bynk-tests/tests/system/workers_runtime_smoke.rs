@@ -458,6 +458,124 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     );
 }
 
+/// #4390: `@unique(by: email)` added to a `Map` that already holds duplicates. The v1 build stores
+/// six people over three emails (held by 2, 3 and 1 key); the v2 build declares the constraint, and the
+/// sweep's wake reports the values more than one key holds, as holder counts: never a value.
+const UNIQUE_SWEEP_V1: &str = r#"context smoke
+
+type Person = { id: String, email: String }
+
+agent Directory {
+  key id: String
+  store people: Map[String, Person]
+
+  on call seed() -> Effect[()] {
+    let _ <- people.put("k1", Person { id: "k1", email: "a@x" })
+    let _ <- people.put("k2", Person { id: "k2", email: "a@x" })
+    let _ <- people.put("k3", Person { id: "k3", email: "b@x" })
+    let _ <- people.put("k4", Person { id: "k4", email: "b@x" })
+    let _ <- people.put("k5", Person { id: "k5", email: "b@x" })
+    let _ <- people.put("k6", Person { id: "k6", email: "c@x" })
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/seed") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Directory("d").seed()
+    Ok("seeded")
+  }
+}
+"#;
+
+const UNIQUE_SWEEP_V2: &str = r#"context smoke
+
+type Person = { id: String, email: String }
+
+agent Directory {
+  key id: String
+  store people: Map[String, Person] @unique(by: email)
+
+  on call size() -> Effect[Int] { people.size() }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}
+"#;
+
+#[test]
+fn the_migrate_route_reports_unique_duplicates_already_stored_on_workerd() {
+    use bynk_check::wire_format as wf;
+    let persist = std::env::temp_dir().join(format!("bynk-workerd-unique-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&persist);
+    fs::create_dir_all(&persist).unwrap();
+    let lock = {
+        let dir = persist.join("lock-src");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("smoke.bynk"), UNIQUE_SWEEP_V1).unwrap();
+        bynk_driver::project::compile_project(
+            &bynk_testkit::compile_options_single(&dir)
+                .target(bynk_driver::project::BuildTarget::Workers)
+                .schema_registry(bynk_driver::project::SchemaLock::On { existing: None }),
+        )
+        .map_err(bynk_driver::project::ProjectFailure::flatten)
+        .expect("the first build compiles")
+        .schema_lock
+    };
+    let store = persist.join("state");
+    {
+        let Some(served) = serve_smoke_with(
+            &[("smoke.bynk", UNIQUE_SWEEP_V1)],
+            "unique-v1",
+            None,
+            Some(&store),
+        ) else {
+            let _ = fs::remove_dir_all(&persist);
+            return;
+        };
+        fetch(&served.url, "/seed").expect("GET /seed stores the duplicates");
+    }
+    let id = stored_object_ids(&store.join("v3/do/smoke-Directory"))
+        .into_iter()
+        .next()
+        .expect("the v1 run persisted one Durable Object");
+    let key = "sweep-unique-key";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", UNIQUE_SWEEP_V2)],
+        "unique-v2",
+        lock,
+        Some(&store),
+        &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
+    ) else {
+        let _ = fs::remove_dir_all(&persist);
+        return;
+    };
+    let path = format!("{}Directory", wf::MIGRATE_PATH_PREFIX);
+    let body = format!("{{\"ids\":[\"{id}\"]}}");
+    let wake = post(
+        &served.url,
+        &path,
+        &migrate_signed_headers(key, &path, &body),
+        &body,
+    );
+    drop(served);
+    let _ = fs::remove_dir_all(&persist);
+    assert!(
+        wake.contains("\"unique\":[{\"map\":\"people\",\"by\":\"email\",\"holders\":[2,3]}]"),
+        "the wake reports the two shared values by their holders: {wake}"
+    );
+    assert!(
+        !wake.contains("@x") && !wake.contains("k3"),
+        "no stored value or key is named: {wake}"
+    );
+}
+
 /// The hex ids of the Durable Objects `wrangler dev --persist-to` stored in one
 /// namespace's directory, `dir`, from their SQLite files' names (as
 /// Miniflare's own objects listing reads them).

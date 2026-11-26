@@ -893,6 +893,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("traceFault", "trace"),
     ("traceFetch", "trace"),
     ("traceStep", "trace"),
+    ("uniqueDuplicates", "entries"),
     ("untilBodyTooLarge", "http"),
     ("utcDateTimeText", "mysql"),
     ("utf8Compare", "storage"),
