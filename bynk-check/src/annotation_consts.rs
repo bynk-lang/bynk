@@ -52,8 +52,12 @@ const fn rule(annotation: &'static str, label: Option<&'static str>, base: BaseT
     }
 }
 
-/// The record-field annotations: `@name("…")` (ADR 0812 C).
+/// The record-field annotations: `@name("…")` (ADR 0812 C). A sum's variants and payload fields
+/// take the same one (#3975).
 const FIELD_RULES: &[ArgRule] = &[rule("name", None, BaseType::String)];
+
+/// A sum type's annotation: `@discriminator("…")` (#3975).
+const TYPE_RULES: &[ArgRule] = &[rule("discriminator", None, BaseType::String)];
 
 /// A `store` field's annotations: `@ttl(d)` and `@retain(d)`.
 const STORE_RULES: &[ArgRule] = &[
@@ -459,7 +463,7 @@ fn rewrite_schedule(h: &mut Handler, scope: &Scope, refs: &mut RefSink) -> bool 
 }
 
 pub(crate) fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
-    let mut changed = false;
+    let mut changed = rewrite_annotations(&mut decl.annotations, TYPE_RULES, scope, refs);
     match &mut decl.body {
         TypeBody::Refined {
             base, refinement, ..
@@ -479,7 +483,15 @@ pub(crate) fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSin
                 }
             }
         }
-        _ => {}
+        // #3975: a variant's and a payload field's `@name`.
+        TypeBody::Sum(sum) => {
+            for v in &mut sum.variants {
+                changed |= rewrite_annotations(&mut v.annotations, FIELD_RULES, scope, refs);
+                for p in &mut v.payload {
+                    changed |= rewrite_annotations(&mut p.annotations, FIELD_RULES, scope, refs);
+                }
+            }
+        }
     }
     changed
 }
@@ -492,6 +504,11 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
             CommonsItem::Type(decl) => changed |= rewrite_type(decl, scope, refs),
             CommonsItem::Event(ev) => {
                 changed |= rewrite_fields(&mut ev.body.fields, scope, refs);
+                // #3975: an event field's `@name`.
+                for field in &mut ev.body.fields {
+                    changed |=
+                        rewrite_annotations(&mut field.annotations, FIELD_RULES, scope, refs);
+                }
                 changed |= rewrite_annotations(&mut ev.annotations, EVENT_RULES, scope, refs);
             }
             CommonsItem::Service(svc) => {

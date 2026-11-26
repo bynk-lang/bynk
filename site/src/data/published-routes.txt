@@ -135,6 +135,7 @@
 /book/guides/type-system/
 /book/guides/type-system/constructors-for-generic-types/
 /book/guides/type-system/declare-eq-bounds/
+/book/guides/type-system/decode-a-third-party-webhook/
 /book/guides/type-system/decode-json/
 /book/guides/type-system/decode-yaml/
 /book/guides/type-system/define-and-validate/
@@ -2172,6 +2173,7 @@
 /reference/diagnostics/bynk.transition.no_step_reference/
 /reference/diagnostics/bynk.transition.not_bool/
 /reference/diagnostics/bynk.types.analytics_point_shape/
+/reference/diagnostics/bynk.types.annotation_unknown/
 /reference/diagnostics/bynk.types.argument_mismatch/
 /reference/diagnostics/bynk.types.asset_at_boundary/
 /reference/diagnostics/bynk.types.bad_field_default/
@@ -2188,6 +2190,9 @@
 /reference/diagnostics/bynk.types.deprecated_json_error/
 /reference/diagnostics/bynk.types.derives_automatic/
 /reference/diagnostics/bynk.types.derives_field_not_orderable/
+/reference/diagnostics/bynk.types.discriminator_bad_arg/
+/reference/diagnostics/bynk.types.discriminator_collides/
+/reference/diagnostics/bynk.types.discriminator_not_sum/
 /reference/diagnostics/bynk.types.duplicate_example/
 /reference/diagnostics/bynk.types.duplicate_literal_arm/
 /reference/diagnostics/bynk.types.duplicate_pattern_field/

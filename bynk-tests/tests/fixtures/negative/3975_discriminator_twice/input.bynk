@@ -1,0 +1,5 @@
+commons test {
+  @discriminator("a")
+  @discriminator("b")
+  type Event = | Created(id: Int)
+}

@@ -1,0 +1,13 @@
+{
+  "blurb": "A `type` takes `@discriminator(\"…\")` (on a sum), and a sum's variant takes `@name(\"…\")`. Any other annotation in those places would do nothing, so it is refused rather than ignored. Remove it, or use one of the two.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.annotation_unknown",
+  "constructs": [
+    "type_decl",
+    "sum_variant"
+  ],
+  "example": "type Shape =\n    | @label(\"round\") Circle(r: Int)    // ✗ not a variant annotation\n    | Square(side: Int)\n\ntype Shape =\n    | @name(\"round\") Circle(r: Int)    // ✓\n    | Square(side: Int)",
+  "severity": "error",
+  "summary": "A type or a sum variant carries an annotation other than `@discriminator(\"…\")` on a type or `@name(\"…\")` on a variant."
+}

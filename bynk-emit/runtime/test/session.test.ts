@@ -297,7 +297,7 @@ test("the credential is hidden from the handler's raw cookie view and typed reco
   assert.deepEqual(requestCookies(r).names(), ["theme", "__Host-session"]);
   const fields = [{ name: "sid", wire: "__Host-session", kind: "string", list: false, optional: true }] as never;
   const shown = cookieObject(r, fields);
-  assert.deepEqual(shown.ok && shown.value, { sid: "tok" });
+  assert.deepEqual(shown.ok && shown.value, { "__Host-session": "tok" });
   const hidden = cookieObject(r, fields, "__Host-session");
   assert.deepEqual(hidden.ok && hidden.value, {});
 });

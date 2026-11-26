@@ -1,0 +1,2 @@
+bynk.types.field_name_invalid
+a wire name must not be empty

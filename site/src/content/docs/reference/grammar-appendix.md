@@ -32,7 +32,7 @@ type_param ::= identifier (":" identifier ("+" identifier)*)?
 where_clause ::= "where" where_bound ("," where_bound)*
 where_bound ::= identifier ":" identifier ("+" identifier)*
 visibility_modifier ::= "private"
-type_decl ::= visibility_modifier? "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
+type_decl ::= store_annotation* visibility_modifier? "type" identifier ("[" type_param ("," type_param)* "]")? "=" type_body ("derives" identifier ("+" identifier)*)?
 type_body ::= opaque_type | refined_type | record_type | sum_type | enum_type
 opaque_type ::= "opaque" base_type ("where" refinement)? store_annotation*
 refined_type ::= base_type ("where" refinement)? store_annotation*
@@ -44,9 +44,9 @@ embed_decl ::= visibility_modifier? "embed" identifier "=" string_literal
 fixture_decl ::= "fixture" identifier "=" string_literal
 const_decl ::= visibility_modifier? "const" identifier ":" type_ref "=" expression
 sum_type ::= sum_variant+ ("embeds" type_ref "as" constant_name ("," type_ref "as" constant_name)*)?
-sum_variant ::= "|" constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
-variant_payload_field ::= identifier ":" type_ref
-enum_type ::= "enum" "{" (constant_name ("," constant_name)*)? ","? "}"
+sum_variant ::= "|" variant_annotation* constant_name ("(" (variant_payload_field ("," variant_payload_field)*)? ","? ")")?
+variant_payload_field ::= store_annotation* identifier ":" type_ref
+enum_type ::= "enum" "{" (variant_annotation* constant_name ("," variant_annotation* constant_name)*)? ","? "}"
 refinement ::= refinement_pred ("&&" refinement_pred)*
 refinement_pred ::= pred_call | predicate_name
 pred_call ::= predicate_name "(" (pred_arg ("," pred_arg)*)? ")"
@@ -103,6 +103,7 @@ key_decl ::= "key" identifier ":" type_ref
 store_field ::= "store" identifier ":" store_kind store_annotation* ("replaces" identifier)? ("=" expression)?
 store_kind ::= identifier ("[" type_ref ("," type_ref)* "]")?
 store_annotation ::= "@" identifier ("(" (annotation_arg ("," annotation_arg)*)? ","? ")")?
+variant_annotation ::= "@" identifier ("(" (annotation_arg ("," annotation_arg)*)? ","? ")")?
 annotation_arg ::= ((identifier | contextual_identifier) ":")? expression
 handler ::= call_handler | http_handler | cron_handler | queue_handler | ws_open_handler | ws_close_handler | event_handler | rejected_handler
 rejected_handler ::= "on" "rejected" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block

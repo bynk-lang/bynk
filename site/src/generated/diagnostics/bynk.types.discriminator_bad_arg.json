@@ -1,0 +1,12 @@
+{
+  "blurb": "`@discriminator` names the JSON key that carries a sum's variant, and the compiler reads that key at compile time, so it takes exactly one non-empty string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A sum may carry one `@discriminator`. Write the key as a literal, as in `@discriminator(\"type\")`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.discriminator_bad_arg",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "@discriminator(1)    // ✗ not a string literal\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)\n\n@discriminator(\"type\")    // ✓\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)",
+  "severity": "error",
+  "summary": "A sum's `@discriminator` does not take exactly one non-empty string literal, or a `String` constant bound to one, or there is more than one."
+}

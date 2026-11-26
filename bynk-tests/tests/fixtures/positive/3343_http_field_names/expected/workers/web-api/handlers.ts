@@ -121,8 +121,8 @@ export const api = {
 
 export function __serialise_Filter(value: Filter): __JsonValue {
   return {
-    pageSize: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.pageSize),
-    status: __serialise_Option_String(value.status),
+    "page-size": ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.pageSize),
+    "filter[status]": __serialise_Option_String(value.status),
     owner: __serialise_Option_String(value.owner),
   };
 }
@@ -132,15 +132,15 @@ export function __deserialise_Filter(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __d_pageSize: __JsonValue = "pageSize" in obj ? obj["pageSize"] : 20;
+  const __d_pageSize: __JsonValue = "page-size" in obj ? obj["page-size"] : 20;
   if (typeof __d_pageSize !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.pageSize`, expected: "number", actual: typeof __d_pageSize });
+    return Err({ kind: "StructuralMismatch", path: `${path}.page-size`, expected: "number", actual: typeof __d_pageSize });
   }
   if (!globalThis.Number.isSafeInteger(__d_pageSize)) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.pageSize`, expected: "safe integer", actual: String(__d_pageSize) });
+    return Err({ kind: "StructuralMismatch", path: `${path}.page-size`, expected: "safe integer", actual: String(__d_pageSize) });
   }
   const __pageSize = __d_pageSize;
-  const __r_status = __deserialise_Option_String(obj["status"], `${path}.status`);
+  const __r_status = __deserialise_Option_String(obj["filter[status]"], `${path}.filter[status]`);
   if (__r_status.tag === "Err") return __r_status;
   const __status = __r_status.value;
   const __r_owner = __deserialise_Option_String(obj["owner"], `${path}.owner`);
@@ -151,7 +151,7 @@ export function __deserialise_Filter(json: __JsonValue, path: string = "$"): Res
 
 export function __serialise_Session(value: Session): __JsonValue {
   return {
-    sid: __serialise_Option_Token(value.sid),
+    "__Host-sid": __serialise_Option_Token(value.sid),
     theme: value.theme as __JsonValue,
   };
 }
@@ -161,7 +161,7 @@ export function __deserialise_Session(json: __JsonValue, path: string = "$"): Re
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_sid = __deserialise_Option_Token(obj["sid"], `${path}.sid`);
+  const __r_sid = __deserialise_Option_Token(obj["__Host-sid"], `${path}.__Host-sid`);
   if (__r_sid.tag === "Err") return __r_sid;
   const __sid = __r_sid.value;
   const __d_theme: __JsonValue = "theme" in obj ? obj["theme"] : "light";
@@ -174,8 +174,8 @@ export function __deserialise_Session(json: __JsonValue, path: string = "$"): Re
 
 export function __serialise_Signup(value: Signup): __JsonValue {
   return {
-    email: value.email as __JsonValue,
-    remember: value.remember as __JsonValue,
+    "e-mail": value.email as __JsonValue,
+    "remember-me": value.remember as __JsonValue,
   };
 }
 
@@ -184,13 +184,13 @@ export function __deserialise_Signup(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  if (typeof obj["email"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.email`, expected: "string", actual: typeof obj["email"] });
+  if (typeof obj["e-mail"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.e-mail`, expected: "string", actual: typeof obj["e-mail"] });
   }
-  const __email = obj["email"];
-  const __d_remember: __JsonValue = "remember" in obj ? obj["remember"] : false;
+  const __email = obj["e-mail"];
+  const __d_remember: __JsonValue = "remember-me" in obj ? obj["remember-me"] : false;
   if (typeof __d_remember !== "boolean") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.remember`, expected: "boolean", actual: typeof __d_remember });
+    return Err({ kind: "StructuralMismatch", path: `${path}.remember-me`, expected: "boolean", actual: typeof __d_remember });
   }
   const __remember = __d_remember;
   return Ok({ email: __email, remember: __remember } as Signup);
@@ -215,8 +215,8 @@ export function __deserialise_Token(json: __JsonValue, path: string = "$"): Resu
 
 export function __serialise_Upload(value: Upload): __JsonValue {
   return {
-    title: value.title as __JsonValue,
-    photo: __serialise_File(value.photo),
+    "doc-title": value.title as __JsonValue,
+    "photo-file": __serialise_File(value.photo),
   };
 }
 
@@ -225,11 +225,11 @@ export function __deserialise_Upload(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  if (typeof obj["title"] !== "string") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.title`, expected: "string", actual: typeof obj["title"] });
+  if (typeof obj["doc-title"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.doc-title`, expected: "string", actual: typeof obj["doc-title"] });
   }
-  const __title = obj["title"];
-  const __r_photo = __deserialise_File(obj["photo"], `${path}.photo`);
+  const __title = obj["doc-title"];
+  const __r_photo = __deserialise_File(obj["photo-file"], `${path}.photo-file`);
   if (__r_photo.tag === "Err") return __r_photo;
   const __photo = __r_photo.value;
   return Ok({ title: __title, photo: __photo } as Upload);

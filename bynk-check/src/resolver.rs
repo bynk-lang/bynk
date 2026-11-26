@@ -66,6 +66,7 @@ mod compute_is_uses_commons_type_tests {
 
     fn bare_record_type(name: &str) -> Arc<TypeDecl> {
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),
@@ -123,6 +124,7 @@ mod compute_is_uses_commons_type_tests {
         use bynk_syntax::ast::{SumBody, Variant};
         let sum = |file| {
             let variant = |n: &str| Variant {
+                annotations: Vec::new(),
                 name: Ident {
                     name: n.to_string(),
                     span: Span::default(),

@@ -1,0 +1,12 @@
+{
+  "blurb": "`@discriminator` names the key that tells a sum's variants apart on the wire. A record, a refined type or an opaque type has no variants, so the annotation would do nothing. Remove it, or put it on the sum.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.discriminator_not_sum",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "@discriminator(\"type\")    // ✗ a record has no variants\ntype Event = { id: String }\n\ntype Event = { id: String }    // ✓",
+  "severity": "error",
+  "summary": "`@discriminator` is on a type that is not a sum."
+}

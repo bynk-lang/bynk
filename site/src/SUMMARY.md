@@ -76,6 +76,7 @@
     - [Constructors for generic types](guides/type-system/constructors-for-generic-types.md)
     - [Recursive generic types](guides/type-system/recursive-generic-types.md)
     - [Rename a field safely](guides/type-system/rename-a-field-safely.md)
+    - [Decode a third-party webhook into typed values](guides/type-system/decode-a-third-party-webhook.md)
   - Structuring code
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)

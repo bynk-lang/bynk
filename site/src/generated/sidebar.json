@@ -290,6 +290,10 @@
           {
             "label": "Rename a field safely",
             "link": "/book/guides/type-system/rename-a-field-safely/"
+          },
+          {
+            "label": "Decode a third-party webhook into typed values",
+            "link": "/book/guides/type-system/decode-a-third-party-webhook/"
           }
         ]
       },

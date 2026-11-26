@@ -78,6 +78,9 @@ pub enum Shape {
     Sum {
         name: String,
         variants: Vec<Variant>,
+        /// #3975: the sum's `@discriminator`, the key the variant travels under; `None` for the
+        /// default `kind`. Names are wire names: a variant's `@name`, a field's `@name`.
+        discriminator: Option<String>,
     },
     Refined {
         name: String,
@@ -442,7 +445,8 @@ fn named_shape(
                 .fields
                 .iter()
                 .map(|f| Field {
-                    name: f.name.name.clone(),
+                    // #3975: a field is known by its wire name.
+                    name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                     ty: shape_of(&f.type_ref, types, seen, subst),
                     preds: f
                         .refinement
@@ -464,12 +468,12 @@ fn named_shape(
                 .variants
                 .iter()
                 .map(|v| Variant {
-                    name: v.name.name.clone(),
+                    name: v.wire_name().unwrap_or_else(|| v.name.name.clone()),
                     payload: v
                         .payload
                         .iter()
                         .map(|p| Field {
-                            name: p.name.name.clone(),
+                            name: p.wire_name().unwrap_or_else(|| p.name.name.clone()),
                             ty: shape_of(&p.type_ref, types, seen, subst),
                             preds: Vec::new(),
                             defaulted: false,
@@ -485,6 +489,7 @@ fn named_shape(
             Shape::Sum {
                 name: name.to_string(),
                 variants,
+                discriminator: decl.discriminator(),
             }
         }
         TypeBody::Refined {
@@ -542,10 +547,17 @@ fn render(s: &Shape) -> String {
             fs.sort();
             format!("{name}{{{}}}", fs.join(", "))
         }
-        Shape::Sum { name, variants } => {
+        Shape::Sum {
+            name,
+            variants,
+            discriminator,
+        } => {
             let mut vs: Vec<String> = variants.iter().map(render_variant).collect();
             vs.sort();
-            format!("{name}|{}", vs.join("|"))
+            match discriminator {
+                Some(d) => format!("{name}|#{d}|{}", vs.join("|")),
+                None => format!("{name}|{}", vs.join("|")),
+            }
         }
         Shape::Refined { name, base, preds } => {
             if preds.is_empty() {
@@ -727,12 +739,20 @@ fn shape_node(s: &Shape) -> Node {
             args.extend(fields.iter().map(field_node));
             Node::call("Rec", args)
         }
-        Shape::Sum { name, variants } => {
+        Shape::Sum {
+            name,
+            variants,
+            discriminator,
+        } => {
             let mut args = vec![Node::Str(name.clone())];
             for v in variants {
                 let mut va = vec![Node::Str(v.name.clone())];
                 va.extend(v.payload.iter().map(field_node));
                 args.push(Node::call("V", va));
+            }
+            // #3975: the key the variant travels under, when it is not `kind`.
+            if let Some(d) = discriminator {
+                args.push(Node::call("Key", vec![Node::Str(d.clone())]));
             }
             Node::call("Sum", args)
         }
@@ -807,10 +827,16 @@ fn node_shape(n: &Node) -> Option<Shape> {
         "Sum" => {
             let name = string(args.first()?)?;
             let mut variants = Vec::new();
+            let mut discriminator = None;
             for v in &args[1..] {
                 let Node::Call(vh, va) = v else {
                     return None;
                 };
+                // #3975: `Key("type")` after the variants.
+                if vh == "Key" && va.len() == 1 {
+                    discriminator = Some(string(&va[0])?);
+                    continue;
+                }
                 if vh != "V" || va.is_empty() {
                     return None;
                 }
@@ -819,7 +845,11 @@ fn node_shape(n: &Node) -> Option<Shape> {
                     payload: va[1..].iter().map(node_field).collect::<Option<_>>()?,
                 });
             }
-            Shape::Sum { name, variants }
+            Shape::Sum {
+                name,
+                variants,
+                discriminator,
+            }
         }
         "Rf" => {
             if args.len() < 2 {
@@ -1170,7 +1200,32 @@ impl Cx {
                     }
                 }
             }
-            (Shape::Sum { variants: sv, .. }, Shape::Sum { variants: rv, .. }) => {
+            (
+                Shape::Sum {
+                    variants: sv,
+                    discriminator: sd,
+                    ..
+                },
+                Shape::Sum {
+                    variants: rv,
+                    discriminator: rd,
+                    ..
+                },
+            ) => {
+                // #3975: the variant is read from one key, so a different key is unreadable.
+                if sd != rd {
+                    let shown =
+                        |d: &Option<String>| d.clone().unwrap_or_else(|| "kind".to_string());
+                    self.note(
+                        path,
+                        true,
+                        format!(
+                            "the discriminator key changes from `{}` to `{}`",
+                            shown(sd),
+                            shown(rd)
+                        ),
+                    );
+                }
                 for svar in sv {
                     let vpath = format!("{path}.{}", svar.name);
                     match rv.iter().find(|v| v.name == svar.name) {
@@ -1517,6 +1572,51 @@ mod tests {
         ));
         let text = s.to_text();
         assert!(text.contains("R(\"name\")"), "{text}");
+        assert_eq!(ServiceShape::from_text(&text).as_ref(), Some(&s));
+    }
+
+    /// #3975: a field is known by its wire name, so the same Bynk name under a new key is a
+    /// break, and a new Bynk name under the same key is not.
+    #[test]
+    fn a_wire_name_is_the_key_a_field_is_judged_by() {
+        breaking(
+            &format!("{REQ}type Req = {{ n: Int }}\n"),
+            &format!("{REQ}type Req = {{ @name(\"count\") n: Int }}\n"),
+        );
+        let same_key =
+            |bynk_name: &str| format!("{REQ}type Req = {{ @name(\"count\") {bynk_name}: Int }}\n");
+        // The contract, and so its hash, is the same: the Bynk name is not part of it.
+        let c = check_call(&shape(&same_key("n")), &shape(&same_key("total")));
+        assert_eq!(c.verdict, Verdict::Unchanged, "{c:#?}");
+        assert!(c.findings.is_empty(), "{c:#?}");
+    }
+
+    /// #3975: a sum's variants are known by their wire names and it by its discriminator, whichever
+    /// way the call goes.
+    #[test]
+    fn a_discriminator_or_a_variant_wire_name_change_is_a_break_either_way() {
+        let plain = format!("{RESP}type Resp = | A | B\n");
+        let keyed = format!("{RESP}@discriminator(\"type\")\ntype Resp = | A | B\n");
+        let other = format!("{RESP}@discriminator(\"event\")\ntype Resp = | A | B\n");
+        breaking(&plain, &keyed);
+        breaking(&keyed, &plain);
+        breaking(&keyed, &other);
+        let named = format!("{RESP}type Resp = | @name(\"a\") A | B\n");
+        breaking(&plain, &named);
+        breaking(&named, &plain);
+        // The same wire name under another Bynk name is the same contract.
+        let renamed = format!("{RESP}type Resp = | @name(\"a\") Z | B\n");
+        let c = check_call(&shape(&named), &shape(&renamed));
+        assert!(c.findings.is_empty(), "{c:#?}");
+    }
+
+    #[test]
+    fn a_discriminator_round_trips_through_the_stored_text() {
+        let s = shape(&format!(
+            "{RESP}@discriminator(\"type\")\ntype Resp = | @name(\"a.b\") A(@name(\"k\") x: Int) | B\n"
+        ));
+        let text = s.to_text();
+        assert!(text.contains("Key(\"type\")"), "{text}");
         assert_eq!(ServiceShape::from_text(&text).as_ref(), Some(&s));
     }
 
@@ -2318,6 +2418,7 @@ mod tests {
     fn sum(variants: Vec<(&str, Vec<(&str, Shape)>)>) -> Shape {
         Shape::Sum {
             name: "S".into(),
+            discriminator: None,
             variants: variants
                 .into_iter()
                 .map(|(n, payload)| Variant {
