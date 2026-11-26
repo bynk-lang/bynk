@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, type Result } from "../../__bynk_runtime/result.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
-import type { __JsonValue } from "../../__bynk_runtime/boundary.js";
+import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
@@ -106,3 +106,94 @@ export const api = {
     throw new globalThis.Error("non-exhaustive match");
   },
 };
+
+export function __serialise_ByCountry(value: ByCountry): __JsonValue {
+  return {
+    country: value.country as __JsonValue,
+    n: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.n),
+  };
+}
+
+export function __deserialise_ByCountry(json: __JsonValue, path: string = "$"): Result<ByCountry, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["country"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.country`, expected: "string", actual: typeof obj["country"] });
+  }
+  const __country = obj["country"];
+  if (typeof obj["n"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "number", actual: typeof obj["n"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["n"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.n`, expected: "safe integer", actual: String(obj["n"]) });
+  }
+  const __n = obj["n"];
+  return Ok({ country: __country, n: __n } as ByCountry);
+}
+
+export function __serialise_Seats(value: Seats): __JsonValue {
+  return {
+    plan: value.plan as __JsonValue,
+    seats: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.seats),
+  };
+}
+
+export function __deserialise_Seats(json: __JsonValue, path: string = "$"): Result<Seats, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["plan"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.plan`, expected: "string", actual: typeof obj["plan"] });
+  }
+  const __plan = obj["plan"];
+  if (typeof obj["seats"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "number", actual: typeof obj["seats"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["seats"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.seats`, expected: "safe integer", actual: String(obj["seats"]) });
+  }
+  const __seats = obj["seats"];
+  return Ok({ plan: __plan, seats: __seats } as Seats);
+}
+
+
+export function __serialise_List_Seats(value: readonly Seats[]): __JsonValue {
+  return value.map((v) => __serialise_Seats(v));
+}
+
+export function __deserialise_List_Seats(json: __JsonValue, path: string = "$"): Result<readonly Seats[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Seats[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_Seats(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Seats);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_ByCountry(value: readonly ByCountry[]): __JsonValue {
+  return value.map((v) => __serialise_ByCountry(v));
+}
+
+export function __deserialise_List_ByCountry(json: __JsonValue, path: string = "$"): Result<readonly ByCountry[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: ByCountry[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_ByCountry(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as ByCountry);
+  }
+  return Ok(out);
+}

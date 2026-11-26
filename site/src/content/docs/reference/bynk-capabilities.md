@@ -1177,7 +1177,9 @@ instance is written with, so the columns are never counted by hand:
 type Signup  = { @index plan: String, country: String, seats: Int }
 type Seats   = { plan: String, seats: Int }
 type ByCountry = { country: String, n: Int }
+```
 
+```bynk,fragment
 let seats <- AnalyticsSql.select[Seats](Signups, "FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", [])
 // SELECT index1 AS "plan", double1 AS "seats" FROM {dataset} WHERE …
 
