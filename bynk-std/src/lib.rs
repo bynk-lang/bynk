@@ -696,7 +696,7 @@ pub const SERVICE_WORKER_OPTION: &str = "worker";
 pub const R2_BINDING_PREFIX: &str = "R2";
 
 /// The one creation option of an `R2` instance: the bucket's jurisdiction.
-pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
+pub const JURISDICTION_OPTION: &str = "jurisdiction";
 
 /// The jurisdictions a resource may be pinned to, as `@jurisdiction(…)` takes them: an `R2`
 /// bucket (`wrangler r2 bucket create --jurisdiction`), a `D1` database and an agent's Durable
@@ -1117,7 +1117,7 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "R2",
                 binding_prefix: R2_BINDING_PREFIX,
-                options: &[(R2_JURISDICTION_OPTION, OptionKind::Str)],
+                options: &[(JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,
@@ -1152,7 +1152,7 @@ pub const UNITS: &[Unit] = &[
             Instantiable {
                 capability: "D1",
                 binding_prefix: D1_BINDING_PREFIX,
-                options: &[],
+                options: &[(JURISDICTION_OPTION, OptionKind::Str)],
                 required: &[],
                 bare: false,
                 linked: false,

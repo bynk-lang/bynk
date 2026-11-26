@@ -274,6 +274,10 @@ pub(crate) struct D1Record {
     pub(crate) name: String,
     /// Cloudflare's `database_id` for it.
     pub(crate) id: String,
+    /// #3820: the jurisdiction it was created in, if any. A database's jurisdiction is fixed when
+    /// it is made, so a source that now names another is refused, not recreated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
     /// Databases this binding used to have, under a name it no longer
     /// derives. They hold data, so they stay recorded (and are reported as
     /// orphans) until their entry is removed by hand, as R2's are.
@@ -1741,6 +1745,7 @@ pub(crate) mod tests {
                             D1Record {
                                 name: "api-orders".into(),
                                 id: "0d1d0000-0000-4000-8000-000000000001".into(),
+                                jurisdiction: None,
                                 superseded: vec![D1Past {
                                     name: "api-orders-old".into(),
                                     id: "0d1d0000-0000-4000-8000-000000000000".into(),
@@ -2692,13 +2697,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_OLD",
-            D1Record::of("shop-old", "id-2"),
+            D1Record::of("shop-old", "id-2", None),
         );
         let resources = BTreeMap::from([(
             "shop".to_string(),
@@ -2723,13 +2728,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-3"),
+            D1Record::of("shop-orders-v2", "id-3", None),
         );
         let orphans = find_orphans(&lock, "default", &resources);
         assert!(
@@ -2879,7 +2884,7 @@ pub(crate) mod tests {
             "staging",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-staging", "id-7"),
+            D1Record::of("shop-orders-staging", "id-7", None),
         );
         let (root, config) = r2_project("d1-staging", D1_CONFIG, &lock);
         assert_eq!(

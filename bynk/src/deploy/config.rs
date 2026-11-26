@@ -210,6 +210,8 @@ pub(crate) struct D1Decl {
     /// P4b (#2608): its migration files, by name in the order wrangler
     /// applies them; empty without a `migrations_dir`.
     pub(crate) migrations: Vec<String>,
+    /// #3820: the `@jurisdiction` the database is pinned to at creation, if any.
+    pub(crate) jurisdiction: Option<String>,
 }
 
 /// P5 (#2323): one `R2` instance's bucket, as the emitted config declares it.
@@ -1194,6 +1196,7 @@ pub(crate) mod tests {
                     binding: binding.to_string(),
                     name: name.to_string(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 })
                 .collect();
             self
@@ -1690,7 +1693,13 @@ max_batch_size = 10
                 "AE_X",
                 BindingSource::AnalyticsDataset { capability: cap() },
             ),
-            sample("D1_X", BindingSource::D1Database { capability: cap() }),
+            sample(
+                "D1_X",
+                BindingSource::D1Database {
+                    capability: cap(),
+                    jurisdiction: None,
+                },
+            ),
             sample(
                 "SECRET_X",
                 BindingSource::StoredSecret {
@@ -2446,6 +2455,7 @@ state = "deleted"
                 "D1_ORDERS",
                 BindingSource::D1Database {
                     capability: "Cap".into(),
+                    jurisdiction: None,
                 },
             )],
             &WorkerLayout::identity(),
@@ -2467,6 +2477,7 @@ state = "deleted"
                 name,
                 BindingSource::D1Database {
                     capability: "Cap".into(),
+                    jurisdiction: None,
                 },
             )
         };
@@ -2483,11 +2494,13 @@ state = "deleted"
                     binding: "D1_AUDIT".into(),
                     name: "shop-cart-audit".into(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 },
                 D1Decl {
                     binding: "D1_ORDERS".into(),
                     name: "shop-cart-orders".into(),
                     migrations: Vec::new(),
+                    jurisdiction: None,
                 },
             ]
         );

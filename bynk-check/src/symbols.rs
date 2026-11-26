@@ -1025,12 +1025,18 @@ impl DerivedInstance {
         ))
     }
 
-    /// The jurisdiction an `R2` instance's bucket is pinned to (P5, #2323), or
-    /// `None` for an unpinned one or any other kind.
+    /// The jurisdiction an `R2` instance's bucket (P5, #2323) or a `D1`
+    /// instance's database (#3820) is pinned to, or `None` for an unpinned one
+    /// or any other kind.
     pub fn jurisdiction(&self) -> Option<&str> {
-        self.is_r2()
-            .then(|| self.option(crate::firstparty::R2_JURISDICTION_OPTION))
+        (self.is_r2() || self.is_d1())
+            .then(|| self.option(crate::firstparty::JURISDICTION_OPTION))
             .flatten()
+    }
+
+    /// Whether this is a `D1` instance.
+    pub fn is_d1(&self) -> bool {
+        self.base_unit == crate::firstparty::CLOUDFLARE_UNIT && self.base_cap == "D1"
     }
 
     /// Whether this is an `R2` instance.

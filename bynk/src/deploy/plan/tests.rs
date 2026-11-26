@@ -641,13 +641,13 @@ fn the_plan_creates_each_database_then_reuses_it_and_reports_an_orphan() {
         "default",
         "shop",
         "D1_ORDERS",
-        D1Record::of("shop-orders", "id-1"),
+        D1Record::of("shop-orders", "id-1", None),
     );
     lock.record::<D1>(
         "default",
         "shop",
         "D1_GONE",
-        D1Record::of("shop-gone", "id-2"),
+        D1Record::of("shop-gone", "id-2", None),
     );
     let again = plan_of(&order, &declared, &lock);
     assert_eq!(again.contexts[0].d1[0].action, "reuse");
@@ -714,7 +714,7 @@ fn two_instances_that_would_share_a_database_are_refused() {
         "staging",
         "shop",
         "D1_ORDERS",
-        D1Record::of("shop-orders-staging", "id-1"),
+        D1Record::of("shop-orders-staging", "id-1", None),
     );
     let message = d1_database_problem(&suffixed, LedgerView::of(&lock, "default")).unwrap();
     assert!(message.contains("environment `staging`"), "{message}");
@@ -725,6 +725,47 @@ fn two_instances_that_would_share_a_database_are_refused() {
     )]);
     assert_eq!(
         d1_database_problem(&own, LedgerView::of(&lock, "staging")),
+        None
+    );
+}
+
+#[test]
+fn a_changed_jurisdiction_on_a_provisioned_database_is_refused_not_recreated() {
+    // #3820 (Decision B): a database's jurisdiction is fixed when it is made.
+    let mut declared = Resources::default().d1_databases(&[("D1_ORDERS", "shop-orders")]);
+    declared.d1_databases[0].jurisdiction = Some("eu".into());
+    let project = project(vec![("shop", declared)]);
+    let mut lock = DeployLock::default();
+    lock.record::<D1>(
+        "default",
+        "shop",
+        "D1_ORDERS",
+        D1Record::of("shop-orders", "id-1", None),
+    );
+    let message = d1_database_problem(&project, LedgerView::of(&lock, "default")).unwrap();
+    assert!(message.contains("no jurisdiction"), "{message}");
+    assert!(message.contains("jurisdiction `eu`"), "{message}");
+    assert!(message.contains("will not recreate"), "{message}");
+    // A record written before `@jurisdiction` existed has no such field and reads as none, so
+    // adding `eu` to that database is refused too.
+    let old: D1Record = toml::from_str("name = \"shop-orders\"\nid = \"id-1\"\n").unwrap();
+    assert_eq!(old.jurisdiction, None);
+    let mut older = DeployLock::default();
+    older.record::<D1>("default", "shop", "D1_ORDERS", old);
+    assert!(d1_database_problem(&project, LedgerView::of(&older, "default")).is_some());
+    // The same jurisdiction, and a database not yet provisioned, are fine.
+    lock.record::<D1>(
+        "default",
+        "shop",
+        "D1_ORDERS",
+        D1Record::of("shop-orders", "id-1", Some("eu")),
+    );
+    assert_eq!(
+        d1_database_problem(&project, LedgerView::of(&lock, "default")),
+        None
+    );
+    assert_eq!(
+        d1_database_problem(&project, LedgerView::of(&DeployLock::default(), "default")),
         None
     );
 }
