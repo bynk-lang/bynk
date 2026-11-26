@@ -811,7 +811,9 @@ pub enum Command {
     /// Maintain `bynk.schema.lock` by hand.
     ///
     /// `accept-order` records a `derives Ord` type's new field or variant order
-    /// after a reorder that `bynk.types.ord_order_changed` refused.
+    /// after a reorder that `bynk.types.ord_order_changed` refused; `accept-analytics`
+    /// records an `Analytics` instance's new column mapping after a change that
+    /// `bynk.analytics.mapping_changed` refused.
     Lock {
         #[command(subcommand)]
         command: LockCommand,
@@ -1031,6 +1033,30 @@ pub enum LockCommand {
         )]
         type_name: Option<String>,
         /// Accept every `derives Ord` type whose order differs from the lock.
+        #[arg(long)]
+        all: bool,
+        /// Project directory. Defaults to the current directory.
+        #[arg(long, value_name = "PATH", default_value = ".")]
+        path: PathBuf,
+    },
+    /// Accept the new column mapping of an `Analytics` instance: rewrite its entry under
+    /// `[analytics]` in `bynk.schema.lock` to the mapping its `writeValue` now writes (#4105).
+    ///
+    /// Points already written keep their old column positions, so a build refuses a reorder,
+    /// a retyped field or a removed field of the written record
+    /// (`bynk.analytics.mapping_changed`) until it is accepted. This is the deliberate step, and the
+    /// rewritten lock belongs in the same commit as the change. Name the instance, qualified
+    /// (`shop.cart.Signups`) or not when it is the only one so called, or pass `--all` to accept
+    /// every changed instance (it lists what it accepts).
+    AcceptAnalytics {
+        /// The instance to accept. Omit with `--all`.
+        #[arg(
+            value_name = "INSTANCE",
+            required_unless_present = "all",
+            conflicts_with = "all"
+        )]
+        instance: Option<String>,
+        /// Accept every instance whose mapping differs from the lock.
         #[arg(long)]
         all: bool,
         /// Project directory. Defaults to the current directory.

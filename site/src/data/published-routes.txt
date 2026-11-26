@@ -1429,6 +1429,7 @@
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /reference/diagnostics/bynk.agents.self_operation/
+/reference/diagnostics/bynk.analytics.mapping_changed/
 /reference/diagnostics/bynk.asset.duplicate/
 /reference/diagnostics/bynk.asset.invalid_at_path/
 /reference/diagnostics/bynk.asset.may_shadow_route/

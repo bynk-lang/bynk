@@ -925,6 +925,8 @@ pub enum Callee {
         /// The record written, which `AnalyticsSql.select[T]` reads back from.
         record: String,
         mapping: analytics::AnalyticsMapping,
+        /// The record's declaration (else the call), where the schema lock reports a mapping that changed.
+        span: Span,
     },
     /// #4105: `AnalyticsSql.select[T](Instance, tail, params)`. The compiler writes the `SELECT`
     /// list from `row` and the instance's written record, so `sql` is filled once the unit has

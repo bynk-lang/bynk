@@ -319,6 +319,8 @@ mod system {
     mod alias_service_workerd;
     #[path = "analyse_mode_corpus.rs"]
     mod analyse_mode_corpus;
+    #[path = "analytics_mapping_lock.rs"]
+    mod analytics_mapping_lock;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]

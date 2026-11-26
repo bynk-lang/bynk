@@ -582,7 +582,9 @@ fn retain_unit_callees(
                     || crate::queue_producers::is_queue_send(c)
                     || matches!(
                         c,
-                        crate::checker::Callee::Cross { .. } | crate::checker::Callee::Agent { .. }
+                        crate::checker::Callee::Cross { .. }
+                            | crate::checker::Callee::Agent { .. }
+                            | crate::checker::Callee::AnalyticsWrite { .. }
                     )
             })
             .map(|(id, c)| (*id, c.clone())),

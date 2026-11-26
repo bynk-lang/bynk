@@ -643,6 +643,11 @@ fn run_lock_command(command: bynk::cli::LockCommand) -> ExitCode {
             all,
             path,
         } => bynk::lock::accept_order(&path, if all { None } else { type_name.as_deref() }),
+        bynk::cli::LockCommand::AcceptAnalytics {
+            instance,
+            all,
+            path,
+        } => bynk::lock::accept_analytics(&path, if all { None } else { instance.as_deref() }),
     }
 }
 
