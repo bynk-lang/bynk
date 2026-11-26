@@ -6356,6 +6356,10 @@
         {
           "type": "STRING",
           "value": "DELETE"
+        },
+        {
+          "type": "STRING",
+          "value": "ANY"
         }
       ]
     },
