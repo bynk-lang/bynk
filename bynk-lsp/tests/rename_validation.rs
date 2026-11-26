@@ -66,6 +66,12 @@ fn try_rename(
     at: (&str, usize),
     new_name: &str,
 ) -> Result<HashMap<PathBuf, String>, String> {
+    // #4455: the handler refuses a rename started on a use under an alias.
+    if let Some(why) =
+        index_queries::alias_rename_refusal(&pre.index, &pre.snapshots, Path::new(at.0), at.1)
+    {
+        return Err(why);
+    }
     let mut plan = index_queries::plan_rename(&pre.index, Path::new(at.0), at.1, new_name)?;
     index_queries::narrow_qualified_edits(&mut plan, &pre.snapshots);
     let mut overlay = HashMap::new();
@@ -339,4 +345,44 @@ fn a_braced_uses_item_is_an_indexed_reference() {
             .any(|s| s.path == Path::new("app/z.bynk") && &z[s.span.start..s.span.end] == "Status"),
         "the braced item is among the references: {sites:?}"
     );
+}
+
+/// #4455: a rename started on a use of a declaration under an alias (`S` of
+/// `uses lib.y { Status as S }`) is refused, with the reason, instead of renaming the declaration
+/// in the commons and leaving the spot the user is on; `prepareRename` declines there too.
+#[test]
+fn a_rename_started_on_an_alias_use_is_refused() {
+    let lib = "commons lib.y\n\ntype Status = | On | Off\n";
+    let app = "commons app.z\n\nuses lib.y { Status as S }\n\nfn a(s: S) -> S { s }\n";
+    let root = setup_project(
+        "braced-alias-start",
+        &[("lib/y.bynk", lib), ("app/z.bynk", app)],
+    );
+    let pre = analyse(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+
+    let on_alias = offset_of(&pre.snapshots, "app/z.bynk", "s: S", 0) + "s: ".len();
+    let why = try_rename(&root, &pre, ("app/z.bynk", on_alias), "T")
+        .expect_err("a rename started on the alias is refused");
+    assert!(
+        why.contains("`S` is `Status` under another name"),
+        "the refusal says what the spot is: {why}"
+    );
+    assert!(
+        index_queries::alias_rename_refusal(
+            &pre.index,
+            &pre.snapshots,
+            Path::new("app/z.bynk"),
+            on_alias
+        )
+        .is_some(),
+        "prepareRename declines on the alias"
+    );
+
+    // The source name in the list, and the declaration, still rename.
+    let item = offset_of(&pre.snapshots, "app/z.bynk", "Status", 0);
+    assert!(try_rename(&root, &pre, ("app/z.bynk", item), "State").is_ok());
 }
