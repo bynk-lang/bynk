@@ -651,6 +651,10 @@ fn typed_read_columns(
     files: Option<&HashMap<PathBuf, String>>,
 ) -> String {
     use bynk_syntax::ast::{CommonsItem, SourceUnit, TypeBody};
+    // #4099: `Ai.generateValue[T]` sends `T`'s JSON Schema, which the compiler derives.
+    if callee == "Ai.generateValue" {
+        return generate_value_schema(after, text, files);
+    }
     if !(callee.ends_with(".select") || callee.ends_with(".firstAs")) {
         return String::new();
     }
@@ -689,6 +693,85 @@ fn typed_read_columns(
     cols.map_or_else(String::new, |c| {
         format!("\n\nThe compiler writes `SELECT {c}` ahead of the literal.")
     })
+}
+
+/// #4099: the section a hover on `Ai.generateValue[T]` adds: the JSON Schema of `T` the call sends
+/// the model, derived as the compiler derives it, or why `T` has none. `after` is the text after
+/// the callee, which starts at the type argument. Read from the declarations in the project, so it
+/// answers while the buffer does not check; a type argument that is not a bare name says nothing.
+fn generate_value_schema(
+    after: &str,
+    text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> String {
+    use bynk_syntax::ast::{Ident, TypeRef};
+    let Some(name) = after
+        .strip_prefix('[')
+        .and_then(|r| r.split(']').next())
+        .map(str::trim)
+        .filter(|r| !r.is_empty() && r.chars().all(|c| c.is_alphanumeric() || c == '_'))
+    else {
+        return String::new();
+    };
+    let mut types: HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>> = HashMap::new();
+    // The unit's own declarations first (the compiler reads the calling unit's type table), then
+    // the project's for a name it does not declare.
+    for scope in [None, files] {
+        collect_type_decls(text, scope, &mut types);
+    }
+    if !types.contains_key(name) {
+        return String::new();
+    }
+    let t = TypeRef::Named(Ident {
+        name: name.to_string(),
+        span: bynk_syntax::span::Span::default(),
+    });
+    match bynk_check::ai_schema::request_schema(&t, name, &types) {
+        Ok(request) => {
+            let pretty = serde_json::from_str::<serde_json::Value>(&request.schema)
+                .and_then(|v| serde_json::to_string_pretty(&v))
+                .unwrap_or(request.schema);
+            let wrapped = if request.wrapped {
+                format!(
+                    " (`{name}` is not a record, so it is asked for as the one field of an object, `value`, and unwrapped)"
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                "\n\n**Sent to the model** as a JSON Schema (`response_format`){wrapped}; the reply is decoded as `{name}`:\n\n```json\n{pretty}\n```"
+            )
+        }
+        Err(why) => format!(
+            "\n\n`{name}` has no JSON Schema, so the call is refused (`bynk.types.ai_value_shape`): `{}`: {}.",
+            why.path, why.reason
+        ),
+    }
+}
+
+/// The type declarations of the units `text` (and `files`, when given) parse to, by name; a name
+/// already in `types` keeps its first declaration.
+fn collect_type_decls(
+    text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+    types: &mut HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit};
+    crate::completion::for_each_unit(text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            _ => return,
+        };
+        for item in items {
+            if let CommonsItem::Type(t) = item {
+                types
+                    .entry(t.name.name.clone())
+                    .or_insert_with(|| std::sync::Arc::new(t.clone()));
+            }
+        }
+    });
 }
 
 /// #2620: hover for a call to the ambient `unreachable(…)` / `todo(…)`: the
@@ -1197,6 +1280,60 @@ mod tests {
             path: None,
             files: None,
         })
+    }
+
+    const GENERATE_VALUE: &str = "context demo.m\n\nconsumes bynk.cloudflare { Ai, GenerateRequest }\n\ntype Severity = enum { Low, High }\ntype Triage = { severity: Severity, summary: String where MaxLength(200) }\ntype Tree = { children: List[Tree] }\n\nservice s {\n  on call() -> Effect[()] by Caller given Ai {\n    let a <- Ai.generateValue[Triage](\"m\", GenerateRequest { messages: [] })\n    let b <- Ai.generateValue[Tree](\"m\", GenerateRequest { messages: [] })\n    ()\n  }\n}\n";
+
+    /// #4099: hovering `Ai.generateValue[T]` shows the signature and the JSON Schema it sends.
+    #[test]
+    fn generate_value_hovers_with_the_schema_it_sends() {
+        let h = hover_at(GENERATE_VALUE, "generateValue", 0).expect("hovers");
+        assert!(
+            h.contains("generateValue[T](model: String, request: GenerateRequest)"),
+            "{h}"
+        );
+        assert!(h.contains("**Sent to the model**"), "{h}");
+        assert!(h.contains("\"maxLength\": 200"), "{h}");
+        assert!(h.contains("\"enum\": ["), "{h}");
+    }
+
+    /// #4099: a type that is not a record is shown as the object it is asked for in.
+    #[test]
+    fn generate_value_of_an_enum_shows_the_object_it_is_wrapped_in() {
+        let src = GENERATE_VALUE.replace("generateValue[Triage]", "generateValue[Severity]");
+        let h = hover_at(&src, "generateValue", 0).expect("hovers");
+        assert!(
+            h.contains("is not a record") && h.contains("\"value\""),
+            "{h}"
+        );
+    }
+
+    /// #4099: the calling unit's own declaration of a name is the one shown, not another unit's.
+    #[test]
+    fn generate_value_reads_the_calling_units_types_first() {
+        let other = "context other.m\n\ntype Triage = { elsewhere: Int }\n";
+        let files: HashMap<PathBuf, String> =
+            HashMap::from([(PathBuf::from("a_other.bynk"), other.to_string())]);
+        let offset = GENERATE_VALUE.find("generateValue").unwrap();
+        let h = hover_content(&HoverInput {
+            analysis: None,
+            doc: Some((GENERATE_VALUE, offset)),
+            path: None,
+            files: Some(&files),
+        })
+        .expect("hovers");
+        assert!(h.contains("severity") && !h.contains("elsewhere"), "{h}");
+    }
+
+    /// #4099: a type with no schema says so, naming the field, instead of showing one.
+    #[test]
+    fn generate_value_of_a_recursive_type_says_it_has_no_schema() {
+        let h = hover_at(GENERATE_VALUE, "generateValue", 1).expect("hovers");
+        assert!(
+            h.contains("has no JSON Schema") && h.contains("Tree.children[]"),
+            "{h}"
+        );
+        assert!(h.contains("bynk.types.ai_value_shape"), "{h}");
     }
 
     /// #3889: the constant named in `from email(Support)` hovers with the address it denotes.

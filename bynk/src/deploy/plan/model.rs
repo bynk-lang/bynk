@@ -881,6 +881,39 @@ impl<'a> Plan<'a> {
         }
     }
 
+    /// #4056 Decision E: before a recorded KV namespace is reused, the deploy reads the account's
+    /// live namespace ids (slice 5's drift read, over REST since 1D.4a) and creates one that has
+    /// gone. Without `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` the read is skipped and
+    /// the ledger trusted, as a failed read always was; a note says so, so the lost check is
+    /// stated, not silent. `applies` is false for a `--dry-run`, which reads nothing.
+    pub(crate) fn noting_unchecked_kv(self, applies: bool) -> Self {
+        self.noting_unchecked_kv_with(applies, || {
+            crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv).map(drop)
+        })
+    }
+
+    /// [`Plan::noting_unchecked_kv`] over `credentials`, the run's KV client check (a test's
+    /// stand-in).
+    pub(crate) fn noting_unchecked_kv_with(
+        self,
+        applies: bool,
+        credentials: impl FnOnce() -> Result<(), crate::cloudflare::CloudflareError>,
+    ) -> Self {
+        let reuses = self
+            .contexts
+            .iter()
+            .any(|c| c.kv.iter().any(|kv| kv.action == "reuse"));
+        if !applies || !reuses {
+            return self;
+        }
+        let Err(why) = credentials() else {
+            return self;
+        };
+        let mut plan = self;
+        plan.account_notes.push(kv_unchecked_note(&why));
+        plan
+    }
+
     /// #3494: what checking the plan against the account found to say.
     pub(crate) fn account_notes(&self) -> &[String] {
         &self.account_notes
@@ -1189,4 +1222,22 @@ pub(super) fn confirm(yes: bool) -> bool {
     let mut answer = String::new();
     io::stdin().read_line(&mut answer).is_ok()
         && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+}
+
+/// The note [`Plan::noting_unchecked_kv`] adds, for `why` the account cannot be listed: the
+/// missing variables, said as such, or another failure's own text. It speaks of the listing it
+/// skips, never of a create or delete, which a reuse does not make.
+pub(crate) fn kv_unchecked_note(why: &crate::cloudflare::CloudflareError) -> String {
+    let skipped = "each `reuse` of a KV namespace is what `bynk.deploy.lock` records, not checked \
+                   against the account's list of namespaces, so one deleted by hand is not \
+                   created again";
+    match why {
+        crate::cloudflare::CloudflareError::Credentials(_) => format!(
+            "bynk: note: the KV drift check was skipped because CLOUDFLARE_API_TOKEN and \
+             CLOUDFLARE_ACCOUNT_ID are not both set: {skipped}; set both, the token with \"{}\", \
+             to check it",
+            crate::cloudflare::rest::Purpose::Kv.permission()
+        ),
+        other => format!("bynk: note: the KV drift check was skipped: {skipped}; {other}"),
+    }
 }

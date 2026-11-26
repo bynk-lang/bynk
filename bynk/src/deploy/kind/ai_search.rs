@@ -221,7 +221,10 @@ mod tests {
         provision_kind::<AiSearch>(
             Site {
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                    api: &crate::cloudflare::Account::new(Wrangler::new(
+                        &provenance,
+                        Path::new("/nonexistent"),
+                    )),
                     project_root: Path::new("/nonexistent"),
                 },
                 environment: "production",

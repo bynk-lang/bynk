@@ -189,6 +189,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         Some(Callee::D1Select { row, .. }) => vec![*row],
         // #4105: a typed Analytics read decodes its rows.
         Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
+        // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
+        Some(Callee::AiGenerateValue { value, .. }) => vec![*value],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)

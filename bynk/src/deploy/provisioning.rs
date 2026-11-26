@@ -1666,7 +1666,7 @@ mod tests {
                     log = log.display(),
                     seen = seen.display(),
                 );
-                scripted = Wrangler::scripted(&script, &root);
+                scripted = crate::cloudflare::Account::new(Wrangler::scripted(&script, &root));
                 &scripted
             }
             Tail::Ok | Tail::Fails => &recording,

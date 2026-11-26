@@ -49,6 +49,7 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub mod ai;
 pub mod analytics;
 pub(crate) mod applied_bounds;
 mod call_outcome;
@@ -941,6 +942,16 @@ pub enum Callee {
         /// Names the tail defines with `AS`, which a read field may take instead of a column.
         aliases: Vec<String>,
         sql: Option<String>,
+        span: Span,
+    },
+    /// #4099: `Ai.generateValue[T](model, request)`. The compiler writes `T`'s JSON Schema
+    /// (`schema`, compact JSON) into the call, and the reply is decoded as `value`.
+    AiGenerateValue {
+        value: TyId,
+        schema: String,
+        /// `schema` is `T`'s inside `{"value": …}` (`T` is not a record), which the call unwraps.
+        wrapped: bool,
+        /// The type argument, which names `T` where the editor shows the schema.
         span: Span,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under

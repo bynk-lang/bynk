@@ -13,6 +13,8 @@
 //! - **`--strict`** promotes *all* warnings (optional gaps, `npx`
 //!   provisionability, minor skew) to failures, for an all-green CI gate.
 
+mod account;
+
 use std::path::PathBuf;
 
 use bynk_driver::npm_install::PackageManager;
@@ -175,6 +177,11 @@ pub fn diagnose(tb: &dyn Toolbox, ctx: &Context, opts: &DoctorOptions) -> Report
         // so only its report carries the row.
         if root.is_some_and(declares_container) {
             rows.push(detect_docker(tb));
+        }
+        // #4056 Decision F: only a project that declares an account resource has a use for
+        // the API credentials, so only its report carries the row.
+        if root.is_some_and(account::declares_account_resources) {
+            rows.push(account::cloudflare_api_row(tb));
         }
         capabilities.push(capability(Capability::Deploy, rows));
     }
@@ -501,11 +508,31 @@ fn detect_package_manager(tb: &dyn Toolbox, root: Option<&std::path::Path>) -> R
 }
 
 /// Whether the project declares a `Container` (`capability X = Container …`):
-/// a text scan of its `.bynk` files, which skips dependency, build and VCS
-/// directories. A comment that spells the declaration counts, which only makes
-/// the Docker row louder than it needs to be.
+/// a text scan of its `.bynk` files ([`any_bynk_line`]). A comment that spells
+/// the declaration counts, which only makes the Docker row louder than it needs
+/// to be.
 pub(crate) fn declares_container(root: &std::path::Path) -> bool {
-    fn walk(dir: &std::path::Path, depth: usize) -> bool {
+    any_bynk_line(root, |line| capability_of(line, &["Container"]))
+}
+
+/// Whether `line` declares a capability of one of `kinds` (`capability X = Kind …`), the kind
+/// not merely a prefix of a longer name.
+pub(crate) fn capability_of(line: &str, kinds: &[&str]) -> bool {
+    line.trim_start().starts_with("capability ")
+        && line.split_once('=').is_some_and(|(_, rest)| {
+            let rest = rest.trim_start();
+            kinds.iter().any(|kind| {
+                rest.strip_prefix(kind).is_some_and(|after| {
+                    !after.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                })
+            })
+        })
+}
+
+/// Whether any line of the project's `.bynk` files satisfies `matches`: a text scan that skips
+/// dependency, build and VCS directories.
+pub(crate) fn any_bynk_line(root: &std::path::Path, matches: impl Fn(&str) -> bool) -> bool {
+    fn walk(dir: &std::path::Path, depth: usize, matches: &dyn Fn(&str) -> bool) -> bool {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return false;
         };
@@ -519,21 +546,14 @@ pub(crate) fn declares_container(root: &std::path::Path) -> bool {
                         name.as_ref(),
                         "node_modules" | "target" | "out" | "dist" | ".git"
                     )
-                    && walk(&path, depth + 1)
+                    && walk(&path, depth + 1, matches)
             } else {
                 name.ends_with(".bynk")
-                    && std::fs::read_to_string(&path).is_ok_and(|text| {
-                        text.lines().any(|l| {
-                            l.trim_start().starts_with("capability ")
-                                && l.split_once("= Container").is_some_and(|(_, rest)| {
-                                    !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_')
-                                })
-                        })
-                    })
+                    && std::fs::read_to_string(&path).is_ok_and(|text| text.lines().any(matches))
             }
         })
     }
-    walk(root, 0)
+    walk(root, 0, &matches)
 }
 
 /// #3477: Docker, which `bynk deploy` needs only to build a `Container`'s image

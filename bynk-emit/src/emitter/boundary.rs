@@ -108,6 +108,10 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                 Some(bynk_check::checker::Callee::AnalyticsSelect { row, .. }) => {
                     push_ground(commons.tys().intern(Ty::List(*row)), &mut roots);
                 }
+                // #4099: `Ai.generateValue[T]` decodes the reply as `T`.
+                Some(bynk_check::checker::Callee::AiGenerateValue { value, .. }) => {
+                    push_ground(*value, &mut roots);
+                }
                 _ => {}
             }
             let ExprKind::MethodCall { args, .. } = &e.kind else {

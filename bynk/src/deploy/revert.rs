@@ -1226,7 +1226,7 @@ fn revert_run(root: &Path, opts: &RevertOptions) -> Result<ExitCode, String> {
             manager: Some(bynk_driver::npm_install::system_tool_manager(root)),
         },
     );
-    let api = Wrangler::new(&probe.provenance, root);
+    let api = crate::cloudflare::Account::new(Wrangler::new(&probe.provenance, root));
     let account = LiveAccount { rest, api: &api };
     let planned = plan(
         &account,
