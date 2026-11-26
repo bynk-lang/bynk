@@ -1021,6 +1021,52 @@ on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor
   (`blob1`…`blob20`, in order).
 - `doubles` are numbers, at most 20, each finite (`double1`…`double20`).
 
+#### Typed points: `writeValue`
+
+A record type can be the data point's schema, so the order of the columns is
+written once, in the type, and not in every `DataPoint`:
+
+```bynk,fragment
+type Signup = {
+	@index plan: String,
+	channel: String,
+	country: String,
+	amount: Decimal,
+	seconds: Duration,
+}
+```
+
+```bynk,fragment
+on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+	let _ <- Signups.writeValue(Signup { plan: plan, channel: "web", country: "GB", amount: 9.99d, seconds: 2.seconds })
+	Created("counted")
+}
+```
+
+`writeValue` is lowered over the instance's `write`, so a point that is over a limit faults the
+same way and a test stubs and observes `Signups.write`. The type argument is the argument's record
+type unless you write it (`Signups.writeValue[Signup](…)`). The compiler computes the mapping from
+the record, in declaration order:
+
+| Field | Column |
+| --- | --- |
+| `String`, or a refined or opaque `String` | `blob1`, `blob2`, … |
+| a payload-less enum | a blob, the variant's name |
+| `Bool` | a blob, `"true"` or `"false"` |
+| `Int`, `Float` | `double1`, `double2`, … |
+| `Decimal` | a double, its float value (a double cannot hold every `Decimal` exactly) |
+| `Duration`, `Instant` | a double, in milliseconds (`Instant` since the epoch) |
+| one `@index` field, a `String` | `index1` |
+
+A record with over 20 blob or 20 double fields, a second `@index`, an `@index` that is not a
+`String`, or a field of any other type (a `List`, an `Option`, a nested record, `Bytes`) is
+`bynk.types.analytics_point_shape`, naming the field. Reordering the fields changes what each column
+holds, so keep a point's fields in the order its reports were written against; appending a field is
+safe. Use `write` for a point whose shape is not a record.
+
+The typed read, `AnalyticsSql.select[T]`, and the schema lock that refuses a reorder follow in later
+changes (#4105).
+
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the
 response, so it never delays one. Reading is [`AnalyticsSql`](#reading-events-analyticssql).

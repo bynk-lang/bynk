@@ -1,0 +1,41 @@
+context shop.cart
+
+// #4105: `Signups.writeValue(point)` writes a record as a data point, its
+// fields to blobs and doubles in declaration order (`@index` is the sampling
+// key), checked at compile time.
+
+consumes bynk
+consumes bynk.cloudflare { Analytics }
+
+type Plan = enum { Free, Pro }
+
+type Sku = String where NonEmpty
+
+type Signup = {
+	@index plan: String,
+	sku: Sku,
+	tier: Plan,
+	trial: Bool,
+	amount: Decimal,
+	seats: Int,
+	seconds: Duration,
+}
+
+type Hit = { path: String, ms: Float }
+
+capability Signups = Analytics
+
+service api from http {
+	on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
+		
+		let _ <- Signups.writeValue(Signup { plan: plan, sku: "sku-1", tier: Pro, trial: false, amount: 9.99d, seats: 3, seconds: 2.seconds })
+		Created("counted")
+	}
+}
+
+service hits {
+	on call(path: String) -> Effect[Int] by Caller given Signups {
+		let _ <- Signups.writeValue[Hit](Hit { path: path, ms: 1.5 })
+		Effect.pure(1)
+	}
+}

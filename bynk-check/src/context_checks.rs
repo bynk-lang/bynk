@@ -6648,6 +6648,17 @@ pub(crate) fn validate_field_names(
         for f in &rec.fields {
             let mut external: Option<(String, Span)> = None;
             for ann in &f.annotations {
+                // #4105: `@index` marks a data point's sampling key; it takes no argument.
+                if ann.name.name == "index" {
+                    if !ann.args.is_empty() {
+                        errors.push(CompileError::new(
+                            "bynk.types.field_annotation_unknown",
+                            ann.span,
+                            "`@index` takes no argument",
+                        ));
+                    }
+                    continue;
+                }
                 if ann.name.name != "name" {
                     errors.push(
                         CompileError::new(
@@ -6655,7 +6666,7 @@ pub(crate) fn validate_field_names(
                             ann.span,
                             format!("unknown field annotation `@{}`", ann.name.name),
                         )
-                        .with_note("the only field annotation is `@name(\"…\")`"),
+                        .with_note("the field annotations are `@name(\"…\")` and `@index`"),
                     );
                     continue;
                 }
