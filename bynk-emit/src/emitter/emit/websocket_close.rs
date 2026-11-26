@@ -7,7 +7,10 @@
 //! and runs it with `CloseInfo { code: 1011, reason: "error", clean: false }`.
 
 use super::websocket::WsOpenHost;
-use crate::ts_build::{await_expr, block_arrow, call, expr_stmt, ident, member};
+use crate::ts_build::{
+    await_expr, block, block_arrow, bool_lit, call, expr_stmt, ident, if_, member, num_lit,
+    return_, str_lit,
+};
 use bynk_syntax::ast::{Handler, TypeDecl};
 use bynk_ts::{TsClassMethod, TsExpr, TsParam, TsStmt, TsType};
 use std::collections::HashMap;
@@ -104,5 +107,37 @@ fn run_close_arrow(
             member(ident("this"), method),
             args,
         )))],
+    )
+}
+
+/// #3903: `if (__webSocketAuthExpired(__att)) { await __webSocketClosing(ws, __att, { code: 1008,
+/// reason: "authentication expired", clean: false }, <on close>); return; }`: a frame that arrives after
+/// the connection's credential expired closes it with `1008` and runs `on close` (once), without running
+/// `on message`. The close goes out first: the release `on close` performs closes a held connection with
+/// no code, which would otherwise reach the client in place of `1008`. Checked per frame, not by a timer,
+/// so an idle connection costs nothing.
+pub(super) fn expiry_check(
+    host: &WsOpenHost<'_>,
+    close: &Handler,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    deps_arg: &TsExpr,
+) -> TsStmt {
+    let closing = expr_stmt(await_expr(call(
+        ident("__webSocketClosing"),
+        vec![
+            ident("ws"),
+            ident("__att"),
+            TsExpr::object(vec![
+                ("code".to_string(), num_lit(1008)),
+                ("reason".to_string(), str_lit("authentication expired")),
+                ("clean".to_string(), bool_lit(false)),
+            ]),
+            run_close_arrow(host, close, types, deps_arg),
+            str_lit("first"),
+        ],
+    )));
+    if_(
+        call(ident("__webSocketAuthExpired"), vec![ident("__att")]),
+        block(vec![closing, return_(None)]),
     )
 }

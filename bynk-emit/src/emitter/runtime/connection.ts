@@ -308,7 +308,7 @@ function echoable(code: number): boolean {
   return Number.isInteger(code) && code >= 1000 && code <= 4999 && !UNSENDABLE_CLOSE_CODES.has(code);
 }
 
-function completeClose(ws: WsClosingSocket, info: WsCloseInfo, reply: "echo" | "error"): void {
+function completeClose(ws: WsClosingSocket, info: WsCloseInfo, reply: "echo" | "error" | "first"): void {
   try {
     if (reply === "error") {
       ws.close(1011, "error");
@@ -330,16 +330,20 @@ export async function webSocketClosing(
   attachment: unknown,
   info: WsCloseInfo,
   run: (info: WsCloseInfo) => Promise<void>,
-  reply: "echo" | "error" = "echo",
+  reply: "echo" | "error" | "first" = "echo",
 ): Promise<void> {
   const state = (attachment ?? {}) as { closed?: boolean };
+  // `first`: the server ends the connection with `info`'s code before `on close` runs. The release `on
+  // close` performs (a held connection's `remove`) closes the socket with no code, which would otherwise
+  // reach the client in place of this one (#3903: `1008 authentication expired`).
+  if (reply === "first") completeClose(ws, info, "echo");
   try {
     if (state.closed !== true) {
       ws.serializeAttachment({ ...state, closed: true });
       await run(info);
     }
   } finally {
-    completeClose(ws, info, reply);
+    if (reply !== "first") completeClose(ws, info, reply);
   }
 }
 
@@ -356,5 +360,20 @@ export async function webSocketErrored(
   await webSocketClosing(ws, attachment, { code: 1011, reason: "error", clean: false }, run, "error");
 }
 
+// #3903: whether the credential a connection was opened with has expired. The upgrade records the
+// token's `exp` (seconds since the epoch) in the socket's attachment; a frame arriving after it closes
+// the connection, so a connection cannot outlive its token's expiry (a hibernating connection can live
+// for days). Only the expiry is re-checked: a revoked token, or one signed with a secret that has since
+// been rotated, keeps acting until its own `exp`, which is why WebSocket tokens should be short-lived.
+// Checked per frame, not by a timer: an idle expired connection can do nothing, and a timer would wake
+// hibernating objects only to close it. The bound is the HTTP Bearer check's, `exp < now` with `now` in
+// whole seconds as `verifyBearerJwtHs256` reads it, so a connection is never closed sooner than an HTTP
+// request with the same token would be refused. A connection with no `exp` (a `None` upgrade, or one
+// accepted before this was recorded) never expires.
+export function webSocketAuthExpired(attachment: unknown, nowSeconds: number = Math.floor(Date.now() / 1000)): boolean {
+  const exp = (attachment as { exp?: unknown } | null)?.exp;
+  return typeof exp === "number" && exp < nowSeconds;
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketClosing as __webSocketClosing, webSocketErrored as __webSocketErrored, webSocketUpgradeResponse as __webSocketUpgradeResponse };
+export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketAuthExpired as __webSocketAuthExpired, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketClosing as __webSocketClosing, webSocketErrored as __webSocketErrored, webSocketUpgradeResponse as __webSocketUpgradeResponse };
