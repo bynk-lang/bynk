@@ -1437,6 +1437,27 @@ export function reportUnknownStoredKeys(agent: string, stored: object, zero: obj
   }
 }
 
+// #3793: `store new: Cell[T] replaces old` reads a record stored under `old` as `new`. Each
+// `[old, new]` pair moves `old`'s value to `new` unless the record already holds `new`, so a value
+// the new build wrote is never replaced by a stale one; `old` is dropped, so the next commit writes
+// only `new`. Returns `stored` itself when no pair applies, and a copy otherwise (the record read
+// from storage is never mutated). Pairs are most-recent-name first, so a field renamed twice is
+// read from whichever of its names the record holds.
+export function renameStoredFields(
+  stored: object,
+  renames: readonly (readonly [string, string])[],
+): object {
+  const has = (key: string): boolean => globalThis.Object.hasOwn(stored, key);
+  if (!renames.some(([old, name]) => has(old) && old !== name)) return stored;
+  const out: { [key: string]: unknown } = { ...(stored as { [key: string]: unknown }) };
+  for (const [old, name] of renames) {
+    if (!globalThis.Object.hasOwn(out, old) || old === name) continue;
+    if (!globalThis.Object.hasOwn(out, name)) out[name] = out[old];
+    delete out[old];
+  }
+  return out;
+}
+
 // State-migrations S2 (#2224 Decision D): the fault a step that throws
 // becomes. The thrown value is discarded, not logged: it can carry stored data.
 export function migrationFailed(agent: string, from: number): Error {

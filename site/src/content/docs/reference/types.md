@@ -1818,6 +1818,40 @@ The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token 
 duplicate and case checks run on the resolved text, and a diagnostic points at the reference
 and names the constant. Go-to-definition, hover and rename work on it.
 
+### Renaming a field: `replaces` {#field-replaces}
+
+A field renamed from an earlier name says so with `replaces` after its type (and refinement), before
+any default:
+
+```bynk,fragment
+type User = {
+	displayName: String replaces name,
+	age: Int replaces years = 18,
+}
+```
+
+`replaces` is contextual, so a field, a type or a value named `replaces` elsewhere is unaffected. The
+clause is a record field's, an event field's and a `store` field's; a sum variant's payload field has none.
+
+- **Decoding accepts both names.** `{"name": "Ada"}` and `{"displayName": "Ada"}` both decode to a
+  `User` whose `displayName` is `"Ada"`, on every path that decodes the record: a request body, a call
+  argument, `Json.decode`, an event payload. The new key wins when both arrive. A key absent under both
+  names takes the field's default, or `None` for an `Option`, as for any absent key. A field renamed
+  twice reads the name its clause gives; a payload from before an earlier rename needs its own clause.
+- **Encoding writes the new name only**, so a payload is never doubled and the rename can finish.
+- **A request is compatible, a response is not.** A callee that renames a request field still
+  understands a caller built against the old contract, so the contract diff reports it compatible. A
+  callee that renames a response field writes only the new key, which a caller built against the old
+  contract no longer finds, so it reports it breaking. An event field is read like a request
+  and recorded additive in `bynk.schema.lock`
+  ([Understand events](/book/concepts/events/understand-events/#renaming-an-event-field)).
+- **The old name must be free.** `replaces` cannot name the field itself, a field the record still
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`).
+- **`replaces` does not change what Bynk code sees.** The field is `displayName` everywhere in the
+  program: access, construction, defaults, refinements.
+
+For the stored and locked sides, see [Renaming a store field](/reference/agents/#rename-a-store-field).
+
 ### Field defaults {#field-defaults}
 
 A field may declare a default, `field: T = expr`. A literal may leave that field

@@ -1834,6 +1834,10 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
             // Opaque-type bodies only reference base types directly.
         }
         TypeBody::Record(r) => {
+            // #3793: the source-only rules for `replaces`.
+            for e in crate::field_renames::check_record(r) {
+                errors.push(e);
+            }
             let mut seen = HashMap::new();
             for f in &r.fields {
                 if let Some(prev_span) = seen.get(&f.name.name) {

@@ -2728,12 +2728,14 @@ mod classified {
             ty: Shape::Base("Bool".into()),
             preds: Vec::new(),
             defaulted: false,
+            renamed_from: Vec::new(),
         }];
         fields.extend(extra.iter().map(|(n, t)| Field {
             name: n.to_string(),
             ty: t.clone(),
             preds: Vec::new(),
             defaulted: false,
+            renamed_from: Vec::new(),
         }));
         fields.sort_by_key(|f| f.name.clone());
         ServiceShape {

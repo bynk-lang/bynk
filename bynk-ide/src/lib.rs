@@ -68,6 +68,7 @@ mod duration_completion;
 pub mod email_fallback;
 pub mod env_const;
 pub mod expected_type;
+pub mod field_rename;
 pub mod first_party_docs;
 pub mod header_completion;
 pub mod hover;

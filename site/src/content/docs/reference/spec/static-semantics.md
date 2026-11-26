@@ -1293,6 +1293,27 @@ between its `store` fields and its handlers.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
 
+**Renaming a `store` field.** `store New: Cell[T] replaces Old` declares that the
+`Cell` field `Old` was renamed to `New`.
+- **What may be named.** `Old` MUST NOT be the field itself, another field the agent
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Only a
+  `Cell` field MAY carry the clause (`bynk.store.replaces_collection`).
+- **What the lock does.** With a lock, `Old` MUST be a field the class's current
+  snapshot records, unless the rename has already been recorded
+  (`bynk.field.replaces_unknown`), and `New` MUST NOT be recorded beside it
+  (`bynk.field.replaces_conflict`). The reconcile renames the recorded field to `New`
+  before comparing, so a rename on its own is additive: the class's version increments
+  and the new snapshot lists `New` with `renamed_from` naming `Old` and the names `Old`
+  was itself renamed from. Earlier snapshots keep their names.
+- **What loading does.** A stored record is read under `New`, or under a recorded old
+  name when `New` is absent, after any `migrate` step and before the zero-merge and the
+  rehydration validation; `New` wins when both are present. The first commit writes
+  `New` alone.
+- **How long the clause stays.** The clause MUST stay while a snapshot at or above
+  the class's floor records the field under an old name
+  (`bynk.field.replaces_needed`). When none does, a build warns that it can be deleted
+  (`bynk.field.replaces_settled`).
+
 ### §5.4.4 Erasing an instance (#3931) {#erase}
 
 `self.erase()` is legal in an agent `on call` handler (not in `migrate`, an invariant, a `transition` or
@@ -2681,7 +2702,12 @@ schema registry, `bynk.schema.lock`. A new event starts at version 1, or at its
 `@schema(N)`. An unchanged shape keeps its version; an additive change, in which
 every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
-`bynk.event.non_additive_schema_change`. A declared `@schema(N)` MUST equal the
+`bynk.event.non_additive_schema_change`. A field declared `replaces old` is the
+recorded field `old` renamed: the reconcile renames the recorded field first, so a
+rename on its own is additive (it increments the version and records `renamed_from`
+on the field), and one beside another change is judged by that change. `old` MUST be
+a recorded field (`bynk.field.replaces_unknown`) and MUST NOT be recorded beside the
+new name (`bynk.field.replaces_conflict`). A declared `@schema(N)` MUST equal the
 version so computed (`bynk.event.schema_version_mismatch`). The computed version
 is the envelope's `schemaVersion`. A check (`bynk check`) and a test run
 (`bynk test`) reconcile against the committed registry the same way and report

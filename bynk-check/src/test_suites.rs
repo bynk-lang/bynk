@@ -4205,6 +4205,7 @@ pub fn register_call_record_types(
                 .iter()
                 .map(|p| RecordField {
                     annotations: Vec::new(),
+                    replaces: None,
                     documentation: None,
                     trivia: Default::default(),
                     name: p.name.clone(),
@@ -5404,6 +5405,7 @@ pub fn check_history_binding(
         .filter(|f| f.kind.head.name == "Cell" && f.kind.args.len() == 1)
         .map(|f| RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: f.name.clone(),
@@ -5490,6 +5492,7 @@ pub fn check_history_binding(
     let step_fields = vec![
         RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: Ident {
@@ -5506,6 +5509,7 @@ pub fn check_history_binding(
         },
         RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: Ident {
@@ -5519,6 +5523,7 @@ pub fn check_history_binding(
         },
         RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: Ident {
@@ -5535,6 +5540,7 @@ pub fn check_history_binding(
         },
         RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: Ident {

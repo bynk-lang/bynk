@@ -1731,6 +1731,31 @@
               "members": [
                 {
                   "type": "STRING",
+                  "value": "replaces"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "replaces",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
                   "value": "="
                 },
                 {
@@ -5309,6 +5334,31 @@
               "name": "store_annotation"
             }
           }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "replaces"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "replaces",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "CHOICE",

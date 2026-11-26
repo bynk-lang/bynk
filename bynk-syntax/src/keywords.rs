@@ -274,7 +274,7 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
     ),
     k(
         "replaces",
-        "Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one.",
+        "Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one. After a field's type (`name: T replaces old`, `store name: Cell[T] replaces old`) it renames the field: the old name is read where the field is stored, locked or decoded, and the new one is written.",
     ),
     k("store", "A persisted agent-state field."),
     k(

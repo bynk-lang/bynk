@@ -272,6 +272,12 @@ impl<'a> Parser<'a> {
             end_span = self.parse_refinement_annotations(&mut r)?;
             refinement = Some(r);
         }
+        // #3793: `name: T replaces old`, between the type (and its refinement) and the
+        // initialiser.
+        let replaces = self.parse_field_replaces(true)?;
+        if let Some(r) = &replaces {
+            end_span = r.span;
+        }
         // v0.11: an optional `= <expr>` initial-value, used by agent state
         // fields. Parsed for every record field; the checker restricts where it
         // is meaningful.
@@ -287,6 +293,7 @@ impl<'a> Parser<'a> {
             name: name.clone(),
             type_ref,
             refinement,
+            replaces,
             init,
             span: start.merge(end_span),
             // The caller takes a field's doc, as it does its comments.

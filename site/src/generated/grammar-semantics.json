@@ -1602,6 +1602,14 @@
   ],
   "record_field": [
     {
+      "code": "bynk.field.replaces_conflict",
+      "summary": "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields."
+    },
+    {
+      "code": "bynk.field.replaces_unknown",
+      "summary": "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename."
+    },
+    {
       "code": "bynk.types.field_annotation_unknown",
       "summary": "A record field carries an annotation other than `@name(\"…\")`."
     },
@@ -1892,6 +1900,26 @@
     {
       "code": "bynk.agents.non_zeroable_state_field",
       "summary": "An agent `store` field has no initialiser and no implicit zero value."
+    },
+    {
+      "code": "bynk.field.replaces_conflict",
+      "summary": "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields."
+    },
+    {
+      "code": "bynk.field.replaces_needed",
+      "summary": "A `store` field was renamed with `replaces`, the clause was deleted, and a stored version the lock still holds keeps the value under the old name."
+    },
+    {
+      "code": "bynk.field.replaces_settled",
+      "summary": "A `store` field's `replaces old` is no longer read: no stored version the lock holds keeps the value under the old name, so the clause can be deleted (a warning)."
+    },
+    {
+      "code": "bynk.field.replaces_unknown",
+      "summary": "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename."
+    },
+    {
+      "code": "bynk.store.replaces_collection",
+      "summary": "`replaces` renames a `Cell` store field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry the field's name, so it cannot be renamed this way."
     }
   ],
   "string_literal": [
