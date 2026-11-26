@@ -28,7 +28,7 @@ the upstream URL from `Secrets.get("RELAY_TARGET_URL")` rather than hard-coding 
 returning `ServerError` if it is unset. On `Some(url)` it re-encodes the verified
 event with `Json.encode`, builds a `POST` `Request` with
 `contentType: Some("application/json")` and no extra headers
-(`headers: Map.empty()`), and sends it onward with `Fetch.send`. A
+(`headers` defaults to empty), and sends it onward with `Fetch.send`. A
 successful response logs a line and returns `Ok("relayed")`; an `Err` returns
 `ServerError("upstream relay failed")`.
 

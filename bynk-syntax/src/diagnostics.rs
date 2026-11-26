@@ -4339,6 +4339,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
+        code: "bynk.queue.producer_never_sends",
+        blurb: "A refinement of `Producer`, such as `actor FromOrders = Producer where IsContext(shop.orders)`, names the Bynk contexts that may send to a queue's consumer. A context sends to a queue through a `Queue @name(\"…\")` instance it declares, and that instance is what signs its messages under the edge key between the two contexts. A named context that declares no instance of the queue never signs a message for it, so the name is dead configuration or a stand-in for the context that does send, and the messages that do arrive from the intended producer would be refused only at run time. Name a context that has a `Queue` for this queue, or declare the `Queue` in the context you meant. A dead-letter queue's consumer names the producers of the queue it dead-letters from, since a dead letter keeps the signed envelope its source received. A name that is no context of the project is `bynk.actor.unknown_context`.",
+        example: "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n\x20 delivery { deadLetter: None }\n\x20 on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
+    },
+    Explain {
         code: "bynk.queue.retry_delay_out_of_range",
         blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
         example: "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
@@ -10014,6 +10019,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
         &["delivery_policy"],
     )),
+    d(
+        "bynk.queue.producer_never_sends",
+        "A `Producer` refinement admits a context that declares no `Queue` for the queue, so it never sends to it.",
+    ),
     d(
         "bynk.queue.retry_delay_out_of_range",
         "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",

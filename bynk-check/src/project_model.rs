@@ -5924,6 +5924,8 @@ pub fn phase_bundle_composition_unprovided(
         tys,
         errors,
     );
+    // #4441: a `Producer` refinement names only contexts that produce to the queue.
+    crate::producer_admission::phase_producer_admission(parsed, groups, kinds, unit_tables, errors);
     // #3890: the whole-program call checks share this entry point, which both
     // pipelines call once the per-unit checks are done: a call the callee's
     // `Caller` refinement does not admit, and an `IsContext(…)` name that is no

@@ -166,7 +166,6 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 							url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
 							contentType: Some("application/json"),
 							authorization: Some(t.bearer()),
-							headers: Map.empty(),
 							body: Some(body),
 						}
 					)
