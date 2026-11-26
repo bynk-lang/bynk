@@ -105,7 +105,20 @@ pub(super) fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lower
                 }
             }
             InterpPart::Hole(hole) => {
-                holes.push(pre.lower_node(hole, cx));
+                let lowered = pre.lower_node(hole, cx);
+                // #3976: a `DecodeErrorKind` is a `{ tag }` value; it prints as its tag.
+                let is_kind = cx.commons().expr_types.get(&hole.id).is_some_and(|te| {
+                    matches!(&*cx.commons().tys().get(te.ty),
+                        bynk_check::checker::Ty::Named { name, .. } if name == "DecodeErrorKind")
+                });
+                holes.push(if is_kind {
+                    bynk_ts::TsExpr::Member {
+                        object: Box::new(lowered),
+                        property: "tag".to_string(),
+                    }
+                } else {
+                    lowered
+                });
                 // #2622: a `Decimal` prints as its canonical text, not as the
                 // host's `[object Object]`. #3977: an `Instant` and a `Duration` print as
                 // their `toString()` does.

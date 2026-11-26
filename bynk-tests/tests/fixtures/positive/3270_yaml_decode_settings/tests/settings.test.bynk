@@ -43,7 +43,7 @@ suite settings {
     match load(text) {
       Ok(_) => expect false
       Err(e) => {
-        expect e.kind == "RefinementViolation"
+        expect e.kind == RefinementViolation
         expect e.path == "$.nudges.after_days"
       }
     }
@@ -53,7 +53,7 @@ suite settings {
     match load("triage:\n  enabled: yes\n  labels: []\n") {
       Ok(_) => expect false
       Err(e) => {
-        expect e.kind == "StructuralMismatch"
+        expect e.kind == StructuralMismatch
         expect e.path == "$.triage.enabled"
       }
     }
@@ -91,7 +91,7 @@ suite settings {
   case "plain numbers are not strings" {
     match loadFlags("a: 1\nb: 2\nc: 3\nd: 4\n") {
       Ok(_) => expect false
-      Err(e) => expect e.kind == "StructuralMismatch"
+      Err(e) => expect e.kind == StructuralMismatch
     }
   }
 
@@ -99,7 +99,7 @@ suite settings {
     match load("triage: [unclosed\n") {
       Ok(_) => expect false
       Err(e) => {
-        expect e.kind == "Malformed"
+        expect e.kind == Malformed
         expect e.path == "$.triage"
       }
     }
@@ -125,7 +125,7 @@ suite settings {
     let deep = "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["
     match load(deep) {
       Ok(_) => expect false
-      Err(e) => expect e.kind == "LimitExceeded"
+      Err(e) => expect e.kind == LimitExceeded
     }
   }
 }

@@ -124,6 +124,6 @@ fn decodesChain(s: String) -> Bool {
 fn chainError(s: String) -> String {
   match Json.decode[Chain](s) {
     Ok(_) => "decoded"
-    Err(e) => e.kind.concat(" at ").concat(e.path).concat(": ").concat(e.message)
+    Err(e) => "\(e.kind) at \(e.path): \(e.message)"
   }
 }

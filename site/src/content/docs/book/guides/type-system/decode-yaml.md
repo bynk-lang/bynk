@@ -68,7 +68,7 @@ so the message can say *which* setting is wrong, not just "invalid".
 `DecodeError` is the same type `Json.decode` returns, with the same three fields
 (`kind`, `path`, `message`), so one `match` handles either decoder:
 
-```bynk
+```bynk,fragment
 commons settings {
 	type Settings = {
 		mode: String = "auto",
