@@ -5821,6 +5821,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
     },
     Explain {
+        code: "bynk.types.analytics_point_shape",
+        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
+        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -6659,7 +6664,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.secret_at_boundary",
         blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
-                stored, sent or encoded form: putting one in a record, event or `store` field, \
+                stored, sent or encoded form (nor has the `Authorization` made from one): putting one in a record, event or `store` field, \
                 or passing one into or out of a handler, would write the secret into data that \
                 is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
                 or a function parameter and use it where it is read, with `matches(candidate)` \
@@ -6673,7 +6678,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.secret_not_comparable",
         blurb: "`==` on text stops at the first character that differs, so how long it takes \
                 tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
-                never compared with `==` or `!=`, nor held in a type that is (a record or sum \
+                never compared with `==` or `!=` (and an `Authorization` not at all), nor held in a type that is (a record or sum \
                 that derives equality). Compare with `secret.matches(candidate)`, which takes \
                 the same time however the two differ, or call `reveal()` where the text itself \
                 is needed.",
@@ -10954,6 +10959,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A transition predicate does not have type `Bool`.",
     ),
     dg(
+        "bynk.types.analytics_point_shape",
+        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11472,11 +11482,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.secret_at_boundary",
-        "A `bynk` `Secret` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+        "A `bynk` `Secret` or `Authorization` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
     ),
     d(
         "bynk.types.secret_not_comparable",
-        "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
+        "`==` or `!=` on a `bynk` `Secret` or `Authorization`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",

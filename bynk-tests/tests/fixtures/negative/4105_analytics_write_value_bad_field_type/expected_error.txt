@@ -1,0 +1,1 @@
+bynk.types.analytics_point_shape

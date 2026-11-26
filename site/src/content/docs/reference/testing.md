@@ -2325,6 +2325,10 @@ record's fields are the operation's parameters (`{ msg: String }` for `Logger.lo
 `any`, indexing). There is no test-only iteration construct: "for every recorded
 call …" is `calls.all((c) => …)`.
 
+A parameter that is a [`Secret` or an `Authorization`](/reference/bynk-capabilities/#the-secret-type) is
+not recorded: its field is simply absent from the record, so a case that traces a call sees every
+other argument and never the secret.
+
 Recording is emitted **only** under `bynk test`; the deploy build calls the seam
 directly, so observation adds no production cost. Observation is *scenario-specific*
 — a claim about one case; a *universal* guarantee ("every payment audits, on every

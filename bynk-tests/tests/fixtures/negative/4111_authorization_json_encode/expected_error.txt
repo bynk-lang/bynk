@@ -1,0 +1,2 @@
+bynk.types.json_uncodable
+`Authorization` cannot be encoded as JSON

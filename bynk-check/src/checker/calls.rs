@@ -1957,6 +1957,18 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
+        // #4105: `writeValue[T]` on a derived `Analytics`, lowered over `write`.
+        if super::analytics::is_write_value(cap.derived_from.as_ref(), &method.name) {
+            return super::analytics::check_write_value(
+                &type_name.name,
+                method,
+                type_args,
+                args,
+                span,
+                expr_id,
+                ctx,
+            );
+        }
         if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
             return d1::check_typed_read(
                 cap.derived_from.as_ref(),
@@ -3121,7 +3133,8 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
-/// #4111: a method call on a `Secret`, or `None` when the receiver is not one.
+/// #4111: a method call on a `Secret` or an `Authorization`, or `None` when the receiver is
+/// neither.
 fn check_secret_call(
     recv_ty: TyId,
     method: &Ident,
@@ -3133,11 +3146,13 @@ fn check_secret_call(
     let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty) else {
         return None;
     };
-    if !crate::context_checks::is_secret_type(name, &ctx.input.types) {
-        return None;
-    }
+    let kind = ctx
+        .input
+        .types
+        .get(name)
+        .and_then(|decl| crate::context_checks::secret_kind(decl))?;
     let kop = SecretOp::from_name(&method.name);
-    let r = check_secret_method(method, kop, args, span, ctx);
+    let r = check_secret_method(kind, method, kop, args, span, ctx);
     Some(record_kernel(
         ctx,
         expr_id,

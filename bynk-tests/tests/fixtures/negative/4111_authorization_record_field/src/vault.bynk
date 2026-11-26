@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Authorization }
+
+type Holder = {
+    credential: Authorization,
+}

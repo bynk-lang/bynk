@@ -1,2 +1,2 @@
 bynk.types.secret_at_boundary
-a `Secret` cannot appear in a record field
+a `Token` cannot appear in a record field

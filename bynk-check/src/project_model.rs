@@ -2674,8 +2674,12 @@ pub fn check_function_type_boundary_items(
             CommonsItem::Type(t) => match &t.body {
                 TypeBody::Record(r) => {
                     check_polymorphic_recursion(t, types, errors);
-                    for f in &r.fields {
-                        reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                    // #4111: `bynk`'s own `Request` holds an `Authorization`, which is how a secret
+                    // reaches `Fetch`; its fields are not the ones a program declares.
+                    if !crate::context_checks::is_firstparty_decl(t) {
+                        for f in &r.fields {
+                            reject_fn_types(&f.type_ref, RECORD_FIELD, types, errors);
+                        }
                     }
                 }
                 TypeBody::Sum(s) => {

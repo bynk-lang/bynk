@@ -1,0 +1,36 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+type P = {
+	b1: String,
+	b2: String,
+	b3: String,
+	b4: String,
+	b5: String,
+	b6: String,
+	b7: String,
+	b8: String,
+	b9: String,
+	b10: String,
+	b11: String,
+	b12: String,
+	b13: String,
+	b14: String,
+	b15: String,
+	b16: String,
+	b17: String,
+	b18: String,
+	b19: String,
+	b20: String,
+	b21: String,
+}
+
+capability Signups = Analytics
+
+service s from http {
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given Signups {
+		let _ <- Signups.writeValue(P { b1: "x", b2: "x", b3: "x", b4: "x", b5: "x", b6: "x", b7: "x", b8: "x", b9: "x", b10: "x", b11: "x", b12: "x", b13: "x", b14: "x", b15: "x", b16: "x", b17: "x", b18: "x", b19: "x", b20: "x", b21: "x" })
+		Ok(1)
+	}
+}

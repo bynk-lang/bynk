@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Authorization }
+
+fn leak(a: Authorization) -> String {
+    a.reveal()
+}
