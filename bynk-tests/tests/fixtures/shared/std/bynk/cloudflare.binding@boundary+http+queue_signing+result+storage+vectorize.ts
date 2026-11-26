@@ -1749,17 +1749,21 @@ export class WorkersAi implements Ai {
       throw new Error("bynk.cloudflare.Ai.generateStream: an event is not a JSON object");
     }
     const e = event as Record<string, unknown>;
-    if (typeof e.response === "string") return e.response === "" ? undefined : e.response;
-    if (e.response === null) return undefined;
+    // `response` wins when it has text; an empty or `null` one falls through to `choices`, as some
+    // models send both shapes, so no text is dropped.
+    if (typeof e.response === "string" && e.response !== "") return e.response;
+    const emptyResponse = e.response === null || e.response === "";
     const choice = Array.isArray(e.choices) ? (e.choices[0] as { delta?: unknown } | null | undefined) : undefined;
     if (choice !== undefined && choice !== null && typeof choice === "object" && choice.delta !== null && typeof choice.delta === "object") {
       const content = (choice.delta as { content?: unknown }).content;
-      if (typeof content === "string") return content === "" ? undefined : content;
-      if (content === undefined || content === null) return undefined;
+      if (typeof content === "string" && content !== "") return content;
+      if (typeof content === "string" || content === undefined || content === null) return undefined;
     }
+    if (emptyResponse) return undefined;
     const keys = Object.keys(e);
-    // A `usage` report, with or without the padding field `p` the stream also carries.
-    if (keys.includes("usage") && keys.every((k) => k === "usage" || k === "p")) return undefined;
+    // A `usage` report: bare, with the padding field `p`, or the OpenAI-style final chunk
+    // (`choices: []` with `usage`).
+    if (keys.includes("usage") && (!Array.isArray(e.choices) || e.choices.length === 0)) return undefined;
     throw new Error(
       `bynk.cloudflare.Ai.generateStream: an event has no text and is not a known non-text one (keys: ${keys.sort().join(", ") || "none"})`,
     );
