@@ -330,6 +330,12 @@ pub(in crate::emitter) fn lower_system_schedule_call(
                     rest.push(ident("undefined"));
                 }
                 rest.push(str_lit(actor));
+                // A `Producer` refinement is acted as a Bynk context: `by Orders("shop.orders")`.
+                if let Some(identity) = cx.call_site_identity.clone() {
+                    rest.push(identity);
+                } else {
+                    rest.push(ident("undefined"));
+                }
             }
             return Some({
                 let nodes = rest;

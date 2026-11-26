@@ -252,3 +252,37 @@ test("a message a dead-letter consumer receives is verified under the queue that
   const other = wire(await legacy({ queue: "elsewhere", id: "m-2" }));
   assert.deepEqual(await admitQueueBody(other, "orders-dead", ["orders"], env, secrets), { ok: false, reason: "bad_signature" });
 });
+
+// A Bynk producer signs under the key of its edge to the consumer's context
+// (`BYNK_CALL_FROM_<PRODUCER>` here), and a `Producer` refinement decides which contexts are admitted.
+const fromOrders = (over: Partial<typeof parts> = {}) => signQueueMessage("edge-secret", { ...parts, ts: nowSecs(), ...over });
+const orders = (c: string) => c === "shop.orders";
+
+test("a context a Producer refinement admits is verified under its edge key, and reported as a context", async () => {
+  const env = { BYNK_CALL_FROM_SHOP__ORDERS: "edge-secret", D1_IDEMPOTENCY: claimDb() };
+  const r = admitted(await admitQueueBody(wire(await fromOrders()), "orders", [], env, {}, orders));
+  assert.deepEqual([r.from, r.context], ["shop.orders", true]);
+  // A declared foreign sender is not a context.
+  const both = { ...env, LEGACY_QUEUE_KEY: "legacy-secret" };
+  assert.equal(admitted(await admitQueueBody(wire(await legacy({ id: "m-9" })), "orders", [], both, secrets, orders)).context, false);
+});
+
+test("a context the refinement does not admit, or whose edge key is unset, is refused as an unknown sender", async () => {
+  const env = { BYNK_CALL_FROM_SHOP__ORDERS: "edge-secret", BYNK_CALL_FROM_SHOP__OTHER: "other-secret", D1_IDEMPOTENCY: claimDb() };
+  const other = wire(await signQueueMessage("other-secret", { ...parts, from: "shop.other", ts: nowSecs() }));
+  assert.deepEqual(await admitQueueBody(other, "orders", [], env, {}, orders), { ok: false, reason: "unknown_sender" });
+  const unset = { D1_IDEMPOTENCY: claimDb() };
+  assert.deepEqual(await admitQueueBody(wire(await fromOrders()), "orders", [], unset, {}, orders), { ok: false, reason: "unknown_sender" });
+  // No refinement admits no context: a signed message from one is refused, whatever key is set.
+  assert.deepEqual(await admitQueueBody(wire(await fromOrders()), "orders", [], env, secrets), { ok: false, reason: "unknown_sender" });
+});
+
+test("a message signed under another context's key, or a foreign secret, is not admitted as the context", async () => {
+  const env = { BYNK_CALL_FROM_SHOP__ORDERS: "edge-secret", D1_IDEMPOTENCY: claimDb() };
+  const forged = wire(await signQueueMessage("wrong-secret", { ...parts, ts: nowSecs() }));
+  assert.deepEqual(await admitQueueBody(forged, "orders", [], env, {}, orders), { ok: false, reason: "bad_signature" });
+  // A predicate that admits every name does not let a foreign actor's name through as a context.
+  const everyone = () => true;
+  const asLegacy = wire(await legacy({ id: "m-8" }));
+  assert.deepEqual(await admitQueueBody(asLegacy, "orders", [], { D1_IDEMPOTENCY: claimDb() }, {}, everyone), { ok: false, reason: "unknown_sender" });
+});

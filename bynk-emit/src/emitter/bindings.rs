@@ -135,7 +135,7 @@ fn context_bindings(
         // L7 (#2414): Workers Cache is a Worker-wide `[cache]` setting, not an
         // `env` binding.
         .filter(|(_, d)| !d.is_edge_cache())
-        .map(|(cap, d)| (cap, instance_binding(cap, d)))
+        .map(|(cap, d)| (cap, instance_binding(cap, d, unit.signed_queues.get(cap))))
         .collect();
     instances.sort_by(|a, b| a.0.cmp(b.0));
     let mut instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
@@ -176,7 +176,7 @@ fn dead_letter_bindings(table: &UnitTable) -> Vec<WorkerBinding> {
 /// The binding of derived instance `cap`, by its base capability: every
 /// instantiable kind by name, with no catch-all, so a new kind cannot silently
 /// bind as a KV namespace (P3, #2342).
-fn instance_binding(cap: &str, d: &DerivedInstance) -> WorkerBinding {
+fn instance_binding(cap: &str, d: &DerivedInstance, signs_to: Option<&String>) -> WorkerBinding {
     let capability = cap.to_string();
     let source = match (d.base_unit.as_str(), d.base_cap.as_str()) {
         (firstparty::CLOUDFLARE_UNIT, "Service") => BindingSource::ForeignService {
@@ -202,6 +202,7 @@ fn instance_binding(cap: &str, d: &DerivedInstance) -> WorkerBinding {
         (firstparty::CLOUDFLARE_UNIT, "Queue") => BindingSource::QueueProducer {
             capability,
             queue: d.queue().unwrap_or_default().to_string(),
+            signs_to: signs_to.cloned(),
         },
         (firstparty::CLOUDFLARE_UNIT, "StoredSecret") => BindingSource::StoredSecret {
             capability,
@@ -624,6 +625,7 @@ mod tests {
                 BindingSource::QueueProducer {
                     capability: cap("J"),
                     queue: cap("q"),
+                    signs_to: None,
                 },
             ),
             at(
