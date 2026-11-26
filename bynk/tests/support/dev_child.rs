@@ -13,6 +13,7 @@
 #[path = "../../../bynk-tests/tests/support/wrangler_warm.rs"]
 pub mod wrangler_warm;
 
+use std::ffi::OsStr;
 use std::fs::File;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -46,9 +47,34 @@ pub fn warm_wrangler() {
     wrangler_warm::warm_unless_installed();
 }
 
+/// #4555: `cmd` with Wrangler's usage telemetry off. The constant is the one `bynk-tests`' harness
+/// uses ([`wrangler_warm::TELEMETRY_OFF`], from the shared `wrangler_warm.rs`), so a test starts no
+/// Wrangler that tries to reach Cloudflare's telemetry hosts, wherever it runs. A child inherits it.
+pub fn telemetry_off(cmd: &mut Command) -> &mut Command {
+    cmd.env(
+        wrangler_warm::TELEMETRY_OFF.0,
+        wrangler_warm::TELEMETRY_OFF.1,
+    )
+}
+
+/// A command for `program`, a `wrangler`, an `npx`, or a probe of one (`program --version`), with
+/// Wrangler's telemetry off ([`telemetry_off`]). Every test that starts one builds it here.
+pub fn tool_command(program: impl AsRef<OsStr>) -> Command {
+    let mut cmd = Command::new(program);
+    telemetry_off(&mut cmd);
+    cmd
+}
+
+/// The `bynk` binary under test, with Wrangler's telemetry off ([`telemetry_off`]). `bynk dev` and
+/// `bynk test --against dev` start a Wrangler as a child, which inherits it. Every test that runs
+/// `bynk` where it may start one builds it here.
+pub fn bynk_command() -> Command {
+    tool_command(env!("CARGO_BIN_EXE_bynk"))
+}
+
 /// Whether `tool --version` runs.
 pub fn have(tool: &str) -> bool {
-    Command::new(tool)
+    tool_command(tool)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
