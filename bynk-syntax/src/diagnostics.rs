@@ -8166,16 +8166,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only.",
     ),
     d(
+        "bynk.deploy.context_not_found",
+        "`bynk deploy --context NAME` (or `--worker NAME`) named a context or Worker the build did not produce, or a context that is a member of a `[deploy.workers.<key>]` group, which deploys as a unit (use `--worker <key>`). With `--format json` the plan's `refusals` carries it with the `requested` name.",
+    ),
+    d(
         "bynk.deploy.contract_skew",
         "A worker was compiled against a contract its live dependencies no longer provide, or no longer provides the contract its live callers were compiled against, so `bynk deploy --context` refuses to ship it.",
+    ),
+    d(
+        "bynk.deploy.contracts_lock_unwritable",
+        "`bynk deploy --accept-compatible-skew` could not write the older contracts it records in `bynk.contracts.lock`, so it stopped before building or pushing anything. Fix the file's permissions or path and run it again. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
+        "bynk.deploy.contracts_manifest_unreadable",
+        "`bynk deploy` could not read the contracts manifest the build wrote for a Worker (in its directory under `.bynk/deploy/`), so it cannot check the Worker against the live contracts and stopped before pushing anything. Rebuild (`bynk build --target workers`) and run it again. With `--format json` the plan's `refusals` carries it with the `worker`.",
+    ),
+    d(
+        "bynk.deploy.dependency_not_deployed",
+        "`bynk deploy --context NAME` selected a Worker that binds to Workers the ledger has never recorded as deployed in this environment. A Service Binding to a Worker that does not exist fails at upload, so `bynk` stops first: deploy the whole project once to bring the topology up. With `--format json` the plan's `refusals` carries it with the `worker` and its `dependencies`.",
     ),
     d(
         "bynk.deploy.duplicate_hostname",
         "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups.",
     ),
     d(
+        "bynk.deploy.email_claim_refused",
+        "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
+    ),
+    d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",
+    ),
+    d(
+        "bynk.deploy.env_passthrough_conflict",
+        "`bynk deploy --env NAME` was given a second, contradictory `--env` or `--environment` after `--`, which would reach `wrangler deploy` as two flags and let wrangler's last-wins parsing pick silently while the ledger recorded the other. Pass one or the other. With `--format json` the plan's `refusals` carries it with the `environment` and the conflicting `flag`.",
     ),
     d(
         "bynk.deploy.foreign_contract_skew",
@@ -8186,16 +8210,40 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.ledger_unreadable",
+        "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.multiple_websocket_members",
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
+    ),
+    d(
+        "bynk.deploy.no_workers_built",
+        "`bynk deploy` found nothing to deploy: the build produced no Workers, because the project defines no contexts. Add a context, or check `[paths] include` in `bynk.toml`.",
     ),
     d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.preflight_failed",
+        "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
+    ),
+    d(
+        "bynk.deploy.project_undeployable",
+        "`bynk deploy` refused the project before preparing anything: its `[deploy.workers]` table does not read, or its build profile checks contracts, which a deployment does not. The message says which. With `--format json` the plan's `refusals` carries it.",
+    ),
+    d(
+        "bynk.deploy.rebuild_failed",
+        "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_source_unreadable",
+        "`bynk deploy` could not read the secrets source named by `--secrets-file` (a malformed or unreadable dotenv-style file), so it stopped before planning rather than fail on a missing secret partway through a run that has already pushed a Worker.",
     ),
     d(
         "bynk.deploy.service_name_conflict",
@@ -8206,6 +8254,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a context the project does not declare.",
     ),
     d(
+        "bynk.deploy.upload_order_cycle",
+        "The Workers a run deploys cannot be ordered, because the Service Bindings between them form a cycle (often through event delivery: a publishing context binds to each subscriber, and a subscriber on the cycle calls back into it). Cloudflare rejects a Worker uploaded before its binding target, so there is no valid upload order; move the services a subscriber calls out of the publishing context. With `--format json` the plan's `refusals` carries it with the `cycle`.",
+    ),
+    d(
         "bynk.deploy.worker_cycle",
         "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed.",
     ),
@@ -8213,6 +8265,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.workers_ignored_on_bundle",
         "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning).",
     )),
+    d(
+        "bynk.deploy.workers_unreadable",
+        "`bynk deploy` could not read what each built Worker declares from its generated `wrangler.toml` and manifests, so it stopped before planning. Rebuild and run it again; the message names the file.",
+    ),
     dg(
         "bynk.detach.in_agent_handler",
         "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive.",
