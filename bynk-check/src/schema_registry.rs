@@ -74,9 +74,11 @@ fn snapshot(event: &EventDecl) -> Vec<FieldShape> {
         .fields
         .iter()
         .map(|f| FieldShape {
-            name: f.name.name.clone(),
+            // #3975: an event field is recorded under its wire name, the key a payload carries.
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             ty: canon_type(&f.type_ref),
             default: f.init.is_some(),
+            renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
         })
         .collect();
     fields.sort_by(|a, b| a.name.cmp(&b.name));
@@ -155,13 +157,21 @@ enum Reconciled {
     },
 }
 
-fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>) -> Reconciled {
+fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: bool) -> Reconciled {
     let Some(stored) = stored else {
         return Reconciled::Baseline {
             fields: current.to_vec(),
         };
     };
     if current == stored.fields.as_slice() {
+        // #3793: a rename leaves every shape equal once the recorded field is renamed, but it
+        // is a change: the new build reads the old key, and the lock records the step.
+        if renamed {
+            return Reconciled::Additive {
+                fields: current.to_vec(),
+                bumped: stored.schema + 1,
+            };
+        }
         return Reconciled::Unchanged {
             fields: current.to_vec(),
             stored: stored.schema,
@@ -246,7 +256,17 @@ pub fn reconcile(
         events.sort_by_key(|(name, _)| *name);
         for (event_name, event) in events {
             let key = format!("{unit_name}.{event_name}");
-            let fields = snapshot(event);
+            let mut fields = snapshot(event);
+            // #3793: a `replaces` clause renames the recorded field before the comparison, so a
+            // rename on its own is additive and one beside another change is judged by that
+            // change.
+            let mut renamed = false;
+            let stored_view = existing.get(&key).map(|entry| {
+                let (view, plan) = crate::rename_plan::event_view(&mut fields, entry);
+                errors.extend(crate::rename_plan::event_errors(&plan, event, &key));
+                renamed = !plan.applied.is_empty();
+                view
+            });
             let declared = event.schema_version();
             let annotation_span = event
                 .annotations
@@ -255,73 +275,74 @@ pub fn reconcile(
                 .map(|a| a.span);
             let has_annotation = annotation_span.is_some();
 
-            let (effective_version, entry) = match reconcile_one(&fields, existing.get(&key)) {
-                Reconciled::Baseline { fields } => (
-                    declared,
-                    EventEntry {
-                        schema: declared,
-                        fields,
-                    },
-                ),
-                Reconciled::Unchanged { fields, stored } => {
-                    if has_annotation && declared != stored {
-                        errors.push(mismatch_error(
-                            event_name,
-                            annotation_span.unwrap(),
-                            declared,
+            let (effective_version, entry) =
+                match reconcile_one(&fields, stored_view.as_ref(), renamed) {
+                    Reconciled::Baseline { fields } => (
+                        declared,
+                        EventEntry {
+                            schema: declared,
+                            fields,
+                        },
+                    ),
+                    Reconciled::Unchanged { fields, stored } => {
+                        if has_annotation && declared != stored {
+                            errors.push(mismatch_error(
+                                event_name,
+                                annotation_span.unwrap(),
+                                declared,
+                                stored,
+                            ));
+                        }
+                        (
                             stored,
-                        ));
+                            EventEntry {
+                                schema: stored,
+                                fields,
+                            },
+                        )
                     }
-                    (
-                        stored,
-                        EventEntry {
-                            schema: stored,
-                            fields,
-                        },
-                    )
-                }
-                Reconciled::Additive { fields, bumped } => {
-                    if has_annotation && declared != bumped {
-                        errors.push(mismatch_error(
-                            event_name,
-                            annotation_span.unwrap(),
-                            declared,
+                    Reconciled::Additive { fields, bumped } => {
+                        if has_annotation && declared != bumped {
+                            errors.push(mismatch_error(
+                                event_name,
+                                annotation_span.unwrap(),
+                                declared,
+                                bumped,
+                            ));
+                        }
+                        (
                             bumped,
-                        ));
+                            EventEntry {
+                                schema: bumped,
+                                fields,
+                            },
+                        )
                     }
-                    (
-                        bumped,
-                        EventEntry {
-                            schema: bumped,
-                            fields,
-                        },
-                    )
-                }
-                Reconciled::NonAdditive {
-                    removed,
-                    retyped,
-                    added_without_default,
-                    lost_default,
-                } => {
-                    errors.push(non_additive_error(
-                        event,
-                        event_name,
-                        &removed,
-                        &retyped,
-                        &added_without_default,
-                        &lost_default,
-                    ));
-                    // Keep the old entry as-is: a build that fails here
-                    // must not perturb the registry (`compile_project`
-                    // skips the write on any error too — this just keeps
-                    // the in-memory document consistent with that).
-                    let old = existing
-                        .get(&key)
-                        .expect("a NonAdditive verdict only fires against a stored entry")
-                        .clone();
-                    (old.schema, old)
-                }
-            };
+                    Reconciled::NonAdditive {
+                        removed,
+                        retyped,
+                        added_without_default,
+                        lost_default,
+                    } => {
+                        errors.push(non_additive_error(
+                            event,
+                            event_name,
+                            &removed,
+                            &retyped,
+                            &added_without_default,
+                            &lost_default,
+                        ));
+                        // Keep the old entry as-is: a build that fails here
+                        // must not perturb the registry (`compile_project`
+                        // skips the write on any error too — this just keeps
+                        // the in-memory document consistent with that).
+                        let old = existing
+                            .get(&key)
+                            .expect("a NonAdditive verdict only fires against a stored entry")
+                            .clone();
+                        (old.schema, old)
+                    }
+                };
 
             effective.insert(key.clone(), effective_version);
             updated.insert(key, entry);
@@ -454,6 +475,7 @@ fn agent_snapshot(
                     path: p.path,
                     ty: p.structure,
                     default: p.default,
+                    renamed_from: p.renamed_from,
                 })
                 .collect();
             StoreShape {
@@ -462,6 +484,7 @@ fn agent_snapshot(
                 ty: structure.join(", "),
                 refinement: full.join(", "),
                 paths,
+                renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
             }
         })
         .collect();
@@ -509,6 +532,15 @@ fn backfill_paths(stored: &mut [StoreShape], current: &[StoreShape]) {
     }
 }
 
+/// `agent New replaces Old`, applied by this build, is remembered on the entry.
+fn remember_class_rename(entry: &mut AgentEntry, old: Option<String>) {
+    if let Some(old) = old
+        && !entry.renamed_from.contains(&old)
+    {
+        entry.renamed_from.push(old);
+    }
+}
+
 fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> AgentChange {
     if current == stored {
         return AgentChange::Unchanged;
@@ -547,7 +579,11 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
             retyped.push(format!("{name} ({})", paths.problems.join(", ")));
             continue;
         }
-        if n.ty != o.ty && paths.added.is_empty() && paths.variants.is_empty() {
+        if n.ty != o.ty
+            && paths.added.is_empty()
+            && paths.variants.is_empty()
+            && paths.renamed.is_empty()
+        {
             // The strings differ but no path explains it: never guess.
             retyped.push(name.to_string());
             continue;
@@ -560,6 +596,7 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
         );
         nested.extend(paths.gained.iter().map(|p| format!("{p} gained a default")));
         nested.extend(paths.variants.iter().map(|p| format!("{p} variant added")));
+        nested.extend(paths.renamed.iter().map(|r| format!("{r} renamed")));
         // The whole-value strings differ whenever a field is added, so a
         // refinement change is read position by position.
         if paths.refined {
@@ -585,6 +622,29 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
         return AgentChange::Unchanged;
     }
     AgentChange::Additive { refined, nested }
+}
+
+/// #3793: [`classify_agent_change_keyed`] after the live fields' `replaces` clauses rename the
+/// recorded ones, so a rename on its own is additive and one beside another change is judged by
+/// that change. The rename is returned for what the caller still needs of it.
+fn classify_renamed(
+    agent: &AgentDecl,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    key: &str,
+    current: &mut [StoreShape],
+    recorded: &[StoreShape],
+    errors: &mut Vec<CompileError>,
+) -> (AgentChange, crate::rename_plan::StoreRename) {
+    let rename = crate::rename_plan::store_rename(current, recorded, agent, key, errors);
+    let change = classify_agent_change_keyed(current, &rename.view, &key_roots(agent, types));
+    let change = match change {
+        AgentChange::Unchanged if rename.renamed => AgentChange::Additive {
+            refined: Vec::new(),
+            nested: Vec::new(),
+        },
+        other => other,
+    };
+    (change, rename)
 }
 
 /// #4037: the path roots of an agent's store *key positions*: a `Map`'s or `Cache`'s key
@@ -644,11 +704,25 @@ fn classify_agent_change_keyed(
     let AgentChange::Additive { nested, .. } = &change else {
         return change;
     };
+    // A rename (#4483) beneath a key is the same hazard: the key's canonical encoding names the
+    // field, so every stored key would change. `nested` records it as `old → new renamed`.
     let under_key: Vec<String> = nested
         .iter()
-        .filter_map(|n| n.strip_suffix(" added with a default"))
-        .filter(|p| roots.iter().any(|r| is_under(p, r)))
-        .map(|p| format!("{p} (added beneath a key: it would change every stored key's encoding)"))
+        .filter_map(|n| {
+            n.strip_suffix(" added with a default")
+                .map(|p| (p, "added"))
+                .or_else(|| {
+                    let renamed = n.strip_suffix(" renamed")?;
+                    Some((
+                        renamed.split_once(" → ").map_or(renamed, |(_, new)| new),
+                        "renamed",
+                    ))
+                })
+        })
+        .filter(|(p, _)| roots.iter().any(|r| is_under(p, r)))
+        .map(|(p, what)| {
+            format!("{p} ({what} beneath a key: it would change every stored key's encoding)")
+        })
         .collect();
     if under_key.is_empty() {
         return change;
@@ -676,6 +750,9 @@ struct PathChange {
     variants: Vec<String>,
     /// Whether a position both shapes have changed its predicates only.
     refined: bool,
+    /// #4483: each recorded record field a `replaces` renamed, as `old → new`. The stored value
+    /// is read under the new name, so it is additive, as a top-level rename is.
+    renamed: Vec<String>,
 }
 
 /// #2676 (Decisions A and E). Every recorded path must still exist with the
@@ -688,9 +765,13 @@ struct PathChange {
 /// value stored before it cannot name it, and a newer record is stopped on
 /// rollback by the `__v` marker.
 fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
+    let (stored, renamed) = apply_field_renames(stored, live);
     let old: BTreeMap<&str, &PathShape> = stored.iter().map(|p| (p.path.as_str(), p)).collect();
     let new: BTreeMap<&str, &PathShape> = live.iter().map(|p| (p.path.as_str(), p)).collect();
-    let mut change = PathChange::default();
+    let mut change = PathChange {
+        renamed,
+        ..PathChange::default()
+    };
     for (path, o) in &old {
         match new.get(path) {
             None => change.problems.push(format!("{path} removed")),
@@ -731,6 +812,40 @@ fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
         }
     }
     change
+}
+
+/// #4483: the recorded paths with each live record field's `replaces` applied, so a rename inside
+/// a stored record is compared like a top-level one. A live field that declares `replaces old`
+/// takes the recorded position `old` beside it, and everything beneath, when the recorded paths
+/// hold `old` and not the new name, and the live ones no longer hold `old` (a field kept beside
+/// the one that replaces it is two fields, and is judged as such). Shallower renames apply
+/// first, so a field renamed inside a renamed record is found under its new parent. Returns the
+/// renames made, as `old → new`.
+fn apply_field_renames(stored: &[PathShape], live: &[PathShape]) -> (Vec<PathShape>, Vec<String>) {
+    let mut paths = stored.to_vec();
+    let mut made = Vec::new();
+    let mut renames: Vec<(&str, &str)> = live
+        .iter()
+        .filter_map(|p| Some((p.path.as_str(), p.renamed_from.as_deref()?)))
+        .collect();
+    renames.sort_by_key(|(path, _)| path.len());
+    for (new, old_name) in renames {
+        let Some((parent, _)) = new.rsplit_once('.') else {
+            continue;
+        };
+        let old = format!("{parent}.{old_name}");
+        let holds = |paths: &[PathShape], p: &str| paths.iter().any(|s| s.path == p);
+        if !holds(&paths, &old) || holds(&paths, new) || holds(live, &old) {
+            continue;
+        }
+        for p in &mut paths {
+            if p.path == old || is_under(&p.path, &old) {
+                p.path = format!("{new}{}", &p.path[old.len()..]);
+            }
+        }
+        made.push(format!("{old} → {new}"));
+    }
+    (paths, made)
 }
 
 /// A path's rendering with predicates kept (recorded only where it differs from
@@ -829,6 +944,9 @@ pub struct AgentVersions {
     /// State-migrations S2 (#2224 Decision C): each valid `migrate from N`
     /// step, sorted by `N`.
     pub steps: Vec<MigrationStep>,
+    /// #3793: each `(old, new)` pair a `store` field's `replaces` asks loading to read: a record
+    /// stored under `old` is read as `new`. Only the names a retained stored version still uses.
+    pub renames: Vec<(String, String)>,
 }
 
 /// What the emitter needs to run one `migrate from N` step (#2224 Decision D).
@@ -1171,7 +1289,7 @@ pub fn reconcile_agents(
         for (agent_name, agent) in agents {
             let key = format!("{unit_name}.{agent_name}");
             live.insert(key.clone());
-            let current = agent_snapshot(agent, &types);
+            let mut current = agent_snapshot(agent, &types);
             // The step that carries the stored version across this build's
             // non-additive change, when one is declared and checked here.
             let mut transition_step: Option<(i64, Option<StepPlanParts>)> = None;
@@ -1226,6 +1344,9 @@ pub fn reconcile_agents(
                     }
                 }
             }
+            // #3793: `replaces` clauses the lock records no name for (`None`: a baseline).
+            let mut unrecorded: Option<Vec<String>> = None;
+            let mut previous: Vec<StoreShape> = Vec::new(); // #4483: recorded before this build
             let entry = match history {
                 None => AgentEntry {
                     version: 1,
@@ -1241,11 +1362,15 @@ pub fn reconcile_agents(
                     // `parse` refuses an entry whose `version` names no
                     // snapshot (`bynk.project.schema_registry_corrupt`), so
                     // there is always one to compare against.
-                    let stored = stored_entry
+                    let recorded = stored_entry
                         .current()
                         .map(|s| s.fields.as_slice())
                         .expect("a parsed agent entry has a snapshot at its version");
-                    match classify_agent_change_keyed(&current, stored, &key_roots(agent, &types)) {
+                    previous = recorded.to_vec();
+                    let (change, rename) =
+                        classify_renamed(agent, &types, &key, &mut current, recorded, errors);
+                    unrecorded = Some(rename.unrecorded.clone());
+                    match change {
                         AgentChange::Unchanged => {
                             // #2676 (Decision C): see `backfill_paths`.
                             let mut entry = stored_entry.clone();
@@ -1301,10 +1426,20 @@ pub fn reconcile_agents(
                                     }
                                 }
                                 None => {
-                                    let hint =
-                                        unambiguous_rename(&removed, &added, stored, &current);
+                                    let hint = unambiguous_rename(
+                                        &removed,
+                                        &added,
+                                        &rename.view,
+                                        &current,
+                                    );
                                     let mut err = non_additive_state_error(
-                                        agent, &key, from, stored, &removed, &retyped, &rekinded,
+                                        agent,
+                                        &key,
+                                        from,
+                                        &rename.view,
+                                        &removed,
+                                        &retyped,
+                                        &rekinded,
                                         &hint,
                                     );
                                     if unrecorded {
@@ -1325,13 +1460,16 @@ pub fn reconcile_agents(
                     }
                 }
             };
+            let renames = crate::rename_plan::store_renames(
+                agent,
+                &entry,
+                (&previous, &current),
+                unrecorded.as_deref(),
+                errors,
+            );
             // A rename applied by this build is remembered on the entry.
             let mut entry = entry;
-            if let Some(old) = renamed_now
-                && !entry.renamed_from.contains(&old)
-            {
-                entry.renamed_from.push(old);
-            }
+            remember_class_rename(&mut entry, renamed_now);
             // Every other step is checked against the reconciled entry and
             // the current shape; each valid one covers a range of versions.
             let mut steps = Vec::new();
@@ -1383,6 +1521,7 @@ pub fn reconcile_agents(
                     version: entry.version,
                     oldest_readable,
                     steps,
+                    renames,
                 },
             );
             updated.insert_agent(key, entry);
@@ -1473,23 +1612,43 @@ pub fn diff_against_lock(
             let Some(stored) = existing.get(&key) else {
                 continue;
             };
-            let current = snapshot(event);
-            let (class, detail) = match reconcile_one(&current, Some(stored)) {
+            let mut current = snapshot(event);
+            let (view, plan) = crate::rename_plan::event_view(&mut current, stored);
+            let (class, detail) = match reconcile_one(
+                &current,
+                Some(&view),
+                !plan.applied.is_empty(),
+            ) {
                 Reconciled::Baseline { .. } | Reconciled::Unchanged { .. } => continue,
                 Reconciled::Additive { .. } => {
-                    let old: Vec<&str> = stored.fields.iter().map(|f| f.name.as_str()).collect();
+                    let old: Vec<&str> = view.fields.iter().map(|f| f.name.as_str()).collect();
                     let added: Vec<&str> = current
                         .iter()
                         .map(|f| f.name.as_str())
                         .filter(|n| !old.contains(n))
                         .collect();
                     // Additive also covers a reorder and a field gaining a
-                    // default, where nothing is added.
-                    let detail = if added.is_empty() {
+                    // default, where nothing is added. #3793: and a rename.
+                    let mut parts = Vec::new();
+                    if !plan.applied.is_empty() {
+                        let pairs: Vec<String> = plan
+                            .applied
+                            .iter()
+                            .map(|(old, new)| format!("`{old}` to `{new}`"))
+                            .collect();
+                        parts.push(format!("field(s) renamed: {}", pairs.join(", ")));
+                    }
+                    if !added.is_empty() {
+                        parts.push(format!(
+                            "field(s) added with a default: {}",
+                            added.join(", ")
+                        ));
+                    }
+                    let detail = if parts.is_empty() {
                         "changed additively (a field gained a default, or fields were reordered)"
                             .to_string()
                     } else {
-                        format!("field(s) added with a default: {}", added.join(", "))
+                        parts.join("; ")
                     };
                     (ChangeClass::Compatible, detail)
                 }
@@ -1535,9 +1694,17 @@ pub fn diff_against_lock(
             let Some(stored) = stored_entry.current() else {
                 continue;
             };
-            let current = agent_snapshot(agent, &types);
-            let change =
-                classify_agent_change_keyed(&current, &stored.fields, &key_roots(agent, &types));
+            let mut current = agent_snapshot(agent, &types);
+            // #3793: a `replaces` clause renames the recorded field first.
+            let (stored_view, plan) = crate::rename_plan::store_view(&mut current, &stored.fields);
+            let mut change =
+                classify_agent_change_keyed(&current, &stored_view, &key_roots(agent, &types));
+            if !plan.applied.is_empty() && change == AgentChange::Unchanged {
+                change = AgentChange::Additive {
+                    refined: Vec::new(),
+                    nested: Vec::new(),
+                };
+            }
             if change == AgentChange::Unchanged {
                 continue;
             }
@@ -1546,15 +1713,23 @@ pub fn diff_against_lock(
                 .is_some_and(|e| e.version > stored_entry.version);
             let (class, detail) = match change {
                 AgentChange::Unchanged => continue,
-                AgentChange::Additive { nested, .. } => (
-                    ChangeClass::Compatible,
-                    // #2676 (Decision G): name what changed inside a value.
-                    if nested.is_empty() {
-                        "stored state changed additively".to_string()
-                    } else {
-                        format!("stored state changed additively ({})", nested.join(", "))
-                    },
-                ),
+                AgentChange::Additive { mut nested, .. } => {
+                    // #3793: and a rename.
+                    nested.extend(
+                        plan.applied
+                            .iter()
+                            .map(|(old, new)| format!("`{old}` renamed to `{new}`")),
+                    );
+                    (
+                        ChangeClass::Compatible,
+                        // #2676 (Decision G): name what changed inside a value.
+                        if nested.is_empty() {
+                            "stored state changed additively".to_string()
+                        } else {
+                            format!("stored state changed additively ({})", nested.join(", "))
+                        },
+                    )
+                }
                 AgentChange::NonAdditive {
                     removed,
                     retyped,
@@ -1683,6 +1858,17 @@ fn non_additive_state_error(
                  is a rename, deployed `{from}` values are not carried over to `{to}` — they \
                  would read as `{to}`'s zero"
             ));
+            // #3793: a `Cell` rename needs no step: `replaces` reads the old key.
+            if stored_fields
+                .iter()
+                .any(|f| f.name == *from && f.kind == "Cell")
+            {
+                err = err.with_note(format!(
+                    "if it is a rename, write `{to}`'s declaration with `replaces {from}` after \
+                     its type (`store {to}: Cell[…] replaces {from}`): the stored value is then \
+                     read under `{from}`, and no `migrate` step is needed"
+                ));
+            }
             // State-migrations S2 (#2224): name the step that carries it. A
             // `Cell` whose stored type is a plain name spells the old type
             // exactly; anything structural is described instead.
@@ -1725,7 +1911,68 @@ mod path_tests {
             ty: ty.to_string(),
             default,
             refinement: String::new(),
+            renamed_from: None,
         }
+    }
+
+    fn renamed(path: &str, ty: &str, from: &str) -> PathShape {
+        PathShape {
+            renamed_from: Some(from.to_string()),
+            ..at(path, ty, false)
+        }
+    }
+
+    #[test]
+    fn a_rename_inside_a_stored_record_needs_no_migration() {
+        // #4483: `store prefs: Cell[Prefs]`, `Prefs.width` renamed to `size`.
+        let stored = [at("prefs", "{}", false), at("prefs.width", "Int", false)];
+        let live = [
+            at("prefs", "{}", false),
+            renamed("prefs.size", "Int", "width"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.problems.is_empty(), "{:?}", change.problems);
+        assert_eq!(change.renamed, ["prefs.width → prefs.size"]);
+        // The same field under a `Map` value, and under a renamed parent.
+        let stored = [at("m#1", "{}", false), at("m#1.width", "Int", false)];
+        let live = [at("m#1", "{}", false), renamed("m#1.size", "Int", "width")];
+        assert!(compare_paths(&stored, &live).problems.is_empty());
+        let stored = [
+            at("a", "{}", false),
+            at("a.old", "{}", false),
+            at("a.old.x", "Int", false),
+        ];
+        let live = [
+            at("a", "{}", false),
+            renamed("a.new", "{}", "old"),
+            renamed("a.new.y", "Int", "x"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.problems.is_empty(), "{:?}", change.problems);
+        assert_eq!(change.renamed.len(), 2);
+    }
+
+    #[test]
+    fn a_rename_that_is_not_one_is_still_a_removal() {
+        let stored = [at("prefs", "{}", false), at("prefs.width", "Int", false)];
+        // No clause: removed and added without a default.
+        let live = [at("prefs", "{}", false), at("prefs.size", "Int", false)];
+        assert!(!compare_paths(&stored, &live).problems.is_empty());
+        // The old field is still there beside the one that claims to replace it.
+        let live = [
+            at("prefs", "{}", false),
+            at("prefs.width", "Int", false),
+            renamed("prefs.size", "Int", "width"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.renamed.is_empty());
+        assert!(!change.problems.is_empty());
+        // A rename that also retypes the field is a retype.
+        let live = [
+            at("prefs", "{}", false),
+            renamed("prefs.size", "Text", "width"),
+        ];
+        assert!(!compare_paths(&stored, &live).problems.is_empty());
     }
 
     #[test]
@@ -1828,6 +2075,7 @@ mod path_tests {
             ty: ty.to_string(),
             refinement: String::new(),
             paths,
+            renamed_from: Vec::new(),
         }
     }
 
@@ -1910,6 +2158,7 @@ mod tests {
     fn field(name: &str, ty: TypeRef, has_default: bool) -> bynk_syntax::ast::RecordField {
         bynk_syntax::ast::RecordField {
             annotations: Vec::new(),
+            replaces: None,
             documentation: None,
             trivia: Default::default(),
             name: ident(name),
@@ -1965,6 +2214,7 @@ mod tests {
             name: name.to_string(),
             ty: ty.to_string(),
             default,
+            renamed_from: Vec::new(),
         }
     }
 
@@ -1988,7 +2238,7 @@ mod tests {
     #[test]
     fn no_entry_baselines_silently() {
         let current = vec![shape("orderId", "String", false)];
-        match reconcile_one(&current, None) {
+        match reconcile_one(&current, None, false) {
             Reconciled::Baseline { fields } => assert_eq!(fields, current),
             _ => panic!("expected Baseline"),
         }
@@ -2001,7 +2251,7 @@ mod tests {
             schema: 2,
             fields: current.clone(),
         };
-        match reconcile_one(&current, Some(&stored)) {
+        match reconcile_one(&current, Some(&stored), false) {
             Reconciled::Unchanged { stored: v, .. } => assert_eq!(v, 2),
             _ => panic!("expected Unchanged"),
         }
@@ -2018,7 +2268,7 @@ mod tests {
             schema: 1,
             fields: old,
         };
-        match reconcile_one(&new, Some(&stored)) {
+        match reconcile_one(&new, Some(&stored), false) {
             Reconciled::Additive { bumped, .. } => assert_eq!(bumped, 2),
             _ => panic!("expected Additive"),
         }
@@ -2035,7 +2285,7 @@ mod tests {
             schema: 1,
             fields: old,
         };
-        match reconcile_one(&new, Some(&stored)) {
+        match reconcile_one(&new, Some(&stored), false) {
             Reconciled::NonAdditive { removed, .. } => {
                 assert_eq!(removed, vec!["region".to_string()])
             }
@@ -2051,7 +2301,7 @@ mod tests {
             schema: 1,
             fields: old,
         };
-        match reconcile_one(&new, Some(&stored)) {
+        match reconcile_one(&new, Some(&stored), false) {
             Reconciled::NonAdditive { retyped, .. } => {
                 assert_eq!(retyped, vec!["orderId".to_string()])
             }
@@ -2070,7 +2320,7 @@ mod tests {
             schema: 1,
             fields: old,
         };
-        match reconcile_one(&new, Some(&stored)) {
+        match reconcile_one(&new, Some(&stored), false) {
             Reconciled::NonAdditive {
                 added_without_default,
                 ..
@@ -2097,7 +2347,7 @@ mod tests {
             schema: 1,
             fields: old,
         };
-        match reconcile_one(&new, Some(&stored)) {
+        match reconcile_one(&new, Some(&stored), false) {
             Reconciled::NonAdditive { lost_default, .. } => {
                 assert_eq!(lost_default, vec!["region".to_string()])
             }

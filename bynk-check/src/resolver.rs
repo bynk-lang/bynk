@@ -66,6 +66,7 @@ mod compute_is_uses_commons_type_tests {
 
     fn bare_record_type(name: &str) -> Arc<TypeDecl> {
         Arc::new(TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             type_params: Vec::new(),
@@ -123,6 +124,7 @@ mod compute_is_uses_commons_type_tests {
         use bynk_syntax::ast::{SumBody, Variant};
         let sum = |file| {
             let variant = |n: &str| Variant {
+                annotations: Vec::new(),
                 name: Ident {
                     name: n.to_string(),
                     span: Span::default(),
@@ -1834,6 +1836,10 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
             // Opaque-type bodies only reference base types directly.
         }
         TypeBody::Record(r) => {
+            // #3793: the source-only rules for `replaces`.
+            for e in crate::field_renames::check_record(r) {
+                errors.push(e);
+            }
             let mut seen = HashMap::new();
             for f in &r.fields {
                 if let Some(prev_span) = seen.get(&f.name.name) {

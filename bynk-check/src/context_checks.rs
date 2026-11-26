@@ -187,6 +187,8 @@ fn decode_targets(e: &Expr, typed: &checker::TypedCommons) -> Vec<TyId> {
         },
         // #2865: a typed `D1` read decodes its row.
         Some(Callee::D1Select { row, .. }) => vec![*row],
+        // #4105: a typed Analytics read decodes its rows.
+        Some(Callee::AnalyticsSelect { row, .. }) => vec![*row],
         Some(
             Callee::Fn(decl, ws)
             | Callee::FnValue(decl, ws)
@@ -910,6 +912,10 @@ pub fn check_context_declarations(
 
     check_event_annotations(table, &mut errors);
 
+    // #4105: every handler body is checked, so each `AnalyticsSql.select[T]` can be written from the
+    // record its instance writes.
+    checker::analytics::resolve_selects(&mut typed.callees, &typed.types, tys, &mut errors);
+
     // State-migrations S3 (#2248): `replaces` / `removed agent` on their own
     // terms; what needs the schema lock is the reconcile's.
     check_class_declarations(table, &mut errors);
@@ -926,6 +932,8 @@ fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
     let mut agents: Vec<&AgentDecl> = table.agents.values().map(|a| &**a).collect();
     agents.sort_by_key(|a| a.span.start);
     for a in agents {
+        // #3793: the source-only rules for a `store` field's `replaces`.
+        errors.extend(crate::field_renames::check_store(a));
         let Some(old) = &a.replaces else { continue };
         if table.agents.contains_key(&old.name) {
             errors.push(
@@ -2241,6 +2249,26 @@ fn check_by_clause_contracts(
                     }
                     _ => "internal protocols (call/cron/queue) take an `Internal` actor",
                 }),
+            );
+        }
+        // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
+        // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
+        if matches!(protocol, ServiceProtocol::WebSocket { .. })
+            && by.is_sum()
+            && matches!(contract.scheme, Scheme::Oidc | Scheme::SignedCookie)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_not_admissible",
+                    actor_ref.span,
+                    format!(
+                        "a `{}` actor is not admissible as a member of a WebSocket actor sum",
+                        contract.scheme.as_str(),
+                    ),
+                )
+                .with_note(
+                    "a `from websocket` `on open` takes a `SignedCookie` or `Oidc` actor on its own (`by user: User`); an actor sum there takes `None` and `Bearer` members",
+                ),
             );
         }
         // v0.54: the `Caller` prelude actor yields a `CallerId` (the calling
@@ -3646,7 +3674,7 @@ fn check_service_decls(
     check_rejected_handlers(table, errors);
 
     // #3343: `@name("…")` on the fields of a request record.
-    validate_field_names(table, &typed.types, &typed.consts, errors);
+    validate_field_names(table, &typed.types, errors);
 
     let cf_is_std = cf_type_is_std(cross_context, table);
     // v0.9: validate HTTP handler shape and check for duplicate routes
@@ -3700,7 +3728,7 @@ fn check_service_decls(
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        validate_service_cors(service, errors);
+        validate_service_cors(service, table, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -4870,6 +4898,7 @@ fn check_agent_decls(
             .filter(|f| f.kind.head.name == "Cell" && f.kind.args.len() == 1)
             .map(|f| RecordField {
                 annotations: Vec::new(),
+                replaces: None,
                 documentation: None,
                 trivia: Default::default(),
                 name: f.name.clone(),
@@ -4882,6 +4911,7 @@ fn check_agent_decls(
         // Build a synthetic Record TypeDecl and stuff it into a *clone* of
         // the resolved types so handler bodies see it.
         let synthetic_state = TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -4981,6 +5011,7 @@ fn check_agent_decls(
         // Ident("self"), so `self` is given a one-off synthetic record type.
         let agent_self_name = format!("__{}Self", agent.name.name);
         let self_decl = TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -4992,6 +5023,7 @@ fn check_agent_decls(
                 trailing_comments: Default::default(),
                 fields: vec![RecordField {
                     annotations: Vec::new(),
+                    replaces: None,
                     documentation: None,
                     trivia: Default::default(),
                     name: Ident {
@@ -5252,11 +5284,96 @@ fn check_agent_decls(
 
 /// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
 /// cross-site cookie warning that depends on it.
-fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut Vec<CompileError>) {
     if let Some(policy) = &service.cors {
         validate_cors_policy(service, policy, errors);
     }
+    check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+}
+
+/// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
+/// `SignedCookie` actor must declare `cors { origins: [...], credentials: true }`. A browser sends the
+/// cookie on a cross-site upgrade by itself and WebSockets are not covered by CORS, so the upgrade
+/// checks `Origin` against exactly these origins (cross-site WebSocket hijacking); without a list
+/// there is nothing to check it against, and a wildcard would admit every site.
+fn check_ws_cookie_origins(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        return;
+    }
+    let Some(open) = service.handlers.iter().find(|h| {
+        matches!(h.kind, HandlerKind::Open)
+            && crate::actors::signed_cookie_seam_for(h, &table.actors).is_some()
+    }) else {
+        // Only a cookie upgrade checks `Origin`, so a `cors` policy on any other WebSocket service
+        // would read as an allow-list and restrict nothing: refuse it.
+        if let Some(policy) = &service.cors {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_not_http",
+                    policy.span,
+                    "a `cors { }` policy on a `from websocket` service takes effect only when its `on open` is `by` a `SignedCookie` actor",
+                )
+                .with_note(
+                    "the upgrade checks `Origin` against `origins` only for a cookie, which a browser sends from any site; a `Bearer` or `Oidc` token is offered by the page itself, so there is no origin list to apply",
+                ),
+            );
+        }
+        return;
+    };
+    // Of the policy's fields only `origins` and `credentials` apply to an upgrade.
+    for field in service.cors.iter().flat_map(|c| &c.fields) {
+        if matches!(field.name.name.as_str(), "headers" | "expose" | "maxAge") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_unknown_field",
+                    field.name.span,
+                    format!(
+                        "the `cors` field `{}` has no effect on a `from websocket` service",
+                        field.name.name
+                    ),
+                )
+                .with_note("only `origins` and `credentials` apply to a WebSocket upgrade"),
+            );
+        }
+    }
+    // The session-live check of a `sessions = true` actor is not made on an upgrade yet, so a revoked
+    // session could still open a socket: refuse the combination rather than accept it quietly.
+    if crate::actors::signed_cookie_seam_for(open, &table.actors).is_some_and(|s| s.sessions) {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                open.span,
+                "a `SignedCookie` actor with `sessions = true` is not admissible on a WebSocket `on open`",
+            )
+            .with_note(
+                "the upgrade does not check the session is still live, so a revoked session could open a socket; use a `SignedCookie` actor without `sessions`, or a `Bearer` actor",
+            ),
+        );
+    }
+    let ok = service
+        .cors
+        .as_ref()
+        .is_some_and(|c| c.credentials() && !c.is_wildcard() && !c.origins().is_empty());
+    if !ok {
+        errors.push(
+            CompileError::new(
+                "bynk.ws.cookie_needs_origins",
+                service.cors.as_ref().map_or(open.span, |c| c.span),
+                format!(
+                    "the `from websocket` service `{}` authenticates a `SignedCookie`, so it must declare `cors {{ origins: [...], credentials: true }}` with the exact origins that may open it",
+                    service.name.name
+                ),
+            )
+            .with_note(
+                "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
+            ),
+        );
+    }
 }
 
 /// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
@@ -5349,14 +5466,18 @@ fn validate_cors_policy(
 ) {
     // CORS is a browser-facing HTTP concern; it is meaningless on any other
     // protocol.
-    if !matches!(service.protocol, ServiceProtocol::Http) {
+    // #3904: a `from websocket` service takes one too, for its upgrade's `Origin` check.
+    if !matches!(
+        service.protocol,
+        ServiceProtocol::Http | ServiceProtocol::WebSocket { .. }
+    ) {
         errors.push(
             CompileError::new(
                 "bynk.http.cors_not_http",
                 policy.span,
-                "a `cors { }` policy is only valid on a `from http` service",
+                "a `cors { }` policy is only valid on a `from http` or `from websocket` service",
             )
-            .with_note("CORS governs cross-origin browser access, which only the HTTP surface has"),
+            .with_note("CORS governs cross-origin browser access, which only the HTTP and WebSocket surfaces have"),
         );
         return;
     }
@@ -5391,12 +5512,14 @@ fn validate_cors_policy(
         Some(expr) => match &expr.kind {
             ExprKind::ListLit(items, ..) if !items.is_empty() => {
                 for item in items {
-                    if !matches!(item.kind, ExprKind::StrLit(_)) {
-                        errors.push(CompileError::new(
+                    match &item.kind {
+                        // #4504: a literal a browser can never send matches nothing.
+                        ExprKind::StrLit(origin) => validate_cors_origin_shape(origin, item.span, errors),
+                        _ => errors.push(CompileError::new(
                             "bynk.http.cors_invalid_origins",
                             item.span,
                             "each `cors` origin must be a string literal or a `String` constant (e.g. \"https://app.example.com\" or \"*\")",
-                        ));
+                        )),
                     }
                 }
             }
@@ -5481,6 +5604,69 @@ fn validate_cors_policy(
             ),
         );
     }
+    refuse_null_origin_with_credentials(policy, errors);
+}
+
+/// #4504: `"null"` is the `Origin` a browser sends from a sandboxed frame or a `data:` page, which
+/// any other site can create, so naming it is as open as the wildcard. Beside `credentials: true`
+/// it would let any page act with the visitor's cookies and `Authorization`, so it is refused as
+/// the wildcard is. Without credentials it is compared like any other entry.
+fn refuse_null_origin_with_credentials(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    if !policy.credentials() {
+        return;
+    }
+    let Some(ExprKind::ListLit(items, ..)) = policy.field("origins").map(|e| &e.kind) else {
+        return;
+    };
+    for item in items {
+        if matches!(&item.kind, ExprKind::StrLit(origin) if origin == "null") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_wildcard_credentials",
+                    item.span,
+                    "`cors` cannot combine `credentials: true` with the origin `\"null\"`",
+                )
+                .with_note(
+                    "a browser sends `Origin: null` from a sandboxed frame or a `data:` page, \
+                     which any other site can create, so allowing it with credentials lets any \
+                     page act with the visitor's cookies; list the exact origins instead, or \
+                     set `credentials: false`",
+                ),
+            );
+        }
+    }
+}
+
+/// #4504: one literal `origins` entry. The router compares a request's `Origin` with it
+/// exactly, so an entry that is not in the form a browser sends (`scheme://host[:port]`, lower
+/// case, no path or trailing slash) matches nothing and every cross-origin request from that
+/// site is refused. An entry that named a constant was rewritten to its value before this runs,
+/// an `env(…)` constant to the value `bynk.toml` gives the environment being built.
+fn validate_cors_origin_shape(origin: &str, span: Span, errors: &mut Vec<CompileError>) {
+    let Some(problem) = crate::cors_origin::check(origin) else {
+        return;
+    };
+    let mut error = CompileError::new(
+        "bynk.http.cors_invalid_origins",
+        span,
+        format!("`cors` origin `{origin}` {}", problem.reason),
+    )
+    .with_note(
+        "the router compares the request's `Origin` with each entry exactly, and a browser sends \
+         `scheme://host[:port]` with the scheme and host in lower case, no path, query, \
+         fragment or trailing slash, and no default port; any other entry matches nothing, so \
+         every request from that site is refused",
+    );
+    if let Some(fixed) = problem.suggestion {
+        error = error.with_note(format!("write `{fixed}`"));
+        if problem.scheme_assumed {
+            error = error.with_note(
+                "the entry has no scheme, so `https` is assumed; use the scheme the site is \
+                 served on (a browser sends `http://…` from a page served over `http`)",
+            );
+        }
+    }
+    errors.push(error);
 }
 
 /// #3925: the `expose` list: header names that are RFC 9110 tokens, or `["*"]`
@@ -6595,16 +6781,14 @@ fn is_http_token(s: &str) -> bool {
             .all(|c| c.is_ascii_graphic() && !"()<>@,;:\\\"/[]?={}".contains(c))
 }
 
-/// #3343: `@name("…")` before a record field names the key it has on the wire,
-/// where that is not an identifier (`__Host-sid`). It is legal only on a record
-/// used as the `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter of an
-/// `on http` handler (the readers that take names off a request); it takes one
-/// string literal; and two fields may not share a wire name (nor, for cookies and
-/// query, differ only in case).
+/// #3343: what a request surface adds to a record field's `@name("…")`: a record used as the
+/// `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler
+/// is read by name, so a cookie or header name must be an RFC 9110 token, and names of a cookies
+/// or query record may not differ only in case. A wire name is legal on any record's field
+/// (#3975); the rules every wire name follows are `wire_names::validate_record`.
 pub(crate) fn validate_field_names(
     table: &UnitTable,
     types: &HashMap<String, Arc<TypeDecl>>,
-    consts: &HashMap<String, ConstDecl>,
     errors: &mut Vec<CompileError>,
 ) {
     let mut uses: HashMap<String, Vec<RequestSurface>> = HashMap::new();
@@ -6633,154 +6817,55 @@ pub(crate) fn validate_field_names(
             }
         }
     }
-    let mut names: Vec<&String> = types.keys().collect();
+    // #3975: the wire names themselves (the argument, an empty or repeated name) are checked on
+    // the unit's own types (`wire_names::validate_record`); what is left here is what a request
+    // surface adds: a cookie or header name must be a token, and names that differ only in case.
+    let mut names: Vec<&String> = uses.keys().collect();
     names.sort();
     for name in names {
-        let TypeBody::Record(rec) = &types[name].body else {
+        let Some(TypeBody::Record(rec)) = types.get(name).map(|t| &t.body) else {
             continue;
         };
-        if rec.fields.iter().all(|f| f.annotations.is_empty()) {
-            continue;
-        }
-        let surfaces = uses.get(name).cloned().unwrap_or_default();
+        let surfaces = &uses[name];
         let mut wire: Vec<(String, Span)> = Vec::new();
-        let mut reported_not_request = false;
         for f in &rec.fields {
-            let mut external: Option<(String, Span)> = None;
-            for ann in &f.annotations {
-                // #4105: `@index` marks a data point's sampling key; it takes no argument.
-                if ann.name.name == "index" {
-                    if !ann.args.is_empty() {
-                        errors.push(CompileError::new(
-                            "bynk.types.field_annotation_unknown",
-                            ann.span,
-                            "`@index` takes no argument",
-                        ));
-                    }
-                    continue;
-                }
-                if ann.name.name != "name" {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.field_annotation_unknown",
-                            ann.span,
-                            format!("unknown field annotation `@{}`", ann.name.name),
-                        )
-                        .with_note("the field annotations are `@name(\"…\")` and `@index`"),
-                    );
-                    continue;
-                }
-                let arg = match ann.args.as_slice() {
-                    [a] if a.label.is_none() => Some(a),
-                    _ => None,
+            let named = f
+                .annotations
+                .iter()
+                .find(|a| a.name.name == "name")
+                .and_then(|ann| Some((ann, f.wire_name()?)));
+            if let Some((ann, literal)) = named {
+                let arg = ann.args.first();
+                let at = match arg {
+                    Some(a) if a.from_const.is_some() => a.value.span,
+                    _ => ann.span,
                 };
-                let literal = arg.and_then(|a| match &a.value.kind {
-                    ExprKind::StrLit(s) => Some(s.clone()),
-                    _ => None,
-                });
-                let Some(literal) = literal else {
-                    let mut err = CompileError::new(
-                        "bynk.types.field_name_bad_arg",
-                        ann.span,
-                        "`@name` takes exactly one string literal, or a `String` constant bound to one",
+                let bad = if surfaces.contains(&RequestSurface::Cookies) && !is_http_token(&literal)
+                {
+                    Some(
+                        "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
                     )
-                    .with_note("write `@name(\"__Host-sid\")`, or `const SidCookie: String = \"__Host-sid\"` and `@name(SidCookie)`");
-                    // #3445: a bare name that did not resolve (pass `annotation_consts`).
-                    if let Some(a) = arg
-                        && let ExprKind::Ident(id) = &a.value.kind
-                    {
-                        err = err.with_note(match consts.get(&id.name) {
-                            Some(c) if matches!(c.ty, TypeRef::Base(BaseType::String, _)) => format!(
-                                "`{}` is declared `String`, but its value does not end at a string literal: every constant it passes through must be declared exactly `String`, and the last bound to a string literal",
-                                id.name,
-                            ),
-                            Some(c) => format!(
-                                "`{}` is declared `{}`; `@name` needs a constant declared exactly `String` and bound to a string literal (or to another such constant)",
-                                id.name,
-                                ts_type_ref_display(&c.ty),
-                            ),
-                            None => format!("`{}` is not a constant in scope", id.name),
-                        });
-                    }
-                    errors.push(err);
-                    continue;
-                };
-                // #3445: where a diagnostic about the value points: at the
-                // reference, where the author can act, when there is one.
-                let (at, origin) = match arg {
-                    Some(a) if a.from_const.is_some() => (a.value.span, Some(a)),
-                    _ => (ann.span, None),
-                };
-                if external.is_some() {
-                    errors.push(CompileError::new(
-                        "bynk.types.field_name_duplicate",
-                        ann.span,
-                        format!("field `{}` has more than one `@name`", f.name.name),
-                    ));
-                    continue;
-                }
-                if surfaces.is_empty() {
-                    // One error per record: the root cause is the record's use, not each `@name`.
-                    if reported_not_request {
-                        external = Some((literal, at));
-                        continue;
-                    }
-                    reported_not_request = true;
-                    errors.push(
-                        CompileError::new(
-                            "bynk.types.field_name_not_request_record",
-                            ann.span,
-                            format!(
-                                "`@name` is on a field of `{name}`, which is not the `cookies`, `headers`, `query` or `@form`/`@multipart` `body` record of an HTTP handler"
-                            ),
-                        )
-                        .with_note(
-                            "`@name` renames the key a request reader looks for; on any other record it would do nothing",
-                        ),
-                    );
+                } else if surfaces.contains(&RequestSurface::Headers) && !is_http_token(&literal) {
+                    Some(
+                        "a header name must be an RFC 9110 token (no spaces, quotes or separators)",
+                    )
                 } else {
-                    let bad = if surfaces.contains(&RequestSurface::Cookies)
-                        && !is_http_token(&literal)
-                    {
-                        Some(
-                            "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
-                        )
-                    } else if surfaces.contains(&RequestSurface::Headers)
-                        && !is_http_token(&literal)
-                    {
-                        Some(
-                            "a header name must be an RFC 9110 token (no spaces, quotes or separators)",
-                        )
-                    } else if literal.is_empty() {
-                        Some("a wire name must not be empty")
-                    } else {
-                        None
-                    };
-                    if let Some(why) = bad {
-                        let shown = match origin.and_then(|a| a.from_const.as_ref()) {
-                            Some(c) => format!(
-                                "`@name({})` is not a valid name here: {why} (`{literal}`)",
-                                c.name.name
-                            ),
-                            None => {
-                                format!("`@name(\"{literal}\")` is not a valid name here: {why}")
-                            }
-                        };
-                        let err = CompileError::new("bynk.types.field_name_invalid", at, shown);
-                        errors.push(match origin {
-                            Some(a) => crate::annotation_consts::with_const_origin(err, a),
-                            None => err,
-                        });
-                    }
+                    None
+                };
+                if let Some(why) = bad {
+                    errors.push(crate::wire_names::invalid_name(
+                        "bynk.types.field_name_invalid",
+                        "name",
+                        &literal,
+                        why,
+                        at,
+                        arg,
+                    ));
                 }
-                external = Some((literal, at));
+                wire.push((literal, at));
+            } else {
+                wire.push((f.name.name.clone(), f.name.span));
             }
-            let (key, span) = external.unwrap_or_else(|| (f.name.name.clone(), f.name.span));
-            wire.push((key, span));
-        }
-        if surfaces.is_empty() {
-            // No request surface: the wire-name checks would only echo the one error above.
-            continue;
         }
         let case_matters = surfaces
             .iter()
@@ -6788,14 +6873,15 @@ pub(crate) fn validate_field_names(
         let headers = surfaces.contains(&RequestSurface::Headers);
         for (i, (a, span)) in wire.iter().enumerate() {
             for (b, _) in &wire[..i] {
-                // #3911: header names compare without case, so a difference of case is the same name.
-                if a == b || (headers && a.eq_ignore_ascii_case(b)) {
+                // #3911: header names compare without case, so a difference of case is the same
+                // name. An exact repeat is reported with the record's other wire-name checks.
+                if a != b && headers && a.eq_ignore_ascii_case(b) {
                     errors.push(CompileError::new(
                         "bynk.types.field_name_duplicate",
                         *span,
                         format!("two fields of `{name}` read the same wire name `{a}`"),
                     ));
-                } else if case_matters && a.eq_ignore_ascii_case(b) {
+                } else if a != b && case_matters && a.eq_ignore_ascii_case(b) {
                     errors.push(
                         CompileError::new(
                             "bynk.types.field_name_case_conflict",
@@ -8677,26 +8763,6 @@ pub fn reject_fn_types(
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
-        // #3343: a record with `@name` fields is read off an HTTP request by name,
-        // so its JSON form is not its wire form: it may not be a body, a result,
-        // a store field, an event or a call argument.
-        TypeRef::Named(id)
-            if what != REQUEST_RECORD_PARAM && record_has_field_names(&id.name, types) =>
-        {
-            errors.push(
-                CompileError::new(
-                    "bynk.types.field_name_record_not_boundary",
-                    id.span,
-                    format!(
-                        "`{}` has `@name` fields, so it can only be a `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter, not {what}",
-                        id.name
-                    ),
-                )
-                .with_note(
-                    "a record's JSON form uses its field names, so a `@name` rename would split the two; use a separate record for this position",
-                ),
-            );
-        }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload
         // may carry one (that is how a `@multipart` body names its parts), but it
@@ -8725,14 +8791,6 @@ pub fn reject_fn_types(
         | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
     }
-}
-
-/// #3343: whether `name` is a record with a `@name`-annotated field.
-fn record_has_field_names(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
-    matches!(
-        types.get(name).map(|t| &t.body),
-        Some(TypeBody::Record(r)) if r.fields.iter().any(|f| !f.annotations.is_empty())
-    )
 }
 
 /// #3276: `bynk.types.file_at_boundary` for a `File`, or a type that carries one,

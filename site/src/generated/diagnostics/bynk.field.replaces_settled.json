@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.field.replaces_settled",
+  "constructs": [
+    "store_field"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `store` field's `replaces old` is no longer read: no stored version the lock holds keeps the value under the old name, so the clause can be deleted (a warning)."
+}

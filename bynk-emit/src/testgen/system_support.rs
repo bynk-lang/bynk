@@ -1872,14 +1872,20 @@ fn typed_url(
     let types = &types;
     request_url_with(path, query.clone(), |name| {
         let id = ident(crate::emitter::ts_ident(name));
-        let kind = h
-            .params
-            .iter()
-            .find(|p| p.name.name == name)
+        let param = h.params.iter().find(|p| p.name.name == name);
+        let kind = param
             .map(|p| crate::emitter::workers_entry::query_leaf_kind(&p.type_ref, types, false));
         match kind {
-            // An enum is in memory a `{ tag }`: its segment is the variant's name.
-            Some("enum") => call(ident("__cookieValue"), vec![str_lit("enum"), id]),
+            // An enum is in memory a `{ tag }`: its segment is the variant's wire name (#3975).
+            Some("enum") => {
+                let mut args = vec![str_lit("enum"), id];
+                if let Some(names) = param.and_then(|p| {
+                    crate::emitter::workers_entry::enum_wire_names(&p.type_ref, types)
+                }) {
+                    args.push(names);
+                }
+                call(ident("__cookieValue"), args)
+            }
             // A `Decimal` is in memory a `{ coefficient, scale }`: its segment is its text form.
             Some("decimal") => {
                 runtime_use.note_decimal("__bynkDecimalToString");

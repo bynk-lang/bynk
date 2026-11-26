@@ -297,7 +297,7 @@ test("the credential is hidden from the handler's raw cookie view and typed reco
   assert.deepEqual(requestCookies(r).names(), ["theme", "__Host-session"]);
   const fields = [{ name: "sid", wire: "__Host-session", kind: "string", list: false, optional: true }] as never;
   const shown = cookieObject(r, fields);
-  assert.deepEqual(shown.ok && shown.value, { sid: "tok" });
+  assert.deepEqual(shown.ok && shown.value, { "__Host-session": "tok" });
   const hidden = cookieObject(r, fields, "__Host-session");
   assert.deepEqual(hidden.ok && hidden.value, {});
 });
@@ -442,7 +442,7 @@ test("requestHeaders drops the Cookie header when the session cookie was the onl
 test("a cookie issued without a session carries no `sid`, so a stateless actor's cookies are unchanged", async () => {
   const c = await issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW);
   const r = await verifySignedCookie(c.value, KEYS, "User", TTL, NOW);
-  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada" } });
+  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada", exp: NOW_S + TTL } });
 });
 
 test("`register` runs before the cookie is signed and the signed `sid` is the one it was given", async () => {
@@ -454,7 +454,7 @@ test("`register` runs before the cookie is signed and the signed `sid` is the on
   assert.equal(seen[0]!.exp, (NOW_S + TTL) * 1000);
   assert.equal(seen[0]!.now, NOW);
   const r = await verifySignedCookie(c.value, KEYS, "User", TTL, NOW);
-  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada", sid: seen[0]!.sid } });
+  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada", sid: seen[0]!.sid, exp: NOW_S + TTL } });
 });
 
 test("a session id is fresh for each issue", async () => {

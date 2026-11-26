@@ -607,6 +607,64 @@ storage.
 - **Tests** observe the reset by calling a read handler, as a user of the agent would
   ([guide](/book/guides/agents-and-state/delete-a-users-data/)).
 
+## Data residency: `@jurisdiction` {#jurisdiction}
+
+`@jurisdiction("eu")` (or `"fedramp"` or `"us"`) before `agent` (#3819) keeps every instance's state in that
+Cloudflare jurisdiction:
+
+```bynk,fragment
+@jurisdiction("eu")
+agent Learner {
+	key id: String
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+```
+
+The values are the ones an `R2` bucket and a `D1` database take. The annotation is on the agent, and
+there is no context-wide default. It is written once and takes one string literal; a second
+`@jurisdiction`, a value that is not `"eu"`, `"fedramp"` or `"us"`, or an argument that is not a literal is
+`bynk.agent.bad_annotation`. It combines with `@busyAfter` in either order.
+
+An agent's calls, `bynk test` and the generated client are unchanged. The generated Worker reaches the
+agent's Durable Object through `namespace.jurisdiction("eu")`, so every caller (a handler, a service,
+a WebSocket route) mints the same restricted id. The Worker's configuration is unchanged: a
+jurisdiction belongs to the id, not to the binding or the class.
+
+**It cannot change after deploy.** An id minted through a jurisdiction-restricted namespace is a
+different id from the unrestricted one for the same name, so adding, changing or dropping the
+annotation on a deployed agent would orphan every existing instance, and nothing moves the data.
+`bynk deploy` records the jurisdiction each class was pushed under in `bynk.deploy.lock`
+(`agent_jurisdictions`), and a plan that differs prints
+
+```text
+change jurisdiction of durable object shop.Learner (none → eu; its existing instances are orphaned, irreversibly; needs --confirm-jurisdiction shop.Learner)
+```
+
+(`bynk deploy --dry-run` shows it and changes nothing). The deploy refuses until you confirm it by
+name, at the prompt or with `--confirm-jurisdiction shop.Learner` (repeatable); `--yes` never stands
+in, and a flag for a class whose jurisdiction does not change is refused, unless the ledger already
+records the class (an earlier deploy applied the change, so a flag left in a CI script is harmless). A
+deployed Worker whose ledger predates this record reads as unrestricted, which is what every agent
+was, so adding `@jurisdiction` to an agent you already deployed asks for the confirmation. Once the
+ledger records a Worker's classes, a class added later is new and asks for nothing, and a renamed
+class (`agent New replaces Old`) is compared with the old class's jurisdiction, since a rename keeps
+the instances.
+
+**Locally.** `bynk dev` and `wrangler dev` run workerd, which does not implement jurisdictions: it
+throws `Jurisdiction restrictions are not implemented in workerd`. Only on that exact message, the
+generated Worker uses the unrestricted namespace and warns once per isolate. Any other failure
+throws, so a deployed Worker can never silently lose the restriction. A jurisdiction is not visible
+from Bynk, in a query or in `bynk test`. Cloudflare reports it inside the object, as `ctx.id.jurisdiction`
+in a Durable Object (the value survives a round trip through the id's string form), which is where a live
+check can read it.
+
+See also [keep a project's data in one jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/).
+
 ## Renaming and removing an agent
 
 Once `bynk.schema.lock` records an agent class, it can't simply disappear from
@@ -625,6 +683,56 @@ source (`bynk.agent.class_removed`); declare what happens to its stored data.
   for this context (`bynk.agent.replaces_unknown`).
 - **Remove the declaration once it's stale.** Keep each declaration until a deploy
   reports Cloudflare's `stale_tombstone` notice for it, then delete it.
+
+## Renaming a store field {#rename-a-store-field}
+
+A `Cell` store field is renamed with `replaces` after its type, naming the field's old name:
+
+```bynk,fragment
+agent Cart {
+	key id: String
+	store owner: Cell[String] replaces customer = ""
+
+	on call owner() -> Effect[String] {
+		owner
+	}
+}
+```
+
+Without the clause, renaming `customer` to `owner` is a removal plus an addition: deployed `customer`
+values are not carried over, and the build is refused (`bynk.agent.non_additive_state_change`). With it:
+
+- **The old key is read.** A record stored under `customer` loads as `owner`. When a record holds both
+  (a stale `customer` beside an `owner` the new build wrote), `owner` wins. The first commit writes
+  `owner` alone; `customer` is dropped.
+- **The lock records it and the change is additive.** The class's version goes up by one, the new
+  snapshot lists `owner` with `renamed_from = ["customer"]`, and the earlier snapshots keep
+  `customer`, so a record stored at an earlier version is still read. A rename beside another additive
+  change (a field added, a record field gained with a default) is judged by that change; beside a
+  retype or a removal it is still refused.
+- **It needs a recorded field.** `replaces` must name a field the lock records for this class
+  (`bynk.field.replaces_unknown`), and not one the lock records beside the new name
+  (`bynk.field.replaces_conflict`). It cannot name the field itself, a field the agent still declares, or a
+  name another field replaces (`bynk.field.replaces_conflict`).
+- **A `Cell`, a `Set` or a `Map`.** A `Map` or `Set` keeps each entry under a storage key that carries the
+  field's name, so the first load after the deploy moves its entries to the new name, in batches (a
+  collection's cost grows with its size, and a crash part-way resumes on the next
+  load; a rolled-back deploy that wrote under the old name is moved on the next roll-forward). A record a
+  [`migrate from` step](#migrations) covers is left for the step, which reads the old name. A `Cache`, a `Log`
+  and a `Map` with `@indexed` or `@unique` are not renamed this way yet
+  (`bynk.store.replaces_collection`): keep the collection's name, or move its entries with a
+  [`migrate from` step](#migrations).
+- **Keep the clause while a version needs it.** While any stored version the lock still holds keeps the
+  value under the old name, deleting the clause would read those records as the field's zero, so the build is
+  refused (`bynk.field.replaces_needed`). Once `bynk migrate` has raised the class's [floor](#the-floor) past
+  them, the clause is no longer read, and the build warns (`bynk.field.replaces_settled`) that it can be
+  deleted. A field renamed again keeps the whole history, so a record from before either rename is still read.
+
+A rename carried by a `migrate from` step is unchanged: the step names the old shape's fields itself.
+A record type used inside a `store` value is not renamed this way; a `replaces` on one of its fields is
+read from the wire (see [Renaming a field](/reference/types/#field-replaces)) but the lock still judges the
+stored shape by name, so change it with a `migrate` step. For the whole picture, see
+[Rename a field safely](/book/guides/type-system/rename-a-field-safely/).
 
 ## Addressing and calling
 

@@ -557,7 +557,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.agent.bad_annotation",
-        blurb: "An agent has one annotation, `@busyAfter(<Duration>)`, written once, immediately before `agent`, taking a single `Duration` literal such as `5.seconds`. Another name, a second `@busyAfter`, or an argument that is not one `Duration` literal (a label, a second argument, a number, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)`, or drop the annotation.",
+        blurb: "An agent has two annotations, each written once, immediately before `agent`: `@busyAfter(<Duration>)`, taking a single `Duration` literal such as `5.seconds`, and `@jurisdiction(\"eu\")`, taking one string literal that is `\"eu\"`, `\"fedramp\"` or `\"us\"`, which keeps every instance's state in that jurisdiction. Another name, a repeated annotation, or an argument that is not one such literal (a label, a second argument, a number, an unknown jurisdiction, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)` or `@jurisdiction(\"eu\")`, or drop the annotation.",
         example: "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
     },
     Explain {
@@ -837,6 +837,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
     },
     Explain {
+        code: "bynk.analytics.mapping_changed",
+        blurb: "`Signups.writeValue(point)` writes a record's fields to `blob1…`, `double1…` and `index1` by position, and a point already written keeps its positions. Moving a field, changing its kind (text to number, a `Bool` to a `String`), removing it, or changing the `@index` field changes what every reader of the old points sees in a column, and nothing else would notice, so bynk.schema.lock records the mapping of each instance under `[analytics]` and a build that finds a different one fails until the change is accepted. Appending a field, and renaming one in place, are not changes and the lock follows them. If the new mapping is intended, run `bynk lock accept-analytics <Instance>` (or `--all`) and commit the lock with the change; otherwise put the record back and add new fields at the end.",
+        example: "// cart.bynk, with `Signups` recorded as blob1 = country, blob2 = channel\ntype Signup = { @index plan: String, channel: String, country: String }    // ✗ the columns swapped\n\ntype Signup = { @index plan: String, country: String, channel: String }    // ✓ the recorded order",
+    },
+    Explain {
         code: "bynk.asset.duplicate",
         blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
                 name once: a second `asset style` would leave `style` meaning two files. Give each \
@@ -985,7 +990,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. \
                 The value must be a literal of the option's kind, and one the platform accepts: \
                 `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, \
-                `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@tls` (on a `MySql`) `\"required\"`, \
+                `@jurisdiction` `\"eu\"`, `\"fedramp\"` or `\"us\"`, `@tls` (on a `MySql`) `\"required\"`, \
                 `\"verify-ca\"` or `\"verify-identity\"`, `@worker` a Worker name and `@name` a \
                 queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name \
                 may also hold `_`). Each option is given once, and an `@worker` must name a Worker \
@@ -1763,7 +1768,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.email.bad_tag",
-        blurb: "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` (or `x-`, header names are case-insensitive) and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map written in a handler body that breaks this is refused when the program compiles; one built elsewhere, in a helper function or at run time, has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
+        blurb: "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` (or `x-`, header names are case-insensitive) and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map that breaks this is refused when the program compiles, wherever it is written, in a handler body or in a helper function; one built at run time has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
         example: "on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"Subject\", \"urgent\"),   // ✗ not an `X-` header\n    })\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"X-Ticket\", \"urgent\"),   // ✓\n    })\n}",
     },
     Explain {
@@ -2088,6 +2093,29 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.exports.undeclared_type",
         blurb: "An `exports` clause lists types this context declares, to make them visible to the contexts that consume it. A name the context does not declare has nothing to export: it is usually a misspelling, or a type that is declared elsewhere. Correct the name, or declare the type in this context. A name in `exports capability` that is not declared is `bynk.exports.undeclared_capability`.",
         example: "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
+    },
+    Explain {
+        code: "bynk.field.replaces_conflict",
+        blurb: "`replaces old` says a field was renamed from `old`: its stored value, a locked event's recorded field and an incoming wire key under the old name are all read as this field. That only makes sense when `old` is a name this field alone gives up. It is refused when the clause names the field itself, when `old` is still another field of the same record or agent (two fields cannot read one name), when two fields replace the same name, and when the project's schema lock records both names as separate fields (the rename would merge two histories). Drop the clause if the fields are separate, or delete the old field.",
+        example: "type Account = {\n  name: String,\n  label: String replaces name,   // ✗ `name` is still declared\n}\n\ntype Account = {\n  label: String replaces name,   // ✓ a rename: `name` is gone\n}",
+    },
+    Explain {
+        code: "bynk.field.replaces_needed",
+        blurb: "A `store` field renamed with `replaces old` is read under `old` for as long as any stored version the lock holds keeps its value there. Deleting the clause while one does would read those records as the field's zero. Keep the clause until `bynk migrate` has raised the class's floor past those versions, and the compiler stops reading the old name; `bynk.field.replaces_settled` says when that is.",
+        example: "agent Cart {
+    key id: String
+    store owner: Cell[String]            // ✗ renamed from `customer`, and version 1 still stores `customer`
+}
+
+agent Cart {
+    key id: String
+    store owner: Cell[String] replaces customer   // ✓ kept until the floor passes version 1
+}",
+    },
+    Explain {
+        code: "bynk.field.replaces_unknown",
+        blurb: "`replaces old` carries the data of a field the project's schema lock already records, so `old` has to be one. A name the lock does not record for this event or agent has nothing to rename: it is usually a misspelling, a clause added to a field that was never renamed, or a rename already applied and since dropped from the lock. Check the old name against the lock's entry for the type, and that it was built with this project. If the field was not renamed, drop the clause.",
+        example: "store owner: Cell[String] replaces customer   // ✗ the lock records no field `customer`\n\nstore owner: Cell[String]                     // ✓ no clause: the field was never renamed",
     },
     Explain {
         code: "bynk.fixture.binary_content",
@@ -2572,12 +2600,12 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
-        example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The comparison is exact, and a browser sends an origin only as `scheme://host[:port]`: the scheme and host in lower case, no path, query, fragment or trailing slash, and no port that is the scheme's default (`:443` for `https`, `:80` for `http`). An entry in any other shape (`\"https://app.example.com/\"`, `\"https://App.example.com\"`, `\"app.example.com\"`, `\"https://*.example.com\"`) can never equal a header a browser sends, so every request from that site would be refused and nothing would say why; it is refused here, with the form to write instead. There is no subdomain wildcard: list each origin. `\"null\"`, the origin a browser sends from a sandboxed frame, is compared like any other entry (but see `bynk.http.cors_wildcard_credentials`). A constant is checked as the value it was read as, and an `env(…)` constant as the value `bynk.toml` gives it in the environment being built, so a bad value for one environment is refused when that environment is built. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: \"https://app.example.com\" }       // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com/\"] }     // ✗ a browser sends no trailing slash\n\ncors { origins: [\"https://app.example.com\"] }      // ✓",
     },
     Explain {
         code: "bynk.http.cors_not_http",
-        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP surface has cross-origin browser callers, so it is valid only on a `from http` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP and WebSocket surfaces have cross-origin browser callers, so it is valid only on a `from http` or `from websocket` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
         example: "service jobs from cron {\n    cors { origins: [\"https://app.example.com\"] }   // ✗ a schedule has no browser callers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -2587,8 +2615,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
-        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
-        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service. The origin `\"null\"` is refused beside `credentials: true` for the same reason in effect: a browser sends `Origin: null` from a sandboxed frame or a `data:` page, which any other site can create, so naming it admits any page, and the visitor\'s cookies would go to it. Without credentials `\"null\"` is an ordinary entry.",
+        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\", \"null\"], credentials: true }   // ✗ any page can claim `null`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_expose_credentials",
@@ -4911,6 +4939,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
     },
     Explain {
+        code: "bynk.store.replaces_collection",
+        blurb: "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` or `@unique` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed or unique `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
+        example: "store visited: Log[Int] replaces seen   // ✗ a `Log` cannot be renamed with `replaces`\n\nstore visited: Set[String] replaces seen   // ✓ a `Set` can",
+    },
+    Explain {
         code: "bynk.store.unique_implies_indexed",
         blurb: "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
         example: "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
@@ -5831,6 +5864,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
     },
     Explain {
+        code: "bynk.types.annotation_unknown",
+        blurb: "A `type` takes `@discriminator(\"…\")` (on a sum), and a sum's variant takes `@name(\"…\")`. Any other annotation in those places would do nothing, so it is refused rather than ignored. Remove it, or use one of the two.",
+        example: "type Shape =\n    | @label(\"round\") Circle(r: Int)    // ✗ not a variant annotation\n    | Square(side: Int)\n\ntype Shape =\n    | @name(\"round\") Circle(r: Int)    // ✓\n    | Square(side: Int)",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -5959,6 +5997,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_bad_arg",
+        blurb: "`@discriminator` names the JSON key that carries a sum's variant, and the compiler reads that key at compile time, so it takes exactly one non-empty string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A sum may carry one `@discriminator`. Write the key as a literal, as in `@discriminator(\"type\")`.",
+        example: "@discriminator(1)    // ✗ not a string literal\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)\n\n@discriminator(\"type\")    // ✓\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)",
+    },
+    Explain {
+        code: "bynk.types.discriminator_collides",
+        blurb: "A sum value is one JSON object: the discriminator key holds the variant's name, and the payload fields are the other keys of the same object. A payload field whose wire name is the discriminator would be written twice. A field's wire name is its `@name`, or its own name when it has none, and the discriminator is `kind` unless the sum has a `@discriminator`. Rename the field with `@name`, or choose another discriminator.",
+        example: "@discriminator(\"type\")\ntype Event =\n    | Created(@name(\"type\") category: String)    // ✗ `type` is the discriminator\n\n@discriminator(\"type\")\ntype Event =\n    | Created(category: String)                    // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_not_sum",
+        blurb: "`@discriminator` names the key that tells a sum's variants apart on the wire. A record, a refined type or an opaque type has no variants, so the annotation would do nothing. Remove it, or put it on the sum.",
+        example: "@discriminator(\"type\")    // ✗ a record has no variants\ntype Event = { id: String }\n\ntype Event = { id: String }    // ✓",
     },
     Explain {
         code: "bynk.types.duplicate_example",
@@ -6098,7 +6151,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_bad_arg",
-        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
+        blurb: "`@name` names the key a field, a sum variant or a variant's payload field has on the wire, and the compiler reads that name at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
         example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\nconst PageKey: String = \"page-size\"\n\ntype Filter = {\n    @name(PageKey) pageSize: Option[Int],       // ✓ a `String` constant bound to a literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
     },
     Explain {
@@ -6108,23 +6161,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_duplicate",
-        blurb: "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+        blurb: "A wire name is the key a reader looks a field up by (or, for a sum variant, the value the discriminator takes), so two fields of one record, two payload fields of one variant, or two variants of one sum cannot share one: both would read the same value. A wire name is the `@name`, or the Bynk name when there is none. A field or variant may also carry only one `@name`. Give each its own name. Names differing only in case are `bynk.types.field_name_case_conflict`.",
         example: "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
     },
     Explain {
         code: "bynk.types.field_name_invalid",
         blurb: "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
         example: "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_not_request_record",
-        blurb: "`@name` renames the key a request reader looks for. Only a record that is the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler is read that way, so on any other record the annotation would do nothing. Remove it, or make the record that parameter. A record used as a JSON body or result may not carry `@name` either: `bynk.types.field_name_record_not_boundary`.",
-        example: "type Plain = {\n    @name(\"x-y\") a: String,    // ✗ `Plain` is not read from a request\n}\n\ntype Plain = {\n    a: String,                // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_record_not_boundary",
-        blurb: "A record with `@name` fields is read off a request by those names, but its JSON form uses the field names, so using it as a JSON body, a result, a store field, an event or a call argument would make the two forms disagree. It may only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter. Use a second record, without `@name`, for the other position.",
-        example: "type Filter = {\n    @name(\"page-size\") pageSize: Option[Int],\n}\n\ntype FilterView = {\n    pageSize: Option[Int],\n}\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[Filter]] by v: Visitor { … }        // ✗\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor { … }    // ✓",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -7112,6 +7155,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "        let _ <- conn.close(4001, \"the room was archived by an administrator after twelve months without any activity, and its members were moved to the general room\")   // ✗ over the protocol's limit\n        let _ <- conn.close(4001, \"room archived\")   // ✓",
     },
     Explain {
+        code: "bynk.ws.cookie_needs_origins",
+        blurb: "A browser sends the session cookie on a WebSocket upgrade from any site, and a WebSocket is not covered by CORS, so a page on another site could open the socket as the signed-in user (cross-site WebSocket hijacking). The upgrade therefore checks `Origin` against the service's `cors` origins: exactly one of them, scheme, host and port, or it is refused with `403` before the cookie is read, and a missing `Origin` is refused too. So a `from websocket` service whose `on open` authenticates a `SignedCookie` actor must declare `cors { origins: [...], credentials: true }` with the exact origins that may open it, and a wildcard is not one. Add the `cors` block.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✗ a `SignedCookie` actor and no `cors`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+    },
+    Explain {
         code: "bynk.ws.lifecycle_by_mismatch",
         blurb: "The connection's principal is verified once, by `on open`'s `by`, and carried for the life of the connection; `on message` and `on close` read it and never verify again. So their `by` must name the same actor as `on open`'s, or the same members of an actor sum. The binder names may differ. Change the lifecycle handler's `by` to match `on open`.",
         example: "actor Member { … }\nactor Admin { … }\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on message (room: RoomId, frame: Frame) -> Effect[()] by admin: Admin { … }   // ✗ `on open` is `by` `Member`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
@@ -7246,6 +7294,18 @@ pub const RETIRED: &[Retired] = &[
         replacement: Some(
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
         ),
+    },
+    Retired {
+        code: "bynk.types.field_name_not_request_record",
+        last_release: "0.661.1",
+        why: "A wire name (`@name`) is now part of a type's one encoding and legal on a field of any record (#3975), so it is no longer limited to a request record.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
+        code: "bynk.types.field_name_record_not_boundary",
+        last_release: "0.661.1",
+        why: "A record's `@name` fields now name its keys at every boundary (#3975), so the record may be a body, a result, a store field, an event or a call argument.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
     },
     Retired {
         code: "bynk.uses.second_spelling",
@@ -7591,7 +7651,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.agent.bad_annotation",
-        "An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument.",
+        "An agent carries an annotation other than `@busyAfter(<Duration literal>)` and `@jurisdiction(\"eu\" | \"fedramp\" | \"us\")`, or one of them is written twice, with the wrong argument, or with an unknown jurisdiction.",
     ),
     d(
         "bynk.agent.busy_after_out_of_range",
@@ -7708,6 +7768,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.agents.self_operation",
         "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
+    ),
+    d(
+        "bynk.analytics.mapping_changed",
+        "The columns an `Analytics` instance's `writeValue` writes (a field moved, retyped or removed, or a different `@index`) differ from the mapping `bynk.schema.lock` records under `[analytics]`, so points already written would be read from the wrong column; accept it with `bynk lock accept-analytics`.",
     ),
     d(
         "bynk.asset.duplicate",
@@ -8083,9 +8147,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace.",
     ),
     d(
+        "bynk.deploy.accept_fresh_agent_unused",
+        "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
+    warn(d(
+        "bynk.deploy.agent_starts_fresh",
+        "A context that hosts agents moves to a different Worker script and `--accept-fresh-agent <context>` named it, so its agents start with fresh state there and the old state stays in the old script, which is no longer a Worker of the project: do not delete it if the data matters. A warning, not a refusal; with `--format json` it is an entry of the plan's `warnings`.",
+    )),
     d(
         "bynk.deploy.asset_path_conflict",
         "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file.",
@@ -8484,6 +8556,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning).",
     )),
     dg(
+        "bynk.field.replaces_conflict",
+        "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields.",
+        &["record_field", "store_field"],
+    ),
+    dg(
+        "bynk.field.replaces_needed",
+        "A `store` field was renamed with `replaces`, the clause was deleted, and a stored version the lock still holds keeps the value under the old name.",
+        &["store_field"],
+    ),
+    warn(dg(
+        "bynk.field.replaces_settled",
+        "A `store` field's `replaces old` is no longer read: no stored version the lock holds keeps the value under the old name, so the clause can be deleted (a warning).",
+        &["store_field"],
+    )),
+    dg(
+        "bynk.field.replaces_unknown",
+        "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename.",
+        &["record_field", "store_field"],
+    ),
+    dg(
         "bynk.fixture.binary_content",
         "A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text.",
         &["fixture_decl"],
@@ -8871,7 +8963,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.cors_not_http",
-        "A `cors { }` policy appears on a service that is not `from http`.",
+        "A `cors { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.cors_unknown_field",
@@ -10472,6 +10564,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
     ),
+    dg(
+        "bynk.store.replaces_collection",
+        "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet.",
+        &["store_field"],
+    ),
     warn(d(
         "bynk.store.unique_implies_indexed",
         "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning).",
@@ -10973,6 +11070,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     dg(
+        "bynk.types.annotation_unknown",
+        "A type or a sum variant carries an annotation other than `@discriminator(\"…\")` on a type or `@name(\"…\")` on a variant.",
+        &["type_decl", "sum_variant"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11041,6 +11143,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.types.derives_field_not_orderable",
         "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_bad_arg",
+        "A sum's `@discriminator` does not take exactly one non-empty string literal, or a `String` constant bound to one, or there is more than one.",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_collides",
+        "A payload field's wire name is its sum's discriminator.",
+        &["variant_payload_field", "type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_not_sum",
+        "`@discriminator` is on a type that is not a sum.",
         &["type_decl"],
     ),
     dg(
@@ -11140,22 +11257,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.field_name_duplicate",
-        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        "A field, variant or payload field has more than one `@name`, or two fields of a record, two variants of a sum or two payload fields of a variant have the same wire name.",
         &["record_field"],
     ),
     dg(
         "bynk.types.field_name_invalid",
-        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_not_request_record",
-        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_record_not_boundary",
-        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        "A `@name` is not a valid name for where it stands (a cookie or header name that is not a token, or an empty name).",
         &["record_field"],
     ),
     dg(
@@ -11735,6 +11842,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A WebSocket `connection.close(code, reason)` names a literal reason over the protocol's 123 bytes of UTF-8 (#3902).",
     ),
     d(
+        "bynk.ws.cookie_needs_origins",
+        "A `from websocket` service whose `on open` authenticates a `SignedCookie` actor does not declare `cors { origins: [...], credentials: true }` with exact origins, so there is nothing to check the upgrade's `Origin` against (#3904).",
+    ),
+    d(
         "bynk.ws.lifecycle_by_mismatch",
         "A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ).",
     ),
@@ -11818,6 +11929,7 @@ fn category_title(cat: &str) -> &'static str {
     match cat {
         "actor" => "Actors",
         "adapter" => "Adapters",
+        "analytics" => "Analytics",
         "agent" | "agents" => "Agents",
         "asset" => "Static assets",
         "boundary" => "Boundaries",

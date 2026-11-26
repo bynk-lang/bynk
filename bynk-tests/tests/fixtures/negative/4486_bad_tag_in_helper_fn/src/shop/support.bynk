@@ -1,0 +1,22 @@
+context shop.support
+
+consumes bynk.cloudflare {
+    InboundEmail,
+    EmailVerdict,
+    EmailActions,
+}
+
+// #4486: the `EmailActions` is built in a helper fn and returned to the handler; a literal tag that
+// breaks the header rules is refused where it is written, as it is in a handler body.
+fn routed() -> EmailActions {
+    EmailActions {
+        forward: ["billing@shop.example"],
+        tag: Map.empty().insert("X-Ticket", "a").insert("Subject", "hijack"),
+    }
+}
+
+service support from email("support@shop.example") {
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+        Route(routed())
+    }
+}

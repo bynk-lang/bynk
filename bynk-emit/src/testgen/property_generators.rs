@@ -1308,6 +1308,7 @@ mod tests {
 
     fn refined_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -1329,6 +1330,7 @@ mod tests {
 
     fn opaque_int_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -1453,6 +1455,7 @@ mod tests {
 
     fn sum_decl(name: &str, variants: Vec<(&str, Vec<(&str, TypeRef)>)>) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: Ident {
@@ -1464,6 +1467,7 @@ mod tests {
                 variants: variants
                     .into_iter()
                     .map(|(vname, fields)| bynk_syntax::ast::Variant {
+                        annotations: Vec::new(),
                         documentation: None,
                         name: Ident {
                             name: vname.to_string(),
@@ -1472,6 +1476,7 @@ mod tests {
                         payload: fields
                             .into_iter()
                             .map(|(fname, type_ref)| bynk_syntax::ast::VariantField {
+                                annotations: Vec::new(),
                                 documentation: None,
                                 name: Ident {
                                     name: fname.to_string(),

@@ -229,6 +229,11 @@ pub struct ProjectAnalysis {
     /// Only contexts/adapters have an entry; empty when the pipeline bails
     /// before the checker.
     pub boundary_info: HashMap<String, ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, for the editor's hover on a written field's column and the completion
+    /// of a typed read's fields. Empty when no unit writes a typed point.
+    pub analytics:
+        std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets, in that order. Empty when the pipeline bails before the
@@ -317,6 +322,7 @@ fn bailed(
         sequence_info: HashMap::new(),
         architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
+        analytics: Default::default(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
     }
@@ -566,6 +572,38 @@ fn per_unit_infos(
     (sequence_info, boundary_info)
 }
 
+/// The lock's registry as read, and as the round reconciled it so far; neither is written anywhere.
+type LockRegistries = (
+    bynk_project::schema_registry::SchemaRegistry,
+    bynk_project::schema_registry::SchemaRegistry,
+);
+
+/// #4502: the Analytics column mappings the checked units write, for the editor, and the lock's
+/// check of them (which needs the checked units, so it runs after them and not with the
+/// declaration-only passes). The registry is the scratch copy the round already reconciled; the
+/// lock is never written.
+fn analytics_round(
+    lock_state: Option<LockRegistries>,
+    unit_callees: &project_model::UnitCallees,
+    parsed: &[ParsedFile],
+    errors: &mut ErrorSink,
+) -> std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry> {
+    if let Some((existing, mut scratch)) = lock_state {
+        let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+        crate::analytics_lock::reconcile_analytics(
+            &existing,
+            &mut scratch,
+            unit_callees,
+            &mut analytics_errors,
+        );
+        errors.extend_attributed_by_span(parsed, analytics_errors);
+    }
+    crate::analytics_lock::live_mappings(unit_callees)
+        .into_iter()
+        .map(|(key, live)| (key, live.entry))
+        .collect()
+}
+
 /// The callees of a unit's checked files that later passes read (events emits, cross-context
 /// service calls and agent calls), merged into the project-wide accumulator.
 fn retain_unit_callees(
@@ -582,7 +620,9 @@ fn retain_unit_callees(
                     || crate::queue_producers::is_queue_send(c)
                     || matches!(
                         c,
-                        crate::checker::Callee::Cross { .. } | crate::checker::Callee::Agent { .. }
+                        crate::checker::Callee::Cross { .. }
+                            | crate::checker::Callee::Agent { .. }
+                            | crate::checker::Callee::AnalyticsWrite { .. }
                     )
             })
             .map(|(id, c)| (*id, c.clone())),
@@ -908,6 +948,7 @@ fn analyse_project_inner(
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
     let mut contract_diff = ContractDiff::default();
+    let mut lock_state: Option<LockRegistries> = None; // for `analytics_round` (#4502)
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
@@ -945,6 +986,7 @@ fn analyse_project_inner(
                     &mut order_errors,
                 );
                 errors.extend_attributed_by_span(&parsed, order_errors);
+                lock_state = Some((existing_reg, updated));
             }
             Err(err) => {
                 contract_diff.lock = LockState::Unreadable;
@@ -1211,6 +1253,7 @@ fn analyse_project_inner(
         doc_scope.insert(name.clone(), scope);
     }
 
+    let analytics = analytics_round(lock_state, &unit_callees, &parsed, &mut errors);
     crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
@@ -1226,6 +1269,7 @@ fn analyse_project_inner(
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     }

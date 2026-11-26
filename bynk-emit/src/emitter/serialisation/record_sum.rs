@@ -69,6 +69,32 @@ pub(super) fn emit_record(
     emit_record_codec(name, &ts_type, &fields, types, codecs, ru)
 }
 
+/// #3975: a JSON key as an object-literal property name: bare when it is a plain identifier,
+/// otherwise a quoted string, so a wire name such as `content-type` or `@odata.etag` is a valid
+/// key.
+fn object_key(key: &str) -> String {
+    let mut chars = key.chars();
+    let plain = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
+    if plain {
+        key.to_string()
+    } else {
+        let mut quoted = String::from("\"");
+        for c in key.chars() {
+            match c {
+                '"' => quoted.push_str("\\\""),
+                '\\' => quoted.push_str("\\\\"),
+                c if c.is_control() => quoted.push_str(&format!("\\u{:04x}", c as u32)),
+                c => quoted.push(c),
+            }
+        }
+        quoted.push('"');
+        quoted
+    }
+}
+
 /// v0.174 (#592): the shared record codec body. `fn_suffix` is the codec name
 /// suffix (`Order`, or the monomorphised `Paginated_User`); `ts_type` is the
 /// TypeScript value type the codec accepts / returns (`Order`, or the erased
@@ -123,7 +149,7 @@ pub(super) fn emit_record_codec(
             .iter()
             .map(|field| {
                 (
-                    field.name.clone(),
+                    object_key(&field.key),
                     serialise_field_expr_wire(
                         &field.shape,
                         &ident(format!("value.{}", field.name)),
@@ -193,6 +219,29 @@ pub(super) fn emit_record_codec(
             .as_ref()
             .and_then(|(e, t)| field_default_value(e, t, types).ok());
         let fname = &field.name;
+        // #3975: the JSON key the field is read from; `fname` stays the Bynk name, which names
+        // the decoder's locals.
+        let wkey = &field.key;
+        // #3793: `name: T replaces old` reads the old key when the new one is absent. `"new" in
+        // obj` is the test, as for a default, so a key present with an explicit value (or an
+        // explicit `null`) is never replaced; the new key wins when both arrive.
+        let present = |key: &str| binary(TsBinaryOp::In, str_lit(key.to_string()), ident("obj"));
+        let keyed = |key: &str| index(ident("obj"), str_lit(key.to_string()));
+        let read_old = field
+            .renamed_from
+            .iter()
+            .rev()
+            .fold(None, |rest: Option<TsExpr>, old| {
+                Some(match rest {
+                    // `"old" in obj ? obj["old"] : <rest>`, the rest being the older names.
+                    Some(rest) => TsExpr::Conditional {
+                        test: Box::new(present(old)),
+                        consequent: Box::new(keyed(old)),
+                        alternate: Box::new(rest),
+                    },
+                    None => keyed(old),
+                })
+            });
         let access = if let Some(d) = &default {
             // `"<field>" in obj ? obj["<field>"] : <default>`: `d` is the default's tree
             // (`field_default_value`), rendered in its wire form (`wire_default_node`). As a
@@ -200,19 +249,39 @@ pub(super) fn emit_record_codec(
             // position, which (per `bynk-ts/src/printer/expr.rs`'s own `Conditional` render arm)
             // never adds parens around either branch, whatever the branch's shape.
             let d_name = format!("__d_{fname}");
+            // With a rename: the older names when present, otherwise the default.
+            let fallback =
+                field
+                    .renamed_from
+                    .iter()
+                    .rev()
+                    .fold(wire_default_node(d), |rest, old| TsExpr::Conditional {
+                        test: Box::new(present(old)),
+                        consequent: Box::new(keyed(old)),
+                        alternate: Box::new(rest),
+                    });
             body.push(TsStmt::const_stmt(
                 TsBindingName::Ident(d_name.clone()),
                 Some(TsType::named("__JsonValue")),
                 TsExpr::Conditional {
-                    test: Box::new(binary(TsBinaryOp::In, str_lit(fname.clone()), ident("obj"))),
-                    consequent: Box::new(index(ident("obj"), str_lit(fname.clone()))),
-                    alternate: Box::new(wire_default_node(d)),
+                    test: Box::new(present(wkey)),
+                    consequent: Box::new(keyed(wkey)),
+                    alternate: Box::new(fallback),
                 },
                 None,
             ));
             ident(d_name)
+        } else if let Some(old) = read_old {
+            // Without a default, an absent key must still reach the codec as `undefined`, so the
+            // lenient `Option` decoder reads `None` and every other codec rejects: the old key
+            // is read only when it is present.
+            TsExpr::Conditional {
+                test: Box::new(present(wkey)),
+                consequent: Box::new(keyed(wkey)),
+                alternate: Box::new(old),
+            }
         } else {
-            index(ident("obj"), str_lit(fname.clone()))
+            keyed(wkey)
         };
         let sub_path = path_field(&field.path_segment);
         // #1439 (Arc E slice 3): `emit_field_deserialise_wire` returns a
@@ -374,7 +443,11 @@ pub(super) fn emit_sum_codec(
     codecs: &DepthCodecs,
     ru: &RuntimeUse,
 ) -> Vec<TsDecl> {
-    let kind = sum.wire_discriminant;
+    // #3975: the JSON key the variant travels under (`@discriminator`, else `kind`). The decoder's
+    // local that holds its value keeps the name `kind` whatever the key, since the key may not be
+    // a TypeScript identifier.
+    let dkey = sum.wire_discriminant.as_str();
+    let kind = "kind";
     // #2656: a sum on a type cycle threads the nesting depth.
     let depth = depth_for(codecs, fn_suffix, true);
     let tag = sum.memory_discriminant;
@@ -386,13 +459,15 @@ pub(super) fn emit_sum_codec(
         .iter()
         .map(|variant| {
             let vname = &variant.name;
+            // #3975: the value the discriminator takes on the wire.
+            let wname = &variant.wire_name;
             if variant.payload.is_empty() {
-                let tagged = TsExpr::object(vec![(kind.to_string(), str_lit(vname.clone()))]);
+                let tagged = TsExpr::object(vec![(object_key(dkey), str_lit(wname.clone()))]);
                 // #3974: in plain mode a payload-less sum is its variant's name.
                 let written = if enum_like && ru.plain_json() {
                     TsExpr::Conditional {
                         test: Box::new(plain_json_test()),
-                        consequent: Box::new(str_lit(vname.clone())),
+                        consequent: Box::new(str_lit(wname.clone())),
                         alternate: Box::new(tagged),
                     }
                 } else {
@@ -400,7 +475,7 @@ pub(super) fn emit_sum_codec(
                 };
                 case_(str_lit(vname.clone()), vec![ret(written)], false)
             } else {
-                let mut entries = vec![(kind.to_string(), str_lit(vname.clone()))];
+                let mut entries = vec![(object_key(dkey), str_lit(wname.clone()))];
                 for field in &variant.payload {
                     // Narrowed (see this function's own doc): `value` is
                     // already the exact variant member inside this `case`
@@ -409,7 +484,7 @@ pub(super) fn emit_sum_codec(
                     // field reads through it directly — no `as any`, no
                     // recovery cast.
                     entries.push((
-                        field.name.clone(),
+                        object_key(&field.key),
                         serialise_field_expr_wire(
                             &field.shape,
                             &ident(format!("value.{}", payload_prop(&field.name))),
@@ -477,7 +552,7 @@ pub(super) fn emit_sum_codec(
         ),
         const_(
             kind.to_string(),
-            index(ident("obj"), str_lit(kind.to_string())),
+            index(ident("obj"), str_lit(dkey.to_string())),
         ),
     ]);
     let mut deserialise_cases: Vec<TsSwitchCase> = sum
@@ -485,9 +560,11 @@ pub(super) fn emit_sum_codec(
         .iter()
         .map(|variant| {
             let vname = &variant.name;
+            // #3975: the case matches the wire name; the value's tag is the Bynk name.
+            let wname = &variant.wire_name;
             if variant.payload.is_empty() {
                 case_(
-                    str_lit(vname.clone()),
+                    str_lit(wname.clone()),
                     vec![ret(call(
                         ident("Ok"),
                         vec![as_expr(
@@ -500,7 +577,7 @@ pub(super) fn emit_sum_codec(
             } else {
                 let mut stmts = Vec::new();
                 for field in &variant.payload {
-                    let access = index(ident("obj"), str_lit(field.name.clone()));
+                    let access = index(ident("obj"), str_lit(field.key.clone()));
                     let sub_path = path_field(&field.path_segment);
                     stmts.extend(emit_field_deserialise_wire(
                         &field.name,
@@ -522,7 +599,7 @@ pub(super) fn emit_sum_codec(
                     ident("Ok"),
                     vec![as_expr(TsExpr::object(entries), ts_type.clone())],
                 )));
-                case_(str_lit(vname.clone()), stmts, true)
+                case_(str_lit(wname.clone()), stmts, true)
             }
         })
         .collect();
@@ -554,7 +631,7 @@ fn bare_string_variant(sum: &WireSum, ts_type: &TsType, tag: &str) -> TsStmt {
         .iter()
         .map(|variant| {
             case_(
-                str_lit(variant.name.clone()),
+                str_lit(variant.wire_name.clone()),
                 vec![ret(call(
                     ident("Ok"),
                     vec![as_expr(
@@ -580,6 +657,18 @@ fn bare_string_variant(sum: &WireSum, ts_type: &TsType, tag: &str) -> TsStmt {
 mod emit_sum_codec_tests {
     use super::*;
     use bynk_check::wire::Expected;
+
+    /// #3975: a wire name is a bare property name when it is an identifier, a quoted string otherwise.
+    #[test]
+    fn a_wire_key_is_quoted_unless_it_is_an_identifier() {
+        assert_eq!(object_key("amount"), "amount");
+        assert_eq!(object_key("_id$"), "_id$");
+        assert_eq!(object_key("content-type"), "\"content-type\"");
+        assert_eq!(object_key("@odata.etag"), "\"@odata.etag\"");
+        assert_eq!(object_key("1st"), "\"1st\"");
+        assert_eq!(object_key("a\"b\\c"), "\"a\\\"b\\\\c\"");
+        assert_eq!(object_key(""), "\"\"");
+    }
 
     fn render_decls(decls: Vec<TsDecl>) -> String {
         decls
@@ -609,18 +698,21 @@ mod emit_sum_codec_tests {
     fn multi_field_variant_and_payload_free_variant_share_one_switch() {
         let ru = RuntimeUse::default();
         let sum = WireSum {
-            wire_discriminant: "kind",
+            wire_discriminant: "kind".to_string(),
             memory_discriminant: "tag",
             variants: vec![
                 WireVariant {
                     name: "Pending".to_string(),
+                    wire_name: "Pending".to_string(),
                     payload: vec![],
                 },
                 WireVariant {
                     name: "Shipped".to_string(),
+                    wire_name: "Shipped".to_string(),
                     payload: vec![
                         WireField {
                             name: "tracking".to_string(),
+                            key: "tracking".to_string(),
                             shape: WireRef::Base {
                                 base: BaseType::String,
                                 json: JsonKind::String,
@@ -630,9 +722,11 @@ mod emit_sum_codec_tests {
                             path_segment: "tracking".to_string(),
                             default: None,
                             predicates: Vec::new(),
+                            renamed_from: Vec::new(),
                         },
                         WireField {
                             name: "weight".to_string(),
+                            key: "weight".to_string(),
                             shape: WireRef::Base {
                                 base: BaseType::Int,
                                 json: JsonKind::Number,
@@ -642,6 +736,7 @@ mod emit_sum_codec_tests {
                             path_segment: "weight".to_string(),
                             default: None,
                             predicates: Vec::new(),
+                            renamed_from: Vec::new(),
                         },
                     ],
                 },

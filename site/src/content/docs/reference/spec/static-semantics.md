@@ -843,8 +843,16 @@ keeps the author's grouping verbatim.
 
 ### §5.2c Record field annotations {#field-annotations}
 
-A record field MAY be annotated. `@name("…")` gives the field its external name on an HTTP request
-(§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
+A record field MAY be annotated. `@name("…")` gives the field its name on the wire, at every
+boundary the record is encoded at (#3975): it takes one string literal, or a `String` constant bound
+to one (`bynk.types.field_name_bad_arg`), may not be empty (`bynk.types.field_name_invalid`), and
+two fields may not share a wire name (`bynk.types.field_name_duplicate`). A sum variant and a variant's
+payload field take `@name` the same way, and `@discriminator("…")` before a sum's `type` replaces
+the discriminator key `kind` (`bynk.types.discriminator_bad_arg`, `bynk.types.discriminator_not_sum`);
+no payload field's wire name may be the discriminator (`bynk.types.discriminator_collides`), and any
+other annotation on a type or a variant is `bynk.types.annotation_unknown`. The Bynk names do not
+change: only the codecs, the OpenAPI document, the typed drivers and a decode error's path use the wire
+name. A request record adds the rules of its surface (§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
 key of an Analytics Engine data point; it is accepted on a field of any record and has meaning only
 where the record is written with `writeValue` (#4105), which requires at most one `@index` field, a
 `String` (or a refined or opaque `String`), and refuses a second or a non-`String` one
@@ -1000,6 +1008,13 @@ and its right-hand side MUST NOT read the cell being written
 returns (ADR 0109). Constructing or calling an agent MUST use the right key arity
 and type and a declared handler (`bynk.agent.construction_arity`,
 `bynk.agent.key_mismatch`, `bynk.agent.handler_arity`, `bynk.agent.handler_not_found`).
+
+An agent MAY carry `@busyAfter(d)` and `@jurisdiction("eu" | "fedramp" | "us")` immediately before `agent`,
+each at most once, each with one positional literal (`bynk.agent.bad_annotation`,
+`bynk.agent.busy_after_out_of_range`). `@jurisdiction` pins every instance's Durable Object ids to that
+jurisdiction (#3819), the values being those of an `R2` bucket's `@jurisdiction`. The id of a pinned
+agent differs from the unrestricted one for the same key, so a change after deploy orphans its
+instances and `bynk deploy` requires it to be confirmed by name.
 
 ### §5.4.1 Invariants (v0.80)
 
@@ -1165,6 +1180,19 @@ is left as it was until `bynk lock accept-order` rewrites it. Dropping
 had; one with entries is at version 3, which an older toolchain refuses rather
 than drops.
 
+**Recorded Analytics mappings (#4105).** A build also reconciles the column mapping of each
+`Analytics` instance written with `writeValue` against the lock's `[analytics]` section, keyed
+`<unit>.<Instance>`: the record written (informational), the `@index` field, and the blob and double
+fields in column order, each as `name:kind` (`text`, `enum`, `bool`, `number`, `decimal`). It is read
+from the checked units, so it is reconciled after them. A new instance is recorded; an unchanged
+mapping keeps its entry. A field appended at the end of a column family, and a field renamed in place
+(its column keeps its place and its kind), update the entry. Any other change is
+`bynk.analytics.mapping_changed` and the entry is left as it was until `bynk lock accept-analytics`
+rewrites it: a recorded column removed, moved, or changed in kind, or the `@index` field changed or
+removed, since points already written keep their positions. An instance no longer written has its
+entry dropped; one written with more than one record type has no single mapping and is left as it was.
+A lock with an `[analytics]` entry is at version 4, which an older toolchain refuses rather than drops.
+
 **Recorded state shapes.** A build also reconciles each agent class's stored shape
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record
@@ -1302,6 +1330,55 @@ between its `store` fields and its handlers.
   `New`, or a `deleted` one, and the old class gets no binding.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
+
+**Renaming a `store` field.** `store New: Cell[T] replaces Old` declares that the
+`Cell` field `Old` was renamed to `New`.
+- **What may be named.** `Old` MUST NOT be the field itself, another field the agent
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Only a
+  `Cell`, `Set` or `Map` field without `@indexed` or `@unique` MAY carry the clause
+  (`bynk.store.replaces_collection`).
+- **What the lock does.** With a lock, `Old` MUST be a field the class's current
+  snapshot records, unless the rename has already been recorded
+  (`bynk.field.replaces_unknown`), and `New` MUST NOT be recorded beside it
+  (`bynk.field.replaces_conflict`). The reconcile renames the recorded field to `New`
+  before comparing, so a rename on its own is additive: the class's version increments
+  and the new snapshot lists `New` with `renamed_from` naming `Old` and the names `Old`
+  was itself renamed from. Earlier snapshots keep their names.
+- **What loading does.** A `Map` or `Set` has every entry under `Old`'s storage keys moved
+  to `New`'s, in bounded batches that each commit together, before the first read; an
+  entry already under `New` wins (and a collection with entries under both names has its
+  count and next sequence merged), and a failure part-way leaves each entry under exactly
+  one name and the next load continues. No marker is kept, so a rolled-back deploy that
+  wrote under `Old` again is moved on the next roll-forward. A record a `migrate` step
+  covers is not moved first: the step reads it under `Old`, as the stored version shaped
+  it, and the commit that follows writes the entries under `New` and deletes `Old`'s. A stored
+  record is read under `New`, or under a recorded old
+  name when `New` is absent, after any `migrate` step and before the zero-merge and the
+  rehydration validation; `New` wins when both are present. The first commit writes
+  `New` alone.
+- **How long the clause stays.** The clause MUST stay while a snapshot at or above
+  the class's floor records the field under an old name
+  (`bynk.field.replaces_needed`). When none does, a build warns that it can be deleted
+  (`bynk.field.replaces_settled`).
+
+**Renaming a record field inside a `store` value (#4483).** `Old` renamed to `New` in a
+record type with `New: T replaces Old` is read by the lock the same way, wherever a `store`
+field holds the record, in a `Cell` or in the value of a `Map`, `Cache` or `Log`.
+- **What the lock does.** The reconcile reads the recorded position `Old` (and everything
+  beneath it) as `New` before comparing, when the lock records `Old`, does not record
+  `New`, and the live shape no longer has `Old`. A rename on its own is additive: the
+  class's version increments and the new snapshot records `renamed_from` on `New`'s path.
+  A rename that also changes the field's type, or a field with no clause, is the
+  non-additive change it was.
+- **What loading does.** The record's decoder accepts the old key, so a value stored
+  before the rename reads as `New`.
+- **How long the clause stays.** As for a `Cell`: the clause MUST stay while a snapshot at or
+  above the class's floor records the old path, under any name the `store` field has had
+  (`bynk.field.replaces_needed`). The lock keeps `renamed_from` on the renamed path to judge it
+  by. A record field's clause also lets its decoders accept the old key from a wire client, so
+  a build never says that it can be deleted. A rename beneath a key position (a `Set`'s
+  element, a `Map`'s or `Cache`'s key, an `@indexed(by:)` composite) is refused, as an added
+  field there is: the key's encoding names the field.
 
 ### §5.4.4 Erasing an instance (#3931) {#erase}
 
@@ -1601,8 +1678,8 @@ and `expect` apply to it unchanged. The rules:
   literal of the option's kind (`bynk.capability.invalid_option`): a string for
   `@worker`, `@jurisdiction` and `@name`, a positive `Int` for `@limit`, a
   `Duration` for `@period`. Every option `K` requires MUST be present
-  (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
-  `@jurisdiction("eu" | "fedramp")`. `RateLimit` requires `@limit(n)` and
+  (`bynk.capability.missing_option`). `Kv` takes none. `R2` and `D1` take an optional
+  `@jurisdiction("eu" | "fedramp" | "us")`. `RateLimit` requires `@limit(n)` and
   `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
   `Service` requires `@worker("name")`, where `name` is 1 to 63 lowercase
   letters, digits, `-` or `_`, not starting or ending with `-`, and not the
@@ -2077,14 +2154,19 @@ checker enforces the closed field set — an unknown field is
 
 - **`origins`** — REQUIRED; a non-empty list of string literals
   (`bynk.http.cors_invalid_origins`). The allowlist of origins, or the single
-  wildcard `["*"]`.
+  wildcard `["*"]`. A request's `Origin` is compared with each entry exactly, so a
+  literal entry must be in the serialised form a browser sends, `scheme://host[:port]`
+  (lower-case scheme and host, no path, query, fragment or trailing slash, no default
+  port); any other shape matches nothing and is the same error. `"null"` is such an
+  origin but is refused beside `credentials: true`.
 - **`headers`** — OPTIONAL; a list of string literals
   (`bynk.http.cors_invalid_field`). Overrides the default `Access-Control-Allow-Headers`.
 - **`credentials`** — OPTIONAL; a boolean literal (`bynk.http.cors_invalid_field`).
 - **`maxAge`** — OPTIONAL; a `Duration` literal (`bynk.http.cors_invalid_field`).
 
-`credentials: true` combined with a wildcard origin (`["*"]`) is rejected
-(`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids that pair.
+`credentials: true` combined with a wildcard origin (`["*"]`), or with the origin `"null"`,
+is rejected (`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids the first
+pair and any other site can claim `null`.
 `Access-Control-Allow-Methods` is **not** a field: it is derived from the service's
 declared route methods (plus `HEAD` where `GET` is declared, plus `OPTIONS`) — the
 same derivation that drives the always-on `Allow` header. A service with no
@@ -2415,8 +2497,12 @@ connection-lifecycle handlers:
 
 - **`on open`** — exactly one per service. The upgrade is authenticated **at the
   edge**: like a `from http` handler it MUST name its actor with `by` (there is no
-  anonymous upgrade), and the boundary admits `None`/`Bearer` actors and rejects
-  `Signature` (a browser cannot set an `Authorization` header). The handler
+  anonymous upgrade), and the boundary admits `None`, `Bearer`, `Oidc` and `SignedCookie` actors and rejects
+  `Signature` (a browser cannot set an `Authorization` header). An `Oidc` or `SignedCookie` actor is the
+  handler's only actor (an actor sum admits `None` and `Bearer` members), a `SignedCookie` actor with
+  `sessions = true` is not admissible, and a service whose `on open` authenticates a `SignedCookie` MUST declare
+  a `cors` list of exact origins with `credentials: true`, no wildcard (`bynk.ws.cookie_needs_origins`),
+  which the upgrade's `Origin` is checked against. The handler
   receives a fresh, **owned** `connection: Connection[O]` that it MUST dispose of
   under the held-resource linearity discipline
   ([§5.4.2](/reference/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
@@ -2699,7 +2785,12 @@ schema registry, `bynk.schema.lock`. A new event starts at version 1, or at its
 `@schema(N)`. An unchanged shape keeps its version; an additive change, in which
 every added field has a default and no field is removed, retyped, or loses a
 default, increments it by one; any other change is
-`bynk.event.non_additive_schema_change`. A declared `@schema(N)` MUST equal the
+`bynk.event.non_additive_schema_change`. A field declared `replaces old` is the
+recorded field `old` renamed: the reconcile renames the recorded field first, so a
+rename on its own is additive (it increments the version and records `renamed_from`
+on the field), and one beside another change is judged by that change. `old` MUST be
+a recorded field (`bynk.field.replaces_unknown`) and MUST NOT be recorded beside the
+new name (`bynk.field.replaces_conflict`). A declared `@schema(N)` MUST equal the
 version so computed (`bynk.event.schema_version_mismatch`). The computed version
 is the envelope's `schemaVersion`. A check (`bynk check`) and a test run
 (`bynk test`) reconcile against the committed registry the same way and report

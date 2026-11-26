@@ -474,11 +474,32 @@ pub fn emit_generic_helpers_qualified(
                             declared.get(n.as_str()).cloned().unwrap_or_else(|| {
                                 unreachable!("`{name}` has no declared field `{n}`")
                             });
+                        // #3975: the generic declaration's `@name` for this field.
+                        let wire = match types.get(name.as_str()).map(|d| &d.body) {
+                            Some(bynk_syntax::ast::TypeBody::Record(r)) => r
+                                .fields
+                                .iter()
+                                .find(|f| f.name.name == n)
+                                .and_then(|f| f.wire_name())
+                                .unwrap_or_else(|| n.clone()),
+                            _ => n.clone(),
+                        };
                         WireField {
                             shape: wire_ref_of(&t),
                             predicates,
-                            path_segment: n.clone(),
+                            key: wire.clone(),
+                            path_segment: wire,
                             default: init.map(|e| (e.clone(), t.clone())),
+                            // #3793: a `replaces` on the generic declaration's field.
+                            renamed_from: match types.get(name.as_str()).map(|d| &d.body) {
+                                Some(bynk_syntax::ast::TypeBody::Record(r)) => r
+                                    .fields
+                                    .iter()
+                                    .find(|f| f.name.name == n)
+                                    .map(bynk_check::wire::field_renamed_from)
+                                    .unwrap_or_default(),
+                                _ => Vec::new(),
+                            },
                             name: n,
                         }
                     })
@@ -515,23 +536,49 @@ pub fn emit_generic_helpers_qualified(
                 // `wire_type`/`wire_sum` would derive for a non-generic
                 // declaration's own variants. The wire/memory discriminants
                 // are the same fixed `"kind"`/`"tag"` pair `wire_sum` uses.
+                // #3975: the generic declaration's `@discriminator`, and its variants' and
+                // payload fields' `@name`s.
+                let decl_sum = match types.get(name.as_str()).map(|d| &d.body) {
+                    Some(bynk_syntax::ast::TypeBody::Sum(s)) => Some(s),
+                    _ => None,
+                };
                 let sum = WireSum {
-                    wire_discriminant: bynk_check::wire::WIRE_DISCRIMINANT,
+                    wire_discriminant: types
+                        .get(name.as_str())
+                        .and_then(|d| d.discriminator())
+                        .unwrap_or_else(|| bynk_check::wire::WIRE_DISCRIMINANT.to_string()),
                     memory_discriminant: "tag",
                     variants: variants
                         .into_iter()
-                        .map(|(vname, payload)| WireVariant {
-                            name: vname,
-                            payload: payload
-                                .into_iter()
-                                .map(|(fname, t)| WireField {
-                                    shape: wire_ref_of(&t),
-                                    path_segment: fname.clone(),
-                                    name: fname,
-                                    default: None,
-                                    predicates: Vec::new(),
-                                })
-                                .collect(),
+                        .map(|(vname, payload)| {
+                            let decl_variant = decl_sum
+                                .and_then(|s| s.variants.iter().find(|v| v.name.name == vname));
+                            WireVariant {
+                                wire_name: decl_variant
+                                    .and_then(|v| v.wire_name())
+                                    .unwrap_or_else(|| vname.clone()),
+                                name: vname,
+                                payload: payload
+                                    .into_iter()
+                                    .map(|(fname, t)| {
+                                        let wire = decl_variant
+                                            .and_then(|v| {
+                                                v.payload.iter().find(|p| p.name.name == fname)
+                                            })
+                                            .and_then(|p| p.wire_name())
+                                            .unwrap_or_else(|| fname.clone());
+                                        WireField {
+                                            shape: wire_ref_of(&t),
+                                            key: wire.clone(),
+                                            path_segment: wire,
+                                            name: fname,
+                                            default: None,
+                                            predicates: Vec::new(),
+                                            renamed_from: Vec::new(),
+                                        }
+                                    })
+                                    .collect(),
+                            }
                         })
                         .collect(),
                 };

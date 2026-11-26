@@ -1,0 +1,2 @@
+bynk.capability.invalid_option
+`asia` is not a jurisdiction a `D1` database can be pinned to

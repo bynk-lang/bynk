@@ -22,6 +22,10 @@ type __Crypto_importCipherKey_Call = { key: globalThis.Uint8Array };
 type __Crypto_importCipherKeyFromSecret_Call = {};
 type __Crypto_seal_Call = { key: __ns_bynk_crypto.CipherKey; plaintext: globalThis.Uint8Array; scope: globalThis.Uint8Array };
 type __Crypto_open_Call = { key: __ns_bynk_crypto.CipherKey; sealed: globalThis.Uint8Array; scope: globalThis.Uint8Array };
+type __Crypto_deriveKey_Call = { secret: globalThis.Uint8Array; salt: globalThis.Uint8Array; info: globalThis.Uint8Array; length: number };
+type __Crypto_hashPassword_Call = { password: string };
+type __Crypto_verifyPassword_Call = { password: string; stored: string };
+type __Crypto_needsRehash_Call = { stored: string };
 type __Crypto_sign_Call = { key: __ns_bynk_crypto.SigningKey; data: globalThis.Uint8Array };
 type __Crypto_verify_Call = { key: __ns_bynk_crypto.VerifyKey; data: globalThis.Uint8Array; signature: globalThis.Uint8Array };
 
@@ -149,7 +153,7 @@ async function test_the_aliased_enum_matches_and_constructs() {
 async function test_a_stubbed_digest_is_observed() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["digest", "equal", "hmac", "importCipherKey", "importCipherKeyFromSecret", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "open", "seal", "sign", "verify", "verifyHmac"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["deriveKey", "digest", "equal", "hashPassword", "hmac", "importCipherKey", "importCipherKeyFromSecret", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "needsRehash", "open", "seal", "sign", "verify", "verifyHmac", "verifyPassword"] }, __obs);
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;

@@ -287,6 +287,50 @@ fn typed_path_parameters_carry_their_schema() {
     assert_eq!(schema("p")["type"], "string");
 }
 
+/// #3975: a body schema names a record's fields by their wire names, a sum's variants by theirs
+/// and its discriminator by its `@discriminator`, and a payload field by its own wire name; a path
+/// enum is the variants' wire names.
+#[test]
+fn wire_names_are_the_keys_of_a_schema() {
+    let dir = scratch("wire-names");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"typed\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/typed.bynk"),
+        "context typed\n\ntype Charge = {\n  id: String,\n  @name(\"amount_captured\") captured: Int,\n  @name(\"x-request-id\") requestId: Option[String],\n}\n\n@discriminator(\"type\")\ntype Hook =\n  | @name(\"charge.succeeded\") ChargeSucceeded(@name(\"object\") data: Charge)\n  | Ping\n\ntype Action = enum { @name(\"opened\") Opened, @name(\"closed\") Closed }\n\nservice api from http {\n  on POST(\"/hook\") (body: Hook) -> Effect[HttpResult[Charge]] by v: Visitor {\n    Ok(Charge { id: \"c\", captured: 1, requestId: None })\n  }\n  on GET(\"/actions/:a\") (a: Action) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let schemas = &d["components"]["schemas"];
+    let charge = &schemas["Charge"]["properties"];
+    assert!(charge.get("amount_captured").is_some(), "{charge}");
+    assert!(charge.get("x-request-id").is_some(), "{charge}");
+    assert!(charge.get("captured").is_none(), "{charge}");
+    assert_eq!(
+        schemas["Charge"]["required"],
+        serde_json::json!(["id", "amount_captured", "x-request-id"])
+    );
+    let variants = schemas["Hook"]["oneOf"].as_array().unwrap();
+    let succeeded = &variants[0];
+    assert_eq!(succeeded["properties"]["type"]["const"], "charge.succeeded");
+    assert!(
+        succeeded["properties"].get("object").is_some(),
+        "{succeeded}"
+    );
+    assert!(succeeded["properties"].get("kind").is_none(), "{succeeded}");
+    assert_eq!(succeeded["required"], serde_json::json!(["type", "object"]));
+    assert_eq!(variants[1]["properties"]["type"]["const"], "Ping");
+    let ps = d["paths"]["/actions/{a}"]["get"]["parameters"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        ps[0]["schema"]["enum"],
+        serde_json::json!(["opened", "closed"])
+    );
+}
+
 /// #3911: a typed `headers` record is described as `in: header` parameters, one per field, under
 /// each field's wire name; the raw `RequestHeaders` view declares none.
 #[test]

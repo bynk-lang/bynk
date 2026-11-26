@@ -219,9 +219,12 @@ fn canon_named_in(
                 .iter()
                 .map(|f| {
                     let ty = canon_type_in(&f.type_ref, types, seen, subst, mode);
+                    // #3975: a field is keyed by its wire name, which is its `@name` or its own
+                    // name: the wire form is what the hash pins.
+                    let key = f.wire_name().unwrap_or_else(|| f.name.name.clone());
                     match f.refinement.as_ref().filter(|_| mode.keeps_predicates()) {
-                        Some(r) => format!("{}: {ty} {}", f.name.name, canon_refinement(Some(r))),
-                        None => format!("{}: {ty}", f.name.name),
+                        Some(r) => format!("{key}: {ty} {}", canon_refinement(Some(r))),
+                        None => format!("{key}: {ty}"),
                     }
                 })
                 .collect();
@@ -245,19 +248,30 @@ fn canon_named_in(
                         .iter()
                         .map(|p| {
                             let ty = canon_type_in(&p.type_ref, types, seen, subst, mode);
-                            format!("{}: {ty}", p.name.name)
+                            // #3975: keyed by wire name.
+                            format!(
+                                "{}: {ty}",
+                                p.wire_name().unwrap_or_else(|| p.name.name.clone())
+                            )
                         })
                         .collect();
                     payload.sort();
+                    // #3975: a variant is named on the wire by its `@name`.
+                    let vname = v.wire_name().unwrap_or_else(|| v.name.name.clone());
                     if payload.is_empty() {
-                        v.name.name.clone()
+                        vname
                     } else {
-                        format!("{}({})", v.name.name, payload.join(", "))
+                        format!("{vname}({})", payload.join(", "))
                     }
                 })
                 .collect();
             variants.sort();
-            format!("|{}", variants.join("|"))
+            // #3975: a sum with its own discriminator key says so, so changing the key changes
+            // the form; the default `kind` writes nothing, which keeps every existing hash.
+            match decl.discriminator() {
+                Some(d) => format!("|#{d}|{}", variants.join("|")),
+                None => format!("|{}", variants.join("|")),
+            }
         }
         TypeBody::Refined {
             base, refinement, ..
@@ -366,6 +380,8 @@ pub struct StoragePath {
     pub structure: String,
     pub full: String,
     pub default: bool,
+    /// #4483: the old name of a record field that declares `replaces`, on its own path.
+    pub renamed_from: Option<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -390,6 +406,7 @@ fn paths_in(
             full: with_inline(ty.clone()),
             structure: ty,
             default,
+            renamed_from: None,
         });
     };
     // A leaf: both renderings of the whole type.
@@ -400,6 +417,7 @@ fn paths_in(
             full: with_inline(full),
             structure,
             default,
+            renamed_from: None,
         });
     };
     match t {
@@ -438,10 +456,12 @@ fn paths_in(
                         .fields
                         .iter()
                         .map(|f| StoredField {
-                            name: f.name.name.clone(),
+                            // #3975: stored under the field's wire key.
+                            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                             ty: f.type_ref.clone(),
                             default: f.init.is_some(),
                             inline: f.refinement.clone(),
+                            replaces: f.replaces.as_ref().map(|o| o.name.clone()),
                         })
                         .collect();
                     record_paths(name, &fields, path, default, types, seen, out);
@@ -454,9 +474,17 @@ fn paths_in(
                             let payload = v
                                 .payload
                                 .iter()
-                                .map(|p| (p.name.name.clone(), p.type_ref.clone()))
+                                .map(|p| {
+                                    (
+                                        p.wire_name().unwrap_or_else(|| p.name.name.clone()),
+                                        p.type_ref.clone(),
+                                    )
+                                })
                                 .collect();
-                            (v.name.name.clone(), payload)
+                            (
+                                v.wire_name().unwrap_or_else(|| v.name.name.clone()),
+                                payload,
+                            )
                         })
                         .collect();
                     sum_paths(name, &variants, path, default, types, seen, out);
@@ -470,7 +498,7 @@ fn paths_in(
             if let Some(fields) = crate::wire::record_inst_fields(name, args, types) {
                 // The instantiation substitutes each field's type; its
                 // default and inline refinement are the declaration's.
-                let declared: HashMap<&str, (bool, Option<Refinement>)> =
+                let declared: HashMap<&str, (bool, Option<Refinement>, Option<String>)> =
                     match types.get(name).map(|d| &d.body) {
                         Some(TypeBody::Record(r)) => r
                             .fields
@@ -478,7 +506,7 @@ fn paths_in(
                             .map(|f| {
                                 (
                                     f.name.name.as_str(),
-                                    (f.init.is_some(), f.refinement.clone()),
+                                    (f.init.is_some(), f.refinement.clone(), f.wire_name()),
                                 )
                             })
                             .collect(),
@@ -487,13 +515,14 @@ fn paths_in(
                 let fields: Vec<StoredField> = fields
                     .into_iter()
                     .map(|(n, ty)| {
-                        let (default, inline) =
+                        let (default, inline, wire) =
                             declared.get(n.as_str()).cloned().unwrap_or_default();
                         StoredField {
-                            name: n,
+                            name: wire.unwrap_or(n),
                             ty,
                             default,
                             inline,
+                            replaces: None,
                         }
                     })
                     .collect();
@@ -514,6 +543,8 @@ struct StoredField {
     ty: TypeRef,
     default: bool,
     inline: Option<Refinement>,
+    /// #4483: the field's `replaces` clause.
+    replaces: Option<String>,
 }
 
 /// The back-reference [`canon_named_in`] writes on revisiting `name`, if it is
@@ -539,6 +570,7 @@ fn record_paths(
             full: back.clone(),
             structure: back,
             default,
+            renamed_from: None,
         });
         return;
     }
@@ -547,11 +579,19 @@ fn record_paths(
         structure: "{}".to_string(),
         full: "{}".to_string(),
         default,
+        renamed_from: None,
     });
     seen.push(name.to_string());
     for f in fields {
         let at = format!("{path}.{}", f.name);
+        let start = out.len();
         paths_in(&f.ty, &at, f.default, f.inline.as_ref(), types, seen, out);
+        // #4483: the rename belongs to the field's own position.
+        if let Some(old) = &f.replaces
+            && let Some(own) = out[start..].iter_mut().find(|p| p.path == at)
+        {
+            own.renamed_from = Some(old.clone());
+        }
     }
     seen.pop();
 }
@@ -571,6 +611,7 @@ fn sum_paths(
             full: back.clone(),
             structure: back,
             default,
+            renamed_from: None,
         });
         return;
     }
@@ -579,6 +620,7 @@ fn sum_paths(
         structure: "|".to_string(),
         full: "|".to_string(),
         default,
+        renamed_from: None,
     });
     seen.push(name.to_string());
     for (variant, payload) in variants {
@@ -588,6 +630,7 @@ fn sum_paths(
             structure: "variant".to_string(),
             full: "variant".to_string(),
             default: false,
+            renamed_from: None,
         });
         for (field, ty) in payload {
             paths_in(ty, &format!("{at}.{field}"), false, None, types, seen, out);

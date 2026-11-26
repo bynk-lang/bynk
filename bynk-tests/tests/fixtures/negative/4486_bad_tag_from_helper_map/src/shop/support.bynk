@@ -1,0 +1,21 @@
+context shop.support
+
+consumes bynk.cloudflare {
+    InboundEmail,
+    EmailVerdict,
+    EmailActions,
+}
+
+// #4486: only the tag map is built in a helper fn, which the literal's `tag:` calls by name.
+fn tags() -> Map[String, String] {
+    Map.empty().insert("X-Ticket", "a").insert("X Bad Name", "b")
+}
+
+service support from email("support@shop.example") {
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+        Route(EmailActions {
+            forward: ["billing@shop.example"],
+            tag: tags(),
+        })
+    }
+}

@@ -104,6 +104,10 @@ fn collect_json_codec_roots(commons: &TypedCommons) -> Vec<TypeRef> {
                         &mut roots,
                     );
                 }
+                // #4105: a typed Analytics read decodes its rows as a `List`.
+                Some(bynk_check::checker::Callee::AnalyticsSelect { row, .. }) => {
+                    push_ground(commons.tys().intern(Ty::List(*row)), &mut roots);
+                }
                 _ => {}
             }
             let ExprKind::MethodCall { args, .. } = &e.kind else {

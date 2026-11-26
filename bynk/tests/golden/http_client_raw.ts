@@ -270,13 +270,17 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
     if (typeof v === "object" && !globalThis.Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      // A payload-less sum's one value is its variant's wire name, under whatever key its
+      // `@discriminator` gave it.
+      const first = globalThis.Object.values(v)[0];
+      return typeof first === "string" ? first : undefined;
     }
     return globalThis.String(v);
   };
   if (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire)) {
     for (const f of fields) {
-      const value = wire[f.name];
+      // The wire form is keyed by wire name.
+      const value = wire[f.wire ?? f.name];
       if (value === undefined) continue;
       for (const item of globalThis.Array.isArray(value) ? value : [value]) {
         const text = leaf(item);
@@ -340,7 +344,7 @@ export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[])
   // A field is a list when its wire value is an array.
   const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
   const lists = new globalThis.Set(
-    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+    fields.filter((f) => globalThis.Array.isArray(record[f.wire ?? f.name])).map((f) => f.wire ?? f.name),
   );
   new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
     const bad = (expected: string): never => {
@@ -892,7 +896,7 @@ export type GetContractResponse =
 
 export function __serialise_ResumeHeaders(value: __Wire_ResumeHeaders): __JsonValue {
   return {
-    lastId: __serialise_Option_String(value.lastId),
+    "last-event-id": __serialise_Option_String(value.lastId),
   };
 }
 
@@ -901,7 +905,7 @@ export function __deserialise_ResumeHeaders(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  const __r_lastId = __deserialise_Option_String(obj["lastId"], `${path}.lastId`);
+  const __r_lastId = __deserialise_Option_String(obj["last-event-id"], `${path}.last-event-id`);
   if (__r_lastId.tag === "Err") return __r_lastId;
   const __lastId = __r_lastId.value;
   return Ok({ lastId: __lastId } as __Wire_ResumeHeaders);
@@ -1048,7 +1052,7 @@ const __route_api_getTicks: __Route = {
 const __route_api_getResume: __Route = {
   method: "GET",
   path: "/resume",
-  contract: "06b497c9098c65eb",
+  contract: "6b4c5aca41a8acad",
   replies: {
     200: [{ kind: "Streaming", body: "events" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1160,7 +1164,7 @@ const __route_api_getContract: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "6e32557c05535c1f",
+    service: "100da9152e7c5421",
     routes: {
       putBlobByName: "2e5adccd6e203411",
       postAny: "b3916c13802b3413",
@@ -1169,7 +1173,7 @@ export const API_CONTRACTS = {
       getChunks: "d892f3cb141268b3",
       postMadeByName: "8a1328cba5042d24",
       getTicks: "51500504e77fb16f",
-      getResume: "06b497c9098c65eb",
+      getResume: "6b4c5aca41a8acad",
       getWatch: "91f0a5da9c6164d6",
       getCr: "a0d7949e54f72c42",
       getFeedByMode: "80ff3ff70fff834c",
@@ -1221,7 +1225,7 @@ export function createClient(options: ClientOptions = {}) {
       }) as globalThis.EventSource | CallFailure,
       getResume: (headers: GetResumeHeaders = {}, init?: globalThis.RequestInit): globalThis.Promise<GetResumeResponse | CallFailure> => __call(options, init, __route_api_getResume, () => {
         const __w_headers: { [k: string]: JsonValue } = {};
-        if (headers.lastId !== undefined) __w_headers["lastId"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
+        if (headers.lastId !== undefined) __w_headers["last-event-id"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
         const __c_headers = __checked(__w_headers, __deserialise_ResumeHeaders, "headers");
         if (__c_headers.tag === "Err") return __c_headers;
         return Ok({ params: {}, headers: __headerRecord(__w_headers, [{ name: "lastId", wire: "last-event-id" }]) });
@@ -1231,7 +1235,7 @@ export function createClient(options: ClientOptions = {}) {
        */
       getResumeEventSource: (headers: GetResumeHeaders = {}): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getResume, () => {
         const __w_headers: { [k: string]: JsonValue } = {};
-        if (headers.lastId !== undefined) __w_headers["lastId"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
+        if (headers.lastId !== undefined) __w_headers["last-event-id"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
         const __c_headers = __checked(__w_headers, __deserialise_ResumeHeaders, "headers");
         if (__c_headers.tag === "Err") return __c_headers;
         return Ok({ params: {}, headers: __headerRecord(__w_headers, [{ name: "lastId", wire: "last-event-id" }]) });

@@ -1,0 +1,13 @@
+{
+  "blurb": "`replaces old` says a field was renamed from `old`: its stored value, a locked event's recorded field and an incoming wire key under the old name are all read as this field. That only makes sense when `old` is a name this field alone gives up. It is refused when the clause names the field itself, when `old` is still another field of the same record or agent (two fields cannot read one name), when two fields replace the same name, and when the project's schema lock records both names as separate fields (the rename would merge two histories). Drop the clause if the fields are separate, or delete the old field.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.field.replaces_conflict",
+  "constructs": [
+    "record_field",
+    "store_field"
+  ],
+  "example": "type Account = {\n  name: String,\n  label: String replaces name,   // ✗ `name` is still declared\n}\n\ntype Account = {\n  label: String replaces name,   // ✓ a rename: `name` is gone\n}",
+  "severity": "error",
+  "summary": "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields."
+}

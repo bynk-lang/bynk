@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BEARER_SUBPROTOCOL,
+  OIDC_SUBPROTOCOL,
   TestConnection,
   WorkersConnection,
   closeArguments,
@@ -13,6 +14,7 @@ import {
   webSocketBearerOffer,
   webSocketBearerProtocol,
   webSocketBearerRefusal,
+  webSocketOriginAllowed,
   webSocketUpgradeResponse,
 } from "../src/connection.ts";
 
@@ -83,6 +85,42 @@ test("the refusal of the old form is a 400 with a fixed message that never echoe
   const res = webSocketBearerRefusal();
   assert.equal(res.status, 400);
   assert.equal(await res.text(), 'Offer the subprotocols ["bynk.bearer", <token>]');
+});
+
+test("an Oidc upgrade offers its own marker, and the Bearer marker is not it (#3904)", async () => {
+  assert.equal(OIDC_SUBPROTOCOL, "bynk.oidc");
+  assert.deepEqual(webSocketBearerOffer("bynk.oidc, tok.en.sig", OIDC_SUBPROTOCOL), { tag: "Token", token: "tok.en.sig" });
+  assert.deepEqual(webSocketBearerOffer("bynk.bearer, tok.en.sig", OIDC_SUBPROTOCOL), { tag: "Legacy" });
+  assert.deepEqual(webSocketBearerOffer("bynk.oidc", OIDC_SUBPROTOCOL), { tag: "Absent" });
+  assert.equal(webSocketBearerProtocol("bynk.oidc, tok", OIDC_SUBPROTOCOL), "bynk.oidc");
+  assert.equal(webSocketBearerProtocol("bynk.bearer, tok", OIDC_SUBPROTOCOL), undefined);
+  const res = webSocketBearerRefusal(OIDC_SUBPROTOCOL);
+  assert.equal(res.status, 400);
+  assert.equal(await res.text(), 'Offer the subprotocols ["bynk.oidc", <token>]');
+});
+
+test("a cookie upgrade's Origin must be exactly a listed one (#3904)", () => {
+  const listed = ["https://app.example.com", "https://admin.example.com:8443"];
+  assert.equal(webSocketOriginAllowed("https://app.example.com", listed), true);
+  assert.equal(webSocketOriginAllowed("https://admin.example.com:8443", listed), true);
+  for (const origin of [
+    null,
+    "",
+    "null",
+    "*",
+    "https://evil.example",
+    "https://app.example.com.evil.example",
+    "http://app.example.com",
+    "https://app.example.com:8443",
+    "https://APP.example.com",
+    "https://app.example.com/",
+  ]) {
+    assert.equal(webSocketOriginAllowed(origin, listed), false, String(origin));
+  }
+  // Nothing listed, or a wildcard listed, trusts nothing.
+  assert.equal(webSocketOriginAllowed("https://app.example.com", []), false);
+  assert.equal(webSocketOriginAllowed("*", ["*"]), false);
+  assert.equal(webSocketOriginAllowed("null", ["null"]), false);
 });
 
 test("the 101 carries the selected subprotocol, and none when none is selected", () => {
@@ -157,7 +195,7 @@ function socket() {
   };
 }
 
-test("webSocketClosing runs the handler with the peer's details, marks the socket, then echoes the code", async () => {
+test("webSocketClosing echoes the code, then runs the handler with the peer's details and marks the socket", async () => {
   const s = socket();
   const seen: unknown[] = [];
   await webSocketClosing(s.ws, { connId: "c" }, { code: 4001, reason: "bye", clean: true }, async (i) => void seen.push(i));
@@ -174,7 +212,7 @@ test("a close code that cannot be sent is acknowledged with a bare close()", asy
   }
 });
 
-test("the handshake completes after a faulting handler, and the fault still propagates", async () => {
+test("the close is sent even when the handler faults, and the fault still propagates", async () => {
   const s = socket();
   await assert.rejects(
     webSocketClosing(s.ws, { connId: "c" }, { code: 1000, reason: "", clean: true }, async () => {
@@ -254,7 +292,7 @@ test("the default clock reads whole seconds, as the HTTP Bearer check does", () 
   }
 });
 
-test("a close-first reply ends the connection with its code before on close runs", async () => {
+test("the close goes out before on close runs, so a release that closes the socket cannot replace its code", async () => {
   const s = socket();
   const order: string[] = [];
   const close = s.ws.close;
@@ -265,10 +303,9 @@ test("a close-first reply ends the connection with its code before on close runs
   await webSocketClosing(
     s.ws,
     { connId: "c" },
-    { code: 1008, reason: "authentication expired", clean: false },
+    { code: 4001, reason: "bye", clean: true },
     async () => void order.push("on close"),
-    "first",
   );
   assert.deepEqual(order, ["close", "on close"]);
-  assert.deepEqual(s.closes, [[1008, "authentication expired"]], "and it is not replied to again afterwards");
+  assert.deepEqual(s.closes, [[4001, "bye"]], "and it is not sent again afterwards");
 });

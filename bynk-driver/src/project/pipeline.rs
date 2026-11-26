@@ -374,6 +374,72 @@ fn reconcile_agents_and_orders(
     versions
 }
 
+/// Reconcile the lock against the declarations (events, agent state shapes and `derives Ord`
+/// orders), when the caller pre-read it. Returns the versions the lock gives, the reconciled
+/// document, and the lock as it was read, which the Analytics mappings reconcile against once the
+/// units are checked (#4105).
+fn reconcile_lock(
+    schema_registry: &SchemaLock,
+    project_root: &Path,
+    units: (
+        &HashMap<String, bynk_check::symbols::UnitTable>,
+        &HashMap<String, Vec<String>>,
+    ),
+    parsed: &[ParsedFile],
+    errors: &mut ErrorSink,
+) -> (
+    SchemaVersions,
+    Option<schema_registry::SchemaRegistry>,
+    Option<schema_registry::SchemaRegistry>,
+) {
+    let mut versions = SchemaVersions::default();
+    let SchemaLock::On { existing } = schema_registry else {
+        return (versions, None, None);
+    };
+    match bynk_check::schema_registry::parse_or_diagnose(existing.as_deref(), project_root) {
+        Ok(existing_reg) => {
+            let mut schema_errors: Vec<CompileError> = Vec::new();
+            let (mut updated, effective) =
+                bynk_check::schema_registry::reconcile(&existing_reg, units.0, &mut schema_errors);
+            errors.extend_for(None, schema_errors);
+            // State-migrations S0 (#2204) and #3956: agent state shapes and the order of each
+            // `derives Ord` type, in the same document.
+            versions.agents =
+                reconcile_agents_and_orders(&existing_reg, &mut updated, units, parsed, errors);
+            versions.events = effective;
+            (versions, Some(updated), Some(existing_reg))
+        }
+        Err(err) => {
+            errors.push_for(None, err);
+            (versions, None, None)
+        }
+    }
+}
+
+/// #4105: the column mapping of each `Analytics` instance written with `writeValue`, against the
+/// lock's `[analytics]`. Known only once the units are checked, so it runs after them.
+fn reconcile_analytics_mappings(
+    existing: &Option<schema_registry::SchemaRegistry>,
+    updated: &mut Option<schema_registry::SchemaRegistry>,
+    (unit_callees, parsed): (
+        &HashMap<String, HashMap<ExprId, bynk_check::checker::Callee>>,
+        &[ParsedFile],
+    ),
+    errors: &mut ErrorSink,
+) {
+    let (Some(existing), Some(updated)) = (existing, updated) else {
+        return;
+    };
+    let mut analytics_errors: Vec<CompileError> = Vec::new();
+    bynk_check::analytics_lock::reconcile_analytics(
+        existing,
+        updated,
+        unit_callees,
+        &mut analytics_errors,
+    );
+    errors.extend_attributed_by_span(parsed, analytics_errors);
+}
+
 /// The rewrites that run right after parsing, before any check: service
 /// defaults (ADR 0147), then #3941's `env(NAME)` constants, which take the
 /// default environment's values.
@@ -828,35 +894,13 @@ pub(super) fn run_checks(
     //        now this crate's caller-side of both the parse and the
     //        `bynk.project.schema_registry_corrupt` construction (§3.2's
     //        "eighth site").
-    let mut schema_effective_versions = SchemaVersions::default();
-    let mut schema_registry_doc: Option<schema_registry::SchemaRegistry> = None;
-    if let SchemaLock::On { existing } = schema_registry {
-        match bynk_check::schema_registry::parse_or_diagnose(existing.as_deref(), project_root) {
-            Ok(existing_reg) => {
-                let mut schema_errors: Vec<CompileError> = Vec::new();
-                let (mut updated, effective) = bynk_check::schema_registry::reconcile(
-                    &existing_reg,
-                    &unit_tables,
-                    &mut schema_errors,
-                );
-                errors.extend_for(None, schema_errors);
-                // State-migrations S0 (#2204) and #3956: agent state shapes and
-                // the order of each `derives Ord` type, in the same document.
-                schema_effective_versions.agents = reconcile_agents_and_orders(
-                    &existing_reg,
-                    &mut updated,
-                    (&unit_tables, &unit_uses),
-                    &parsed,
-                    &mut errors,
-                );
-                schema_effective_versions.events = effective;
-                schema_registry_doc = Some(updated);
-            }
-            Err(err) => {
-                errors.push_for(None, err);
-            }
-        }
-    }
+    let (schema_effective_versions, mut schema_registry_doc, existing_registry) = reconcile_lock(
+        schema_registry,
+        project_root,
+        (&unit_tables, &unit_uses),
+        &parsed,
+        &mut errors,
+    );
 
     if !errors.is_empty() && mode == Mode::Build {
         return RunChecks::Bailed {
@@ -1284,6 +1328,13 @@ pub(super) fn run_checks(
     // wire position now routes through `serialisation.rs`, whose `Bytes` arm
     // base64-encodes. The restriction has no remaining cause, and ADR 0142 D8's
     // deferral to "the roadmap's typed cross-context boundary fix" is discharged.
+
+    reconcile_analytics_mappings(
+        &existing_registry,
+        &mut schema_registry_doc,
+        (&unit_callees, &parsed),
+        &mut errors,
+    );
 
     RunChecks::Checked {
         errors,

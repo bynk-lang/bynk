@@ -286,6 +286,14 @@
           {
             "label": "Recursive generic types",
             "link": "/book/guides/type-system/recursive-generic-types/"
+          },
+          {
+            "label": "Rename a field safely",
+            "link": "/book/guides/type-system/rename-a-field-safely/"
+          },
+          {
+            "label": "Decode a third-party webhook into typed values",
+            "link": "/book/guides/type-system/decode-a-third-party-webhook/"
           }
         ]
       },
@@ -408,6 +416,10 @@
           {
             "label": "Sign and verify data",
             "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
+          },
+          {
+            "label": "Store a password",
+            "link": "/book/guides/effects-and-capabilities/store-a-password/"
           }
         ]
       },
@@ -628,6 +640,10 @@
           {
             "label": "Deploy from CI",
             "link": "/book/guides/projects-build-and-deployment/deploy-from-ci/"
+          },
+          {
+            "label": "Keep a project's data in one jurisdiction",
+            "link": "/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/"
           },
           {
             "label": "Roll back a deployment",

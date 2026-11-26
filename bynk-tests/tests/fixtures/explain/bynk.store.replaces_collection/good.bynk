@@ -1,0 +1,10 @@
+context shop.cart
+
+agent Cart {
+  key id: String
+  store visited: Set[String] replaces seen
+
+  on call ping() -> Effect[Int] {
+    1
+  }
+}

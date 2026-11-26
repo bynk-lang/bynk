@@ -1,0 +1,12 @@
+{
+  "blurb": "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` or `@unique` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed or unique `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.replaces_collection",
+  "constructs": [
+    "store_field"
+  ],
+  "example": "store visited: Log[Int] replaces seen   // ✗ a `Log` cannot be renamed with `replaces`\n\nstore visited: Set[String] replaces seen   // ✓ a `Set` can",
+  "severity": "error",
+  "summary": "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet."
+}

@@ -1,0 +1,18 @@
+commons demo.ord
+
+// #4475: a single-file program uses `Ordering` (`compare`, `sortWith`, `then`, `reverse`), with no `uses`.
+fn order(a: Int, b: Int) -> String {
+  match a.compare(b) {
+    Less => "less",
+    Equal => "equal",
+    Greater => "greater",
+  }
+}
+
+fn newest_first(xs: List[Int]) -> List[Int] {
+  xs.sortWith((a, b) => b.compare(a))
+}
+
+fn then_by(a: Int, b: Int, c: Int, d: Int) -> Ordering {
+  a.compare(b).then(c.compare(d)).reverse()
+}

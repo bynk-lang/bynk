@@ -1511,9 +1511,9 @@ commons and context, as `Option` can. A unit that names `Ordering` or calls
 written `uses bynk.ordering`; a unit that never mentions them is unchanged, and
 nothing is emitted for it. A type of your own named `Ordering` takes precedence
 in your unit. Building `Ordering.Less` inside a context is not a rebrand
-construction: the type is shared by every context as it is. `compare` is not
-available in a single-file program (`bynk check page.bynk`), which has no other
-units to reach.
+construction: the type is shared by every context as it is. A single-file
+program (`bynk check page.bynk`) has no other unit to `uses`, so the commons is
+merged into it instead, on the same words, and `compare` works there too.
 
 Its variants name an `Ordering` only where the context says so: an expected type
 (`-> Ordering { Less }`), the other operand of `==`, `!=` or an ordering
@@ -1799,34 +1799,71 @@ fn kind(a: Account) -> String {
 
 The emitted TypeScript keeps the field name: `a.type`, `{ type: "Organization" }`.
 
-### Field annotations: `@name` {#field-name}
+### Wire names: `@name` and `@discriminator` {#field-name}
 
-A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
-request where that is not an identifier:
+A type's wire names are part of its one encoding. `@name("…")` before a record field, a sum
+variant or a variant's payload field names the key (or, for a variant, the value) it has on the
+wire, and `@discriminator("…")` before a sum's `type` names the key that carries the variant, in
+place of `kind`. They apply at every boundary the type is encoded at: an HTTP body or result,
+`Json`, `Yaml` and `Form`, a cross-context call, a queue, an event and stored state, and they are
+what OpenAPI, the MCP tool descriptions and a decode error's path show.
 
 ```bynk,fragment
-type Filter = {
-  @name("page-size") pageSize: Option[Int],
-  @name("filter[status]") status: Option[String],
-  owner: Option[String],
+type Charge = {
+  id: String,
+  @name("amount_captured") captured: Int,
+  @name("content-type") contentType: String,
 }
+
+@discriminator("type")
+type StripeEvent =
+  | @name("charge.succeeded") ChargeSucceeded(data: Charge)
+  | @name("charge.refunded") ChargeRefunded(@name("object") body: Charge)
+  | Ping
+
+type Action = enum { @name("opened") Opened, @name("closed") Closed }
 ```
 
-The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
-only the key a request reader looks for changes. It is legal only on a field of a record used as the
-`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
-(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
-a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
-a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
-its JSON key is the field name. Two fields may not read the same name
-(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
-(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
-refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
-`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
-key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
-and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
-follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
-([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
+The Bynk names never change: a `Charge` has `captured` and `contentType`, a `StripeEvent` is matched
+on `ChargeSucceeded` and `Ping`, and a diagnostic says `captured`. Only the codec, the OpenAPI
+document, the typed test drivers and a decode error's path use the wire name, so a bad
+`amount_captured` is reported at `$.amount_captured`. The sum above reads
+`{"type": "charge.succeeded", "data": { … }}` and writes the same; its default key `kind`, and
+the Bynk variant name `ChargeSucceeded`, no longer read. An `enum` whose variants are named reads
+the bare string too (`"opened"`), whatever its discriminator, and a path, query, header or cookie
+value of that enum is the wire name. `Option` and `Result` keep their fixed shapes.
+
+Annotations go before the name they apply to: before the field (as for any annotation), after the
+`|` of a pipe-form variant or before a tag of the `enum { }` shorthand, before a payload field
+inside the parentheses, and before the `type` keyword (after its doc comment) for
+`@discriminator`.
+
+The checks:
+
+- `@name` takes exactly one string literal, or a `String` constant bound to one
+  (`bynk.types.field_name_bad_arg`), may appear once on a field or variant, and may not be empty
+  (`bynk.types.field_name_invalid`).
+- Two fields of a record, two payload fields of a variant and two variants of a sum may not share
+  a wire name (`bynk.types.field_name_duplicate`).
+- `@discriminator` takes one non-empty string literal (`bynk.types.discriminator_bad_arg`), is
+  legal on a sum only (`bynk.types.discriminator_not_sum`), and no payload field's wire name may be
+  the discriminator, `kind` unless the sum names another (`bynk.types.discriminator_collides`).
+- Any other annotation on a type or a variant is `bynk.types.annotation_unknown`; on a payload
+  field, `bynk.types.field_annotation_unknown`.
+- A request record adds its own rules: a cookie or header name must be a token, and cookie and
+  query names that differ only in case are refused (`bynk.types.field_name_invalid`,
+  `bynk.types.field_name_case_conflict`). A `cookies`, `query`, `headers` or `@form`/`@multipart`
+  `body` record reads each field from its wire name off the request.
+
+A wire name is part of the stored and the contract shape. Changing it on a type held by a `store`
+field, or by a locked event, changes what is on disk or in flight: on a field of an event, or of a
+record stored in an agent, `replaces` names the previous key (`bynk.field.replaces_conflict`
+refuses a clause that names the field's own current key), and a store whose recorded shape no longer
+matches needs a `migrate` step, as for any other change to a stored shape
+([Rename a field safely](/book/guides/type-system/rename-a-field-safely/)). On a type that only
+crosses an HTTP or `Json` boundary it is a contract change, and `contractDiff` reports it as one:
+a different request key is breaking, as is a different discriminator, a different variant name or a
+different payload key.
 
 A name that two places must agree on can be a constant. `@name` accepts a bare reference
 to a constant declared exactly `String` (not a refined type) and bound to a string literal,
@@ -1842,7 +1879,42 @@ type Prefs = {
 
 The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
 duplicate and case checks run on the resolved text, and a diagnostic points at the reference
-and names the constant. Go-to-definition, hover and rename work on it.
+and names the constant. Go-to-definition, hover and rename work on it. `@discriminator` takes a
+constant the same way.
+
+### Renaming a field: `replaces` {#field-replaces}
+
+A field renamed from an earlier name says so with `replaces` after its type (and refinement), before
+any default:
+
+```bynk,fragment
+type User = {
+	displayName: String replaces name,
+	age: Int replaces years = 18,
+}
+```
+
+`replaces` is contextual, so a field, a type or a value named `replaces` elsewhere is unaffected. The
+clause is a record field's, an event field's and a `store` field's; a sum variant's payload field has none.
+
+- **Decoding accepts both names.** `{"name": "Ada"}` and `{"displayName": "Ada"}` both decode to a
+  `User` whose `displayName` is `"Ada"`, on every path that decodes the record: a request body, a call
+  argument, `Json.decode`, an event payload. The new key wins when both arrive. A key absent under both
+  names takes the field's default, or `None` for an `Option`, as for any absent key. A field renamed
+  twice reads the name its clause gives; a payload from before an earlier rename needs its own clause.
+- **Encoding writes the new name only**, so a payload is never doubled and the rename can finish.
+- **A request is compatible, a response is not.** A callee that renames a request field still
+  understands a caller built against the old contract, so the contract diff reports it compatible. A
+  callee that renames a response field writes only the new key, which a caller built against the old
+  contract no longer finds, so it reports it breaking. An event field is read like a request
+  and recorded additive in `bynk.schema.lock`
+  ([Understand events](/book/concepts/events/understand-events/#renaming-an-event-field)).
+- **The old name must be free.** `replaces` cannot name the field itself, a field the record still
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`).
+- **`replaces` does not change what Bynk code sees.** The field is `displayName` everywhere in the
+  program: access, construction, defaults, refinements.
+
+For the stored and locked sides, see [Renaming a store field](/reference/agents/#rename-a-store-field).
 
 ### Field annotations: `@index` {#field-index}
 

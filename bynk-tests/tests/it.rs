@@ -67,6 +67,8 @@ mod integration {
     mod contract_hash;
     #[path = "contracts_lock.rs"]
     mod contracts_lock;
+    #[path = "cors_origin_shapes.rs"]
+    mod cors_origin_shapes;
     #[path = "cross_context_nodes.rs"]
     mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
@@ -319,6 +321,8 @@ mod system {
     mod alias_service_workerd;
     #[path = "analyse_mode_corpus.rs"]
     mod analyse_mode_corpus;
+    #[path = "analytics_mapping_lock.rs"]
+    mod analytics_mapping_lock;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
@@ -345,6 +349,8 @@ mod system {
     mod check_warning_reporting_behaviour;
     #[path = "cli_rooting.rs"]
     mod cli_rooting;
+    #[path = "collection_rename_workerd.rs"]
+    mod collection_rename_workerd;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
     #[path = "compatibility_flags_cli.rs"]
@@ -417,6 +423,12 @@ mod system {
     mod failure_explanation_behaviour;
     #[path = "fetch_headers.rs"]
     mod fetch_headers;
+    #[path = "field_rename_behaviour.rs"]
+    mod field_rename_behaviour;
+    #[path = "field_rename_lock.rs"]
+    mod field_rename_lock;
+    #[path = "field_rename_workerd.rs"]
+    mod field_rename_workerd;
     #[path = "float_codec_behaviour.rs"]
     mod float_codec_behaviour;
     #[path = "header_question_lint.rs"]

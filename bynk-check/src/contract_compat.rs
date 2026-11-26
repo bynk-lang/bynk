@@ -78,6 +78,9 @@ pub enum Shape {
     Sum {
         name: String,
         variants: Vec<Variant>,
+        /// #3975: the sum's `@discriminator`, the key the variant travels under; `None` for the
+        /// default `kind`. Names are wire names: a variant's `@name`, a field's `@name`.
+        discriminator: Option<String>,
     },
     Refined {
         name: String,
@@ -107,6 +110,12 @@ pub struct Field {
     /// the normal form or the hash: a default is not hashed. Text recorded
     /// before the marker existed reads `false`, which errs towards breaking.
     pub defaulted: bool,
+    /// #3793: the keys this field was renamed from (`new: T replaces old`), most recent first.
+    /// A receiver that declares a rename reads the old key as this field, so a sender still
+    /// writing the old key is understood. Part of the stored shape text, never of the normal form
+    /// or the hash, as `defaulted` is. Text recorded before the marker existed reads empty,
+    /// which errs towards breaking.
+    pub renamed_from: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -436,7 +445,8 @@ fn named_shape(
                 .fields
                 .iter()
                 .map(|f| Field {
-                    name: f.name.name.clone(),
+                    // #3975: a field is known by its wire name.
+                    name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
                     ty: shape_of(&f.type_ref, types, seen, subst),
                     preds: f
                         .refinement
@@ -444,6 +454,7 @@ fn named_shape(
                         .map(canon_pred_set)
                         .unwrap_or_default(),
                     defaulted: f.init.is_some(),
+                    renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
                 })
                 .collect();
             fields.sort_by_cached_key(render_field);
@@ -457,15 +468,16 @@ fn named_shape(
                 .variants
                 .iter()
                 .map(|v| Variant {
-                    name: v.name.name.clone(),
+                    name: v.wire_name().unwrap_or_else(|| v.name.name.clone()),
                     payload: v
                         .payload
                         .iter()
                         .map(|p| Field {
-                            name: p.name.name.clone(),
+                            name: p.wire_name().unwrap_or_else(|| p.name.name.clone()),
                             ty: shape_of(&p.type_ref, types, seen, subst),
                             preds: Vec::new(),
                             defaulted: false,
+                            renamed_from: Vec::new(),
                         })
                         .collect(),
                 })
@@ -477,6 +489,7 @@ fn named_shape(
             Shape::Sum {
                 name: name.to_string(),
                 variants,
+                discriminator: decl.discriminator(),
             }
         }
         TypeBody::Refined {
@@ -534,10 +547,17 @@ fn render(s: &Shape) -> String {
             fs.sort();
             format!("{name}{{{}}}", fs.join(", "))
         }
-        Shape::Sum { name, variants } => {
+        Shape::Sum {
+            name,
+            variants,
+            discriminator,
+        } => {
             let mut vs: Vec<String> = variants.iter().map(render_variant).collect();
             vs.sort();
-            format!("{name}|{}", vs.join("|"))
+            match discriminator {
+                Some(d) => format!("{name}|#{d}|{}", vs.join("|")),
+                None => format!("{name}|{}", vs.join("|")),
+            }
         }
         Shape::Refined { name, base, preds } => {
             if preds.is_empty() {
@@ -659,6 +679,10 @@ fn field_node(f: &Field) -> Node {
     if f.defaulted {
         fa.push(Node::call("D", vec![]));
     }
+    // #3793: a trailing `R("old", …)` lists the names the field was renamed from.
+    if !f.renamed_from.is_empty() {
+        fa.push(Node::call("R", strs(&f.renamed_from).collect()));
+    }
     Node::call("F", fa)
 }
 
@@ -673,18 +697,27 @@ fn node_field(n: &Node) -> Option<Field> {
         Node::Str(s) => Some(s.clone()),
         Node::Call(..) => None,
     };
-    // #2689: a trailing `D()` marks a defaulted field; the rest are predicates.
-    let (defaulted, preds) = match fa.last() {
-        Some(Node::Call(h, a)) if fa.len() > 2 && h == "D" && a.is_empty() => {
-            (true, &fa[2..fa.len() - 1])
-        }
-        _ => (false, &fa[2..]),
+    // #3793: a trailing `R("old", …)` lists the names the field was renamed from, and
+    // #2689: a `D()` before it marks a defaulted field; the rest are predicates.
+    let mut rest = &fa[2..];
+    let mut renamed_from = Vec::new();
+    if let Some((Node::Call(h, a), head)) = rest.split_last()
+        && h == "R"
+        && !a.is_empty()
+    {
+        renamed_from = a.iter().map(string).collect::<Option<_>>()?;
+        rest = head;
+    }
+    let (defaulted, preds) = match rest.split_last() {
+        Some((Node::Call(h, a), head)) if h == "D" && a.is_empty() => (true, head),
+        _ => (false, rest),
     };
     Some(Field {
         name: string(&fa[0])?,
         ty: node_shape(&fa[1])?,
         preds: preds.iter().map(string).collect::<Option<_>>()?,
         defaulted,
+        renamed_from,
     })
 }
 
@@ -706,12 +739,20 @@ fn shape_node(s: &Shape) -> Node {
             args.extend(fields.iter().map(field_node));
             Node::call("Rec", args)
         }
-        Shape::Sum { name, variants } => {
+        Shape::Sum {
+            name,
+            variants,
+            discriminator,
+        } => {
             let mut args = vec![Node::Str(name.clone())];
             for v in variants {
                 let mut va = vec![Node::Str(v.name.clone())];
                 va.extend(v.payload.iter().map(field_node));
                 args.push(Node::call("V", va));
+            }
+            // #3975: the key the variant travels under, when it is not `kind`.
+            if let Some(d) = discriminator {
+                args.push(Node::call("Key", vec![Node::Str(d.clone())]));
             }
             Node::call("Sum", args)
         }
@@ -786,10 +827,16 @@ fn node_shape(n: &Node) -> Option<Shape> {
         "Sum" => {
             let name = string(args.first()?)?;
             let mut variants = Vec::new();
+            let mut discriminator = None;
             for v in &args[1..] {
                 let Node::Call(vh, va) = v else {
                     return None;
                 };
+                // #3975: `Key("type")` after the variants.
+                if vh == "Key" && va.len() == 1 {
+                    discriminator = Some(string(&va[0])?);
+                    continue;
+                }
                 if vh != "V" || va.is_empty() {
                     return None;
                 }
@@ -798,7 +845,11 @@ fn node_shape(n: &Node) -> Option<Shape> {
                     payload: va[1..].iter().map(node_field).collect::<Option<_>>()?,
                 });
             }
-            Shape::Sum { name, variants }
+            Shape::Sum {
+                name,
+                variants,
+                discriminator,
+            }
         }
         "Rf" => {
             if args.len() < 2 {
@@ -1094,8 +1145,24 @@ impl Cx {
             (Shape::Record { fields: sf, .. }, Shape::Record { fields: rf, .. }) => {
                 for rfield in rf {
                     let fpath = format!("{path}.{}", rfield.name);
-                    match sf.iter().find(|f| f.name == rfield.name) {
+                    // #3793: a receiver that declares `replaces old` reads the sender's `old`
+                    // key as this field, when the sender does not also send the new key.
+                    match sf
+                        .iter()
+                        .find(|f| f.name == rfield.name)
+                        .or_else(|| claimed_by(rfield, sf))
+                    {
                         Some(sfield) => {
+                            if sfield.name != rfield.name {
+                                self.note(
+                                    &fpath,
+                                    false,
+                                    format!(
+                                        "the {sender} sends the field under its old name `{}`, which the {receiver} reads as `{}`",
+                                        sfield.name, rfield.name
+                                    ),
+                                );
+                            }
                             self.flows(&sfield.ty, &sfield.preds, &rfield.ty, &rfield.preds, &fpath)
                         }
                         None if rfield.defaulted && !matches!(rfield.ty, Shape::Option(_)) => {
@@ -1118,7 +1185,10 @@ impl Cx {
                     }
                 }
                 for sfield in sf {
-                    if !rf.iter().any(|f| f.name == sfield.name) {
+                    if !rf.iter().any(|f| {
+                        f.name == sfield.name
+                            || claimed_by(f, sf).is_some_and(|c| c.name == sfield.name)
+                    }) {
                         self.note(
                             &format!("{path}.{}", sfield.name),
                             false,
@@ -1130,7 +1200,32 @@ impl Cx {
                     }
                 }
             }
-            (Shape::Sum { variants: sv, .. }, Shape::Sum { variants: rv, .. }) => {
+            (
+                Shape::Sum {
+                    variants: sv,
+                    discriminator: sd,
+                    ..
+                },
+                Shape::Sum {
+                    variants: rv,
+                    discriminator: rd,
+                    ..
+                },
+            ) => {
+                // #3975: the variant is read from one key, so a different key is unreadable.
+                if sd != rd {
+                    let shown =
+                        |d: &Option<String>| d.clone().unwrap_or_else(|| "kind".to_string());
+                    self.note(
+                        path,
+                        true,
+                        format!(
+                            "the discriminator key changes from `{}` to `{}`",
+                            shown(sd),
+                            shown(rd)
+                        ),
+                    );
+                }
                 for svar in sv {
                     let vpath = format!("{path}.{}", svar.name);
                     match rv.iter().find(|v| v.name == svar.name) {
@@ -1210,6 +1305,18 @@ impl Cx {
             );
         }
     }
+}
+
+/// #3793: the sender's field a receiver's `replaces` reads as `rfield`: the first of the
+/// receiver's old names (most recent first) the sender sends, when it does not send the new one.
+fn claimed_by<'a>(rfield: &Field, sender: &'a [Field]) -> Option<&'a Field> {
+    if sender.iter().any(|f| f.name == rfield.name) {
+        return None;
+    }
+    rfield
+        .renamed_from
+        .iter()
+        .find_map(|old| sender.iter().find(|f| &f.name == old))
 }
 
 /// A variant's payload field names, sorted.
@@ -1404,6 +1511,113 @@ mod tests {
             &format!("{REQ}type Req = {{ id: Int, note: Option[String] }}\n"),
         );
         only(&c, Direction::Request, "request.note");
+    }
+
+    // ---- #3793: a renamed field ---------------------------------------------
+
+    /// A request flows caller to callee, and the callee reads the caller's old key under its
+    /// declared `replaces`, so a rename in a request is compatible: old callers keep working.
+    #[test]
+    fn a_renamed_request_field_is_compatible() {
+        let c = compatible(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: String replaces name }}\n"),
+        );
+        only(&c, Direction::Request, "request.label");
+    }
+
+    #[test]
+    fn a_renamed_request_field_is_not_reported_as_ignored() {
+        let c = compatible(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: String replaces name }}\n"),
+        );
+        assert!(
+            !c.findings.iter().any(|f| f.path == "request.name"),
+            "the old key is read as the new field, not ignored: {c:#?}"
+        );
+    }
+
+    /// A response flows callee to caller: the callee now writes only the new key and an old caller
+    /// still requires the old one, so a rename in a response is breaking.
+    #[test]
+    fn a_renamed_response_field_is_breaking() {
+        breaking(
+            &format!("{RESP}type Resp = {{ name: String }}\n"),
+            &format!("{RESP}type Resp = {{ label: String replaces name }}\n"),
+        );
+    }
+
+    #[test]
+    fn a_rename_still_judges_the_type() {
+        breaking(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: Int replaces name }}\n"),
+        );
+    }
+
+    /// The source names one old name, so a caller two renames back is not understood.
+    #[test]
+    fn only_the_named_old_key_is_read() {
+        breaking(
+            &format!("{REQ}type Req = {{ a: String }}\n"),
+            &format!("{REQ}type Req = {{ c: String replaces b }}\n"),
+        );
+    }
+
+    #[test]
+    fn a_renamed_field_round_trips_through_the_stored_text() {
+        let s = shape(&format!(
+            "{REQ}type Req = {{ label: String replaces name = \"x\" }}\n"
+        ));
+        let text = s.to_text();
+        assert!(text.contains("R(\"name\")"), "{text}");
+        assert_eq!(ServiceShape::from_text(&text).as_ref(), Some(&s));
+    }
+
+    /// #3975: a field is known by its wire name, so the same Bynk name under a new key is a
+    /// break, and a new Bynk name under the same key is not.
+    #[test]
+    fn a_wire_name_is_the_key_a_field_is_judged_by() {
+        breaking(
+            &format!("{REQ}type Req = {{ n: Int }}\n"),
+            &format!("{REQ}type Req = {{ @name(\"count\") n: Int }}\n"),
+        );
+        let same_key =
+            |bynk_name: &str| format!("{REQ}type Req = {{ @name(\"count\") {bynk_name}: Int }}\n");
+        // The contract, and so its hash, is the same: the Bynk name is not part of it.
+        let c = check_call(&shape(&same_key("n")), &shape(&same_key("total")));
+        assert_eq!(c.verdict, Verdict::Unchanged, "{c:#?}");
+        assert!(c.findings.is_empty(), "{c:#?}");
+    }
+
+    /// #3975: a sum's variants are known by their wire names and it by its discriminator, whichever
+    /// way the call goes.
+    #[test]
+    fn a_discriminator_or_a_variant_wire_name_change_is_a_break_either_way() {
+        let plain = format!("{RESP}type Resp = | A | B\n");
+        let keyed = format!("{RESP}@discriminator(\"type\")\ntype Resp = | A | B\n");
+        let other = format!("{RESP}@discriminator(\"event\")\ntype Resp = | A | B\n");
+        breaking(&plain, &keyed);
+        breaking(&keyed, &plain);
+        breaking(&keyed, &other);
+        let named = format!("{RESP}type Resp = | @name(\"a\") A | B\n");
+        breaking(&plain, &named);
+        breaking(&named, &plain);
+        // The same wire name under another Bynk name is the same contract.
+        let renamed = format!("{RESP}type Resp = | @name(\"a\") Z | B\n");
+        let c = check_call(&shape(&named), &shape(&renamed));
+        assert!(c.findings.is_empty(), "{c:#?}");
+    }
+
+    #[test]
+    fn a_discriminator_round_trips_through_the_stored_text() {
+        let s = shape(&format!(
+            "{RESP}@discriminator(\"type\")\ntype Resp = | @name(\"a.b\") A(@name(\"k\") x: Int) | B\n"
+        ));
+        let text = s.to_text();
+        assert!(text.contains("Key(\"type\")"), "{text}");
+        assert_eq!(ServiceShape::from_text(&text).as_ref(), Some(&s));
     }
 
     #[test]
@@ -2186,6 +2400,7 @@ mod tests {
                     ty,
                     preds: Vec::new(),
                     defaulted: false,
+                    renamed_from: Vec::new(),
                 })
                 .collect(),
         }
@@ -2203,6 +2418,7 @@ mod tests {
     fn sum(variants: Vec<(&str, Vec<(&str, Shape)>)>) -> Shape {
         Shape::Sum {
             name: "S".into(),
+            discriminator: None,
             variants: variants
                 .into_iter()
                 .map(|(n, payload)| Variant {
@@ -2214,6 +2430,7 @@ mod tests {
                             ty,
                             preds: Vec::new(),
                             defaulted: false,
+                            renamed_from: Vec::new(),
                         })
                         .collect(),
                 })

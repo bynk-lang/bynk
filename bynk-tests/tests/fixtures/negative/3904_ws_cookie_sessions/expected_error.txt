@@ -1,0 +1,2 @@
+bynk.actor.scheme_not_admissible a `SignedCookie` actor with `sessions = true` is not admissible on a WebSocket `on open`
+# exact

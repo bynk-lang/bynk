@@ -572,7 +572,8 @@ default.
 
 {{#grammar record_field}}
 
-One field of a record: a name, a type, an optional inline refinement, and an
+One field of a record: a name, a type, an optional inline refinement, an optional
+`replaces <old>` clause naming the name the field was renamed from (#3793), and an
 optional default value.
 
 **Static semantics.**
@@ -599,7 +600,16 @@ One variant of a sum type: a constant name with an optional payload.
 
 {{#grammar variant_payload_field}}
 
-A named field in a sum-variant payload.
+A named field in a sum-variant payload, optionally preceded by `@name` annotations (#3975).
+
+### variant_annotation {#rule-_variant_annotation}
+
+{{#grammar _variant_annotation}}
+
+The annotation before a sum variant or an enum tag (#3975): `@<name>` or `@<name>(<args>)`,
+shown as a [`store_annotation`](#rule-store_annotation). It is a rule of its own so that the
+parser state after it is not shared with a field's annotations, where an identifier follows, and
+a capitalised variant name is read as one. The checker admits only `@name("…")`.
 
 ### enum_type {#rule-enum_type}
 
@@ -1599,8 +1609,9 @@ The agent's identity: a key field whose value names an instance.
 
 {{#grammar store_field}}
 
-A `store` field (storage track): `store <name>: <Kind>[…] [@annotations] [= <init>]`
-— an access-pattern slot of a declared storage kind. `store` is a contextual
+A `store` field (storage track): `store <name>: <Kind>[…] [@annotations] [replaces <old>] [= <init>]`
+— an access-pattern slot of a declared storage kind. `replaces <old>` renames a `Cell` field from `<old>`
+(#3793). `store` is a contextual
 keyword (also a valid identifier elsewhere). It is the agent's sole state surface
 (ADR 0108); the legacy `state { }` block was removed at the parity slice.
 

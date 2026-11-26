@@ -120,7 +120,11 @@ pub enum BindingSource {
     /// instance (`capability Orders = D1`), one database per instance under a
     /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
     /// they reach it through the instance's `WorkersD1`.
-    D1Database { capability: String },
+    D1Database {
+        capability: String,
+        /// #3820: the jurisdiction the database is pinned to at creation, if any.
+        jurisdiction: Option<String>,
+    },
     /// #3301: the `[[secrets_store_secrets]]` binding of a `StoredSecret`
     /// instance (`capability StripeKey = StoredSecret @store("payments")
     /// @secret("stripe-live")`), reading `secret` of the Secrets Store named
@@ -218,7 +222,12 @@ pub enum BindingSource {
     Singleton { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
-    Agent { class_name: String },
+    /// `jurisdiction` is the agent's `@jurisdiction` (#3819): not in the wrangler config, since
+    /// it is a property of the id, but what `deploy` records per class and compares.
+    Agent {
+        class_name: String,
+        jurisdiction: Option<String>,
+    },
     /// The `[[durable_objects.bindings]]` entry for the events fan-out class
     /// of a context whose handlers emit. Never seen by handlers: they reach it
     /// through `deps.__eventsDispatch`.
@@ -239,6 +248,7 @@ pub fn idempotency_binding() -> WorkerBinding {
         name: crate::d1_migrations::IDEMPOTENCY_BINDING.to_string(),
         source: BindingSource::D1Database {
             capability: IMPLICIT_IDEMPOTENCY_CAPABILITY.to_string(),
+            jurisdiction: None,
         },
     }
 }
@@ -275,11 +285,13 @@ impl BindingSource {
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
             }
-            Self::D1Database { capability } if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY => {
+            Self::D1Database { capability, .. }
+                if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY =>
+            {
                 "the implicit idempotency database of a Worker that calls `Idempotency.claim`"
                     .to_string()
             }
-            Self::D1Database { capability } => {
+            Self::D1Database { capability, .. } => {
                 format!("the D1 database binding of derived capability `{capability}`")
             }
             Self::StoredSecret {
@@ -317,7 +329,7 @@ impl BindingSource {
                 "the `{capability}` binding of `{}`",
                 firstparty::CLOUDFLARE_UNIT
             ),
-            Self::Agent { class_name } => {
+            Self::Agent { class_name, .. } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
             Self::EventsFanout { .. } => {
@@ -790,7 +802,7 @@ fn declared_at(
                 .map(|d| d.span)
         };
         let span = match &binding.source {
-            BindingSource::Agent { class_name } => c.items.iter().find_map(|item| {
+            BindingSource::Agent { class_name, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Agent(a) = item else {
                     return None;
                 };
@@ -814,7 +826,7 @@ fn declared_at(
             | BindingSource::ContainerInstance { capability, .. }
             | BindingSource::AiSearchInstance { capability, .. }
             | BindingSource::MtlsCertificate { capability, .. }
-            | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
+            | BindingSource::D1Database { capability, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };
@@ -985,6 +997,7 @@ mod tests {
             name: format!("AGENT_{}", name.to_uppercase()),
             source: BindingSource::Agent {
                 class_name: name.to_string(),
+                jurisdiction: None,
             },
         }
     }

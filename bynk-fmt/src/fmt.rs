@@ -1627,6 +1627,11 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &t.documentation {
             self.emit_doc(doc);
         }
+        // #3975: annotations before the `type` keyword, one per line.
+        for ann in &t.annotations {
+            self.push(&annotation_to_string(ann));
+            self.newline();
+        }
         // #2618: the unit-private modifier.
         if t.private.is_some() {
             self.push("private ");
@@ -1771,6 +1776,10 @@ impl<'a> Formatter<'a> {
             self.push(" where ");
             self.format_refinement(r);
         }
+        // #3793: `name: T replaces old`.
+        if let Some(old) = &field.replaces {
+            self.push(&format!(" replaces {}", old.name));
+        }
         if let Some(init) = &field.init {
             self.push(" = ");
             self.format_expr(init);
@@ -1792,7 +1801,7 @@ impl<'a> Formatter<'a> {
                         || v.documentation.is_some()
                 });
             if !has_comments {
-                let names: Vec<&str> = s.variants.iter().map(|v| v.name.name.as_str()).collect();
+                let names: Vec<String> = s.variants.iter().map(variant_head).collect();
                 let oneline = format!("enum {{ {} }}", names.join(", "));
                 if self.fits(&oneline, 0) {
                     self.push(&oneline);
@@ -1807,7 +1816,7 @@ impl<'a> Formatter<'a> {
                     if let Some(doc) = &v.documentation {
                         f.emit_doc(doc);
                     }
-                    f.push(&v.name.name);
+                    f.push(&variant_head(v));
                     if i + 1 < s.variants.len() || f.opts.trailing_comma {
                         f.push(",");
                     }
@@ -1834,7 +1843,7 @@ impl<'a> Formatter<'a> {
                     f.emit_doc(doc);
                 }
                 f.push("| ");
-                f.push(&v.name.name);
+                f.push(&variant_head(v));
                 if v.payload.iter().any(|p| p.documentation.is_some()) {
                     // #1888: a documented payload field puts each field on its
                     // own line, under its doc, as in a record body.
@@ -1846,11 +1855,7 @@ impl<'a> Formatter<'a> {
                             if let Some(doc) = &p.documentation {
                                 f.emit_doc(doc);
                             }
-                            f.push(&format!(
-                                "{}: {}",
-                                p.name.name,
-                                type_ref_to_string(&p.type_ref)
-                            ));
+                            f.push(&payload_field_text(p));
                             if j < last || f.opts.trailing_comma {
                                 f.push(",");
                             }
@@ -1860,11 +1865,7 @@ impl<'a> Formatter<'a> {
                     f.push(")");
                 } else if !v.payload.is_empty() {
                     f.push("(");
-                    let parts: Vec<String> = v
-                        .payload
-                        .iter()
-                        .map(|p| format!("{}: {}", p.name.name, type_ref_to_string(&p.type_ref)))
-                        .collect();
+                    let parts: Vec<String> = v.payload.iter().map(payload_field_text).collect();
                     f.push(&parts.join(", "));
                     f.push(")");
                 }
@@ -2479,6 +2480,10 @@ impl<'a> Formatter<'a> {
         // v0.85 (ADR 0111): annotations follow the kind, one space-separated each.
         for ann in &sf.annotations {
             self.push(&format!(" {}", annotation_to_string(ann)));
+        }
+        // #3793: `store name: Kind[T] replaces old`.
+        if let Some(old) = &sf.replaces {
+            self.push(&format!(" replaces {}", old.name));
         }
         if let Some(init) = &sf.init {
             self.push(" = ");
@@ -3620,6 +3625,32 @@ fn store_kind_to_string(k: &StoreKind) -> String {
     }
 }
 
+/// #3975: a sum variant's source head, its annotations then its name (`@name("opened") Opened`).
+fn variant_head(v: &Variant) -> String {
+    let mut out = String::new();
+    for ann in &v.annotations {
+        out.push_str(&annotation_to_string(ann));
+        out.push(' ');
+    }
+    out.push_str(&v.name.name);
+    out
+}
+
+/// #3975: a variant's payload field, `@name("k") field: Type`.
+fn payload_field_text(p: &VariantField) -> String {
+    let mut out = String::new();
+    for ann in &p.annotations {
+        out.push_str(&annotation_to_string(ann));
+        out.push(' ');
+    }
+    out.push_str(&format!(
+        "{}: {}",
+        p.name.name,
+        type_ref_to_string(&p.type_ref)
+    ));
+    out
+}
+
 /// Render a storage annotation (v0.85; ADR 0111): `@name`, or `@name(arg, …)`
 /// where each argument is an optional `label: ` then the value expression.
 /// Render a storage annotation as a single source-syntax token: `@indexed(by:
@@ -3797,6 +3828,20 @@ mod tests {
         let src = "commons m\n\ntype Pair[T: Eq] = {\n\tleft: T,\n}\n\nfn same[T: Eq + Ord, U](a: T, b: T, u: U) -> Bool {\n\ta == b\n}\n\nfn Pair.has(self, x: T) -> Bool where T: Eq, T: Ord {\n\tself.left == x\n}\n\nfn Pair.has2(self, x: T) -> Bool where T: Eq\n\trequires p: true\n{\n\tself.left == x\n}\n";
         let out = format_source(src, &FormatOptions::default()).unwrap();
         assert_eq!(out, src);
+    }
+
+    /// #3975: wire-name annotations print where they were written, and the output is a fixed point.
+    #[test]
+    fn wire_name_annotations_round_trip() {
+        let src = "commons m\n\ntype Charge = {\n\tid: String,\n\t@name(\"amount_captured\") captured: Int,\n}\n\n--- An event.\n@discriminator(\"type\")\ntype Hook =\n\t| @name(\"charge.succeeded\") ChargeSucceeded(@name(\"d\") data: Charge)\n\t| Ping\n\ntype Action = enum { @name(\"opened\") Opened, Closed }\n\n@discriminator(\"t\")\nprivate type Other = enum { A, B }\n";
+        let out = format_source(src, &FormatOptions::default()).unwrap();
+        assert_eq!(out, src);
+        // An enum with a multi-line body keeps the annotation before its tag.
+        let long = "commons m\n\ntype Action = enum {\n\t@name(\"opened\") Opened,\n\t// closed again\n\tClosed,\n}\n";
+        assert_eq!(
+            format_source(long, &FormatOptions::default()).unwrap(),
+            long
+        );
     }
 
     /// #2640: a `par` block prints one binding per line, indented, and the
@@ -4443,6 +4488,23 @@ mod tests {
             "cell write not formatted: {out}"
         );
         assert_eq!(out, fmt(&out), "formatter not idempotent: {out}");
+    }
+
+    /// #3793: `replaces old` after a field's type, refinement and annotations, before a default.
+    #[test]
+    fn formats_a_field_replaces_clause() {
+        let src = "context shop {\ntype User = { displayName: String replaces name, age: Int where Positive replaces years = 18 }\nagent Counter {\nkey id: String\nstore count: Cell[Int] replaces total = 0\non call get() -> Effect[Int] {\ncount\n}\n}\n}";
+        let out = fmt(src);
+        assert!(out.contains("displayName: String replaces name"), "{out}");
+        assert!(
+            out.contains("age: Int where Positive replaces years = 18"),
+            "{out}"
+        );
+        assert!(
+            out.contains("store count: Cell[Int] replaces total = 0"),
+            "{out}"
+        );
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
 
     #[test]

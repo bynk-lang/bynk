@@ -1,0 +1,88 @@
+===========================
+A record field's wire name (#3975)
+===========================
+
+commons shapes
+
+type Charge = { @name("amount_captured") captured: Int }
+
+---------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (record_type
+        (record_field
+          (store_annotation
+            (identifier)
+            (annotation_arg
+              (string_literal)))
+          (identifier)
+          (base_type))))))
+
+===========================
+A sum's discriminator and variant wire names (#3975)
+===========================
+
+commons shapes
+
+@discriminator("type")
+type StripeEvent =
+  | @name("charge.succeeded") ChargeSucceeded(@name("d") data: Charge)
+  | ChargeRefunded
+
+---------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (store_annotation
+        (identifier)
+        (annotation_arg
+          (string_literal)))
+      (identifier)
+      (sum_type
+        (sum_variant
+          (store_annotation
+            (identifier)
+            (annotation_arg
+              (string_literal)))
+          (constant_name)
+          (variant_payload_field
+            (store_annotation
+              (identifier)
+              (annotation_arg
+                (string_literal)))
+            (identifier)
+            (identifier)))
+        (sum_variant
+          (constant_name))))))
+
+===========================
+An enum tag's wire name (#3975)
+===========================
+
+commons shapes
+
+type Action = enum { @name("opened") Opened, Closed }
+
+---------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (type_decl
+      (identifier)
+      (enum_type
+        (store_annotation
+          (identifier)
+          (annotation_arg
+            (string_literal)))
+        (constant_name)
+        (constant_name)))))

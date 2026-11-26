@@ -484,6 +484,82 @@ pub(in crate::emitter) fn lower_d1_select_call(
     })
 }
 
+/// #4105: lower `AnalyticsSql.select[T](Instance, tail, params)`, or `None` when the call is not
+/// one. The checker wrote the SQL (`SELECT` and the columns of the instance's written record, then
+/// the literal tail); this runs it through `query` with the instance's dataset and decodes the
+/// reply's JSON rows into `List[T]`, so no runtime operation is involved.
+pub(in crate::emitter) fn lower_analytics_select_call(
+    e: &Expr,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let Some(Callee::AnalyticsSelect { cap, row, sql, .. }) =
+        cx.commons().callees.get(&e.id).cloned()
+    else {
+        return None;
+    };
+    // The checker writes every accepted select's SQL; one without it was refused, so this is a
+    // missing fact, never a call to a `select` the binding does not have.
+    let Some(sql) = sql else {
+        return Some(cx.missing_fact(e.span, "the SQL of a typed Analytics read"));
+    };
+    let params = args.get(2)?;
+    let target = cx.ty_render().intern(Ty::List(row));
+    // The reply's rows are JSON; the platform quotes a 64-bit integer (`count()`) as text, as
+    // `int8` is quoted for Postgres, so an `Int` field reads either form (`DecodeSource::Pg`).
+    let decoder = json_decoder_fn(target, DecodeSource::Pg, cx)
+        .unwrap_or_else(|| cx.missing_fact(e.span, "JSON decoder for a `select` row type"));
+    let params = pre.lower_node(params, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let r = || ident("__r");
+    let d = || ident("__d");
+    let tag_is = |obj: TsExpr, tag: &str| {
+        binary(
+            bynk_ts::TsBinaryOp::StrictEq,
+            member(obj, "tag"),
+            str_lit(tag),
+        )
+    };
+    let err = |tag: &str, error: TsExpr| {
+        call(
+            ident("Err"),
+            vec![object(vec![("tag", tag_const(tag)), ("error", error)])],
+        )
+    };
+    let table = TsExpr::Await(Box::new(call(
+        chain(deps_node.clone(), &[cap.as_str(), "dataset"]),
+        Vec::new(),
+    )));
+    let body = vec![
+        const_typed("__decode", None, decoder),
+        const_typed(
+            "__r",
+            None,
+            TsExpr::Await(Box::new(call(
+                chain(deps_node, &["AnalyticsSql", "query"]),
+                vec![table, str_lit(&sql), params],
+            ))),
+        ),
+        TsStmt::if_stmt(
+            tag_is(r(), "Err"),
+            ret(err("AnalyticsQuery", member(r(), "error"))),
+            None,
+        ),
+        const_typed(
+            "__d",
+            None,
+            call(ident("__decode"), vec![chain(r(), &["value", "data"])]),
+        ),
+        ret(TsExpr::Conditional {
+            test: Box::new(tag_is(d(), "Ok")),
+            consequent: Box::new(call(ident("Ok"), vec![member(d(), "value")])),
+            alternate: Box::new(err("AnalyticsDecode", member(d(), "error"))),
+        }),
+    ];
+    Some(call(paren(block_arrow(vec![], true, body)), vec![]))
+}
+
 /// #3386: lower `Actor.issue(identity)` and `Actor.expire()` on a local `SignedCookie` actor, or
 /// `None` when the call is not one. `issue` is an effect: it signs the identity into a session
 /// cookie with the actor's keys (from `deps.__session`, supplied by the Worker's compose from the
@@ -632,12 +708,14 @@ pub(in crate::emitter) fn lower_cookie_field_call(
         } else {
             value
         };
-        typed_cookie_node(
-            &name,
-            call(ident("__cookieValue"), vec![str_lit(kind), value]),
-            none(),
-            none(),
-        )
+        let mut args = vec![str_lit(kind), value];
+        // #3975: an enum with wire-named variants is written under those names.
+        if kind == "enum"
+            && let Some(names) = crate::emitter::workers_entry::enum_wire_names(leaf, types)
+        {
+            args.push(names);
+        }
+        typed_cookie_node(&name, call(ident("__cookieValue"), args), none(), none())
     })
 }
 
@@ -768,7 +846,7 @@ pub(in crate::emitter) fn lower_capability_call(
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
     // #4105: `Cap.writeValue[T](value)` is lowered over the instance's `write`.
-    if let Some(Callee::AnalyticsWrite { cap, mapping }) = cx.commons().callee(e.id).cloned() {
+    if let Some(Callee::AnalyticsWrite { cap, mapping, .. }) = cx.commons().callee(e.id).cloned() {
         let value = pre.lower_node(args.first()?, cx);
         let point = analytics_point(value, &mapping, cx);
         let deps = deps_receiver(cx.in_test_case(), cx);

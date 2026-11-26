@@ -43,6 +43,12 @@ pub fn lock_version() -> u32 {
 /// newer version rather than dropping the table it does not know.
 pub const ORDERS_LOCK_VERSION: u32 = 3;
 
+/// #4105: the lock version a document carries once it records `[analytics]`, the mapping of each
+/// `Analytics` instance written with `writeValue`. Newer than [`ORDERS_LOCK_VERSION`] for the same
+/// reason: a toolchain that knows only `[orders]` refuses it rather than dropping the table it
+/// does not know. A lock with no recorded mapping stays at the version its other tables need.
+pub const ANALYTICS_LOCK_VERSION: u32 = 4;
+
 /// The last lock version without `[agents]`. [`parse`] reads it as the
 /// current version with an empty agent table; the next build writes it back
 /// at [`lock_version`]. `check`/`test` read it and never write (ADR 0493).
@@ -68,6 +74,29 @@ pub struct SchemaRegistry {
     /// document it always did.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     orders: BTreeMap<String, OrderEntry>,
+    /// #4105: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`. Skipped when empty, so a project with none writes the document it
+    /// always did.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    analytics: BTreeMap<String, AnalyticsEntry>,
+}
+
+/// One `Analytics` instance's recorded column mapping (#4105): the record it is written with
+/// (informational: a rename of the record is not a change), the `@index` field, and the blob and
+/// double fields in column order, each as `name:kind` (`country:text`, `seats:number`). Reordering,
+/// retyping (a field changing kind) or removing a field moves what a column holds for every point
+/// already written; appending a field does not.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnalyticsEntry {
+    pub record: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index: Option<String>,
+    /// `blob1`, `blob2`, … in order, as `name:kind`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blobs: Vec<String>,
+    /// `double1`, `double2`, … in order, as `name:kind`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub doubles: Vec<String>,
 }
 
 /// One `derives Ord` type's recorded order (#3956): the field names of a record
@@ -105,6 +134,7 @@ impl SchemaRegistry {
             events: BTreeMap::new(),
             agents: BTreeMap::new(),
             orders: BTreeMap::new(),
+            analytics: BTreeMap::new(),
         }
     }
 
@@ -139,7 +169,36 @@ impl SchemaRegistry {
     /// [`ORDERS_LOCK_VERSION`] from the first one.
     pub fn insert_order(&mut self, key: String, entry: OrderEntry) {
         self.orders.insert(key, entry);
-        self.version = ORDERS_LOCK_VERSION;
+        self.settle_version();
+    }
+
+    /// The recorded mapping of `Analytics` instance `key` (`<unit>.<Instance>`).
+    pub fn get_analytics(&self, key: &str) -> Option<&AnalyticsEntry> {
+        self.analytics.get(key)
+    }
+
+    /// Record `entry` under `key`, overwriting any prior entry. The document is at
+    /// [`ANALYTICS_LOCK_VERSION`] from the first one.
+    pub fn insert_analytics(&mut self, key: String, entry: AnalyticsEntry) {
+        self.analytics.insert(key, entry);
+        self.version = ANALYTICS_LOCK_VERSION;
+    }
+
+    /// Every recorded mapping, in key order.
+    pub fn analytics(&self) -> impl Iterator<Item = (&String, &AnalyticsEntry)> {
+        self.analytics.iter()
+    }
+
+    /// The version the tables this registry records need: [`ANALYTICS_LOCK_VERSION`] with an
+    /// `[analytics]` mapping, [`ORDERS_LOCK_VERSION`] with `[orders]`, else [`lock_version`].
+    fn settle_version(&mut self) {
+        self.version = if !self.analytics.is_empty() {
+            ANALYTICS_LOCK_VERSION
+        } else if !self.orders.is_empty() {
+            ORDERS_LOCK_VERSION
+        } else {
+            lock_version()
+        };
     }
 
     /// Every recorded order, in key order.
@@ -282,6 +341,12 @@ pub struct StoreShape {
     /// (Decision C).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<PathShape>,
+    /// #3793: the names this field was renamed from (`store new: Cell[T] replaces old`),
+    /// most recent first: the old name, then the names it was itself renamed from. A record
+    /// stored at an earlier version holds its value under one of them. Additive and omitted
+    /// when empty, so the lock is unchanged for a field never renamed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renamed_from: Vec<String>,
 }
 
 /// #2676: one position in a stored value. `path` starts at the `store` field's
@@ -304,6 +369,11 @@ pub struct PathShape {
     /// alone leaves stored data readable, as for [`StoreShape::refinement`].
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub refinement: String,
+    /// #4483: the name this record field was renamed from (`replaces old`), on the field's own
+    /// path. A recorded path under the old name is read as this one, as a top-level `replaces`
+    /// reads it, so the rename needs no `migrate from`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_from: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -324,6 +394,11 @@ pub struct FieldShape {
     #[serde(rename = "type")]
     pub ty: String,
     pub default: bool,
+    /// #3793: the names this field was renamed from (`new: T replaces old`), most recent first.
+    /// An event recorded under an earlier schema holds the value under one of them. Additive and
+    /// omitted when empty, so the lock is unchanged for a field never renamed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renamed_from: Vec<String>,
 }
 
 /// Parse `bynk.schema.lock`'s content. `existing: None` means the project
@@ -368,7 +443,15 @@ pub fn parse(existing: Option<&str>, project_root: &Path) -> Result<SchemaRegist
     if reg.version == ORDERS_LOCK_VERSION && reg.orders.is_empty() {
         reg.version = lock_version();
     }
-    if reg.version != lock_version() && reg.version != ORDERS_LOCK_VERSION {
+    // #4105: and a version-4 one records `[analytics]`; one with none is read at the version its
+    // other tables need.
+    if reg.version == ANALYTICS_LOCK_VERSION && reg.analytics.is_empty() {
+        reg.settle_version();
+    }
+    if reg.version != lock_version()
+        && reg.version != ORDERS_LOCK_VERSION
+        && reg.version != ANALYTICS_LOCK_VERSION
+    {
         return Err(format!(
             "unsupported schema registry version {} (`{}`)",
             reg.version,
@@ -406,6 +489,7 @@ mod tests {
             name: name.to_string(),
             ty: ty.to_string(),
             default,
+            renamed_from: Vec::new(),
         }
     }
 
@@ -502,6 +586,7 @@ mod tests {
                             ty: "String".to_string(),
                             refinement: "String".to_string(),
                             paths: Vec::new(),
+                            renamed_from: Vec::new(),
                         }],
                     },
                     AgentShape {

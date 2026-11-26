@@ -129,6 +129,21 @@ export const CipherKey = {
  * signature or a token's digest; `Bytes.compare` is not constant-time and must
  * never compare secrets. `digest`, `hmac` and `sign` run in time that does not
  * depend on the data in a way a program can exploit.
+ *
+ * Keys and passwords. `deriveKey` is HKDF-SHA-256 (RFC 5869): `info` names what
+ * the key is for, and `length` is 1 to 8160 bytes. `hashPassword` is salted
+ * PBKDF2-HMAC-SHA-256 at a count Bynk chooses, returned as a self-describing
+ * string; `verifyPassword` reads the parameters from it and compares in constant
+ * time (a string not in the format is `false`); `needsRehash` says whether to
+ * hash again after a successful login. The count is 600,000 on Node and in the
+ * browser and 100,000 on Cloudflare Workers, which is the most Workers will run
+ * and is below OWASP's guidance of 600,000 for this algorithm; a hash made off
+ * Workers above 100,000 cannot be verified on Workers (`verifyPassword` is
+ * `false`, with a logged warning). Cost: one `hashPassword` or `verifyPassword`
+ * spends significant CPU, counted against a Worker's CPU limit: about 30 ms per
+ * call at Workers' 100,000 iterations, so it needs the Workers Paid plan (the Free
+ * plan allows 10 ms). There is no cheaper setting. Where that is not an option,
+ * use an identity provider.
  */
 export interface Crypto {
   digest(algorithm: Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
@@ -143,6 +158,10 @@ export interface Crypto {
   importCipherKeyFromSecret(secret: Secret): globalThis.Promise<Result<CipherKey, CryptoError>>;
   seal(key: CipherKey, plaintext: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
   open(key: CipherKey, sealed: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<Result<globalThis.Uint8Array, CryptoError>>;
+  deriveKey(secret: globalThis.Uint8Array, salt: globalThis.Uint8Array, info: globalThis.Uint8Array, length: number): globalThis.Promise<globalThis.Uint8Array>;
+  hashPassword(password: string): globalThis.Promise<string>;
+  verifyPassword(password: string, stored: string): globalThis.Promise<boolean>;
+  needsRehash(stored: string): globalThis.Promise<boolean>;
   sign(key: SigningKey, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
   verify(key: VerifyKey, data: globalThis.Uint8Array, signature: globalThis.Uint8Array): globalThis.Promise<boolean>;
 }

@@ -464,7 +464,10 @@ stopped: exit 1: could not delete the orphaned KV namespace for `gone`: ✘ [ERR
 +155 
 +156 [environments.default.workers.shop-cart.expects]
 +157 
-+165 shop = ["orders@example.com"]
++164 [environments.default.agent_jurisdictions.shop]
++165 Cart = "none"
++166 
++168 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -526,7 +529,10 @@ stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone
 +152 
 +153 [environments.default.workers.shop-cart.expects]
 +154 
-+162 shop = ["orders@example.com"]
++161 [environments.default.agent_jurisdictions.shop]
++162 Cart = "none"
++163 
++165 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -589,7 +595,10 @@ stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`:
 +149 
 +150 [environments.default.workers.shop-cart.expects]
 +151 
-+159 shop = ["orders@example.com"]
++158 [environments.default.agent_jurisdictions.shop]
++159 Cart = "none"
++160 
++162 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -659,7 +668,10 @@ stopped: exit 1: could not delete the orphaned Hyperdrive config `gone-main` of 
 +140 
 +141 [environments.default.workers.shop-cart.expects]
 +142 
-+150 shop = ["orders@example.com"]
++149 [environments.default.agent_jurisdictions.shop]
++150 Cart = "none"
++151 
++153 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -731,7 +743,10 @@ stopped: exit 1: could not delete the orphaned Hyperdrive config `shop-main-was`
 +136 
 +137 [environments.default.workers.shop-cart.expects]
 +138 
-+146 shop = ["orders@example.com"]
++145 [environments.default.agent_jurisdictions.shop]
++146 Cart = "none"
++147 
++149 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -805,7 +820,10 @@ stopped: exit 1: could not delete the orphaned queue `old-jobs`: ✘ [ERROR] the
 +132 
 +133 [environments.default.workers.shop-cart.expects]
 +134 
-+142 shop = ["orders@example.com"]
++141 [environments.default.agent_jurisdictions.shop]
++142 Cart = "none"
++143 
++145 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1322,7 +1340,10 @@ stopped: exit 1: deleted the orphaned KV namespace for `gone` but could not reco
 +155 
 +156 [environments.default.workers.shop-cart.expects]
 +157 
-+165 shop = ["orders@example.com"]
++164 [environments.default.agent_jurisdictions.shop]
++165 Cart = "none"
++166 
++168 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1384,7 +1405,10 @@ stopped: exit 1: deleted the orphaned KV namespace `KV_CACHE` for `gone` but cou
 +152 
 +153 [environments.default.workers.shop-cart.expects]
 +154 
-+162 shop = ["orders@example.com"]
++161 [environments.default.agent_jurisdictions.shop]
++162 Cart = "none"
++163 
++165 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1447,7 +1471,10 @@ stopped: exit 1: deleted the orphaned KV namespace `KV_OLD` for `shop` but could
 +149 
 +150 [environments.default.workers.shop-cart.expects]
 +151 
-+159 shop = ["orders@example.com"]
++158 [environments.default.agent_jurisdictions.shop]
++159 Cart = "none"
++160 
++162 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1513,7 +1540,10 @@ stopped: exit 1: deleted the orphaned Vectorize index `gone-index` but could not
 +146 
 +147 [environments.default.workers.shop-cart.expects]
 +148 
-+156 shop = ["orders@example.com"]
++155 [environments.default.agent_jurisdictions.shop]
++156 Cart = "none"
++157 
++159 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1582,7 +1612,10 @@ stopped: exit 1: deleted the orphaned Vectorize index `shop-docs-v0` but could n
 +143 
 +144 [environments.default.workers.shop-cart.expects]
 +145 
-+153 shop = ["orders@example.com"]
++152 [environments.default.agent_jurisdictions.shop]
++153 Cart = "none"
++154 
++156 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1652,7 +1685,10 @@ stopped: exit 1: deleted the orphaned Hyperdrive config `gone-main` but could no
 +140 
 +141 [environments.default.workers.shop-cart.expects]
 +142 
-+150 shop = ["orders@example.com"]
++149 [environments.default.agent_jurisdictions.shop]
++150 Cart = "none"
++151 
++153 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1724,7 +1760,10 @@ stopped: exit 1: deleted the orphaned Hyperdrive config `shop-main-was` but coul
 +136 
 +137 [environments.default.workers.shop-cart.expects]
 +138 
-+146 shop = ["orders@example.com"]
++145 [environments.default.agent_jurisdictions.shop]
++146 Cart = "none"
++147 
++149 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -1798,7 +1837,10 @@ stopped: exit 1: deleted the orphaned queue `old-jobs` but could not record it i
 +132 
 +133 [environments.default.workers.shop-cart.expects]
 +134 
-+142 shop = ["orders@example.com"]
++141 [environments.default.agent_jurisdictions.shop]
++142 Cart = "none"
++143 
++145 shop = ["orders@example.com"]
 -121 shop = [
 -122     "orders@example.com",
 -123     "returns@example.com",
@@ -2578,8 +2620,11 @@ stopped: exit 1: could not delete the orphaned queue `old-jobs-staging`: ✘ [ER
 +229 [environments.staging.renamed_classes.shop]
 +230 Basket = "Cart"
 +231 
-+232 [environments.staging.email_addresses]
-+233 shop = ["orders@example.com"]
++232 [environments.staging.agent_jurisdictions.shop]
++233 Cart = "none"
++234 
++235 [environments.staging.email_addresses]
++236 shop = ["orders@example.com"]
 -- write 1 fails
 stopped: exit 1: created KV namespace `KV_SESSIONS` for `shop-cart` but could not record it in <root>/bynk.deploy.lock: the disk is full
   (unchanged)
@@ -3661,5 +3706,8 @@ stopped: exit 1: deleted the orphaned queue `old-jobs-staging` but could not rec
 +229 [environments.staging.renamed_classes.shop]
 +230 Basket = "Cart"
 +231 
-+232 [environments.staging.email_addresses]
-+233 shop = ["orders@example.com"]
++232 [environments.staging.agent_jurisdictions.shop]
++233 Cart = "none"
++234 
++235 [environments.staging.email_addresses]
++236 shop = ["orders@example.com"]

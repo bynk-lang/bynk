@@ -1028,6 +1028,20 @@ export const AnalyticsSqlError = {
 };
 
 /**
+ * Why a typed Analytics read (`AnalyticsSql.select[T]`) failed: `AnalyticsQuery` is the
+ * query's own failure, `AnalyticsDecode` a row that did not fit `T`. The names carry the
+ * `Analytics` prefix because `Sql` and `Decode` are `SqlReadError`'s.
+ */
+export type AnalyticsReadError =
+    { readonly tag: "AnalyticsQuery"; readonly error: AnalyticsSqlError }
+  | { readonly tag: "AnalyticsDecode"; readonly error: DecodeError };
+
+export const AnalyticsReadError = {
+  AnalyticsQuery: (error: AnalyticsSqlError): AnalyticsReadError => ({ tag: "AnalyticsQuery", error }),
+  AnalyticsDecode: (error: DecodeError): AnalyticsReadError => ({ tag: "AnalyticsDecode", error }),
+};
+
+/**
  * The version of this Worker that is running, as `Version.current()`
  * reports it. `id` is the version's id, `tag` its tag (`None` when the
  * version was uploaded without one), and `deployed` when the version was
@@ -1706,7 +1720,7 @@ export const __ServiceToken: symbol = globalThis.Symbol("Service");
  * metadata, conditional writes and multipart uploads. Used only through a named instance,
  * `capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
  * `given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
- * `"fedramp"`) pins the bucket's jurisdiction at creation.
+ * `"fedramp"` or `"us"`) pins the bucket's jurisdiction at creation.
  *
  * `get`, `put` and `putWith` buffer the object in the Worker's memory, so
  * each should stay well under its 128 MB limit. `get` and `head` give `None`
@@ -1865,6 +1879,16 @@ export const __AnalyticsToken: symbol = globalThis.Symbol("Analytics");
  * The reply is an `AnalyticsSqlResult`, its `data` the rows as JSON text for `Json.decode`.
  * A failure is an `AnalyticsSqlError`: `SqlRetryable` when the platform says repeating
  * may succeed, `SqlRejected` when it does not. The call never retries by itself.
+ *
+ * `select[T](instance, tail, params)` is the typed read, over `query`: `T` is a record, and
+ * the compiler writes the `SELECT` list from it, so the columns are never counted by hand. A
+ * field of `T` named after a field of the record `instance` is written with
+ * (`Signups.writeValue(…)`) reads that field's column (`blob1 AS "plan"`); a field that is not
+ * written is one the `tail` computes, named by an `AS` alias in a select list the tail
+ * continues with a comma (`", sum(_sample_interval) AS n FROM {dataset} … GROUP BY country"`). The `tail`
+ * is a literal, as for `query`, and starts at `FROM` or at that comma. A field that is neither
+ * written nor an alias, or whose type does not read its column (text for a blob, a number for
+ * a double), is a compile error naming it. The call gives `Result[List[T], AnalyticsReadError]`.
  *
  * There is no local implementation of the binding: under `bynk dev` a query runs on
  * Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
@@ -2508,6 +2532,39 @@ export function __deserialise_AiError(json: __JsonValue, path: string = "$"): Re
       }
       const __message = obj["message"];
       return Ok({ tag: "AiFailed", message: __message } as AiError);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_AnalyticsReadError(value: AnalyticsReadError): __JsonValue {
+  switch (value.tag) {
+    case "AnalyticsQuery": {
+      return { kind: "AnalyticsQuery", error: __serialise_AnalyticsSqlError(value.error) };
+    }
+    case "AnalyticsDecode": {
+      return { kind: "AnalyticsDecode", error: value.error as unknown as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_AnalyticsReadError(json: __JsonValue, path: string = "$"): Result<AnalyticsReadError, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "AnalyticsQuery": {
+      const __r_error = __deserialise_AnalyticsSqlError(obj["error"], `${path}.error`);
+      if (__r_error.tag === "Err") return __r_error;
+      const __error = __r_error.value;
+      return Ok({ tag: "AnalyticsQuery", error: __error } as AnalyticsReadError);
+    }
+    case "AnalyticsDecode": {
+      const __error = obj["error"] as unknown as DecodeError;
+      return Ok({ tag: "AnalyticsDecode", error: __error } as AnalyticsReadError);
     }
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });

@@ -922,7 +922,26 @@ pub enum Callee {
     /// computed from the record `T`.
     AnalyticsWrite {
         cap: String,
+        /// The record written, which `AnalyticsSql.select[T]` reads back from.
+        record: String,
         mapping: analytics::AnalyticsMapping,
+        /// The record's declaration (else the call), where the schema lock reports a mapping that changed.
+        span: Span,
+    },
+    /// #4105: `AnalyticsSql.select[T](Instance, tail, params)`. The compiler writes the `SELECT`
+    /// list from `row` and the instance's written record, so `sql` is filled once the unit has
+    /// been checked (`analytics::resolve_selects`); `None` before that, and when it is refused.
+    AnalyticsSelect {
+        /// The `Analytics` instance whose dataset is read.
+        cap: String,
+        row: TyId,
+        /// The literal after the select list (it starts at `FROM`, or at a comma that continues
+        /// the list).
+        tail: String,
+        /// Names the tail defines with `AS`, which a read field may take instead of a column.
+        aliases: Vec<String>,
+        sql: Option<String>,
+        span: Span,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
@@ -1688,6 +1707,20 @@ pub fn check_record_in(
 
     // 1b. #2617: check each constant declared in this file — its name, its
     // initialiser's static-ness and type — and the cycles through it.
+    // #3975: the wire names (`@name`, `@discriminator`) this unit's own types declare.
+    crate::wire_names::validate_wire_names(
+        input.commons.items.iter().filter_map(|i| match i {
+            CommonsItem::Type(t) => Some(t),
+            _ => None,
+        }),
+        &input.consts,
+        &mut errors,
+    );
+    for item in &input.commons.items {
+        if let CommonsItem::Event(e) = item {
+            crate::wire_names::validate_record(&e.name.name, &e.body, &input.consts, &mut errors);
+        }
+    }
     let local_consts: Vec<&ConstDecl> = input
         .commons
         .items
@@ -7718,6 +7751,7 @@ mod pure_helper_pins {
     }
     fn refined_decl(name: &str, base: BaseType, refinement: Option<Refinement>) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),
@@ -7735,6 +7769,7 @@ mod pure_helper_pins {
     }
     fn record_decl(name: &str) -> TypeDecl {
         TypeDecl {
+            annotations: Vec::new(),
             derives: Vec::new(),
             derives_kw: None,
             name: ident(name),

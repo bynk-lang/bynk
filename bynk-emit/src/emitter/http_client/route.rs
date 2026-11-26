@@ -711,7 +711,8 @@ impl Gen {
             if !is_file {
                 let wired = self.convert(&f.type_ref, Dir::ToWire, field(), 0)?;
                 let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
-                stmts.push(wire_assign("body", &fname, ser));
+                // #3975: the object is the record's wire form, keyed by wire name.
+                stmts.push(wire_assign("body", &wire, ser));
                 specs.push(field_spec(&fname, f.wire_name()));
                 continue;
             }
@@ -849,7 +850,8 @@ impl Gen {
             let given = member(ident(arg), &fname);
             let wired = self.convert(&f.type_ref, Dir::ToWire, given.clone(), 0)?;
             let ser = serialisation::serialise_expr_via(&f.type_ref, &wired, "", &self.ru);
-            let write = wire_assign(arg, &fname, ser);
+            // #3975: the object is the record's wire form, keyed by wire name.
+            let write = wire_assign(arg, &f.wire_name().unwrap_or_else(|| fname.clone()), ser);
             if optional {
                 stmts.push(TsStmt::if_stmt(
                     binary(TsBinaryOp::StrictNotEq, given, ident("undefined")),
