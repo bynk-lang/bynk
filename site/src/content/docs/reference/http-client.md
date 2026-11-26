@@ -133,7 +133,7 @@ status or a network failure.
 `RouteResponse` is a union with one member for each answer `bynk openapi`
 documents for the route: the declared success when the handler can return it, each
 `HttpResult` variant it constructs, and the boundary's own `400` (and `413` and
-`415` where they apply).
+`415` where they apply, and `429` on a route with [`@rateLimit`](/reference/http/#rate-limiting)).
 
 | The route answers | The member |
 |---|---|
@@ -143,6 +143,7 @@ documents for the route: the declared success when the handler can return it, ea
 | the same, on a route that answers its errors as [problem details](/reference/http/#problem-details) | `{ status, kind, problem: Problem }`, where `Problem` is `{ type, title, status, detail?, kind?, path?, expected?, actual?, violation? }`; on such a route the boundary's `400`, `413` and `415` are `problem: Problem` too, told apart from a handler's error variant at the same status by the `kind` only a router rejection carries |
 | a redirect | `{ status, kind, location: string }` |
 | the boundary's `400` | `{ status: 400, kind: "StructuralMismatch", error: BoundaryError }` |
+| the router's `429` on a [`@rateLimit`](/reference/http/#rate-limiting) route | `{ status: 429, kind: "RateLimited", error: { kind: "RateLimited", details: string } }`, or `problem: Problem` on a problem-details route; the member is always there on a limited route, so a `switch (res.kind)` that ends in a `never` check must handle it; a handler's own `TooManyRequests` at the same status is a separate member, told apart by the body each writes |
 | `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
 | `Streaming(s)` | `{ status, kind, events: AsyncIterable<string> }`; see [Server-sent events](#server-sent-events) |
 

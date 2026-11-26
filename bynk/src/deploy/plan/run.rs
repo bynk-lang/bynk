@@ -201,12 +201,16 @@ pub(crate) fn record_pushed_tombstones(
         worker,
         pushed.renamed_durable_objects.iter().cloned().collect(),
     );
-    // #3328: and the Email Routing addresses it carried.
-    lock.record_email_addresses(
-        environment,
-        worker,
-        pushed.email_addresses.iter().cloned().collect(),
-    );
+    // #3328: and the Email Routing addresses it carried. #3883: an environment that claims
+    // none omits `addresses`, which changes no rule, so what was recorded is still live and
+    // stays recorded (the plan names it).
+    if !pushed.email_unclaimed(environment) {
+        lock.record_email_addresses(
+            environment,
+            worker,
+            pushed.email_addresses.iter().cloned().collect(),
+        );
+    }
 }
 
 /// The `--` passthrough argument that conflicts with the driver's own
@@ -321,6 +325,11 @@ fn deploy(
             return Err(ExitCode::FAILURE);
         }
     };
+    // #3883: a named environment claims only the addresses `[deploy.email]` maps it to.
+    if let Err(e) = crate::deploy::email::claim(&mut resources, &model.layout, &opts.environment) {
+        emsg!("bynk: error: {e}");
+        return Err(ExitCode::FAILURE);
+    }
     let (graph, groups) = (service_graph(&resources), GroupNames::of(project_root));
     // Read before the plan: a malformed `--secrets-file` is the user's typo, and
     // it should surface as one now rather than as a missing-secret failure

@@ -292,6 +292,27 @@ addresses = ["*@shop.example", "support@shop.example"]
 every environment, so it is top-level and is never copied into an `[env.*]`
 table. See [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/).
 
+### Environments
+
+The addresses a service names are the `default` environment's. A named environment
+(`bynk deploy --env staging`) **claims no address** unless `bynk.toml` maps it one:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+`bynk deploy --env staging` then writes `addresses = ["support@staging.shop.example"]`
+for that environment, and the Worker accepts mail to the mapped address and hands it
+to the same service as the source address. With no entry for `staging`, the deploy
+leaves `addresses` out, which Wrangler documents as changing no Email Routing rule, so
+staging cannot take production's rules over. `default` is never mapped.
+
+A key must be an address a `from email` service names; a mapped address must pass the
+same rules as one written in a header (`bynk.email.invalid_address`); and no address
+may be claimed by two environments, or by the source and an environment. See the
+[manifest reference](/reference/tooling/manifest/#mapping-inbound-email-addresses-per-environment).
+
 ## Running it locally
 
 `bynk dev` serves a Worker under `wrangler dev`, which accepts a raw message at
