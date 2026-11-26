@@ -1,0 +1,2 @@
+bynk.types.type_mismatch
+the `Secret.basic` user has type `Int`

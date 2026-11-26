@@ -775,11 +775,31 @@ pub fn check_context_declarations(
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
                 let mut conflict: Option<(String, String, bool)> = None;
                 let mut resolve = |tr: &TypeRef, in_param: bool| {
-                    let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
-                        .unwrap_or_else(|| tys.intern(Ty::Unit));
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
                     if conflict.is_none()
-                        && let Some(name) =
-                            checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
                     {
                         conflict = Some((unit.clone(), name, in_param));
                     }
@@ -7421,13 +7441,13 @@ pub fn close_route_params<'a>(
     }
 }
 
-/// #4111: `bynk.types.secret_at_boundary` for a `Secret` written at `span` in `what`.
-fn secret_at_boundary_error(span: Span, what: &str) -> CompileError {
+/// #4111: `bynk.types.secret_at_boundary` for a `Secret` or `Authorization` (as `name` spells it) written at `span` in `what`.
+fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError {
     CompileError::new(
         "bynk.types.secret_at_boundary",
         span,
         format!(
-            "a `Secret` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
+            "a `{name}` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
         ),
     )
     .with_note(
@@ -7435,25 +7455,112 @@ fn secret_at_boundary_error(span: Span, what: &str) -> CompileError {
     )
 }
 
-/// #4111: whether `name`, in the project's type table, is the `Secret` type `bynk` exports,
-/// found by its declaration's first-party span, whatever it is spelled here (as `is_crypto_key_type` finds a key), so a
-/// user type that happens to be called `Secret` is not mistaken for it.
+/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecretKind {
+    /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
+    Secret,
+    /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
+    /// `Fetch` reveals when it sends and which has no reader of its own.
+    Authorization,
+}
+
+/// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
+/// what the text there says, and never by the name it is spelled here: `consumes bynk { Secret as
+/// Token }` renames the declaration but not its source span.
+pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
+    if !matches!(decl.body, bynk_syntax::ast::TypeBody::Opaque { .. }) {
+        return None;
+    }
+    let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+    if decl.span.file != crate::project_model::firstparty_file_id(unit) {
+        return None;
+    }
+    let text = unit.source.get(decl.span.start..decl.span.end)?;
+    if text.contains("type Secret =") {
+        Some(SecretKind::Secret)
+    } else if text.contains("type Authorization =") {
+        Some(SecretKind::Authorization)
+    } else {
+        None
+    }
+}
+
+/// #4111: whether `name`, in the project's type table, is a secret-carrying `bynk` type
+/// (`Secret` or `Authorization`), whatever it is spelled here, so a user type that happens to be
+/// called `Secret` is not mistaken for it.
 pub fn is_secret_type(
     name: &str,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> bool {
-    // By declaration, not spelling: `consumes bynk { Secret as Token }` keys the table by `Token`.
-    types.get(name).is_some_and(|decl| is_secret_decl(decl))
+    types.get(name).is_some_and(|decl| is_secret_carrier(decl))
 }
 
-/// #4111: whether `decl` is the `Secret` declaration `bynk` itself ships, which the emitter
-/// builds as a runtime `BynkSecret` rather than a branded string.
+/// #4111: whether the named type `name` is, or holds at any depth in a record field or variant
+/// payload, a `Secret` or an `Authorization`. `bynk`'s own `Request` holds one, so a `Request` has
+/// no codec, though the field itself is allowed there.
+pub fn type_carries_secret(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    fn walk(
+        name: &str,
+        types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+        seen: &mut HashSet<String>,
+    ) -> bool {
+        let Some(decl) = types.get(name) else {
+            return false;
+        };
+        if is_secret_carrier(decl) {
+            return true;
+        }
+        if !seen.insert(name.to_string()) {
+            return false;
+        }
+        let fields: Vec<&TypeRef> = match &decl.body {
+            bynk_syntax::ast::TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
+            bynk_syntax::ast::TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| v.payload.iter().map(|f| &f.type_ref))
+                .collect(),
+            _ => Vec::new(),
+        };
+        fields.into_iter().any(|f| {
+            bynk_syntax::ast::type_ref_heads(f)
+                .iter()
+                .any(|h| walk(h, types, seen))
+        })
+    }
+    walk(name, types, &mut HashSet::new())
+}
+
+/// #4111: the types the `bynk` adapter declares, by name, from its embedded source (built once).
+fn bynk_types() -> &'static HashMap<String, Arc<TypeDecl>> {
+    static TYPES: std::sync::OnceLock<HashMap<String, Arc<TypeDecl>>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        crate::checker::std_type_decls()
+            .iter()
+            .map(|t| (t.name.name.clone(), Arc::clone(t)))
+            .collect()
+    })
+}
+
+/// #4111: whether `decl` is one the `bynk` adapter itself ships.
+pub fn is_firstparty_decl(decl: &TypeDecl) -> bool {
+    crate::firstparty::unit(bynk_std::BYNK_UNIT)
+        .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
+/// #4111: whether `decl` is `Secret` or `Authorization`: the types that are never stored, sent,
+/// encoded or compared, and that the emitter builds as a runtime `BynkSecret`.
+pub fn is_secret_carrier(decl: &TypeDecl) -> bool {
+    secret_kind(decl).is_some()
+}
+
+/// #4111: whether `decl` is `Secret` itself, the one whose `of` cannot fail.
 pub fn is_secret_decl(decl: &TypeDecl) -> bool {
-    // The one opaque type `bynk` declares, found by where it is declared and not by what it is
-    // called here: `consumes bynk { Secret as Token }` renames it.
-    matches!(decl.body, bynk_syntax::ast::TypeBody::Opaque { .. })
-        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
-            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+    secret_kind(decl) == Some(SecretKind::Secret)
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its
@@ -8557,7 +8664,7 @@ pub fn reject_fn_types(
         // operation is where one is returned (`Secrets.get`), in-process, so its signature
         // is exempt.
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
-            errors.push(secret_at_boundary_error(id.span, what));
+            errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
         // #3343: a record with `@name` fields is read off an HTTP request by name,
         // so its JSON form is not its wire form: it may not be a body, a result,
@@ -9069,5 +9176,37 @@ service Api from http {
             2,
             "exactly the two `by`-bearing handlers, nothing extra persisted for the third"
         );
+    }
+}
+
+#[cfg(test)]
+mod secret_kind_tests {
+    use super::*;
+
+    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
+    /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
+    #[test]
+    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+        let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
+            .iter()
+            .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
+            .map(|t| (t.name.name.as_str(), secret_kind(t)))
+            .collect();
+        let mut names: Vec<&str> = opaque.iter().map(|(n, _)| *n).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            ["Authorization", "Secret"],
+            "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
+             secret-carrying, and extend `secret_kind` and this test"
+        );
+        for (name, kind) in opaque {
+            let want = match name {
+                "Secret" => SecretKind::Secret,
+                _ => SecretKind::Authorization,
+            };
+            assert_eq!(kind, Some(want), "{name}");
+        }
     }
 }

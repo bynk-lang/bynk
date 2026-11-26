@@ -20,7 +20,7 @@ export class FetchWeather implements Weather {
       method: Method.Get,
       url: `https://api.example.com/weather?city=${encodeURIComponent(city)}`,
       contentType: None,
-      authorization: key.tag === "Some" ? Some(`Bearer ${key.value}`) : None,
+      authorization: key.tag === "Some" ? Some(key.value.bearer()) : None,
       headers: new Map<string, string>(),
       body: None,
     });

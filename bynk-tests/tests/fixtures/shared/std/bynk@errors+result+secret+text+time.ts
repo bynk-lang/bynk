@@ -29,6 +29,26 @@ export const Secret = {
 };
 
 /**
+ * The credential of a request's `Authorization` header: `token.bearer()` for
+ * `Bearer <token>` and `password.basic(user)` for `Basic <user:password>`,
+ * made from a `Secret`. It carries the secret without ever being text: it has
+ * no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored or
+ * sent (`bynk.types.secret_at_boundary`), and it has no reader of its own,
+ * because `Fetch` is the only place it is revealed. It is set on a request as
+ * `authorization: Some(token.bearer())`.
+ */
+export type Authorization = __BynkSecret & { readonly __brand: "Authorization" };
+
+export const Authorization = {
+  of(value: string): Result<Authorization, ValidationError> {
+    return Ok(__bynkSecret(value) as Authorization);
+  },
+  unsafe(value: string): Authorization {
+    return __bynkSecret(value) as Authorization;
+  },
+};
+
+/**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
  */
 export type Uuid = string & { readonly __brand: "Uuid" };
@@ -124,7 +144,7 @@ export interface Request {
   readonly method: Method;
   readonly url: string;
   readonly contentType: Option<string>;
-  readonly authorization: Option<string>;
+  readonly authorization: Option<Authorization>;
   readonly headers: ReadonlyMap<string, string>;
   readonly body: Option<string>;
 }
