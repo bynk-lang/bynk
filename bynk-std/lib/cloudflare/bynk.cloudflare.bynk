@@ -647,8 +647,13 @@ adapter bynk.cloudflare {
 	the sender's claims, as `from` is: `date` is not when the message arrived.
 	`text`, `html` and `attachments` come from the parsed MIME body (`None` or
 	empty when the message has no such part); a test builds them directly. `size`
-	is the raw message in bytes. Every field after `to` has a default, so a test
-	writes only what it cares about.
+	is the raw message in bytes. `subaddress` is the
+	text after the first `+` of the envelope recipient's local part (RFC 5233, as
+	Email Routing defines it), so mail to `support+1234@shop.example` reaches the
+	service claiming `support@shop.example` with `subaddress = Some("1234")`; it
+	is `None` without a `+`. `to` keeps the full recipient. A case at the `system`
+	tier posts `to` through the Worker's entry, which reads the tag from it. Every
+	field after `to` has a default, so a test writes only what it cares about.
 	---
 	type InboundEmail = {
 		from: String,
@@ -666,6 +671,7 @@ adapter bynk.cloudflare {
 		html: Option[String] = None,
 		attachments: List[InboundAttachment] = [],
 		size: Int = 0,
+		subaddress: Option[String] = None,
 	}
 
 	---

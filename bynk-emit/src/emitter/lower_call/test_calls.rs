@@ -31,6 +31,30 @@ pub(crate) struct BadDriver {
     pub(crate) arm: Option<String>,
 }
 
+impl BadDriver {
+    /// The driver a bad-credential principal clause (`kind`, as the checker recorded it) drives; `None`
+    /// for any other principal. `named` is the member the clause writes (`by Forged(Browser)`). A bare
+    /// principal the checker resolved to its one refusing member (#4385) drives as if that member were
+    /// named.
+    pub(crate) fn of(
+        kind: &bynk_check::actors::CallSitePrincipal,
+        named: Option<&str>,
+    ) -> Option<BadDriver> {
+        use bynk_check::actors::CallSitePrincipal as P;
+        match kind {
+            P::BadCredential(bad) => Some(BadDriver {
+                driver: bad.driver(),
+                arm: named.map(str::to_string),
+            }),
+            P::BadCredentialArm(bad, arm) => Some(BadDriver {
+                driver: bad.driver(),
+                arm: Some(arm.clone()),
+            }),
+            P::Actor(_) | P::Nobody => None,
+        }
+    }
+}
+
 // ---- Names ----
 
 /// The module's event-delivery helper for a service (#2052).

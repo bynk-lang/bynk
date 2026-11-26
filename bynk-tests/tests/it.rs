@@ -111,6 +111,8 @@ mod integration {
     mod host_globals_qualified;
     #[path = "ident_audit.rs"]
     mod ident_audit;
+    #[path = "identity_verify_guard.rs"]
+    mod identity_verify_guard;
     #[path = "implementation_index.rs"]
     mod implementation_index;
     #[path = "import_closure.rs"]
