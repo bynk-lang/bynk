@@ -887,6 +887,18 @@ impl<'a> Plan<'a> {
     /// the ledger trusted, as a failed read always was; a note says so, so the lost check is
     /// stated, not silent. `applies` is false for a `--dry-run`, which reads nothing.
     pub(crate) fn noting_unchecked_kv(self, applies: bool) -> Self {
+        self.noting_unchecked_kv_with(applies, || {
+            crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv).map(drop)
+        })
+    }
+
+    /// [`Plan::noting_unchecked_kv`] over `credentials`, the run's KV client check (a test's
+    /// stand-in).
+    pub(crate) fn noting_unchecked_kv_with(
+        self,
+        applies: bool,
+        credentials: impl FnOnce() -> Result<(), crate::cloudflare::CloudflareError>,
+    ) -> Self {
         let reuses = self
             .contexts
             .iter()
@@ -894,8 +906,7 @@ impl<'a> Plan<'a> {
         if !applies || !reuses {
             return self;
         }
-        let Err(why) = crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv)
-        else {
+        let Err(why) = credentials() else {
             return self;
         };
         let mut plan = self;
@@ -1216,7 +1227,9 @@ pub(super) fn confirm(yes: bool) -> bool {
 /// The note [`Plan::noting_unchecked_kv`] adds, with `why` the credentials are unavailable.
 pub(crate) fn kv_unchecked_note(why: &str) -> String {
     format!(
-        "bynk: note: `reuse` of a KV namespace is what `bynk.deploy.lock` records, not checked \
-         against the account, so one deleted by hand is not created again; {why}"
+        "bynk: note: the KV drift check was skipped because CLOUDFLARE_API_TOKEN and \
+         CLOUDFLARE_ACCOUNT_ID are not both set: each `reuse` of a KV namespace is what \
+         `bynk.deploy.lock` records, not checked against the account, so one deleted by hand is \
+         not created again; {why}"
     )
 }

@@ -479,15 +479,30 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
         resources: cx.resources,
         order: cx.order,
     };
-    if !kv_calls_the_account(&project, &cx.plan.orphans.kv, cx.opts.prune) {
+    let checked = resource_credentials(&project, &cx.plan.orphans.kv, cx.opts.prune, |purpose| {
+        crate::cloudflare::rest::for_kind(purpose).map(drop)
+    });
+    checked.map_err(|refusal| {
+        emsg!("bynk: error: {refusal}");
+        ExitCode::FAILURE
+    })
+}
+
+/// [`account_resource_credentials`]'s decision over `credentials`, the run's client check for a
+/// kind (a test's stand-in): the refusal, in the first needing kind's words, or `Ok` when no
+/// step needs the account or the credentials are there.
+pub(crate) fn resource_credentials(
+    project: &ProjectCx<'_>,
+    kv_orphans: &[OrphanKv],
+    prune: bool,
+    credentials: impl Fn(
+        crate::cloudflare::rest::Purpose,
+    ) -> Result<(), crate::cloudflare::CloudflareError>,
+) -> Result<(), String> {
+    if !kv_calls_the_account(project, kv_orphans, prune) {
         return Ok(());
     }
-    crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv)
-        .map(drop)
-        .map_err(|e| {
-            emsg!("bynk: error: {e}");
-            ExitCode::FAILURE
-        })
+    credentials(crate::cloudflare::rest::Purpose::Kv).map_err(|e| e.to_string())
 }
 
 /// What the account checks found, for the apply: the wrangler to run, the ids each stored secret

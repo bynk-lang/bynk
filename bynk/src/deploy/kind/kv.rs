@@ -1056,6 +1056,57 @@ mod tests {
         assert!(kv_calls_the_account(&staging, &[], false));
     }
 
+    /// #4056 Decision E: a create or a `--prune` delete without credentials is refused before
+    /// anything changes, in the kind's words; a run that calls nothing never asks.
+    #[test]
+    fn the_pre_flight_refuses_a_create_or_prune_without_credentials() {
+        use crate::cloudflare::CloudflareError;
+        use crate::cloudflare::rest::Purpose;
+        let lock = lock_of(&[
+            ("default", "shop", "KV", "bare"),
+            ("default", "gone", "KV", "old"),
+        ]);
+        let resources = project(vec![
+            ("shop", Resources::default().needs_kv()),
+            (
+                "shop-cart",
+                Resources::default().kv_instances(&["KV_SESSIONS"]),
+            ),
+        ]);
+        let asked = std::cell::RefCell::new(Vec::new());
+        let missing = |purpose: Purpose| {
+            asked.borrow_mut().push(purpose);
+            Err(CloudflareError::Credentials(format!(
+                "set CLOUDFLARE_ACCOUNT_ID to {}: {} and the account it belongs to",
+                purpose.doing(),
+                purpose.needs()
+            )))
+        };
+        let run = |order: &[&str], orphans: &[OrphanKv], prune: bool| {
+            let order: Vec<String> = order.iter().map(|w| w.to_string()).collect();
+            let project = ProjectCx {
+                ledger: LedgerView::of(&lock, "default"),
+                resources: &resources,
+                order: &order,
+            };
+            crate::deploy::gates::resource_credentials(&project, orphans, prune, missing)
+        };
+        let create = run(&["shop", "shop-cart"], &[], false).unwrap_err();
+        assert_eq!(
+            create,
+            "set CLOUDFLARE_ACCOUNT_ID to create or delete the account's KV namespaces: an API token with \"Workers KV Storage: Edit\" (a `wrangler login` session is not enough: the deploy calls Cloudflare's API directly) and the account it belongs to"
+        );
+        let orphan = OrphanKv {
+            worker: "gone".into(),
+            binding: None,
+        };
+        assert!(run(&["shop"], std::slice::from_ref(&orphan), true).is_err());
+        assert_eq!(asked.borrow().as_slice(), [Purpose::Kv, Purpose::Kv]);
+        // Everything recorded, no prune: the credentials are never asked for.
+        assert_eq!(run(&["shop"], std::slice::from_ref(&orphan), false), Ok(()));
+        assert_eq!(asked.borrow().len(), 2);
+    }
+
     #[test]
     fn a_trusted_recorded_namespace_is_bound_without_a_record_or_an_account_call() {
         let lock = lock_of(&[("default", "shop", "KV", "bare")]);
