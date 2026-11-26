@@ -4137,7 +4137,18 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
     }
     // v0.142 (ADR 0165): the request-limits policy, if declared, renders similarly.
     if let Some(limits) = &s.limits {
-        out.push_str(&format!("\tlimits {{ {} }}\n", limits_summary(limits)));
+        // #3905: a WebSocket service's one field is `maxFrame`; the hover says its default and ceiling.
+        let summary = if matches!(s.protocol, ServiceProtocol::WebSocket { .. }) {
+            format!(
+                "maxFrame: {} bytes  // default {}, at most {}",
+                limits.max_frame(),
+                bynk_syntax::ast::DEFAULT_MAX_FRAME,
+                bynk_syntax::ast::MAX_FRAME_CEILING
+            )
+        } else {
+            limits_summary(limits)
+        };
+        out.push_str(&format!("\tlimits {{ {summary} }}\n"));
     }
     // #2858: the response-JSON policy, if declared, renders its mode.
     if let Some(json) = &s.json {
@@ -5976,6 +5987,16 @@ mod tests {
             hover.contains("Emits `Cache-Control: public, max-age=31536000, immutable`."),
             "{hover}"
         );
+    }
+
+    #[test]
+    fn hover_on_a_websocket_service_shows_its_frame_limit_default_and_ceiling() {
+        // #3905
+        let src = "context a\ntype F = { t: String }\nservice live from websocket(in: Bytes, out: F) {\n  limits { maxFrame: 4096 }\n  on open (r: String) -> Effect[()] by v: Visitor { () }\n}\n";
+        let hover = describe_symbol(src, "live").expect("hovers the service");
+        assert!(hover.contains("maxFrame: 4096 bytes"), "{hover}");
+        assert!(hover.contains("default 1048576"), "{hover}");
+        assert!(hover.contains("at most 33554432"), "{hover}");
     }
 
     #[test]

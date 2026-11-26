@@ -1251,6 +1251,33 @@ pub const LIMITS_FIELDS: &[(&str, &str)] = &[
     ),
 ];
 
+/// #3905: a `from websocket` service's `limits { }` has the one field `maxFrame`.
+pub const WS_LIMITS_FIELDS: &[(&str, &str)] = &[(
+    "maxFrame",
+    "the largest frame in bytes the service reads or sends (a positive `Int`; default 1_048_576, at most Cloudflare's 33_554_432); a larger inbound frame is closed with `1009`",
+)];
+
+/// #3905: whether the `{` at `brace` opens a `service … from websocket` body, read from its header
+/// line.
+fn brace_opens_websocket_service(text: &str, brace: usize) -> bool {
+    let header_start = text[..brace].rfind('\n').map_or(0, |i| i + 1);
+    let header = &text[header_start..brace];
+    header.contains("service ") && header.contains("from websocket")
+}
+
+/// #3905: the cursor is in a `limits { … }` block of a `from websocket` service, or at an item start in
+/// the body of one, so `maxFrame` is the field to offer instead of the request-body fields.
+pub fn in_websocket_service_limits(text: &str, offset: usize) -> bool {
+    let Some(open) = innermost_open_brace(text, offset) else {
+        return false;
+    };
+    if word_before_brace(text, open) == "limits" {
+        return innermost_open_brace(text, open)
+            .is_some_and(|service| brace_opens_websocket_service(text, service));
+    }
+    brace_opens_websocket_service(text, open)
+}
+
 /// #2858: the response-JSON policy fields, offered at a field-name position
 /// inside a `json { }` block (and as `@json( … )` arguments). The closed set is
 /// this one.
@@ -5923,6 +5950,20 @@ fn Box.size(self) -> Int { 1 }
         // Not a contract clause.
         assert_eq!(contract_clause_kind("  id: Int"), None);
         assert_eq!(contract_clause_kind("  let x = 1"), None);
+    }
+
+    #[test]
+    fn websocket_limits_offers_max_frame() {
+        // #3905: a `from websocket` service's `limits { }` and item start are the WebSocket forms.
+        let ws = "service Audio from websocket(in: Bytes, out: Bytes) {\n  limits {\n    ";
+        assert!(in_websocket_service_limits(ws, ws.len()));
+        let ws_item = "service Audio from websocket(in: Bytes, out: Bytes) {\n  ";
+        assert!(in_websocket_service_limits(ws_item, ws_item.len()));
+        let http = "service api from http {\n  limits {\n    ";
+        assert!(!in_websocket_service_limits(http, http.len()));
+        let http_item = "service api from http {\n  ";
+        assert!(!in_websocket_service_limits(http_item, http_item.len()));
+        assert_eq!(WS_LIMITS_FIELDS.len(), 1);
     }
 
     #[test]

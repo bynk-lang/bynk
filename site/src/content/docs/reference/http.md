@@ -2126,9 +2126,9 @@ cannot get past the cap. The counted read covers a JSON body as well as a
 comes from the route's wrapper, as a returned `PayloadTooLarge`). In a `system`
 test the `413` is observable as `Rejected(PayloadTooLarge(_))`.
 
-A `limits { }` block is only valid on a `from http` service
+A `limits { }` block is only valid on a `from http` service, or a `from websocket` one, where its one field is `maxFrame` ([WebSocket](/reference/websocket/#frame-size-and-binary-frames))
 (`bynk.http.limits_not_http`), and a service declares at most one
-(`bynk.parse.duplicate_limits`). The section's fields are `maxBody`, `maxFile` and `maxParts`
+(`bynk.parse.duplicate_limits`). The section's fields are `maxBody`, `maxFile` and `maxParts` (and `maxFrame` on a WebSocket)
 (`bynk.http.limits_unknown_field`), each of which MUST be a positive `Int`
 (`bynk.http.limits_invalid_field`). A `@limit` on a `GET`/`DELETE` (a bodyless
 method) is `bynk.http.limit_on_bodyless`; a duplicate `@limit` on one handler is

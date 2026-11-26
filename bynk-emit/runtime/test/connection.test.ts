@@ -8,6 +8,7 @@ import {
   TestConnection,
   WorkersConnection,
   closeArguments,
+  webSocketAdmit,
   webSocketAuthExpired,
   webSocketClosing,
   webSocketErrored,
@@ -308,4 +309,108 @@ test("the close goes out before on close runs, so a release that closes the sock
   );
   assert.deepEqual(order, ["close", "on close"]);
   assert.deepEqual(s.closes, [[4001, "bye"]], "and it is not sent again afterwards");
+});
+
+// -- #3905: frame limits and binary frames ----------------------------------------------------------
+
+function fakeSocket(attachment: unknown = null) {
+  const sent: (string | Uint8Array)[] = [];
+  const closed: { code?: number; reason?: string }[] = [];
+  return {
+    sent,
+    closed,
+    send(data: string | Uint8Array) {
+      sent.push(data);
+    },
+    close(code?: number, reason?: string) {
+      closed.push({ code, reason });
+    },
+    deserializeAttachment: () => attachment,
+  };
+}
+
+test("an inbound frame over maxFrame closes with 1009 before anything is parsed (#3905)", () => {
+  const log = console.error;
+  const logged: string[] = [];
+  console.error = (m: string) => logged.push(m);
+  try {
+    for (const binary of [false, true]) {
+      const ws = fakeSocket();
+      const frame: string | ArrayBuffer = binary ? new ArrayBuffer(9) : "x".repeat(9);
+      assert.equal(webSocketAdmit(ws, frame, 8, binary), false);
+      assert.deepEqual(ws.closed, [{ code: 1009, reason: "message too large" }]);
+    }
+  } finally {
+    console.error = log;
+  }
+  // The log names the size and nothing of the content.
+  assert.ok(logged.every((m) => /9 bytes/.test(m) && !m.includes("xxx")), logged.join("|"));
+});
+
+test("maxFrame counts bytes of UTF-8, not characters (#3905)", () => {
+  // "é" is two bytes: four of them are 8 bytes, which fits 8, and five are 10, which does not.
+  const ok = fakeSocket();
+  assert.equal(webSocketAdmit(ok, "éééé", 8, false), true);
+  assert.deepEqual(ok.closed, []);
+  const big = fakeSocket();
+  assert.equal(webSocketAdmit(big, "ééééé", 8, false), false);
+  assert.equal(big.closed[0]!.code, 1009);
+  // Three-byte characters and a surrogate pair (four bytes in two UTF-16 units).
+  assert.equal(webSocketAdmit(fakeSocket(), "€€", 6, false), true);
+  assert.equal(webSocketAdmit(fakeSocket(), "€€", 5, false), false);
+  assert.equal(webSocketAdmit(fakeSocket(), "😀", 4, false), true);
+  assert.equal(webSocketAdmit(fakeSocket(), "😀", 3, false), false);
+  // At the limit exactly is admitted.
+  assert.equal(webSocketAdmit(fakeSocket(), "x".repeat(8), 8, false), true);
+});
+
+test("a frame of the wrong kind closes with 1003 (#3905)", () => {
+  const text = fakeSocket();
+  assert.equal(webSocketAdmit(text, "hi", 1024, true), false);
+  assert.deepEqual(text.closed, [{ code: 1003, reason: "text frame not accepted" }]);
+  const bin = fakeSocket();
+  assert.equal(webSocketAdmit(bin, new ArrayBuffer(2), 1024, false), false);
+  assert.deepEqual(bin.closed, [{ code: 1003, reason: "binary frame not accepted" }]);
+  // The right kinds go on.
+  assert.equal(webSocketAdmit(fakeSocket(), "hi", 1024, false), true);
+  assert.equal(webSocketAdmit(fakeSocket(), new ArrayBuffer(2), 1024, true), true);
+});
+
+test("an oversize check comes before the kind check (#3905)", () => {
+  const ws = fakeSocket();
+  assert.equal(webSocketAdmit(ws, "x".repeat(20), 8, true), false);
+  assert.equal(ws.closed[0]!.code, 1009);
+});
+
+test("a Bytes frame is sent as a binary message and any other as JSON text (#3905)", async () => {
+  const ws = fakeSocket({ connId: "c", max: 64 });
+  const conn = new WorkersConnection<unknown>(ws, "c");
+  const bytes = new Uint8Array([1, 2, 3]);
+  await conn.send(bytes);
+  await conn.send({ text: "hi" });
+  assert.equal(ws.sent[0], bytes);
+  assert.equal(ws.sent[1], '{"text":"hi"}');
+});
+
+test("a frame the server sends over the attachment's maxFrame faults the send (#3905)", async () => {
+  const ws = fakeSocket({ connId: "c", max: 8 });
+  const conn = new WorkersConnection<unknown>(ws, "c");
+  await conn.send(new Uint8Array(8));
+  await assert.rejects(conn.send(new Uint8Array(9)), /9 bytes is over the service's maxFrame of 8/);
+  await assert.rejects(conn.send({ text: "xxxxxxxx" }), /over the service's maxFrame of 8/);
+  assert.equal(ws.sent.length, 1);
+  // A socket with no ceiling recorded (accepted before it existed) sends as before.
+  const old = fakeSocket({ connId: "c" });
+  await new WorkersConnection<unknown>(old, "c").send(new Uint8Array(1000));
+  assert.equal(old.sent.length, 1);
+});
+
+test("a TestConnection opened by a service holds that service's maxFrame (#3905)", async () => {
+  const tc = new TestConnection<Uint8Array>();
+  await tc.send(new Uint8Array(1000));
+  const bounded = new TestConnection<Uint8Array>();
+  bounded.remember([], {}, 8);
+  await bounded.send(new Uint8Array(8));
+  await assert.rejects(bounded.send(new Uint8Array(9)), /over the service's maxFrame of 8/);
+  assert.equal(bounded.sent.length, 1);
 });

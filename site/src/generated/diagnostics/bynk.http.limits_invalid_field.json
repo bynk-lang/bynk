@@ -1,10 +1,10 @@
 {
-  "blurb": "Every `limits { }` field is a positive `Int` literal: `maxBody` and `maxFile` are byte counts, and `maxParts` counts parts. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the three is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
+  "blurb": "Every `limits { }` field is a positive `Int` literal: `maxBody`, `maxFile` and a WebSocket service's `maxFrame` are byte counts, and `maxParts` counts parts. `maxFrame` is also at most 33_554_432, Cloudflare's own limit on an inbound message. A string such as `\"1MB\"`, zero or a negative number is refused: there is no size literal yet, and a ceiling of zero would reject every request. Write the count, as `1_048_576` for 1 MiB. A field outside the set is `bynk.http.limits_unknown_field`. The per-route form of the rule is `bynk.http.limit_bad_max_body`.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.limits_invalid_field",
   "constructs": [],
   "example": "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: \"1MB\" }       // ✗ a byte count, not a string\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_048_576 }   // ✓ 1 MiB\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
   "severity": "error",
-  "summary": "A `limits` policy field (`maxBody`) has the wrong value shape."
+  "summary": "A `limits` policy field (`maxBody`, `maxFrame`) has the wrong value shape."
 }
