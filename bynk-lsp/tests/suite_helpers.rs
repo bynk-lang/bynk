@@ -64,6 +64,7 @@ fn hover_at(r: &ProjectDiagnostics, rel: &Path, text: &str, root: &Path, offset:
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((text, offset)),
         path: uri.to_file_path().ok().as_deref(),

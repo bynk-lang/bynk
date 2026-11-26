@@ -1602,6 +1602,14 @@ pub fn handler_annotation_token_spans(source: &str) -> Vec<Span> {
                 bynk_syntax::ast::TypeBody::Record(r) => {
                     for f in &r.fields {
                         push_refinement(&mut spans, &f.refinement);
+                        // #4502: a field's own annotation (`@index`, `@name("…")`).
+                        for ann in &f.annotations {
+                            spans.push(Span {
+                                file: ann.span.file,
+                                start: ann.span.start,
+                                end: ann.name.span.end,
+                            });
+                        }
                     }
                 }
                 bynk_syntax::ast::TypeBody::Sum(_) => {}
@@ -6086,6 +6094,17 @@ mod tests {
         // A service with no annotations yields nothing.
         let plain = "context api\nservice api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
         assert!(handler_annotation_token_spans(plain).is_empty());
+    }
+
+    /// #4502: a record field's own annotation (`@index`) is tokenised as a decorator.
+    #[test]
+    fn annotation_token_spans_cover_an_index_field() {
+        let src = "commons shop\n\ntype Signup = { @index plan: String, seats: Int }\n";
+        let texts: Vec<&str> = handler_annotation_token_spans(src)
+            .iter()
+            .map(|s| &src[s.start..s.end])
+            .collect();
+        assert_eq!(texts, ["@index"]);
     }
 
     #[test]
