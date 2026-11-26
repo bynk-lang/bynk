@@ -198,7 +198,7 @@ fn all_parts(ty: TyId, cx: &LowerCtx, named: &dyn Fn(&str) -> bool, other: bool)
         Ty::Error
         | Ty::Never
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -228,7 +228,7 @@ fn is_plain_data(ty: TyId, cx: &LowerCtx) -> bool {
 fn is_tagged_outcome(ty: TyId, cx: &LowerCtx) -> bool {
     matches!(
         &*cx.commons().tys().get(ty),
-        Ty::HttpResult(_) | Ty::HttpOutcome(_) | Ty::QueueResult
+        Ty::HttpResult(_, _) | Ty::HttpOutcome(_) | Ty::QueueResult
     )
 }
 
@@ -253,7 +253,7 @@ fn is_redacted(ty: TyId, cx: &LowerCtx) -> bool {
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection

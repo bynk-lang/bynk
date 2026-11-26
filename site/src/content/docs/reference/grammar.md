@@ -705,7 +705,7 @@ The unit type `()`.
 {{#grammar generic_type_ref}}
 
 A generic type applied to arguments: `Result[T, E]`, `Option[T]`, `Effect[T]`,
-`HttpResult[T]`, or `Stream[T]`.
+`HttpResult[T]` or `HttpResult[T, E]` (the element a `Streaming` body carries), or `Stream[T]`.
 
 **Static semantics.**
 {{#grammar-semantics generic_type_ref}}

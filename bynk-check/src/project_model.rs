@@ -7339,13 +7339,18 @@ pub(crate) fn type_ref_names(r: &TypeRef, vars: &HashSet<&str>, out: &mut Vec<St
         }
         TypeRef::Option(t, _)
         | TypeRef::Effect(t, _)
-        | TypeRef::HttpResult(t, _)
         | TypeRef::List(t, _)
         | TypeRef::Set(t, _)
         | TypeRef::Query(t, _)
         | TypeRef::Stream(t, _)
         | TypeRef::Connection(t, _)
         | TypeRef::History(t, _) => type_ref_names(t, vars, out),
+        TypeRef::HttpResult(t, e, _) => {
+            type_ref_names(t, vars, out);
+            if let Some(e) = e {
+                type_ref_names(e, vars, out);
+            }
+        }
         TypeRef::Fn(params, ret, _) => {
             for p in params {
                 type_ref_names(p, vars, out);

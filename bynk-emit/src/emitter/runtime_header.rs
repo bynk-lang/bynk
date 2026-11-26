@@ -248,6 +248,8 @@ const WORKER_ORDER: &[&str] = &[
     "__withRetryAfter",
     "__withLocation",
     "__withDownload",
+    "__withETag",
+    "__withLastModified",
     "__withHeartbeat",
     "__resultHeaders",
     "__headResponse",

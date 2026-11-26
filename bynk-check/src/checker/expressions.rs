@@ -2673,7 +2673,7 @@ pub(crate) fn check_ok(
             let given = (!flexible || keeps_flexible_context(inner)).then_some(t_ty);
             let inner_ty = type_of(inner, given, ctx)?;
             if flexible {
-                return Some(tys.intern(Ty::HttpResult(inner_ty)));
+                return Some(tys.intern(Ty::HttpResult(inner_ty, None)));
             }
             if !compatible(inner_ty, t_ty, tys) {
                 ctx.errors.push(CompileError::new(
@@ -2687,7 +2687,7 @@ pub(crate) fn check_ok(
                 ));
                 return None;
             }
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         (Some((t_ty, e_ty)), _) => {
             // As in `check_some`: a flexible expected value type is left for
@@ -2859,6 +2859,70 @@ fn check_retry_after(
 const MIN_RETRY_DELAY_MS: i64 = 1_000;
 const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 
+/// `Streaming(s)` (#4394): the stream body of an `HttpResult`. A route that names the element it streams,
+/// `HttpResult[T, E]`, has a body that is exactly a `Stream[E]`; one that names none accepts a
+/// `Stream[String]` or a `Stream[SseEvent]`, as it always did. `(expected_t, expected_e)` are the
+/// surrounding context's `T` and `E`.
+fn check_streaming_variant(
+    span: Span,
+    variant: HttpVariant,
+    args: &[Expr],
+    (expected_t, expected_e): (Option<TyId>, Option<TyId>),
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+
+    let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+                "bynk.types.variant_arity",
+                span,
+                format!(
+                    "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
+                    variant.name,
+                    args.len(),
+                ),
+            ));
+        return None;
+    }
+    if let Some(element) = expected_e {
+        // #4394: the route declares what it streams, `HttpResult[T, E]`: the body is exactly
+        // a `Stream[E]`, and a mismatch is a type error.
+        let want = tys.intern(Ty::Stream(element));
+        let arg_ty = type_of(&args[0], Some(want), ctx)?;
+        if !compatible(arg_ty, want, tys) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `{}` body, because the route declares `HttpResult[_, {}]`, but got `{}`",
+                        variant.name,
+                        want.display(tys),
+                        element.display(tys),
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    } else {
+        let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
+        if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
+                        variant.name,
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    }
+    let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
+    Some(tys.intern(Ty::HttpResult(t_ty, expected_e)))
+}
+
 /// #4389: `check_http_variant`, with the two variants that answer a range or conditional read
 /// handled first: both are refused off a `GET` route, and `PartialContent` has its own shape.
 pub(crate) fn check_http_variant(
@@ -2907,6 +2971,14 @@ fn check_http_variant_inner(
     let expected_t = expected
         .and_then(|t| peel_to_http_result(t, tys))
         .or_else(|| peel_to_http_result(ctx.return_ty, tys));
+    // #4394: the streaming element the surrounding `HttpResult[T, E]` declares, from the same context
+    // as `T`: the expected type when it is an `HttpResult`, the enclosing return type otherwise.
+    let expected_e = peel_to_http_result_element(
+        expected
+            .filter(|&t| peel_to_http_result(t, tys).is_some())
+            .unwrap_or(ctx.return_ty),
+        tys,
+    );
     match variant.payload {
         HttpVariantPayload::Value => {
             if args.len() != 1 {
@@ -2941,7 +3013,7 @@ fn check_http_variant_inner(
                 }
                 (None, t) => t,
             };
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         HttpVariantPayload::Message => {
             if args.len() != 1 {
@@ -2973,7 +3045,7 @@ fn check_http_variant_inner(
             // a concrete payload. Pick `()` when nothing is known; otherwise
             // use the propagated expected type.
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         HttpVariantPayload::Location => {
             if args.len() != 1 {
@@ -3004,40 +3076,13 @@ fn check_http_variant_inner(
             // A redirect carries no body; inner T is irrelevant, so fall back
             // to the propagated expected type or `()`.
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
-        // v0.101 (real-time track slice 1): `Streaming(s)` carries a
-        // `Stream[String]` body, SSE-framed at the boundary. Like the redirect
-        // and message shapes, the JSON body parameter `T` is irrelevant.
+        // v0.101 (real-time track slice 1): `Streaming(s)` carries a stream body, SSE-framed at the
+        // boundary (#4394: exactly a `Stream[E]` when the route names `E`). Like the redirect and
+        // message shapes, the JSON body parameter `T` is irrelevant.
         HttpVariantPayload::Streamed => {
-            let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
-            if args.len() != 1 {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.variant_arity",
-                    span,
-                    format!(
-                        "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
-                        variant.name,
-                        args.len(),
-                    ),
-                ));
-                return None;
-            }
-            let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
-            if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.argument_mismatch",
-                    args[0].span,
-                    format!(
-                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
-                        variant.name,
-                        arg_ty.display(tys),
-                    ),
-                ));
-                return None;
-            }
-            let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            check_streaming_variant(span, variant, args, (expected_t, expected_e), ctx)
         }
         // v0.111: `Raw(body, contentType)` — the first two-argument shape. The
         // body is a `Bytes` written straight into the response; the content-type
@@ -3095,7 +3140,7 @@ fn check_http_variant_inner(
                 }
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         // K-streams (#2623): `RawStreamed(body, contentType)` — `Raw`'s shape
         // with a `Stream[Bytes]` body, streamed into the response.
@@ -3134,7 +3179,7 @@ fn check_http_variant_inner(
                 }
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         // #2341 (L4): `RawError(status, body, contentType)`. The status is an
         // `ErrorStatus` name — one of the vocabulary's own 4xx/5xx variant
@@ -3211,7 +3256,7 @@ fn check_http_variant_inner(
                 return None;
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
         HttpVariantPayload::None | HttpVariantPayload::Partial => {
             if !args.is_empty() {
@@ -3227,7 +3272,7 @@ fn check_http_variant_inner(
                 return None;
             }
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty)))
+            Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
     }
 }
