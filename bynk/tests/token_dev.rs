@@ -16,8 +16,8 @@
 #![cfg(unix)]
 
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::path::Path;
+use std::process::Child;
 use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
@@ -106,12 +106,12 @@ fn get_within(port: u16, path: &str, bearer: Option<&str>) -> String {
 }
 
 /// Mint with the real `bynk token`, signing with `SECRET` from the environment.
-fn mint(bynk: &Path, project: &Path, extra: &[&str]) -> String {
-    mint_with(bynk, project, SECRET, extra)
+fn mint(project: &Path, extra: &[&str]) -> String {
+    mint_with(project, SECRET, extra)
 }
 
-fn mint_with(bynk: &Path, project: &Path, secret: &str, extra: &[&str]) -> String {
-    let out = Command::new(bynk)
+fn mint_with(project: &Path, secret: &str, extra: &[&str]) -> String {
+    let out = dev_child::bynk_command()
         .args(["token", "Reader", "--sub", "me"])
         .args(extra)
         .arg("--input")
@@ -138,7 +138,6 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
     {
         return;
     }
-    let bynk = PathBuf::from(env!("CARGO_BIN_EXE_bynk"));
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/token");
     // `bynk dev` writes its output beside the project, so serve a copy.
     let dir = std::env::temp_dir().join(format!("bynk-token-dev-{}", std::process::id()));
@@ -186,21 +185,21 @@ fn a_minted_token_is_accepted_and_expired_or_not_yet_valid_ones_are_refused() {
         std::thread::sleep(Duration::from_millis(250));
     }
 
-    let good = mint(&bynk, &proj, &[]);
+    let good = mint(&proj, &[]);
     let reply = get_within(port, "/me", Some(&good));
     assert!(status(&reply).contains(" 200"), "valid token: {reply}");
 
-    let expired = mint(&bynk, &proj, &["--expired"]);
+    let expired = mint(&proj, &["--expired"]);
     let reply = get_within(port, "/me", Some(&expired));
     assert!(status(&reply).contains(" 401"), "--expired: {reply}");
 
-    let early = mint(&bynk, &proj, &["--not-before", "10m"]);
+    let early = mint(&proj, &["--not-before", "10m"]);
     let reply = get_within(port, "/me", Some(&early));
     assert!(status(&reply).contains(" 401"), "--not-before 10m: {reply}");
 
     // Signed with another secret: refused, so the 200 above is the Worker
     // verifying the signature, not just checking `exp`/`nbf`.
-    let forged = mint_with(&bynk, &proj, "wrong-secret", &[]);
+    let forged = mint_with(&proj, "wrong-secret", &[]);
     let reply = get_within(port, "/me", Some(&forged));
     assert!(status(&reply).contains(" 401"), "wrong secret: {reply}");
 

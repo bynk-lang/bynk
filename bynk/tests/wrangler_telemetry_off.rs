@@ -34,12 +34,19 @@ fn every_wrangler_a_bynk_test_starts_has_telemetry_off() {
     }
 }
 
-/// No test file builds a `bynk dev` / `bynk test --against dev` / Wrangler command by hand: each
-/// goes through the builders above, which set the variable.
+/// Programs a `bynk` test may start directly: none of them is, or starts, a Wrangler.
+const OTHER_PROGRAMS: [&str; 3] = ["node", "ps", "sh"];
+
+/// In a test file that includes `dev_child` (those that start `bynk dev`, `bynk test --against dev`
+/// or a Wrangler), every
+/// `Command::new(` is one of [`OTHER_PROGRAMS`], and `CARGO_BIN_EXE_bynk` is never named: the binary
+/// and the tools come from `dev_child::{bynk_command, tool_command}`, which set the variable. So a
+/// bypass through a local variable (`Command::new(&bynk)`, `Command::new(tool)`) fails here too.
 #[test]
 fn no_bynk_test_spawns_a_wrangler_without_the_builders() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
     let mut bad = Vec::new();
+    let mut checked = 0;
     for entry in std::fs::read_dir(&dir).expect("read bynk/tests") {
         let path = entry.expect("dir entry").path();
         if path.extension().is_none_or(|e| e != "rs") || path.ends_with("wrangler_telemetry_off.rs")
@@ -47,25 +54,26 @@ fn no_bynk_test_spawns_a_wrangler_without_the_builders() {
             continue;
         }
         let src = std::fs::read_to_string(&path).expect("read a test file");
-        let starts_wrangler = src.contains("\"dev\"")
-            || src.contains("\"--against\"")
-            || src.contains("Command::new(\"wrangler\")");
-        if !starts_wrangler {
+        // The files that start a Wrangler are the ones that include `dev_child`.
+        if !src.contains("support/dev_child.rs") {
             continue;
         }
+        checked += 1;
         for (n, line) in src.lines().enumerate() {
-            let t = line.trim_start();
-            if t.starts_with("//") {
+            if line.trim_start().starts_with("//") {
                 continue;
             }
-            if line.contains("Command::new(env!(\"CARGO_BIN_EXE_bynk\"))")
-                || line.contains("Command::new(\"wrangler\")")
-                || line.contains("Command::new(\"npx\")")
+            let spawns_other = OTHER_PROGRAMS
+                .iter()
+                .any(|p| line.contains(&format!("Command::new(\"{p}\")")));
+            if (line.contains("Command::new(") && !spawns_other)
+                || line.contains("CARGO_BIN_EXE_bynk")
             {
                 bad.push(format!("{}:{}: {}", path.display(), n + 1, line.trim()));
             }
         }
     }
+    assert!(checked >= 6, "the guard selected only {checked} files");
     assert!(
         bad.is_empty(),
         "start these through dev_child::bynk_command / tool_command (#4555):\n{}",
