@@ -472,11 +472,18 @@ fn index_units(builder: &mut IndexBuilder, parsed: &[ParsedFile]) -> Vec<RefEdge
         if pf.is_synthetic() {
             continue;
         }
-        // A suite is not a unit: its own name is its target, a reference.
+        // A suite is not a unit: its own name is its target, a reference. An
+        // adapter is a unit of another kind (the issue's decision A covers
+        // contexts and commons): it is neither defined nor referenced here, so a
+        // `consumes` of one resolves as it did before, lexically. Its own `uses`
+        // and `consumes` clauses are references all the same.
         let is_suite = matches!(pf.unit(), SourceUnit::Suite(_));
+        let is_adapter = matches!(pf.unit(), SourceUnit::Adapter(_));
         let name = pf.unit().name();
         let joined = name.joined();
-        if is_suite {
+        if is_adapter {
+            // No header symbol.
+        } else if is_suite {
             edges.push(edge(pf, &joined, name.span));
         } else if defined.insert(joined.clone()) {
             builder.add_leaf_def(

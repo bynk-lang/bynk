@@ -519,3 +519,75 @@ fn units_are_workspace_symbols_and_lens_targets() {
         .expect("a lens on the unit's header");
     assert_eq!(refs.len(), 1);
 }
+
+#[test]
+fn a_unit_is_not_a_call_hierarchy_item() {
+    // A unit is indexed, but nothing calls it: `prepareCallHierarchy` answers
+    // nothing on a unit name, as it did before units were symbols.
+    let (r, _) = analysed("call-hierarchy");
+    let (rel, _) = file(&r, "shop/cart.bynk");
+    let offset = at(CART, "consumes ops.billing", "ops.billing");
+    assert!(index_queries::definition_at(&r.index, rel, offset).is_some());
+    assert!(index_queries::prepare_call_hierarchy(&r.index, rel, offset).is_none());
+}
+
+const TOKENS_ADAPTER: &str = "\
+adapter tokens {
+  binding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }
+
+  exports capability { Jwt }
+
+  capability Jwt {
+    fn sign(sub: String, secret: String) -> Effect[String]
+  }
+
+  provides Jwt = JoseJwt
+}
+";
+
+const TOKENS_BINDING: &str = "\
+import type { Jwt } from \"./tokens.js\";
+
+export class JoseJwt implements Jwt {
+  async sign(sub: string, secret: string): Promise<string> {
+    return `${sub}.${secret}`;
+  }
+}
+";
+
+#[test]
+fn an_adapter_is_not_a_unit_symbol_and_still_hovers_as_before() {
+    // The issue's decision A covers contexts and commons. An adapter is neither
+    // defined nor referenced as a unit, so a `consumes` of one is resolved by
+    // the lexical hover rung exactly as it was.
+    let app = "context app\n\nconsumes tokens\n\ntype Id = String\n";
+    let (r, root) = project(
+        "adapter",
+        &[
+            ("bynk.toml", MANIFEST),
+            ("src/tokens.bynk", TOKENS_ADAPTER),
+            ("src/tokens.binding.ts", TOKENS_BINDING),
+            ("src/app.bynk", app),
+        ],
+    );
+    assert!(
+        r.index
+            .symbols
+            .keys()
+            .any(|k| k.kind == bynk_check::index::SymbolKind::Unit && k.name == "app"),
+        "the context `app` is indexed, so the index was built"
+    );
+    assert!(
+        r.index
+            .symbols
+            .keys()
+            .all(|k| k.kind != bynk_check::index::SymbolKind::Unit || k.name != "tokens"),
+        "the adapter `tokens` is not a unit symbol"
+    );
+    let (rel, text) = file(&r, "src/app.bynk");
+    let offset = at(text, "consumes tokens", "tokens");
+    assert!(index_queries::definition_at(&r.index, rel, offset).is_none());
+    let hover = hover_at(&r, &root, "src/app.bynk", offset).expect("hover on the adapter");
+    assert!(hover.starts_with("```bynk\nadapter tokens\n```"), "{hover}");
+    assert!(!hover.contains("Declared in"), "{hover}");
+}

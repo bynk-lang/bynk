@@ -188,6 +188,10 @@ pub fn prepare_call_hierarchy<'a>(
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
     // #3582: also a service handler's `on` keyword.
     let (key, _) = index.call_symbol_at(path, offset)?;
+    // #4183: a unit is indexed now, but it is not something that is called.
+    if key.kind == SymbolKind::Unit {
+        return None;
+    }
     Some((key, index.symbols.get(key)?.def.as_ref()?))
 }
 

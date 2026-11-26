@@ -112,7 +112,7 @@ fn describe_indexed(
     def_text: &str,
 ) -> Option<String> {
     if key.kind != SymbolKind::Unit {
-        return crate::symbols::describe_symbol(def_text, &key.name);
+        return crate::symbols::describe_key(key.kind, def_text, &key.name);
     }
     let mut siblings: Vec<(&PathBuf, &String)> = a
         .snapshots
