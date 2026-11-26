@@ -1,0 +1,2 @@
+bynk.boundary.structural_mismatch
+takes as a parameter `bynk.crypto`'s type `Secret`

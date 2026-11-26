@@ -777,13 +777,29 @@ pub fn check_context_declarations(
                 let mut resolve = |tr: &TypeRef, in_param: bool| {
                     // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
                     // is not in its contract view, which reads consumed contexts only, so a name
-                    // the view lacks is read as the consumer's own `bynk` type of that name.
-                    let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
-                        .or_else(|| checker::resolve_type_ref_in(tr, &typed.types, &vars, tys))
-                        .unwrap_or_else(|| tys.intern(Ty::Unit));
+                    // the view lacks is read as `bynk`'s own type of that name. It is resolved
+                    // against `bynk`'s declarations and never the consumer's table, where a type
+                    // of the consumer's own called `Secret` would answer to it.
+                    let (ty, signature_types) =
+                        match checker::resolve_type_ref_in(tr, unit_types, &vars, tys) {
+                            Some(ty) => (ty, unit_types),
+                            None => {
+                                match checker::resolve_type_ref_in(tr, bynk_types(), &vars, tys) {
+                                    Some(ty) => (ty, bynk_types()),
+                                    None => (tys.intern(Ty::Unit), unit_types),
+                                }
+                            }
+                        };
+                    // The same-name check reads the table the type came from, so a consumer type
+                    // called `Secret` is refused against `bynk`'s, not mistaken for it.
                     if conflict.is_none()
-                        && let Some(name) =
-                            checker::rebrand_conflict(ty, unit_types, &typed.types, receiving, tys)
+                        && let Some(name) = checker::rebrand_conflict(
+                            ty,
+                            signature_types,
+                            &typed.types,
+                            receiving,
+                            tys,
+                        )
                     {
                         conflict = Some((unit.clone(), name, in_param));
                     }
@@ -7512,6 +7528,17 @@ pub fn type_carries_secret(
         })
     }
     walk(name, types, &mut HashSet::new())
+}
+
+/// #4111: the types the `bynk` adapter declares, by name, from its embedded source (built once).
+fn bynk_types() -> &'static HashMap<String, Arc<TypeDecl>> {
+    static TYPES: std::sync::OnceLock<HashMap<String, Arc<TypeDecl>>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        crate::checker::std_type_decls()
+            .iter()
+            .map(|t| (t.name.name.clone(), Arc::clone(t)))
+            .collect()
+    })
 }
 
 /// #4111: whether `decl` is one the `bynk` adapter itself ships.
