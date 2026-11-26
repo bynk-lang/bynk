@@ -1,0 +1,12 @@
+context api
+
+// #4504: the default of an `env(…)` constant is checked as the origin it is.
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://App.example.com/"])
+
+service api from http {
+  cors { origins: AppOrigins }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

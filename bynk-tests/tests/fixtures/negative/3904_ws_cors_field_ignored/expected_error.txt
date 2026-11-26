@@ -1,0 +1,2 @@
+bynk.http.cors_unknown_field the `cors` field `maxAge` has no effect on a `from websocket` service
+# exact

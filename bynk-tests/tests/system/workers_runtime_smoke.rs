@@ -1705,6 +1705,181 @@ fn a_frame_after_the_credential_expires_closes_the_connection_on_workerd() {
     );
 }
 
+/// #3904: a cookie-authenticated upgrade through the deployed Worker. The service lists one origin in
+/// `cors`; `joined` counts the connections the Durable Object accepted, so a refused upgrade that
+/// reached it would show.
+const WS_COOKIE_SOURCE: &str = r#"context smoke
+
+type UserId = String where NonEmpty
+type Frame = { text: String }
+
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 1.hour), identity = UserId }
+
+service live from websocket(in: Frame, out: Frame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on open (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on close (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).left()
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store joined: Cell[Int]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    let _ <- joined.update((c) => c + 1)
+    ()
+  }
+
+  on call left() -> Effect[()] {
+    let _ <- conns.remove("c")
+    ()
+  }
+
+  on call snapshot() -> Effect[String] {
+    "\(joined)"
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }
+}
+"#;
+
+/// A real client that sends raw upgrade requests, so it can set `Origin` and `Cookie` as a browser
+/// would, and reports the status of each. A `101` is the upgrade accepted.
+const WS_COOKIE_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const http = require("node:http");
+const [port, keyB64] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const key = Buffer.from(keyB64, "base64url");
+const kid = crypto.createHash("sha256").update(key).digest().subarray(0, 6).toString("base64url");
+const cookie = (aud, ttl, secret = key) => {
+  const iat = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: "HS256", typ: "bynk+session", kid });
+  const body = b64({ sub: "ada", aud, iat, exp: iat + ttl });
+  const mac = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+  return `${head}.${body}.${mac}`;
+};
+const upgrade = (origin, cookieValue) => new Promise((resolve, reject) => {
+  const headers = {
+    Connection: "Upgrade",
+    Upgrade: "websocket",
+    "Sec-WebSocket-Version": "13",
+    "Sec-WebSocket-Key": crypto.randomBytes(16).toString("base64"),
+  };
+  if (origin !== null) headers.Origin = origin;
+  if (cookieValue !== null) headers.Cookie = `__Host-session=${cookieValue}`;
+  const req = http.request({ host: "127.0.0.1", port, path: "/?room=r1", headers });
+  req.on("upgrade", (res, socket) => { socket.destroy(); resolve(res.statusCode); });
+  req.on("response", (res) => { res.resume(); resolve(res.statusCode); });
+  req.on("error", reject);
+  req.end();
+});
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+(async () => {
+  const good = cookie("Member", 3600);
+  const out = {};
+  out.listed = await upgrade("https://app.example.com", good);
+  await new Promise((r) => setTimeout(r, 500));
+  out.afterListed = await state();
+  out.noOrigin = await upgrade(null, good);
+  out.otherOrigin = await upgrade("https://evil.example", good);
+  out.nearOrigin = await upgrade("https://app.example.com.evil.example", good);
+  out.noOriginNoCookie = await upgrade(null, null);
+  out.noCookie = await upgrade("https://app.example.com", null);
+  out.foreignKey = await upgrade("https://app.example.com", cookie("Member", 3600, crypto.randomBytes(32)));
+  out.otherActor = await upgrade("https://app.example.com", cookie("Other", 3600));
+  await new Promise((r) => setTimeout(r, 500));
+  out.afterRefused = await state();
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_cookie_upgrade_needs_a_listed_origin_through_the_worker_on_workerd() {
+    let key = "c2Vzc2lvbi1rZXktZm9yLXRoZS13b3JrZXJkLXNtb2tlLXRlc3Q";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", WS_COOKIE_SOURCE)],
+        "ws-cookie",
+        None,
+        None,
+        &["--var".to_string(), format!("SESSION_KEY:{key}")],
+    ) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-cookie-client.js");
+    fs::write(&script, WS_COOKIE_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(key)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the cookie client must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["listed"], 101,
+        "a listed Origin with a valid cookie upgrades\n{report}"
+    );
+    assert_eq!(
+        seen["afterListed"],
+        serde_json::json!("\"1\""),
+        "the Durable Object accepted it\n{report}"
+    );
+    for case in ["noOrigin", "otherOrigin", "nearOrigin", "noOriginNoCookie"] {
+        assert_eq!(
+            seen[case], 403,
+            "{case}: a missing or unlisted Origin is 403\n{report}"
+        );
+    }
+    for case in ["noCookie", "foreignKey", "otherActor"] {
+        assert_eq!(
+            seen[case], 401,
+            "{case}: a listed Origin with a bad cookie is 401\n{report}"
+        );
+    }
+    assert_eq!(
+        seen["afterRefused"],
+        serde_json::json!("\"1\""),
+        "no refused upgrade reached the Durable Object\n{report}"
+    );
+}
+
 /// #3202: an agent instance runs the handlers that reach it one at a time. `bump`
 /// loads its state, awaits a call to another agent (a Durable Object subrequest,
 /// which does not close the input gate), then commits `n + 1`. Before the fix, five

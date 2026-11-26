@@ -79,6 +79,9 @@ pub struct HoverAnalysis<'a> {
     /// second "context" and `NoCrossContextReason::SingleContext` would
     /// almost never fire).
     pub context_count: usize,
+    /// #4502: the round's recorded Analytics column mappings, by `<unit>.<Instance>`.
+    pub analytics:
+        &'a std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
 }
 
 /// Everything the ladder reads.
@@ -163,15 +166,27 @@ fn with_kind_appendix(
             None => content,
         },
         SymbolKind::Field => {
-            match key.name.split_once('.').and_then(|(ty, field)| {
+            let split = key.name.split_once('.');
+            let plain = split.and_then(|(ty, field)| {
                 crate::plain_shape::field_section(ty, field, a.boundary_info)
-            }) {
-                Some(section) => format!("{content}{section}"),
-                None => content,
-            }
+            });
+            let column = split.and_then(|(ty, field)| {
+                crate::analytics_tooling::column_section(ty, field, a.analytics)
+            });
+            format!(
+                "{content}{}{}",
+                plain.unwrap_or_default(),
+                column.unwrap_or_default()
+            )
         }
         _ => content,
     }
+}
+
+/// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
+    let (text, offset) = input.doc?;
+    crate::analytics_tooling::dataset_hover_at(text, offset)
 }
 
 /// `content` with [`used_name_note`] appended when there is one.
@@ -258,7 +273,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.
-        if let Some(section) = capability_path_section(a) {
+        if let Some(section) = capability_path_section(a).or_else(|| dataset_hover(input)) {
             return Some(section);
         }
         // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the

@@ -148,6 +148,9 @@ struct Analysis {
     /// and service/agent tables the `bynk/wireContract` request resolves a
     /// handler's boundary shape and cross-context hash against.
     boundary_info: std::collections::HashMap<String, bynk_ide::ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, behind the hover on a written field and a typed read's completion.
+    analytics: std::collections::BTreeMap<String, bynk_ide::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets — backs intra-doc-link resolution in `document_link` and
@@ -1088,6 +1091,7 @@ impl Backend {
                 sequence_info: result.sequence_info,
                 architecture_facts: result.architecture_facts,
                 boundary_info: result.boundary_info,
+                analytics: result.analytics,
                 doc_scope: result.doc_scope,
                 contract_diff: result.contract_diff,
             });
@@ -2660,6 +2664,17 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_DECORATOR))
                 .collect();
+        // #4451: each `{dataset}` placeholder in an Analytics SQL literal, as `keyword` over the string.
+        dt.extend(
+            bynk_ide::analytics_tooling::dataset_token_spans(text)
+                .into_iter()
+                .map(|(s, e)| {
+                    (
+                        bynk_syntax::span::Span::new(s, e),
+                        crate::semantic_tokens::TOK_KEYWORD,
+                    )
+                }),
+        );
         // Constraint names in a bound (`T: Eq`, `where A: Eq`), as `interface`.
         dt.extend(
             crate::symbols::constraint_token_spans(text)
@@ -3457,6 +3472,7 @@ impl LanguageServer for Backend {
                     &a.boundary_info,
                     &a.unit_sources,
                 ),
+                analytics: &a.analytics,
             });
         // #2842: a `matches snapshot` claim hovers with the stored snapshot, read
         // from the project's `snapshots/` folder (or "not yet recorded").
@@ -4103,6 +4119,26 @@ impl LanguageServer for Backend {
         // #3911: inside `@name("…")` on a `headers` record's field, the common header names.
         if let Some(items) =
             bynk_ide::header_completion::header_name_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #4451: the first argument of `AnalyticsSql.query` / `select` names an `Analytics` instance.
+        if let Some(items) =
+            bynk_ide::analytics_tooling::instance_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #4502: a field-name position of the record an `AnalyticsSql.select[R]` reads offers the
+        // fields its instance was written with.
+        if let Some(a) = self.project_analysis_for(&uri).await
+            && let Some(items) = bynk_ide::analytics_tooling::read_field_candidates_at(
+                &text,
+                offset,
+                files.as_deref(),
+                &a.analytics,
+            )
         {
             let items = items.into_iter().map(to_completion_item).collect();
             return Ok(Some(CompletionResponse::Array(items)));
@@ -5788,7 +5824,9 @@ fn cors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
         return vec![CompletionItem {
             label: "cors".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("a cross-origin (CORS) policy for this HTTP service".to_string()),
+            detail: Some(
+                "a cross-origin (CORS) policy for this HTTP or WebSocket service".to_string(),
+            ),
             insert_text: Some("cors {\n\torigins: [$0],\n}".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()

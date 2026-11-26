@@ -2600,12 +2600,12 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
-        example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The comparison is exact, and a browser sends an origin only as `scheme://host[:port]`: the scheme and host in lower case, no path, query, fragment or trailing slash, and no port that is the scheme's default (`:443` for `https`, `:80` for `http`). An entry in any other shape (`\"https://app.example.com/\"`, `\"https://App.example.com\"`, `\"app.example.com\"`, `\"https://*.example.com\"`) can never equal a header a browser sends, so every request from that site would be refused and nothing would say why; it is refused here, with the form to write instead. There is no subdomain wildcard: list each origin. `\"null\"`, the origin a browser sends from a sandboxed frame, is compared like any other entry (but see `bynk.http.cors_wildcard_credentials`). A constant is checked as the value it was read as, and an `env(…)` constant as the value `bynk.toml` gives it in the environment being built, so a bad value for one environment is refused when that environment is built. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: \"https://app.example.com\" }       // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com/\"] }     // ✗ a browser sends no trailing slash\n\ncors { origins: [\"https://app.example.com\"] }      // ✓",
     },
     Explain {
         code: "bynk.http.cors_not_http",
-        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP surface has cross-origin browser callers, so it is valid only on a `from http` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+        blurb: "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP and WebSocket surfaces have cross-origin browser callers, so it is valid only on a `from http` or `from websocket` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
         example: "service jobs from cron {\n    cors { origins: [\"https://app.example.com\"] }   // ✗ a schedule has no browser callers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -2615,8 +2615,8 @@ agent Cart {
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
-        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
-        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+        blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service. The origin `\"null\"` is refused beside `credentials: true` for the same reason in effect: a browser sends `Origin: null` from a sandboxed frame or a `data:` page, which any other site can create, so naming it admits any page, and the visitor\'s cookies would go to it. Without credentials `\"null\"` is an ordinary entry.",
+        example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\", \"null\"], credentials: true }   // ✗ any page can claim `null`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_expose_credentials",
@@ -7155,6 +7155,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "        let _ <- conn.close(4001, \"the room was archived by an administrator after twelve months without any activity, and its members were moved to the general room\")   // ✗ over the protocol's limit\n        let _ <- conn.close(4001, \"room archived\")   // ✓",
     },
     Explain {
+        code: "bynk.ws.cookie_needs_origins",
+        blurb: "A browser sends the session cookie on a WebSocket upgrade from any site, and a WebSocket is not covered by CORS, so a page on another site could open the socket as the signed-in user (cross-site WebSocket hijacking). The upgrade therefore checks `Origin` against the service's `cors` origins: exactly one of them, scheme, host and port, or it is refused with `403` before the cookie is read, and a missing `Origin` is refused too. So a `from websocket` service whose `on open` authenticates a `SignedCookie` actor must declare `cors { origins: [...], credentials: true }` with the exact origins that may open it, and a wildcard is not one. Add the `cors` block.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✗ a `SignedCookie` actor and no `cors`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    cors { origins: [\"https://app.example.com\"], credentials: true }   // ✓ the pages that may open it\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+    },
+    Explain {
         code: "bynk.ws.lifecycle_by_mismatch",
         blurb: "The connection's principal is verified once, by `on open`'s `by`, and carried for the life of the connection; `on message` and `on close` read it and never verify again. So their `by` must name the same actor as `on open`'s, or the same members of an actor sum. The binder names may differ. Change the lifecycle handler's `by` to match `on open`.",
         example: "actor Member { … }\nactor Admin { … }\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on message (room: RoomId, frame: Frame) -> Effect[()] by admin: Admin { … }   // ✗ `on open` is `by` `Member`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
@@ -8950,7 +8955,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.cors_not_http",
-        "A `cors { }` policy appears on a service that is not `from http`.",
+        "A `cors { }` policy appears on a service that is neither `from http` nor `from websocket`.",
     ),
     d(
         "bynk.http.cors_unknown_field",
@@ -11827,6 +11832,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.ws.bad_close_reason",
         "A WebSocket `connection.close(code, reason)` names a literal reason over the protocol's 123 bytes of UTF-8 (#3902).",
+    ),
+    d(
+        "bynk.ws.cookie_needs_origins",
+        "A `from websocket` service whose `on open` authenticates a `SignedCookie` actor does not declare `cors { origins: [...], credentials: true }` with exact origins, so there is nothing to check the upgrade's `Origin` against (#3904).",
     ),
     d(
         "bynk.ws.lifecycle_by_mismatch",

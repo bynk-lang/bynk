@@ -144,6 +144,9 @@ fn check_single_typed(
             ));
         }
     };
+    // #4475: a single file has no other unit to reach, so the first-party units behind the prelude
+    // types it names (`Ordering`, `ValidationRule`, `DecodeErrorKind`) are merged into it.
+    bynk_check::inline_prelude_units(&mut commons, source);
     // #3445: a constant named by a literal-only annotation argument is replaced
     // by the literal it denotes, as the project path does.
     bynk_check::annotation_consts::resolve_single_file(&mut commons);

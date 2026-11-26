@@ -1,10 +1,10 @@
 {
-  "blurb": "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP surface has cross-origin browser callers, so it is valid only on a `from http` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+  "blurb": "A `cors { }` block says which other sites a browser may let call the service, and only the HTTP and WebSocket surfaces have cross-origin browser callers, so it is valid only on a `from http` or `from websocket` service. On a `cron` or other service it has no request to apply to. Move it to the `from http` service it was meant for, or delete it. The `security`, `limits` and `json` blocks follow the same rule: `bynk.http.security_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.cors_not_http",
   "constructs": [],
   "example": "service jobs from cron {\n    cors { origins: [\"https://app.example.com\"] }   // ✗ a schedule has no browser callers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://app.example.com\"] }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
   "severity": "error",
-  "summary": "A `cors { }` policy appears on a service that is not `from http`."
+  "summary": "A `cors { }` policy appears on a service that is neither `from http` nor `from websocket`."
 }

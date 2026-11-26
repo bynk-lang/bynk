@@ -2336,6 +2336,7 @@
 /reference/diagnostics/bynk.within.timed_out_not_in_scope/
 /reference/diagnostics/bynk.ws.bad_close_code/
 /reference/diagnostics/bynk.ws.bad_close_reason/
+/reference/diagnostics/bynk.ws.cookie_needs_origins/
 /reference/diagnostics/bynk.ws.lifecycle_by_mismatch/
 /reference/diagnostics/bynk.ws.message_frame_param/
 /reference/diagnostics/bynk.ws.missing_close/

@@ -2145,14 +2145,19 @@ checker enforces the closed field set — an unknown field is
 
 - **`origins`** — REQUIRED; a non-empty list of string literals
   (`bynk.http.cors_invalid_origins`). The allowlist of origins, or the single
-  wildcard `["*"]`.
+  wildcard `["*"]`. A request's `Origin` is compared with each entry exactly, so a
+  literal entry must be in the serialised form a browser sends, `scheme://host[:port]`
+  (lower-case scheme and host, no path, query, fragment or trailing slash, no default
+  port); any other shape matches nothing and is the same error. `"null"` is such an
+  origin but is refused beside `credentials: true`.
 - **`headers`** — OPTIONAL; a list of string literals
   (`bynk.http.cors_invalid_field`). Overrides the default `Access-Control-Allow-Headers`.
 - **`credentials`** — OPTIONAL; a boolean literal (`bynk.http.cors_invalid_field`).
 - **`maxAge`** — OPTIONAL; a `Duration` literal (`bynk.http.cors_invalid_field`).
 
-`credentials: true` combined with a wildcard origin (`["*"]`) is rejected
-(`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids that pair.
+`credentials: true` combined with a wildcard origin (`["*"]`), or with the origin `"null"`,
+is rejected (`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids the first
+pair and any other site can claim `null`.
 `Access-Control-Allow-Methods` is **not** a field: it is derived from the service's
 declared route methods (plus `HEAD` where `GET` is declared, plus `OPTIONS`) — the
 same derivation that drives the always-on `Allow` header. A service with no
@@ -2483,8 +2488,12 @@ connection-lifecycle handlers:
 
 - **`on open`** — exactly one per service. The upgrade is authenticated **at the
   edge**: like a `from http` handler it MUST name its actor with `by` (there is no
-  anonymous upgrade), and the boundary admits `None`/`Bearer` actors and rejects
-  `Signature` (a browser cannot set an `Authorization` header). The handler
+  anonymous upgrade), and the boundary admits `None`, `Bearer`, `Oidc` and `SignedCookie` actors and rejects
+  `Signature` (a browser cannot set an `Authorization` header). An `Oidc` or `SignedCookie` actor is the
+  handler's only actor (an actor sum admits `None` and `Bearer` members), a `SignedCookie` actor with
+  `sessions = true` is not admissible, and a service whose `on open` authenticates a `SignedCookie` MUST declare
+  a `cors` list of exact origins with `credentials: true`, no wildcard (`bynk.ws.cookie_needs_origins`),
+  which the upgrade's `Origin` is checked against. The handler
   receives a fresh, **owned** `connection: Connection[O]` that it MUST dispose of
   under the held-resource linearity discipline
   ([§5.4.2](/reference/spec/static-semantics/#542-held-resource-linearity-v0102)) — the canonical
