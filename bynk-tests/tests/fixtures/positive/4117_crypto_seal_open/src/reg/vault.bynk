@@ -1,0 +1,46 @@
+context reg.vault
+
+consumes bynk.crypto { Crypto, CryptoError }
+
+// #4117: authenticated encryption, the shapes a service uses to protect a field before it is stored.
+
+fn raw(hex: String) -> Bytes {
+	match Bytes.fromHex(hex) {
+		Some(b) => b,
+		None => Bytes.empty(),
+	}
+}
+
+service sealer {
+	on call(keyHex: String, text: String, scope: String) -> Effect[String] by Caller given Crypto {
+		let imported <- Crypto.importCipherKey(raw(keyHex))
+		match imported {
+			Ok(key) => {
+				let sealed <- Crypto.seal(key, Bytes.fromUtf8(text), Bytes.fromUtf8(scope))
+				Effect.pure(sealed.toHex())
+			},
+			Err(_) => Effect.pure("bad key"),
+		}
+	}
+}
+
+service opener {
+	on call(
+		keyHex: String,
+		sealedHex: String,
+		scope: String
+	) -> Effect[String] by Caller given Crypto {
+		let imported <- Crypto.importCipherKey(raw(keyHex))
+		match imported {
+			Ok(key) => {
+				let opened <- Crypto.open(key, raw(sealedHex), Bytes.fromUtf8(scope))
+				match opened {
+					Ok(plain) => Effect.pure(plain.decodeUtf8().getOrElse("not text")),
+					Err(OpenFailed) => Effect.pure("open failed"),
+					Err(_) => Effect.pure("other failure"),
+				}
+			},
+			Err(_) => Effect.pure("bad key"),
+		}
+	}
+}

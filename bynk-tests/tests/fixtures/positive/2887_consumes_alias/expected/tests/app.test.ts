@@ -18,6 +18,10 @@ type __Crypto_importSigningKey_Call = { algorithm: __ns_bynk_crypto.Signature; p
 type __Crypto_importSigningKeyFromSecret_Call = { algorithm: __ns_bynk_crypto.Signature };
 type __Crypto_importVerifyKey_Call = { algorithm: __ns_bynk_crypto.Signature; key: globalThis.Uint8Array };
 type __Crypto_importVerifyJwk_Call = { jwk: string };
+type __Crypto_importCipherKey_Call = { key: globalThis.Uint8Array };
+type __Crypto_importCipherKeyFromSecret_Call = {};
+type __Crypto_seal_Call = { key: __ns_bynk_crypto.CipherKey; plaintext: globalThis.Uint8Array; scope: globalThis.Uint8Array };
+type __Crypto_open_Call = { key: __ns_bynk_crypto.CipherKey; sealed: globalThis.Uint8Array; scope: globalThis.Uint8Array };
 type __Crypto_deriveKey_Call = { secret: globalThis.Uint8Array; salt: globalThis.Uint8Array; info: globalThis.Uint8Array; length: number };
 type __Crypto_hashPassword_Call = { password: string };
 type __Crypto_verifyPassword_Call = { password: string; stored: string };
@@ -38,7 +42,8 @@ class __Stub_Crypto {
 
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
     const { algorithmName, empty } = __ns_app;
-    const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Digest = __ns_bynk_crypto.Digest;
@@ -76,7 +81,8 @@ async function test_the_aliased_enum_is_passed_to_the_capability() {
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -100,7 +106,8 @@ async function test_the_commons_Digest_is_untouched() {
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -124,7 +131,8 @@ async function test_the_aliased_enum_matches_and_constructs() {
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -145,11 +153,12 @@ async function test_the_aliased_enum_matches_and_constructs() {
 async function test_a_stubbed_digest_is_observed() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["deriveKey", "digest", "equal", "hashPassword", "hmac", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "needsRehash", "sign", "verify", "verifyHmac", "verifyPassword"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["deriveKey", "digest", "equal", "hashPassword", "hmac", "importCipherKey", "importCipherKeyFromSecret", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "needsRehash", "open", "seal", "sign", "verify", "verifyHmac", "verifyPassword"] }, __obs);
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -174,7 +183,8 @@ async function test_a_stub_can_match_on_the_aliased_variant() {
     const { algorithmName, empty, hashing, name, total } = __ns_app;
     const { Digest } = __ns_report;
     type Digest = __ns_report.Digest;
-    const { CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;

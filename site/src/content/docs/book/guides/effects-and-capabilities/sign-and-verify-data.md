@@ -151,5 +151,83 @@ verifiers are unchanged. In a browser, Web Crypto exists only in a secure contex
 (HTTPS or `localhost`); elsewhere an operation fails loudly rather than falling
 back to something weaker.
 
+## Encrypt a field
+
+To keep a value unreadable at rest (a customer's email in agent state, `D1`, `KV`
+or `R2`), seal it. The key is 32 random bytes you keep in `Secrets`, as base64.
+`importCipherKeyFromSecret` takes the `Secret` itself, so the key is never a
+`String` in the program:
+
+```bynk,fragment
+context registry.vault
+
+consumes bynk { Secrets }
+consumes bynk.crypto { Crypto }
+
+service protect {
+	on call(
+		customerId: String,
+		email: String
+	) -> Effect[Option[String]] by Caller given Crypto, Secrets {
+		let stored <- Secrets.get("FIELD_KEY")
+		match stored {
+			None => Effect.pure(None),
+			Some(secret) => {
+				let imported <- Crypto.importCipherKeyFromSecret(secret)
+				match imported {
+					Ok(key) => {
+						let sealed <- Crypto.seal(
+							key,
+							Bytes.fromUtf8(email),
+							Bytes.fromUtf8(customerId)
+						)
+						Effect.pure(Some(sealed.toBase64()))
+					},
+					Err(_) => Effect.pure(None),
+				}
+			},
+		}
+	}
+}
+```
+
+The last argument is the *scope*: here the customer's id. A sealed value only
+opens with the same scope, so a value copied to another customer's row does not
+open there. It is required, so a ciphertext is always bound to something.
+
+`open` gives the plaintext back, or `Err(OpenFailed)`. It is the same single
+failure for a wrong key, a wrong scope, a changed byte and a truncated value, so
+a caller learns nothing about which:
+
+```bynk,fragment
+context registry.vault.read
+
+consumes bynk.crypto { Crypto }
+
+service reveal {
+	on call(
+		keyBytes: Bytes,
+		sealed: Bytes,
+		customerId: String
+	) -> Effect[Option[String]] by Caller given Crypto {
+		let imported <- Crypto.importCipherKey(keyBytes)
+		match imported {
+			Ok(key) => {
+				let opened <- Crypto.open(key, sealed, Bytes.fromUtf8(customerId))
+				match opened {
+					Ok(plain) => Effect.pure(plain.decodeUtf8()),
+					Err(_) => Effect.pure(None),
+				}
+			},
+			Err(_) => Effect.pure(None),
+		}
+	}
+}
+```
+
+A random 96-bit nonce is safe for about 2^32 messages under one key, so rotate
+the key well before that, and derive a separate key for each purpose with
+`deriveKey` rather than reusing one.
+
 **See also:** [`bynk.crypto` reference](/reference/bynk-capabilities/#cryptography--bynkcrypto),
 [Verify webhooks](/book/guides/actors/verify-webhooks/).
