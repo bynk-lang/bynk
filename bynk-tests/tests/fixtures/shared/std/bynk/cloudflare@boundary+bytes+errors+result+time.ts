@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../__bynk_runtime/bytes.js";
+import { __bynkInstantFromWire } from "../__bynk_runtime/time.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -604,13 +605,33 @@ export const InboundAttachment = {
 };
 
 /**
+ * One header occurrence of an `InboundEmail`: its lower-case `name` and its
+ * decoded `value`.
+ */
+export interface EmailHeader {
+  readonly name: string;
+  readonly value: string;
+}
+
+export const EmailHeader = {
+};
+
+/**
  * One email delivered to a `from email(...)` service's `on message` handler.
  * `from` is the **envelope** sender, a claim: anyone can write any address, so
  * trust it only when the `Sender` actor's `dmarc` is `DmarcPass`. `to` is the
  * envelope recipient the service was routed by. `headers` holds the message's
- * headers by lower-case name. `text`, `html` and `attachments` come from the
- * parsed MIME body (`None` or empty when the message has no such part); a test
- * builds them directly. `size` is the raw message in bytes. `subaddress` is the
+ * headers by lower-case name, the first occurrence of each; `headerList` holds
+ * every occurrence, in the order they appear. `inReplyTo` and `references` are
+ * the message ids the sender says this message answers, as `messageId` is
+ * written (`<id@host>`), `references` in the message's order; `replyTo` and `cc`
+ * are bare addresses, display names dropped; and `date` is the sender's own
+ * `Date` header, `None` when it is missing or cannot be read (a date has whole
+ * seconds, so a `system` case gets its `date` back to the second). All of these are
+ * the sender's claims, as `from` is: `date` is not when the message arrived.
+ * `text`, `html` and `attachments` come from the parsed MIME body (`None` or
+ * empty when the message has no such part); a test builds them directly. `size`
+ * is the raw message in bytes. `subaddress` is the
  * text after the first `+` of the envelope recipient's local part (RFC 5233, as
  * Email Routing defines it), so mail to `support+1234@shop.example` reaches the
  * service claiming `support@shop.example` with `subaddress = Some("1234")`; it
@@ -623,7 +644,13 @@ export interface InboundEmail {
   readonly to: string;
   readonly subject: string;
   readonly messageId: string;
+  readonly inReplyTo: Option<string>;
+  readonly references: readonly string[];
+  readonly replyTo: readonly string[];
+  readonly cc: readonly string[];
+  readonly date: Option<number>;
   readonly headers: ReadonlyMap<string, string>;
+  readonly headerList: readonly EmailHeader[];
   readonly text: Option<string>;
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
@@ -2624,6 +2651,18 @@ export function __serialise_ChatRole(value: ChatRole): __JsonValue {
 }
 
 export function __deserialise_ChatRole(json: __JsonValue, path: string = "$"): Result<ChatRole, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "System":
+        return Ok({ tag: "System" } as ChatRole);
+      case "User":
+        return Ok({ tag: "User" } as ChatRole);
+      case "Assistant":
+        return Ok({ tag: "Assistant" } as ChatRole);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -2739,6 +2778,18 @@ export function __serialise_DmarcVerdict(value: DmarcVerdict): __JsonValue {
 }
 
 export function __deserialise_DmarcVerdict(json: __JsonValue, path: string = "$"): Result<DmarcVerdict, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "DmarcPass":
+        return Ok({ tag: "DmarcPass" } as DmarcVerdict);
+      case "DmarcFail":
+        return Ok({ tag: "DmarcFail" } as DmarcVerdict);
+      case "DmarcNone":
+        return Ok({ tag: "DmarcNone" } as DmarcVerdict);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -2863,6 +2914,29 @@ export function __deserialise_EmailError(json: __JsonValue, path: string = "$"):
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_EmailHeader(value: EmailHeader): __JsonValue {
+  return {
+    name: value.name as __JsonValue,
+    value: value.value as __JsonValue,
+  };
+}
+
+export function __deserialise_EmailHeader(json: __JsonValue, path: string = "$"): Result<EmailHeader, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["name"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
+  }
+  const __name = obj["name"];
+  if (typeof obj["value"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "string", actual: typeof obj["value"] });
+  }
+  const __value = obj["value"];
+  return Ok({ name: __name, value: __value } as EmailHeader);
 }
 
 export function __serialise_EmailMessage(value: EmailMessage): __JsonValue {
@@ -3180,6 +3254,24 @@ export function __serialise_ImageFit(value: ImageFit): __JsonValue {
 }
 
 export function __deserialise_ImageFit(json: __JsonValue, path: string = "$"): Result<ImageFit, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "ScaleDown":
+        return Ok({ tag: "ScaleDown" } as ImageFit);
+      case "Contain":
+        return Ok({ tag: "Contain" } as ImageFit);
+      case "Cover":
+        return Ok({ tag: "Cover" } as ImageFit);
+      case "Crop":
+        return Ok({ tag: "Crop" } as ImageFit);
+      case "Pad":
+        return Ok({ tag: "Pad" } as ImageFit);
+      case "Squeeze":
+        return Ok({ tag: "Squeeze" } as ImageFit);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -3221,6 +3313,24 @@ export function __serialise_ImageFormat(value: ImageFormat): __JsonValue {
 }
 
 export function __deserialise_ImageFormat(json: __JsonValue, path: string = "$"): Result<ImageFormat, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Jpeg":
+        return Ok({ tag: "Jpeg" } as ImageFormat);
+      case "Png":
+        return Ok({ tag: "Png" } as ImageFormat);
+      case "Webp":
+        return Ok({ tag: "Webp" } as ImageFormat);
+      case "Avif":
+        return Ok({ tag: "Avif" } as ImageFormat);
+      case "Gif":
+        return Ok({ tag: "Gif" } as ImageFormat);
+      case "Heic":
+        return Ok({ tag: "Heic" } as ImageFormat);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -3411,7 +3521,13 @@ export function __serialise_InboundEmail(value: InboundEmail): __JsonValue {
     to: value.to as __JsonValue,
     subject: value.subject as __JsonValue,
     messageId: value.messageId as __JsonValue,
+    inReplyTo: __serialise_Option_String(value.inReplyTo),
+    references: __serialise_List_String(value.references),
+    replyTo: __serialise_List_String(value.replyTo),
+    cc: __serialise_List_String(value.cc),
+    date: __serialise_Option_Instant(value.date),
     headers: __serialise_Map_String_String(value.headers),
+    headerList: __serialise_List_EmailHeader(value.headerList),
     text: __serialise_Option_String(value.text),
     html: __serialise_Option_String(value.html),
     attachments: __serialise_List_InboundAttachment(value.attachments),
@@ -3443,10 +3559,34 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path: `${path}.messageId`, expected: "string", actual: typeof __d_messageId });
   }
   const __messageId = __d_messageId;
+  const __d_inReplyTo: __JsonValue = "inReplyTo" in obj ? obj["inReplyTo"] : { kind: "None" };
+  const __r_inReplyTo = __deserialise_Option_String(__d_inReplyTo, `${path}.inReplyTo`);
+  if (__r_inReplyTo.tag === "Err") return __r_inReplyTo;
+  const __inReplyTo = __r_inReplyTo.value;
+  const __d_references: __JsonValue = "references" in obj ? obj["references"] : [];
+  const __r_references = __deserialise_List_String(__d_references, `${path}.references`);
+  if (__r_references.tag === "Err") return __r_references;
+  const __references = __r_references.value;
+  const __d_replyTo: __JsonValue = "replyTo" in obj ? obj["replyTo"] : [];
+  const __r_replyTo = __deserialise_List_String(__d_replyTo, `${path}.replyTo`);
+  if (__r_replyTo.tag === "Err") return __r_replyTo;
+  const __replyTo = __r_replyTo.value;
+  const __d_cc: __JsonValue = "cc" in obj ? obj["cc"] : [];
+  const __r_cc = __deserialise_List_String(__d_cc, `${path}.cc`);
+  if (__r_cc.tag === "Err") return __r_cc;
+  const __cc = __r_cc.value;
+  const __d_date: __JsonValue = "date" in obj ? obj["date"] : { kind: "None" };
+  const __r_date = __deserialise_Option_Instant(__d_date, `${path}.date`);
+  if (__r_date.tag === "Err") return __r_date;
+  const __date = __r_date.value;
   const __d_headers: __JsonValue = "headers" in obj ? obj["headers"] : [];
   const __r_headers = __deserialise_Map_String_String(__d_headers, `${path}.headers`);
   if (__r_headers.tag === "Err") return __r_headers;
   const __headers = __r_headers.value;
+  const __d_headerList: __JsonValue = "headerList" in obj ? obj["headerList"] : [];
+  const __r_headerList = __deserialise_List_EmailHeader(__d_headerList, `${path}.headerList`);
+  if (__r_headerList.tag === "Err") return __r_headerList;
+  const __headerList = __r_headerList.value;
   const __d_text: __JsonValue = "text" in obj ? obj["text"] : { kind: "None" };
   const __r_text = __deserialise_Option_String(__d_text, `${path}.text`);
   if (__r_text.tag === "Err") return __r_text;
@@ -3471,7 +3611,7 @@ export function __deserialise_InboundEmail(json: __JsonValue, path: string = "$"
   const __r_subaddress = __deserialise_Option_String(__d_subaddress, `${path}.subaddress`);
   if (__r_subaddress.tag === "Err") return __r_subaddress;
   const __subaddress = __r_subaddress.value;
-  return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, headers: __headers, text: __text, html: __html, attachments: __attachments, size: __size, subaddress: __subaddress } as InboundEmail);
+  return Ok({ from: __from, to: __to, subject: __subject, messageId: __messageId, inReplyTo: __inReplyTo, references: __references, replyTo: __replyTo, cc: __cc, date: __date, headers: __headers, headerList: __headerList, text: __text, html: __html, attachments: __attachments, size: __size, subaddress: __subaddress } as InboundEmail);
 }
 
 export function __serialise_IndexInfo(value: IndexInfo): __JsonValue {
@@ -3567,13 +3707,14 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
       return Ok({ tag: "After", ttl: __ttl } as KvExpiration);
     }
     case "At": {
-      if (typeof obj["instant"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "number", actual: typeof obj["instant"] });
+      const __instant$ms = __bynkInstantFromWire(obj["instant"]);
+      if (typeof __instant$ms !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "number", actual: typeof __instant$ms });
       }
-      if (!globalThis.Number.isSafeInteger(obj["instant"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "safe integer", actual: String(obj["instant"]) });
+      if (!globalThis.Number.isSafeInteger(__instant$ms)) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.instant`, expected: "safe integer", actual: String(__instant$ms) });
       }
-      const __instant = obj["instant"];
+      const __instant = __instant$ms;
       return Ok({ tag: "At", instant: __instant } as KvExpiration);
     }
     default:
@@ -3773,6 +3914,18 @@ export function __serialise_MetadataScope(value: MetadataScope): __JsonValue {
 }
 
 export function __deserialise_MetadataScope(json: __JsonValue, path: string = "$"): Result<MetadataScope, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Omit":
+        return Ok({ tag: "Omit" } as MetadataScope);
+      case "Indexed":
+        return Ok({ tag: "Indexed" } as MetadataScope);
+      case "All":
+        return Ok({ tag: "All" } as MetadataScope);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -4069,13 +4222,14 @@ export function __deserialise_MySqlValue(json: __JsonValue, path: string = "$"):
       return Ok({ tag: "MySqlBoolean", value: __value } as MySqlValue);
     }
     case "MySqlTimestamp": {
-      if (typeof obj["value"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      const __value$ms = __bynkInstantFromWire(obj["value"]);
+      if (typeof __value$ms !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
-      if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      if (!globalThis.Number.isSafeInteger(__value$ms)) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
       }
-      const __value = obj["value"];
+      const __value = __value$ms;
       return Ok({ tag: "MySqlTimestamp", value: __value } as MySqlValue);
     }
     case "MySqlDateTime": {
@@ -4406,13 +4560,14 @@ export function __deserialise_PgValue(json: __JsonValue, path: string = "$"): Re
       return Ok({ tag: "PgBoolean", value: __value } as PgValue);
     }
     case "PgTimestamp": {
-      if (typeof obj["value"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof obj["value"] });
+      const __value$ms = __bynkInstantFromWire(obj["value"]);
+      if (typeof __value$ms !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "number", actual: typeof __value$ms });
       }
-      if (!globalThis.Number.isSafeInteger(obj["value"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(obj["value"]) });
+      if (!globalThis.Number.isSafeInteger(__value$ms)) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.value`, expected: "safe integer", actual: String(__value$ms) });
       }
-      const __value = obj["value"];
+      const __value = __value$ms;
       return Ok({ tag: "PgTimestamp", value: __value } as PgValue);
     }
     case "PgJson": {
@@ -4513,13 +4668,14 @@ export function __deserialise_QueueDelivery(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "safe integer", actual: String(obj["attempts"]) });
   }
   const __attempts = obj["attempts"];
-  if (typeof obj["sentAt"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "number", actual: typeof obj["sentAt"] });
+  const __sentAt$ms = __bynkInstantFromWire(obj["sentAt"]);
+  if (typeof __sentAt$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "number", actual: typeof __sentAt$ms });
   }
-  if (!globalThis.Number.isSafeInteger(obj["sentAt"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "safe integer", actual: String(obj["sentAt"]) });
+  if (!globalThis.Number.isSafeInteger(__sentAt$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "safe integer", actual: String(__sentAt$ms) });
   }
-  const __sentAt = obj["sentAt"];
+  const __sentAt = __sentAt$ms;
   return Ok({ attempts: __attempts, sentAt: __sentAt } as QueueDelivery);
 }
 
@@ -4701,13 +4857,14 @@ export function __deserialise_R2Object(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path: `${path}.etag`, expected: "string", actual: typeof obj["etag"] });
   }
   const __etag = obj["etag"];
-  if (typeof obj["uploaded"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "number", actual: typeof obj["uploaded"] });
+  const __uploaded$ms = __bynkInstantFromWire(obj["uploaded"]);
+  if (typeof __uploaded$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "number", actual: typeof __uploaded$ms });
   }
-  if (!globalThis.Number.isSafeInteger(obj["uploaded"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "safe integer", actual: String(obj["uploaded"]) });
+  if (!globalThis.Number.isSafeInteger(__uploaded$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.uploaded`, expected: "safe integer", actual: String(__uploaded$ms) });
   }
-  const __uploaded = obj["uploaded"];
+  const __uploaded = __uploaded$ms;
   const __r_contentType = __deserialise_Option_String(obj["contentType"], `${path}.contentType`);
   if (__r_contentType.tag === "Err") return __r_contentType;
   const __contentType = __r_contentType.value;
@@ -4961,6 +5118,18 @@ export function __serialise_RetrievalType(value: RetrievalType): __JsonValue {
 }
 
 export function __deserialise_RetrievalType(json: __JsonValue, path: string = "$"): Result<RetrievalType, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Vector":
+        return Ok({ tag: "Vector" } as RetrievalType);
+      case "Keyword":
+        return Ok({ tag: "Keyword" } as RetrievalType);
+      case "Hybrid":
+        return Ok({ tag: "Hybrid" } as RetrievalType);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -5575,13 +5744,14 @@ export function __deserialise_WorkerVersion(json: __JsonValue, path: string = "$
   const __r_tag = __deserialise_Option_String(obj["tag"], `${path}.tag`);
   if (__r_tag.tag === "Err") return __r_tag;
   const __tag = __r_tag.value;
-  if (typeof obj["deployed"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "number", actual: typeof obj["deployed"] });
+  const __deployed$ms = __bynkInstantFromWire(obj["deployed"]);
+  if (typeof __deployed$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "number", actual: typeof __deployed$ms });
   }
-  if (!globalThis.Number.isSafeInteger(obj["deployed"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "safe integer", actual: String(obj["deployed"]) });
+  if (!globalThis.Number.isSafeInteger(__deployed$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.deployed`, expected: "safe integer", actual: String(__deployed$ms) });
   }
-  const __deployed = obj["deployed"];
+  const __deployed = __deployed$ms;
   return Ok({ id: __id, tag: __tag, deployed: __deployed } as WorkerVersion);
 }
 
@@ -5719,6 +5889,9 @@ export function __serialise_Map_String_String(value: ReadonlyMap<string, string>
 }
 
 export function __deserialise_Map_String_String(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, string>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_String(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }
@@ -5931,6 +6104,70 @@ export function __deserialise_Option_TokenUsage(json: __JsonValue, path: string 
   return __b;
 }
 
+export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __v$ms = __bynkInstantFromWire(raw);
+  if (typeof __v$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
+  }
+  if (!globalThis.Number.isSafeInteger(__v$ms)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
+  }
+  const __v = __v$ms;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Instant(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Instant(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Instant(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_EmailHeader(value: readonly EmailHeader[]): __JsonValue {
+  return value.map((v) => __serialise_EmailHeader(v));
+}
+
+export function __deserialise_List_EmailHeader(json: __JsonValue, path: string = "$"): Result<readonly EmailHeader[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: EmailHeader[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_EmailHeader(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as EmailHeader);
+  }
+  return Ok(out);
+}
+
 export function __serialise_List_InboundAttachment(value: readonly InboundAttachment[]): __JsonValue {
   return value.map((v) => __serialise_InboundAttachment(v));
 }
@@ -5983,50 +6220,6 @@ export function __deserialise_Option_KvCacheTtl(json: __JsonValue, path: string 
   const __b = __option_value_KvCacheTtl(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as KvCacheTtl) as Option<KvCacheTtl>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
-}
-
-export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
-  return { kind: "None" };
-}
-
-function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_Instant(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Instant(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as number) as Option<number>);
-    }
-  }
-  const __b = __option_value_Instant(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });

@@ -25,6 +25,14 @@ export function __serialise_ReaperError(value: ReaperError): __JsonValue {
 }
 
 export function __deserialise_ReaperError(json: __JsonValue, path: string = "$"): Result<ReaperError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "StorageUnavailable":
+        return Ok({ tag: "StorageUnavailable" } as ReaperError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

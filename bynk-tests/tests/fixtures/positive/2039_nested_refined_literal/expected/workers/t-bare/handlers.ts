@@ -136,6 +136,9 @@ export function __serialise_Map_String_Cents(value: ReadonlyMap<string, __Common
 }
 
 export function __deserialise_Map_String_Cents(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, __CommonsCents>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Cents(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

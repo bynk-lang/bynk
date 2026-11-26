@@ -1,0 +1,212 @@
+{
+  "version": 1,
+  "diagnostics": [
+    {
+      "code": "bynk.types.type_mismatch",
+      "severity": "error",
+      "file": "src/glyph.bynk",
+      "start": {
+        "line": 3,
+        "column": 22,
+        "byteOffset": 36
+      },
+      "end": {
+        "line": 3,
+        "column": 27,
+        "byteOffset": 44
+      },
+      "message": "operator `+` requires `Int` or `Float` operands; left operand has type `String`",
+      "labels": [],
+      "notes": [
+        "`+` does not join strings; use string interpolation instead, e.g. `\"hi \\(name)\"` rather than `\"hi \" + name`"
+      ],
+      "fixes": []
+    },
+    {
+      "code": "bynk.resolve.duplicate_fn",
+      "severity": "error",
+      "file": "src/money/b.bynk",
+      "start": {
+        "line": 3,
+        "column": 4,
+        "byteOffset": 18
+      },
+      "end": {
+        "line": 3,
+        "column": 7,
+        "byteOffset": 21
+      },
+      "message": "function `one` is already declared",
+      "labels": [
+        {
+          "file": "src/money/a.bynk",
+          "start": {
+            "line": 3,
+            "column": 4,
+            "byteOffset": 18
+          },
+          "end": {
+            "line": 3,
+            "column": 7,
+            "byteOffset": 21
+          },
+          "message": "previously declared here"
+        }
+      ],
+      "notes": [],
+      "fixes": []
+    },
+    {
+      "code": "bynk.types.not_orderable",
+      "severity": "error",
+      "file": "src/order.bynk",
+      "start": {
+        "line": 6,
+        "column": 5,
+        "byteOffset": 92
+      },
+      "end": {
+        "line": 6,
+        "column": 10,
+        "byteOffset": 97
+      },
+      "message": "operator `<` needs an orderable type, but `Point` is not",
+      "labels": [],
+      "notes": [
+        "`Point` does not declare `derives Ord`; declaring it orders the type by declaration order (fields, then variants), so reordering the declaration changes the order"
+      ],
+      "fixes": [
+        {
+          "message": "add `derives Ord` to `Point`",
+          "applicability": "suggested",
+          "edits": [
+            {
+              "file": "src/order.bynk",
+              "start": {
+                "line": 3,
+                "column": 32,
+                "byteOffset": 46
+              },
+              "end": {
+                "line": 3,
+                "column": 32,
+                "byteOffset": 46
+              },
+              "replacement": " derives Ord"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "bynk.given.undeclared_capability",
+      "severity": "error",
+      "file": "src/relay.bynk",
+      "start": {
+        "line": 19,
+        "column": 5,
+        "byteOffset": 231
+      },
+      "end": {
+        "line": 19,
+        "column": 9,
+        "byteOffset": 235
+      },
+      "message": "capability `Beta` is used but not listed in the handler's `given` clause",
+      "labels": [],
+      "notes": [
+        "add `Beta` to the handler's `given` clause so the dependency surface is visible at the declaration site"
+      ],
+      "fixes": [
+        {
+          "message": "add `Beta` to the `given` clause",
+          "applicability": "machine",
+          "edits": [
+            {
+              "file": "src/relay.bynk",
+              "start": {
+                "line": 18,
+                "column": 32,
+                "byteOffset": 224
+              },
+              "end": {
+                "line": 18,
+                "column": 32,
+                "byteOffset": 224
+              },
+              "replacement": " given Beta"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "bynk.parse.let_else_staircase",
+      "severity": "hint",
+      "file": "src/stairs.bynk",
+      "start": {
+        "line": 4,
+        "column": 3,
+        "byteOffset": 83
+      },
+      "end": {
+        "line": 4,
+        "column": 10,
+        "byteOffset": 90
+      },
+      "message": "these 2 nested `match`es can be flattened with `let … else`",
+      "labels": [],
+      "notes": [
+        "each `match` has one arm that carries on and one that gives up; `let P = e else { … }` says that without the nesting"
+      ],
+      "fixes": [
+        {
+          "message": "flatten the nested `match`es into `let … else`",
+          "applicability": "machine",
+          "edits": [
+            {
+              "file": "src/stairs.bynk",
+              "start": {
+                "line": 4,
+                "column": 3,
+                "byteOffset": 83
+              },
+              "end": {
+                "line": 10,
+                "column": 4,
+                "byteOffset": 202
+              },
+              "replacement": "let Some(x) = a else { Err(\"a\") }\n  let Some(y) = b else { Err(\"b\") }\n  Ok(x + y)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "bynk.parse.orphan_doc_block",
+      "severity": "warning",
+      "file": "src/warn.bynk",
+      "start": {
+        "line": 3,
+        "column": 1,
+        "byteOffset": 14
+      },
+      "end": {
+        "line": 6,
+        "column": 1,
+        "byteOffset": 55
+      },
+      "message": "documentation block is separated from the following declaration by a blank line; it will not be attached",
+      "labels": [],
+      "notes": [
+        "remove the blank line to attach the doc to the next declaration, or remove the doc block if it is not meant to document anything"
+      ],
+      "fixes": []
+    }
+  ],
+  "summary": {
+    "errors": 4,
+    "warnings": 1,
+    "hints": 1
+  }
+}

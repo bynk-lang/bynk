@@ -92,7 +92,7 @@ async function main(): Promise<void> {
   assert(
     plain ===
       '{"id":"a1","action":"opened","size":null,"tags":["x",null],' +
-        '"scores":[["k",1],["z",null]],"detail":{"note":null,"count":2},' +
+        '"scores":{"k":1,"z":null},"detail":{"note":null,"count":2},' +
         '"event":{"kind":"Opened","actor":"bob"}}',
     "a plain route writes v / null at every depth",
     plain,

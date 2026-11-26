@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Some, None } from "../src/result.ts";
-import { __bynkDurationToIso, __bynkDurationToString, __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsCron, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
+import { __bynkDurationToIso, __bynkDurationToString, __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantFromWire, __bynkInstantToIso, __bynkIsCron, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
 
 // Standard-library K3 (#2592).
 test("toIso writes UTC with three fraction digits and Z", () => {
@@ -256,4 +256,15 @@ test("a Duration's ISO 8601 form has days as its largest unit and the fraction o
   assert.equal(iso(60_000), "PT1M");
   assert.equal(iso(3_600_000), "PT1H");
   assert.equal(iso(90_061_001), "P1DT1H1M1.001S");
+});
+
+// #3974: the `Instant` wire decoder reads an RFC 3339 string and passes everything else through.
+test("InstantFromWire reads an offset timestamp and leaves anything else as it came", () => {
+  assert.equal(__bynkInstantFromWire(1_795_341_600_000), 1_795_341_600_000);
+  assert.equal(__bynkInstantFromWire("2026-11-22T10:00:00Z"), 1_795_341_600_000);
+  assert.equal(__bynkInstantFromWire("2026-11-22T12:00:00.5+02:00"), 1_795_341_600_500);
+  for (const bad of ["2026-11-22T10:00:00", "2026-02-30T10:00:00Z", "2026-11-22", "soon", ""]) {
+    assert.equal(__bynkInstantFromWire(bad), bad);
+  }
+  assert.equal(__bynkInstantFromWire(null), null);
 });
