@@ -1344,6 +1344,25 @@ between its `store` fields and its handlers.
   (`bynk.field.replaces_needed`). When none does, a build warns that it can be deleted
   (`bynk.field.replaces_settled`).
 
+**Renaming a record field inside a `store` value (#4483).** `Old` renamed to `New` in a
+record type with `New: T replaces Old` is read by the lock the same way, wherever a `store`
+field holds the record, in a `Cell` or in the value of a `Map`, `Cache` or `Log`.
+- **What the lock does.** The reconcile reads the recorded position `Old` (and everything
+  beneath it) as `New` before comparing, when the lock records `Old`, does not record
+  `New`, and the live shape no longer has `Old`. A rename on its own is additive: the
+  class's version increments and the new snapshot records `renamed_from` on `New`'s path.
+  A rename that also changes the field's type, or a field with no clause, is the
+  non-additive change it was.
+- **What loading does.** The record's decoder accepts the old key, so a value stored
+  before the rename reads as `New`.
+- **How long the clause stays.** As for a `Cell`: the clause MUST stay while a snapshot at or
+  above the class's floor records the old path, under any name the `store` field has had
+  (`bynk.field.replaces_needed`). The lock keeps `renamed_from` on the renamed path to judge it
+  by. A record field's clause also lets its decoders accept the old key from a wire client, so
+  a build never says that it can be deleted. A rename beneath a key position (a `Set`'s
+  element, a `Map`'s or `Cache`'s key, an `@indexed(by:)` composite) is refused, as an added
+  field there is: the key's encoding names the field.
+
 ### §5.4.4 Erasing an instance (#3931) {#erase}
 
 `self.erase()` is legal in an agent `on call` handler (not in `migrate`, an invariant, a `transition` or
