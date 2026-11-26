@@ -32,6 +32,7 @@ import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/testing/bindings.js";
+import { verifyQueueMessage } from "./__bynk_runtime/queue_signing.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -1131,6 +1132,34 @@ t("WorkersQueue.send: sends the JSON text parsed, as contentType json", async ()
   const q = fakeQueue();
   await new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS").send('{"id":7,"tags":["a"]}');
   assert.deepEqual(q.sends, [{ body: { id: 7, tags: ["a"] }, options: { contentType: "json" } }]);
+});
+
+// #3899: a producer whose queue has a signed consumer sends each message in a signed envelope, under
+// the key of the edge to the consumer's context, so the consumer verifies which context sent it.
+const signedQueue = (env, q) => new WorkersQueue({ QUEUE_ORDERS: q, ...env }, "QUEUE_ORDERS", "shop.orders", "shop.fulfil", "order-events");
+const verifies = (sent) => verifyQueueMessage(sent, "order-events", (from) => (from === "shop.orders" ? ["edge-key"] : []));
+
+t("WorkersQueue (signed): every send path wraps the body in an envelope the consumer verifies", async () => {
+  const q = fakeQueue();
+  const queue = signedQueue({ BYNK_CALL_TO_SHOP__FULFIL: "edge-key" }, q);
+  await queue.send('{"id":1}');
+  await queue.sendWith('{"id":2}', { delay: None });
+  await queue.sendValue({ id: 3 });
+  await queue.sendValueWith({ id: 4 }, { delay: Some(2000) });
+  await queue.sendBatch(['{"id":5}']);
+  await queue.sendValueBatch([{ id: 6 }]);
+  const sent = [...q.sends.map((s) => s.body), ...q.batches.flat().map((m) => m.body)];
+  const verified = await Promise.all(sent.map(verifies));
+  assert.deepEqual(verified.map((v) => v.ok && v.body.id), [1, 2, 3, 4, 5, 6]);
+  assert.ok(verified.every((v) => v.ok && v.from === "shop.orders"));
+  assert.equal(new Set(verified.map((v) => v.id)).size, 6, "every message has its own id");
+  assert.deepEqual(q.sends[3].options, { contentType: "json", delaySeconds: 2 });
+});
+
+t("WorkersQueue (signed): a Worker without the edge key faults, and nothing is sent", async () => {
+  const q = fakeQueue();
+  await assert.rejects(signedQueue({}, q).send('{"id":1}'), /BYNK_CALL_TO_/);
+  assert.deepEqual([q.sends, q.batches], [[], []]);
 });
 
 t("WorkersQueue.send: text that is not JSON faults, and nothing is sent", async () => {

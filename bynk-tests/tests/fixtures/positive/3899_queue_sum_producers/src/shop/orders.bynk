@@ -1,0 +1,21 @@
+context shop.orders
+
+// `claims` is whatever the sender writes in the body: it is not who sent the message.
+type Order = { id: String, claims: String }
+
+// #3899: a Bynk context and a foreign producer on one queue. `Internal` is admitted by what it is
+// (a context `IsContext` names, signed under the edge key between the two), `Legacy` by its secret.
+// The handler reads which one signed the message: the actor comes from the signature the entry
+// verified, never from the body.
+actor Internal = Producer where IsContext(shop.fulfil, shop.audit)
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by who: Internal | Legacy {
+    match who {
+      Internal(sender) => Retry("signed as \(sender), the body claims \(order.claims)")
+      Legacy => Retry("signed as Legacy, the body claims \(order.claims)")
+    }
+  }
+}

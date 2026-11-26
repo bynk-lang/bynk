@@ -65,8 +65,8 @@ public names of the commons: all of them (`uses lib.y`), those listed, each opti
 renamed (`uses lib.y { Status as YStatus, describe }`; a name that is not public is
 `bynk.uses.unknown_name`), or none bare but all qualified by an alias (`uses lib.y as Y`,
 then `Y.Status`). A commons' full name (`lib.y.Status`) qualifies as well, and a one-segment
-commons name is not a qualifier. A declaration MUST be read by one spelling in a unit
-(`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
+commons name is not a qualifier. Every spelling of one declaration (`Status`, `Y.Status`, `lib.y.Status`) is that declaration: one
+type, one function or constant, whichever spelling a value was typed with. Two used commons that
 declare one name do not collide at the `uses`: the name MUST NOT be written bare
 (`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
 unit's own wins over a used name, and a name a braced list selects wins over the same name
@@ -2552,7 +2552,8 @@ refinement of a `Bearer` one (#2380, #3937), also exposes the verified token's c
 `<binder>.claims`, of type `TokenClaims` (`get(name)`, `has(name)`). The seam reads them from the
 token it already verified, so a refinement's binder reads its base's. The binder of any other scheme,
 a binder-less `by`, and a sum's binder (which is the resolved arm) have no `.claims`
-(`bynk.types.unknown_field`). A `TokenClaims` MUST NOT be a field, nor cross a call, a message or an
+(`bynk.types.unknown_field`); a `Bearer` or `Oidc` arm of an `http` sum reads them through a second
+pattern binder (§5.7a.1). A `TokenClaims` MUST NOT be a field, nor cross a call, a message or an
 agent (`bynk.types.claims_at_boundary`). A test supplies them as the principal's second argument,
 `by User("ada", TokenClaims.of([…]))`, for an `Oidc` or `Bearer` actor and no other
 (`bynk.test.principal_claims_not_oidc`).
@@ -2588,8 +2589,10 @@ first: with none (or a repeated one) it does not resolve and refuses nothing. Wi
 state-changing method it applies its cross-site check (`Sec-Fetch-Site: same-origin`, or an `Origin` among
 the service's credentialed `cors` origins) before verifying the cookie; a request it refuses that no
 other member resolves is `403`, not `401`. A request carrying a token and a cookie is the first
-listed member's. A sum arm binds its identity only; reading `.claims` of an `Oidc` or `Bearer` arm is
-not part of this rule (#4344).
+listed member's. A sum arm binds its identity, `User(u)`. A `Bearer` or `Oidc` arm of an `http` handler's sum MAY also bind
+its verified token's claims, as a `TokenClaims`, with a second pattern binder, `User(u, c)` (#4344); the
+claims are the verified token's and an arm of any other scheme, or of a non-`http` sum, has none, so a
+second binder there, or a third on a `Bearer` or `Oidc` arm, is `bynk.types.pattern_arity`.
 
 The reachability checks are **decidable and scheme-level**; the compiler does not
 reason about predicate-level disjointness. Total verification failure (no member
