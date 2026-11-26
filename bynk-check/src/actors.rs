@@ -1811,6 +1811,10 @@ pub enum CallSitePrincipal {
     /// `by Nobody`: no credential at all, so the auth seam answers `401`.
     Nobody,
     BadCredential(BadCredential),
+    /// #4385: a bare bad credential on an actor sum whose one refusing member is not a `Bearer` or
+    /// `Signature` seam, so the checker names that member: what the emitter drives as
+    /// `by <Bad>(<member>)`. Only ever recorded on a clause, never classified from a name.
+    BadCredentialArm(BadCredential, String),
 }
 
 impl CallSitePrincipal {

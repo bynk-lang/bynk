@@ -36,7 +36,7 @@ async function test_mail_with_no_DMARC_verdict_is_refused() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "sender not authenticated"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:7:12", 414, 453, "expect r is Reject(\"sender not authenticated\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -53,7 +53,7 @@ async function test_mail_that_failed_DMARC_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const failed: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set("authentication-results", "mx.cloudflare.net; dmarc=fail header.from=b.example");
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: failed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: failed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "sender not authenticated"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:13:12", 783, 822, "expect r is Reject(\"sender not authenticated\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -70,7 +70,7 @@ async function test_mail_Cloudflare_authenticated_is_answered() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const signed: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set("authentication-results", "mx.cloudflare.net; dmarc=pass header.from=b.example");
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed, messageId: "", text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     void (((__d) => {
       switch (__d.tag) {
         case "Reply": {

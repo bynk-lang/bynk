@@ -7,11 +7,13 @@
 //! the key it counts by. This module is the checker half: the shape of the
 //! annotation and what it names. The router's step is `bynk-emit`'s.
 //!
-//! This increment counts by `clientIp`, the request's `CF-Connecting-IP`, checked
-//! ahead of every other router step so it also protects the authentication
-//! step. `identity` (the verified actor, checked after authentication and before
-//! the body) is part of the annotation's design and is refused until the router
-//! verifies the actor ahead of the body read.
+//! Two keys. `clientIp`, the request's `CF-Connecting-IP`, is checked ahead of every
+//! other router step, so it also protects the authentication step. `identity`, the
+//! verified caller (`sub`), is checked after the route's actor has been verified and
+//! before anything else is read: the router verifies the credential first (an
+//! unverified caller gets the `401`/`403` it always did and never touches the
+//! limiter), asks the limiter, then reads the body. `identity` needs a single actor
+//! that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor.
 
 use bynk_syntax::ast::{Annotation, ExprKind, Handler, HandlerKind};
 use bynk_syntax::error::CompileError;
@@ -36,6 +38,8 @@ pub struct RateLimitRoute {
 pub enum RateLimitKey {
     /// The request's `CF-Connecting-IP`, checked before the actor.
     ClientIp,
+    /// The verified caller's `sub`, checked after the actor and before the body.
+    Identity,
 }
 
 /// The route's valid `@rateLimit`, if it carries one. The checker has reported
@@ -53,9 +57,20 @@ pub fn route_rate_limit(handler: &Handler, table: &UnitTable) -> Option<RateLimi
         limiter,
         key: match key.as_str() {
             "clientIp" => RateLimitKey::ClientIp,
+            "identity" => RateLimitKey::Identity,
             _ => return None,
         },
     })
+}
+
+/// Whether the route's `by` is a single actor that verifies a credential and carries an
+/// identity (`sub`): a `Bearer`, `Oidc` or `SignedCookie` actor, not an actor sum.
+fn has_identity_seam(handler: &Handler, table: &UnitTable) -> bool {
+    use crate::actors;
+    actors::sum_members_for(handler, &table.actors).is_none()
+        && (actors::bearer_seam_for(handler, &table.actors).is_some()
+            || actors::oidc_seam_for(handler, &table.actors).is_some()
+            || actors::signed_cookie_seam_for(handler, &table.actors).is_some())
 }
 
 /// The `RateLimit` instance `name` the context declares.
@@ -154,23 +169,27 @@ fn validate_handler(handler: &Handler, table: &UnitTable, errors: &mut Vec<Compi
     }
     match key.as_str() {
         "clientIp" => {}
-        "identity" => errors.push(
-            CompileError::new(
-                "bynk.http.rate_limit_key_unavailable",
-                ann.args[1].value.span,
-                "`key: identity` is not available yet",
-            )
-            .with_note(
-                "`identity` counts by the verified caller and needs the router to authenticate before it reads the body, which it does not yet; use `key: clientIp`, or call the limiter's `allow(key)` in the handler for a limit keyed on the caller",
-            ),
-        ),
+        "identity" => {
+            if !has_identity_seam(handler, table) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.http.rate_limit_key_unavailable",
+                        ann.args[1].value.span,
+                        "`key: identity` needs a route whose actor carries an identity",
+                    )
+                    .with_note(
+                        "`identity` counts by the verified caller: the route's `by` must be a single `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor`, a `Signature` sender and an actor sum have no one identity to count by; use `key: clientIp`, or call the limiter's `allow(key)` in the handler",
+                    ),
+                );
+            }
+        }
         other => errors.push(
             CompileError::new(
                 "bynk.http.rate_limit_bad_args",
                 ann.args[1].value.span,
                 format!("`{other}` is not a `@rateLimit` key"),
             )
-            .with_note("the keys are `clientIp` and, once the router authenticates before the body, `identity`"),
+            .with_note("the keys are `clientIp` and `identity`"),
         ),
     }
 }

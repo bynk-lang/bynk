@@ -325,6 +325,10 @@ service fulfil from queue("order-events") {
 
 Changing a consumer's message type while messages are already queued is not caught.
 
+## Traces
+
+A queue message does not carry the request's [trace](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/): a message is only a body, and carrying an id would change the message format. Each batch a consumer receives starts a trace of its own. A producer that wants to follow a message puts an id in the message.
+
 A send can be written in a function, a service or agent handler, or a provider operation. An
 agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
 scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.

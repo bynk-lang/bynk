@@ -2,7 +2,7 @@ context pay.api
 
 type UserId = String where NonEmpty
 
-actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sessions = true), identity = UserId }
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 actor ApiClient {
 	auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
 	identity = UserId

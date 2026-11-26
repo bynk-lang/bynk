@@ -756,12 +756,12 @@ fn lower_effect_let_value(
         let kind = call_site_principal(cx, principal);
         if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
-        } else if let CallSitePrincipal::BadCredential(bad) = kind {
+        } else if let Some(driver) = crate::emitter::lower_call::test_calls::BadDriver::of(
+            &kind,
+            bynk_check::actors::bad_principal_arm(principal),
+        ) {
             // #2135: `by Forged` / `by Stale` name no identity either.
-            cx.call_site_bad_signature = Some(crate::emitter::lower_call::test_calls::BadDriver {
-                driver: bad.driver(),
-                arm: bynk_check::actors::bad_principal_arm(principal).map(str::to_string),
-            });
+            cx.call_site_bad_signature = Some(driver);
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower_node(id, cx));
             // #3052, #3937: a `system` call mints its `Oidc` or `Bearer` token's claims from the

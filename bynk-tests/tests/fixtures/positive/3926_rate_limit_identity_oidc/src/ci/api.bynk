@@ -1,0 +1,22 @@
+context ci.api
+
+// #3926: a limit counted per verified workload (`sub`). The token is verified against the issuer's
+// JWKS first; a token the seam refuses never reaches the limiter.
+
+consumes bynk.cloudflare { RateLimit }
+
+type WorkloadId = String where NonEmpty
+
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = WorkloadId
+}
+
+capability ReleaseLimit = RateLimit @limit(2) @period(60.seconds)
+
+service api from http {
+	@rateLimit(ReleaseLimit, key: identity)
+	on POST("/release") (body: String) -> Effect[HttpResult[String]] by w: Workload {
+		Ok("released \(body) by \(w.identity)")
+	}
+}
