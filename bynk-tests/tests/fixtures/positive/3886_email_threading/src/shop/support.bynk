@@ -1,0 +1,34 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  DmarcVerdict,
+  SenderIdentity,
+  EmailVerdict,
+  EmailHeader,
+}
+
+// #3886: the handler reads threading, where to answer, who else received the message, when the
+// sender wrote it and every header occurrence, as typed fields rather than by re-parsing `headers`.
+// It rejects with what it read, so a case sees what the Worker's real parse produced.
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    let answers = mail.inReplyTo.getOrElse("none")
+    let chain = mail.references.length()
+    let received = mail.headerList.filter((h) => h.name == "received").length()
+    let when = match mail.date {
+      Some(at) => "dated"
+      None => "undated"
+    }
+    Reject("\(answers) refs=\(chain) cc=\(mail.cc.length()) reply-to=\(mail.replyTo.length()) received=\(received) \(when)")
+  }
+}
+
+// #3886: the verdict is read from the first occurrence of `authentication-results` across `headers`
+// and then `headerList`, the order a case's message is written in, so a case that sets it in either
+// reads the same at the `unit` and the `system` tier.
+service audit from email("audit@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Sender {
+    if s.identity.dmarc == DmarcPass { Reject("pass") } else { Reject("none") }
+  }
+}

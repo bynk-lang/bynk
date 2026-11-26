@@ -42,7 +42,7 @@ async function test_a_plus_addressed_recipient_reaches_the_base_address_s_servic
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support+1234@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support+1234@shop.example", subject: "hello", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "tickets@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:4:12", 256, 292, "expect r is Forward(\"tickets@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -58,7 +58,7 @@ async function test_mail_without_a_tag_reaches_the_same_service_with_no_subaddre
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:9:12", 496, 507, "expect r is Accept", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -74,7 +74,7 @@ async function test_the_case_of_the_recipient_and_the_tag_is_ignored() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "SUPPORT+X@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "SUPPORT+X@shop.example", subject: "hello", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "tickets@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:14:12", 699, 735, "expect r is Forward(\"tickets@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -90,7 +90,7 @@ async function test_an_exact_claim_on_a_tagged_address_wins_over_its_base_addres
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_vip({ from: "a@b.example", to: "support+vip@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_vip({ from: "a@b.example", to: "support+vip@shop.example", subject: "hello", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "vip mail goes elsewhere"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:19:12", 938, 976, "expect r is Reject(\"vip mail goes elsewhere\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -106,7 +106,7 @@ async function test_a_tagged_recipient_with_no_base_claim_falls_to_the_catch_all
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_rest({ from: "a@b.example", to: "sales+9@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    const r = await __sysdrive_message_rest({ from: "a@b.example", to: "sales+9@shop.example", subject: "hello", messageId: "", inReplyTo: { tag: "None" as const }, references: [], replyTo: [], cc: [], date: { tag: "None" as const }, headers: new globalThis.Map(), headerList: [], text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "no such mailbox"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:24:12", 1175, 1205, "expect r is Reject(\"no such mailbox\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

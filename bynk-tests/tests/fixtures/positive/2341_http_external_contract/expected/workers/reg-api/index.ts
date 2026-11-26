@@ -56,7 +56,7 @@ export default {
             const __raw_name = __m.params["name"];
             const name = __raw_name;
             const result = await surface.http_DELETE_packages_Param_name(name);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"reg.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"reg.api\""]), __security_api);
           }
         }
         {
@@ -76,7 +76,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_notes_Param_id(request, id, __requestHeaders(request, undefined, ["x-sig", "authorization"]));
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"reg.api\", header=\"X-Sig\"", "Bearer realm=\"reg.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Signature realm=\"reg.api\", header=\"X-Sig\"", "Bearer realm=\"reg.api\""])), __security_api);
           }
         }
         {
@@ -114,7 +114,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_PUT_packages_Param_name(name, body, __requestHeaders(request));
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"reg.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"reg.api\""]), __security_api);
           }
         }
         if (__matchPath("/notes/:id", path) !== null) {

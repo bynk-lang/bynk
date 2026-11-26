@@ -56,28 +56,28 @@ export default {
           if (method === "POST" && __matchPath("/logout", path) !== null) {
             __route = "POST /logout";
             const result = await surface.http_POST_logout(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/orders", path) !== null) {
             __route = "POST /orders";
             const result = await surface.http_POST_orders(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/orders/token-first", path) !== null) {
             __route = "POST /orders/token-first";
             const result = await surface.http_POST_orders_token_first(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"shop.api\"", "Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bearer realm=\"shop.api\"", "Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/revoke-all", path) !== null) {
             __route = "POST /revoke-all";
             const result = await surface.http_POST_revoke_all(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/logout", path) !== null) {

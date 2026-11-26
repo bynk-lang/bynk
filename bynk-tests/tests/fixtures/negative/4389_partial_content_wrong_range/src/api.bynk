@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/blob") () -> Effect[HttpResult[()]] by v: Visitor {
+        PartialContent(Stream.of([Bytes.fromUtf8("x")]), "text/plain", "bytes 0-0/1")
+    }
+}

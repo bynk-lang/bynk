@@ -144,7 +144,7 @@ documents for the route: the declared success when the handler can return it, ea
 | a redirect | `{ status, kind, location: string }` |
 | the boundary's `400` | `{ status: 400, kind: "StructuralMismatch", error: BoundaryError }` |
 | the router's `429` on a [`@rateLimit`](/reference/http/#rate-limiting) route | `{ status: 429, kind: "RateLimited", error: { kind: "RateLimited", details: string } }`, or `problem: Problem` on a problem-details route; the member is always there on a limited route, so a `switch (res.kind)` that ends in a `never` check must handle it; a handler's own `TooManyRequests` at the same status is a separate member, told apart by the body each writes |
-| `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
+| `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `PartialContent`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
 | `Streaming(s)` | `{ status, kind, events: AsyncIterable<string> }`; see [Server-sent events](#server-sent-events) |
 
 `kind` is the `HttpResult` variant's name. Two answers can share a status (the
@@ -320,7 +320,7 @@ which Chromium-based browsers, Node and Workers can make; other browsers cannot,
 a `Blob` or bytes there.
 
 An answer whose body the author owns (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`,
-`RawError`) is not read or decoded. Its member is
+`PartialContent`, `RawError`) is not read or decoded. Its member is
 
 ```ts
 { status, kind, contentType: string, etag?: string | null,

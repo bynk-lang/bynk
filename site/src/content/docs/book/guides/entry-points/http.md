@@ -131,8 +131,8 @@ curl -X POST http://localhost:8787/notes \
 ## Choose the right status
 
 Return the `HttpResult` variant matching the outcome — `Ok` (200),
-`Created` (201), `Accepted` (202), `NoContent` (204), a redirect such as
-`Found(url)` (302) or `SeeOther(url)` (303), `BadRequest(msg)` (400),
+`Created` (201), `Accepted` (202), `NoContent` (204), `PartialContent(…)` (206) for a range read, a
+redirect such as `Found(url)` (302) or `SeeOther(url)` (303), `NotModified` (304), `BadRequest(msg)` (400),
 `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict(msg)` (409),
 `UnprocessableEntity(msg)` (422), `TooManyRequests(msg)` (429),
 `ServerError(msg)` (500), `ServiceUnavailable(msg)` (503). See the
@@ -184,7 +184,7 @@ service Feed from http {
 
 A streamed response returns `Effect[HttpResult[()]]` — there is no JSON body
 value, so the parameter is `()`. Because the status is sent before the first
-chunk, streaming is **200-only**: decide any failure *before* you start, and
+chunk, streaming is **200-only** (a range read is the one exception, below): decide any failure *before* you start, and
 return an ordinary variant instead — it shares `HttpResult[()]`, so both live in
 one handler:
 
@@ -273,6 +273,11 @@ contentType)` takes a `Stream[Bytes]`, usually from a capability, and writes eac
 chunk as the client reads it. It sends no `ETag`, and a fault partway through cuts
 the response off, since the status is already sent. See
 [Streamed raw responses](/reference/http/#streamed-raw-responses).
+
+A range read answers differently: `PartialContent(body, contentType, range)` streams just the bytes the
+client asked for as a **206**, with the `ContentRange` it covers sent as `Content-Range`, and
+`NotModified` is a bodyless **304** for a conditional read the handler resolved itself. Both are `GET`
+answers. See [Partial content](/reference/http/#partial-content).
 
 **Why can't I just return HTML?** Because rendering is the frontend tier's job,
 not the service's. Bynk serves *bytes with a content-type*; it deliberately has

@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on POST("/blob") (body: String) -> Effect[HttpResult[()]] by v: Visitor {
+        NotModified
+    }
+}

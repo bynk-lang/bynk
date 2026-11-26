@@ -11,6 +11,13 @@ export interface SseEvent {
   readonly retry: Opt<number>;
 }
 
+// #4389: the `bynk` record `ContentRange`, as a `PartialContent` answer carries it.
+export interface ContentRange {
+  readonly start: number;
+  readonly end: number;
+  readonly total: Opt<number>;
+}
+
 // #4394: `E` is the element a `Streaming` body carries (`HttpResult[T, E]` in Bynk), `string | SseEvent` when a
 // route names none, as it always was.
 export type HttpResult<T, E = string | SseEvent> =
@@ -43,6 +50,15 @@ export type HttpResult<T, E = string | SseEvent> =
   | { readonly tag: "Created"; readonly value: T }
   | { readonly tag: "Accepted"; readonly value: T }
   | { readonly tag: "NoContent" }
+  // 206 a raw body streamed chunk by chunk, answering a range request, with its `Content-Range` (#4389).
+  | {
+      readonly tag: "PartialContent";
+      readonly body: AsyncIterable<Uint8Array>;
+      readonly contentType: string;
+      readonly range: ContentRange;
+    }
+  // 304 bodyless, a conditional answer the handler worked out itself (#4389).
+  | { readonly tag: "NotModified" }
   // 3xx redirection — carries the target URL, emitted as a Location header.
   | { readonly tag: "MovedPermanently"; readonly location: string }
   | { readonly tag: "Found"; readonly location: string }
@@ -112,6 +128,14 @@ export const HttpResult = {
   Created: <T>(value: T): HttpResult<T, never> => ({ tag: "Created", value }),
   Accepted: <T>(value: T): HttpResult<T, never> => ({ tag: "Accepted", value }),
   NoContent: { tag: "NoContent" } as HttpResult<never, never>,
+  // 206 — the chunks, their content-type and the range they cover.
+  PartialContent: (body: AsyncIterable<Uint8Array>, contentType: string, range: ContentRange): HttpResult<never, never> => ({
+    tag: "PartialContent",
+    body,
+    contentType,
+    range,
+  }),
+  NotModified: { tag: "NotModified" } as HttpResult<never, never>,
   // 3xx redirection — the argument is the target URL (Location header).
   MovedPermanently: (location: string): HttpResult<never, never> => ({ tag: "MovedPermanently", location }),
   Found: (location: string): HttpResult<never, never> => ({ tag: "Found", location }),

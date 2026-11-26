@@ -1,0 +1,13 @@
+context api
+
+consumes bynk { ContentRange }
+
+service api from http {
+    on GET("/blob") () -> Effect[HttpResult[()]] by v: Visitor {
+        PartialContent(
+            Stream.of([Bytes.fromUtf8("x")]),
+            "text/plain",
+            ContentRange { start: 0, end: 0, total: Some(1) }
+        ).withHeader("Content-Range", "bytes 0-0/9")
+    }
+}

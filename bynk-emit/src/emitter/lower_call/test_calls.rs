@@ -261,7 +261,10 @@ fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_t
             "dmarc".to_string(),
             call(
                 ident("__dmarcVerdictOf"),
-                vec![member(ident("__m"), "headers")],
+                vec![
+                    member(ident("__m"), "headers"),
+                    member(ident("__m"), "headerList"),
+                ],
             ),
         ),
     ]);
@@ -956,7 +959,7 @@ mod tests {
     /// The inbound-email arrow prints as the text it replaced.
     #[test]
     fn the_inbound_email_arrow_prints_as_the_text_it_replaced() {
-        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))(mail)"#;
+        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers, __m.headerList) } }))(mail)"#;
         assert_eq!(
             printed(inbound_email_call("svc", "key", node("mail"))),
             want
