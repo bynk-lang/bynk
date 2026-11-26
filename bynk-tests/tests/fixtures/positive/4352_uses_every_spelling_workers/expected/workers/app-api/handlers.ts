@@ -5,6 +5,10 @@ import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import { Status as __CommonsStatus } from "../../lib/y.js";
+import * as Y from "../../lib/y.js";
+export { Y };
+import * as __use_lib_y from "../../lib/y.js";
+export { __use_lib_y };
 import { __serialise_Status, __deserialise_Status, __serialise_Status as __serialise_Y_Status, __deserialise_Status as __deserialise_Y_Status, __serialise_Status as __serialise_lib_y_Status, __deserialise_Status as __deserialise_lib_y_Status } from "../../lib/y.js";
 
 export type Status = __CommonsStatus & { readonly __ctxBrand?: "app.api" };

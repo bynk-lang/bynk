@@ -7,6 +7,7 @@ import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary
 
 import { Level as __CommonsLevel, Point as __CommonsPoint, Status as __CommonsStatus, begin } from "../../lib/y.js";
 import * as __use_lib_y from "../../lib/y.js";
+export { __use_lib_y };
 import { __serialise_Point, __deserialise_Point, __serialise_Status, __deserialise_Status, __serialise_Point as __serialise_lib_y_Point, __deserialise_Point as __deserialise_lib_y_Point, __serialise_Status as __serialise_lib_y_Status, __deserialise_Status as __deserialise_lib_y_Status } from "../../lib/y.js";
 
 export type Level = __CommonsLevel & { readonly __ctxBrand?: "app.api" };

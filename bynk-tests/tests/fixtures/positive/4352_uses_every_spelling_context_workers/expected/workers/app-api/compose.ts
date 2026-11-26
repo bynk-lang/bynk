@@ -9,7 +9,7 @@ export interface Env {
 export function compose(env: Env) {
   const deps = {};
   return {
-    async flipper(s: handlers.lib.y.Status) {
+    async flipper(s: handlers.__use_lib_y.Status) {
       return handlers.flipper.call(s, deps);
     },
     async hold(h: handlers.Holder) {
