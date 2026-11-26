@@ -241,6 +241,18 @@ export function __serialise_Priority(value: Priority): __JsonValue {
 }
 
 export function __deserialise_Priority(json: __JsonValue, path: string = "$"): Result<Priority, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Low":
+        return Ok({ tag: "Low" } as Priority);
+      case "Medium":
+        return Ok({ tag: "Medium" } as Priority);
+      case "High":
+        return Ok({ tag: "High" } as Priority);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

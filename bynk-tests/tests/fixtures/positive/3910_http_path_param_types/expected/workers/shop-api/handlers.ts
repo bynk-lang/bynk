@@ -83,6 +83,16 @@ export function __serialise_Status(value: Status): __JsonValue {
 }
 
 export function __deserialise_Status(json: __JsonValue, path: string = "$"): Result<Status, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as Status);
+      case "Closed":
+        return Ok({ tag: "Closed" } as Status);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

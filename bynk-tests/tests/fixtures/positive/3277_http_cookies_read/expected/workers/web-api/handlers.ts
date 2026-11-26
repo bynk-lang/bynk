@@ -118,6 +118,16 @@ export function __serialise_Theme(value: Theme): __JsonValue {
 }
 
 export function __deserialise_Theme(json: __JsonValue, path: string = "$"): Result<Theme, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Light":
+        return Ok({ tag: "Light" } as Theme);
+      case "Dark":
+        return Ok({ tag: "Dark" } as Theme);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

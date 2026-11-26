@@ -220,6 +220,19 @@ export function __bynkInstantFromIso(s: string): Option<number> {
   return Some(date.getTime() - offsetMinutes * 60_000);
 }
 
+// #3974: the wire decoder for an `Instant`. Epoch milliseconds (the tagged
+// form) pass through untouched, so they are tried first; a string that reads as
+// an RFC 3339 timestamp with an explicit offset becomes its epoch milliseconds;
+// anything else is returned as it came, for the caller's `typeof` guard to
+// refuse without echoing it.
+export function __bynkInstantFromWire(v: unknown): unknown {
+  if (typeof v !== "string") {
+    return v;
+  }
+  const parsed = __bynkInstantFromIso(v);
+  return parsed.tag === "Some" ? parsed.value : v;
+}
+
 // Hyperdrive H3 (#3320, ADR 0799 F): the `Instant` a Postgres `timestamptz`
 // arrives as. The boundary codec reads an `Instant` as whole epoch milliseconds
 // (ADR 0114) and has no ISO-8601 rule, and `Json.decode`'s wire format stays

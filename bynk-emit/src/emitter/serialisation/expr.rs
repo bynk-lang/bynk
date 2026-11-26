@@ -284,6 +284,16 @@ fn http_result_ty(inner: &TypeRef) -> TsType {
     )
 }
 
+/// #3974: an `Instant` also reads as an RFC 3339 string; the helper passes anything else through
+/// for the `typeof` guard that follows.
+fn instant_wire_json(b: BaseType, json: &TsExpr, ru: &RuntimeUse) -> TsExpr {
+    if b != BaseType::Instant {
+        return json.clone();
+    }
+    ru.note_time("__bynkInstantFromWire");
+    call(ident("__bynkInstantFromWire"), vec![json.clone()])
+}
+
 /// v0.22b: an expression-form deserialise call for a codec target. Named
 /// types and generic instantiations go through their (module-local)
 /// helpers; bases inline the structural check.
@@ -473,6 +483,7 @@ pub(crate) fn deserialise_expr_via(
             )
         }
         TypeRef::Base(b, _) => {
+            let json = &instant_wire_json(*b, json, ru);
             let typeof_str = match b {
                 BaseType::Int => "number",
                 BaseType::String => "string",

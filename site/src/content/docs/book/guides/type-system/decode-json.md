@@ -186,6 +186,35 @@ commons orders {
 }
 ```
 
+## Decode a webhook with an enum, a map and a timestamp
+
+A third-party payload writes an enum as a bare string, a map as an object and a
+time as an RFC 3339 string. `Json.decode` reads each of them, so the fields keep
+their types:
+
+```bynk
+commons hooks {
+	type Action = enum { Opened, Closed, Reopened }
+
+	type IssueHook = {
+		action: Action,
+		labels: Map[String, String],
+		created_at: Instant,
+	}
+
+	fn read(body: String) -> Result[IssueHook, DecodeError] {
+		Json.decode[IssueHook](body)
+	}
+}
+```
+
+`{"action":"Closed","labels":{"bug":"red"},"created_at":"2026-11-22T10:00:00Z"}`
+decodes. An enum matches a variant's name exactly, so `"closed"` is refused. A
+timestamp needs an explicit offset (`Z` or `+02:00`), because one without it names
+no instant. Bynk's own forms (`{"kind":"Closed"}`, an array of pairs, epoch
+milliseconds) still decode. `Json.encodePlain` writes the external shapes back. See
+[the wire format](/reference/wire-format/#encoding) for each accepted form.
+
 ## Write JSON for a non-Bynk API
 
 `Json.encode` writes an `Option` in Bynk's tagged form, which only Bynk reads back.
