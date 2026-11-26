@@ -4939,11 +4939,6 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
     },
     Explain {
-        code: "bynk.store.replaces_collection",
-        blurb: "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` or `@unique` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed or unique `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
-        example: "store visited: Log[Int] replaces seen   // ✗ a `Log` cannot be renamed with `replaces`\n\nstore visited: Set[String] replaces seen   // ✓ a `Set` can",
-    },
-    Explain {
         code: "bynk.store.unique_implies_indexed",
         blurb: "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
         example: "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
@@ -10563,11 +10558,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
-    ),
-    dg(
-        "bynk.store.replaces_collection",
-        "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet.",
-        &["store_field"],
     ),
     warn(d(
         "bynk.store.unique_implies_indexed",
