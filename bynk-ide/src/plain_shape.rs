@@ -7,7 +7,7 @@
 //! field whose type has no plain-only shape.
 //!
 //! "A type a route writes" is the route's response type and every type it reaches through record fields,
-//! variant payloads and the `Option`, `List`, `Map`, `Set` and `Result` it is wrapped in. The reach is by type
+//! variant payloads, a generic application's declaration and arguments, and the `Option`, `List`, `Map`, `Set` and `Result` it is wrapped in. The reach is by type
 //! name in the route's own type table (the table the wire peek reads), so a name two units both declare is read
 //! as the same type: the section can name a route that writes a same-named type, never miss one that writes this.
 
@@ -110,9 +110,14 @@ fn reach(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, out: &mut BTreeSet
                 TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}
             }
         }
-        TypeRef::Option(inner, _) | TypeRef::List(inner, _) | TypeRef::Effect(inner, _) => {
-            reach(inner, types, out)
+        TypeRef::App { name, args, .. } => {
+            reach(&TypeRef::Named(name.clone()), types, out);
+            args.iter().for_each(|a| reach(a, types, out));
         }
+        TypeRef::Option(inner, _)
+        | TypeRef::List(inner, _)
+        | TypeRef::Set(inner, _)
+        | TypeRef::Effect(inner, _) => reach(inner, types, out),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             reach(a, types, out);
             reach(b, types, out);
@@ -203,17 +208,32 @@ service tagged from http {
 }
 ";
 
-    /// The hover over the `nth` `needle` of the project's one file, through the real ladder.
+    /// Removes the temp project when the call that made it ends.
+    struct Cleanup(PathBuf);
+
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The hover over the `nth` `needle` of [`SRC`], through the real ladder.
     fn hover(needle: &str, nth: usize) -> Option<String> {
+        hover_in(SRC, needle, nth)
+    }
+
+    /// The hover over the `nth` `needle` of the project's one file `src`, through the real ladder.
+    fn hover_in(src: &str, needle: &str, nth: usize) -> Option<String> {
         // One directory per call: the tests run in parallel.
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let root =
             std::env::temp_dir().join(format!("bynk-plain-shape-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
+        let _cleanup = Cleanup(root.clone());
         let file = root.join("shop/users.bynk");
         std::fs::create_dir_all(file.parent().unwrap()).expect("create dirs");
-        std::fs::write(&file, SRC).expect("write fixture");
+        std::fs::write(&file, src).expect("write fixture");
         let root = root.canonicalize().unwrap_or(root);
         let r = crate::testkit::diagnose_project(&root);
         for f in &r.files {
@@ -299,5 +319,112 @@ service tagged from http {
             let h = hover(needle, nth).expect("the field hovers");
             assert!(!h.contains("plain-JSON route"), "{needle}: {h}");
         }
+    }
+
+    /// A route's own `@json` wins over its service's `json { }`: one record each way, and a type that
+    /// is reached only through other types (an `Option`, a `List`, a `Set`, a generic application and a
+    /// variant payload) and so is not any route's response type itself.
+    const REACH: &str = "context shop.users
+
+type Role = enum { Admin, Guest }
+
+type Inner = { role: Role, at: Option[Instant], roles: List[Role] }
+type Item = { role: Role }
+type Member = { role: Role }
+type Payload = { role: Role }
+type Page[T] = { items: List[T] }
+type Choice = | Pick(payload: Payload) | Skip
+type Envelope = { inner: Option[Inner], page: Page[Item], members: Set[Member], choice: Choice }
+
+type Forced = { role: Role }
+type Kept = { role: Role }
+
+service outer from http {
+  json { options: plain }
+  on GET(\"/envelope\") () -> Effect[HttpResult[Envelope]] by v: Visitor {
+    Ok(Envelope { inner: None, page: Page { items: [] }, members: Set.empty(), choice: Skip })
+  }
+
+  @json(options: tagged)
+  on GET(\"/kept\") () -> Effect[HttpResult[Kept]] by v: Visitor {
+    Ok(Kept { role: Admin })
+  }
+}
+
+service legacy from http {
+  on GET(\"/legacy\") () -> Effect[HttpResult[Forced]] by v: Visitor {
+    Ok(Forced { role: Admin })
+  }
+
+  @json(options: plain)
+  on GET(\"/forced\") () -> Effect[HttpResult[Forced]] by v: Visitor {
+    Ok(Forced { role: Admin })
+  }
+}
+";
+
+    #[test]
+    fn a_type_reached_through_wrappers_and_payloads_is_written_by_the_route() {
+        // Each hovered field is the first `role: Role` of its type's declaration.
+        for (type_decl, what) in [
+            ("type Inner = { role: Role", "through an `Option`"),
+            (
+                "type Item = { role: Role",
+                "through a generic application's argument",
+            ),
+            ("type Member = { role: Role", "through a `Set`"),
+            ("type Payload = { role: Role", "through a variant payload"),
+        ] {
+            let at =
+                REACH.find(type_decl).expect("declared") + type_decl.len() - "role: Role".len();
+            let nth = REACH[..at].matches("role: Role").count();
+            let h = hover_in(REACH, "role: Role", nth).unwrap_or_else(|| panic!("{what}: hovers"));
+            assert!(h.contains("`GET /envelope`"), "{what}: {h}");
+            assert!(
+                h.contains("a bare string, the variant's name"),
+                "{what}: {h}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_route_level_json_option_overrides_its_service() {
+        // `Kept` is answered only by `@json(options: tagged)` on a plain service: unchanged.
+        let at = REACH.find("type Kept = { role: Role").unwrap() + "type Kept = { ".len();
+        let nth = REACH[..at].matches("role: Role").count();
+        let h = hover_in(REACH, "role: Role", nth).expect("the field hovers");
+        assert!(!h.contains("plain-JSON route"), "{h}");
+        // `Forced` is answered by a tagged-by-default service's `@json(options: plain)` route, and only that
+        // one is named.
+        let at = REACH.find("type Forced = { role: Role").unwrap() + "type Forced = { ".len();
+        let nth = REACH[..at].matches("role: Role").count();
+        let h = hover_in(REACH, "role: Role", nth).expect("the field hovers");
+        assert!(h.contains("`GET /forced`") && !h.contains("/legacy"), "{h}");
+    }
+
+    #[test]
+    fn an_option_and_a_list_say_so_and_many_routes_are_counted() {
+        let h = hover_in(REACH, "at: Option", 0).expect("the field hovers");
+        assert!(
+            h.contains("RFC 3339 text in UTC") && h.contains("or `null` for `None`"),
+            "{h}"
+        );
+        let h = hover_in(REACH, "roles: List", 0).expect("the field hovers");
+        assert!(h.contains("an array of: a bare string"), "{h}");
+
+        let mut many = String::from(
+            "context shop.users\n\ntype Role = enum { Admin, Guest }\n\ntype U = { role: Role }\n\nservice s from http {\n  json { options: plain }\n",
+        );
+        for n in 1..=4 {
+            many.push_str(&format!(
+                "  on GET(\"/u{n}\") () -> Effect[HttpResult[U]] by v: Visitor {{\n    Ok(U {{ role: Admin }})\n  }}\n"
+            ));
+        }
+        many.push_str("}\n");
+        let h = hover_in(&many, "role: Role", 0).expect("the field hovers");
+        assert!(
+            h.contains("`GET /u1`, `GET /u2`, `GET /u3` and 1 more"),
+            "{h}"
+        );
     }
 }
