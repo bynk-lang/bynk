@@ -8,7 +8,11 @@
 //! * no key, or a key without `Bearer`, is a `401` whose challenge names no error (RFC 6750);
 //! * a store fault is a `500` and `AgentBusy` a `503` with `Retry-After: 1`, never a `401` or an
 //!   admit, and a missing pepper faults the request;
-//! * one store call per request, whose body carries neither the pepper nor the secret;
+//! * the store compares once against the dummy digest for an unknown key number and an unknown
+//!   handle, once against the record for a forged secret, and is never called for a key refused at
+//!   parsing (counters by raw request, not timing);
+//! * one store call per request, whose body carries neither the pepper nor the secret, and the
+//!   emitted key-store agents name no pepper;
 //! * the CORS preflight allows the key's header.
 //!
 //! A `system`-tier suite cannot make the key store fail or queue, so those live here. Like the other
@@ -147,6 +151,38 @@ const real = parseApiKey(secret.key, "acme")!;
 const forgedKey = formatApiKey("acme", real.handle, real.keyNo, new Uint8Array(32).fill(3));
 const unknownKey = formatApiKey("acme", real.handle, "00000000000000aa", new Uint8Array(32).fill(4));
 const unknownHandle = formatApiKey("acme", "000000000000000000000000000000bb", real.keyNo, new Uint8Array(32).fill(5));
+// D3 B / §13 timing, by raw request: the store compares once, against the dummy digest, for an
+// unknown key number and for an unknown handle; once, against the record, for a forged secret; and
+// a key refused at parsing never reaches the store at all.
+const { apiKeyCountCompares } = await import("./__bynk_runtime/apikey.js");
+const compares = apiKeyCountCompares();
+let storeCalls = 0;
+const counted = {
+  ...env,
+  CLIENT_KEYS: {
+    idFromName: (n: string) => n,
+    get: (id: unknown) => {
+      storeCalls += 1;
+      return (env.CLIENT_KEYS as ReturnType<typeof namespace>).get(id);
+    },
+  },
+};
+async function work(key: string): Promise<{ status: number; all: number; dummy: number; calls: number }> {
+  const before = { ...compares };
+  const calls = storeCalls;
+  const r = await req("GET", "/me", bearer(key), undefined, counted);
+  return { status: r.status, all: compares.all - before.all, dummy: compares.dummy - before.dummy, calls: storeCalls - calls };
+}
+const same = (w: { status: number; all: number; dummy: number; calls: number }, want: [number, number, number, number], what: string) =>
+  assert(w.status === want[0] && w.all === want[1] && w.dummy === want[2] && w.calls === want[3], `${what}: ${JSON.stringify(w)}`);
+same(await work(unknownKey), [401, 1, 1, 1], "an unknown key number is one dummy compare in one store call");
+same(await work(unknownHandle), [401, 1, 1, 1], "an unknown handle is one dummy compare in one store call");
+same(await work(forgedKey), [401, 1, 0, 1], "a forged secret is one record compare");
+same(await work(flip(secret.key)), [401, 0, 0, 0], "a malformed key makes no store call");
+same(await work(secret.key.replace(/^acme_/, "beta_")), [401, 0, 0, 0], "another prefix makes no store call");
+same(await work(secret.key + "x".repeat(60)), [401, 0, 0, 0], "an oversized key makes no store call");
+same(await work(secret.key), [200, 1, 0, 1], "the real key is one record compare");
+
 const want = await refusal(bearer(flip(secret.key)));
 assert(want.startsWith("401\n"), `a malformed key is a 401:\n${want}`);
 assert(want.includes('www-authenticate: Bearer realm="acme.api"'), `the 401 carries the Bearer challenge:\n${want}`);
@@ -289,6 +325,24 @@ fn drive(fixture_name: &str, driver: &str) {
         ok,
         "the API key seam driver must type-check + compile:\n{log}"
     );
+    // D2 B: the pepper never reaches agent code. The generated key-store agents, as emitted, name no
+    // pepper variable, no `deps.__apiKey`, and read no environment secret.
+    let handlers = fs::read_to_string(tmp.join("workers/acme-api/handlers.ts")).unwrap();
+    for agent in ["export class ClientKeys ", "export class ClientKeyOwner "] {
+        let start = handlers
+            .find(agent)
+            .unwrap_or_else(|| panic!("`{agent}` is emitted"));
+        let end = handlers[start + 1..]
+            .find("\nexport class ")
+            .map_or(handlers.len(), |i| start + 1 + i);
+        let class = &handlers[start..end];
+        for forbidden in ["CLIENT_KEY_PEPPER", "deps.__apiKey", "Pepper", "pepper"] {
+            assert!(
+                !class.contains(forbidden),
+                "the emitted `{agent}` mentions `{forbidden}`"
+            );
+        }
+    }
     let (ran, log) = run("node", &[], &["js/driver.js"], &tmp);
     assert!(
         ran && log.contains("ALL OK"),

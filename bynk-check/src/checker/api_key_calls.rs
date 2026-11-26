@@ -142,7 +142,8 @@ fn check_internal_equal(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    if method.name != "equal" || !crate::api_key::in_generated_agent(span, &ctx.input.commons.items) {
+    if method.name != "equal" || !crate::api_key::in_generated_agent(span, &ctx.input.commons.items)
+    {
         ctx.errors.push(
             CompileError::new(
                 "bynk.actor.api_key_internal",

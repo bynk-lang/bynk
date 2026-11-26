@@ -1,6 +1,5 @@
 context acme.api
 
-consumes bynk.crypto { Crypto }
 
 type AccountId = String where NonEmpty
 

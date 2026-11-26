@@ -371,15 +371,12 @@ pub(super) fn emit_integration_module(
         exposed.push(suite.to_string());
     }
     // #3939: an `ApiKey` actor's drivers mint the acting principal's key into its key store through
-    // the participant's `env`, and count the store's comparisons over the platform `Crypto` binding.
+    // the participant's `env`, and count the store's comparisons.
     if super::api_key_driver::suite_has_api_key(unit_tables.get(suite)) {
         if !exposed.contains(&suite.to_string()) {
             exposed.push(suite.to_string());
         }
-        stmts.extend(super::api_key_driver::preamble(parent_specifier(
-            "bynk/crypto-cloudflare.binding",
-            "js",
-        )));
+        stmts.extend(super::api_key_driver::preamble());
     }
     if peeks {
         for p in harness_participants {

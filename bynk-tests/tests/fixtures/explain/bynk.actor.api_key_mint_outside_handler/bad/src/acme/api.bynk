@@ -1,7 +1,6 @@
 context acme.api
 
 consumes bynk { Clock, ApiKeyLabel }
-consumes bynk.crypto { Crypto }
 
 type AccountId = String where NonEmpty
 

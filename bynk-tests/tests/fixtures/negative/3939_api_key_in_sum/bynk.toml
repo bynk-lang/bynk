@@ -6,4 +6,4 @@ version = "0.1.0"
 include = ["src"]
 
 [unstable]
-allow = ["bynk.crypto"]
+allow = ["bynk.actor.ApiKey"]

@@ -1,6 +1,5 @@
 context acme.api
 
-consumes bynk.crypto { Crypto }
 consumes bynk.cloudflare { RateLimit }
 
 type AccountId = String where NonEmpty

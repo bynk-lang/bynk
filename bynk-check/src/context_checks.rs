@@ -8968,7 +8968,9 @@ pub fn reject_fn_types(
             if what != CAPABILITY_SIGNATURE
                 && crate::api_key::carries_api_key_value(&id.name, types) =>
         {
-            errors.push(crate::api_key::key_at_boundary_error(id.span, &id.name, what));
+            errors.push(crate::api_key::key_at_boundary_error(
+                id.span, &id.name, what,
+            ));
         }
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));

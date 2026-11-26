@@ -13,11 +13,11 @@
 //!   record.
 //!
 //! Each principal's driver counts the store's comparisons (`__apiKeyCompares`, a counter over the
-//! platform `Crypto` binding the in-process agents construct) and fails the case unless the seam
-//! did exactly that work, so "the same work for an unknown key as for a wrong one" is pinned by the
+//! platform primitive the runtime's one constant-time comparison reaches) and fails the case unless
+//! the seam did exactly that work, so "the same work for an unknown key as for a wrong one" is pinned by the
 //! harness, not by timing.
 
-use bynk_ts::{TsBinaryOp, TsDecl, TsExpr, TsParam, TsStmt, TsType};
+use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsStmt, TsType};
 
 use super::system_jobs::async_driver;
 use super::system_request::{Entries, header, request_init};
@@ -320,24 +320,12 @@ pub(super) fn suite_has_api_key(table: Option<&bynk_check::symbols::UnitTable>) 
     table.is_some_and(|t| t.actors.values().any(bynk_check::api_key::is_api_key_actor))
 }
 
-/// The module preamble a suite whose target has an `ApiKey` route needs: the platform `Crypto`
-/// binding the in-process agents construct, and the counter over its comparisons.
-pub(super) fn preamble(binding_specifier: String) -> Vec<TsStmt> {
-    vec![
-        TsStmt::decl(
-            TsDecl::ImportNamespace {
-                type_only: false,
-                alias: "__bynkApiKeyCryptoBinding".to_string(),
-                from: binding_specifier,
-            },
-            None,
-        ),
-        const_(
-            "__apiKeyCompares",
-            call(
-                ident("__apiKeyCountCompares"),
-                vec![member(ident("__bynkApiKeyCryptoBinding"), "CryptoProvider")],
-            ),
-        ),
-    ]
+/// The module preamble a suite whose target has an `ApiKey` route needs: the counter over the key
+/// store's comparisons, which wraps the platform primitive the runtime's one constant-time
+/// comparison reaches.
+pub(super) fn preamble() -> Vec<TsStmt> {
+    vec![const_(
+        "__apiKeyCompares",
+        call(ident("__apiKeyCountCompares"), Vec::new()),
+    )]
 }

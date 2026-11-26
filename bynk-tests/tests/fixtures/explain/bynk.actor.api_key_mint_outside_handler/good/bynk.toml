@@ -3,4 +3,4 @@ name = "explain"
 version = "0.1.0"
 
 [unstable]
-allow = ["bynk.crypto", "bynk.ApiKeyLabel", "bynk.ApiKeySecret", "bynk.TooManyKeys"]
+allow = ["bynk.actor.ApiKey"]

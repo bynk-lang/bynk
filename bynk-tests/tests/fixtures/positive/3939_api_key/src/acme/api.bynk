@@ -2,7 +2,6 @@ context acme.api
 
 consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
 consumes bynk.cloudflare { RateLimit }
-consumes bynk.crypto { Crypto }
 
 type AccountId = String where NonEmpty && MaxLength(64)
 

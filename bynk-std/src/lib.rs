@@ -991,12 +991,6 @@ pub const UNITS: &[Unit] = &[
             "Fetch.receiveStream",
             "Fetch.sendStream",
             "Logger.log",
-            // #3939: the API key types, experimental with the `ApiKey` scheme (track §17).
-            "ApiKeyId",
-            "ApiKeyLabel",
-            "ApiKeySecret",
-            "ApiKeyValue",
-            "TooManyKeys",
         ],
         extensible: &["FetchError", "Method", "Redirect"],
         instantiable: &[],
@@ -1590,7 +1584,28 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// spelt under `bynk`, as `[unstable] allow` names it, and counts as a
 /// first-party item ([`names_first_party_item`]) and an experimental one
 /// ([`experimental_items`]).
-pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries"];
+pub const BUILTIN_EXPERIMENTAL: &[&str] = &["bynk.RequestHeaders.entries", "bynk.actor.ApiKey"];
+
+/// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
+/// `(item, gate)`. The `ApiKey` scheme's types are reachable only through an `ApiKey` actor, so
+/// the scheme, its types and its members are one feature behind `bynk.actor.ApiKey`, promoted as
+/// a unit.
+pub const BUILTIN_GATED: &[(&str, &str)] = &[
+    ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
+    ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
+];
+
+/// The `[unstable] allow` name that admits `path`: its gate, when [`BUILTIN_GATED`] gives one, else
+/// the path itself.
+pub fn gate_of(path: &str) -> &str {
+    BUILTIN_GATED
+        .iter()
+        .find(|(item, _)| covers(item, path))
+        .map_or(path, |(_, gate)| gate)
+}
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -2219,11 +2234,6 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
-                "bynk.ApiKeyId",
-                "bynk.ApiKeyLabel",
-                "bynk.ApiKeySecret",
-                "bynk.ApiKeyValue",
-                "bynk.TooManyKeys",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -2252,7 +2262,9 @@ mod tests {
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
                 // #3752 (D12): a method of a built-in type.
-                "bynk.RequestHeaders.entries"
+                "bynk.RequestHeaders.entries",
+                // #3939: the `ApiKey` scheme, with its types and members behind it.
+                "bynk.actor.ApiKey"
             ]
         );
         let extensible: Vec<(&str, &str)> = UNITS

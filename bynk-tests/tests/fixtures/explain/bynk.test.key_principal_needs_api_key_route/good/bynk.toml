@@ -3,4 +3,4 @@ name = "explain"
 version = "0.1.0"
 
 [unstable]
-allow = ["bynk.crypto", "bynk.cloudflare.RateLimit"]
+allow = ["bynk.actor.ApiKey", "bynk.cloudflare.RateLimit"]

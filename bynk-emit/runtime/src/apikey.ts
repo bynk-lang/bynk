@@ -536,24 +536,35 @@ function isDummy(b: unknown): boolean {
   return b instanceof Uint8Array && b.length === API_KEY_DUMMY_DIGEST.length && b.every((x) => x === 0);
 }
 
-/** Count every comparison the key store makes through `provider` (the platform's `Crypto` binding
- *  the in-process agents construct), once per class. */
-export function apiKeyCountCompares(provider: {
-  prototype: { equal(a: Uint8Array, b: Uint8Array): Promise<boolean> };
-}): ApiKeyCompares {
-  const proto = provider.prototype as unknown as Record<symbol, ApiKeyCompares | undefined> & {
-    equal(a: Uint8Array, b: Uint8Array): Promise<boolean>;
-  };
-  const existing = proto[COUNTED];
+/** Count every comparison the key store makes, by wrapping the platform primitive `apiKeyEqual`
+ *  reaches on Node (`node:crypto`'s `timingSafeEqual`, through `process.getBuiltinModule`), once
+ *  per process. The test tier runs on Node, so every key-store comparison passes through it. */
+export function apiKeyCountCompares(): ApiKeyCompares {
+  const proc = (globalThis as unknown as { process?: Record<PropertyKey, unknown> & { getBuiltinModule?: (id: string) => unknown } })
+    .process;
+  if (proc === undefined || typeof proc.getBuiltinModule !== "function") {
+    throw new Error("bynk: the API key comparison counter needs Node's process.getBuiltinModule");
+  }
+  const existing = proc[COUNTED] as ApiKeyCompares | undefined;
   if (existing !== undefined) return existing;
   const counts: ApiKeyCompares = { all: 0, dummy: 0 };
-  const equal = proto.equal;
-  proto.equal = function (this: unknown, a: Uint8Array, b: Uint8Array): Promise<boolean> {
-    counts.all += 1;
-    if (isDummy(a) || isDummy(b)) counts.dummy += 1;
-    return equal.call(this, a, b);
+  const load = proc.getBuiltinModule.bind(proc);
+  proc.getBuiltinModule = (id: string): unknown => {
+    const m = load(id);
+    if (id !== "node:crypto" || m === null || typeof m !== "object") return m;
+    const native = (m as { timingSafeEqual: (a: Uint8Array, b: Uint8Array) => boolean }).timingSafeEqual;
+    return new Proxy(m as object, {
+      get(target, key, receiver) {
+        if (key !== "timingSafeEqual") return Reflect.get(target, key, receiver);
+        return (a: Uint8Array, b: Uint8Array): boolean => {
+          counts.all += 1;
+          if (isDummy(a) || isDummy(b)) counts.dummy += 1;
+          return native(a, b);
+        };
+      },
+    });
   };
-  proto[COUNTED] = counts;
+  proc[COUNTED] = counts;
   return counts;
 }
 

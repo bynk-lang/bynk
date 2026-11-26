@@ -297,19 +297,18 @@ test("§10 the failure keys: malformed fails parsing; the others parse, under th
   assert.notDeepEqual(forged.secret, r.secret);
 });
 
-test("D3 B harness counter: compares are counted, dummy ones apart, and a mismatch fails", async () => {
-  const { apiKeyCountCompares, apiKeyExpectCompares, apiKeyDummyDigest } = await import("../src/apikey.ts");
-  class Provider {
-    async equal(a: Uint8Array, b: Uint8Array): Promise<boolean> {
-      return a.length === b.length && a.every((x, i) => x === b[i]);
-    }
-  }
-  const counts = apiKeyCountCompares(Provider);
-  assert.equal(apiKeyCountCompares(Provider), counts, "patched once");
+test("D3 B harness counter: the key store's comparisons are counted, dummy ones apart, and a mismatch fails", async () => {
+  const { apiKeyCountCompares, apiKeyExpectCompares, apiKeyDummyDigest, apiKeyEqual } = await import("../src/apikey.ts");
+  const counts = apiKeyCountCompares();
+  assert.equal(apiKeyCountCompares(), counts, "wrapped once");
   const before = { ...counts };
-  await new Provider().equal(apiKeyDummyDigest(), new Uint8Array(32).fill(1));
+  assert.equal(await apiKeyEqual(apiKeyDummyDigest(), new Uint8Array(32).fill(1)), false);
   apiKeyExpectCompares(counts, before, { all: 1, dummy: 1 }, "Unknown");
   assert.throws(() => apiKeyExpectCompares(counts, before, { all: 1, dummy: 0 }, "Forged"), /dummy/);
+  const again = { ...counts };
+  const d = new Uint8Array(32).fill(7);
+  assert.equal(await apiKeyEqual(d, d.slice()), true);
+  apiKeyExpectCompares(counts, again, { all: 1, dummy: 0 }, "Forged");
 });
 
 // ---- D3 B: the one constant-time comparison ---------------------------------------------------

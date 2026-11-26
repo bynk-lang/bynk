@@ -210,11 +210,17 @@ mod tests {
     fn a_fragment_context_gains_both_agents_after_the_authors_text() {
         let src = "context shop\n\ntype AccountId = String where NonEmpty\n\nactor Client { auth = ApiKey(secret = \"P\"), identity = AccountId }\n";
         let out = with_api_key_agents(src, &parse(src)).expect("generated");
-        assert!(out.starts_with(src), "the author's text is unchanged, byte for byte");
+        assert!(
+            out.starts_with(src),
+            "the author's text is unchanged, byte for byte"
+        );
         assert!(out.contains("agent ClientKeys {"));
         assert!(out.contains("agent ClientKeyOwner {"));
         assert!(!out.contains("consumes"), "no capability is put in scope");
-        assert!(!out.contains("Crypto"), "the agents use the internal comparison");
+        assert!(
+            !out.contains("Crypto"),
+            "the agents use the internal comparison"
+        );
         let _ = parse(&out);
     }
 
@@ -226,7 +232,10 @@ mod tests {
         let out = with_api_key_agents(src, &parse(src)).expect("generated");
         let agents = &out[src.len()..];
         for forbidden in ["CLIENT_KEY_PEPPER", "pepper", "Secrets", "secret", "env"] {
-            assert!(!agents.contains(forbidden), "the agents mention `{forbidden}`");
+            assert!(
+                !agents.contains(forbidden),
+                "the agents mention `{forbidden}`"
+            );
         }
     }
 
