@@ -161,6 +161,105 @@ pub(super) fn object_of(entries: Vec<(&str, TsExpr)>) -> TsExpr {
     )
 }
 
+/// #3821: the `iss` and `aud` an actor declares, as the claims a token minted for it carries, so a valid
+/// token passes its seam. An actor that declares none adds none.
+pub(super) fn bearer_claim_entries(
+    claims: &bynk_check::actors::BearerClaims,
+) -> Vec<bynk_ts::TsObjectEntry> {
+    [("iss", &claims.issuer), ("aud", &claims.audience)]
+        .into_iter()
+        .filter_map(|(k, v)| {
+            Some(bynk_ts::TsObjectEntry::prop(
+                k.to_string(),
+                str_lit(v.clone()?),
+            ))
+        })
+        .collect()
+}
+
+/// #3821: the claims of a `by Forged` or `by Expired` Bearer token: a valid `sub`, the `exp` that makes
+/// it expired (or an hour ahead), and the actor's declared `iss`/`aud`, so only the signature or the
+/// expiry is wrong.
+pub(super) fn bearer_bad_claims(exp: TsExpr, claims: &bynk_check::actors::BearerClaims) -> TsExpr {
+    TsExpr::object_entries(
+        [
+            bynk_ts::TsObjectEntry::prop("sub".to_string(), str_lit("bynk-test")),
+            bynk_ts::TsObjectEntry::prop("exp".to_string(), exp),
+        ]
+        .into_iter()
+        .chain(bearer_claim_entries(claims))
+        .collect(),
+    )
+}
+
+/// #3821: the claims of a `by WrongIssuer` or `by WrongAudience` Bearer token: correctly signed and
+/// unexpired, with the declared `iss` and `aud` except the one under test, which names another party.
+pub(super) fn bearer_wrong_claims(
+    exp: TsExpr,
+    claims: &bynk_check::actors::BearerClaims,
+    wrong_issuer: bool,
+) -> TsExpr {
+    let wrong = |v: &Option<String>, is_wrong: bool| {
+        v.as_ref().map(|v| {
+            str_lit(if is_wrong {
+                format!("{v}-not-the-expected")
+            } else {
+                v.clone()
+            })
+        })
+    };
+    let mut entries = vec![
+        bynk_ts::TsObjectEntry::prop("sub".to_string(), str_lit("bynk-test")),
+        bynk_ts::TsObjectEntry::prop("exp".to_string(), exp),
+    ];
+    entries.extend(
+        wrong(&claims.issuer, wrong_issuer)
+            .map(|v| bynk_ts::TsObjectEntry::prop("iss".to_string(), v)),
+    );
+    entries.extend(
+        wrong(&claims.audience, !wrong_issuer)
+            .map(|v| bynk_ts::TsObjectEntry::prop("aud".to_string(), v)),
+    );
+    TsExpr::object_entries(entries)
+}
+
+/// #2864, #3821: the bad Bearer tokens a route's drivers present, as `(driver, secret, exp sign)`:
+/// `Expired` (the real secret, an `exp` an hour past), `Forged` (a derived wrong secret, unless the route
+/// has a `Signature` seam that takes the name), and, where the actor declares an `issuer` or an `audience`,
+/// `WrongIssuer` and `WrongAudience` (the real secret, a future `exp`, another party's claim).
+pub(super) fn bearer_variants(
+    secret_read: &TsExpr,
+    claims: &bynk_check::actors::BearerClaims,
+    forged: bool,
+) -> Vec<(&'static str, TsExpr, TsBinaryOp)> {
+    let real = || TsExpr::Paren(Box::new(secret_read.clone()));
+    let mut variants = vec![("expired", real(), TsBinaryOp::Sub)];
+    if forged {
+        let wrong = binary(TsBinaryOp::Add, secret_read.clone(), str_lit("!"));
+        variants.push(("forged", TsExpr::Paren(Box::new(wrong)), TsBinaryOp::Add));
+    }
+    if claims.issuer.is_some() {
+        variants.push(("wrongissuer", real(), TsBinaryOp::Add));
+    }
+    if claims.audience.is_some() {
+        variants.push(("wrongaudience", real(), TsBinaryOp::Add));
+    }
+    variants
+}
+
+/// #3821: the claims of the bad Bearer token a driver `name` presents.
+pub(super) fn bearer_variant_claims(
+    name: &str,
+    exp: TsExpr,
+    claims: &bynk_check::actors::BearerClaims,
+) -> TsExpr {
+    match name {
+        "wrongissuer" => bearer_wrong_claims(exp, claims, true),
+        "wrongaudience" => bearer_wrong_claims(exp, claims, false),
+        _ => bearer_bad_claims(exp, claims),
+    }
+}
+
 /// `` `Bearer ${await __bynkSignHs256(<claims>, <secret>)}` ``: a signed Bearer token.
 pub(super) fn bearer_token(claims: TsExpr, secret: TsExpr) -> TsExpr {
     TsExpr::template_lit(

@@ -103,6 +103,9 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
     validate_sub(signer, sub)?;
 
     let mut claims = refinement_claims(found)?;
+    // #3821: the `iss` and `aud` the actor declares, so the token passes its seam. A `trustFrom` variable
+    // that is set in the environment replaces them, as the seam reads it.
+    claims.extend(declared_claims(&signer.decl));
 
     let secret = match std::env::var(&env_var) {
         Ok(v) if !v.is_empty() => v,
@@ -128,6 +131,32 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
         claims.push((name, value));
     }
     Ok(mint_with(&secret, sub, nbf, exp, &claims))
+}
+
+/// #3821: the `iss` and `aud` a `Bearer` actor declares, read through its `trustFrom` variable when that
+/// is set to JSON `{ "issuer"?, "audience"? }`, as the seam reads it.
+fn declared_claims(decl: &ActorDecl) -> Vec<(String, serde_json::Value)> {
+    let declared = bynk_check::actors::BearerClaims::of(decl);
+    let from_env: Option<serde_json::Value> = declared
+        .trust_from
+        .as_deref()
+        .and_then(|var| std::env::var(var).ok())
+        .and_then(|raw| serde_json::from_str(&raw).ok());
+    let pick = |key: &str, declared: Option<String>| {
+        from_env
+            .as_ref()
+            .and_then(|v| v.get(key))
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(declared)
+    };
+    [
+        ("iss", pick("issuer", declared.issuer.clone())),
+        ("aud", pick("audience", declared.audience.clone())),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| Some((name.to_string(), serde_json::Value::String(value?))))
+    .collect()
 }
 
 /// `name` (the claim `true`, as the `system` harness signs a present claim) or

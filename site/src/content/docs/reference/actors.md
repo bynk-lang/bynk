@@ -21,7 +21,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | Scheme | Config | Identity | Protocols | Verification |
 |---|---|---|---|---|
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
-| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http`, `websocket` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `Bearer` | `secret = "<ENV>"`; optional `issuer`, `audience`, `trustFrom` | a string-constructible type | `http`, `websocket` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
 | `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http`, `websocket` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http`, `websocket` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
@@ -312,6 +312,37 @@ claims as the principal's second argument, as for a lone actor: `by User("ada", 
 
 A claim says what the token asserts, not whose data the handler may touch: an object-level check
 (*is this report this tenant's?*) stays in the handler. See [Who, not whose](#who-not-whose).
+
+## Issuer and audience for a `Bearer` token
+
+A `Bearer` token is an HS256 signature over its claims, so any token signed with the actor's secret is
+accepted, whatever it was minted for. Where several kinds of token share one secret (a web app's token and an
+internal one, say), bind each to its purpose with the `iss` and `aud` claims:
+
+```bynk,ignore
+actor Learner  { auth = Bearer(secret = "AUTH_SECRET", issuer = "agilearn-web", audience = "agilearn-api"), identity = LearnerId }
+actor Internal { auth = Bearer(secret = "AUTH_SECRET", audience = "agilearn-internal"), identity = LearnerId }
+```
+
+- **`issuer`**: the token's `iss` must be present and equal it.
+- **`audience`**: the token's `aud` must be present and equal it, or, when `aud` is an array of strings, contain it.
+  An `aud` of any other shape is refused.
+- Either missing from a token, or different, is `401`, checked after the signature and the expiry, so a forged token
+  says nothing about them. An actor that declares **neither** checks neither, as before: a token carrying an `iss`
+  or `aud` it does not name is still accepted.
+- **`trustFrom = "<ENV>"`** names an environment variable whose JSON `{ "issuer"?, "audience"? }`, when set,
+  replaces the declared values, exactly as for [`Oidc`](#trust-roots-from-the-environment) (unset leaves the
+  declaration, set but malformed refuses every request). It must name a variable other than the `secret`.
+- **Two `Bearer` actors on one secret** must each declare an `audience`, and different ones
+  (`bynk.actor.bearer_secret_shared`); otherwise a token minted for one is accepted by the other. Declare a
+  distinct `audience` on each and mint each actor's tokens with its own, which `bynk token <Actor>` does. A
+  refinement of an actor shares its base's secret by design and is exempt.
+- The config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other is
+  `bynk.actor.bearer_unknown_key`, because an ignored key is a check you believed you had written, and an empty or
+  non-string value is `bynk.actor.bearer_bad_arg`.
+- `bynk token <Actor>` mints with the declared `iss` and `aud`, and the `system` tier signs a valid principal's token
+  with them. `by WrongIssuer` and `by WrongAudience` drive a route whose actor declares the claim
+  ([failure principals](/reference/testing/#failure-principals)).
 
 ## Trust roots from the environment
 

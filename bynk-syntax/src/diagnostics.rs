@@ -104,6 +104,11 @@ impl Explain {
 /// project trees `bad/` and `good/`.
 pub const EXPLANATIONS: &[Explain] = &[
     Explain {
+        code: "bynk.actor.bearer_bad_arg",
+        blurb: "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
+    },
+    Explain {
         code: "bynk.actor.bearer_identity_not_string_constructible",
         blurb: "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a \
                 string, so the identity type must be one a string can become: a refined or \
@@ -130,6 +135,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\n\n\
                   actor User { auth = Bearer, identity = UserId }                         // ✗ no signing secret named\n\n\
                   actor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }     // ✓ the env var that holds the key",
+    },
+    Explain {
+        code: "bynk.actor.bearer_secret_shared",
+        blurb: "Two `Bearer` actors that read one secret accept each other's tokens: a token is only a signature over its claims, so one minted for `Learner` verifies at a route that names `Internal`, and a learner who can obtain their own token can replay it there (RFC 8725, cross-JWT confusion). Bind each token to its purpose: declare a different `audience` on each actor and mint each actor's tokens with its own, which `bynk token <Actor>` does. Or give each actor its own secret. A refinement of an actor shares its base's secret by design and is exempt.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }                          // ✗ shares its secret with `Internal`, and says nothing of who a token is for\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }\n\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"api\"), identity = UserId }          // ✓\nactor Internal { auth = Bearer(secret = \"AUTH_SECRET\", audience = \"internal\"), identity = UserId }",
+    },
+    Explain {
+        code: "bynk.actor.bearer_unknown_key",
+        blurb: "A `Bearer` actor's config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other key is refused rather than ignored, because an ignored key is a check you believed you had written: a misspelt `iss` or `aud` would leave tokens that share the secret interchangeable. Use `issuer` and `audience`.",
+        example: "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", iss = \"web\"), identity = UserId }      // ✗ not a key of `Bearer`\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
     },
     Explain {
         code: "bynk.actor.binder_shadows_param",
@@ -5795,13 +5810,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.wrong_audience_needs_oidc_route",
-        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ a `Bearer` token has no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
+        blurb: "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor, or a `Bearer` actor that declares an `audience`, has an audience to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ this `Bearer` actor declares no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
     },
     Explain {
         code: "bynk.test.wrong_issuer_needs_oidc_route",
-        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor has an issuer to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
-        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ a `Bearer` token has no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
+        blurb: "`by WrongIssuer` sends a correctly signed, unexpired token whose `iss` is not the actor's issuer. Only an `Oidc` actor, or a `Bearer` actor that declares an `issuer`, has an issuer to check: an undeclared one is not checked, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by such an actor. The same holds for `bynk.test.wrong_audience_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+        example: "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongIssuer      // ✗ this `Bearer` actor declares no issuer\nlet r <- api.GET(\"/who\") by WrongIssuer     // ✓",
     },
     Explain {
         code: "bynk.test.ws_lifecycle_by",
@@ -7364,12 +7379,24 @@ pub fn lookup(code: &str) -> Option<&'static DiagnosticInfo> {
 /// Every diagnostic code the compiler emits, sorted by code.
 pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
+        "bynk.actor.bearer_bad_arg",
+        "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821).",
+    ),
+    d(
         "bynk.actor.bearer_identity_not_string_constructible",
         "A `Bearer` actor's identity is not a string-constructible type.",
     ),
     d(
         "bynk.actor.bearer_missing_secret",
         "A `Bearer` actor does not name its signing secret.",
+    ),
+    d(
+        "bynk.actor.bearer_secret_shared",
+        "Two `Bearer` actors read one secret without each declaring a different `audience`, so a token minted for one is accepted by the other (#3821).",
+    ),
+    d(
+        "bynk.actor.bearer_unknown_key",
+        "A `Bearer` actor's config has a key other than `secret`, `issuer`, `audience` and `trustFrom`, which would have been ignored (#3821).",
     ),
     d(
         "bynk.actor.binder_shadows_param",

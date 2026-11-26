@@ -2439,6 +2439,102 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// The keys a `Bearer` actor's config admits (#3821): the signing `secret`, the `issuer` and `audience`
+/// its tokens must carry, and the `trustFrom` variable that can replace the last two at run time.
+const BEARER_KEYS: &[&str] = &["secret", "issuer", "audience", "trustFrom"];
+
+/// #3821: the `Bearer` config checks that are not about the secret or the identity: the key set is
+/// closed (so an `issuer` that was never enforced cannot be written and ignored), `issuer`, `audience`
+/// and `trustFrom` are non-empty strings, and two `Bearer` actors on one secret must each declare an
+/// `audience`, and different ones, or a token minted for one is accepted by the other.
+fn check_bearer_actor(
+    actor: &ActorDecl,
+    auth: &Ident,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    for arg in &actor.auth_config {
+        if !BEARER_KEYS.contains(&arg.key.name.as_str()) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_unknown_key",
+                    arg.key.span,
+                    format!("unknown `Bearer` config key `{}`", arg.key.name),
+                )
+                .with_note(
+                    "the keys are `secret`, `issuer`, `audience` and `trustFrom`; a key that is not one of them would be ignored, and a token check you wrote would not run",
+                ),
+            );
+        }
+    }
+    for key in ["issuer", "audience", "trustFrom"] {
+        if let Some(arg) = actor.scheme_arg(key)
+            && arg.value.as_str().is_none_or(str::is_empty)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_bad_arg",
+                    arg.span,
+                    format!("a `Bearer` actor's `{key}` must be a non-empty string"),
+                )
+                .with_note(
+                    "write `auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\", audience = \"api\")`; `trustFrom` names the environment variable whose JSON `{\"issuer\", \"audience\"}` replaces them",
+                ),
+            );
+        }
+    }
+    let Some(secret) = actor.scheme_arg("secret").and_then(|a| a.value.as_str()) else {
+        return;
+    };
+    if let Some(arg) = actor.scheme_arg("trustFrom")
+        && arg.value.as_str() == Some(secret)
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.bearer_bad_arg",
+                arg.span,
+                "a `Bearer` actor's `trustFrom` names its own signing secret",
+            )
+            .with_note(
+                "`trustFrom` names a different environment variable, whose JSON `{ \"issuer\", \"audience\" }` replaces the declared values; the secret holds the signing key",
+            ),
+        );
+    }
+    let mine = actor.scheme_arg("audience").and_then(|a| a.value.as_str());
+    for other in table.actors.values() {
+        // Report each pair once, at the actor that sorts later, so the order of the table does not matter.
+        if other.name.name >= actor.name.name
+            || other
+                .auth
+                .as_ref()
+                .and_then(|a| crate::actors::Scheme::from_name(a.name.as_str()))
+                != Some(crate::actors::Scheme::Bearer)
+            || other.scheme_arg("secret").and_then(|a| a.value.as_str()) != Some(secret)
+        {
+            continue;
+        }
+        let theirs = other.scheme_arg("audience").and_then(|a| a.value.as_str());
+        if mine.is_some() && theirs.is_some() && mine != theirs {
+            continue;
+        }
+        errors.push(
+            CompileError::new(
+                "bynk.actor.bearer_secret_shared",
+                auth.span,
+                format!(
+                    "`Bearer` actors `{}` and `{}` share the secret `{secret}` without distinct audiences, so a token minted for one is accepted by the other",
+                    other.name.name, actor.name.name
+                ),
+            )
+            .with_note(format!(
+                "declare a different `audience` on each (`audience = \"{}\"` and `audience = \"{}\"`) and mint each actor's tokens with its own audience; `bynk token <Actor>` does that. Or give each actor its own secret",
+                other.name.name.to_lowercase(),
+                actor.name.name.to_lowercase()
+            )),
+        );
+    }
+}
+
 /// The keys a `SignedCookie` actor's config admits (#3386).
 const SIGNED_COOKIE_KEYS: &[&str] = &[
     "cookie", "secret", "previous", "ttl", "sameSite", "sessions",
@@ -3319,6 +3415,7 @@ fn check_actor_contracts(
             // v0.47: a Bearer actor must name its signing secret and yield a
             // string-constructible identity (minted from the JWT `sub` claim).
             Some(Scheme::Bearer) => {
+                check_bearer_actor(actor, auth, table, errors);
                 if actor.scheme_arg("secret").is_none() {
                     errors.push(
                         CompileError::new(

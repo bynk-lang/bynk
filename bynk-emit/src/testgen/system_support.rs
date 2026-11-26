@@ -378,7 +378,7 @@ pub(super) fn emit_system_http_support(
             // #2019: a refinement-guarded route's signing drivers take the
             // claims the acting actor presents, signed next to `sub`.
             let mut signs_claims = false;
-            let mut lone_bearer_read: Option<TsExpr> = None;
+            let mut lone_bearer_read: Option<(TsExpr, bynk_check::actors::BearerClaims)> = None;
             // #3052: the expression for an `Oidc` route's trust roots.
             let mut oidc_trust: Option<TsExpr> = None;
             let auth_header: Entries = match bynk_check::actors::bearer_seam_for(h, &table.actors) {
@@ -398,6 +398,8 @@ pub(super) fn emit_system_http_support(
                         "exp",
                         binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
                     ));
+                    // #3821: the actor's declared `iss`/`aud`, so a valid principal passes its seam.
+                    claim_entries.extend(system_request::bearer_claim_entries(&seam.claims));
                     // P7.2: `Record<string, string>`, not `emitter/workers.rs`'s own
                     // `Record<string, unknown>` marker — this expression feeds
                     // `__bynkSignHs256` directly with no `typeof` narrowing step in
@@ -408,7 +410,7 @@ pub(super) fn emit_system_http_support(
                     // fixed test secret, as it does at the seam, which reads
                     // the participant's `env` first.
                     let secret_read = secret_read_of(&seam.secret);
-                    lone_bearer_read = Some(secret_read.clone());
+                    lone_bearer_read = Some((secret_read.clone(), seam.claims.clone()));
                     vec![header(
                         "authorization",
                         bearer_token(TsExpr::object_entries(claim_entries), secret_read),
@@ -494,8 +496,10 @@ pub(super) fn emit_system_http_support(
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
-            let bearer_read: Option<TsExpr> = if is_sum {
-                sum.as_ref().and_then(SumAuth::bearer).cloned()
+            let bearer_read: Option<(TsExpr, bynk_check::actors::BearerClaims)> = if is_sum {
+                sum.as_ref()
+                    .and_then(SumAuth::bearer)
+                    .map(|(read, claims)| (read.clone(), claims.clone()))
             } else {
                 lone_bearer_read
             };
@@ -879,7 +883,7 @@ pub(super) fn emit_system_http_support(
                 .map(|p| vec![body_entry(body_ident(p))])
                 .unwrap_or_default();
             let token_header = vec![header("authorization", ident("__token"))];
-            if let Some(secret_read) = bearer_read.as_ref() {
+            if let Some((secret_read, bearer_claims)) = bearer_read.as_ref() {
                 let bearer_options = request_init(
                     verb,
                     cat(vec![
@@ -898,36 +902,18 @@ pub(super) fn emit_system_http_support(
                     ]),
                     raw_token_body.clone(),
                 );
-                let mut variants = vec![(
-                    "expired",
-                    TsExpr::Paren(Box::new(secret_read.clone())),
-                    TsBinaryOp::Sub,
-                )];
-                if sig.is_none() {
-                    variants.push((
-                        "forged",
-                        TsExpr::Paren(Box::new(binary(
-                            TsBinaryOp::Add,
-                            secret_read.clone(),
-                            str_lit("!"),
-                        ))),
-                        TsBinaryOp::Add,
-                    ));
-                }
+                let variants =
+                    system_request::bearer_variants(secret_read, bearer_claims, sig.is_none());
                 for (name, secret, sign) in variants {
                     // A valid `sub`, so only the signature (`Forged`) or the
                     // `exp` (`Expired`) is wrong. The `sub` is fixed rather
                     // than the call's identity: `by Forged` names none.
-                    let sign_stmt = const_(
-                        "__token",
-                        bearer_token(
-                            object_of(vec![
-                                ("sub", str_lit("bynk-test")),
-                                ("exp", binary(sign, now_secs(), num_lit("3600"))),
-                            ]),
-                            secret,
-                        ),
+                    let claims = system_request::bearer_variant_claims(
+                        name,
+                        binary(sign, now_secs(), num_lit("3600")),
+                        bearer_claims,
                     );
+                    let sign_stmt = const_("__token", bearer_token(claims, secret));
                     routes.push(sysdrive_driver(
                         SysdriveKind::typed(name),
                         sname,
@@ -1907,7 +1893,7 @@ fn sum_signs_claims(
     let bearer_arm = sum.as_ref().is_some_and(|s| {
         s.members
             .iter()
-            .any(|(_, c)| matches!(c, SumCredential::Bearer(_) | SumCredential::Oidc(_)))
+            .any(|(_, c)| matches!(c, SumCredential::Bearer(..) | SumCredential::Oidc(_)))
     });
     if bearer_arm {
         claims.bearer_claim_routes.insert(route.clone());

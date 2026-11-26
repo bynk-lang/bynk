@@ -1,0 +1,35 @@
+context api
+
+type LearnerId = String where NonEmpty && MaxLength(64)
+
+// #3821: two `Bearer` actors on one secret, told apart by the `aud` their tokens carry. A token minted
+// for one is refused (401) at a route of the other; `issuer` is checked too where it is declared.
+actor Learner {
+  auth = Bearer(secret = "AUTH_SECRET", issuer = "agilearn-web", audience = "agilearn-api"),
+  identity = LearnerId
+}
+
+actor Internal {
+  auth = Bearer(secret = "AUTH_SECRET", audience = "agilearn-internal"),
+  identity = LearnerId
+}
+
+// A third actor on its own secret and from the environment: `trustFrom` replaces what it declares.
+actor Partner {
+  auth = Bearer(secret = "PARTNER_SECRET", issuer = "partner", audience = "partner-api", trustFrom = "PARTNER_TRUST"),
+  identity = LearnerId
+}
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by user: Learner {
+    Ok(user.identity)
+  }
+
+  on GET("/internal") () -> Effect[HttpResult[String]] by user: Internal {
+    Ok(user.identity)
+  }
+
+  on GET("/partner") () -> Effect[HttpResult[String]] by user: Partner {
+    Ok(user.identity)
+  }
+}

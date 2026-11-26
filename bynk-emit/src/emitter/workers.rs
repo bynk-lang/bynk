@@ -619,7 +619,8 @@ pub(super) fn emit_websocket_upgrade(
                 SumMemberSeam::Bearer {
                     secret,
                     identity_type,
-                } => sum_bearer_member_stmts(&tag, secret, identity_type),
+                    claims,
+                } => sum_bearer_member_stmts(&tag, secret, identity_type, claims),
                 // Rejected at the WebSocket boundary (no body to sign), so a
                 // checked program has none; resolve nothing, fail closed.
                 // `Signature`, `Oidc` and `SignedCookie` are not WebSocket schemes (the checker
@@ -967,10 +968,11 @@ fn bearer_seam_stmts(
         "__claims",
         await_expr(call(
             ident("__verifyBearerJwtHs256"),
-            vec![
+            bearer_verify_args(
                 method_call(ident("__authz"), "slice", vec![num_lit("7")]),
                 ident("__secret"),
-            ],
+                &seam.claims,
+            ),
         )),
     ));
     stmts.push(if_(
@@ -1120,7 +1122,12 @@ pub(super) fn emit_http_wrapper(
 /// One `Bearer` member of an actor sum at the WebSocket upgrade: verify the offered token against the
 /// member's secret and, when it verifies and mints the identity, resolve `__who` to this member. #3903:
 /// also records the token's `exp` in `__exp`, so the connection can be closed once the credential expires.
-fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
+pub(super) fn sum_bearer_member_stmts(
+    tag: &str,
+    secret: &str,
+    identity_type: &str,
+    claims: &bynk_check::actors::BearerClaims,
+) -> Vec<TsStmt> {
     let secret = crate::emitter::escape_ts_string(secret);
     vec![if_(
         strict_neq(ident("__token"), ident("undefined")),
@@ -1133,7 +1140,7 @@ fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<
                         "__claims",
                         await_expr(call(
                             ident("__verifyBearerJwtHs256"),
-                            vec![ident("__token"), ident("__secret")],
+                            bearer_verify_args(ident("__token"), ident("__secret"), claims),
                         )),
                     ),
                     if_(
@@ -1178,6 +1185,42 @@ fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<
             ),
         ]),
     )]
+}
+
+/// #3821: the arguments of `__verifyBearerJwtHs256` for a token and secret: the third, the claims the
+/// token must carry, only when the actor declares any, so an actor that declares none emits what it always
+/// did. With `trustFrom` the expectation is read from the environment at run time (`__bearerTrust`, which
+/// refuses every token when the variable is set but unreadable).
+pub(super) fn bearer_verify_args(
+    token: TsExpr,
+    secret: TsExpr,
+    claims: &bynk_check::actors::BearerClaims,
+) -> Vec<TsExpr> {
+    let mut args = vec![token, secret];
+    if claims.is_unchecked() {
+        return args;
+    }
+    let lit = |v: &Option<String>| {
+        v.as_ref()
+            .map(|v| str_lit(crate::emitter::escape_ts_string(v)))
+    };
+    args.push(match &claims.trust_from {
+        Some(var) => call(
+            ident("__bearerTrust"),
+            vec![
+                secret_probe_expr(&crate::emitter::escape_ts_string(var)),
+                lit(&claims.issuer).unwrap_or_else(|| ident("undefined")),
+                lit(&claims.audience).unwrap_or_else(|| ident("undefined")),
+            ],
+        ),
+        None => TsExpr::object(
+            [("issuer", &claims.issuer), ("audience", &claims.audience)]
+                .into_iter()
+                .filter_map(|(k, v)| Some((k.to_string(), lit(v)?)))
+                .collect(),
+        ),
+    });
+    args
 }
 
 /// `__claims.value.claims.exp`: the verified token's expiry (#3903).

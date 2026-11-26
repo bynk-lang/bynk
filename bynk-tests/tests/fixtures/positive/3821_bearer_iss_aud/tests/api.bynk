@@ -1,0 +1,43 @@
+suite api as system {
+	// #3821: the driver mints each actor's tokens with the `iss` and `aud` it declares, so a valid
+	// principal passes the real seam, and `Forged` and `Expired` are wrong only in their signature or
+	// expiry. The claims themselves (a wrong or missing `iss`/`aud`, an array `aud`, `trustFrom`) are
+	// driven by `bynk-tests/tests/system/bearer_claims_seam.rs`, which signs its own tokens.
+	env {
+		AUTH_SECRET = "test-shared-secret",
+		PARTNER_SECRET = "test-partner-secret"
+	}
+
+	case "a learner token carries its declared issuer and audience and is admitted" {
+		let r <- api.GET("/me") by Learner("ada")
+		expect r is Ok("ada")
+	}
+
+	case "an internal token, on the same secret, is admitted at the internal route" {
+		let r <- api.GET("/internal") by Internal("ada")
+		expect r is Ok("ada")
+	}
+
+	case "a partner token is admitted" {
+		let r <- api.GET("/partner") by Partner("ada")
+		expect r is Ok("ada")
+	}
+
+	case "a missing, forged or expired token is refused" {
+		let none <- api.GET("/me") by Nobody
+		let forged <- api.GET("/me") by Forged
+		let expired <- api.GET("/me") by Expired
+		expect none is Rejected(Unauthorized)
+		expect forged is Rejected(Unauthorized)
+		expect expired is Rejected(Unauthorized)
+	}
+
+	case "a token for another issuer or another audience is refused where the actor declares one" {
+		let issuer <- api.GET("/me") by WrongIssuer
+		let audience <- api.GET("/me") by WrongAudience
+		let internal <- api.GET("/internal") by WrongAudience
+		expect issuer is Rejected(Unauthorized)
+		expect audience is Rejected(Unauthorized)
+		expect internal is Rejected(Unauthorized)
+	}
+}

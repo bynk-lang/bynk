@@ -438,3 +438,79 @@ fn bare_token_lists_the_bearer_actors_and_their_secrets() {
     assert!(!out.stdout.contains("Hook") && !out.stdout.contains("Sso"));
     assert!(!out.stdout.contains("Moderator"));
 }
+
+/// `bynk token` in the `token_claims` fixture, the actors of which declare `issuer` and `audience`.
+fn claims_token(actor: &str, env: &[(&str, &str)]) -> serde_json::Value {
+    let mut cmd = Command::new(bynk());
+    cmd.arg("token")
+        .arg(actor)
+        .args(["--sub", "ada"])
+        .arg("--input")
+        .arg(manifest_dir().join("tests/fixtures/token_claims"));
+    for var in [
+        "AUTH_SECRET",
+        "PLAIN_SECRET",
+        "PARTNER_SECRET",
+        "PARTNER_TRUST",
+    ] {
+        cmd.env_remove(var);
+    }
+    cmd.env("AUTH_SECRET", "s1")
+        .env("PLAIN_SECRET", "s2")
+        .env("PARTNER_SECRET", "s3");
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd.output().expect("run bynk");
+    assert!(
+        out.status.success(),
+        "bynk token {actor}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    claims_of(String::from_utf8_lossy(&out.stdout).trim())
+}
+
+#[test]
+fn a_token_carries_the_issuer_and_audience_its_actor_declares() {
+    // #3821: so it passes the seam that checks them, and two actors on one secret get different audiences.
+    let learner = claims_token("Learner", &[]);
+    assert_eq!(learner["iss"], "agilearn-web");
+    assert_eq!(learner["aud"], "agilearn-api");
+    let internal = claims_token("Internal", &[]);
+    assert_eq!(internal["aud"], "agilearn-internal");
+    assert!(
+        internal.get("iss").is_none(),
+        "no issuer is declared, so none is minted"
+    );
+    let plain = claims_token("Plain", &[]);
+    assert!(
+        plain.get("iss").is_none() && plain.get("aud").is_none(),
+        "{plain}"
+    );
+    assert_eq!(plain["sub"], "ada");
+}
+
+#[test]
+fn a_trust_from_variable_that_is_set_replaces_the_declared_claims() {
+    let declared = claims_token("Partner", &[]);
+    assert_eq!(
+        (declared["iss"].as_str(), declared["aud"].as_str()),
+        (Some("partner"), Some("partner-api"))
+    );
+    let staging = claims_token(
+        "Partner",
+        &[(
+            "PARTNER_TRUST",
+            r#"{"issuer":"partner-stg","audience":"stg-api"}"#,
+        )],
+    );
+    assert_eq!(
+        (staging["iss"].as_str(), staging["aud"].as_str()),
+        (Some("partner-stg"), Some("stg-api"))
+    );
+    let audience_only = claims_token("Partner", &[("PARTNER_TRUST", r#"{"audience":"stg-api"}"#)]);
+    assert_eq!(
+        (audience_only["iss"].as_str(), audience_only["aud"].as_str()),
+        (Some("partner"), Some("stg-api"))
+    );
+}
