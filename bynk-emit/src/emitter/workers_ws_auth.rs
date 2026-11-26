@@ -107,7 +107,7 @@ fn bearer_stmts(seam: &BearerSeam) -> WsVerified {
         "__claims",
         await_expr(call(
             ident("__verifyBearerJwtHs256"),
-            vec![ident("__token"), ident("__secret")],
+            bearer_verify_args(ident("__token"), ident("__secret"), &seam.claims),
         )),
     ));
     stmts.push(if_(

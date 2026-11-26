@@ -518,7 +518,7 @@ const TESTING_BINDING: &str = include_str!("../lib/testing/testing.binding.ts");
 /// sent (`bynk.types.key_at_boundary`), as a `Stream` is not. The checker finds
 /// them by the unit's reserved span file, so a user type of the same name is not
 /// mistaken for one.
-pub const CRYPTO_KEY_TYPES: &[&str] = &["SigningKey", "VerifyKey"];
+pub const CRYPTO_KEY_TYPES: &[&str] = &["CipherKey", "SigningKey", "VerifyKey"];
 
 /// What a first-party unit is, and so how a project brings it in: an adapter is
 /// injected when a unit `consumes` it, a commons when a unit `uses` it. Local to

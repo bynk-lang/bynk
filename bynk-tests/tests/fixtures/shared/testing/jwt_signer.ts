@@ -20,3 +20,25 @@ function __bynkClaimLines(lines: readonly string[]): globalThis.Record<string, u
   }
   return claims;
 }
+// #3821: the `iss`/`aud` claims a token minted for a Bearer actor carries: its declared values, replaced by its
+// `trustFrom` variable's JSON when the case's `env` (or the process) sets it, exactly as the Worker's seam
+// reads it. `wrong` names the one claim (`"iss"` or `"aud"`) that instead names another party.
+function __bynkBearerClaimsOf(declared: { iss?: string; aud?: string }, raw: string | undefined, wrong?: string): globalThis.Record<string, unknown> {
+  let iss = declared.iss;
+  let aud = declared.aud;
+  if (raw !== undefined && raw !== "") {
+    let parsed: { issuer?: unknown; audience?: unknown };
+    try { parsed = JSON.parse(raw); } catch { throw new globalThis.Error("a Bearer actor's trustFrom variable isn't JSON"); }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new globalThis.Error("a Bearer actor's trustFrom variable isn't a JSON object");
+    for (const key of ["issuer", "audience"] as const) {
+      const value = parsed[key];
+      if (value !== undefined && (typeof value !== "string" || value === "")) throw new globalThis.Error(`a Bearer actor's trustFrom \`${key}\` must be a non-empty string`);
+    }
+    iss = (parsed.issuer as string | undefined) ?? iss;
+    aud = (parsed.audience as string | undefined) ?? aud;
+  }
+  const claims: globalThis.Record<string, unknown> = {};
+  if (iss !== undefined) claims.iss = wrong === "iss" ? `${iss}-not-the-expected` : iss;
+  if (aud !== undefined) claims.aud = wrong === "aud" ? `${aud}-not-the-expected` : aud;
+  return claims;
+}

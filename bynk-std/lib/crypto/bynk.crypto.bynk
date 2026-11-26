@@ -2,7 +2,7 @@ adapter bynk.crypto {
 	consumes bynk { Secrets, Secret }
 	exports capability { Crypto }
 	exports transparent { Digest, Signature, CryptoError }
-	exports opaque { SigningKey, VerifyKey }
+	exports opaque { CipherKey, SigningKey, VerifyKey }
 
 	---
 	A hash function for `Crypto.digest`, `Crypto.hmac` and `Crypto.verifyHmac`.
@@ -33,6 +33,7 @@ adapter bynk.crypto {
 	type CryptoError =
 		| InvalidKey(reason: String)
 		| UnsupportedAlgorithm(name: String)
+		| OpenFailed
 
 	---
 	A key that signs, imported by `Crypto.importSigningKey`. It is opaque: its
@@ -50,6 +51,13 @@ adapter bynk.crypto {
 	`Crypto.importVerifyJwk`. Opaque and unstorable exactly as `SigningKey` is.
 	---
 	type VerifyKey = opaque Bytes
+
+	---
+	A key that encrypts and decrypts, imported by `Crypto.importCipherKey` or
+	`Crypto.importCipherKeyFromSecret`: AES-256-GCM, held non-extractable. Opaque
+	and unstorable exactly as `SigningKey` is.
+	---
+	type CipherKey = opaque Bytes
 
 	---
 	Cryptography over Web Crypto (`crypto.subtle`): digests, HMAC, constant-time
@@ -100,6 +108,10 @@ adapter bynk.crypto {
 			key: Bytes
 		) -> Effect[Result[VerifyKey, CryptoError]]
 		fn importVerifyJwk(jwk: String) -> Effect[Result[VerifyKey, CryptoError]]
+		fn importCipherKey(key: Bytes) -> Effect[Result[CipherKey, CryptoError]]
+		fn importCipherKeyFromSecret(secret: Secret) -> Effect[Result[CipherKey, CryptoError]]
+		fn seal(key: CipherKey, plaintext: Bytes, scope: Bytes) -> Effect[Bytes]
+		fn open(key: CipherKey, sealed: Bytes, scope: Bytes) -> Effect[Result[Bytes, CryptoError]]
 		fn deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int) -> Effect[Bytes]
 		fn hashPassword(password: String) -> Effect[String]
 		fn verifyPassword(password: String, stored: String) -> Effect[Bool]

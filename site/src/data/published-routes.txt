@@ -1349,8 +1349,11 @@
 /reference/constants/
 /reference/cron/
 /reference/diagnostics/
+/reference/diagnostics/bynk.actor.bearer_bad_arg/
 /reference/diagnostics/bynk.actor.bearer_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.bearer_missing_secret/
+/reference/diagnostics/bynk.actor.bearer_secret_shared/
+/reference/diagnostics/bynk.actor.bearer_unknown_key/
 /reference/diagnostics/bynk.actor.binder_shadows_param/
 /reference/diagnostics/bynk.actor.by_on_agent/
 /reference/diagnostics/bynk.actor.caller_not_admitted/
@@ -2200,6 +2203,7 @@
 /reference/diagnostics/bynk.transition.may_violate/
 /reference/diagnostics/bynk.transition.no_step_reference/
 /reference/diagnostics/bynk.transition.not_bool/
+/reference/diagnostics/bynk.types.ai_value_shape/
 /reference/diagnostics/bynk.types.analytics_point_shape/
 /reference/diagnostics/bynk.types.annotation_unknown/
 /reference/diagnostics/bynk.types.argument_mismatch/
