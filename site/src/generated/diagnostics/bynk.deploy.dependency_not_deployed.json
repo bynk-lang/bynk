@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.dependency_not_deployed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy --context NAME` selected a Worker that binds to Workers the ledger has never recorded as deployed in this environment. A Service Binding to a Worker that does not exist fails at upload, so `bynk` stops first: deploy the whole project once to bring the topology up. With `--format json` the plan's `refusals` carries it with the `worker` and its `dependencies`."
+}

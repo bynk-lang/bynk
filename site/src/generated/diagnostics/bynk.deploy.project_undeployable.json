@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.project_undeployable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` refused the project before preparing anything: its `[deploy.workers]` table does not read, or its build profile checks contracts, which a deployment does not. The message says which. With `--format json` the plan's `refusals` carries it."
+}
