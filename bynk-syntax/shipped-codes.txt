@@ -918,6 +918,7 @@ bynk.within.outside_handler
 bynk.within.timed_out_not_in_scope
 bynk.ws.bad_close_code
 bynk.ws.bad_close_reason
+bynk.ws.cookie_needs_origins
 bynk.ws.lifecycle_by_mismatch
 bynk.ws.message_frame_param
 bynk.ws.missing_close

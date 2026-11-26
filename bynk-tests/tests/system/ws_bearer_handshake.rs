@@ -9,7 +9,7 @@
 //!   could use) is a `400` with a fixed message naming the pair, and is never forwarded;
 //! * no offer, the marker with no token, and a bad or foreign-secret token are `401`, never forwarded.
 //!
-//! The Durable Object's `101` selecting `bynk.bearer` is the runtime helper's
+//! #3904 adds the cookie and `Oidc` forms (below). The Durable Object's `101` selecting `bynk.bearer` is the runtime helper's
 //! (`bynk-emit/runtime/test/connection.test.ts`) and the golden's.
 //!
 //! Like the other tsc-driven tests it skips loudly without a toolchain; `BYNK_REQUIRE_TSC=1` turns the
@@ -283,6 +283,192 @@ assert(forwarded.length === count, "the old form is not forwarded");
 console.log("ALL OK");
 "#;
 
+/// #3904: a `SignedCookie` actor on `on open`. The upgrade must carry an `Origin` that is exactly one
+/// of the service's `cors` origins, checked before the cookie is read, and then a valid session
+/// cookie. Anything else is refused at the edge and never forwarded.
+const COOKIE_DRIVER_TS: &str = r#"
+import worker from "./workers/chat/index.js";
+import { __newSessionKey, __signSessionCookie } from "./__bynk_runtime/session.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+const KEY = __newSessionKey();
+const OTHER_KEY = __newSessionKey();
+const LISTED = "https://app.example.com";
+
+const forwarded: { open: string | null }[] = [];
+const ROOM = {
+  idFromName: (name: string) => ({ toString: () => name }),
+  idFromString: (id: string) => ({ toString: () => id }),
+  get: () => ({
+    fetch: async (req: Request) => {
+      forwarded.push({ open: req.headers.get("X-Bynk-Ws-Open") });
+      return new Response("hosted", { status: 200 });
+    },
+  }),
+};
+const env = { SESSION_KEY: KEY, ROOM };
+
+async function upgrade(origin: string | null, cookie: string | null, extra: Record<string, string> = {}): Promise<Response> {
+  const headers: Record<string, string> = { Upgrade: "websocket", Connection: "Upgrade", ...extra };
+  if (origin !== null) headers["Origin"] = origin;
+  if (cookie !== null) headers["Cookie"] = `__Host-session=${cookie}`;
+  return worker.fetch(new Request("https://chat.example/?roomId=r1", { headers }), env);
+}
+
+const good = await __signSessionCookie({ secret: KEY }, "Member", "ada", 3600);
+
+// A listed Origin with a valid cookie is forwarded, with the verified identity and the cookie's expiry.
+let res = await upgrade(LISTED, good);
+assert(res.status === 200 && (await res.text()) === "hosted", "a listed Origin with a valid cookie is forwarded");
+assert(forwarded.length === 1, "exactly one request reached the Durable Object");
+const open = JSON.parse(forwarded[0].open ?? "{}");
+assert(open.identity === "ada", "the verified identity rides along");
+assert(typeof open.exp === "number" && open.exp > Math.floor(Date.now() / 1000), "the cookie's expiry rides along");
+
+// A missing, unlisted or near-miss Origin is a 403 before the cookie is read, so even a request with
+// no cookie at all is a 403 and not a 401, and a valid cookie does not help.
+for (const [origin, why] of [
+  [null, "no Origin"],
+  ["https://evil.example", "an unlisted Origin"],
+  ["https://app.example.com.evil.example", "a Origin that only begins with a listed one"],
+  ["http://app.example.com", "a listed host over http"],
+  ["https://app.example.com:8443", "a listed host on another port"],
+  ["https://APP.example.com", "a listed host in another case"],
+  ["https://app.example.com/", "a listed Origin with a trailing slash"],
+  ["null", "the opaque Origin `null`"],
+  ["*", "a wildcard Origin"],
+] as [string | null, string][]) {
+  res = await upgrade(origin, good);
+  assert(res.status === 403, `${why} is a 403, got ${res.status}`);
+  res = await upgrade(origin, null);
+  assert(res.status === 403, `${why} with no cookie is a 403 (the Origin is checked first), got ${res.status}`);
+}
+
+// `Sec-Fetch-Site` is not an origin check: `same-origin` with no `Origin` is still refused.
+res = await upgrade(null, good, { "Sec-Fetch-Site": "same-origin" });
+assert(res.status === 403, `Sec-Fetch-Site alone is not enough, got ${res.status}`);
+res = await upgrade("https://evil.example", good, { "Sec-Fetch-Site": "same-origin" });
+assert(res.status === 403, `Sec-Fetch-Site does not rescue an unlisted Origin, got ${res.status}`);
+assert(forwarded.length === 1, "no refused Origin reached the Durable Object");
+
+// A listed Origin with no cookie, a forged, foreign-key, wrong-audience or expired cookie is a 401.
+const expired = await __signSessionCookie({ secret: KEY }, "Member", "ada", 60, Date.now() - 3_600_000);
+for (const [cookie, why] of [
+  [null, "no cookie"],
+  ["not.a.cookie", "a malformed cookie"],
+  [await __signSessionCookie({ secret: OTHER_KEY }, "Member", "ada", 3600), "a cookie signed with another key"],
+  [await __signSessionCookie({ secret: KEY }, "Other", "ada", 3600), "a cookie issued for another actor"],
+  [expired, "an expired cookie"],
+] as [string | null, string][]) {
+  res = await upgrade(LISTED, cookie);
+  assert(res.status === 401, `${why} is a 401, got ${res.status}`);
+}
+assert(forwarded.length === 1, "no refused credential reached the Durable Object");
+
+console.log("ALL OK");
+"#;
+
+/// #3904: an `Oidc` actor on `on open`. The token is the subprotocol after `bynk.oidc`, verified
+/// against the provider's JWKS, so a driver serves a JWKS from a stubbed `fetch`.
+const OIDC_DRIVER_TS: &str = r#"
+import worker from "./workers/chat/index.js";
+
+function assert(cond: boolean, msg: string): void {
+  if (!cond) {
+    throw new Error(`assertion failed: ${msg}`);
+  }
+}
+
+function b64urlBytes(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64url(s: string): string {
+  return b64urlBytes(new TextEncoder().encode(s));
+}
+
+const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+const other = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+const jwk = { ...(await crypto.subtle.exportKey("jwk", pair.publicKey)), kid: "k1", alg: "ES256", use: "sig" };
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: unknown, init?: unknown) => {
+  if (String(input) === "https://id.example/jwks") {
+    return new Response(JSON.stringify({ keys: [jwk] }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return realFetch(input as string, init as RequestInit);
+}) as typeof fetch;
+
+async function mint(claims: Record<string, unknown>, key: CryptoKey): Promise<string> {
+  const h = b64url(JSON.stringify({ alg: "ES256", typ: "JWT", kid: "k1" }));
+  const p = b64url(JSON.stringify(claims));
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(`${h}.${p}`) as BufferSource));
+  return `${h}.${p}.${b64urlBytes(sig)}`;
+}
+
+const forwarded: { protocol: string | null; open: string | null }[] = [];
+const ROOM = {
+  idFromName: (name: string) => ({ toString: () => name }),
+  idFromString: (id: string) => ({ toString: () => id }),
+  get: () => ({
+    fetch: async (req: Request) => {
+      forwarded.push({ protocol: req.headers.get("Sec-WebSocket-Protocol"), open: req.headers.get("X-Bynk-Ws-Open") });
+      return new Response("hosted", { status: 200 });
+    },
+  }),
+};
+const env = { ROOM };
+
+async function upgrade(protocol: string | null): Promise<Response> {
+  const headers: Record<string, string> = { Upgrade: "websocket", Connection: "Upgrade" };
+  if (protocol !== null) headers["Sec-WebSocket-Protocol"] = protocol;
+  return worker.fetch(new Request("https://chat.example/?roomId=r1", { headers }), env);
+}
+
+const now = Math.floor(Date.now() / 1000);
+const claims = { sub: "ada", iss: "https://id.example", aud: "chat", exp: now + 3600 };
+const good = await mint(claims, pair.privateKey);
+
+// The pair `["bynk.oidc", token]` with a valid token is forwarded, with the identity and the expiry.
+let res = await upgrade(`bynk.oidc, ${good}`);
+assert(res.status === 200, `a valid token is forwarded, got ${res.status}`);
+const open = JSON.parse(forwarded[0].open ?? "{}");
+assert(open.identity === "ada", "the verified identity rides along");
+assert(open.exp === now + 3600, "the token's expiry rides along");
+assert(forwarded[0].protocol !== null && forwarded[0].protocol.split(",").map((p) => p.trim()).includes("bynk.oidc"), "the marker reaches the Durable Object, which selects it");
+
+// The `bynk.bearer` marker is not this actor's, and the old single-element form is a 400 naming the pair.
+res = await upgrade(`bynk.bearer, ${good}`);
+assert(res.status === 400, `the Bearer marker is not an Oidc offer, got ${res.status}`);
+res = await upgrade(good);
+assert(res.status === 400, `the old [token] form is a 400, got ${res.status}`);
+const message = await res.text();
+assert(message === 'Offer the subprotocols ["bynk.oidc", <token>]', `the refusal names the pair: ${message}`);
+assert(!message.includes(good), "the refusal never echoes the token");
+
+// No offer, the marker alone, and a bad, foreign-key, wrong-issuer, wrong-audience or expired token are 401.
+for (const [offer, why] of [
+  [null, "no subprotocol"],
+  ["bynk.oidc", "the marker with no token"],
+  ["bynk.oidc, not.a.jwt", "a malformed token"],
+  [`bynk.oidc, ${await mint(claims, other.privateKey)}`, "a token signed with another key"],
+  [`bynk.oidc, ${await mint({ ...claims, iss: "https://evil.example" }, pair.privateKey)}`, "a token from another issuer"],
+  [`bynk.oidc, ${await mint({ ...claims, aud: "other" }, pair.privateKey)}`, "a token for another audience"],
+  [`bynk.oidc, ${await mint({ ...claims, exp: now - 3600 }, pair.privateKey)}`, "an expired token"],
+] as [string | null, string][]) {
+  res = await upgrade(offer);
+  assert(res.status === 401, `${why} is a 401, got ${res.status}`);
+}
+assert(forwarded.length === 1, "no refused upgrade reached the Durable Object");
+
+console.log("ALL OK");
+"#;
+
 /// Compile `fixture` (a Workers fixture) and run `driver` against its emitted Worker under Node.
 fn drive(fixture_name: &str, driver: &str) {
     let runner = match discover_tsc() {
@@ -357,4 +543,14 @@ fn the_bearer_handshake_offers_the_marker_then_the_token() {
 #[test]
 fn an_actor_sum_upgrade_resolves_the_pair_first_wins() {
     drive("3041_ws_open_actor_sum", SUM_DRIVER_TS);
+}
+
+#[test]
+fn a_cookie_upgrade_needs_a_listed_origin_before_the_cookie_is_read() {
+    drive("3904_ws_signed_cookie", COOKIE_DRIVER_TS);
+}
+
+#[test]
+fn an_oidc_upgrade_offers_the_token_after_bynk_oidc() {
+    drive("3904_ws_oidc", OIDC_DRIVER_TS);
 }
