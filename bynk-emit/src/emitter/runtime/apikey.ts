@@ -456,73 +456,9 @@ export async function mintApiKey<R>(
 }
 
 // ---------------------------------------------------------------------------------------------
-// The `system` test tier (track §10). These run only in a generated test module: they mint a real
-// key into the in-process key store, build the keys the failure principals present, and count the
-// key store's comparisons so a case can tell the seam did the same work (D3 B).
+// The key store's comparison counter. It runs only in a test: it counts the key store's
+// comparisons so a test can tell the seam did the same work for every bad key (D3 B).
 // ---------------------------------------------------------------------------------------------
-
-/** The key `actor`'s principal `sub` presents in this test run: minted once per harness `env`,
- *  through `store` (the participant's in-process `<Actor>KeyOwner.mint`), under `peppers`. */
-export async function apiKeyForTest(
-  env: Record<string, unknown>,
-  actor: string,
-  sub: string,
-  peppers: ApiKeyPeppers,
-  pepperName: string,
-  prefix: string,
-  nowMs: number,
-  store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
-): Promise<string> {
-  const memo = (env.__bynkApiKeys ??= new Map<string, string>()) as Map<string, string>;
-  const k = `${actor}:${sub}`;
-  let key = memo.get(k);
-  if (key === undefined) {
-    const minted = await mintApiKey<{ readonly tag: "Ok"; readonly value: { readonly key: BynkSecret } } | { readonly tag: "Err" }>(
-      peppers,
-      pepperName,
-      prefix,
-      "bynk-test",
-      nowMs,
-      100,
-      store,
-    );
-    if (minted.tag !== "Ok") throw new Error(`bynk: the test identity \`${sub}\` holds the most keys it may`);
-    key = minted.value.key.reveal();
-    memo.set(k, key);
-  }
-  return key;
-}
-
-/**
- * The key a failure principal presents, made from a real minted key `real`:
- *
- * - `malformed`: the real key with its last checksum character changed (refused before lookup);
- * - `unknownkey`: the real key's handle with a fresh key number and secret (never minted);
- * - `unknownhandle`: a fresh handle, key number and secret (no store holds the handle);
- * - `forged`: the real key's id with a fresh secret the store does not hold.
- *
- * Every key but `malformed` is well formed, its checksum recomputed, so the seam reaches the store.
- */
-export function apiKeyBadKey(kind: string, real: string, prefix: string): string {
-  const parsed = parseApiKey(real, prefix);
-  if (parsed === null) throw new Error("bynk: the test key is not a key of this actor");
-  const secret = crypto.getRandomValues(new Uint8Array(API_KEY_SECRET_BYTES));
-  const keyNo = hex(crypto.getRandomValues(new Uint8Array(API_KEY_NUMBER_BYTES)));
-  switch (kind) {
-    case "malformed": {
-      const last = real.at(-1) === "0" ? "1" : "0";
-      return real.slice(0, -1) + last;
-    }
-    case "unknownkey":
-      return formatApiKey(prefix, parsed.handle, keyNo, secret);
-    case "unknownhandle":
-      return formatApiKey(prefix, newApiKeyHandle(), keyNo, secret);
-    case "forged":
-      return formatApiKey(prefix, parsed.handle, parsed.keyNo, secret);
-    default:
-      throw new Error(`bynk: no such bad API key \`${kind}\``);
-  }
-}
 
 /** The key store's comparisons so far: every `Crypto.equal`, and those against the dummy digest. */
 export interface ApiKeyCompares {
@@ -568,21 +504,5 @@ export function apiKeyCountCompares(): ApiKeyCompares {
   return counts;
 }
 
-/** Fail the case unless the request that ran since `before` made exactly the comparisons `want`. */
-export function apiKeyExpectCompares(
-  counts: ApiKeyCompares,
-  before: { readonly all: number; readonly dummy: number },
-  want: { readonly all: number; readonly dummy: number },
-  principal: string,
-): void {
-  const all = counts.all - before.all;
-  const dummy = counts.dummy - before.dummy;
-  if (all !== want.all || dummy !== want.dummy) {
-    throw new Error(
-      `bynk: \`by ${principal}\` made the key store compare ${all} time(s), ${dummy} against the dummy digest; the seam must compare ${want.all} time(s), ${want.dummy} against the dummy`,
-    );
-  }
-}
-
 // #1653: the `__` aliases emitted code imports.
-export { apiKeyEqual as __apiKeyEqual, apiKeyBadKey as __apiKeyBadKey, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
+export { apiKeyEqual as __apiKeyEqual, apiKeyCountCompares as __apiKeyCountCompares, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };

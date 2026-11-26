@@ -690,7 +690,7 @@ segment only: on a queue, cron, `on call` or event address it is
 `bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm`, `by NoSubject`, `by Revoked`, `by Malformed` and `by Unknown` {#failure-principals}
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm`, `by NoSubject` and `by Revoked` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
@@ -712,19 +712,14 @@ the bytes it sends (the serialised JSON of a typed call, the raw string of a
 [`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
 `system` nothing changes: the handler runs in process and the seam is skipped.
 
-On a route an **`ApiKey`** actor guards, `by Client("acct-7")` at `system` presents a real key:
-the harness mints one for the identity into the participant's in-process key store, under the
-suite's [`env`](#env) entry for the actor's pepper (else a fixed test pepper), once per identity
-per run, so the real seam verifies it. Below `system` the identity is given, as for every actor.
-
-Eleven reserved principals drive the failures. Each yields the same
+Nine reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
 `Rejected(Unauthorized)`:
 
 | Principal | What the `system` driver sends | Legal on |
 |---|---|---|
-| `by Nobody` | no credential: no `Authorization` header, no session cookie, no API key, or no signature headers | a route with a Bearer, `Oidc`, `SignedCookie`, `ApiKey` or `Signature` actor |
-| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on a `SignedCookie` route, a well-formed cookie signed with a key the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish; on an `ApiKey` route, a real key's id with a secret its store does not hold | a route with a `Signature`, Bearer, `SignedCookie`, `Oidc` or single `ApiKey` actor |
+| `by Nobody` | no credential: no `Authorization` header, no session cookie, or no signature headers | a route with a Bearer, `Oidc`, `SignedCookie` or `Signature` actor |
+| `by Forged` | on a `Signature` route, a signature made with a secret the seam does not hold; on a Bearer route, a well-formed token (a valid `sub`, a future `exp`) signed with a secret the seam does not hold; on a `SignedCookie` route, a well-formed cookie signed with a key the seam does not hold; on an `Oidc` route, the same, signed by a key the test JWKS does not publish | a route with a `Signature`, Bearer, `SignedCookie` or `Oidc` actor |
 | `by Stale` | a correct signature, timestamped `tolerance + 60` seconds in the past | a route with a `Signature` actor that declares `timestamp` and `tolerance` |
 | `by Expired` | a Bearer or `Oidc` token, or a `SignedCookie` cookie, with a valid `sub`, correctly signed, whose lifetime ended an hour before the test clock | a route with a Bearer, `SignedCookie` or `Oidc` actor |
 | `by WrongIssuer` | an `Oidc` or `Bearer` token correctly signed and unexpired, whose `iss` is not the actor's issuer | a route with an `Oidc` actor, or a single `Bearer` actor that declares an `issuer` |
@@ -732,14 +727,6 @@ Eleven reserved principals drive the failures. Each yields the same
 | `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
 | `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
 | `by Revoked` | a `SignedCookie` cookie correctly signed and unexpired, for a session that was issued and then revoked in the actor's session agent (`revokeAll`) | a route with a single `SignedCookie` actor declared with `sessions = true` |
-| `by Malformed` | a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup | a route with a single `ApiKey` actor |
-| `by Unknown` | two well-formed keys that were never minted: a key number its store never held, and a handle no store holds | a route with a single `ApiKey` actor |
-
-On an `ApiKey` route the driver also counts the key store's comparisons, and fails the case unless
-the seam did the work its contract says: none for `by Malformed`, one against a fixed dummy hash for
-each `by Unknown` key, and one against the record for `by Forged`. So "an unknown key costs the same
-as a wrong one" is pinned by every run, not by timing. `Malformed`, `Unknown` and `Forged` get
-byte-identical responses.
 
 On an [actor sum](/book/guides/actors/multiple-callers/) a bad credential is presented to
 one member's seam, so the principal names the member in parentheses:
@@ -761,7 +748,7 @@ credential resolves as `Visitor`. So none of them is legal there. `by WrongIssue
 `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject` are not offered on a sum: they take
 no member name and reach the sum's `Oidc` member.
 
-All eleven are `system`-tier only: below it the seam is skipped and the identity
+All nine are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
 `by Expired` on any other route is `bynk.test.expired_needs_bearer_route`, and
 `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` on a
@@ -769,10 +756,7 @@ route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
 `bynk.test.wrong_audience_needs_oidc_route`,
 `bynk.test.wrong_algorithm_needs_oidc_route` or
 `bynk.test.no_subject_needs_oidc_route`. `by Revoked` on a route without a `sessions = true`
-`SignedCookie` actor is `bynk.test.revoked_needs_sessions_route`. `by Malformed` or `by Unknown`
-on a route without an `ApiKey` actor is `bynk.test.key_principal_needs_api_key_route`, and
-`by Expired` on an `ApiKey` route is `bynk.test.expired_needs_bearer_route`, since keys do not
-expire yet.
+`SignedCookie` actor is `bynk.test.revoked_needs_sessions_route`.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {

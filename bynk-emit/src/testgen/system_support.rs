@@ -2,7 +2,6 @@
 //!
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
-use super::api_key_driver::{ApiKeyDriver, KeyRoute, push_api_key_drivers};
 use super::session_driver::{SessionAgentRef, SessionDriver};
 use super::*;
 use crate::emitter::RuntimeUse;
@@ -382,9 +381,6 @@ pub(super) fn emit_system_http_support(
             let mut lone_bearer_read: Option<(TsExpr, system_request::BearerMint)> = None;
             // #3052: the expression for an `Oidc` route's trust roots.
             let mut oidc_trust: Option<TsExpr> = None;
-            // #3939: an `ApiKey` route's drivers present a key minted into the in-process store.
-            let api_key =
-                ApiKeyDriver::of(h, &table.actors, &ns, &secret_read_of, &mut session_secrets);
             let auth_header: Entries = match bynk_check::actors::bearer_seam_for(h, &table.actors) {
                 Some(seam) => {
                     secrets.insert(seam.secret.clone());
@@ -458,10 +454,7 @@ pub(super) fn emit_system_http_support(
                             ),
                         )]
                     }
-                    None => api_key
-                        .iter()
-                        .map(|d| d.principal_header(ident("__sub")))
-                        .collect(),
+                    None => Vec::new(),
                 },
             };
             // #2155: an actor-sum route's credential depends on the member a
@@ -972,19 +965,6 @@ pub(super) fn emit_system_http_support(
                 ((h, verb, &content_type, &headers_spread), &body_init),
                 body_ps.first().map(|p| p.name.name.as_str()),
             );
-            if let Some(driver) = &api_key {
-                let route = KeyRoute {
-                    typed: (&driver_params, &url, &body_stmts, &body_init),
-                    raw: (!h.params.is_empty()).then_some((&raw_params, &raw_url, &raw_body_init)),
-                    request: (verb, &content_type, &headers_spread),
-                };
-                push_api_key_drivers(
-                    &mut routes,
-                    driver,
-                    (sname, &key, &binding, &payload),
-                    &route,
-                );
-            }
             // #3052: on an `Oidc` route, `by Forged` (signed by a key the
             // JWKS does not publish), `by Expired`, `by WrongIssuer` and
             // `by WrongAudience`, typed and raw, each decoding a `401` to

@@ -296,11 +296,9 @@ pub fn by_clause_is_oidc(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> 
 }
 
 /// Whether a route's seam refuses a forged or expired credential as a `401`: a `Bearer` route's
-/// token, (#3386) a `SignedCookie` route's cookie, or (#3939) an `ApiKey` route's key.
+/// token, or (#3386) a `SignedCookie` route's cookie.
 pub fn route_refuses_bad_token(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
-    route_has_bearer_seam(by, actors)
-        || by_clause_is_signed_cookie(by, actors)
-        || crate::api_key::by_clause_is_api_key(by, actors)
+    route_has_bearer_seam(by, actors) || by_clause_is_signed_cookie(by, actors)
 }
 
 /// #3386: whether a `by` clause names a single local `SignedCookie` actor (never a sum member), so
@@ -1841,15 +1839,11 @@ pub enum BadCredential {
     /// #3938: a cookie correctly signed for a session that was then revoked (`revokeAll`), so
     /// only a `SignedCookie` actor with `sessions = true` can refuse it.
     Revoked,
-    /// #3939: an API key with the actor's prefix and a bad checksum, refused before any lookup.
-    Malformed,
-    /// #3939: a well-formed API key whose id was never minted, refused after the dummy compare.
-    Unknown,
 }
 
 impl BadCredential {
     /// Every bad-credential principal.
-    pub const ALL: [BadCredential; 10] = [
+    pub const ALL: [BadCredential; 8] = [
         BadCredential::Forged,
         BadCredential::Stale,
         BadCredential::Expired,
@@ -1858,8 +1852,6 @@ impl BadCredential {
         BadCredential::WrongAlgorithm,
         BadCredential::NoSubject,
         BadCredential::Revoked,
-        BadCredential::Malformed,
-        BadCredential::Unknown,
     ];
 
     /// The name written after `by`.
@@ -1873,8 +1865,6 @@ impl BadCredential {
             BadCredential::WrongAlgorithm => "WrongAlgorithm",
             BadCredential::NoSubject => "NoSubject",
             BadCredential::Revoked => "Revoked",
-            BadCredential::Malformed => "Malformed",
-            BadCredential::Unknown => "Unknown",
         }
     }
 
@@ -1889,8 +1879,6 @@ impl BadCredential {
             BadCredential::WrongAlgorithm => "wrongalgorithm",
             BadCredential::NoSubject => "nosubject",
             BadCredential::Revoked => "revoked",
-            BadCredential::Malformed => "malformed",
-            BadCredential::Unknown => "unknown",
         }
     }
 
@@ -2023,8 +2011,6 @@ mod call_site_principal_tests {
             ("WrongAlgorithm", "wrongalgorithm"),
             ("NoSubject", "nosubject"),
             ("Revoked", "revoked"),
-            ("Malformed", "malformed"),
-            ("Unknown", "unknown"),
         ];
         assert_eq!(drivers.len(), BadCredential::ALL.len());
         for (name, driver) in drivers {

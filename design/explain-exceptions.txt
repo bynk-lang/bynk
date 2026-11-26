@@ -69,7 +69,6 @@ bynk.deploy.secrets_file_passthrough: needs the network, git, a registry, lockfi
 bynk.deploy.strict_environments_shared: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.strict_environments_unchecked: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_advance: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
-bynk.test.remote_unsupported_api_key: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_asset: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_call: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_env: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
