@@ -54,6 +54,8 @@ export const EMAIL_REJECT_FAULT = "message could not be processed";
 export const EMAIL_REJECT_REPLY = "reply refused";
 export const EMAIL_REJECT_FORWARD = "forward refused";
 export const EMAIL_REJECT_UNAUTHENTICATED = "sender not authenticated";
+/** #3885: the header a fallback forward carries; its value is the outcome, never anything from the message. */
+export const EMAIL_FALLBACK_HEADER = "X-Bynk-Fallback";
 
 export type DmarcVerdict =
   | { readonly tag: "DmarcPass" }
@@ -130,7 +132,7 @@ export interface InboundMessage {
   readonly raw: ReadableStream<Uint8Array>;
   readonly rawSize: number;
   setReject(reason: string): void;
-  forward(rcptTo: string): Promise<unknown>;
+  forward(rcptTo: string, headers?: Headers): Promise<unknown>;
   reply(message: unknown): Promise<unknown>;
 }
 
@@ -139,6 +141,8 @@ export interface EmailRoute {
   readonly address: string;
   /** #3888: the DMARC verdict tags the handler's `Sender` refinement admits; absent admits any mail. */
   readonly admits?: readonly DmarcVerdict["tag"][];
+  /** #3885: the verified address mail the handler faulted on, or that could not be read, is forwarded to. */
+  readonly fallback?: string;
   handle(mail: InboundEmail, sender: SenderIdentity): Promise<EmailVerdict>;
 }
 
@@ -626,6 +630,31 @@ export function rejectReason(reason: string): string {
 const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
 
 /**
+ * A message the service could not process: forwarded to its fallback address, labelled with the
+ * outcome, when it declares one (#3885), and otherwise, or if that forward is refused, rejected as
+ * it always was. The header holds `handler-fault` or `unreadable` and nothing from the message.
+ */
+async function fallBack(
+  message: InboundMessage,
+  route: EmailRoute,
+  outcome: "handler-fault" | "unreadable",
+  reject: string,
+  where: string,
+  log: EmailLog,
+): Promise<void> {
+  if (route.fallback !== undefined) {
+    try {
+      await message.forward(route.fallback, new Headers({ [EMAIL_FALLBACK_HEADER]: outcome }));
+      log(`${where}: ${outcome}, forwarded to the fallback`);
+      return;
+    } catch (e) {
+      log(`${where}: fallback forward refused (${errorName(e)})`);
+    }
+  }
+  message.setReject(reject);
+}
+
+/**
  * What the Worker's `email()` export runs. Every outcome is decided here: a
  * message is `setReject`ed, forwarded, replied to or accepted, and nothing
  * escapes as a throw, because the platform's behaviour on a throw is
@@ -663,7 +692,7 @@ export async function handleEmail(
     raw = await readRaw(message.raw, EMAIL_MAX_RAW_BYTES);
   } catch (e) {
     log(`${where}: reading the message failed (${errorName(e)})`);
-    message.setReject(EMAIL_REJECT_UNPARSEABLE);
+    await fallBack(message, route, "unreadable", EMAIL_REJECT_UNPARSEABLE, where, log);
     return;
   }
   if (raw === null) {
@@ -674,7 +703,7 @@ export async function handleEmail(
   const parsed = await parseInbound({ from: message.from, to: message.to }, raw);
   if (!parsed.ok) {
     log(`${where}: parse failed (${parsed.code})`);
-    message.setReject(parsed.reason);
+    await fallBack(message, route, "unreadable", parsed.reason, where, log);
     return;
   }
   // #3888: a `Sender` refinement (`actor Authenticated = Sender where Dmarc(DmarcPass)`)
@@ -693,7 +722,7 @@ export async function handleEmail(
     }
   } catch (e) {
     log(`${where}: handler faulted (${errorName(e)})`);
-    message.setReject(EMAIL_REJECT_FAULT);
+    await fallBack(message, route, "handler-fault", EMAIL_REJECT_FAULT, where, log);
     return;
   }
   switch (verdict.tag) {

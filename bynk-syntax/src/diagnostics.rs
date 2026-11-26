@@ -1772,6 +1772,21 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
     },
     Explain {
+        code: "bynk.email.fallback_bad_option",
+        blurb: "A `fallback { }` block on a `from email` service has one field, `forward`: the address mail a handler faulted on, or that could not be read, is forwarded to. It is a string literal holding a bare address, not a display name and not a domain's catch-all, and it must be a verified destination address on the account (`bynk deploy` warns of one that is not). A second `forward`, any other field or a missing `forward` is this error.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"*@ops.example\" }   // ✗ a catch-all, not one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_claimed",
+        blurb: "A fallback forwards mail to an address outside the service. If a `from email` service of the project claims that address, directly or through its domain's catch-all, the forwarded message is routed straight back to Bynk, and a fault there would forward it again. Name a verified destination address that no service of the project claims.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"help@shop.example\" }   // ✗ `helpdesk` claims it\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice helpdesk from email(\"help@shop.example\") { … }\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ not routed to a service\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_not_email",
+        blurb: "A `fallback { }` block says where mail a handler faulted on is forwarded, so only a `from email` service, which receives mail, can have one. A queue's equivalent is its `delivery { }` dead-letter queue.",
+        example: "service jobs from queue(\"jobs\") {\n    delivery { deadLetter: None }\n    fallback { forward: \"ops@ops.example\" }   // ✗ not a `from email` service\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice jobs from queue(\"jobs\") {\n    delivery { deadLetter: \"jobs-dead\" }   // ✓ a queue's counterpart\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}",
+    },
+    Explain {
         code: "bynk.email.invalid_address",
         blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address. The address may be written as the name of a constant declared exactly `String` and bound to such a literal; a constant of any other type, refined or not, is this error with a note naming it.",
         example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
@@ -3476,6 +3491,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.parse.duplicate_errors",
         blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
         example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_fallback",
+        blurb: "A `from email` service has one `fallback` block: the one address mail a handler faulted on is forwarded to. A second block could name another address, and the reader would not know which holds, so it is refused. Keep one.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }\n    fallback { forward: \"oncall@ops.example\" }   // ✗ a second `fallback`\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one policy\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -8154,6 +8174,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.email.duplicate_handler",
         "A `from email` service declares more than one `on message` handler; it has exactly one.",
     ),
+    dg(
+        "bynk.email.fallback_bad_option",
+        "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_claimed",
+        "A `fallback` address is one a `from email` service of the project claims.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_not_email",
+        "A `fallback { }` block is on a service that is not `from email`.",
+        &["fallback_policy"],
+    ),
     d(
         "bynk.email.invalid_address",
         "A `from email(\"…\")` binding is not a recipient address a service can claim.",
@@ -9445,6 +9480,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_errors",
         "A service declares more than one `errors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_fallback",
+        "A service declares more than one `fallback { }` policy.",
         &["service_decl"],
     ),
     dg(

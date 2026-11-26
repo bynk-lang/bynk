@@ -1,0 +1,7 @@
+context svc
+
+service jobs from queue("jobs") {
+  delivery { deadLetter: None }
+  fallback { forward: "ops@ops.example" }   // ✗ not a `from email` service
+  on message(job: String) -> Effect[QueueResult] by Producer { Ack }
+}

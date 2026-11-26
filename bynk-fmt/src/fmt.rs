@@ -2205,6 +2205,7 @@ impl<'a> Formatter<'a> {
                     || s.json.is_some()
                     || s.errors.is_some()
                     || s.delivery.is_some()
+                    || s.fallback.is_some()
                     || !s.handlers.is_empty()
                 {
                     f.newline();
@@ -2216,6 +2217,7 @@ impl<'a> Formatter<'a> {
                     || s.json.is_some()
                     || s.errors.is_some()
                     || s.delivery.is_some()
+                    || s.fallback.is_some()
                     || !s.handlers.is_empty()
                 {
                     f.newline();
@@ -2226,6 +2228,7 @@ impl<'a> Formatter<'a> {
                 if s.json.is_some()
                     || s.errors.is_some()
                     || s.delivery.is_some()
+                    || s.fallback.is_some()
                     || !s.handlers.is_empty()
                 {
                     f.newline();
@@ -2233,18 +2236,28 @@ impl<'a> Formatter<'a> {
             }
             if let Some(json) = &s.json {
                 f.format_json_policy(json);
-                if s.errors.is_some() || s.delivery.is_some() || !s.handlers.is_empty() {
+                if s.errors.is_some()
+                    || s.delivery.is_some()
+                    || s.fallback.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(errors) = &s.errors {
                 f.format_errors_policy(errors);
-                if s.delivery.is_some() || !s.handlers.is_empty() {
+                if s.delivery.is_some() || s.fallback.is_some() || !s.handlers.is_empty() {
                     f.newline();
                 }
             }
             if let Some(delivery) = &s.delivery {
                 f.format_delivery_policy(delivery);
+                if s.fallback.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(fallback) = &s.fallback {
+                f.format_fallback_policy(fallback);
                 if !s.handlers.is_empty() {
                     f.newline();
                 }
@@ -2264,6 +2277,7 @@ impl<'a> Formatter<'a> {
                     || s.json.is_some()
                     || s.errors.is_some()
                     || s.delivery.is_some()
+                    || s.fallback.is_some()
                 {
                     f.newline();
                 }
@@ -2344,6 +2358,21 @@ impl<'a> Formatter<'a> {
             &delivery.trivia,
             &fields,
             &delivery.trailing_comments,
+        );
+    }
+
+    /// Format a `fallback { }` policy section (#3885), as `format_delivery_policy`.
+    fn format_fallback_policy(&mut self, fallback: &FallbackPolicy) {
+        let fields: Vec<_> = fallback
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy(
+            "fallback",
+            &fallback.trivia,
+            &fields,
+            &fallback.trailing_comments,
         );
     }
 

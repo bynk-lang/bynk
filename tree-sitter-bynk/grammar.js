@@ -962,6 +962,9 @@ module.exports = grammar({
         // #3877: the optional `delivery { }` policy, a header-position
         // `from queue` concern restricted by the checker.
         optional(field("delivery", $.delivery_policy)),
+        // #3885: the optional `fallback { }` policy, a header-position
+        // `from email` concern restricted by the checker.
+        optional(field("fallback", $.fallback_policy)),
         // v0.140 (ADR 0163): a handler may carry one or more `@name(args)`
         // annotations (`@cache(maxAge: 5.minutes)`, `@limit(maxBody: …)`) —
         // the same shape `store_annotation` already gives store fields.
@@ -1039,6 +1042,17 @@ module.exports = grammar({
         "}",
       ),
     delivery_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3885: `fallback { forward: <address> }`. `fallback` is a contextual keyword (like
+    // `delivery`); the key is an ordinary identifier matched against the closed set by the checker.
+    fallback_policy: ($) =>
+      seq(
+        "fallback",
+        "{",
+        repeat(seq($.fallback_field, optional(","))),
+        "}",
+      ),
+    fallback_field: ($) =>
       seq(field("name", $.identifier), ":", field("value", $._expression)),
     // v0.44: `from <protocol>` on the service header.
     // v0.103: `from websocket(in: I, out: O)` binds the inbound/outbound frame

@@ -49,6 +49,7 @@
   "limits"
   "json"
   "delivery"
+  "fallback"
   "errors"
   "exports"
   "key"
