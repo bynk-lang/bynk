@@ -405,7 +405,11 @@ pub enum Command {
         /// for tooling (the VS Code problem-matcher, CI, scripts).
         /// In both, `path` is the file as you'd type it from the working
         /// directory (the input you passed, joined with the file's place in
-        /// it), the same path `fmt` reports.
+        /// it), the same path `fmt` reports. `json` writes one versioned JSON
+        /// document to stdout, and `ndjson` one diagnostic per line plus a
+        /// summary line; both carry each diagnostic's code, severity, range
+        /// (UTF-16 columns and a byte offset), labels, notes and fixes, hints
+        /// included. The exit status is the same in every format.
         #[arg(long, value_enum, default_value = "rich")]
         format: CheckFormatArg,
         /// Apply the machine-applicable fix suggestions to the sources, in
@@ -1081,7 +1085,7 @@ pub enum MigrateCommand {
     },
 }
 
-/// `bynk check --format` selector (rich/short).
+/// `bynk check --format` selector (rich/short/json/ndjson).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, ValueEnum)]
 pub enum CheckFormatArg {
     /// Ariadne rendering with full source context (the default).
@@ -1090,6 +1094,11 @@ pub enum CheckFormatArg {
     /// One terse `path:line:col: severity[category]: message` line per
     /// diagnostic — for the VS Code problem-matcher, CI, and scripts.
     Short,
+    /// One JSON document on stdout: every diagnostic with its code, severity,
+    /// file, range, labels, notes and fixes, and a summary (#4123).
+    Json,
+    /// The same diagnostics as JSON, one per line, then a summary line (#4123).
+    Ndjson,
 }
 
 /// `--only` selector. Mirrors [`Capability`] minus the internal distinctions.
