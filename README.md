@@ -1,7 +1,7 @@
 # Bynk
 
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#licence)
-[![Rust 2024 (MSRV 1.95)](https://img.shields.io/badge/rust-2024%20edition%20%C2%B7%20MSRV%201.95-orange.svg)](rust-toolchain.toml)
+[![Rust 2024 (MSRV 1.98)](https://img.shields.io/badge/rust-2024%20edition%20%C2%B7%20MSRV%201.98-orange.svg)](rust-toolchain.toml)
 
 **Bynk** is a statically typed, *architecture-first* programming language for
 building services. The shape of a program — its contexts, services, agents, and

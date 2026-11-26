@@ -512,11 +512,8 @@ pub(crate) fn check_val(
         } => {
             let name = name.clone();
             let base = *base;
-            let decl = match ctx.input.types.get(&name) {
-                Some(d) => d.clone(),
-                // Unreachable: the type already resolved above.
-                None => return None,
-            };
+            // Unreachable `None`: the type already resolved above.
+            let decl = ctx.input.types.get(&name)?.clone();
             let refinement = type_decl_refinement(&decl);
             match args {
                 [] => {

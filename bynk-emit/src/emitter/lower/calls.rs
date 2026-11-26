@@ -719,10 +719,9 @@ fn lower_predicate_size(
     }
     let (collections, step) = if let Some(c) = cx.invariant_collections() {
         (c, false)
-    } else if let Some(c) = cx.transition_collections() {
-        (c, true)
     } else {
-        return None;
+        let c = cx.transition_collections()?;
+        (c, true)
     };
     let (old, field) = super::super::lower_ctx::size_read(receiver, collections, step)?;
     Some(bynk_ts::TsExpr::Ident(

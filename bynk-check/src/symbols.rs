@@ -1972,10 +1972,8 @@ fn value_namespace_error(
         ("service", span)
     } else if let Some(span) = (what == ValueKind::Provider).then(agents).flatten() {
         ("agent", span)
-    } else if let Some(span) = earlier_provider {
-        ("provider", span)
     } else {
-        return None;
+        ("provider", earlier_provider?)
     };
     let what = match what {
         ValueKind::Service => "service",
