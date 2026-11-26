@@ -145,6 +145,7 @@ bynk.consumes.unknown_service
 bynk.container.build_missing
 bynk.container.build_path
 bynk.container.output_outside_project
+bynk.container.unbounded_instances
 bynk.context.consumes_cycle
 bynk.context.duplicate_binding
 bynk.context.external_construction

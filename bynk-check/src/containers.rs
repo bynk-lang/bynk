@@ -6,12 +6,15 @@
 //! about the project's files, which the driver answers
 //! ([`dockerfile_problem`]); the checker has no filesystem.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use bynk_project::{ParsedFile, UnitKind};
-use bynk_syntax::ast::CommonsItem;
+use bynk_syntax::ast::{
+    Block, CommonsItem, Expr, ExprKind, Handler, HandlerKind, MatchBody, ServiceProtocol, Statement,
+};
 use bynk_syntax::error::CompileError;
+use bynk_syntax::span::Span;
 
 use crate::firstparty;
 use crate::project_model::ErrorSink;
@@ -189,9 +192,256 @@ pub fn phase_container_builds(
     }
 }
 
+/// The `Container` operations whose first argument names the instance.
+const INSTANCE_OPERATIONS: &[&str] = &["send", "receiveBytes", "sendBytes"];
+
+/// One call that names a container instance from request input.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InstanceFromInput {
+    /// The instance argument.
+    pub span: Span,
+    /// `Renderer.send`.
+    pub call: String,
+    /// The handler input the name depends on (`tenant`).
+    pub input: String,
+}
+
+/// The first handler input `e` depends on, or `None`.
+///
+/// A value depends on an input when it mentions one, or a local bound from one: an interpolation,
+/// a method call on it, an `if`. It does not follow a call to a function (`normalise(tenant)`): that
+/// is where an author bounds the set, so a name laundered through one is not warned about, rather
+/// than warned about wrongly (#4112). A lambda is not entered either.
+fn depends_on_input(e: &Expr, inputs: &HashMap<String, String>) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => inputs.get(&id.name).cloned(),
+        ExprKind::Call { .. } | ExprKind::Lambda(_) => None,
+        // The value of a `match` or an `if` is one of its branches, not what it tests: mapping a
+        // value onto a closed set (`match plan { Free => "free", Pro => "pro" }`) is how a set is
+        // bounded, so the scrutinee and the condition are not followed, only the branches.
+        ExprKind::Match { arms, .. } => arms.iter().find_map(|arm| match &arm.body {
+            MatchBody::Expr(body) => depends_on_input(body, inputs),
+            MatchBody::Block(block) => block_depends_on_input(block, inputs),
+        }),
+        ExprKind::If {
+            then_block,
+            else_block,
+            ..
+        } => block_depends_on_input(then_block, inputs)
+            .or_else(|| block_depends_on_input(else_block, inputs)),
+        ExprKind::Block(block) => block_depends_on_input(block, inputs),
+        _ => bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .find_map(|c| depends_on_input(c, inputs)),
+    }
+}
+
+/// [`depends_on_input`] for a block's value, its tail.
+fn block_depends_on_input(block: &Block, inputs: &HashMap<String, String>) -> Option<String> {
+    depends_on_input(&block.tail, inputs)
+}
+
+/// Every call in `e` of an instance operation on a container in `containers`.
+fn collect_instance_calls(
+    e: &Expr,
+    containers: &HashSet<String>,
+    inputs: &HashMap<String, String>,
+    out: &mut Vec<InstanceFromInput>,
+) {
+    if let ExprKind::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &e.kind
+        && INSTANCE_OPERATIONS.contains(&method.name.as_str())
+        && let ExprKind::Ident(cap) = &receiver.kind
+        && containers.contains(&cap.name)
+        && let Some(instance) = args.first()
+        && let Some(input) = depends_on_input(instance, inputs)
+    {
+        out.push(InstanceFromInput {
+            span: instance.span,
+            call: format!("{}.{}", cap.name, method.name),
+            input,
+        });
+    }
+    for child in bynk_syntax::ast::expr_children(e) {
+        collect_instance_calls(child, containers, inputs, out);
+    }
+}
+
+/// The calls in `handler` that name a container instance (one of `containers`) from the handler's
+/// own input: a path, query or body parameter, or a local bound from one, in statement order.
+///
+/// The check follows values through the handler's top-level `let`s and stops there: a binding made
+/// inside a nested block or a match arm, or from the result of an effect, is not followed, so it
+/// can miss a name and never reports one wrongly.
+pub fn instances_from_input(
+    handler: &Handler,
+    containers: &HashSet<String>,
+) -> Vec<InstanceFromInput> {
+    // Each name that depends on an input, with the input it came from (a parameter, or the
+    // parameter a local was bound from).
+    let mut inputs: HashMap<String, String> = handler
+        .params
+        .iter()
+        .map(|p| (p.name.name.clone(), p.name.name.clone()))
+        .collect();
+    let mut found = Vec::new();
+    for statement in &handler.body.statements {
+        let mut exprs: Vec<&Expr> = Vec::new();
+        bynk_syntax::ast::statement_exprs(statement, &mut exprs);
+        for e in exprs {
+            collect_instance_calls(e, containers, &inputs, &mut found);
+        }
+        // A pure `let x = …` from an input is an input; an effect result is not.
+        if let Statement::Let(l) = statement
+            && let Some(origin) = depends_on_input(&l.value, &inputs)
+        {
+            inputs.insert(l.name.name.clone(), origin);
+        }
+    }
+    collect_instance_calls(&handler.body.tail, containers, &inputs, &mut found);
+    found
+}
+
+/// `bynk.container.unbounded_instances` (a warning, #4112): a `Container` instance name built from
+/// a request's own input on a route whose caller is not authenticated. Every distinct name starts
+/// its own container, and a running container costs money, so anyone who can reach the route can
+/// start as many as they have values to send.
+pub fn phase_container_instance_names(
+    groups: &BTreeMap<String, Vec<usize>>,
+    parsed: &[ParsedFile],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut ErrorSink,
+) {
+    for (name, indices) in groups {
+        let Some(table) = unit_tables.get(name) else {
+            continue;
+        };
+        let containers: HashSet<String> = table
+            .derived
+            .iter()
+            .filter(|(_, d)| d.is_container())
+            .map(|(cap, _)| cap.clone())
+            .collect();
+        if containers.is_empty() {
+            continue;
+        }
+        for &i in indices {
+            if parsed[i].is_synthetic() {
+                continue;
+            }
+            let path = parsed[i].identity_path();
+            for item in parsed[i].items() {
+                let CommonsItem::Service(svc) = item else {
+                    continue;
+                };
+                if !matches!(svc.protocol, ServiceProtocol::Http) {
+                    continue;
+                }
+                for h in &svc.handlers {
+                    let HandlerKind::Http {
+                        method,
+                        path: route,
+                    } = &h.kind
+                    else {
+                        continue;
+                    };
+                    let Some(by) = h.by_clause.as_ref().or(svc.default_by.as_ref()) else {
+                        continue;
+                    };
+                    if !crate::actors::sum_has_open_member(by, &table.actors) {
+                        continue;
+                    }
+                    for call in instances_from_input(h, &containers) {
+                        errors.push_for(
+                            Some(&path),
+                            CompileError::new(
+                                "bynk.container.unbounded_instances",
+                                call.span,
+                                format!(
+                                    "`{}` names a container instance from `{}`, which any caller of `{} {route}` chooses, and each distinct name starts its own container",
+                                    call.call,
+                                    call.input,
+                                    method.as_str()
+                                ),
+                            )
+                            .with_note(
+                                "a running container costs money, and nothing here limits how many names a caller can send; serve the route `by` an authenticated actor, or choose the name from a fixed set (an enum's names, a constant, the authenticated identity)",
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The calls `instances_from_input` finds in the first service handler of `src`, as
+    /// `(call, input)`.
+    fn found(src: &str) -> Vec<(String, String)> {
+        let tokens = bynk_syntax::lexer::tokenize(src).expect("lex");
+        let unit = bynk_syntax::parser::parse_unit(&tokens, src).expect("parse");
+        let bynk_syntax::ast::SourceUnit::Context(ctx) = unit else {
+            panic!("expected a context unit");
+        };
+        let containers: HashSet<String> = ["Renderer".to_string()].into();
+        ctx.items
+            .iter()
+            .filter_map(|i| match i {
+                CommonsItem::Service(s) => s.handlers.first(),
+                _ => None,
+            })
+            .flat_map(|h| instances_from_input(h, &containers))
+            .map(|c| (c.call, c.input))
+            .collect()
+    }
+
+    fn handler(body: &str) -> String {
+        format!(
+            "context t\n\nservice api from http {{\n  on GET(\"/x/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor {{\n{body}\n  }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn an_instance_name_from_a_parameter_is_found_through_interpolation_and_locals() {
+        let direct = handler("    let r <- Renderer.send(tenant, req)\n    Ok(\"\")");
+        assert_eq!(found(&direct), [("Renderer.send".into(), "tenant".into())]);
+        let interpolated =
+            handler("    let r <- Renderer.send(\"t-\\(tenant)\", req)\n    Ok(\"\")");
+        assert_eq!(found(&interpolated).len(), 1);
+        // A local keeps the input it came from, through a chain of locals.
+        let chained = handler(
+            "    let a = tenant.toLower()\n    let b = a.concat(\"-x\")\n    let r <- Renderer.receiveBytes(b, req)\n    Ok(\"\")",
+        );
+        assert_eq!(
+            found(&chained),
+            [("Renderer.receiveBytes".into(), "tenant".into())]
+        );
+    }
+
+    #[test]
+    fn a_bounded_name_is_not_found() {
+        for body in [
+            "    let r <- Renderer.send(\"shared\", req)\n    Ok(\"\")",
+            // Through a function: where a set is bounded, so not followed.
+            "    let r <- Renderer.send(shard(tenant), req)\n    Ok(\"\")",
+            // What a `match` tests is not what it yields.
+            "    let n = match tenant {\n      \"a\" => \"one\"\n      _ => \"two\"\n    }\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+            // Another capability's `send`.
+            "    let r <- Other.send(tenant, req)\n    Ok(\"\")",
+            // An effect result is not followed.
+            "    let n <- Lookup.get(tenant)\n    let r <- Renderer.send(n, req)\n    Ok(\"\")",
+        ] {
+            assert_eq!(found(&handler(body)), [], "{body}");
+        }
+    }
 
     #[test]
     fn a_build_path_stays_inside_the_project() {

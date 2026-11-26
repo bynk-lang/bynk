@@ -2248,15 +2248,18 @@ the port the server listens on:
 consumes bynk
 consumes bynk.cloudflare { Container, ContainerError }
 
+type TenantId = String where NonEmpty
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
 capability Renderer = Container @build("containers/renderer") @port(8080) @sleepAfter(5.minutes) @instanceType("standard-1")
 
 service render from http {
-	on GET("/render/:tenant") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+	on GET("/render") () -> Effect[HttpResult[String]] by m: Member given Renderer {
 		let req = Request {
 			method: Get,
 			url: "http://renderer/render",
 		}
-		let res <- Renderer.send("tenant-\(tenant)", req)
+		let res <- Renderer.send("tenant-\(m.identity)", req)
 		match res {
 			Ok(r) => Ok(r.body),
 			Err(Unavailable) => ServiceUnavailable("no capacity"),
@@ -2294,7 +2297,8 @@ the request body (`req.body` must be `None`). `Request`, `Response` and `BytesRe
 are `bynk`'s, with the same header and body rules as `Fetch`, and the URL's host is not
 used for routing. `instance` names one container instance, one process: the same name
 reaches the same instance, and a new name starts a new one, so a handler can use one
-per tenant. A name is 1 to 256 bytes with no control character, otherwise the call
+per tenant, named from who is calling (the example above names it from the
+authenticated identity). A name is 1 to 256 bytes with no control character, otherwise the call
 faults before anything is sent; it is not a secret, because names appear in
 Cloudflare's dashboards and logs. The first call to an instance starts its container,
 which takes noticeable time, longer for a larger image, and a container's disk is
@@ -2315,6 +2319,22 @@ references are not supported for this kind of container. In a test every `Contai
 operation faults, naming the instance, until it is stubbed (`stub Renderer.send(_, _)
 returns …`), so a test never starts a container, and the system tier gives each Worker
 a binding that faults the same way.
+
+**Do not let a caller choose the name.** Every distinct name starts its own
+container, a running container costs money, and there is no ceiling to stop it. A
+name built from a request's own input (a path or query parameter, the body, a
+header or a cookie) on a route anyone can call lets any caller start as many
+containers as they have values to send, and `bynk check` warns
+(`bynk.container.unbounded_instances`), naming the input and the route. The check
+follows the handler's parameters, and the locals bound from them, into the first
+argument of `send`, `receiveBytes` and `sendBytes`. It does not warn when the name
+comes from a constant, from the authenticated identity, from a closed set (a
+`match` over an enum's names), or from a route served `by` an actor that
+authenticates; and it does not follow a name through a function, which is where
+an author bounds the set, so a name laundered through one is not warned about,
+rather than warned about wrongly. A refined type limits what a name looks like, not
+how many there are: bound the count with an authenticated actor, a `RateLimit`, or
+a closed set.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

@@ -1058,6 +1058,7 @@ pub fn phase_resolve_derived(
         }
     }
     phase_edge_cache_reach(groups, parsed, unit_tables, errors);
+    crate::containers::phase_container_instance_names(groups, parsed, unit_tables, errors);
 }
 
 /// L7 (#2414, Decision D): an `EdgeCache` purge reaches the cache only from

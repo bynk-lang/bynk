@@ -1,0 +1,39 @@
+context shop.render
+
+// #4112: a `Container` instance is started, or reused, per distinct name, and a running container
+// costs money. Naming one from a request's own input on a route anyone can call lets any caller
+// start as many as they have values to send, so each of these warns.
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+capability Renderer = Container @build("containers/renderer") @port(8080)
+
+service api from http {
+	on GET("/render/:tenant") (
+		tenant: String
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send("tenant-\(tenant)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/thumb/:name") (name: String) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/thumb",
+		}
+		let key = name.toLower()
+		let res <- Renderer.receiveBytes(key, req)
+		match res {
+			Ok(r) => Ok(r.body.decodeUtf8().getOrElse("")),
+			Err(_) => ServerError("thumbnail failed"),
+		}
+	}
+}
