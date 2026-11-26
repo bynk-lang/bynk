@@ -236,7 +236,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.given.parameters\", \"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -353,6 +353,100 @@ fn workers_kv_round_trips_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersKv on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+/// #3959 (capability parameters, slice 1): a commons function that takes its
+/// `Kv` as a capability parameter, bound at each call. Track §11: the
+/// instance is written at every call and never inferred, so the namespace a
+/// call reads and writes is the one its binding names.
+const CAP_PARAMS_COMMONS: &str = "commons lib.cache
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+
+fn remember(key: String, value: String) -> Effect[String] given Store: Kv, Logger {
+\tlet hit <- Store.get(key)
+\tmatch hit {
+\t\tSome(text) => Effect.pure(text),
+\t\tNone => {
+\t\t\tlet _ <- Store.put(key, value)
+\t\t\tlet _ <- Logger.info(\"stored \\(key)\")
+\t\t\tEffect.pure(value)
+\t\t},
+\t}
+}
+";
+
+const CAP_PARAMS_SOURCE: &str = "context params.smoke
+
+consumes bynk { Logger }
+consumes bynk.cloudflare { Kv }
+uses lib.cache
+
+capability Sessions = Kv
+
+capability Notes {
+\tfn note(key: String, value: String) -> Effect[String]
+}
+
+provides Notes = KvNotes given Sessions, Logger {
+\tfn note(key: String, value: String) -> Effect[String] {
+\t\tremember(key, value, given Store = Sessions)
+\t}
+}
+
+service api from http {
+\ton GET(\"/sessions/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Sessions, Logger {
+\t\tlet v <- remember(key, value, given Store = Sessions)
+\t\tOk(v)
+\t}
+
+\ton GET(\"/bare/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Kv, Logger {
+\t\tlet v <- remember(key, value, given Store = Kv)
+\t\tOk(v)
+\t}
+
+\ton GET(\"/notes/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Notes {
+\t\tlet v <- Notes.note(key, value)
+\t\tOk(v)
+\t}
+}
+";
+
+/// #3959, slice 1: the commons function runs on workerd through a derived
+/// instance, through the bare `Kv`, and from a Bynk-bodied provider, and each
+/// call reaches exactly the namespace its binding names (track §11).
+#[test]
+fn capability_parameter_binds_the_named_instance_on_workerd() {
+    let steps: &[(&str, u16, &str)] = &[
+        // A derived instance: the first value is stored, the second read back.
+        ("/sessions/k/first", 200, r#""first""#),
+        ("/sessions/k/second", 200, r#""first""#),
+        // The bare `Kv`, bound explicitly, is its own namespace.
+        ("/bare/k/plain", 200, r#""plain""#),
+        ("/bare/k/again", 200, r#""plain""#),
+        // A provider binds its own `given Sessions`: it sees the session value.
+        ("/notes/k/note", 200, r#""first""#),
+        ("/notes/n/note", 200, r#""note""#),
+        ("/sessions/n/other", 200, r#""note""#),
+    ];
+    let Some((failures, log)) = run_smoke_with(
+        "params-smoke",
+        "params",
+        CAP_PARAMS_SOURCE,
+        &[("src/lib/cache.bynk", CAP_PARAMS_COMMONS)],
+        &|_| None,
+        "/sessions/boot/boot",
+        &[],
+        &|port| check_steps(port, steps),
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "a capability parameter on workerd reached a namespace other than its binding names:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

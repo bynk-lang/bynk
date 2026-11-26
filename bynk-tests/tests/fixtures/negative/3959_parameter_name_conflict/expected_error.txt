@@ -1,0 +1,6 @@
+# exact
+bynk.given.parameter_name_conflict the capability parameter `Kv` has the name of a capability this commons selects
+bynk.given.parameter_name_conflict the capability parameter `Logger` has the name of a capability this commons selects
+bynk.given.parameter_name_conflict the capability parameter `S` has the name of another capability parameter of this function
+bynk.given.parameter_name_conflict the capability parameter `T` has the name of a type parameter of this function
+bynk.commons.capability_unused `Logger` is selected from `bynk`, but no function here names it in `given`

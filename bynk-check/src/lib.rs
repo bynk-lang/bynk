@@ -48,6 +48,7 @@ pub mod builtin_names;
 #[cfg(test)]
 mod callee_tests;
 pub mod caller_admission;
+pub mod cap_params;
 pub mod capability_paths;
 pub mod check_pipeline;
 pub mod checker;

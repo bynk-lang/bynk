@@ -1062,6 +1062,14 @@ Declares the capabilities a handler or provider may use.
 **Static semantics.**
 {{#grammar-semantics given_clause}}
 
+### capability_parameter {#rule-capability_parameter}
+
+{{#grammar capability_parameter}}
+
+A commons free function's capability parameter, `given Store: Kv`: a name for the
+instance each caller binds, bounded by an instantiable kind the commons selects
+(experimental). See [Capability parameters in a commons](/reference/capabilities/#capability-parameters).
+
 ## Actors (v0.45)
 
 An `actor` is a nominal *boundary contract* — a closed, compiler-known
@@ -1811,10 +1819,26 @@ Reads a field of a record or agent state: `value.field`.
 
 {{#grammar call}}
 
-Calls a function or constructs a variant: `name(args)`.
+Calls a function or constructs a variant: `name(args)`. A call to a commons
+function with capability parameters ends its arguments with their bindings,
+`name(args, given Store = Sessions)` (experimental).
 
 **Static semantics.**
 {{#grammar-semantics call}}
+
+### capability_bindings {#rule-capability_bindings}
+
+{{#grammar capability_bindings}}
+
+The bindings after a call's ordinary arguments, behind `given`. No trailing comma
+follows the last.
+
+### capability_binding {#rule-capability_binding}
+
+{{#grammar capability_binding}}
+
+One binding, `Parameter = Capability`: the callee's capability parameter, and a
+capability in the caller's own `given` of the parameter's kind.
 
 ### record_construction {#rule-record_construction}
 

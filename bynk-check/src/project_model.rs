@@ -3236,6 +3236,13 @@ pub fn phase_resolve_consumes(
                         {
                             errors.push_for(Some(&parsed[i].identity_path()), err);
                         }
+                        // #3959: a capability in a commons' `consumes` is experimental.
+                        if kind == UnitKind::Commons
+                            && exported.contains(&cap.name)
+                            && let Some(err) = crate::cap_params::gate(policy, cap.span)
+                        {
+                            errors.push_for(Some(&parsed[i].identity_path()), err);
+                        }
                         // #2765: the braces may also name a type `U` exports
                         // (`consumes bynk { TimedOut }`). Exported types are
                         // already in scope for any `consumes U`, so a type
@@ -6465,10 +6472,18 @@ fn commons_consumes_refusal(
     for item in names {
         let n = &item.name;
         if capabilities.is_some_and(|caps| caps.contains(&n.name)) {
+            // #3959: a first-party unit's capability, contract only, for a
+            // function's capability parameters and shared capabilities.
+            if crate::firstparty::unit(target).is_some() {
+                continue;
+            }
             return refuse(
                 n.span,
-                format!("`{}` is a capability of `{target}`, not a type", n.name),
-                "a commons stays pure: it names types, and a context uses a capability with `consumes` and `given`",
+                format!(
+                    "`{}` is a capability of `{target}`, which is not a first-party unit",
+                    n.name
+                ),
+                "a commons may list a capability only from a first-party unit (`bynk`, `bynk.cloudflare`, …), for its functions' `given`; from a project's adapter it lists types, and a context uses the adapter's capabilities with `consumes` and `given`",
             );
         }
         if !exports_type(target, &n.name) {
@@ -7694,6 +7709,7 @@ mod native_platform_closure_tests {
         CapRef {
             context: prefix.map(qualified),
             name: ident(name),
+            bound: None,
             span: Span::default(),
         }
     }
@@ -9101,6 +9117,7 @@ mod cross_caps_first_party_tests {
         CapRef {
             context: None,
             name: ident(name),
+            bound: None,
             span: Span::default(),
         }
     }

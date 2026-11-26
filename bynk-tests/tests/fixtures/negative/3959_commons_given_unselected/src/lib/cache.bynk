@@ -1,0 +1,13 @@
+---
+#3959: a commons names a first-party capability only by selecting it in its braced
+`consumes`; `bynk.given.fn_outside_context` is retired.
+---
+commons lib.cache
+
+fn warn(what: String) -> Effect[()] given Logger {
+	Effect.pure(())
+}
+
+fn forget(key: String) -> Effect[()] given Store: Kv {
+	Effect.pure(())
+}

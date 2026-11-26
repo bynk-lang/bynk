@@ -734,6 +734,22 @@ pub struct CapRef {
     pub context: Option<QualifiedName>,
     /// The capability's simple name (also the local deps key).
     pub name: Ident,
+    /// #3959: a commons function's capability parameter, `given Store: Kv`,
+    /// carries its bound kind here; `name` is then the parameter. `None` for
+    /// every plain capability reference.
+    pub bound: Option<Ident>,
+    pub span: Span,
+}
+
+/// #3959: one binding of a capability parameter at a call, `Store = Sessions`,
+/// written after the ordinary arguments behind `given`
+/// (`cached(id, load, given Store = Sessions)`).
+#[derive(Debug, Clone)]
+pub struct CapBinding {
+    /// The callee's capability parameter.
+    pub param: Ident,
+    /// The caller's capability bound to it.
+    pub value: CapRef,
     pub span: Span,
 }
 
@@ -760,6 +776,11 @@ impl CapRef {
     /// a dotted string, if any.
     pub fn prefix(&self) -> Option<String> {
         self.context.as_ref().map(|q| q.joined())
+    }
+
+    /// #3959: whether this is a capability parameter (`Store: Kv`).
+    pub fn is_parameter(&self) -> bool {
+        self.bound.is_some()
     }
 }
 
@@ -5247,6 +5268,10 @@ pub enum ExprKind {
         /// v0.20a: explicit type arguments (`name[T](…)`); empty when absent.
         type_args: Vec<TypeRef>,
         args: Vec<Expr>,
+        /// #3959: the capability bindings after the arguments
+        /// (`f(x, given Store = Sessions)`); `None` when there are none. Boxed
+        /// to keep [`Expr`] within its size budget: almost no call has any.
+        bindings: Option<Box<[CapBinding]>>,
         /// #3110: the comments between the arguments; `None` when there are none.
         trivia: Option<Box<ListTrivia>>,
     },

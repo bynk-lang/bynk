@@ -698,6 +698,8 @@ pub fn check_file_core(
         ctx.uses_commons_type_names.clone(),
     )
     .with_local_fns(local_fns)
+    // #3959: a commons' free functions may declare `given`.
+    .with_is_commons(kind == UnitKind::Commons)
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.
@@ -878,22 +880,37 @@ pub fn check_file_core(
     // checks are vacuous for adapters, which have none).
     let mut typed = typed;
     let unit_table_owned = unit_info.get(name).map(|i| i.table.clone());
-    if (kind == UnitKind::Context || kind == UnitKind::Adapter)
-        && let Some(table) = unit_table_owned.as_ref()
+    // #3959: a commons runs only its `given` functions' check here.
+    if matches!(
+        kind,
+        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
+    ) && let Some(table) = unit_table_owned.as_ref()
     {
-        let decl_errs = ours(check_context_declarations(
-            &mut typed,
-            table,
-            &cross_context_for_file,
-            kind == UnitKind::Context,
-            &ctx.uses_commons_type_names,
-            &subscriber_visible_types,
-            refs,
-            hints,
-            locals,
-            requirements,
-            tys,
-        ));
+        let decl_errs = ours(if kind == UnitKind::Commons {
+            crate::cap_params::check_commons_given_fns(
+                &mut typed,
+                table,
+                pf.consumes(),
+                &cross_context_for_file,
+                &ctx.uses_commons_type_names,
+                (refs, hints, locals, requirements),
+                tys,
+            )
+        } else {
+            check_context_declarations(
+                &mut typed,
+                table,
+                &cross_context_for_file,
+                kind == UnitKind::Context,
+                &ctx.uses_commons_type_names,
+                &subscriber_visible_types,
+                refs,
+                hints,
+                locals,
+                requirements,
+                tys,
+            )
+        });
         if !decl_errs.is_empty() {
             // ADR 0117: a warning-severity declaration diagnostic (e.g. the
             // `@indexed` hygiene hints) must not block emission — only an

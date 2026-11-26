@@ -2663,6 +2663,11 @@ pub fn resolve_given_cap_ref(
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
 ) -> Option<CapabilityInfo> {
+    // #3959: a capability parameter belongs to a commons function's `given`.
+    if cap_ref.is_parameter() {
+        errors.push(crate::cap_params::parameter_outside_commons(cap_ref));
+        return None;
+    }
     let Some(prefix) = cap_ref.prefix() else {
         // Local capability.
         match capability_info_map.get(cap_ref.key()) {

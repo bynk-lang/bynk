@@ -650,8 +650,11 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
     if let Some(Callee::Fn(decl, witnesses)) = cx.commons().callee(e.id) {
         args_lowered.extend(cx.witness_args(decl, witnesses));
         // #2868: a function that declares `given` takes the caller's `deps`,
-        // which the checker has made carry its capabilities.
-        if !decl.given.is_empty() {
+        // which the checker has made carry its capabilities. #3959: one with
+        // capability parameters takes a `deps` built for the call.
+        if decl.given.iter().any(|g| g.is_parameter()) {
+            args_lowered.push(bound_deps(&decl.given, e, cx));
+        } else if !decl.given.is_empty() {
             args_lowered.push(cx.cap_deps_node());
         }
         // #2719: a function in the needs-context set takes the context last.
@@ -665,6 +668,42 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
         built = settle_built(built, cx);
     }
     pre.finish(built)
+}
+
+/// #3959: the `deps` a call to a function with capability parameters passes:
+/// one entry per entry of the callee's `given`, read from the caller's own
+/// `deps` — a parameter under its name from the capability the call binds it
+/// to (`{ Store: deps.Sessions, Logger: deps.Logger }`), a shared capability
+/// as itself. `__exec` is a separate parameter, so nothing else is dropped.
+fn bound_deps(given: &[bynk_syntax::ast::CapRef], e: &Expr, cx: &LowerCtx) -> bynk_ts::TsExpr {
+    let bindings: &[bynk_syntax::ast::CapBinding] = if let ExprKind::Call {
+        bindings: Some(b),
+        ..
+    } = &e.kind
+    {
+        b
+    } else {
+        &[]
+    };
+    let entries = given
+        .iter()
+        .map(|g| {
+            let from = bindings
+                .iter()
+                .find(|b| b.param.name == g.key())
+                .map_or(g.key(), |b| b.value.key());
+            let read = bynk_ts::TsExpr::Member {
+                object: Box::new(cx.cap_deps_node()),
+                property: from.to_string(),
+            };
+            bynk_ts::TsObjectEntry::prop(g.key(), read)
+        })
+        .collect();
+    bynk_ts::TsExpr::Object {
+        entries,
+        multiline: false,
+        end_span: None,
+    }
 }
 
 /// The binding read when `receiver.method(args)` is a collection `size()` in a

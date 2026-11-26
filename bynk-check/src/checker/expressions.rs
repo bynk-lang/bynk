@@ -80,7 +80,7 @@ pub(crate) fn check_ident_at(
         && let Some(decl) = ctx.input.fns.get(&id.name)
     {
         let decl = Arc::clone(decl);
-        require_callee_given(id, &decl, ctx);
+        require_callee_given(id, &decl, None, ctx);
         let decl = &decl;
         ctx.callees
             .insert(expr_id, Callee::FnValue(Arc::clone(decl), witnesses));
@@ -93,7 +93,7 @@ pub(crate) fn check_ident_at(
     {
         // #2868: naming a `given` function carries its capabilities along.
         let decl = Arc::clone(decl);
-        require_callee_given(id, &decl, ctx);
+        require_callee_given(id, &decl, None, ctx);
         let decl = &decl;
         // #2719: every function named as a value is recorded (with no
         // witnesses when it has no `Ord` bound), so the needs-context analysis
@@ -419,6 +419,20 @@ pub(crate) fn check_ident(
     {
         err = err.with_note(format!(
             "`{}` is a capability: only a handler or function body that is `given` it can call it, and this position is pure",
+            id.name
+        ));
+    }
+    // #3959: a commons function's capability parameter is never a value either.
+    if ctx.input.is_commons
+        && ctx.caps.capabilities.contains_key(&id.name)
+        && !ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .contains_key(&id.name)
+    {
+        err = err.with_note(format!(
+            "`{0}` is a capability parameter of this function: it names a capability, never a value; call its operations (`{0}.get(…)`), or bind a callee's parameter to it (`given Store = {0}`)",
             id.name
         ));
     }
