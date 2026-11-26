@@ -1,8 +1,9 @@
 # Capability parameters — a commons function uses a capability its caller binds
 
-- **Status:** Settling in the PR that adds this doc. Every maintainer ruling
-  was given on 26 November 2026, and Q2's fork was closed by
-  [ADR 0990](../decisions/0990-commons-consumes-types.md) Decision E (§14).
+- **Status:** Settled (26 November 2026). Every maintainer ruling was given
+  on 26 November 2026, and Q2's fork was closed by
+  [ADR 0990](../decisions/0990-commons-consumes-types.md) Decision E (§15).
+  The change is additive and enters as experimental (§12).
   Spine issue: #3959, which carries the live slice status.
 - **Realises:** the step [ADR 0726](../decisions/0726-given-on-context-functions.md)
   deferred (#2868 Decision A: "A later step could add capability parameters to
@@ -28,7 +29,7 @@
   declare `given`), [ADR 0974](../decisions/0974-test-only-commons.md) (a
   test-only commons),
   [ADR 0152](../decisions/0152-observation-is-auto-recorded-at-the-capability-seam.md)
-  (observation at the capability seam). Two ADRs land up front (§13).
+  (observation at the capability seam). Two ADRs land up front (§14).
 - **Code on `main`:** cited by symbol, never by line, as of `2f315d8c`. The
   book's reference pages are cited from `site/src/content/docs/reference/`.
 
@@ -101,7 +102,7 @@ The track settles four things:
   functions beside type parameters; tests and doubles; tooling and the book.
 - **Its surface was not settled when the track opened.** The binding syntax,
   the set of admissible kinds, how a commons names a kind at all, and how
-  parameters meet `stub` and `expect … called` were open (§14, now settled).
+  parameters meet `stub` and `expect … called` were open (§15, now settled).
 - **It is not a security boundary** (§11). The integrity hazard of binding the
   wrong instance is real, which is why the binding is explicit.
 
@@ -211,14 +212,14 @@ The track settles four things:
 - **Generic capability kinds** (`Queue[Order]`). None exist (#3879).
 - **Capabilities declared in a commons.** A commons may name kinds that a
   first-party unit exports; it may not declare its own capability contract
-  (§14 Q2).
+  (§15 Q2).
 - **Capability parameters on context functions,** methods, or suite helpers
-  (§14 Q6). A suite helper keeps ADR 0977's plain `given`; in a commons suite
+  (§15 Q6). A suite helper keeps ADR 0977's plain `given`; in a commons suite
   it names the doubles a case holds (§9).
 - **A capability selection from a project adapter.** A commons selects only
   first-party capabilities; ADR 0990 B's project adapters stay types-only
   here.
-- **A partially bound function as a value** (§14 Q8).
+- **A partially bound function as a value** (§15 Q8).
 - **Inference or defaulting of a binding,** in the compiler or in tooling.
 
 ## 4. Declaration
@@ -601,24 +602,56 @@ becomes a real concern, with `Secrets` plus `Fetch` as the concrete case to
 watch, a narrower grant (naming the secrets a function may read) is the line
 to revisit, in its own increment.
 
-## 12. Slices
+## 12. The 1.0 position
 
-| # | Slice | Depends on |
-|---|---|---|
-| 0 | Settle this doc; land D1 and D2 | — |
-| 1 | Declare, bind, call: first-party capability names in a commons' braced `consumes` (ADR 0990 E); `given Name: Kind` and shared capabilities on a commons free function; in-body use; binding at a call from a context body or a provider; the inclusion rule; emission through `deps` | 0 |
-| 2 | Forwarding and generics: binding from one commons function to another, type parameters alongside, recursion, the refusal of an unbound function value | 1 |
-| 3 | Tests: kind doubles in a commons suite, suite-local instances (lifting `bynk.capability.derived_outside_context` in a commons suite only), `stub` and `expect … called` through a bound instance, the `bynk.stub.not_a_seam` note for a parameter, fixtures in both kinds of suite and for a test-only commons | 1 |
-| 4 | Tooling and the book: hover, completion of instances at a binding, the add-binding fix (§11), signature help, architecture model, the reference and spec, and a guide ("Write a library that uses a capability") | 1; 2 and 3 for the complete pages |
+**Additive, with no Foundations behaviour changed.** Every new form is an
+error today, so no program that compiles now changes meaning:
 
-## 13. Decisions (ADRs to land up front)
+- **`given Name: Kind`** on a function is a parse error today:
+  `parse_cap_ref` reads a name or a qualified `B.Cap`, and a `:` after it
+  ends the clause where nothing may follow.
+- **`f(x, given Store = Sessions)`** is a parse error today: `given` is a
+  reserved token and starts no expression (§2.2).
+- **`given` on a commons function** is `bynk.given.fn_outside_context` today,
+  and **a capability in a commons' `consumes`** is
+  `bynk.commons.consumes_not_types`.
+- **Suite-local instances** (`capability Archive = Kv` in a commons suite)
+  are `bynk.capability.derived_outside_context` today.
+- **Emission** changes only for code that could not compile before. A
+  context function, its callers and its `deps` are emitted as now.
+
+**`bynk.given.fn_outside_context` is retired, not broken.** Slice 1 removes
+its last trigger and moves it to the retired codes (§14.1). A program that
+raised it either compiles or, for a bare instantiable kind, raises
+`bynk.given.kind_needs_parameter`, still an error. Retiring a code is not a
+change to a program that compiles.
+
+**Every new form enters as experimental** (`[unstable] allow`), as
+`pass-through-http.md` §12 does for its new items: capability parameters,
+the in-argument binding, a capability in a commons' `consumes`, and
+suite-local instances. None joins the frozen surface until promoted. Since
+the change is additive and experimental, it does not have to land before
+1.0, and the slices can run either side of it.
+
+## 13. Slices
+
+| # | Slice | Depends on | Done when |
+|---|---|---|---|
+| 0 | Settle this doc; land D1 and D2 | — | D1 and D2 have merged with numbers, the spine's checklist links them, and this doc's status reads Settled. |
+| 1 | Declare, bind, call: first-party capability names in a commons' braced `consumes` (ADR 0990 E); `given Name: Kind` and shared capabilities on a commons free function; in-body use; binding at a call from a context body or a provider; the inclusion rule; emission through `deps` | 0 | A commons function with `given Store: Kv, Logger` is called from a context body and from a Bynk-bodied provider, and runs at unit and workerd tiers through a derived instance and through the bare `Kv`; the emitted call passes `{ Store: deps.Sessions, Logger: deps.Logger }`; every slice-1 row of §14.1 has a negative fixture; `bynk.given.fn_outside_context` is in `Retired`; a commons that lists `Kv` but uses none of it warns; every new form needs `[unstable] allow`. |
+| 2 | Forwarding and generics: binding from one commons function to another, type parameters alongside, recursion, the refusal of an unbound function value | 1 | A three-deep chain of commons functions forwards a parameter beside type parameters, with an `Ord` bound in the chain; a recursive parameterised function compiles; `bynk.given.parameterised_fn_value` has a fixture, and so does the lambda that binds in its place; a missing binding three deep is reported at the function that lacks it. |
+| 3 | Tests: kind doubles in a commons suite, suite-local instances (lifting `bynk.capability.derived_outside_context` in a commons suite only), `stub` and `expect … called` through a bound instance, the `bynk.stub.not_a_seam` note for a parameter, fixtures in both kinds of suite and for a test-only commons | 1 | Fixtures for each of: a kind double bound in a commons suite (`given Store = Kv`), stubbed and observed (`stub Kv.get`, `expect Kv.put called`); a shared double (`expect Logger.info called`); a suite-local instance as a second double (`capability Archive = Kv`), and its refusal in a commons itself; `stub` and `expect … called` on the bound instance in a context suite (`stub Sessions.get`); the `bynk.stub.not_a_seam` note for a parameter in each kind of suite; a `given` suite helper over a double; and a test-only commons function with a capability parameter called from a context suite. |
+| 4 | Tooling and the book: hover, completion of instances at a binding, the add-binding fix (§11), signature help, architecture model, the reference and spec, and a guide ("Write a library that uses a capability") | 1; 2 and 3 for the complete pages | Hover on a call through a parameter names the bound instance; completion at a binding offers only instances of the bound kind; the add-binding fix is machine-applicable only with one candidate, and `bynk fix` leaves a two-candidate call alone; signature help shows the parameters; the architecture model draws the bound instance; the reference, the spec and the guide *Write a library that uses a capability* are published; the formatter and tree-sitter accept every form in §5.2. |
+
+## 14. Decisions (ADRs to land up front)
 
 - **D1. Capability parameters and their binding.** A commons function
   declares `given Name: Kind`. Every call binds each parameter explicitly,
   inside the argument list after a `given` (§5), to a capability in the
   caller's `given`. Never inferred or defaulted, by the compiler or by a
   machine-applicable fix with more than one candidate. Supersedes the
-  `bynk.given.fn_outside_context` refusal for commons free functions.
+  `bynk.given.fn_outside_context` refusal for commons free functions, which
+  retires. Additive, and experimental until promoted (§12).
 - **D2. Kinds and shared capabilities.** A commons may list first-party
   capabilities in ADR 0990's braced `consumes`, contract only (ADR 0990 E
   carried out). An instantiable kind
@@ -632,7 +665,7 @@ Recorded in their slices: emission through `deps` (slice 1); forwarding
 instances, which lift `bynk.capability.derived_outside_context` in a commons
 suite only (slice 3).
 
-### 13.1 Diagnostic codes
+### 14.1 Diagnostic codes
 
 The codes are named here so that D1 and D2 can cite them; the slice that
 first raises a code registers it with its explainer. Where an existing code
@@ -659,7 +692,7 @@ used as a value gets today; slice 1 adds a note naming it a parameter.
 `bynk.given.fn_outside_context` loses its last trigger in slice 1 and moves
 to the retired codes (`Retired` in `bynk-syntax/src/diagnostics.rs`).
 
-## 14. Open questions — settled answers
+## 15. Open questions — settled answers
 
 Every question was reviewed on the settling PR, and the points that needed
 the maintainer were ruled on 26 November 2026, each on the proposed option:
@@ -672,7 +705,7 @@ the maintainer were ruled on 26 November 2026, each on the proposed option:
   list, and stubs that name the instance, not the parameter. Both accepted.
 - **Q6** closes context functions to parameters for this track. Accepted.
 - **`Secrets`** stays a shared capability (§11). Accepted.
-- **Diagnostic codes** are named in §13.1; a slice may rename one when it
+- **Diagnostic codes** are named in §14.1; a slice may rename one when it
   registers it, and says so in its ADR.
 
 1. **The binding syntax.**
@@ -784,7 +817,7 @@ the maintainer were ruled on 26 November 2026, each on the proposed option:
     libraries back to function values inside providers.
     *Rejected:* refusing provider callers in the first slice.
 
-### 14.1 Decisions index
+### 15.1 Decisions index
 
 | | Question | Outcome |
 |---|---|---|
