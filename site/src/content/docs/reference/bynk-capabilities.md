@@ -2670,6 +2670,10 @@ No third-party crypto runs and nothing is polyfilled.
 | `importSigningKeyFromSecret(algorithm: Signature, secret: Secret)` | `Effect[Result[SigningKey, CryptoError]]`. The key is the base64 PKCS#8 a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. A secret that is not base64, or not a key for the algorithm, is `InvalidKey`, and the failure names none of its text. |
 | `importVerifyKey(algorithm: Signature, key: Bytes)` | `Effect[Result[VerifyKey, CryptoError]]` — SPKI, or the 32 raw bytes of an Ed25519 key. |
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
+| `importCipherKey(key: Bytes)` | `Effect[Result[CipherKey, CryptoError]]` — exactly 32 bytes, for AES-256-GCM; any other length is `InvalidKey`. |
+| `importCipherKeyFromSecret(secret: Secret)` | `Effect[Result[CipherKey, CryptoError]]`. The key is the base64 of 32 bytes a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. |
+| `seal(key: CipherKey, plaintext: Bytes, scope: Bytes)` | `Effect[Bytes]` — AES-256-GCM with a fresh random nonce each call. The format and failure rule are described below. |
+| `open(key: CipherKey, sealed: Bytes, scope: Bytes)` | `Effect[Result[Bytes, CryptoError]]`; `Err(OpenFailed)` for any failure. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
 | `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
 | `deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int)` | `Effect[Bytes]` — HKDF-SHA-256 ([RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)). `length` is from 1 to 8160 bytes and `secret` must not be empty; either outside that is a fault. |
@@ -2680,8 +2684,8 @@ No third-party crypto runs and nothing is polyfilled.
 `Digest` is `Sha256 | Sha384 | Sha512`. `Signature` is `Ed25519 |
 EcdsaP256Sha256 | RsaPkcs1Sha256`: ECDSA over P-256 with SHA-256, signing the raw
 `r || s` form, and RSASSA-PKCS1-v1_5 with SHA-256. The set is what all three
-platforms support. `CryptoError` is `InvalidKey(reason)` or
-`UnsupportedAlgorithm(name)`, and carries no key material. All three are
+platforms support. `CryptoError` is `InvalidKey(reason)`,
+`UnsupportedAlgorithm(name)` or `OpenFailed`, and carries no key material. All three are
 [extensible](#extensible-enums), so a `match` over them needs a wildcard.
 
 **Effects, not pure functions.** `crypto.subtle` is asynchronous on every
@@ -2689,13 +2693,41 @@ platform, so every operation is an `Effect` and there is no hashing in pure
 functions, refinements or invariants. Encodings (`toHex`, `toBase64`,
 `toBase64Url` and their decoders) stay pure on `Bytes`.
 
-**Keys are handles.** `SigningKey` and `VerifyKey` are opaque: the platform holds
+**Keys are handles.** `SigningKey`, `VerifyKey` and `CipherKey` are opaque: the platform holds
 the key non-extractable, so its bytes can't be read back. Like a `Stream`, a key
 lives for the call that imported it. It can't be stored, serialised, logged or
 sent, so using one in a `store`, a record or event field, a handler parameter or
 result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
 [`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify
-(`importSigningKeyFromSecret` takes the secret itself).
+(`importSigningKeyFromSecret` and `importCipherKeyFromSecret` take the secret itself).
+
+**Encryption.** `seal` and `open` are AES-256-GCM, shaped so the usual mistakes
+cannot be written. There is no way to give a nonce: every `seal` draws a fresh
+random 96-bit one. `scope` is GCM's associated data and is required, so a value
+is bound to where it belongs (the record id, the field name) and cannot be moved
+to another row and still open; an empty `Bytes` is allowed but must be written.
+What `seal` returns is `version (1 byte) ‖ nonce (12) ‖ ciphertext ‖ tag (16)`,
+with version `1`, so a later algorithm can be added and every value already
+stored still opens; `open` refuses a version it does not know. `open` has one
+failure, `Err(OpenFailed)`, for a wrong key, a wrong `scope`, a changed or
+truncated value and an unknown version alike, so which one it was is not
+revealed.
+
+```bynk,fragment
+let imported <- Crypto.importCipherKey(rawKey)
+match imported {
+	Ok(key) => {
+		let sealed <- Crypto.seal(key, Bytes.fromUtf8(email), Bytes.fromUtf8(customerId))
+		Crypto.open(key, sealed, Bytes.fromUtf8(customerId))
+	},
+	Err(e) => Effect.pure(Err(e)),
+}
+```
+
+A random 96-bit nonce is safe for about 2^32 messages under one key. Rotate keys
+well before that, and give each purpose its own key with `deriveKey`. Key
+management is still yours: keep the key in [`Secrets`](#the-secret-type) and
+import it where it is used.
 
 **Key derivation.** One secret should not be reused for HMAC, for encryption and
 for each tenant's key. `deriveKey` takes the secret, a `salt` (which may be

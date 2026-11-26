@@ -20,7 +20,8 @@ class __Stub_Crypto {
   }
 
   async digest(algorithm: __ns_bynk_crypto.Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array> {
-    const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Digest = __ns_bynk_crypto.Digest;
@@ -57,7 +58,8 @@ async function test_a_case_names_the_context_type_by_its_declared_name() {
     type LibCode = __ns_lib.Code;
     type Code = __ns_lib.Code;
     const lib = (deps as any).surface?.lib;
-    const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Digest = __ns_bynk_crypto.Digest;
@@ -84,7 +86,8 @@ async function test_a_case_names_the_adapter_type_by_its_declared_name() {
     type LibCode = __ns_lib.Code;
     type Code = __ns_lib.Code;
     const lib = (deps as any).surface?.lib;
-    const { CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest: CryptoDigest, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type CryptoDigest = __ns_bynk_crypto.Digest;
     type Digest = __ns_bynk_crypto.Digest;
