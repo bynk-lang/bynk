@@ -1923,7 +1923,7 @@
     },
     {
       "code": "bynk.store.replaces_collection",
-      "summary": "`replaces` renames a `Cell` store field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry the field's name, so it cannot be renamed this way."
+      "summary": "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet."
     }
   ],
   "string_literal": [
