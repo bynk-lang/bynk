@@ -101,6 +101,38 @@ pub struct HoverInput<'a> {
     pub files: Option<&'a HashMap<PathBuf, String>>,
 }
 
+/// What rung 1 describes an index key as. A unit (#4183) is described from every
+/// file that declares it, since its module doc may sit in a sibling of the file
+/// its definition is in, and says which file the definition is in; every other
+/// kind is the declaration in its defining file.
+fn describe_indexed(
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    def_path: &Path,
+    def_text: &str,
+) -> Option<String> {
+    if key.kind != SymbolKind::Unit {
+        return crate::symbols::describe_symbol(def_text, &key.name);
+    }
+    let mut siblings: Vec<(&PathBuf, &String)> = a
+        .snapshots
+        .iter()
+        .filter(|(p, _)| p.as_path() != def_path)
+        .collect();
+    siblings.sort_by(|x, y| x.0.cmp(y.0));
+    let sources = std::iter::once(def_text).chain(siblings.into_iter().map(|(_, t)| t.as_str()));
+    let described = crate::symbols::describe_unit(sources, &key.name)?;
+    let file = def_path.to_string_lossy().replace('\\', "/");
+    // After the fenced `<kind> <name>` line, before the module doc.
+    Some(match described.find("\n```\n") {
+        Some(at) => {
+            let (head, rest) = described.split_at(at + 5);
+            format!("{head}\nDeclared in `{file}`.\n{rest}")
+        }
+        None => format!("{described}\nDeclared in `{file}`.\n"),
+    })
+}
+
 /// `content` with [`used_name_note`] appended when there is one.
 fn with_used_name_note(
     content: String,
@@ -149,7 +181,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    `Method`/`CapabilityOp` came to render the wrong declaration.
         if let Some((key, def)) = crate::index_queries::definition_at(a.index, a.rel, a.offset)
             && let Some(def_text) = a.snapshots.get(&def.path)
-            && let Some(content) = crate::symbols::describe_symbol(def_text, &key.name)
+            && let Some(content) = describe_indexed(a, key, &def.path, def_text)
         {
             // #848: rewrite any resolvable intra-doc link in the rendered
             // doc comment into a Markdown link, scoped to `key.unit` (the

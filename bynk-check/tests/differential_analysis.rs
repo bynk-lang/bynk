@@ -234,7 +234,7 @@ fn new_entry_point_reports_no_errors_on_a_clean_project() {
     units.sort();
     assert_eq!(units, vec!["demo.shared", "demo.svc"]);
     assert_eq!(analysed.snapshots.len(), 2);
-    assert_eq!(analysed.index.symbols.len(), 9); // #3582: + the service's `on call` handler
+    assert_eq!(analysed.index.symbols.len(), 11); // #3582: + the service's `on call` handler; #4183: + the two units
     assert_eq!(analysed.index.calls.len(), 1);
     assert_eq!(analysed.index.impls.len(), 1);
 
@@ -373,11 +373,27 @@ fn new_entry_point_reports_a_test_bodys_own_type_error() {
     // The test file's `double(1)` call is a binding edge (a ref on
     // `double`'s index entry) — `phase_test_bodies` populates `&mut RefSink`
     // for it, so go-to-definition works from inside a test file too.
-    let total_refs: usize = analysed.index.symbols.values().map(|e| e.refs.len()).sum();
+    use bynk_check::index::SymbolKind;
+    let declaration_refs: usize = analysed
+        .index
+        .symbols
+        .iter()
+        .filter(|(key, _)| key.kind != SymbolKind::Unit)
+        .map(|(_, e)| e.refs.len())
+        .sum();
     assert_eq!(
-        total_refs, 1,
+        declaration_refs, 1,
         "the test body's call to `double` must be recorded as a binding edge"
     );
+    // #4183: and the suite's `demo.math` target is a reference to that unit.
+    let unit_refs: usize = analysed
+        .index
+        .symbols
+        .iter()
+        .filter(|(key, _)| key.kind == SymbolKind::Unit && key.name == "demo.math")
+        .map(|(_, e)| e.refs.len())
+        .sum();
+    assert_eq!(unit_refs, 1, "the suite's target names the unit it tests");
 }
 
 /// #2081: under the caller's `SchemaLock::On`, `analyse_project` reconciles

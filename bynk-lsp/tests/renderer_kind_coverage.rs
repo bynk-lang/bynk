@@ -135,13 +135,15 @@ fn declared_name(kind: SymbolKind) -> &'static str {
         SymbolKind::Embed => "banner",
         // #2617: a constant, keyed by its name.
         SymbolKind::Const => "MaxTodos",
+        // #4183: a unit, keyed by its qualified name.
+        SymbolKind::Unit => "demo.every",
     }
 }
 
 /// Every variant, so the fixture's coverage is asserted rather than assumed.
 /// `declared_name`'s exhaustive `match` is what forces this list to be extended
 /// in practice: a new kind fails to compile there first.
-const ALL_KINDS: [SymbolKind; 15] = [
+const ALL_KINDS: [SymbolKind; 16] = [
     SymbolKind::Type,
     SymbolKind::Fn,
     SymbolKind::Capability,
@@ -157,6 +159,7 @@ const ALL_KINDS: [SymbolKind; 15] = [
     SymbolKind::Asset,
     SymbolKind::Embed,
     SymbolKind::Const,
+    SymbolKind::Unit,
 ];
 
 /// [`EVERY_KIND`] analysed under its own root. `test_name` is what keeps the
@@ -235,7 +238,7 @@ fn every_indexed_symbol_has_a_renderer() {
             .find(|(p, _)| p.file_name() == def.path.file_name())
             .map(|(_, t)| t.as_str())
             .unwrap_or_default();
-        if symbols::describe_symbol(text, &key.name).is_none() {
+        if symbols::describe_key(key.kind, text, &key.name).is_none() {
             unrendered.push(format!("{:?} {:?}", key.kind, key.name));
         }
     }

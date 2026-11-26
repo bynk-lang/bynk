@@ -124,6 +124,22 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
     None
 }
 
+/// #4183: [`describe_symbol`] for an index key, which is what a resolved
+/// reference answers with. A [`bynk_check::index::SymbolKind::Unit`] key names a whole unit, so it is
+/// described as one ([`describe_unit`]) and never matched against a declaration of
+/// the same name inside the file (`fn money` is not the unit `money`); every other
+/// kind is a declaration `describe_symbol` finds by name.
+pub fn describe_key(
+    kind: bynk_check::index::SymbolKind,
+    source: &str,
+    name: &str,
+) -> Option<String> {
+    match kind {
+        bynk_check::index::SymbolKind::Unit => describe_unit(std::iter::once(source), name),
+        _ => describe_symbol(source, name),
+    }
+}
+
 /// v0.121 (ADR 0156): the reserved-keyword doc for the token at `offset` in
 /// `source`, if the cursor sits on one — matched by source text against
 /// `bynk_syntax::keywords::KEYWORDS`, independent of the token's `TokenKind`

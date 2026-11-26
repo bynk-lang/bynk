@@ -1,18 +1,18 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::checker::CapabilityInfo;
-use crate::index::{IndexBuilder, ProjectIndex, RefSink, SiteRef, SymbolKind};
+use crate::index::{IndexBuilder, ProjectIndex, RefEdge, RefSink, SiteRef, SymbolKind};
 use crate::project_model::UnitInfo;
 use crate::resolver::{self, MethodTable as ResolverMethodTable};
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::SourceUnit;
 use bynk_syntax::ast::{
     ActorDecl, AgentDecl, AssetDecl, BaseType, Block, CapRef, CapabilityDecl, CommonsItem,
-    ConstDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl, FnName,
-    HandlerKind, Ident, Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia, TypeBody,
-    TypeDecl, TypeRef, Visibility,
+    ConstDecl, ConsumesDecl, EmbedDecl, EventDecl, ExportKind, Expr, ExprId, ExprKind, FnDecl,
+    FnName, HandlerKind, Ident, Param, ProviderDecl, ServiceDecl, ServiceProtocol, Trivia,
+    TypeBody, TypeDecl, TypeRef, UsesDecl, Visibility,
 };
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
@@ -436,7 +436,89 @@ pub fn assemble_index(
             }
         }
     }
-    builder.build(refs.edges)
+    let unit_edges = index_units(&mut builder, parsed);
+    let mut edges = refs.edges;
+    edges.extend(unit_edges);
+    builder.build(edges)
+}
+
+/// #4183 (decision A): index every unit as a [`SymbolKind::Unit`] symbol.
+///
+/// A unit's definition is the name in its header; a unit split across files has
+/// one header per file, the first of which (in project order) is the definition
+/// and the rest references, so find-references and rename reach every header. The
+/// other references are a `consumes` or `uses` target, a suite's target and each
+/// context an `IsContext(…)` names. Every site spans the whole dotted name.
+///
+/// This is a syntactic pass over the parsed units: a name resolves to a unit
+/// only if some file declares it, and an edge to any other name is dropped when
+/// the index is built, as an unresolved edge is for every kind. Synthetic
+/// first-party units (`bynk.*`) are not on disk, so they are neither defined nor
+/// referenced here.
+fn index_units(builder: &mut IndexBuilder, parsed: &[ParsedFile]) -> Vec<RefEdge> {
+    let mut defined: HashSet<String> = HashSet::new();
+    let mut edges: Vec<RefEdge> = Vec::new();
+    let edge = |pf: &ParsedFile, name: &str, span: Span| RefEdge {
+        span,
+        kind: SymbolKind::Unit,
+        name: name.to_string(),
+        unit: Some(name.to_string()),
+        file: pf.identity_path(),
+        namespace: None,
+        owner: None,
+        provides: false,
+    };
+    for pf in parsed {
+        if pf.is_synthetic() {
+            continue;
+        }
+        // A suite is not a unit: its own name is its target, a reference.
+        let is_suite = matches!(pf.unit(), SourceUnit::Suite(_));
+        let name = pf.unit().name();
+        let joined = name.joined();
+        if is_suite {
+            edges.push(edge(pf, &joined, name.span));
+        } else if defined.insert(joined.clone()) {
+            builder.add_leaf_def(
+                &joined,
+                SymbolKind::Unit,
+                &joined,
+                SiteRef {
+                    path: pf.identity_path(),
+                    span: name.span,
+                },
+                symbol_modifiers(&joined, None),
+            );
+        } else {
+            edges.push(edge(pf, &joined, name.span));
+        }
+        let (uses, consumes): (&[UsesDecl], &[ConsumesDecl]) = match pf.unit() {
+            SourceUnit::Commons(c) => (&c.uses, &[]),
+            SourceUnit::Context(c) => (&c.uses, &c.consumes),
+            SourceUnit::Adapter(a) => (&a.uses, &a.consumes),
+            SourceUnit::Suite(s) => (&s.uses, &[]),
+        };
+        for u in uses {
+            edges.push(edge(pf, &u.target.joined(), u.target.span));
+        }
+        for c in consumes {
+            edges.push(edge(pf, &c.target.joined(), c.target.span));
+        }
+        for item in pf.items() {
+            let CommonsItem::Actor(actor) = item else {
+                continue;
+            };
+            let Some(refinement) = &actor.refinement else {
+                continue;
+            };
+            let mut names = Vec::new();
+            crate::caller_admission::mentioned_names(&refinement.predicate, &mut names);
+            for (context, span) in names {
+                edges.push(edge(pf, &context, span));
+            }
+        }
+    }
+    edges
 }
 
 /// A service's definition, and (#3582) its callable handlers — `on call` and each `on http` route —
