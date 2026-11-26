@@ -447,7 +447,7 @@ pub(super) fn emit_agent_dispatch(
         // (steps are key-free), loads the state (running any step), and
         // commits only a record older than this build's version. Reachable
         // only through this Worker's signed `/_bynk/migrate/` route.
-        fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx));
+        fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx, commons));
         // `(this as unknown as Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName]`:
         // the cast chain prints bare as `Index`'s receiver and the printer brackets it.
         let dispatch_callee = crate::ts_build::index(
