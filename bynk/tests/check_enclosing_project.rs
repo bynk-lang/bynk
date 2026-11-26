@@ -90,3 +90,82 @@ fn the_manifest_still_refuses_what_it_does_not_allow() {
     assert!(!plain_ok, "{plain}");
     assert!(plain.contains("bynk.stability.experimental"), "{plain}");
 }
+
+/// A directory the project does not compile is not the project: `scratch/` is outside `src`, so a
+/// check of it must read `scratch`, not return the project's verdict.
+#[test]
+fn a_directory_outside_the_projects_sources_is_checked_as_itself() {
+    let dir = scratch("check-enclosing-outside", true);
+    std::fs::create_dir_all(dir.join("scratch")).unwrap();
+    // A broken file the project never reads: only a check of `scratch` itself can see it.
+    std::fs::write(
+        dir.join("scratch/bad.bynk"),
+        "context bad\n\nnot a declaration\n",
+    )
+    .unwrap();
+
+    let (ok, text) = check(&dir, &["scratch"]);
+    assert!(!ok, "`scratch` is checked, not the project:\n{text}");
+    assert!(!text.contains("checking the project"), "{text}");
+    let (ok, text) = check(&dir, &[]);
+    assert!(ok, "the project itself is unaffected:\n{text}");
+}
+
+/// A directory with a `src/` of its own selects project mode, as the CLI reference says, even
+/// inside another project.
+#[test]
+fn a_directory_with_its_own_src_is_not_replaced_by_the_outer_project() {
+    let dir = scratch("check-enclosing-own-src", true);
+    let inner = dir.join("src/inner");
+    std::fs::create_dir_all(inner.join("src")).unwrap();
+    std::fs::write(
+        inner.join("src/bad.bynk"),
+        "context bad\n\nnot a declaration\n",
+    )
+    .unwrap();
+
+    let (ok, text) = check(&dir, &["src/inner"]);
+    assert!(!ok, "the inner tree is checked:\n{text}");
+    assert!(!text.contains("checking the project"), "{text}");
+}
+
+/// An `exclude`d subtree is not read by the project, so it is checked as itself.
+#[test]
+fn an_excluded_directory_is_checked_as_itself() {
+    let dir = scratch("check-enclosing-excluded", true);
+    let manifest = std::fs::read_to_string(dir.join("bynk.toml")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        format!("{manifest}\n[paths]\ninclude = [\"src\"]\nexclude = [\"src/vendored\"]\n"),
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src/vendored")).unwrap();
+    std::fs::write(
+        dir.join("src/vendored/bad.bynk"),
+        "context bad\n\nnot a declaration\n",
+    )
+    .unwrap();
+
+    let (ok, text) = check(&dir, &["src/vendored"]);
+    assert!(!ok, "the excluded tree is checked as itself:\n{text}");
+    assert!(!text.contains("checking the project"), "{text}");
+}
+
+/// `--fix` edits what it was given: reading the project's manifest widens the check, not the
+/// files rewritten.
+#[test]
+fn fix_stays_inside_the_directory_named() {
+    let dir = scratch("check-enclosing-fix", true);
+    let outside = dir.join("src/outer.bynk");
+    let before = "context outer\n";
+    std::fs::write(&outside, before).unwrap();
+    std::fs::create_dir_all(dir.join("src/feature")).unwrap();
+    std::fs::write(dir.join("src/feature/f.bynk"), "context feature\n").unwrap();
+
+    let _ = check(&dir, &["src/feature", "--fix"]);
+    assert_eq!(
+        std::fs::read_to_string(&outside).unwrap(),
+        before,
+        "a file outside is untouched"
+    );
+}
