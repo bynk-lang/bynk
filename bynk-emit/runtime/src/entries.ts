@@ -593,7 +593,7 @@ export const RENAME_BATCH = 128;
 const renameMarkerKey = (field: string): string => `r/${encodeKeyPart(field)}`;
 
 // Instances whose renames this isolate has finished, so only the first load pays for the check.
-const renamesDone = new WeakSet<object>();
+const renamesDone = new WeakMap<object, true>();
 
 /**
  * Move every entry of each renamed collection from under its old name to its new one. Called from a
@@ -608,7 +608,7 @@ export async function moveRenamedEntries(
 ): Promise<void> {
   if (renamesDone.has(self)) return;
   for (const rename of renames) await moveOneRename(storage, rename, batch);
-  renamesDone.add(self);
+  renamesDone.set(self, true);
 }
 
 async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename, batch: number): Promise<void> {
