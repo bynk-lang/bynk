@@ -507,6 +507,21 @@ fn http_responses(
             },
         });
     }
+    // #4434: a `@rateLimit` route's limiter is asked before the body is read, and a caller over
+    // the limit gets the router's own `429` with a `Retry-After`, whatever the handler does.
+    if handler
+        .annotations
+        .iter()
+        .any(|a| a.name.name == "rateLimit")
+    {
+        out.push(HttpResponse {
+            status: 429,
+            variant: "RateLimited".to_string(),
+            origin: ResponseOrigin::BoundaryImplicit {
+                why: "the route's `@rateLimit` limiter refused the request before its body was read (a `Retry-After` header says when to try again)",
+            },
+        });
+    }
     if walk.saw_option_question {
         out.push(HttpResponse {
             status: 404,

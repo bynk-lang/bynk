@@ -201,8 +201,10 @@ bynk new <PATH> [--name NAME]
 ├── bynk.toml            # [project] name/version + optional [paths] include/exclude
 ├── .gitignore           # /.bynk
 ├── .gitattributes       # *.bynk text eol=lf
-└── src/
-    └── <name>.bynk      # context <name> — a GET "/" HTTP service
+├── src/
+│   └── <name>.bynk      # context <name> — a GET "/" HTTP service
+└── tests/
+    └── <name>.test.bynk # one case that drives that route and checks its answer
 ```
 
 **Behaviour** — `bynk new` is pure, offline file-writing: it shells nothing,
@@ -215,7 +217,8 @@ compiles nothing, and reads no network, so it works before Node or
 2. Refuse to clobber: if the target exists and is non-empty, fail before writing
    anything. An empty directory is fine; VCS/OS cruft (`.git`, `.gitignore`,
    `.gitattributes`, `.DS_Store`, …) doesn't count as non-empty.
-3. Write the scaffold and print next steps (`cd <path> && bynk dev`).
+3. Write the scaffold and print next steps (`cd <path>`, then `bynk test` and
+   `bynk dev`). `bynk test` passes on the project as generated.
 
 **Exit code** — `0` on a written scaffold. A non-empty target or a name that
 isn't a legal identifier exits non-zero, **touching nothing**.
@@ -2125,7 +2128,18 @@ diagnostic-code links (`codeDescription`) and the language server's
 the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
-non-zero for an unrecognised code.
+non-zero for an unrecognised code. A misspelt code that is close to a real one
+also gets a `did you mean` line, found by the same search as
+`bynk check --fix=<code>`, so the two commands suggest the same code:
+
+```text
+$ bynk explain bynk.types.not_orderabel
+error: `bynk.types.not_orderabel` is not a diagnostic code the compiler emits.
+did you mean `bynk.types.not_orderable`?
+Diagnostic codes look like `bynk.resolve.unknown_type`; see … for the full list.
+```
+
+A code far from any real one gets the message without the suggestion.
 
 ---
 

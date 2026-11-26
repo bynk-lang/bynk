@@ -44,7 +44,14 @@ fn admitted_verdicts(
 
 /// The routes of every `from email` service in `table`, exact addresses before
 /// catch-alls and each group in address order, so the output is deterministic.
-pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
+///
+/// #3883: a service is also routed at each address a named environment claims in its place
+/// (`[deploy.email]`), so the Worker deployed to that environment accepts mail to it. The
+/// mapped address is the same service with the same admitted verdicts.
+pub(super) fn collect_routes(
+    table: &UnitTable,
+    layout: &bynk_project::worker_layout::WorkerLayout,
+) -> Vec<EmailRoute> {
     let mut routes: Vec<EmailRoute> = table
         .services
         .iter()
@@ -52,12 +59,17 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
             let ServiceProtocol::Email { address, .. } = &s.protocol else {
                 return None;
             };
-            Some(EmailRoute {
+            let admits = admitted_verdicts(table, s);
+            let route = |address: String| EmailRoute {
                 service: name.clone(),
-                address: address.clone(),
-                admits: admitted_verdicts(table, s),
-            })
+                address,
+                admits: admits.clone(),
+            };
+            let mut own = vec![route(address.clone())];
+            own.extend(layout.email_aliases(address).into_iter().map(route));
+            Some(own)
         })
+        .flatten()
         .collect();
     routes.sort_by(|a, b| {
         a.address
