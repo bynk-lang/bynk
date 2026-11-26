@@ -202,7 +202,7 @@ pub(super) fn bearer_wrong_claims(
     let wrong = |v: &Option<String>, is_wrong: bool| {
         v.as_ref().map(|v| {
             str_lit(if is_wrong {
-                format!("{v}-not-the-expected")
+                [v.as_str(), "-not-the-expected"].concat()
             } else {
                 v.clone()
             })
