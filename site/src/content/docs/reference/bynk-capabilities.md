@@ -1061,8 +1061,8 @@ A record with over 20 blob or 20 double fields, a second `@index`, an `@index` t
 holds, so keep a point's fields in the order its reports were written against; appending a field is
 safe. Use `write` for a point whose shape is not a record.
 
-The typed read, `AnalyticsSql.select[T]`, and the schema lock that refuses a reorder follow in later
-changes (#4105).
+The typed read, [`AnalyticsSql.select[T]`](#typed-reads-selectt), reads a record back by the same
+mapping. The schema lock that refuses a reorder follows in a later change (#4105).
 
 A point over a limit faults the write; the platform's own cap of 250 writes per
 Worker invocation faults with the platform's error. The write is sent after the
@@ -1107,7 +1107,7 @@ type Row = { n: Int }
 service report from http {
 	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
 		let res <- AnalyticsSql.query(Signups,
-			"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
+			"SELECT sum(_sample_interval) AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
 			[Text(country)])
 		match res {
 			Ok(r) => {
@@ -1163,6 +1163,47 @@ only by the platform:
   window rather than the whole retention period.
 - Do not filter on `accountTag` or `zoneTag`, and do not add a `FORMAT` clause: the
   binding scopes the query to your account and returns JSON itself.
+
+#### Typed reads: `select[T]`
+
+A record read back is `select[T]`, the counterpart of the [typed point](#typed-points-writevalue)
+written with `writeValue`. The compiler writes the `SELECT` list from `T` and the record the
+instance is written with, so the columns are never counted by hand:
+
+```bynk,fragment
+type Signup  = { @index plan: String, country: String, seats: Int }
+type Seats   = { plan: String, seats: Int }
+type ByCountry = { country: String, n: Int }
+```
+
+```bynk,fragment
+let seats <- AnalyticsSql.select[Seats](Signups, "FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", [])
+// SELECT index1 AS "plan", double1 AS "seats" FROM {dataset} WHERE …
+
+let by_country <- AnalyticsSql.select[ByCountry](Signups,
+	", sum(_sample_interval) AS n FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY country", [])
+// SELECT blob1 AS "country", sum(_sample_interval) AS n FROM {dataset} WHERE … GROUP BY country
+```
+
+- The tail is a literal, as for `query`, and starts at `FROM`, or at a comma that continues the
+  select list with what the compiler cannot know, as `sum(_sample_interval) AS n`.
+- Each field of `T` is a field of the record `Signups` is written with (`Signups.writeValue`
+  anywhere in the context), read from its column, or an alias the tail defines with `AS`. An
+  alias the tail defines takes the place of the written column of that name, so a field can total
+  itself (`, sum(double1) AS seats FROM …`). Aliases are found at the top level of the select
+  list, in any case, bare or quoted; an `AS` inside a cast or a subquery is not one. A field
+  that is neither is `bynk.types.sql_row_shape`, naming it; so is a field read as the wrong kind
+  (text for a number column, or a number for a blob), and a `T` that is not a record.
+- A text field is a `String` (or a refined or opaque one) and reads a blob or the index; a number
+  field reads a double as the type it was written with, or as `Float` (a `Float` column read as
+  `Int`, or an `Instant` as a `Duration`, is refused, because the first fractional value would
+  fail); an `Option` of either is read too. An `Int` field also reads a 64-bit integer the platform
+  returns as text, as `count()` may be. A `Bool` or an enum is written as text, so it is read as a `String`.
+- `Signups` written with more than one record type is refused
+  (`bynk.types.argument_mismatch`): which columns a typed read means would be a guess.
+- The call gives `Result[List[T], AnalyticsReadError]`: `AnalyticsQuery(error)` is the query's
+  own failure, `AnalyticsDecode(error)` a row that did not fit `T`.
+- It runs over `query`, so a test stubs `AnalyticsSql.query(_, _, _)` and sees the written SQL.
 
 There is no local implementation, so under `bynk dev` a query runs on your Cloudflare
 account and reads your deployed datasets. The development copy of the Worker's

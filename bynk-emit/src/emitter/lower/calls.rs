@@ -18,8 +18,9 @@ use super::super::lower_call::cross_context::{
 };
 use super::super::lower_call::kernel::lower_kernel_method_call;
 use super::super::lower_call::platform::{
-    lower_capability_call, lower_cookie_field_call, lower_cross_capability_call,
-    lower_d1_peek_call, lower_d1_select_call, lower_events_emit_call, lower_signed_cookie_call,
+    lower_analytics_select_call, lower_capability_call, lower_cookie_field_call,
+    lower_cross_capability_call, lower_d1_peek_call, lower_d1_select_call, lower_events_emit_call,
+    lower_signed_cookie_call,
 };
 use super::super::lower_call::statics::{
     lower_runtime_value_static_call, lower_scalar_static_call, lower_type_static_call,
@@ -114,6 +115,9 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     }
     // Capability, cross-context, events and static-type calls (#3167).
     if let Some(built) = lower_d1_peek_call(e, cx) {
+        return pre.finish(built);
+    }
+    if let Some(built) = lower_analytics_select_call(e, args, cx, &mut pre) {
         return pre.finish(built);
     }
     if let Some(built) = lower_d1_select_call(e, args, cx, &mut pre) {

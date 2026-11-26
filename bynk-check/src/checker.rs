@@ -922,7 +922,24 @@ pub enum Callee {
     /// computed from the record `T`.
     AnalyticsWrite {
         cap: String,
+        /// The record written, which `AnalyticsSql.select[T]` reads back from.
+        record: String,
         mapping: analytics::AnalyticsMapping,
+    },
+    /// #4105: `AnalyticsSql.select[T](Instance, tail, params)`. The compiler writes the `SELECT`
+    /// list from `row` and the instance's written record, so `sql` is filled once the unit has
+    /// been checked (`analytics::resolve_selects`); `None` before that, and when it is refused.
+    AnalyticsSelect {
+        /// The `Analytics` instance whose dataset is read.
+        cap: String,
+        row: TyId,
+        /// The literal after the select list (it starts at `FROM`, or at a comma that continues
+        /// the list).
+        tail: String,
+        /// Names the tail defines with `AS`, which a read field may take instead of a column.
+        aliases: Vec<String>,
+        sql: Option<String>,
+        span: Span,
     },
     /// #3070: a literal SQL statement of a derived `D1` instance, recorded under
     /// the *SQL argument's* id (not the call's, which keeps its own entry), so
