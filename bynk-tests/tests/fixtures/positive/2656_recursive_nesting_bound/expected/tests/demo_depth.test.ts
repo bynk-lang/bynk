@@ -2,6 +2,7 @@
 // test target: demo.depth
 
 import * as __ns_demo_depth from "./../demo/depth.js";
+import * as __ns_bynk_decode from "./../bynk/decode.js";
 
 <<bynk-shared: testing/expectation>>
 function __makeTestDeps() {
@@ -18,6 +19,8 @@ async function test_a_chain_at_the_bound_round_trips() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(chainRoundTrips(chain(256)))) { throw __bynkExpectFailure("tests/demo/depth.bynk:7:10", 150, 177, "expect chainRoundTrips(chain(256))"); }
     return { pass: true };
   } catch (e) {
@@ -38,6 +41,8 @@ async function test_a_tree_at_the_bound_round_trips() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(treeRoundTrips(tree(256)))) { throw __bynkExpectFailure("tests/demo/depth.bynk:11:10", 231, 256, "expect treeRoundTrips(tree(256))"); }
     return { pass: true };
   } catch (e) {
@@ -58,6 +63,8 @@ async function test_an_index_through_a_Map_at_the_bound_round_trips() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(indexRoundTrips(index(256)))) { throw __bynkExpectFailure("tests/demo/depth.bynk:15:10", 326, 353, "expect indexRoundTrips(index(256))"); }
     return { pass: true };
   } catch (e) {
@@ -78,6 +85,8 @@ async function test_mutually_recursive_sums_255_levels_deep_round_trip() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(exprRoundTrips(expr(255)))) { throw __bynkExpectFailure("tests/demo/depth.bynk:19:10", 426, 451, "expect exprRoundTrips(expr(255))"); }
     return { pass: true };
   } catch (e) {
@@ -98,6 +107,8 @@ async function test_a_hand_written_chain_at_the_bound_decodes() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(decodesChain(chainJson(256)))) { throw __bynkExpectFailure("tests/demo/depth.bynk:23:10", 515, 543, "expect decodesChain(chainJson(256))"); }
     return { pass: true };
   } catch (e) {
@@ -118,6 +129,8 @@ async function test_a_chain_one_level_past_the_bound_is_a_StructuralMismatch() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!(chainError(chainJson(257)) === "StructuralMismatch at $".concat(repeat(".next", 256)).concat(": expected a value nested at most 256 levels deep, got a value nested more deeply"))) { throw __bynkExpectFailure("tests/demo/depth.bynk:29:10", 767, 943, "expect chainError(chainJson(257)) == \"StructuralMismatch at $\".concat(repeat(\".next\", 256)).concat(\": expected a value nested at most 256 levels deep, got a value nested more deeply\")\n  expected: chainError(chainJson(257)) == \"StructuralMismatch at $\".concat(repeat(\".next\", 256)).concat(\": expected a value nested at most 256 levels deep, got a value nested more deeply\")\n  actual:   " + __bynkShow((chainError(chainJson(257)))) + " == " + __bynkShow(("StructuralMismatch at $".concat(repeat(".next", 256)).concat(": expected a value nested at most 256 levels deep, got a value nested more deeply")))); }
     return { pass: true };
   } catch (e) {
@@ -138,6 +151,8 @@ async function test_encoding_a_chain_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!((await (async () => {
       try {
         await (encodeChain(chain(257)));
@@ -168,6 +183,8 @@ async function test_encoding_a_tree_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!((await (async () => {
       try {
         await (encodeTree(tree(257)));
@@ -198,6 +215,8 @@ async function test_encoding_an_index_one_level_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!((await (async () => {
       try {
         await (encodeIndex(index(257)));
@@ -228,6 +247,8 @@ async function test_encoding_mutually_recursive_sums_past_the_bound_faults() {
     type Index = __ns_demo_depth.Index;
     type Stmt = __ns_demo_depth.Stmt;
     type Tree = __ns_demo_depth.Tree;
+    const { DecodeErrorKind } = __ns_bynk_decode;
+    type DecodeErrorKind = __ns_bynk_decode.DecodeErrorKind;
     if (!((await (async () => {
       try {
         await (encodeExpr(expr(257)));

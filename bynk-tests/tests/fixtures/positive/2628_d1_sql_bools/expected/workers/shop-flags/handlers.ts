@@ -103,7 +103,7 @@ export const listing = {
           try {
             __j = globalThis.JSON.parse(__s) as __JsonValue;
           } catch (__e) {
-            return Err({ kind: "Malformed", path: "$", message: String(__e) });
+            return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
           }
           const __flags = (__o: __JsonValue): void => {
             if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -117,7 +117,7 @@ export const listing = {
           const __r = __deserialise_List_Flag(__j, "$");
           if (__r.tag === "Ok") return Ok(__r.value as readonly Flag[]);
           const __be = __r.error;
-          return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+          return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
         })(text));
       }
       case "Err": {
@@ -149,7 +149,7 @@ export const lookup = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __flags = (__o: __JsonValue): void => {
           if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -163,7 +163,7 @@ export const lookup = {
         const __r = __deserialise_Flag(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Flag);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(text));
     }
     return None;
@@ -191,7 +191,7 @@ export const strange = {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __flags = (__o: __JsonValue): void => {
           if (__o === null || typeof __o !== "object" || globalThis.Array.isArray(__o)) return;
@@ -205,7 +205,7 @@ export const strange = {
         const __r = __deserialise_Flag(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Flag);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(text));
     }
     return false;

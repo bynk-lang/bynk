@@ -706,12 +706,12 @@ class __Stub_Clock {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(encoded());
       switch (__r0.tag) {
         case "Ok": {
@@ -1231,24 +1231,24 @@ async function test_a_suite_type_round_trips_through_Result() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) {
       throw __bynkExpectFailure("tests/demo/clk.bynk:35:9", 838, 896, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r))));
     }
     return { pass: true };
@@ -1400,24 +1400,24 @@ async function test_a_suite_type_round_trips_through_a_nested_generic() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_List_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))), Ok(rs)))) {
       throw __bynkExpectFailure("tests/demo/clk.bynk:40:9", 1036, 1102, "expect Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  expected: Json.decode[List[Result[Pair, String]]](Json.encode(rs)) == Ok(rs)\n  actual:   " + __bynkShow((((__s: string): Result<readonly Result<Pair, string>[], DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_List_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as readonly Result<Pair, string>[]);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(globalThis.JSON.stringify(__serialise_List_Result_Pair_String(rs))))) + " == " + __bynkShow((Ok(rs))));
     }
     return { pass: true };
@@ -1552,24 +1552,24 @@ async function test_a_suite_type_round_trips_through_Result_at_the_integration_t
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Result_Pair_String(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))), Ok(r)))) {
       throw __bynkExpectFailure("tests/demo/clk.bynk:52:9", 1454, 1512, "expect Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, String]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, string>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Result_Pair_String(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, string>);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(globalThis.JSON.stringify(__serialise_Result_Pair_String(r))))) + " == " + __bynkShow((Ok(r))));
     }
     const v = await ping.call(deps);
@@ -1866,24 +1866,24 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Result_Pair_Int(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))), Ok(r)))) {
       throw __bynkExpectFailure("tests/demo/clk.bynk:46:10", 1247, 1302, "expect Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  expected: Json.decode[Result[Pair, Int]](Json.encode(r)) == Ok(r)\n  actual:   " + __bynkShow((((__s: string): Result<Result<Pair, number>, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Result_Pair_Int(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as Result<Pair, number>);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(globalThis.JSON.stringify(__serialise_Result_Pair_Int(r))))) + " == " + __bynkShow((Ok(r))));
     }
   };

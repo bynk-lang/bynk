@@ -6,14 +6,15 @@ import { YAML_MAX_BYTES, YAML_MAX_DEPTH, __bynkYamlParse } from "../src/yaml.ts"
 
 function ok(text: string): JsonValue {
   const r = __bynkYamlParse(text);
-  assert.equal(r.tag, "Ok", r.tag === "Err" ? `${r.error.kind}: ${r.error.message}` : "");
+  assert.equal(r.tag, "Ok", r.tag === "Err" ? `${r.error.kind.tag}: ${r.error.message}` : "");
   return (r as { value: JsonValue }).value;
 }
 
 function err(text: string): { kind: string; path: string; message: string } {
   const r = __bynkYamlParse(text);
   assert.equal(r.tag, "Err", `expected a refusal, got ${JSON.stringify((r as { value: unknown }).value)}`);
-  return (r as { error: { kind: string; path: string; message: string } }).error;
+  const e = (r as { error: { kind: { tag: string }; path: string; message: string } }).error;
+  return { kind: e.kind.tag, path: e.path, message: e.message };
 }
 
 test("core-schema scalar resolution", () => {

@@ -2,7 +2,7 @@ import type { DurableObjectState } from "./storage.ts";
 import { makeTestState } from "./storage.ts";
 import type { BoundaryError, CallOutcome, JsonValue } from "./boundary.ts";
 import { boundaryError } from "./boundary.ts";
-import { LAYOUT_PER_ENTRY } from "./entries.ts";
+import { LAYOUT_PER_ENTRY, uniqueDuplicates } from "./entries.ts";
 import type { Result } from "./result.ts";
 import { None, Ok } from "./result.ts";
 
@@ -384,6 +384,9 @@ export async function wakeForMigration<S>(
   // The storage layout this build writes. `load` upgrades an older record to it
   // (the lazy upgrade), so a record that woke without a fault is in it afterwards.
   layout: number = LAYOUT_PER_ENTRY,
+  // The class's `@unique(by:)` indexes, as `[map, index]` (#4390): a woken instance reports the values more than one
+  // key holds, which a constraint added to a populated `Map` leaves behind.
+  unique: ReadonlyArray<readonly [string, string]> = [],
 ): Promise<Response> {
   const json = (value: object) =>
     new Response(JSON.stringify(value), {
@@ -411,7 +414,22 @@ export async function wakeForMigration<S>(
     // with no collections has nothing for `load` to write, and the marker is stamped by
     // its commit).
     if (before === null || before < current || layoutBefore !== layout) await commit(state);
-    return json({ before, after: current, layoutBefore, layoutAfter: layout });
+    let duplicates: Awaited<ReturnType<typeof uniqueDuplicates>> = [];
+    if (unique.length > 0) {
+      // Information only (#4390): a report that cannot be read never turns a woken instance into a fault.
+      try {
+        duplicates = await uniqueDuplicates(state as object, unique);
+      } catch {
+        duplicates = [];
+      }
+    }
+    return json({
+      before,
+      after: current,
+      layoutBefore,
+      layoutAfter: layout,
+      ...(duplicates.length > 0 ? { unique: duplicates } : {}),
+    });
   } catch (e) {
     return json({ before, layoutBefore, fault: migrationFaultKind(e) });
   }

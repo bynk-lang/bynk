@@ -1,5 +1,5 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
-import type { DecodeError } from "./errors.ts";
+import type { DecodeError, DecodeErrorKind } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { ContentRange, HttpResult, SseEvent } from "./httpresult.ts";
 
@@ -447,7 +447,7 @@ export async function problemRejection(response: Response): Promise<Response> {
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: string },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -649,7 +649,7 @@ function contentRangeHeader(range: ContentRange): string {
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean; readonly notGet?: string },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -661,9 +661,14 @@ function baseHttpResultToResponse<T>(
   const status = HTTP_STATUS[result.tag];
   // #4389: a range or conditional answer belongs to a `GET`. The compiler refuses one named in a
   // non-`GET` handler's own body; one built in a helper `fn` and returned from such a route is
-  // caught here, as a fault (`500`, logged), never sent.
-  if (opts?.notGet === true && (result.tag === "PartialContent" || result.tag === "NotModified")) {
-    throw new Error(`${result.tag} (${status}) answers a range or conditional read, which only a GET route serves`);
+  // caught here, as a fault (`500`, logged), never sent. `notGet` is the route it was returned
+  // from, `POST /orders`, so the log line names the route to fix (#4467).
+  if (opts?.notGet !== undefined && (result.tag === "PartialContent" || result.tag === "NotModified")) {
+    throw new Error(
+      `${result.tag} (${status}) is a GET answer, but ${opts.notGet} returned it: ` +
+        `a range or conditional read is only served by a GET route, so build it in a GET handler ` +
+        `(a helper fn cannot be checked at compile time)`,
+    );
   }
   switch (result.tag) {
     // 2xx with a body — the serialised value as JSON.
@@ -1845,7 +1850,13 @@ export function formDecode(
       : e.kind === "RefinementViolation"
         ? e.violation.message
         : e.details;
-  return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
+  const kind: DecodeErrorKind =
+    e.kind === "StructuralMismatch"
+      ? { tag: "StructuralMismatch" }
+      : e.kind === "RefinementViolation"
+        ? { tag: "RefinementViolation" }
+        : { tag: "Malformed" };
+  return { tag: "Err", error: { kind, path, message } } as Result<JsonValue, DecodeError>;
 }
 
 /** The JSON a text value of `kind` reads as: an `Int` that is plain digits within the safe-integer

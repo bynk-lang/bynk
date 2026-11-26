@@ -67,7 +67,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_book(request, body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Booking, { notGet: true }), request, ["Bearer realm=\"shop.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Booking, { notGet: "POST /book" }), request, ["Bearer realm=\"shop.api\""])), __security_api);
           }
         }
         {

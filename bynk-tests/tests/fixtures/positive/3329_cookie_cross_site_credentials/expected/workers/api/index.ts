@@ -45,21 +45,21 @@ export default {
           if (method === "POST" && __matchPath("/host", path) !== null) {
             __route = "POST /host";
             const result = await surface.http_POST_host();
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /host" }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/login", path) !== null) {
             __route = "POST /login";
             const result = await surface.http_POST_login();
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /login" }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/plain", path) !== null) {
             __route = "POST /plain";
             const result = await surface.http_POST_plain();
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /plain" }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/host", path) !== null) {

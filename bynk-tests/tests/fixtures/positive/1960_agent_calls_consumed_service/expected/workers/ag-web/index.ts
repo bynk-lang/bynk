@@ -92,7 +92,7 @@ export default {
             const __raw_n = __m.params["n"];
             const n = __raw_n;
             const result = await surface.http_POST_add_Param_n(n);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: true }), request, ["Bynk realm=\"ag.web\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /add/:n" }), request, ["Bynk realm=\"ag.web\""]), __security_api);
           }
         }
         if (__matchPath("/add/:n", path) !== null) {
