@@ -384,12 +384,7 @@ pub(crate) fn emit_service(
             // stays opaque text" precedent this track uses elsewhere, not a
             // gap this slice leaves unclosed.
             ActorSeamIr::Sum(members) => {
-                let who = if matches!(protocol, ProtocolIr::Http) {
-                    http_actor_sum_ts_union(members)
-                } else {
-                    actor_sum_ts_union(members)
-                };
-                append_deps_field(&mut deps_members, "who", who);
+                append_deps_field(&mut deps_members, "who", sum_who_ts_type(protocol, members));
             }
             // I3 (#1971): a `call` sum. `Caller` carries the calling context's
             // name; a foreign caller is its actor alone.
@@ -1354,6 +1349,19 @@ pub(super) fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> b
             })
             .collect(),
     )
+}
+
+/// The `who` type of a sum handler's `deps`: an http sum's `Bearer` members also carry their verified
+/// `claims` (#4344).
+fn sum_who_ts_type(
+    protocol: &ProtocolIr,
+    members: &[bynk_check::actors::SumMember],
+) -> bynk_ts::TsType {
+    if matches!(protocol, ProtocolIr::Http) {
+        http_actor_sum_ts_union(members)
+    } else {
+        actor_sum_ts_union(members)
+    }
 }
 
 /// #4344: an http sum's `who` union, whose `Bearer` members also carry their verified `claims`.

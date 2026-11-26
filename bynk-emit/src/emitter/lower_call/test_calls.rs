@@ -150,6 +150,13 @@ fn test_address(cx: &LowerCtx, e: &Expr) -> Option<HandlerAddress> {
     }
 }
 
+/// #4344: whether `actor` is a `Bearer` arm of the addressed http handler's actor sum, so an in-process
+/// call gives that arm `claims` beside its identity.
+fn is_claims_sum_arm(cx: &LowerCtx, (service, key): (&str, &str), actor: &str) -> bool {
+    matches!(&cx.mode, crate::emitter::ctx::BodyMode::TestCase { sum_handlers, .. }
+        if sum_handlers.contains(&(service.to_string(), ["claimsarm", key, actor].join(":"))))
+}
+
 /// The `deps` argument of an addressed call: the call-site principal folded in, or `deps`.
 fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
     let plain = |value| DepsArg { value, plain: true };
@@ -159,7 +166,7 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
         (Some(actor), identity) if is_sum => {
             // #4344: a `Bearer` arm gets the principal's claims, or none.
             let claims = sum_key
-                .is_some_and(|k| cx.is_claims_sum_arm(service, k, &actor))
+                .is_some_and(|k| is_claims_sum_arm(cx, (service, k), &actor))
                 .then(|| {
                     cx.call_site_claims.clone().unwrap_or_else(|| {
                         call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])

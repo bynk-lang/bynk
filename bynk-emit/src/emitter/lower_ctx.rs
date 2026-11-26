@@ -1044,28 +1044,6 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #4344: whether `actor` is a `Bearer` arm of the addressed http handler's actor sum, so an
-    /// in-process call gives that arm `claims` beside its identity.
-    pub(crate) fn is_claims_sum_arm(&self, service: &str, key: &str, actor: &str) -> bool {
-        match &self.mode {
-            BodyMode::TestCase { sum_handlers, .. } => {
-                sum_handlers.contains(&(service.to_string(), ["claimsarm", key, actor].join(":")))
-            }
-            BodyMode::Method
-            | BodyMode::FreeFn
-            | BodyMode::GivenFn { .. }
-            | BodyMode::StaticInit
-            | BodyMode::Invariant { .. }
-            | BodyMode::Transition { .. }
-            | BodyMode::ServiceHandler { .. }
-            | BodyMode::ProviderOp { .. }
-            | BodyMode::AgentHandler { .. }
-            | BodyMode::WsDoMethod { .. }
-            | BodyMode::PredicateScaffold { .. }
-            | BodyMode::IntegrationCase { .. } => false,
-        }
-    }
-
     /// #2857: whether `?` here fails the case — a test or integration case
     /// body, outside any lambda. A case's function returns a `CaseResult`, so
     /// there is nowhere for an `Err` to propagate to.

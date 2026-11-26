@@ -467,17 +467,7 @@ pub(super) fn emit_system_http_support(
             );
             let is_sum = h.by_clause.as_ref().is_some_and(|by| by.is_sum());
             let (auth_header, signs_claims) = if is_sum {
-                // #4344: a sum with a `Bearer` arm signs the principal's claims into that arm's
-                // token, so its drivers take them (`__claims`) as a lone `Bearer` route's do.
-                let bearer_arm = sum.as_ref().is_some_and(|s| {
-                    s.members
-                        .iter()
-                        .any(|(_, c)| matches!(c, SumCredential::Bearer(_)))
-                });
-                if bearer_arm {
-                    claims.bearer_claim_routes.insert(route_key.clone());
-                }
-                (Vec::new(), bearer_arm)
+                (Vec::new(), sum_signs_claims(&sum, &route_key, &mut claims))
             } else {
                 (auth_header, signs_claims)
             };
@@ -1898,6 +1888,25 @@ fn typed_url(
             _ => id,
         }
     })
+}
+
+/// #4344: whether an actor-sum route's drivers take the principal's claims (`__claims`): when it has a
+/// `Bearer` arm, whose token they are signed into, as a lone `Bearer` route's are. Records the route so
+/// a call passes them.
+fn sum_signs_claims(
+    sum: &Option<SumAuth>,
+    route: &(String, String, String),
+    claims: &mut emitter::ctx::SystemHttpClaims,
+) -> bool {
+    let bearer_arm = sum.as_ref().is_some_and(|s| {
+        s.members
+            .iter()
+            .any(|(_, c)| matches!(c, SumCredential::Bearer(_)))
+    });
+    if bearer_arm {
+        claims.bearer_claim_routes.insert(route.clone());
+    }
+    bearer_arm
 }
 
 #[cfg(test)]

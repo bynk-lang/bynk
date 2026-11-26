@@ -484,6 +484,21 @@ pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     bearer_seam_for(handler, actors)?.binder
 }
 
+impl crate::checker::HandlerBodyCheck<'_> {
+    /// What the handler's `by` clause lets its body read of a verified token: the binder whose
+    /// `.claims` is the token's (#2380, #3937), and the `Bearer` arms of an actor sum, whose pattern
+    /// binds the claims beside the identity (#4344).
+    pub fn with_claims_of(
+        mut self,
+        handler: &Handler,
+        actors: &HashMap<String, ActorDecl>,
+    ) -> Self {
+        self.claims_binder = claims_binder_for(handler, actors);
+        self.bearer_sum_arms = bearer_sum_arms_for(handler, actors);
+        self
+    }
+}
+
 /// #4344: the `Bearer` arms of an HTTP handler's actor sum (`by who: User | Visitor`), whose pattern
 /// may bind the verified token's claims beside the identity, `User(u, c)`. Empty for every other
 /// handler. (`Oidc` is refused in a sum, `bynk.actor.oidc_not_in_sum`.)
