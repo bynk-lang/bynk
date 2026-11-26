@@ -54,6 +54,16 @@ pub struct Scope {
     codes: Vec<String>,
 }
 
+/// The real diagnostic code nearest to a misspelt `code`, when one is close
+/// enough to be a likely slip. The one search `check --fix=<code>` and
+/// `explain` share, so they suggest the same code (#4126, #3537).
+pub fn nearest_code(code: &str) -> Option<&'static str> {
+    bynk_project::paths::did_you_mean(
+        code,
+        bynk_syntax::diagnostics::REGISTRY.iter().map(|d| d.code),
+    )
+}
+
 impl Scope {
     /// Every diagnostic `check` shows.
     pub fn shown() -> Self {
@@ -65,11 +75,7 @@ impl Scope {
     pub fn codes(codes: &[String]) -> Result<Self, String> {
         for code in codes {
             if bynk_syntax::diagnostics::lookup(code).is_none() {
-                let nearest = bynk_project::paths::did_you_mean(
-                    code,
-                    bynk_syntax::diagnostics::REGISTRY.iter().map(|d| d.code),
-                );
-                return Err(match nearest {
+                return Err(match nearest_code(code) {
                     Some(real) => {
                         format!("unknown diagnostic code `{code}`; did you mean `{real}`?")
                     }

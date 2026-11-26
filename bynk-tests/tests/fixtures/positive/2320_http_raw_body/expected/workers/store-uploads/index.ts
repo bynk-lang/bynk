@@ -2,6 +2,7 @@
 // Worker entry point for context `store.uploads`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
@@ -18,184 +19,186 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    const __security_uploads: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "store.uploads");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      const __security_uploads: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "store.uploads");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
+          }
         }
-      }
 
-      {
-        if (method === "POST" && __matchPath("/blob", path) !== null) {
-          __route = "POST /blob";
-          const __contentLength = request.headers.get("content-length");
-          if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+        {
+          if (method === "POST" && __matchPath("/blob", path) !== null) {
+            __route = "POST /blob";
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 8);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const body = __bytes;
+            const result = await surface.http_POST_blob(body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
-          let __bytes: globalThis.Uint8Array | undefined;
-          try {
-            __bytes = await __readBodyCapped(request, 8);
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 8 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const body = __bytes;
-          const result = await surface.http_POST_blob(body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
-      }
-      {
-        if (method === "POST" && __matchPath("/either", path) !== null) {
-          __route = "POST /either";
-          const __contentLength = request.headers.get("content-length");
-          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+        {
+          if (method === "POST" && __matchPath("/either", path) !== null) {
+            __route = "POST /either";
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const result = await surface.http_POST_either(request);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""])), __security_uploads);
           }
-          const result = await surface.http_POST_either(request);
-          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""])), __security_uploads);
         }
-      }
-      {
-        if (method === "POST" && __matchPath("/json", path) !== null) {
-          __route = "POST /json";
-          if (!__jsonMediaTypeMatches(request)) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+        {
+          if (method === "POST" && __matchPath("/json", path) !== null) {
+            __route = "POST /json";
+            if (!__jsonMediaTypeMatches(request)) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 64);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            let __body_json: __JsonValue;
+            try {
+              __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __r_body = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__body_json);
+            if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            const body = __r_body.value;
+            const result = await surface.http_POST_json(body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
-          const __contentLength = request.headers.get("content-length");
-          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          let __bytes: globalThis.Uint8Array | undefined;
-          try {
-            __bytes = await __readBodyCapped(request, 64);
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          let __body_json: __JsonValue;
-          try {
-            __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const __r_body = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$", expected: "base64 string", actual: typeof __v } as __BoundaryError))(__body_json);
-          if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          const body = __r_body.value;
-          const result = await surface.http_POST_json(body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
-      }
-      {
-        if (method === "POST" && __matchPath("/signed", path) !== null) {
-          __route = "POST /signed";
-          if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+        {
+          if (method === "POST" && __matchPath("/signed", path) !== null) {
+            __route = "POST /signed";
+            if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 64);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
+            if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
+            const __ts = request.headers.get("X-Ts");
+            if (__ts === null) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
+            const __ok = await __verifySignatureHmacSha256(__bytes, __secret, request.headers.get("X-Sig"), __ts, 300);
+            if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
+            const body = __bytes;
+            const result = await surface.http_POST_signed(body);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""])), __security_uploads);
           }
-          const __contentLength = request.headers.get("content-length");
-          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          let __bytes: globalThis.Uint8Array | undefined;
-          try {
-            __bytes = await __readBodyCapped(request, 64);
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
-          const __ts = request.headers.get("X-Ts");
-          if (__ts === null) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
-          const __ok = await __verifySignatureHmacSha256(__bytes, __secret, request.headers.get("X-Sig"), __ts, 300);
-          if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
-          const body = __bytes;
-          const result = await surface.http_POST_signed(body);
-          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""])), __security_uploads);
         }
-      }
-      {
-        const __m = __matchPath("/api/:org/:package", path);
-        if (method === "PUT" && __m) {
-          __route = "PUT /api/:org/:package";
-          if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+        {
+          const __m = __matchPath("/api/:org/:package", path);
+          if (method === "PUT" && __m) {
+            __route = "PUT /api/:org/:package";
+            if (__m.malformed) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            if (!__mediaTypeMatches(request, ["application/vnd.bynk.tree-v1"])) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/vnd.bynk.tree-v1" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __contentLength = request.headers.get("content-length");
+            if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const __raw_org = __m.params["org"];
+            const org = __raw_org;
+            const __raw_package = __m.params["package"];
+            const __id_package = __raw_package;
+            let __bytes: globalThis.Uint8Array | undefined;
+            try {
+              __bytes = await __readBodyCapped(request, 64);
+            } catch {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            if (__bytes === undefined) {
+              return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
+            }
+            const body = __bytes;
+            const result = await surface.http_PUT_api_Param_org_Param_package(org, __id_package, body);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
           }
-          if (!__mediaTypeMatches(request, ["application/vnd.bynk.tree-v1"])) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/vnd.bynk.tree-v1" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const __contentLength = request.headers.get("content-length");
-          if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const __raw_org = __m.params["org"];
-          const org = __raw_org;
-          const __raw_package = __m.params["package"];
-          const __id_package = __raw_package;
-          let __bytes: globalThis.Uint8Array | undefined;
-          try {
-            __bytes = await __readBodyCapped(request, 64);
-          } catch {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
-          }
-          const body = __bytes;
-          const result = await surface.http_PUT_api_Param_org_Param_package(org, __id_package, body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
+        if (__matchPath("/api/:org/:package", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
+          return __applySecurityHeaders(__res, __security_uploads);
+        }
+        if (__matchPath("/blob", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_uploads);
+        }
+        if (__matchPath("/either", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_uploads);
+        }
+        if (__matchPath("/json", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_uploads);
+        }
+        if (__matchPath("/signed", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__res, __security_uploads);
+        }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`store.uploads ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("store.uploads", __route);
       }
-      if (__matchPath("/api/:org/:package", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
-        return __applySecurityHeaders(__res, __security_uploads);
-      }
-      if (__matchPath("/blob", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_uploads);
-      }
-      if (__matchPath("/either", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_uploads);
-      }
-      if (__matchPath("/json", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_uploads);
-      }
-      if (__matchPath("/signed", path) !== null) {
-        const __status = method === "OPTIONS" ? 204 : 405;
-        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
-        return __applySecurityHeaders(__res, __security_uploads);
-      }
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      const __busy = __agentBusyResponse(e, __route);
-      if (__busy !== null) return __busy;
-      globalThis.console.error(`store.uploads ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("store.uploads", __route);
-    }
+    });
   },
 };
