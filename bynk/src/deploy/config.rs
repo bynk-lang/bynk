@@ -1693,10 +1693,13 @@ max_batch_size = 10
                 "AE_X",
                 BindingSource::AnalyticsDataset { capability: cap() },
             ),
-            sample("D1_X", BindingSource::D1Database {
+            sample(
+                "D1_X",
+                BindingSource::D1Database {
                     capability: cap(),
                     jurisdiction: None,
-                }),
+                },
+            ),
             sample(
                 "SECRET_X",
                 BindingSource::StoredSecret {

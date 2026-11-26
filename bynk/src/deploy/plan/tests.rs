@@ -758,10 +758,7 @@ fn a_changed_jurisdiction_on_a_provisioned_database_is_refused_not_recreated() {
         None
     );
     assert_eq!(
-        d1_database_problem(
-            &project,
-            LedgerView::of(&DeployLock::default(), "default")
-        ),
+        d1_database_problem(&project, LedgerView::of(&DeployLock::default(), "default")),
         None
     );
 }

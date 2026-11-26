@@ -760,7 +760,10 @@ mod tests {
             },
             &mut out,
         );
-        assert_eq!(out, "d1 create shop-orders (D1_ORDERS) in jurisdiction eu\n");
+        assert_eq!(
+            out,
+            "d1 create shop-orders (D1_ORDERS) in jurisdiction eu\n"
+        );
     }
 
     #[test]

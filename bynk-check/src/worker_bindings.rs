@@ -285,7 +285,9 @@ impl BindingSource {
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
             }
-            Self::D1Database { capability, .. } if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY => {
+            Self::D1Database { capability, .. }
+                if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY =>
+            {
                 "the implicit idempotency database of a Worker that calls `Idempotency.claim`"
                     .to_string()
             }

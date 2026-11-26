@@ -442,19 +442,19 @@ mod tests {
                 "d1 migrations apply DB --remote --env staging",
             ),
             (
-                    Op::D1Create {
-                        name: "db",
-                        jurisdiction: None,
-                    },
-                    "d1 create db",
-                ),
-                (
-                    Op::D1Create {
-                        name: "db",
-                        jurisdiction: Some("eu"),
-                    },
-                    "d1 create db --jurisdiction eu",
-                ),
+                Op::D1Create {
+                    name: "db",
+                    jurisdiction: None,
+                },
+                "d1 create db",
+            ),
+            (
+                Op::D1Create {
+                    name: "db",
+                    jurisdiction: Some("eu"),
+                },
+                "d1 create db --jurisdiction eu",
+            ),
             (Op::D1List, "d1 list --json"),
             (
                 Op::R2Create {
