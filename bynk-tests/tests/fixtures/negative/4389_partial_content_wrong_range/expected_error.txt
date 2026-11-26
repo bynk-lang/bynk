@@ -1,0 +1,1 @@
+bynk.types.argument_mismatch `HttpResult.PartialContent` expects a `ContentRange`, but got `String`

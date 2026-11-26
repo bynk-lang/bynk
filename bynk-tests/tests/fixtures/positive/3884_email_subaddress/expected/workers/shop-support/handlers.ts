@@ -2,7 +2,7 @@
 // context shop.support
 
 import { EmailVerdict, InboundEmail } from "../../bynk/cloudflare.js";
-import { __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail } from "../../bynk/cloudflare.js";
+import { __serialise_EmailHeader, __deserialise_EmailHeader, __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail } from "../../bynk/cloudflare.js";
 
 export { type InboundEmail };
 
@@ -33,4 +33,4 @@ export const rest = {
   },
 };
 
-export { __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail };
+export { __serialise_EmailHeader, __deserialise_EmailHeader, __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail };

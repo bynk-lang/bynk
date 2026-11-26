@@ -1,6 +1,7 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
+	exports opaque { Secret }
 	exports transparent {
 		Uuid,
 		CronSchedule,
@@ -14,6 +15,7 @@ adapter bynk {
 		Cookie,
 		SameSite,
 		SseEvent,
+		ContentRange,
 		FetchOptions,
 		ParOptions,
 		Redirect,
@@ -25,6 +27,16 @@ adapter bynk {
 		Claim,
 		EventEnvelope,
 	}
+
+	---
+	A secret read from the platform's secret store. It cannot leak by accident: it
+	has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+	(comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+	never stored, sent, encoded or returned across a boundary
+	(`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+	text, and `matches(candidate)` the constant-time comparison.
+	---
+	type Secret = opaque String
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -274,6 +286,20 @@ adapter bynk {
 	}
 
 	---
+	The part of a representation a `PartialContent(...)` response carries, as the
+	`Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+	bytes in all (`None` when the total is not known, written `*`). `start` is at
+	least 0 and at most `end`, and `end` is below `total` when there is one: a
+	response whose range breaks this faults, so a malformed `Content-Range` is
+	never sent.
+	---
+	type ContentRange = {
+		start: Int,
+		end: Int,
+		total: Option[Int] = None,
+	}
+
+	---
 	An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
 	and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
 	single-pass: a second read faults. A network failure partway through the
@@ -399,7 +425,7 @@ adapter bynk {
 	Reads named secrets from the platform's secret store.
 	---
 	capability Secrets {
-		fn get(name: String) -> Effect[Option[String]]
+		fn get(name: String) -> Effect[Option[Secret]]
 	}
 
 	---

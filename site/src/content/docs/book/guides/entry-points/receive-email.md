@@ -128,6 +128,27 @@ service support from email("support@shop.example") {
 
 A queue message is at most 128 KB, so put the parsed fields on the queue, not the attachments.
 
+## Thread a conversation
+
+`inReplyTo` and `references` are the message ids the sender says this message answers, as
+`messageId` is written, so a handler groups a conversation without parsing `headers`:
+
+```bynk,ignore
+on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Tickets {
+    // The message this one answers: look its id up among the ids of the tickets you have
+    // seen, as `mail.messageId` of an earlier message is written the same way.
+    match mail.inReplyTo {
+      Some(parent) => …
+      None => …
+    }
+}
+```
+
+`replyTo` says where to answer when it is not `from`, `cc` who else received the message and
+`date` when the sender wrote it, all as the sender claims: a `Date` is often malformed (`None`) and is
+not the arrival time. `headerList` has every header occurrence in order, for the ones that repeat,
+such as `Received`. A `Reply` verdict still extends the incoming chain for you.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The

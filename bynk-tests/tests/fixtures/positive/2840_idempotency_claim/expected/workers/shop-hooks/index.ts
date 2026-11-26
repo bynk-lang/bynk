@@ -71,7 +71,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_flaky_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.hooks\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.hooks\""]), __security_api);
           }
         }
         {
@@ -84,7 +84,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_hooks_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.hooks\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.hooks\""]), __security_api);
           }
         }
         {
@@ -97,7 +97,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_receipt_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.hooks\""]), __security_skew);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.hooks\""]), __security_skew);
           }
         }
         {
@@ -110,7 +110,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_replay_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.hooks\""]), __security_replay);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.hooks\""]), __security_replay);
           }
         }
         {
@@ -125,7 +125,7 @@ export default {
             const __raw_mode = __m.params["mode"];
             const mode = __raw_mode;
             const result = await surface.http_POST_skew_Param_id_Param_mode(id, mode);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.hooks\""]), __security_skew);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.hooks\""]), __security_skew);
           }
         }
         if (__matchPath("/flaky/:id", path) !== null) {

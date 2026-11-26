@@ -3869,13 +3869,7 @@ fn check_service_decls(
             };
             // The firing `connection` of `on message`/`on close` is borrowed, not
             // owned — no disposal obligation (contrast `on open`, owned).
-            let borrowed_held: std::collections::HashSet<String> = if is_ws_lifecycle
-                && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close)
-            {
-                std::iter::once("connection".to_string()).collect()
-            } else {
-                std::collections::HashSet::new()
-            };
+            let borrowed_held = borrowed_connection(handler, is_ws_lifecycle);
             checker::check_handler_body(
                 resolved,
                 checker::HandlerBodyCheck {
@@ -3888,6 +3882,7 @@ fn check_service_decls(
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
+                    http_non_get: is_non_get_http(handler),
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,
@@ -6260,6 +6255,23 @@ fn reserved_route_char(
     true
 }
 
+/// The `connection` a `from websocket` `on message`/`on close` handler borrows (not owned, so no disposal obligation).
+fn borrowed_connection(
+    handler: &Handler,
+    is_ws_lifecycle: bool,
+) -> std::collections::HashSet<String> {
+    if is_ws_lifecycle && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close) {
+        std::iter::once("connection".to_string()).collect()
+    } else {
+        std::collections::HashSet::new()
+    }
+}
+
+/// #4389: whether `handler` is an `on http` handler of a method other than `GET`.
+fn is_non_get_http(handler: &Handler) -> bool {
+    matches!(&handler.kind, HandlerKind::Http { method, .. } if *method != HttpMethod::Get)
+}
+
 /// Validate an `on http METHOD "path"` handler (v0.9 §4.1):
 ///
 /// - Path must start with `/`, must not be `/_bynk/...` (reserved).
@@ -7349,6 +7361,41 @@ pub fn is_std_bynk_type(
     decl: &TypeDecl,
 ) -> bool {
     types.get(name).is_some_and(|d| d.span == decl.span)
+        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+}
+
+/// #4111: `bynk.types.secret_at_boundary` for a `Secret` written at `span` in `what`.
+fn secret_at_boundary_error(span: Span, what: &str) -> CompileError {
+    CompileError::new(
+        "bynk.types.secret_at_boundary",
+        span,
+        format!(
+            "a `Secret` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
+        ),
+    )
+    .with_note(
+        "read the text with `reveal()` where it is used, or keep it in `Secrets` and read it again where it is needed",
+    )
+}
+
+/// #4111: whether `name`, in the project's type table, is the `Secret` type `bynk` exports,
+/// found by its declaration's first-party span, whatever it is spelled here (as `is_crypto_key_type` finds a key), so a
+/// user type that happens to be called `Secret` is not mistaken for it.
+pub fn is_secret_type(
+    name: &str,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    // By declaration, not spelling: `consumes bynk { Secret as Token }` keys the table by `Token`.
+    types.get(name).is_some_and(|decl| is_secret_decl(decl))
+}
+
+/// #4111: whether `decl` is the `Secret` declaration `bynk` itself ships, which the emitter
+/// builds as a runtime `BynkSecret` rather than a branded string.
+pub fn is_secret_decl(decl: &TypeDecl) -> bool {
+    // The one opaque type `bynk` declares, found by where it is declared and not by what it is
+    // called here: `consumes bynk { Secret as Token }` renames it.
+    matches!(decl.body, bynk_syntax::ast::TypeBody::Opaque { .. })
         && crate::firstparty::unit(bynk_std::BYNK_UNIT)
             .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
@@ -8448,6 +8495,13 @@ pub fn reject_fn_types(
                     "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey` / `Crypto.importVerifyKey`)",
                 ),
             );
+        }
+        // #4111: a `Secret` has no codec, so it is neither storable nor boundary-crossing:
+        // it would leak the value into storage, a wire body or a log. A capability
+        // operation is where one is returned (`Secrets.get`), in-process, so its signature
+        // is exempt.
+        TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
+            errors.push(secret_at_boundary_error(id.span, what));
         }
         // #3343: a record with `@name` fields is read off an HTTP request by name,
         // so its JSON form is not its wire form: it may not be a body, a result,

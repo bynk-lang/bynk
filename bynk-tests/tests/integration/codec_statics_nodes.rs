@@ -44,9 +44,9 @@ fn function<'a>(text: &'a str, name: &str) -> &'a str {
 
 /// The tail every typed decoder ends with: `Ok`, else the error mapped to `kind`/`path`/`message`
 /// (ADR 0047). Pinned once, so a change to the `path` rule or to a message arm is a failure here.
-const TAIL: &str = "    const __be = __r.error;\n    return Err({ kind: __be.kind, path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", message: __be.kind === \"StructuralMismatch\" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details });\n  })(s);\n}";
+const TAIL: &str = "    const __be = __r.error;\n    return Err({ kind: { tag: __be.kind === \"StructuralMismatch\" ? \"StructuralMismatch\" : __be.kind === \"RefinementViolation\" ? \"RefinementViolation\" : \"Malformed\" }, path: (__be.kind === \"StructuralMismatch\" || __be.kind === \"RefinementViolation\") ? __be.path : \"$\", message: __be.kind === \"StructuralMismatch\" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === \"RefinementViolation\" ? __be.violation.message : __be.details });\n  })(s);\n}";
 
-const JSON_PARSE: &str = "    let __j: __JsonValue;\n    try {\n      __j = globalThis.JSON.parse(__s) as __JsonValue;\n    } catch (__e) {\n      return Err({ kind: \"Malformed\", path: \"$\", message: String(__e) });\n    }\n";
+const JSON_PARSE: &str = "    let __j: __JsonValue;\n    try {\n      __j = globalThis.JSON.parse(__s) as __JsonValue;\n    } catch (__e) {\n      return Err({ kind: { tag: \"Malformed\" }, path: \"$\", message: String(__e) });\n    }\n";
 
 /// The decoder of `fn_name` for result type `ty`, in full: parse step `parse`, row pass `pass`,
 /// the codec call `des`.

@@ -726,7 +726,7 @@ became the error of every decoder (ADR 0047 is amended); `JsonError` remains a
 reserved, deprecated spelling of the same type, and a use of it is the warning
 `bynk.types.deprecated_json_error` with a machine-applicable fix.
 
-```bynk
+```bynk,fragment
 commons store {
 	type Item = {
 		sku: String,
@@ -745,7 +745,7 @@ commons store {
 	fn restoreError(s: String) -> String {
 		match Json.decode[Item](s) {
 			Ok(i) => i.sku,
-			Err(e) => e.kind.concat(" at ").concat(e.path),
+			Err(e) => "\(e.kind) at \(e.path)",
 		}
 	}
 }

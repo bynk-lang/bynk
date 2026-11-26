@@ -1909,33 +1909,46 @@ fn lint_cookie_literal(arg: &Expr, ctx: &mut Ctx) {
 /// embedded source. A system suite sees only the types of the context it
 /// tests, so this is how `HttpResult.cookies()` still names `Cookie` there.
 fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
+    std_decl("Cookie")
+}
+
+/// A record of the `bynk` adapter by name, from its embedded source (parsed once).
+pub(crate) fn std_decl(name: &str) -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
     use bynk_syntax::ast::{CommonsItem, SourceUnit};
-    static COOKIE: std::sync::OnceLock<Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>>> =
-        std::sync::OnceLock::new();
-    COOKIE
+    type Decls = Vec<std::sync::Arc<bynk_syntax::ast::TypeDecl>>;
+    static TYPES: std::sync::OnceLock<Decls> = std::sync::OnceLock::new();
+    TYPES
         .get_or_init(|| {
-            let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
-            let file = crate::project_model::firstparty_file_id(unit);
-            let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
-            let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
-                + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
-            let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
-                &tokens,
-                unit.source,
-                &mut next_id,
-            )
-            .ok()?;
-            let SourceUnit::Adapter(a) = &parsed else {
-                return None;
+            let parsed_types = || -> Option<Decls> {
+                let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+                let file = crate::project_model::firstparty_file_id(unit);
+                let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
+                let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+                    + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+                let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
+                    &tokens,
+                    unit.source,
+                    &mut next_id,
+                )
+                .ok()?;
+                let SourceUnit::Adapter(a) = &parsed else {
+                    return None;
+                };
+                Some(
+                    a.items
+                        .iter()
+                        .filter_map(|i| match i {
+                            CommonsItem::Type(t) => Some(std::sync::Arc::new(t.clone())),
+                            _ => None,
+                        })
+                        .collect(),
+                )
             };
-            a.items.iter().find_map(|i| match i {
-                CommonsItem::Type(t) if t.name.name == "Cookie" => {
-                    Some(std::sync::Arc::new(t.clone()))
-                }
-                _ => None,
-            })
+            parsed_types().unwrap_or_default()
         })
-        .clone()
+        .iter()
+        .find(|t| t.name.name == name)
+        .cloned()
 }
 
 /// #3386: the `SignedCookie` actor `name` declared in this context, if it is one.
@@ -2606,6 +2619,58 @@ pub(crate) fn check_token_claims_method(
         ctx,
     );
     Some(tys.intern(ret))
+}
+
+/// #4111: type a method on a `Secret`. `reveal()` hands the text back as a `String`, which
+/// is the one deliberate exit; `matches(candidate)` compares in constant time and answers a
+/// `Bool`. A `Secret` has nothing else, so any other spelling is a missing method.
+pub(crate) fn check_secret_method(
+    method: &Ident,
+    op: Option<SecretOp>,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let Some(op) = op else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "`Secret` has no method `{}` — it has `reveal()` and `matches(candidate)`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let expected_args = usize::from(op == SecretOp::Matches);
+    if args.len() != expected_args {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Secret.{}` takes {expected_args} argument{}, got {}",
+                method.name,
+                if expected_args == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(a) = args.first() {
+        check_arg(a, string, "the `Secret.matches` candidate", ctx);
+    }
+    Some(match op {
+        SecretOp::Reveal => string,
+        SecretOp::Matches => tys.intern(Ty::Base(BaseType::Bool)),
+    })
 }
 
 /// v0.22a: type a built-in `String` kernel method (ADR 0046). `String` is

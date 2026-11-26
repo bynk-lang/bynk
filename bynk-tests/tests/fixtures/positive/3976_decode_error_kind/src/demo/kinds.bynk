@@ -1,0 +1,54 @@
+commons demo.kinds
+
+type Qty = Int where Positive
+
+type Line = { sku: String, qty: Qty }
+
+type Flags = { a: String }
+
+fn explain(e: DecodeError) -> String {
+  match e.kind {
+    Malformed => "not JSON",
+    RefinementViolation => "invalid value at \(e.path)",
+    _ => "\(e.path): \(e.message)",
+  }
+}
+
+fn name(e: DecodeError) -> String { "\(e.kind)" }
+
+fn rank(k: DecodeErrorKind) -> Int {
+  match k {
+    Malformed => 0,
+    StructuralMismatch => 1,
+    RefinementViolation => 2,
+    UnsupportedAnchor => 3,
+    UnsupportedAlias => 4,
+    UnsupportedMergeKey => 5,
+    UnsupportedTag => 6,
+    MultipleDocuments => 7,
+    UnsupportedSyntax => 8,
+    UnsupportedValue => 9,
+    DuplicateKey => 10,
+    LimitExceeded => 11,
+  }
+}
+
+fn fromJson(s: String) -> Result[Line, DecodeError] { Json.decode[Line](s) }
+
+fn fromYaml(s: String) -> Result[Flags, DecodeError] { Yaml.decode[Flags](s) }
+
+fn fromForm(s: String) -> Result[Line, DecodeError] { Form.decode[Line](s) }
+
+fn kindOf(r: Result[Line, DecodeError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => name(e),
+  }
+}
+
+fn yamlKindOf(s: String) -> String {
+  match fromYaml(s) {
+    Ok(_) => "ok",
+    Err(e) => name(e),
+  }
+}

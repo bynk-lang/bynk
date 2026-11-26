@@ -48,7 +48,7 @@ export default {
               return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
             }
             const result = await surface.http_POST_ingest(request);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"api\"", "Bynk-Signature realm=\"api\", header=\"X-Signature\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bearer realm=\"api\"", "Bynk-Signature realm=\"api\", header=\"X-Signature\""])), __security_api);
           }
         }
         if (__matchPath("/ingest", path) !== null) {

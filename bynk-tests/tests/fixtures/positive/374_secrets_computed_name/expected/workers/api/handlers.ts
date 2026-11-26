@@ -12,14 +12,14 @@ export const api = {
     switch (chosen.tag) {
       case "Some": {
         const s = chosen.value;
-        return HttpResult.Ok(s);
+        return HttpResult.Ok(s.reveal());
       }
       case "None": {
         return ((__d) => {
           switch (__d.tag) {
             case "Some": {
               const k = __d.value;
-              return HttpResult.Ok(k);
+              return HttpResult.Ok(k.reveal());
             }
             case "None": {
               return HttpResult.Ok("none");

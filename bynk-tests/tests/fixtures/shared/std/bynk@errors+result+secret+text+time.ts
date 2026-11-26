@@ -2,11 +2,31 @@
 // adapter bynk
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __BynkSecret, __bynkSecret } from "./__bynk_runtime/secret.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
 import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
+
+/**
+ * A secret read from the platform's secret store. It cannot leak by accident: it
+ * has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+ * (comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+ * never stored, sent, encoded or returned across a boundary
+ * (`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+ * text, and `matches(candidate)` the constant-time comparison.
+ */
+export type Secret = __BynkSecret & { readonly __brand: "Secret" };
+
+export const Secret = {
+  of(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+  unsafe(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+};
 
 /**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -389,6 +409,23 @@ export const SseEvent = {
 };
 
 /**
+ * The part of a representation a `PartialContent(...)` response carries, as the
+ * `Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
+ * bytes in all (`None` when the total is not known, written `*`). `start` is at
+ * least 0 and at most `end`, and `end` is below `total` when there is one: a
+ * response whose range breaks this faults, so a malformed `Content-Range` is
+ * never sent.
+ */
+export interface ContentRange {
+  readonly start: number;
+  readonly end: number;
+  readonly total: Option<number>;
+}
+
+export const ContentRange = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -527,7 +564,7 @@ export const __FetchToken: symbol = globalThis.Symbol("Fetch");
  * Reads named secrets from the platform's secret store.
  */
 export interface Secrets {
-  get(name: string): globalThis.Promise<Option<string>>;
+  get(name: string): globalThis.Promise<Option<Secret>>;
 }
 
 export const __SecretsToken: symbol = globalThis.Symbol("Secrets");

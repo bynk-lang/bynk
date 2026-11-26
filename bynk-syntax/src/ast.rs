@@ -2666,6 +2666,10 @@ pub enum HttpVariantPayload {
     /// `RawStreamed` (200) variant (K-streams, #2623). Its status is sent
     /// before the first chunk, so a fault mid-body aborts the response.
     RawStreamed,
+    /// Carries `(body: Stream[Bytes], contentType: String, range: ContentRange)` — a
+    /// raw body streamed as a `206 Partial Content` answer, with the `Content-Range`
+    /// its `range` states (#4389). `PartialContent`; `GET` routes only.
+    Partial,
     /// Carries `(status: ErrorStatus, body: Bytes, contentType: String)` — an
     /// error status the author chooses, with an author-owned body and no codec
     /// (#2341, L4). The `RawError` variant; `status` is one of the vocabulary's
@@ -2749,6 +2753,14 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         payload: HttpVariantPayload::None,
         status: 204,
     },
+    // #4389: a `Stream[Bytes]` body answering a range request, with the
+    // `Content-Range` its `ContentRange` states. A `GET` answer only, and
+    // sent as 206 before the body, like `RawStreamed`.
+    HttpVariant {
+        name: "PartialContent",
+        payload: HttpVariantPayload::Partial,
+        status: 206,
+    },
     // ── 3xx redirection (carry a `Location` URL) ─────────────────────────
     HttpVariant {
         name: "MovedPermanently",
@@ -2764,6 +2776,13 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         name: "SeeOther",
         payload: HttpVariantPayload::Location,
         status: 303,
+    },
+    // #4389: a conditional answer the handler works out itself (an object store's
+    // own `If-None-Match`), bodyless. The router's own `304` is separate.
+    HttpVariant {
+        name: "NotModified",
+        payload: HttpVariantPayload::None,
+        status: 304,
     },
     HttpVariant {
         name: "TemporaryRedirect",

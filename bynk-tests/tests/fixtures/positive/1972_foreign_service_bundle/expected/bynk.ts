@@ -1,1 +1,1 @@
-<<bynk-shared: std/bynk.ts#errors+result+text+time>>
+<<bynk-shared: std/bynk.ts#errors+result+secret+text+time>>

@@ -1,0 +1,11 @@
+context vault
+
+consumes bynk { Secret }
+
+type Inner = {
+    key: Secret,
+}
+
+type Outer = {
+    inner: Inner,
+}

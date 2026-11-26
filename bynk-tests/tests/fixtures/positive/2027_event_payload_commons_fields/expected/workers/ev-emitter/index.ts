@@ -43,7 +43,7 @@ export default {
           if (method === "POST" && __matchPath("/ping", path) !== null) {
             __route = "POST /ping";
             const result = await surface.http_POST_ping();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"ev.emitter\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"ev.emitter\""]), __security_api);
           }
         }
         if (__matchPath("/ping", path) !== null) {

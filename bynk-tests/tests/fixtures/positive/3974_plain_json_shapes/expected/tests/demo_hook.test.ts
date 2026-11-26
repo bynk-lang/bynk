@@ -44,12 +44,12 @@ async function test_a_webhook_body_decodes_into_typed_values() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(body)));
     return { pass: true };
   } catch (e) {
@@ -76,24 +76,24 @@ async function test_the_tagged_forms_still_decode__and_win() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(body), Ok({ action: Action.Closed, labels: new globalThis.Map(new globalThis.Map<string, string>()).set("bug", "red"), created_at: 1795341600000, wait: 2000 })))) {
       throw __bynkExpectFailure("tests/demo/hook.bynk:21:10", 802, 983, "expect Json.decode[Hook](body) == Ok(Hook { action: Closed, labels: Map.empty().insert(\"bug\", \"red\"), created_at: Instant.fromEpochMillis(1_795_341_600_000), wait: Duration.millis(2000) })\n  expected: Json.decode[Hook](body) == Ok(Hook { action: Closed, labels: Map.empty().insert(\"bug\", \"red\"), created_at: Instant.fromEpochMillis(1_795_341_600_000), wait: Duration.millis(2000) })\n  actual:   " + __bynkShow((((__s: string): Result<__ns_demo_hook.Hook, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Hook(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(body))) + " == " + __bynkShow((Ok({ action: Action.Closed, labels: new globalThis.Map(new globalThis.Map<string, string>()).set("bug", "red"), created_at: 1795341600000, wait: 2000 }))));
     }
     return { pass: true };
@@ -121,24 +121,24 @@ async function test_plain_mode_writes_the_external_shapes_and_decodes_back() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(plain(sample())), Ok(sample())))) {
       throw __bynkExpectFailure("tests/demo/hook.bynk:26:10", 1217, 1267, "expect Json.decode[Hook](plain(sample())) == Ok(sample())\n  expected: Json.decode[Hook](plain(sample())) == Ok(sample())\n  actual:   " + __bynkShow((((__s: string): Result<__ns_demo_hook.Hook, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Hook(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(plain(sample())))) + " == " + __bynkShow((Ok(sample()))));
     }
     return { pass: true };
@@ -186,12 +186,12 @@ async function test_a_timestamp_needs_an_offset_and_a_real_date() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(no_offset).tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:35:10", 1641, 1677, "expect Json.decode[Hook](no_offset).isErr()"); }
     const bad_date = "{\"action\":\"Opened\",\"labels\":{},\"created_at\":\"2026-02-30T10:00:00Z\",\"wait\":0}";
     if (!((((__s: string): Result<__ns_demo_hook.Hook, DecodeError> => {
@@ -199,12 +199,12 @@ async function test_a_timestamp_needs_an_offset_and_a_real_date() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(bad_date).tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:37:10", 1795, 1830, "expect Json.decode[Hook](bad_date).isErr()"); }
     return { pass: true };
   } catch (e) {
@@ -231,12 +231,12 @@ async function test_an_unknown_variant_name_is_refused() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Hook(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Hook);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })(body).tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:42:10", 1966, 1997, "expect Json.decode[Hook](body).isErr()"); }
     return { pass: true };
   } catch (e) {
@@ -283,36 +283,36 @@ async function test_a_sum_with_a_payload_variant_keeps_its_object_form() {
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Shape(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Shape);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("\"Dot\"").tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:47:10", 2147, 2184, "expect Json.decode[Shape](\"\\\"Dot\\\"\").isErr()"); }
     if (!(__bynkEq(((__s: string): Result<__ns_demo_hook.Shape, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Shape(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Shape);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("{\"kind\":\"Dot\"}"), Ok(Shape.Dot)))) {
       throw __bynkExpectFailure("tests/demo/hook.bynk:48:10", 2194, 2245, "expect Json.decode[Shape](\"{\\\"kind\\\":\\\"Dot\\\"}\") == Ok(Dot)\n  expected: Json.decode[Shape](\"{\\\"kind\\\":\\\"Dot\\\"}\") == Ok(Dot)\n  actual:   " + __bynkShow((((__s: string): Result<__ns_demo_hook.Shape, DecodeError> => {
         let __j: __JsonValue;
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_Shape(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Shape);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })("{\"kind\":\"Dot\"}"))) + " == " + __bynkShow((Ok(Shape.Dot))));
     }
     return { pass: true };
@@ -339,36 +339,36 @@ async function test_a_refined_String_key_is_checked__and_another_key_type_keeps_
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Keyed(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Keyed);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("{\"by_slug\":{\"ab\":1},\"by_id\":[[1,\"x\"]]}").tag === "Ok"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:52:10", 2333, 2408, "expect Json.decode[Keyed](\"{\\\"by_slug\\\":{\\\"ab\\\":1},\\\"by_id\\\":[[1,\\\"x\\\"]]}\").isOk()"); }
     if (!((((__s: string): Result<__ns_demo_hook.Keyed, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Keyed(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Keyed);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("{\"by_slug\":{\"a\":1},\"by_id\":[]}").tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:53:10", 2418, 2484, "expect Json.decode[Keyed](\"{\\\"by_slug\\\":{\\\"a\\\":1},\\\"by_id\\\":[]}\").isErr()"); }
     if (!((((__s: string): Result<__ns_demo_hook.Keyed, DecodeError> => {
       let __j: __JsonValue;
       try {
         __j = globalThis.JSON.parse(__s) as __JsonValue;
       } catch (__e) {
-        return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
       }
       const __r = __deserialise_Keyed(__j, "$");
       if (__r.tag === "Ok") return Ok(__r.value as __ns_demo_hook.Keyed);
       const __be = __r.error;
-      return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
     })("{\"by_slug\":{},\"by_id\":{\"1\":\"x\"}}").tag === "Err"))) { throw __bynkExpectFailure("tests/demo/hook.bynk:54:10", 2494, 2564, "expect Json.decode[Keyed](\"{\\\"by_slug\\\":{},\\\"by_id\\\":{\\\"1\\\":\\\"x\\\"}}\").isErr()"); }
     return { pass: true };
   } catch (e) {

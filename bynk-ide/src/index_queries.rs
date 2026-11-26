@@ -60,7 +60,13 @@ pub fn prepare_rename<'a>(
     path: &Path,
     offset: usize,
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
-    index.symbol_at(path, offset)
+    // #4183: a unit is indexed (hover, definition, references, tokens), but
+    // renaming one is a separate step: it changes a dotted name wherever it is
+    // written, and the file layout that names it, so it is refused here until
+    // it is planned as one.
+    index
+        .symbol_at(path, offset)
+        .filter(|(key, _)| key.kind != SymbolKind::Unit)
 }
 
 /// v0.26 rider (ADR 0055): `workspace/symbol` — every index definition whose
@@ -182,6 +188,10 @@ pub fn prepare_call_hierarchy<'a>(
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
     // #3582: also a service handler's `on` keyword.
     let (key, _) = index.call_symbol_at(path, offset)?;
+    // #4183: a unit is indexed now, but it is not something that is called.
+    if key.kind == SymbolKind::Unit {
+        return None;
+    }
     Some((key, index.symbols.get(key)?.def.as_ref()?))
 }
 
@@ -1042,12 +1052,15 @@ pub fn plan_rename(
     new_name: &str,
 ) -> Result<RenamePlan, String> {
     validate_new_name(new_name)?;
-    let (key, _) = index.symbol_at(path, offset).ok_or_else(|| {
-        "no renameable symbol at the cursor — types, fns, methods, record fields, \
-         capability ops, capabilities, services, agents and providers rename; \
-         local bindings and unit names are not yet supported"
-            .to_string()
-    })?;
+    let (key, _) = index
+        .symbol_at(path, offset)
+        .filter(|(key, _)| key.kind != SymbolKind::Unit)
+        .ok_or_else(|| {
+            "no renameable symbol at the cursor — types, fns, methods, record fields, \
+             capability ops, capabilities, services, agents and providers rename; \
+             local bindings and unit names are not yet supported"
+                .to_string()
+        })?;
     if key_segment(&key.name) == new_name {
         return Err(format!("`{new_name}` is already the symbol's name"));
     }
@@ -1249,9 +1262,45 @@ pub fn narrow_qualified_edits(
         for s in spans.iter_mut() {
             *s = narrow_qualified_span(text, *s, &old);
         }
+        // #4455: a site written under another spelling of the declaration (`S` of
+        // `uses lib.y { Status as S }`) is the unit's own name for it, which a rename of the
+        // declaration leaves alone.
+        spans.retain(|s| !is_other_spelling(text, *s, &old));
         spans.sort();
         spans.dedup();
     }
+}
+
+/// #4455: why a rename started at `offset` is refused, when the cursor is on a use of a
+/// declaration under another name (`S` of `uses lib.y { Status as S }`), or `None`. Such a rename
+/// would rename the declaration in its commons while leaving the spot the user is on, which is not
+/// what they asked for, and a rename of the alias itself is not a rename of the declaration.
+pub fn alias_rename_refusal(
+    index: &ProjectIndex,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+    path: &Path,
+    offset: usize,
+) -> Option<String> {
+    let (key, site) = index.symbol_at(path, offset)?;
+    let text = snapshots.get(path)?;
+    let name = key_segment(&key.name);
+    let span = narrow_qualified_span(text, site.span, name);
+    is_other_spelling(text, span, name).then(|| {
+        let written = &text[span.start..span.end];
+        format!(
+            "`{written}` is `{name}` under another name (an alias in a `uses` list): rename `{name}` at its declaration, or edit the alias by hand"
+        )
+    })
+}
+
+/// Whether `span` of `text` is a plain identifier other than `name`: a declaration written under
+/// an alias, not `name` itself or `name` after a qualifier.
+fn is_other_spelling(text: &str, span: Span, name: &str) -> bool {
+    text.get(span.start..span.end).is_some_and(|written| {
+        written != name
+            && !written.is_empty()
+            && written.chars().all(|c| c.is_alphanumeric() || c == '_')
+    })
 }
 
 /// #4352: `span` of `text`, narrowed to the segment after the last dot when it is `name` written

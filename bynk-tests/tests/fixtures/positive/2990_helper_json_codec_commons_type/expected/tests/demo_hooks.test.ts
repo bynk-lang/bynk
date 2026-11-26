@@ -33,12 +33,12 @@ async function test_a_helper_encodes_a_commons_record() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(s);
     }
     if (!(enc({ login: "x", kind: "User" }) === "{\"login\":\"x\",\"kind\":\"User\"}")) { throw __bynkExpectFailure("tests/demo/hooks.bynk:18:9", 407, 489, "expect enc(UserRef { login: \"x\", kind: \"User\" }) == \"{\\\"login\\\":\\\"x\\\",\\\"kind\\\":\\\"User\\\"}\"\n  expected: enc(UserRef { login: \"x\", kind: \"User\" }) == \"{\\\"login\\\":\\\"x\\\",\\\"kind\\\":\\\"User\\\"}\"\n  actual:   " + __bynkShow((enc({ login: "x", kind: "User" }))) + " == " + __bynkShow(("{\"login\":\"x\",\"kind\":\"User\"}"))); }
@@ -71,12 +71,12 @@ async function test_a_helper_encodes_a_list_of_commons_records() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(s);
     }
     if (!(encAll([{ id: 1 }]) === "[{\"id\":1}]")) { throw __bynkExpectFailure("tests/demo/hooks.bynk:22:9", 553, 598, "expect encAll([Payload { id: 1 }]) == \"[{\\\"id\\\":1}]\"\n  expected: encAll([Payload { id: 1 }]) == \"[{\\\"id\\\":1}]\"\n  actual:   " + __bynkShow((encAll([{ id: 1 }]))) + " == " + __bynkShow(("[{\"id\":1}]"))); }
@@ -109,12 +109,12 @@ async function test_a_helper_decodes_a_commons_record() {
         try {
           __j = globalThis.JSON.parse(__s) as __JsonValue;
         } catch (__e) {
-          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+          return Err({ kind: { tag: "Malformed" }, path: "$", message: String(__e) });
         }
         const __r = __deserialise_UserRef(__j, "$");
         if (__r.tag === "Ok") return Ok(__r.value as UserRef);
         const __be = __r.error;
-        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+        return Err({ kind: { tag: __be.kind === "StructuralMismatch" ? "StructuralMismatch" : __be.kind === "RefinementViolation" ? "RefinementViolation" : "Malformed" }, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
       })(s);
     }
     if (!(__bynkEq(dec("{\"login\":\"x\",\"kind\":\"User\"}"), Ok({ login: "x", kind: "User" })))) { throw __bynkExpectFailure("tests/demo/hooks.bynk:26:9", 653, 739, "expect dec(\"{\\\"login\\\":\\\"x\\\",\\\"kind\\\":\\\"User\\\"}\") == Ok(UserRef { login: \"x\", kind: \"User\" })\n  expected: dec(\"{\\\"login\\\":\\\"x\\\",\\\"kind\\\":\\\"User\\\"}\") == Ok(UserRef { login: \"x\", kind: \"User\" })\n  actual:   " + __bynkShow((dec("{\"login\":\"x\",\"kind\":\"User\"}"))) + " == " + __bynkShow((Ok({ login: "x", kind: "User" })))); }

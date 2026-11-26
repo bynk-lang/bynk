@@ -571,6 +571,7 @@
 /book/reference/diagnostics/bynk.http.security_invalid_field/
 /book/reference/diagnostics/bynk.http.security_not_http/
 /book/reference/diagnostics/bynk.http.security_unknown_field/
+/book/reference/diagnostics/bynk.http.status_needs_get/
 /book/reference/diagnostics/bynk.http.stream_body_not_raw/
 /book/reference/diagnostics/bynk.http.stream_body_on_sum_route/
 /book/reference/diagnostics/bynk.http.stream_body_signature/
@@ -1757,6 +1758,7 @@
 /reference/diagnostics/bynk.http.security_invalid_field/
 /reference/diagnostics/bynk.http.security_not_http/
 /reference/diagnostics/bynk.http.security_unknown_field/
+/reference/diagnostics/bynk.http.status_needs_get/
 /reference/diagnostics/bynk.http.stream_body_not_raw/
 /reference/diagnostics/bynk.http.stream_body_on_sum_route/
 /reference/diagnostics/bynk.http.stream_body_signature/
@@ -2269,6 +2271,8 @@
 /reference/diagnostics/bynk.types.request_query_at_boundary/
 /reference/diagnostics/bynk.types.return_mismatch/
 /reference/diagnostics/bynk.types.rounding_mode_position/
+/reference/diagnostics/bynk.types.secret_at_boundary/
+/reference/diagnostics/bynk.types.secret_not_comparable/
 /reference/diagnostics/bynk.types.select_tail_has_select/
 /reference/diagnostics/bynk.types.sequence_needs_result/
 /reference/diagnostics/bynk.types.some_value_mismatch/

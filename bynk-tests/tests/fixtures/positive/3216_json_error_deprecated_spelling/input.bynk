@@ -7,6 +7,6 @@ commons orders {
   }
 
   fn describe(e: DecodeError) -> String {
-    "\(e.kind) at \(e.path): \(e.message)"
+    "\(e.path): \(e.message)"
   }
 }

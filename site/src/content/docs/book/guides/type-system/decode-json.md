@@ -137,12 +137,12 @@ commons orders {
 
 ## Report why a decode failed
 
-A `DecodeError` carries three `String` fields: `kind` (`Malformed`,
-`StructuralMismatch` or `RefinementViolation`), `path` (where in the document,
-such as `$.qty`) and `message`. The error itself has no string form, so
-interpolate the fields:
+A `DecodeError` carries a `kind`, a closed `DecodeErrorKind` (`Malformed`,
+`StructuralMismatch`, `RefinementViolation`, and the YAML decoder's refusals), a
+`path` (where in the document, such as `$.qty`) and a `message`. The error itself
+has no string form, so interpolate the fields; `kind` prints as its name:
 
-```bynk
+```bynk,fragment
 commons orders {
 	type Order = {
 		id: String,
@@ -153,6 +153,20 @@ commons orders {
 		match Json.decode[Order](raw) {
 			Ok(order) => "decoded \(order.id)",
 			Err(e) => "order did not decode: \(e.kind) at \(e.path): \(e.message)",
+		}
+	}
+}
+```
+
+To act on the kind, `match` on it. The match is checked for exhaustiveness:
+
+```bynk,fragment
+commons orders {
+	fn explain(e: DecodeError) -> String {
+		match e.kind {
+			Malformed => "not JSON",
+			RefinementViolation => "invalid value at \(e.path)",
+			_ => "\(e.path): \(e.message)",
 		}
 	}
 }

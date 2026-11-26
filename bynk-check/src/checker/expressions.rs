@@ -1601,6 +1601,14 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                             op.name()
                         ),
                     ),
+                    super::equality::NotComparable::Secret => (
+                        "bynk.types.secret_not_comparable",
+                        format!(
+                            "operator `{}` cannot compare `{shown}` — a `Secret` is compared with `matches`, never `{}`: comparing text is variable-time",
+                            op.name(),
+                            op.name()
+                        ),
+                    ),
                     super::equality::NotComparable::Computation(part) => (
                         "bynk.types.not_comparable",
                         if top {
@@ -1638,7 +1646,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                     return None;
                 }
             } else if !compatible(lt, rt, tys) && !compatible(rt, lt, tys) {
-                ctx.errors.push(CompileError::new(
+                let err = CompileError::new(
                     "bynk.types.type_mismatch",
                     span,
                     format!(
@@ -1647,7 +1655,10 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                         lt.display(tys),
                         rt.display(tys)
                     ),
-                ));
+                );
+                let err =
+                    super::decode_kind::migrate_string_comparison(err, (lhs, lt), (rhs, rt), ctx);
+                ctx.errors.push(err);
                 return None;
             }
             Some(tys.intern(Ty::Base(BaseType::Bool)))
@@ -2848,6 +2859,25 @@ fn check_retry_after(
 const MIN_RETRY_DELAY_MS: i64 = 1_000;
 const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 
+/// #4389: `check_http_variant`, with the two variants that answer a range or conditional read
+/// handled first: both are refused off a `GET` route, and `PartialContent` has its own shape.
+pub(crate) fn check_http_variant(
+    span: Span,
+    variant: HttpVariant,
+    args: &[Expr],
+    expected: Option<TyId>,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    super::partial_content::refuse_off_get(span, variant, ctx);
+    if variant.payload == HttpVariantPayload::Partial {
+        let expected_t = expected
+            .and_then(|t| peel_to_http_result(t, ctx.tys))
+            .or_else(|| peel_to_http_result(ctx.return_ty, ctx.tys));
+        return super::partial_content::check_partial_content(span, variant, args, expected_t, ctx);
+    }
+    check_http_variant_inner(span, variant, args, expected, ctx)
+}
+
 /// Type-check construction of an `HttpResult[T]` variant (v0.9 §4.3).
 ///
 /// Variants come in six payload shapes:
@@ -2866,7 +2896,7 @@ const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 /// - `RawError` (`RawError`) — three arguments: an `ErrorStatus` name
 ///   (`Forbidden`, or `ErrorStatus.Forbidden`), a `Bytes` body and a `String`
 ///   content-type (#2341, L4).
-pub(crate) fn check_http_variant(
+fn check_http_variant_inner(
     span: Span,
     variant: HttpVariant,
     args: &[Expr],
@@ -3183,7 +3213,7 @@ pub(crate) fn check_http_variant(
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
             Some(tys.intern(Ty::HttpResult(t_ty)))
         }
-        HttpVariantPayload::None => {
+        HttpVariantPayload::None | HttpVariantPayload::Partial => {
             if !args.is_empty() {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.variant_arity",
@@ -3382,11 +3412,13 @@ fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx)
     let Some(base) = type_decl_base(decl) else {
         return err;
     };
-    if !bynk_syntax::ast::of_is_total(
-        base,
-        type_decl_refinement(decl),
-        matches!(decl.body, TypeBody::Opaque { .. }),
-    ) {
+    if !crate::context_checks::is_secret_decl(decl)
+        && !bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
         return err;
     }
     err.with_note(format!(
@@ -4090,19 +4122,7 @@ pub(crate) fn check_field_access(
     // v0.22b: `DecodeError` is a compiler-known record (ADR 0047) — uniform
     // `String` fields so a decode failure is inspectable in Bynk.
     if recv_ty == tys.intern(Ty::DecodeError) {
-        return match field.name.as_str() {
-            "kind" | "path" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
-            other => {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.unknown_field",
-                    field.span,
-                    format!(
-                        "`DecodeError` has no field `{other}` — its fields are `kind`, `path`, `message`"
-                    ),
-                ));
-                None
-            }
-        };
+        return super::decode_kind::decode_error_field(field, ctx);
     }
     // #2866: `ValidationError` is compiler-known too — a refined type's `.of`
     // failure exposes `field` and `message`. Its runtime `value` is `unknown`

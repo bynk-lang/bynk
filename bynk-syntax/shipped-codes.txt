@@ -381,6 +381,7 @@ bynk.http.return_not_effect_http_result
 bynk.http.security_invalid_field
 bynk.http.security_not_http
 bynk.http.security_unknown_field
+bynk.http.status_needs_get
 bynk.http.stream_body_not_raw
 bynk.http.stream_body_on_sum_route
 bynk.http.stream_body_signature

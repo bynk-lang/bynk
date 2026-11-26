@@ -4,7 +4,7 @@
 import { Ok, Err, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 
-import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
+import { BytesResponse, FetchError, Request, Response, Secret } from "../bynk.js";
 
 /**
  * A KV expiry span: a `Duration` of at least 60 seconds, the shortest the
@@ -602,13 +602,33 @@ export const InboundAttachment = {
 };
 
 /**
+ * One header occurrence of an `InboundEmail`: its lower-case `name` and its
+ * decoded `value`.
+ */
+export interface EmailHeader {
+  readonly name: string;
+  readonly value: string;
+}
+
+export const EmailHeader = {
+};
+
+/**
  * One email delivered to a `from email(...)` service's `on message` handler.
  * `from` is the **envelope** sender, a claim: anyone can write any address, so
  * trust it only when the `Sender` actor's `dmarc` is `DmarcPass`. `to` is the
  * envelope recipient the service was routed by. `headers` holds the message's
- * headers by lower-case name. `text`, `html` and `attachments` come from the
- * parsed MIME body (`None` or empty when the message has no such part); a test
- * builds them directly. `size` is the raw message in bytes. `subaddress` is the
+ * headers by lower-case name, the first occurrence of each; `headerList` holds
+ * every occurrence, in the order they appear. `inReplyTo` and `references` are
+ * the message ids the sender says this message answers, as `messageId` is
+ * written (`<id@host>`), `references` in the message's order; `replyTo` and `cc`
+ * are bare addresses, display names dropped; and `date` is the sender's own
+ * `Date` header, `None` when it is missing or cannot be read (a date has whole
+ * seconds, so a `system` case gets its `date` back to the second). All of these are
+ * the sender's claims, as `from` is: `date` is not when the message arrived.
+ * `text`, `html` and `attachments` come from the parsed MIME body (`None` or
+ * empty when the message has no such part); a test builds them directly. `size`
+ * is the raw message in bytes. `subaddress` is the
  * text after the first `+` of the envelope recipient's local part (RFC 5233, as
  * Email Routing defines it), so mail to `support+1234@shop.example` reaches the
  * service claiming `support@shop.example` with `subaddress = Some("1234")`; it
@@ -621,7 +641,13 @@ export interface InboundEmail {
   readonly to: string;
   readonly subject: string;
   readonly messageId: string;
+  readonly inReplyTo: Option<string>;
+  readonly references: readonly string[];
+  readonly replyTo: readonly string[];
+  readonly cc: readonly string[];
+  readonly date: Option<number>;
   readonly headers: ReadonlyMap<string, string>;
+  readonly headerList: readonly EmailHeader[];
   readonly text: Option<string>;
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
@@ -2030,15 +2056,16 @@ export const __ImagesToken: symbol = globalThis.Symbol("Images");
  * the store and the secret, when either is missing (create the secret with
  * `wrangler secrets-store secret create`). The deploy needs
  * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
- * "Secrets Store: Read". `get` returns the value as a `String`, not an
+ * "Secrets Store: Read". `get` returns the value as a `Secret`, not an
  * `Option`: the binding exists only if the deploy found the secret, so an
  * absence at run time is a platform fault, not something a handler can act
- * on. The value is not logged by Bynk; do not log it either. Under `bynk dev`
+ * on. A `Secret` has no text to log: read it with `reveal()` where the value
+ * has to leave, or compare it with `matches`. Under `bynk dev`
  * the secret is read from the local store, and a test faults until
  * `stub StripeKey.get() returns …` gives it a value.
  */
 export interface StoredSecret {
-  get(): globalThis.Promise<string>;
+  get(): globalThis.Promise<Secret>;
 }
 
 export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");

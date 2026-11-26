@@ -2,6 +2,7 @@
 // bynk.cloudflare platform adapter binding.
 import type { Ai, AiError, AiSearch, SearchAnswer, Analytics, AnalyticsSql, AnalyticsSqlError, AnalyticsSqlResult, Condition, Container, ContainerError, D1, DataPoint, EdgeCache, Email, EmailError, EmailMessage, FilterOp, ChatMessage, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, Images, IndexInfo, Kv, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MtlsCertificate, Mutation, MySql, MySqlError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgRun, PgStatement, PgValue, Postgres, QueryOptions, Queue, QueueSend, R2, R2Body, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RateLimit, SearchError, SearchHit, SearchOptions, Service, SqlError, SqlRun, SqlStatement, SqlValue, StoredSecret, TransformOptions, Vector, VectorError, VectorMatch, Vectorize, Version, WorkerVersion } from "./cloudflare.js";
 import type { BytesResponse, FetchError, FetchOptions, Request as FetchRequest, Response as FetchResponse } from "../bynk.js";
+import { Secret } from "../bynk.js";
 import { FetchProvider } from "../bynk-cloudflare.js";
 import { Err, None, Ok, Some, type Option, type Result } from "../__bynk_runtime/result.js";
 import type { AnalyticsDataset, D1Database, D1PreparedStatement, D1Result, KVNamespace, QueueProducer, R2Bucket, R2MultipartUpload, R2ObjectMeta, RateLimiter, SecretsStoreSecret, SendEmail, WorkerAiBinding, WorkerImagesBinding, AnalyticsSqlBinding, AiSearchInstance, WorkerVersionMetadata } from "../__bynk_runtime/storage.js";
@@ -1796,14 +1797,14 @@ export class WorkersStoredSecret implements StoredSecret {
     this.binding = binding;
   }
 
-  async get(): Promise<string> {
+  async get(): Promise<Secret> {
     const secret = (this.env as Record<string, SecretsStoreSecret | undefined> | undefined)?.[this.binding];
     if (!secret) {
       throw new Error(
         `bynk.cloudflare.StoredSecret requires a Secrets Store binding (env.${this.binding}) — deploy with the generated [[secrets_store_secrets]] wrangler stanza`,
       );
     }
-    return await secret.get();
+    return Secret.unsafe(await secret.get());
   }
 }
 

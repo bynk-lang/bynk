@@ -1,0 +1,2 @@
+bynk.types.type_mismatch
+the `Map.insert` value has type `Secret`, but `String` is required

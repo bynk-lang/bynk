@@ -2928,6 +2928,11 @@ agent Cart {
         example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ not a field of `security`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
+        code: "bynk.http.status_needs_get",
+        blurb: "`PartialContent` (206) answers a range request and `NotModified` (304) answers a conditional read, and only a `GET` route serves either: a range or a validator is how a client re-reads a representation it already knows, and `HEAD` is answered by the `GET` route. Return them from a `GET` handler; a write that fails a precondition answers `PreconditionFailed` (412) instead.",
+        example: "service api from http {\n    on POST(\"/blob\") (body: String) -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✗ not a `GET` route\n    }\n}\n\nservice api from http {\n    on GET(\"/blob\") () -> Effect[HttpResult[()]] by v: Visitor {\n        NotModified   // ✓\n    }\n}",
+    },
+    Explain {
         code: "bynk.http.stream_body_not_raw",
         blurb: "A `Stream[Bytes]` `body` is a request body handed to the handler chunk by chunk, so the router must be told to leave it as octets: without `@raw` a body is JSON (or base64 inside JSON for `Bytes`), which has no streamed form. Add `@raw(contentType: \"…\")` and a `@limit`, or take the body as a value (`T`, or `Bytes`) to have it read whole.",
         example: "@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✗ not `@raw`\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non PUT(\"/blobs/:id\") (id: String, body: Stream[Bytes]) -> Effect[HttpResult[()]] by v: Visitor { … }   // ✓",
@@ -6675,6 +6680,30 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let mode = RoundingMode.HalfUp         // ✗ a mode is not a value\n\nprice.round(2, RoundingMode.HalfUp)    // ✓ written where it rounds",
     },
     Explain {
+        code: "bynk.types.secret_at_boundary",
+        blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
+                stored, sent or encoded form: putting one in a record, event or `store` field, \
+                or passing one into or out of a handler, would write the secret into data that \
+                is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
+                or a function parameter and use it where it is read, with `matches(candidate)` \
+                to compare or `reveal()` to hand its text to the one call that needs it. A \
+                capability operation may take or return one: that is how `Secrets.get` and \
+                `StoredSecret.get` produce it.",
+        example: "type Credentials = {\n    owner: String,\n    token: Secret,     // ✗ a secret cannot be held in a type\n}\n\n\
+                  type Credentials = {\n    owner: String,     // ✓ read the secret where it is used\n}",
+    },
+    Explain {
+        code: "bynk.types.secret_not_comparable",
+        blurb: "`==` on text stops at the first character that differs, so how long it takes \
+                tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
+                never compared with `==` or `!=`, nor held in a type that is (a record or sum \
+                that derives equality). Compare with `secret.matches(candidate)`, which takes \
+                the same time however the two differ, or call `reveal()` where the text itself \
+                is needed.",
+        example: "fn same(a: Secret, b: Secret) -> Bool {\n    a == b                       // ✗ variable-time\n}\n\n\
+                  fn same(a: Secret, b: Secret) -> Bool {\n    a.matches(b.reveal())        // ✓ constant-time\n}",
+    },
+    Explain {
         code: "bynk.types.select_tail_has_select",
         blurb: "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
         example: "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
@@ -9137,6 +9166,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `security { }` policy declares a field outside the closed set.",
     ),
     d(
+        "bynk.http.status_needs_get",
+        "`PartialContent` or `NotModified` is returned from a route that is not a `GET`.",
+    ),
+    d(
         "bynk.http.stream_body_not_raw",
         "A `Stream[Bytes]` `body` is on a handler that is not `@raw`.",
     ),
@@ -11460,6 +11493,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.rounding_mode_position",
         "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
+    ),
+    d(
+        "bynk.types.secret_at_boundary",
+        "A `bynk` `Secret` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+    ),
+    d(
+        "bynk.types.secret_not_comparable",
+        "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",

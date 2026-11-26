@@ -1223,7 +1223,7 @@ service api from http {
 
 \ton GET(\"/secret\") () -> Effect[HttpResult[String]] by Visitor given StripeKey {
 \t\tlet key <- StripeKey.get()
-\t\tif key == \"workerd-smoke-secret\" { Ok(\"matched\") } else { Ok(\"different\") }
+\t\tif key.matches(\"workerd-smoke-secret\") { Ok(\"matched\") } else { Ok(\"different\") }
 \t}
 
 \ton GET(\"/missing\") () -> Effect[HttpResult[String]] by Visitor given MissingKey {

@@ -1,0 +1,13 @@
+context vault
+
+consumes bynk { Secret, Secrets }
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[Secret]] by Visitor given Secrets {
+        let found <- Secrets.get("TOKEN")
+        match found {
+            Some(s) => Ok(s)
+            None => Err(NotFound)
+        }
+    }
+}

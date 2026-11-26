@@ -1,0 +1,2 @@
+bynk.types.json_uncodable
+`Token` cannot be encoded as JSON
