@@ -51,12 +51,25 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
+      {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/workload", path) !== null) {
+          __route = "GET /workload";
+          const result = await surface.http_GET_workload(request);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.reports\"", "Bynk realm=\"shop.reports\""])), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
       if (__matchPath("/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/who", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/workload", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

@@ -18,12 +18,27 @@ suite shop.reports {
 		let r <- api.GET("/plain") by User("ada")
 		expect r == Ok("user ada")
 	}
+
+	case "an Oidc arm reads its claims" {
+		let r <- api.GET("/workload") by Workload("ci", TokenClaims.of(["repository: acme/shop"]))
+		expect r == Ok("ci acme/shop")
+	}
+
+	case "an Oidc arm with no claims reads none" {
+		let r <- api.GET("/workload") by Workload("ci")
+		expect r == Ok("ci none")
+	}
 }
 
 suite shop.reports as integration {
 	case "in process, claims reach the arm" {
 		let r <- api.GET("/who") by User("ada", TokenClaims.of(["tenant: acme"]))
 		expect r == Ok("ada acme false")
+	}
+
+	case "in process, an Oidc arm's claims reach the arm" {
+		let r <- api.GET("/workload") by Workload("ci", TokenClaims.of(["repository: acme/shop"]))
+		expect r == Ok("ci acme/shop")
 	}
 }
 
@@ -41,5 +56,15 @@ suite shop.reports as system {
 	case "at system, the visitor arm is unchanged" {
 		let r <- api.GET("/who") by Visitor
 		expect r == Ok("anonymous")
+	}
+
+	case "at system, the signed OIDC token carries the claims" {
+		let r <- api.GET("/workload") by Workload("ci", TokenClaims.of(["repository: acme/shop"]))
+		expect r == Ok("ci acme/shop")
+	}
+
+	case "at system, an OIDC token without the claim reads as none" {
+		let r <- api.GET("/workload") by Workload("ci")
+		expect r == Ok("ci none")
 	}
 }

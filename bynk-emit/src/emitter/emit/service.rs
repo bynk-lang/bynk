@@ -1351,8 +1351,8 @@ pub(super) fn actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> b
     )
 }
 
-/// The `who` type of a sum handler's `deps`: an http sum's `Bearer` members also carry their verified
-/// `claims` (#4344).
+/// The `who` type of a sum handler's `deps`: an http sum's `Bearer` and `Oidc` members also carry their
+/// verified `claims` (#4344).
 fn sum_who_ts_type(
     protocol: &ProtocolIr,
     members: &[bynk_check::actors::SumMember],
@@ -1364,7 +1364,7 @@ fn sum_who_ts_type(
     }
 }
 
-/// #4344: an http sum's `who` union, whose `Bearer` members also carry their verified `claims`.
+/// #4344: an http sum's `who` union, whose `Bearer` and `Oidc` members also carry their verified `claims`.
 fn http_actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> bynk_ts::TsType {
     bynk_ts::TsType::union(
         members
@@ -1373,7 +1373,8 @@ fn http_actor_sum_ts_union(members: &[bynk_check::actors::SumMember]) -> bynk_ts
                 let mut ty =
                     tag_member(&m.actor_name, m.identity_type().map(bynk_ts::TsType::named));
                 if let (
-                    bynk_check::actors::SumMemberSeam::Bearer { .. },
+                    bynk_check::actors::SumMemberSeam::Bearer { .. }
+                    | bynk_check::actors::SumMemberSeam::Oidc(_),
                     bynk_ts::TsType::Object(props),
                 ) = (&m.seam, &mut ty)
                 {

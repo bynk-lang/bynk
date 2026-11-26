@@ -288,8 +288,8 @@ resolved arm, which reads claims as below).
 
 ### In an actor sum
 
-The binder of an actor sum is the resolved arm, so it has no `.claims`. A `Bearer` arm of an `http`
-handler's sum binds the verified claims with a **second pattern binder**, beside its identity:
+The binder of an actor sum is the resolved arm, so it has no `.claims`. A `Bearer` or an `Oidc` arm of an
+`http` handler's sum binds the verified claims with a **second pattern binder**, beside its identity:
 
 ```bynk,fragment
 on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
@@ -301,9 +301,10 @@ on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
 ```
 
 The one-name form, `User(u)`, is unchanged, and an arm that binds no claims reads none. The claims are the
-verified token's, as for a lone `Bearer` binder, and a `Visitor` or any other arm has none. Only a `Bearer`
-arm of an `http` sum has the second binder: a second binder on any other arm, or a third on a `Bearer` one,
-is `bynk.types.pattern_arity`. (`Oidc` is refused in a sum, `bynk.actor.oidc_not_in_sum`.) A test supplies the
+verified token's, as for a lone `Bearer` or `Oidc` binder: an arm resolves only after its token's signature
+and checks pass, and a `Visitor` or any other arm has none. Only a `Bearer` or `Oidc` arm of an `http` sum has
+the second binder: a second binder on any other arm (`Signature`, `SignedCookie` or an open one), on a sum of
+another protocol, or a third on a `Bearer` or `Oidc` arm, is `bynk.types.pattern_arity`. A test supplies the
 claims as the principal's second argument, as for a lone actor: `by User("ada", TokenClaims.of([…]))`.
 
 A claim says what the token asserts, not whose data the handler may touch: an object-level check

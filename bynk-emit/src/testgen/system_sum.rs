@@ -57,13 +57,14 @@ impl SumAuth {
                         secret_read.clone(),
                     ),
                 )],
+                // #4344: the principal's claims (`__claims`) are the token's `claims`.
                 SumCredential::Oidc(trust) => vec![assign(
                     auth("authorization"),
                     oidc_token(
                         trust.clone(),
                         object_of(vec![
                             ("sub", ident("__sub")),
-                            ("claims", object_of(Vec::new())),
+                            ("claims", ident("__claims")),
                             ("kind", str_lit("valid")),
                         ]),
                     ),

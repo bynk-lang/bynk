@@ -707,7 +707,7 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 bynk_model::lower_handler_kind_ir(&h.kind)
             {
                 let route = crate::emitter::http_handler_method_name_ir(method, &path);
-                for arm in bynk_check::actors::bearer_sum_arms_for(h, &t.actors) {
+                for arm in bynk_check::actors::claims_sum_arms_for(h, &t.actors) {
                     out.insert((name.clone(), ["claimsarm", &route, &arm].join(":")));
                 }
             }

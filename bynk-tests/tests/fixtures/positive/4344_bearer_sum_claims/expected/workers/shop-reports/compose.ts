@@ -2,7 +2,7 @@
 // composition root for `shop.reports` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __verifyOidcJwt, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -31,6 +31,24 @@ export function compose(env: Env) {
       }
       if (__who === undefined) return HttpResult.Unauthorized;
       return handlers.api.http_GET_who({ ...deps, who: __who });
+    },
+    async http_GET_workload(request: globalThis.Request) {
+      let __who: any = undefined;
+      if (__who === undefined) {
+        const __authz = request.headers.get("Authorization");
+        if (__authz !== null && __authz.startsWith("Bearer ")) {
+          const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
+          if (__claims.tag === "Ok") {
+            const __id = handlers.UserId.of(__claims.value.sub);
+            if (__id.tag === "Ok") __who = { tag: "Workload", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
+          }
+        }
+      }
+      if (__who === undefined) {
+        __who = { tag: "Visitor" };
+      }
+      if (__who === undefined) return HttpResult.Unauthorized;
+      return handlers.api.http_GET_workload({ ...deps, who: __who });
     },
     async http_GET_plain(request: globalThis.Request) {
       let __who: any = undefined;

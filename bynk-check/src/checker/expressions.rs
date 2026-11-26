@@ -5100,7 +5100,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             let claims_arm = bindings.len() >= 2
                 && payload.len() == 1
                 && matches!(&*tys.get(ty), Ty::ActorSum(_))
-                && ctx.bearer_sum_arms.contains(&variant.name);
+                && ctx.claims_sum_arms.contains(&variant.name);
             if claims_arm {
                 payload.push(("claims".to_string(), tys.intern(Ty::TokenClaims)));
             }
@@ -5119,7 +5119,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 );
                 if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
                     err = err.with_note(
-                        "an open arm such as `Visitor` carries no identity and no claims; write it without bindings",
+                        "this arm (an open or a `Signature` actor) carries no identity and no claims; write it without bindings",
                     );
                 }
                 ctx.errors.push(err);
@@ -5175,7 +5175,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 // #4344: only a `Bearer` arm of an http actor sum carries claims beside its identity.
                 if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
                     err = err.with_note(
-                        "an actor-sum arm binds its identity, `User(u)`; only a `Bearer` arm also binds its verified claims, `User(u, c)`",
+                        "an actor-sum arm binds its identity, `User(u)`; only a `Bearer` or `Oidc` arm of an `http` sum also binds its verified claims, `User(u, c)`",
                     );
                 }
                 ctx.errors.push(err);

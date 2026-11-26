@@ -87,7 +87,7 @@ See [acting as an actor](/reference/testing/#call-site-by).
 
 ## Reading an arm's claims
 
-A `Bearer` arm can also read the claims of its verified token. Bind them with a second name beside the
+A `Bearer` or `Oidc` arm can also read the claims of its verified token. Bind them with a second name beside the
 identity:
 
 ```bynk,fragment
@@ -101,7 +101,7 @@ on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
 
 The one-name `User(u)` still works. The claims come only from the token the seam verified, and a
 `Visitor` has none. A test passes them in the principal, `by User("ada", TokenClaims.of(["tenant: acme"]))`.
-Only a `Bearer` arm has them: a second name on another arm is an error.
+Only a `Bearer` or `Oidc` arm has them: a second name on another arm is an error.
 
 ## A browser session or an API token
 

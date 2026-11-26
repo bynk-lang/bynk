@@ -59,7 +59,7 @@ export function compose(env: Env) {
           const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
           if (__claims.tag === "Ok") {
             const __id = handlers.UserId.of(__claims.value.sub);
-            if (__id.tag === "Ok") __who = { tag: "Machine", identity: __id.value };
+            if (__id.tag === "Ok") __who = { tag: "Machine", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
           }
         }
       }

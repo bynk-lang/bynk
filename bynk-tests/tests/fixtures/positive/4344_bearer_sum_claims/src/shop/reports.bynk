@@ -3,9 +3,13 @@ context shop.reports
 type UserId = String where NonEmpty
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor Workload {
+	auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
+	identity = UserId
+}
 
 service api from http {
-	// A `Bearer` arm of an actor sum reads its verified claims through a second binder, `c`, beside the
+	// A `Bearer` or `Oidc` arm of an actor sum reads its verified claims through a second binder, `c`, beside the
 	// identity. The arm's one-name form, `User(u)`, is unchanged.
 	on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
 		match who {
@@ -13,6 +17,14 @@ service api from http {
 				let tenant = c.get("tenant").getOrElse("default")
 				Ok("\(u) \(tenant) \(c.has("beta"))")
 			}
+			Visitor => Ok("anonymous")
+		}
+	}
+
+	// An `Oidc` arm reads its verified claims the same way.
+	on GET("/workload") () -> Effect[HttpResult[String]] by who: Workload | Visitor {
+		match who {
+			Workload(w, c) => Ok("\(w) \(c.get("repository").getOrElse("none"))")
 			Visitor => Ok("anonymous")
 		}
 	}

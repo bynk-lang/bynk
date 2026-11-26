@@ -1891,8 +1891,8 @@ fn typed_url(
 }
 
 /// #4344: whether an actor-sum route's drivers take the principal's claims (`__claims`): when it has a
-/// `Bearer` arm, whose token they are signed into, as a lone `Bearer` route's are. Records the route so
-/// a call passes them.
+/// `Bearer` or an `Oidc` arm, whose token they are signed into, as a lone route's are. Records the
+/// route so a call passes them.
 fn sum_signs_claims(
     sum: &Option<SumAuth>,
     route: &(String, String, String),
@@ -1901,7 +1901,7 @@ fn sum_signs_claims(
     let bearer_arm = sum.as_ref().is_some_and(|s| {
         s.members
             .iter()
-            .any(|(_, c)| matches!(c, SumCredential::Bearer(_)))
+            .any(|(_, c)| matches!(c, SumCredential::Bearer(_) | SumCredential::Oidc(_)))
     });
     if bearer_arm {
         claims.bearer_claim_routes.insert(route.clone());

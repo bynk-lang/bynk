@@ -27,6 +27,8 @@ function __makeHarness() {
 }
 
 <<bynk-shared: testing/jwt_signer>>
+const __bynkOidcRemote: boolean = false;
+<<bynk-shared: testing/oidc_issuer>>
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["AUTH_JWT_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_api_http_GET_who(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
@@ -67,6 +69,32 @@ async function __sysdrive_sumbad_api_http_GET_who(__extraHeaders: { get(name: st
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/who`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
+  const __res = await __h.env.SHOP_REPORTS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_workload(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Workload") {
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/workload`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
+  const __res = await __h.env.SHOP_REPORTS.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_workload(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/workload`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.SHOP_REPORTS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_sumbad_api_http_GET_workload(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __bad: string, __sub: string, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Workload") {
+    if (__bad === "forged" || __bad === "expired") __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: "bynk-test", claims: {}, kind: __bad })}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/workload`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
   const __res = await __h.env.SHOP_REPORTS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -124,7 +152,7 @@ async function test_the_signed_token_carries_the_claims() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_who(undefined, ("ada" as any), __bynkClaimLines(["tenant: acme", "beta: yes"]), "User");
-    if (!(__bynkEq(r, HttpResult.Ok("ada acme true")))) { throw __bynkExpectFailure("tests/reports.bynk:33:10", 946, 970, "expect r == Ok(\"ada acme true\")\n  expected: r == Ok(\"ada acme true\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada acme true")))); }
+    if (!(__bynkEq(r, HttpResult.Ok("ada acme true")))) { throw __bynkExpectFailure("tests/reports.bynk:48:10", 1432, 1456, "expect r == Ok(\"ada acme true\")\n  expected: r == Ok(\"ada acme true\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada acme true")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -140,7 +168,7 @@ async function test_at_system__a_token_without_the_claim_reads_as_none() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_who(undefined, ("ada" as any), {}, "User");
-    if (!(__bynkEq(r, HttpResult.Ok("ada default false")))) { throw __bynkExpectFailure("tests/reports.bynk:38:10", 1087, 1115, "expect r == Ok(\"ada default false\")\n  expected: r == Ok(\"ada default false\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada default false")))); }
+    if (!(__bynkEq(r, HttpResult.Ok("ada default false")))) { throw __bynkExpectFailure("tests/reports.bynk:53:10", 1573, 1601, "expect r == Ok(\"ada default false\")\n  expected: r == Ok(\"ada default false\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada default false")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -156,7 +184,39 @@ async function test_at_system__the_visitor_arm_is_unchanged() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_who(undefined, "", {}, "Visitor");
-    if (!(__bynkEq(r, HttpResult.Ok("anonymous")))) { throw __bynkExpectFailure("tests/reports.bynk:43:10", 1217, 1237, "expect r == Ok(\"anonymous\")\n  expected: r == Ok(\"anonymous\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("anonymous")))); }
+    if (!(__bynkEq(r, HttpResult.Ok("anonymous")))) { throw __bynkExpectFailure("tests/reports.bynk:58:10", 1703, 1723, "expect r == Ok(\"anonymous\")\n  expected: r == Ok(\"anonymous\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("anonymous")))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_at_system__the_signed_OIDC_token_carries_the_claims() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_workload(undefined, ("ci" as any), __bynkClaimLines(["repository: acme/shop"]), "Workload");
+    if (!(__bynkEq(r, HttpResult.Ok("ci acme/shop")))) { throw __bynkExpectFailure("tests/reports.bynk:63:10", 1892, 1915, "expect r == Ok(\"ci acme/shop\")\n  expected: r == Ok(\"ci acme/shop\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ci acme/shop")))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_at_system__an_OIDC_token_without_the_claim_reads_as_none() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_workload(undefined, ("ci" as any), {}, "Workload");
+    if (!(__bynkEq(r, HttpResult.Ok("ci none")))) { throw __bynkExpectFailure("tests/reports.bynk:68:10", 2046, 2064, "expect r == Ok(\"ci none\")\n  expected: r == Ok(\"ci none\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ci none")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -168,7 +228,7 @@ async function test_at_system__the_visitor_arm_is_unchanged() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["the signed token carries the claims", "at system, a token without the claim reads as none", "at system, the visitor arm is unchanged"];
+export const __bynkCases: readonly string[] = ["the signed token carries the claims", "at system, a token without the claim reads as none", "at system, the visitor arm is unchanged", "at system, the signed OIDC token carries the claims", "at system, an OIDC token without the claim reads as none"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -188,6 +248,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("at system, the visitor arm is unchanged")) {
     const started = __bynkCaseNow();
     const r = { name: "at system, the visitor arm is unchanged", ...(await test_at_system__the_visitor_arm_is_unchanged()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("at system, the signed OIDC token carries the claims")) {
+    const started = __bynkCaseNow();
+    const r = { name: "at system, the signed OIDC token carries the claims", ...(await test_at_system__the_signed_OIDC_token_carries_the_claims()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("at system, an OIDC token without the claim reads as none")) {
+    const started = __bynkCaseNow();
+    const r = { name: "at system, an OIDC token without the claim reads as none", ...(await test_at_system__an_OIDC_token_without_the_claim_reads_as_none()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

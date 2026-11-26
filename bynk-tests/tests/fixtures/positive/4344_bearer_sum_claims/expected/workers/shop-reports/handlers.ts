@@ -32,6 +32,19 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_GET_workload(deps: { who: { tag: "Workload"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+    switch (deps.who.tag) {
+      case "Workload": {
+        const w = deps.who.identity;
+        const c = deps.who.claims;
+        return HttpResult.Ok(`${String(w)} ${String(((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(c.get("repository"), "none"))}`);
+      }
+      case "Visitor": {
+        return HttpResult.Ok("anonymous");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
   async http_GET_plain(deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {

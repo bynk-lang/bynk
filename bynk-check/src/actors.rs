@@ -494,22 +494,27 @@ impl crate::checker::HandlerBodyCheck<'_> {
         actors: &HashMap<String, ActorDecl>,
     ) -> Self {
         self.claims_binder = claims_binder_for(handler, actors);
-        self.bearer_sum_arms = bearer_sum_arms_for(handler, actors);
+        self.claims_sum_arms = claims_sum_arms_for(handler, actors);
         self
     }
 }
 
-/// #4344: the `Bearer` arms of an HTTP handler's actor sum (`by who: User | Visitor`), whose pattern
-/// may bind the verified token's claims beside the identity, `User(u, c)`. Empty for every other
-/// handler. (`Oidc` is refused in a sum, `bynk.actor.oidc_not_in_sum`.)
-pub fn bearer_sum_arms_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
+/// #4344: the arms of an HTTP handler's actor sum (`by who: User | Visitor`) that read a verified token,
+/// a `Bearer` or an `Oidc` arm, whose pattern may bind the token's claims beside the identity,
+/// `User(u, c)`. Empty for every other handler.
+pub fn claims_sum_arms_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
     if !matches!(handler.kind, HandlerKind::Http { .. }) {
         return Vec::new();
     }
     sum_members_for(handler, actors)
         .into_iter()
         .flatten()
-        .filter(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+        .filter(|m| {
+            matches!(
+                m.seam,
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_)
+            )
+        })
         .map(|m| m.actor_name)
         .collect()
 }

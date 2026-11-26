@@ -45,7 +45,7 @@ async function __sysdrive_api_http_POST_ingest(body: any, __extraHeaders: { get(
     __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
   }
   if (__as === "Machine") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   if (__as === "Hook") {
     const __sig = await __bynkSignHmacSha256(__body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
@@ -66,7 +66,7 @@ async function __sysdrive_raw_api_http_POST_ingest(body: string, __extraHeaders:
     __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_KEY"] ?? ""))}`;
   }
   if (__as === "Machine") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   if (__as === "Hook") {
     const __sig = await __bynkSignHmacSha256(body, ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["HOOK_SECRET"] ?? ""), true, 0);
