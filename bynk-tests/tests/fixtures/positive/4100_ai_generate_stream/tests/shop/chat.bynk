@@ -1,0 +1,34 @@
+suite shop.chat
+
+consumes bynk.cloudflare { AiError, Ai }
+
+// #4100: a test never reaches Workers AI: `generateStream` faults until stubbed, and a stub gives
+// the text deltas the handler re-serves as one streamed response.
+
+case "an unstubbed generateStream faults" {
+	expect chat.POST("/chat", "hi") by Visitor faults
+}
+
+case "the text deltas are re-served as a stream" {
+	stub Ai.generateStream(_, _) returns Ok(Stream.of(["Hel", "lo"]))
+	let r <- chat.POST("/chat", "hi") by Visitor
+	match r {
+		Streaming(body) => {
+			let parts <- body.collect()
+			expect parts.length() == 2
+		}
+		_ => expect false
+	}
+}
+
+case "an overloaded model is answered before any event" {
+	stub Ai.generateStream(_, _) returns Err(Overloaded)
+	let r <- chat.POST("/chat", "hi") by Visitor
+	expect r is ServiceUnavailable("try again shortly")
+}
+
+case "any other refusal is an ordinary server error" {
+	stub Ai.generateStream(_, _) returns Err(QuotaExceeded)
+	let r <- chat.POST("/chat", "hi") by Visitor
+	expect r is ServerError("model unavailable")
+}

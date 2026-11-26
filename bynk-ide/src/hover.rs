@@ -1199,6 +1199,18 @@ mod tests {
         })
     }
 
+    /// #4100: hovering `Ai.generateStream` shows its signature, as any declared operation.
+    #[test]
+    fn generate_stream_hovers_with_its_signature() {
+        let src = "context demo.m\n\nconsumes bynk.cloudflare { Ai, GenerateRequest }\n\nservice s {\n  on call() -> Effect[()] by Caller given Ai {\n    let a <- Ai.generateStream(\"m\", GenerateRequest { messages: [] })\n    ()\n  }\n}\n";
+        let h = hover_at(src, "generateStream", 0).expect("hovers");
+        assert!(
+            h.contains("generateStream(model: String, request: GenerateRequest)")
+                && h.contains("Stream[String]"),
+            "{h}"
+        );
+    }
+
     /// #3889: the constant named in `from email(Support)` hovers with the address it denotes.
     #[test]
     fn an_email_address_constant_hovers_with_its_address() {

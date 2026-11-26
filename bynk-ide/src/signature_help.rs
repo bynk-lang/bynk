@@ -749,6 +749,18 @@ mod tests {
         assert!(select.contains("AnalyticsReadError"), "{select}");
     }
 
+    /// #4100: `Ai.generateStream` is a declared operation, so signature help reads it as any other.
+    #[test]
+    fn ai_generate_stream_has_a_signature() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Ai }\n";
+        assert_eq!(
+            resolve_label("Ai.generateStream", DOC, None).as_deref(),
+            Some(
+                "generateStream(model: String, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]"
+            )
+        );
+    }
+
     /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`
     /// and `PgReadError`, and `transaction` is its declared operation.
     #[test]

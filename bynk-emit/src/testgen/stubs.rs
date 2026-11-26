@@ -1621,11 +1621,12 @@ pub(super) fn platform_double(
                 )
             };
             format!(
-                "  return {{\n{}{}{}{}  }};\n",
+                "  return {{\n{}{}{}{}{}  }};\n",
                 op("run", "_, _"),
                 op("generate", "_, _"),
                 op("embed", "_, _"),
-                op("runStream", "_, _")
+                op("runStream", "_, _"),
+                op("generateStream", "_, _")
             )
         }
         // #3515: a test never reaches Cloudflare Images, so every operation

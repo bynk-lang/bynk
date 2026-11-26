@@ -5291,6 +5291,21 @@ mod tests {
         );
     }
 
+    /// #4100: `Ai.` offers `generateStream` beside the other operations, with its signature.
+    #[test]
+    fn the_ai_name_offers_generate_stream() {
+        let doc = "context a.b\n\nconsumes bynk.cloudflare { Ai }\n";
+        let items = complete("    Ai.", doc, None);
+        let gs = find(&items, "generateStream", CompletionKind::Member).expect("`generateStream`");
+        assert!(
+            gs.detail
+                .as_deref()
+                .is_some_and(|d| d.contains("GenerateRequest") && d.contains("Stream[String]")),
+            "{:?}",
+            gs.detail
+        );
+    }
+
     #[test]
     fn statics_of_a_generic_type_are_offered() {
         // Constrained generics slice 4: `Box.` offers the type's statics, with
