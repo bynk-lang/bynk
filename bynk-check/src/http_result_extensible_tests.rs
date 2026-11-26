@@ -139,9 +139,10 @@ fn a_partial_match_still_names_its_missing_variants() {
 /// type is caught by the rule.
 #[test]
 fn no_user_type_can_be_named_http_result() {
-    let c = codes(
-        "commons app.probe\n\ntype HttpResult = enum { A, B }\n\nfn label(e: HttpResult) -> String {\n\tmatch e {\n\t\tA => \"a\"\n\t\tB => \"b\"\n\t}\n}\n",
+    let c = codes("commons app.probe\n\ntype HttpResult = enum { A, B }\n");
+    assert_eq!(
+        c,
+        ["bynk.resolve.reserved_builtin_type"],
+        "a user `HttpResult` is refused as a reserved name"
     );
-    assert!(!c.is_empty(), "a user `HttpResult` is refused");
-    assert!(!c.contains(&NEEDS_WILDCARD), "{c:?}");
 }

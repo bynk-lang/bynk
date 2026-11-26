@@ -703,8 +703,8 @@ fn describe_ambient_builtin(name: &str, after: &str) -> Option<String> {
 /// extensible first-party enums use.
 fn describe_http_result(name: &str) -> Option<String> {
     (name == "HttpResult").then(|| {
-        let mut out = "```bynk\nHttpResult[T]\n```\n\nA handler's HTTP answer: one variant per \
-                       RFC 9110 status it can give, with `T` the success body."
+        let mut out = "```bynk\nHttpResult[T]\n```\n\nA handler's HTTP answer: a status from the \
+                       RFC 9110 vocabulary, with `T` the success body."
             .to_string();
         if bynk_syntax::ast::HTTP_RESULT_EXTENSIBLE {
             out.push_str(
