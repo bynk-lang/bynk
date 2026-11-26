@@ -3119,9 +3119,6 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
-/// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
-/// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
-#[allow(clippy::too_many_arguments)]
 /// #4111: a method call on a `Secret`, or `None` when the receiver is not one.
 fn check_secret_call(
     recv_ty: TyId,
@@ -3149,6 +3146,9 @@ fn check_secret_call(
     ))
 }
 
+/// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
+/// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
     receiver: &Expr,
     method: &Ident,
