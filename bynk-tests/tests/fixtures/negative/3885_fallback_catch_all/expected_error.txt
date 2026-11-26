@@ -1,0 +1,1 @@
+bynk.email.fallback_bad_option

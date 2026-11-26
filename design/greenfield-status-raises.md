@@ -5,6 +5,13 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| emit_abi_shapes | 109 | 115 | v0.764.0 | #4435 | the `bynk.cloudflare` binding's `WorkersQueue` imports three more runtime names (`signQueueMessage`, `edgeKeyOf`, `EDGE_TO_PREFIX`) to sign a Bynk producer's messages under the call edge's key |
+| emit_abi_shapes | 109 | 115 | v0.760.0 | #4404 | the three Logger bindings import `withTraceField` from the runtime to put the request's trace on a structured record, and each is one more name in the bindings' runtime surface |
+| ts_any | 21 | 23 | v0.759.0 | #4422 | the identity route's verify result and run step carry the actor's principal, whose concrete type (the handler's own actor-deps shape) cannot be spelt at that seam; two `any` sites, the same shape the event wrapper keeps (#3926) |
+| ts_writes | 475 | 481 | v0.759.0 | #4422 | the verify step's return type and the entry's refusal guards are spelt as TS text, the same shape the neighbouring actor wrappers keep (#3926) |
+| ts_writes | 475 | 481 | v0.755.0 | #4432 | the generated client gains an EventSource function per streaming GET route (#3918) |
+| ts_writes | 475 | 481 | v0.751.0 | #4425 | the queue entry builds a sum consumer's resolved actor (`const __who = { tag: … }`) from the verified signer, one more generated-TypeScript write, as the call entry does for its sum |
+| ts_writes | 475 | 481 | v0.749.1 | #4421 | the emitter spells a qualified type's codec helper names (`__serialise_lib_x_Status`) with a `format!` in `codec_names`, as the other codec names are spelt (#4403) |
 | ts_writes | 473 | 475 | v0.749.0 | #4420 | Streaming gains an optional heartbeat interval and the SSE body writes comment lines while idle (#3918) |
 | ts_writes | 473 | 475 | v0.745.0 | #4392 | the SSE framer in the runtime's http.ts now frames a structured event (#3918) |
 | emit_abi_shapes | 104 | 109 | v0.742.0 | #4406 | the `WorkersR2` binding names five more types (`R2GetIf`, `R2List`, `R2Partial`, `R2Range`, `R2Read`) that the new operations take and return (#4049) |
