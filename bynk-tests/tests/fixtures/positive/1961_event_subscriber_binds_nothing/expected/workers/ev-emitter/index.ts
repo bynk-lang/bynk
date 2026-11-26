@@ -49,7 +49,7 @@ export default {
             const __raw_n = __m.params["n"];
             const n = __raw_n;
             const result = await surface.http_POST_ping_Param_n(n);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"ev.emitter\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"ev.emitter\""]), __security_api);
           }
         }
         if (__matchPath("/ping/:n", path) !== null) {

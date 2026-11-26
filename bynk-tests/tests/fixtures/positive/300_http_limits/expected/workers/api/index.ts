@@ -79,7 +79,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_bulk(body);
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -111,7 +111,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_upload(body);
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/bulk", path) !== null) {

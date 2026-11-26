@@ -5,6 +5,7 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
   allowUnion,
+  RESERVED_RESPONSE_HEADERS,
   decodePath,
   matchPath,
   cfObject,
@@ -327,6 +328,43 @@ test("httpResultToResponse: a range that is not one is a fault, never a malforme
       () => httpResultToResponse(HttpResult.PartialContent(partialBody(), "text/plain", { start, end, total }), id),
       /is not a byte range/,
       `${start}-${end}`,
+    );
+  }
+});
+
+test("httpResultToResponse: a PartialContent body that does not match its range aborts the response", async () => {
+  const enc = new TextEncoder();
+  const body = (...parts: string[]) =>
+    (async function* () {
+      for (const p of parts) yield enc.encode(p);
+    })();
+  const range = { start: 0, end: 4, total: someRange(10) };
+  const ok = httpResultToResponse(HttpResult.PartialContent(body("he", "llo"), "text/plain", range), id);
+  assert.equal(await ok.text(), "hello");
+  const short = httpResultToResponse(HttpResult.PartialContent(body("hel"), "text/plain", range), id);
+  await assert.rejects(short.arrayBuffer(), /is 3 bytes, but its range covers 5/);
+  const long = httpResultToResponse(HttpResult.PartialContent(body("hello", "!"), "text/plain", range), id);
+  await assert.rejects(long.arrayBuffer(), /longer than its range/);
+});
+
+test("httpResultToResponse: a PartialContent or NotModified returned from a non-GET route is a fault", () => {
+  for (const result of [
+    HttpResult.NotModified,
+    HttpResult.PartialContent(partialBody(), "text/plain", { start: 3, end: 8, total: noTotal }),
+  ]) {
+    assert.throws(() => httpResultToResponse(result, id, { notGet: true }), /only a GET route serves/);
+  }
+});
+
+test("withHeader: Content-Range is a header the router owns", () => {
+  assert.ok(RESERVED_RESPONSE_HEADERS.has("content-range"));
+});
+
+test("responseToHttpResult: a 206 with a missing or malformed Content-Range is a fault, not an invented range", async () => {
+  for (const headers of [{} as Record<string, string>, { "content-range": "bytes 0-4" }, { "content-range": "items 0-4/9" }]) {
+    await assert.rejects(
+      responseToHttpResult(new Response("hello", { status: 206, headers }), () => ({ tag: "Ok", value: null }) as never),
+      /Content-Range is missing or malformed/,
     );
   }
 });

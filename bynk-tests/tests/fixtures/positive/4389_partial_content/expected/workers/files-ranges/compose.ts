@@ -18,8 +18,14 @@ export function compose(env: Env) {
     async http_GET_broken() {
       return handlers.api.http_GET_broken(deps);
     },
+    async http_GET_download() {
+      return handlers.api.http_GET_download(deps);
+    },
     async http_GET_same() {
       return handlers.api.http_GET_same(deps);
+    },
+    async http_POST_helper(body: string) {
+      return handlers.api.http_POST_helper(body, deps);
     },
   };
 }

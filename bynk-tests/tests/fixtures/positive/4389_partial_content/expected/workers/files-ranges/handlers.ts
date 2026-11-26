@@ -3,6 +3,11 @@
 
 import { Some } from "../../__bynk_runtime/result.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __withDownload } from "../../__bynk_runtime/http.js";
+
+export function unchanged(): HttpResult<void> {
+  return HttpResult.NotModified;
+}
 
 export const api = {
   async http_GET_blob(deps: {}): globalThis.Promise<HttpResult<void>> {
@@ -26,7 +31,17 @@ export const api = {
       }
     })(), "text/plain", { start: 5, end: 4, total: Some(12) });
   },
+  async http_GET_download(deps: {}): globalThis.Promise<HttpResult<void>> {
+    return __withDownload(HttpResult.PartialContent((async function* () {
+      for (const __e of [new globalThis.TextEncoder().encode("hello")]) {
+        yield __e;
+      }
+    })(), "text/plain", { start: 0, end: 4, total: Some(5) }), "hello.txt");
+  },
   async http_GET_same(deps: {}): globalThis.Promise<HttpResult<void>> {
     return HttpResult.NotModified;
+  },
+  async http_POST_helper(body: string, deps: {}): globalThis.Promise<HttpResult<void>> {
+    return unchanged();
   },
 };

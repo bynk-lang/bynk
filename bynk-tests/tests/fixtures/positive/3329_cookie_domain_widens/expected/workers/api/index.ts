@@ -41,7 +41,7 @@ export default {
           if (method === "POST" && __matchPath("/login", path) !== null) {
             __route = "POST /login";
             const result = await surface.http_POST_login();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"api\""]), __security_api);
           }
         }
         if (__matchPath("/login", path) !== null) {

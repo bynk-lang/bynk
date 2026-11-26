@@ -3861,13 +3861,7 @@ fn check_service_decls(
             };
             // The firing `connection` of `on message`/`on close` is borrowed, not
             // owned — no disposal obligation (contrast `on open`, owned).
-            let borrowed_held: std::collections::HashSet<String> = if is_ws_lifecycle
-                && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close)
-            {
-                std::iter::once("connection".to_string()).collect()
-            } else {
-                std::collections::HashSet::new()
-            };
+            let borrowed_held = borrowed_connection(handler, is_ws_lifecycle);
             checker::check_handler_body(
                 resolved,
                 checker::HandlerBodyCheck {
@@ -3881,10 +3875,7 @@ fn check_service_decls(
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
-                    http_non_get: matches!(
-                        &handler.kind,
-                        HandlerKind::Http { method, .. } if *method != HttpMethod::Get
-                    ),
+                    http_non_get: is_non_get_http(handler),
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,
@@ -6250,6 +6241,23 @@ fn reserved_route_char(
         }),
     );
     true
+}
+
+/// The `connection` a `from websocket` `on message`/`on close` handler borrows (not owned, so no disposal obligation).
+fn borrowed_connection(
+    handler: &Handler,
+    is_ws_lifecycle: bool,
+) -> std::collections::HashSet<String> {
+    if is_ws_lifecycle && matches!(handler.kind, HandlerKind::Message | HandlerKind::Close) {
+        std::iter::once("connection".to_string()).collect()
+    } else {
+        std::collections::HashSet::new()
+    }
+}
+
+/// #4389: whether `handler` is an `on http` handler of a method other than `GET`.
+fn is_non_get_http(handler: &Handler) -> bool {
+    matches!(&handler.kind, HandlerKind::Http { method, .. } if *method != HttpMethod::Get)
 }
 
 /// Validate an `on http METHOD "path"` handler (v0.9 §4.1):

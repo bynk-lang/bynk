@@ -22,6 +22,11 @@ suite files.ranges {
     }
   }
 
+  case "a PartialContent can be a download" {
+    let r <- api.GET("/download") by Visitor
+    expect r is PartialContent(_, _, _)
+  }
+
   case "NotModified is a bodyless answer" {
     let r <- api.GET("/same") by Visitor
     expect r is NotModified
@@ -59,5 +64,10 @@ suite files.ranges as system {
   case "a 304 arrives over HTTP and reads back as NotModified" {
     let r <- api.GET("/same") by Visitor
     expect r is NotModified
+  }
+
+  case "a 304 built in a helper and returned from a POST route is a 500" {
+    let r <- api.POST("/helper", "x") by Visitor
+    expect r is ServerError(_)
   }
 }

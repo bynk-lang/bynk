@@ -75,7 +75,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_PUT_items_Param_id(id, body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_ItemView), request, ["Bynk realm=\"items\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_ItemView, { notGet: true }), request, ["Bynk realm=\"items\""]), __security_api);
           }
         }
         if (__matchPath("/items/:id", path) !== null) {

@@ -892,7 +892,7 @@ on GET("/export") () -> Effect[HttpResult[Bytes]] by v: Visitor {
 | `withHeader(name, value)` | one header line; a repeated name keeps every value | any `HttpResult` |
 | `retryAfter(delay)` | `Retry-After`, `delay` in whole seconds, rounded up | `TooManyRequests`, `ServiceUnavailable` |
 | `at(url)` | `Location` of the new resource | `Created`, `RawCreated`, `Accepted` |
-| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed` |
+| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed`, `PartialContent` |
 
 A typed helper is written on the variant itself, after any other header methods
 (`TooManyRequests(m).withHeader("X-Reason", "deploy").retryAfter(90.seconds)`), because the router
@@ -902,8 +902,8 @@ refused (`bynk.http.invalid_response_header`).
 
 `withHeader` cannot set a header the router owns: the caching headers (`Cache-Control`, `ETag`,
 `Vary`, `Expires`, `Last-Modified`, `Age`, `Pragma` and the CDN directives), `Content-Type` and
-`Content-Length`, `Location`, `Retry-After` and `Content-Disposition` (the typed helpers write
-those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
+`Content-Length`, `Content-Range` (`PartialContent` writes it), `Location`, `Retry-After` and
+`Content-Disposition` (the typed helpers write those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
 `WWW-Authenticate`, `Allow` and the hop-by-hop headers. A header value is ASCII: a literal with
 another character is `bynk.http.invalid_response_header`, and a computed one answers `500`; `at`
 percent-encodes a URL instead. A literal name that is one is
@@ -1383,17 +1383,24 @@ the handler works the range out (an object store such as R2 does it for you) and
 sent. A range that is not one (`start` below 0 or past `end`, or `end` at or past a known `total`)
 is a fault, so the answer is `500` and the route is logged, and a malformed `Content-Range` is never
 sent. The body is streamed like `RawStreamed`'s: no `ETag`, no `content-length`, and a fault mid-body
-aborts the response.
+aborts the response. So does a body that yields more or fewer bytes than the range says (`end - start + 1`),
+rather than going out under a `Content-Range` it does not match.
 
 `NotModified` is a **304** with no body, for a conditional read the handler has resolved itself, such
 as an `If-None-Match` an object store checked against its own entity tag. It is separate from the
 automatic `304` the router gives an eligible `GET` (see [Automatic revalidation](#automatic-revalidation-etag--304)),
-which needs no handler code; add the validator headers you want with the [response header
-operations](#response-headers).
+which needs no handler code.
 
-Both are answers to a `GET`: a route of another method that names either is
-[`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/), and a `HEAD` is
-answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
+Neither variant can carry a validator yet. `ETag`, `Last-Modified`, `Cache-Control` and the other
+caching headers are ones the router owns, so [`withHeader`](#response-headers) refuses them, and these
+two variants have no argument for one as `RawTagged` has. RFC 9110 §15.4.5 says a `304` should repeat the
+validators a `200` would have sent, and a client resumes a download with `If-Range` only against an `ETag`
+on the `206`: a handler that needs either cannot send it today.
+
+Both are answers to a `GET`. A route of another method that names either in its own body is
+[`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/). A variant built in a
+helper `fn` and returned from such a route is not seen at compile time: that route answers `500` and
+logs the fault. A `HEAD` is answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
 `Content-Range` header, and the generated client reads it as a raw body. A unit-tier test matches
 `PartialContent(body, contentType, range)`; at the system tier a `206` reads back as
 `PartialContent` with the range parsed from `Content-Range`, and a `304` as `NotModified`.

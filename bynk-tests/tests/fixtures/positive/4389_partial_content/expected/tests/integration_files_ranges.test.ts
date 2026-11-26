@@ -44,11 +44,30 @@ async function __sysdrive_api_http_GET_broken(__extraHeaders: { get(name: string
   const __res = await __h.env.FILES_RANGES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
+async function __sysdrive_api_http_GET_download(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/download`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.FILES_RANGES.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
 async function __sysdrive_api_http_GET_same(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/same`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.FILES_RANGES.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_api_http_POST_helper(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/helper`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body });
+  const __res = await __h.env.FILES_RANGES.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
+}
+async function __sysdrive_raw_api_http_POST_helper(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/helper`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
+  const __res = await __h.env.FILES_RANGES.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
 async function __sysdrive_wrongmethod_api(method: string, path: string) {
   const __h = __makeHarness();
@@ -68,12 +87,12 @@ async function test_a_206_arrives_over_HTTP_and_reads_back_as_PartialContent__wi
         case "PartialContent": {
           const contentType = __d.contentType;
           const range = __d.range;
-          if (!(contentType === "text/plain")) { throw __bynkExpectFailure("tests/ranges.bynk:36:16", 1046, 1073, "expect contentType == \"text/plain\"\n  expected: contentType == \"text/plain\"\n  actual:   " + __bynkShow((contentType)) + " == " + __bynkShow(("text/plain"))); }
-          if (!(__bynkEq(range, { start: 3, end: 8, total: Some(12) }))) { throw __bynkExpectFailure("tests/ranges.bynk:37:16", 1089, 1148, "expect range == ContentRange { start: 3, end: 8, total: Some(12) }\n  expected: range == ContentRange { start: 3, end: 8, total: Some(12) }\n  actual:   " + __bynkShow((range)) + " == " + __bynkShow(({ start: 3, end: 8, total: Some(12) }))); }
+          if (!(contentType === "text/plain")) { throw __bynkExpectFailure("tests/ranges.bynk:41:16", 1182, 1209, "expect contentType == \"text/plain\"\n  expected: contentType == \"text/plain\"\n  actual:   " + __bynkShow((contentType)) + " == " + __bynkShow(("text/plain"))); }
+          if (!(__bynkEq(range, { start: 3, end: 8, total: Some(12) }))) { throw __bynkExpectFailure("tests/ranges.bynk:42:16", 1225, 1284, "expect range == ContentRange { start: 3, end: 8, total: Some(12) }\n  expected: range == ContentRange { start: 3, end: 8, total: Some(12) }\n  actual:   " + __bynkShow((range)) + " == " + __bynkShow(({ start: 3, end: 8, total: Some(12) }))); }
           return undefined;
         }
         default: {
-          return __bynkExpect((false), "tests/ranges.bynk:39:19", 1175, 1180, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/ranges.bynk:44:19", 1311, 1316, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -97,13 +116,13 @@ async function test_an_unknown_total_is_written___and_reads_back_as_None() {
       switch (__d.tag) {
         case "PartialContent": {
           const range = __d.range;
-          if (!(__bynkEq(range.start, 0))) { throw __bynkExpectFailure("tests/ranges.bynk:47:16", 1365, 1381, "expect range.start == 0\n  expected: range.start == 0\n  actual:   " + __bynkShow((range.start)) + " == " + __bynkShow((0))); }
-          if (!(__bynkEq(range.end, 4))) { throw __bynkExpectFailure("tests/ranges.bynk:48:16", 1397, 1411, "expect range.end == 4\n  expected: range.end == 4\n  actual:   " + __bynkShow((range.end)) + " == " + __bynkShow((4))); }
-          if (!(__bynkEq(range, { start: 0, end: 4, total: None }))) { throw __bynkExpectFailure("tests/ranges.bynk:49:16", 1427, 1482, "expect range == ContentRange { start: 0, end: 4, total: None }\n  expected: range == ContentRange { start: 0, end: 4, total: None }\n  actual:   " + __bynkShow((range)) + " == " + __bynkShow(({ start: 0, end: 4, total: None }))); }
+          if (!(__bynkEq(range.start, 0))) { throw __bynkExpectFailure("tests/ranges.bynk:52:16", 1501, 1517, "expect range.start == 0\n  expected: range.start == 0\n  actual:   " + __bynkShow((range.start)) + " == " + __bynkShow((0))); }
+          if (!(__bynkEq(range.end, 4))) { throw __bynkExpectFailure("tests/ranges.bynk:53:16", 1533, 1547, "expect range.end == 4\n  expected: range.end == 4\n  actual:   " + __bynkShow((range.end)) + " == " + __bynkShow((4))); }
+          if (!(__bynkEq(range, { start: 0, end: 4, total: None }))) { throw __bynkExpectFailure("tests/ranges.bynk:54:16", 1563, 1618, "expect range == ContentRange { start: 0, end: 4, total: None }\n  expected: range == ContentRange { start: 0, end: 4, total: None }\n  actual:   " + __bynkShow((range)) + " == " + __bynkShow(({ start: 0, end: 4, total: None }))); }
           return undefined;
         }
         default: {
-          return __bynkExpect((false), "tests/ranges.bynk:51:19", 1509, 1514, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/ranges.bynk:56:19", 1645, 1650, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -123,7 +142,7 @@ async function test_a_range_that_is_not_one_is_a_500__not_a_malformed_Content_Ra
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_broken(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/ranges.bynk:56:12", 1654, 1673, "expect r is ServerError(_)", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/ranges.bynk:61:12", 1790, 1809, "expect r is ServerError(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -139,7 +158,23 @@ async function test_a_304_arrives_over_HTTP_and_reads_back_as_NotModified() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_same(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "NotModified"))) { throw __bynkExpectFailure("tests/ranges.bynk:61:12", 1796, 1812, "expect r is NotModified", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "NotModified"))) { throw __bynkExpectFailure("tests/ranges.bynk:66:12", 1932, 1948, "expect r is NotModified", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_304_built_in_a_helper_and_returned_from_a_POST_route_is_a_500() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_POST_helper("x", undefined, "");
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/ranges.bynk:71:12", 2089, 2108, "expect r is ServerError(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -151,7 +186,7 @@ async function test_a_304_arrives_over_HTTP_and_reads_back_as_NotModified() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a 206 arrives over HTTP and reads back as PartialContent, with the range it states", "an unknown total is written * and reads back as None", "a range that is not one is a 500, not a malformed Content-Range", "a 304 arrives over HTTP and reads back as NotModified"];
+export const __bynkCases: readonly string[] = ["a 206 arrives over HTTP and reads back as PartialContent, with the range it states", "an unknown total is written * and reads back as None", "a range that is not one is a 500, not a malformed Content-Range", "a 304 arrives over HTTP and reads back as NotModified", "a 304 built in a helper and returned from a POST route is a 500"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -177,6 +212,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a 304 arrives over HTTP and reads back as NotModified")) {
     const started = __bynkCaseNow();
     const r = { name: "a 304 arrives over HTTP and reads back as NotModified", ...(await test_a_304_arrives_over_HTTP_and_reads_back_as_NotModified()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a 304 built in a helper and returned from a POST route is a 500")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a 304 built in a helper and returned from a POST route is a 500", ...(await test_a_304_built_in_a_helper_and_returned_from_a_POST_route_is_a_500()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

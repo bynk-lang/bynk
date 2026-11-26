@@ -45,7 +45,7 @@ export default {
           if (method === "POST" && __matchPath("/logout", path) !== null) {
             __route = "POST /logout";
             const result = await surface.http_POST_logout();
-            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/logout", path) !== null) {
