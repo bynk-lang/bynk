@@ -206,22 +206,6 @@ fn ws_frame_json_expr() -> bynk_ts::TsExpr {
     }
 }
 
-/// `void code; void reason; void wasClean;`: the close handler's parameters, marked used.
-fn ws_close_unused_params() -> Vec<bynk_ts::TsStmt> {
-    ["code", "reason", "wasClean"]
-        .into_iter()
-        .map(|name| {
-            bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Unary {
-                    op: bynk_ts::TsUnaryOp::Void,
-                    expr: Box::new(bynk_ts::TsExpr::Ident(name.to_string())),
-                },
-                None,
-            )
-        })
-        .collect()
-}
-
 /// `try { <target> = <value>; } catch { ws.close(1003, "<reason>"); return; }`:
 /// one step of decoding an incoming WebSocket frame, closing the socket and
 /// returning when it fails.
@@ -1039,7 +1023,7 @@ pub(super) fn emit_ws_dispatch_handlers(
     };
     // The firing socket's minimal structural surface (attachment + send/close), so
     // emitted code stays free of `@cloudflare/workers-types`.
-    let ws_ty = "{ deserializeAttachment(): unknown; send(data: string): void; close(code?: number, reason?: string): void }";
+    let ws_ty = super::websocket_close::WS_CLOSE_TY;
     let deps_arg = ws_attachment_deps_arg(host);
     let att_or_null = bynk_ts::TsType::union(vec![
         bynk_ts::TsType::named(att_ty.clone()),
@@ -1260,49 +1244,13 @@ pub(super) fn emit_ws_dispatch_handlers(
     }
 
     if let Some(c) = host.close {
-        let method = ws_close_do_method_name(host.service);
-        let mut stmts = ws_close_unused_params();
-        att_guard(&mut stmts);
-        stmts.extend(host.rebuild.stmts());
-        let mut call_args = vec![ident("connection")];
-        for (i, p) in c.params.iter().enumerate() {
-            call_args.push(ws_arg_cast("__att", i, &p.type_ref));
-        }
-        stmts.push(bynk_ts::TsStmt::expr_stmt(
-            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
-                    property: method,
-                }),
-                args: call_args.into_iter().chain([deps_arg]).collect(),
-            })),
-            None,
-        ));
-        let close_method = bynk_ts::TsClassMethod::new(
-            "webSocketClose",
-            true,
-            vec![
-                bynk_ts::TsParam::new("ws".to_string(), Some(bynk_ts::TsType::named(ws_ty))),
-                bynk_ts::TsParam::new("code".to_string(), Some(bynk_ts::TsType::named("number"))),
-                bynk_ts::TsParam::new("reason".to_string(), Some(bynk_ts::TsType::named("string"))),
-                bynk_ts::TsParam::new(
-                    "wasClean".to_string(),
-                    Some(bynk_ts::TsType::named("boolean")),
-                ),
-            ],
-            Some(bynk_ts::TsType::named_with_args(
-                "globalThis.Promise",
-                vec![bynk_ts::TsType::named("void")],
-            )),
-            stmts,
-        );
-        methods.push(close_method);
+        super::websocket_close::emit_close_methods(methods, host, c, types, &att_guard, &deps_arg);
     }
 }
 
 /// `<holder>.args[<i>] as <type>`: a wire argument recovered from a hibernated connection's
 /// attachment (or the forwarded payload), read at its declared type.
-fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
+pub(super) fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::Index {
             object: Box::new(member(ident(holder), "args")),

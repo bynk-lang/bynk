@@ -149,7 +149,8 @@ suite chat {
 |---|---|
 | `svc.open(tc, route…) by A(…)` | runs `on open` with `tc` as the `connection`, the handler's route values and the principal |
 | `svc.message(tc, frame)` | runs `on message` with one decoded `in` frame |
-| `svc.close(tc)` | runs `on close`: the client went away |
+| `svc.close(tc)` | runs `on close`: the client went away, closing normally (`CloseInfo { code: 1000, reason: "", clean: true }`) |
+| `svc.close(tc, info)` | the same, with the `CloseInfo` the handler's `close: CloseInfo` parameter receives |
 
 - **The connection remembers `open`.** `message` and `close` take neither route
   values nor `by`. The connection carries both from `open`, as the platform
@@ -158,8 +159,10 @@ suite chat {
   principal, open a new `TestConnection`. A `message` or `close` on a connection
   that was never opened fails the case.
 - **Reading the connection.** `tc.sent()` is the frames the server wrote, in
-  order (`List[F]`), and `tc.closed()` is `true` once the server closed it. The
-  client going away (`svc.close(tc)`) does not set `closed()`. Both are plain
+  order (`List[F]`), `tc.closed()` is `true` once the server closed it, and
+  `tc.closeCode()` and `tc.closeReason()` are the code and reason it closed with
+  (`Option[Int]` and `Option[String]`; `None` when it gave none). The client
+  going away (`svc.close(tc)`) does not set `closed()`. All are plain
   reads, not effects. `message` takes a decoded frame of the service's `in`
   type; there is no raw-text form.
 - **Handing a connection to an agent.** `tc.connection()` gives the owned

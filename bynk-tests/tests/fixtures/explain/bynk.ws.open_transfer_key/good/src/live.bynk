@@ -17,4 +17,8 @@ service feed from websocket(in: Frame, out: Frame) {
     let _ <- Room("lobby").join(connection)
     ()
   }
+
+  on close () -> Effect[()] by v: Visitor {
+    ()
+  }
 }

@@ -1,0 +1,11 @@
+// #3902: `ChatGateway`'s `on close` declares no `close: CloseInfo`, so there is nothing for an
+// explicit `CloseInfo` to fill.
+suite chat {
+  consumes bynk { CloseInfo }
+
+  case "a CloseInfo for an on close that takes none" {
+    let tc = TestConnection[ServerFrame]()
+    let _ <- ChatGateway.open(tc, RoomId.unsafe("r")) by Participant(UserId.unsafe("a"))
+    let _ <- ChatGateway.close(tc, CloseInfo { code: 1000, reason: "", clean: true })
+  }
+}

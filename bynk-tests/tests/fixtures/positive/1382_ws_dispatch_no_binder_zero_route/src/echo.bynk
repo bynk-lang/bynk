@@ -23,6 +23,10 @@ service Echo from websocket(in: Frame, out: Frame) {
   on message (frame: Frame) -> Effect[()] by Participant {
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by Participant {
+    ()
+  }
 }
 
 agent Room {

@@ -1,0 +1,10 @@
+{
+  "blurb": "A close frame carries its reason in at most 123 bytes of UTF-8, the protocol's limit. A literal reason longer than that is refused here; a computed one is cut to 123 bytes on a character boundary. Shorten the reason, and put anything longer in a frame sent before closing.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.bad_close_reason",
+  "constructs": [],
+  "example": "        let _ <- conn.close(4001, \"the room was archived by an administrator after twelve months without any activity, and its members were moved to the general room\")   // ✗ over the protocol's limit\n        let _ <- conn.close(4001, \"room archived\")   // ✓",
+  "severity": "error",
+  "summary": "A WebSocket `connection.close(code, reason)` names a literal reason over the protocol's 123 bytes of UTF-8 (#3902)."
+}

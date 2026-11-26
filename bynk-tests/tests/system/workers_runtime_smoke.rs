@@ -1059,6 +1059,10 @@ service live from websocket(in: Frame, out: Frame) {
     let _ <- Board("ci").join(user, connection)
     ()
   }
+
+  on close (user: String) -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Board {
@@ -1098,6 +1102,10 @@ type Frame = { text: String }
 service live from websocket(in: Frame, out: Frame) {
   on open (room: String, user: String) -> Effect[()] by v: Visitor {
     let _ <- Room(room).join(user, connection)
+    ()
+  }
+
+  on close (room: String, user: String) -> Effect[()] by v: Visitor {
     ()
   }
 }
@@ -1243,6 +1251,176 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
             "room=r1&user=bob",
             "room=r2&user=carol",
         ],
+    );
+}
+
+/// #3902: a client leaving is released by `on close`, with the close code the client sent, and the
+/// platform's close handshake completes. `join` closes a banned user's connection with a code and
+/// reason of the agent's choosing; `leave` removes a departed client and records the code `on close`
+/// was given. A room that kept a dead connection (no `on close`) would raise on the next broadcast.
+const WS_CLOSE_SOURCE: &str = r#"context smoke
+
+consumes bynk { CloseInfo }
+
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (room: String, user: String) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).join(user, connection)
+    ()
+  }
+
+  on close (room: String, user: String, close: CloseInfo) -> Effect[()] by v: Visitor {
+    let _ <- Room(room).leave(user, close.code)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store lastCode: Cell[Int]
+
+  on call join(user: String, conn: Connection[Frame]) -> Effect[()] {
+    if user == "banned" {
+      let _ <- conn.close(4001, "banned")
+      ()
+    } else {
+      let _ <- conns.put(user, conn)
+      ()
+    }
+  }
+
+  on call leave(user: String, code: Int) -> Effect[()] {
+    let _ <- conns.remove(user)
+    lastCode := code
+    ()
+  }
+
+  on call post(text: String) -> Effect[()] {
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
+    ()
+  }
+
+  on call last() -> Effect[Int] {
+    lastCode
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/post") () -> Effect[HttpResult[String]] by v: Visitor {
+    do Room("r1").post("hello")
+    Ok("posted")
+  }
+
+  on GET("/last") () -> Effect[HttpResult[String]] by v: Visitor {
+    let code <- Room("r1").last()
+    Ok("\(code)")
+  }
+}
+"#;
+
+/// Real clients: `banned` is closed by the server with `4001 "banned"` and sees exactly that; `alice`
+/// and `bob` join; `alice` closes with `4002 "bye"` and, once the Durable Object has run `on close`,
+/// sees its close complete; the room then records `4002`, and a broadcast reaches
+/// only `bob` (a dead connection would have raised on the way). Prints the observations as JSON.
+const WS_CLOSE_CLIENTS_JS: &str = r#"
+const [port] = process.argv.slice(2);
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const open = (user) => within(new Promise((resolve, reject) => {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/?room=r1&user=${user}`);
+  const frames = [];
+  const closed = new Promise((done) => {
+    ws.addEventListener("close", (e) => done({ code: e.code, reason: e.reason }));
+  });
+  ws.addEventListener("message", (e) => frames.push(String(e.data)));
+  ws.addEventListener("open", () => resolve({ ws, frames, closed }));
+  ws.addEventListener("error", () => reject(new Error(`upgrade failed: ${user}`)));
+}), 15000, `the upgrade for ${user}`);
+(async () => {
+  const banned = await open("banned");
+  const bannedClose = await within(banned.closed, 15000, "the server's close of the banned client");
+  const alice = await open("alice");
+  const bob = await open("bob");
+  alice.ws.close(4002, "bye");
+  const aliceClose = await within(alice.closed, 15000, "the close handshake reply for alice");
+  const last = await within(fetch(`http://127.0.0.1:${port}/last`).then((r) => r.text()), 15000, "/last");
+  const post = await within(fetch(`http://127.0.0.1:${port}/post`), 15000, "/post");
+  if (!post.ok) throw new Error(`the broadcast answered ${post.status}`);
+  await within(new Promise((resolve) => {
+    const tick = () => (bob.frames.length > 0 ? resolve() : setTimeout(tick, 50));
+    tick();
+  }), 15000, "the broadcast on bob");
+  console.log(JSON.stringify({ bannedClose, aliceClose, last, bob: bob.frames, alice: alice.frames }));
+  bob.ws.close();
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_departing_client_runs_on_close_with_its_code_and_the_handshake_completes_on_workerd() {
+    let Some(served) = serve_smoke(WS_CLOSE_SOURCE, "ws-close") else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-close-clients.js");
+    fs::write(&script, WS_CLOSE_CLIENTS_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the close clients must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["bannedClose"],
+        serde_json::json!({ "code": 4001, "reason": "banned" }),
+        "`connection.close(4001, \"banned\")` reaches the client with that code and reason\n{report}"
+    );
+    // The handshake completes: the client sees its close event rather than waiting. Which code the
+    // reply carries is the platform's when it replies automatically (`web_socket_auto_reply_to_close`,
+    // on under the emitted compatibility date), so only completion is asserted here; the code Bynk's
+    // own reply sends is pinned in `bynk-emit/runtime/test/connection.test.ts`.
+    assert!(
+        seen["aliceClose"]["code"].is_number(),
+        "the close handshake completes for the client that left\n{report}"
+    );
+    assert_eq!(
+        seen["last"],
+        serde_json::json!("\"4002\""),
+        "`on close` ran with the code the client closed with\n{report}"
+    );
+    assert_eq!(
+        seen["bob"],
+        serde_json::json!(["{\"text\":\"hello\"}"]),
+        "a later broadcast reaches the remaining client\n{report}"
+    );
+    assert_eq!(
+        seen["alice"],
+        serde_json::json!([]),
+        "and not the one that left\n{report}"
     );
 }
 

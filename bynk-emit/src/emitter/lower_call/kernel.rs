@@ -564,6 +564,8 @@ fn lower_test_connection(op: TestConnectionOp, recv: bynk_ts::TsExpr) -> bynk_ts
     match op {
         TestConnectionOp::Sent => TsExpr::array(vec![spread(member(recv, "sent"))]),
         TestConnectionOp::Closed => member(recv, "closed"),
+        TestConnectionOp::CloseCode => call(member(recv, "closeCodeOption"), vec![]),
+        TestConnectionOp::CloseReason => call(member(recv, "closeReasonOption"), vec![]),
         TestConnectionOp::Connection => call(member(recv, "mint"), vec![]),
     }
 }
@@ -728,6 +730,8 @@ mod tests {
         for (op, want) in [
             (TestConnectionOp::Sent, "[...c.sent]"),
             (TestConnectionOp::Closed, "c.closed"),
+            (TestConnectionOp::CloseCode, "c.closeCodeOption()"),
+            (TestConnectionOp::CloseReason, "c.closeReasonOption()"),
             (TestConnectionOp::Connection, "c.mint()"),
         ] {
             assert_eq!(printed(lower_test_connection(op, node("c"))), want);

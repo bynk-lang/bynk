@@ -8,4 +8,8 @@ service G from websocket(in: NoIn, out: String) {
   on open () -> Effect[()] by user: Participant {
     ()
   }
+
+  on close () -> Effect[()] by user: Participant {
+    ()
+  }
 }

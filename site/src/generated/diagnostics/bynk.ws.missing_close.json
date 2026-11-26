@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket service has an `on close` handler. `on open` always hands its connection to an agent's state, and the runtime cannot tell which store entry holds it, so nothing removes it when the client leaves. Without `on close`, a departed client's dead connection stays held, and the next broadcast to it raises, so one departure breaks every later broadcast to the room. Add `on close` with the same leading route parameters and `by` as `on open`, and release the connection there. A trailing `close: CloseInfo` parameter carries the close code and reason.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.missing_close",
+  "constructs": [],
+  "example": "service gateway from websocket(in: Frame, out: Frame) {   // ✗ no `on close`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on close (room: RoomId, close: CloseInfo) -> Effect[()] by user: Member { … }   // ✓ releases the connection\n}",
+  "severity": "error",
+  "summary": "A `from websocket` service has no `on close` handler, so a departed client's connection, held in an agent by `on open`, is never released (#3902)."
+}

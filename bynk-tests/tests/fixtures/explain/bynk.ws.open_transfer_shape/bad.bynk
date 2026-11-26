@@ -11,4 +11,8 @@ service gateway from websocket(in: Frame, out: Frame) {
     let _ <- connection.close()
     ()
   }
+
+  on close (room: RoomId) -> Effect[()] by user: Member {
+    ()
+  }
 }

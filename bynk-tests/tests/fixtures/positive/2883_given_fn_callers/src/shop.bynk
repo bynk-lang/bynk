@@ -45,6 +45,10 @@ service chat from websocket(in: Frame, out: Frame) {
 		let _ <- warn(frame.text)
 		()
 	}
+
+	on close (roomId: RoomId) -> Effect[()] by user: Participant {
+	  ()
+	}
 }
 
 // Handlers declaring no `given` inherit the service's, which satisfies `warn`.

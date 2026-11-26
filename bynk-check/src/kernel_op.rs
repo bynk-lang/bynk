@@ -444,6 +444,8 @@ kernel_ops! {
     TestConnectionOp {
         Sent = "sent", "sent() -> List[F]";
         Closed = "closed", "closed() -> Bool";
+        CloseCode = "closeCode", "closeCode() -> Option[Int]";
+        CloseReason = "closeReason", "closeReason() -> Option[String]";
         Connection = "connection", "connection() -> Connection[F]";
     }
 
@@ -458,7 +460,7 @@ kernel_ops! {
 /// completion registry.
     ConnectionOp {
         Send = "send", "send(frame: F) -> Effect[()]";
-        Close = "close", "close() -> Effect[()]";
+        Close = "close", "close(code?: Int, reason?: String) -> Effect[()]";
     }
 /// `Effect[T]` (#2683, #2711, #3437, #3965): `within`, `race`, `detach`, `map` and `andThen`, on every `Effect`.
     EffectOp {
