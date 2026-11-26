@@ -38,7 +38,7 @@ async function test_a_handler_fault_is_forwarded_to_the_fallback() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "ops@ops.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:6:12", 396, 427, "expect r is Forward(\"ops@ops.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -54,7 +54,7 @@ async function test_what_the_handler_decides_is_applied_as_before() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "spam", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "spam", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "not wanted"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:11:12", 613, 638, "expect r is Reject(\"not wanted\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -70,7 +70,7 @@ async function test_a_service_with_no_fallback_rejects_a_fault() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_sales({ from: "a@b.example", to: "sales@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_sales({ from: "a@b.example", to: "sales@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "message could not be processed"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:16:12", 817, 862, "expect r is Reject(\"message could not be processed\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
