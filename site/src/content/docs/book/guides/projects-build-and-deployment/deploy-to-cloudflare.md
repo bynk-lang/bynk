@@ -795,6 +795,13 @@ interrupted run never makes a second one), and writes both into the generated
 deploy adopts it, looking its id up with `wrangler d1 list`. Under `--env` the
 environment gets its own database and id.
 
+A `D1` with `@jurisdiction("eu")` is planned as
+`d1 create shop-cart-orders (D1_ORDERS) in jurisdiction eu` and created with
+`--jurisdiction eu`; the ledger records the jurisdiction beside the id. It is fixed at creation, so a
+source that later adds or changes it for a database already in the ledger is refused with an
+explanation, never recreated. An adopted database (one already on the account) keeps whatever
+jurisdiction it was made with, which Bynk cannot read back.
+
 Removing or renaming the capability leaves an orphan, reported as
 `orphan d1 shop-cart D1_ORDERS (shop-cart-orders; not deleted)`. `--prune`
 never deletes a database: it holds data. Delete it yourself, then remove its

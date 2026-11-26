@@ -44,6 +44,20 @@ capability Archives = R2 @jurisdiction("eu")
 `bynk deploy` creates the bucket with `--jurisdiction eu`. Changing it makes a new bucket and leaves the
 old one, with its objects, where it is.
 
+## D1 databases
+
+A [`D1` instance](/reference/bynk-capabilities/#sql-databases-d1) takes it too:
+
+```bynk,fragment
+capability Orders = D1 @jurisdiction("eu")
+```
+
+`bynk deploy` creates the database with `wrangler d1 create --jurisdiction eu` and records the jurisdiction
+in `bynk.deploy.lock`. A database's jurisdiction is fixed when it is made, so adding or changing the
+annotation on a database that is already provisioned is refused, and the plan never recreates it: it holds
+data. Keep the annotation the database was made with, or create a new `D1` capability, move the data
+across and remove the old one.
+
 ## What to check yourself
 
 A jurisdiction is invisible to a query and to `bynk test`, so nothing in a test run proves it. Bynk

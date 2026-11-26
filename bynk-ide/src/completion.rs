@@ -6233,6 +6233,7 @@ fn Box.size(self) -> Int { 1 }
         for doc in [
             "context a\n@jurisdiction(",
             "context a\ncapability Files = R2 @jurisdiction(",
+            "context a\ncapability Orders = D1 @jurisdiction(",
         ] {
             let offered: Vec<&str> = instance_option_values(doc, doc.len())
                 .iter()
