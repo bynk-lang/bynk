@@ -1,7 +1,8 @@
 # Pass-through HTTP — rest segments, forwarded requests and pass-through responses
 
-- **Status:** Settling in the draft PR that adds this doc. Spine issue: #3752,
-  which carries the live slice status.
+- **Status:** Settling in the PR that adds this doc. Every maintainer ruling
+  was given on 26 November 2026 (§16). Spine issue: #3752, which carries the
+  live slice status.
 - **Realises:** the service-tier HTTP surface
   (`site/src/content/docs/reference/http.md`) and the outbound streamed bodies
   of `Fetch` (`reference/bynk-capabilities.md`, *Streamed bodies*). It answers
@@ -45,7 +46,8 @@
 
 Every open question is written as a **[DECISION]** with a recommendation and
 the alternatives rejected. A decision that is a product call rather than an
-engineering one is marked **Maintainer ruling needed**; §16 lists them.
+engineering one was marked **Maintainer ruling needed**; each has now been
+ruled, recorded at the decision, and §16 lists them.
 
 ## 1. The theme
 
@@ -273,8 +275,8 @@ other route keeps:
 | Rest segments for R2 and SPAs | Same feature, ordinary routes | Separate | Separate |
 
 **[DECISION D1] Pass-through is part of the ordinary service tier, as a
-distinct route form (A).** **Maintainer ruling needed** — this is the "should
-Bynk do this at all" question #3752 leaves open.
+distinct route form (A).** **Ruled 26 November 2026:** (A). This was the "should Bynk do this
+at all" question #3752 left open.
 Recommendation: (A). A pass-through route is a route: it ranks with the
 others, takes `by`, `@rateLimit` and `@limit`, is tested like the others, and
 the boundary behaviours it gives up are named in one table (§6.3) and visible
@@ -463,8 +465,8 @@ pattern like any other.
 ### 6.1 The route form
 
 **[DECISION D7] `on ANY("<route>")` declares a pass-through route. It must
-return `Effect[PassThrough]`, and only it may.** **Maintainer ruling
-needed** — this fixes the surface the track is built on.
+return `Effect[PassThrough]`, and only it may.** **Ruled 26 November 2026:** `on ANY` with
+`Effect[PassThrough]`, the surface the track is built on.
 
 ```bynk,ignore
 on ANY("/blog/*path") (path: String, request: InboundRequest)
@@ -601,9 +603,8 @@ one-item list); `names()` plus `get` (two calls for one need).
 
 **[DECISION D13] An `Upstream` capability instance, whose origin is a
 literal or a `String` constant, never a value computed at run time.**
-**Maintainer ruling needed** on placing it in the portable `bynk` surface
-(recommended: it needs only `fetch`, so it works under `bynk dev` and Node)
-rather than `bynk.cloudflare`.
+**Ruled 26 November 2026:** it goes in the portable `bynk` surface (it needs only
+`fetch`, so it works under `bynk dev` and Node), not `bynk.cloudflare`.
 
 ```bynk,ignore
 consumes bynk { Upstream }
@@ -652,7 +653,7 @@ mount** (`@mount("/blog")`), which duplicates the route.
 
 **[DECISION D14] Forward every end-to-end header except a deny list; strip
 credentials unless the instance opts in; replace the forwarding headers.**
-**Maintainer ruling needed** on deny-list versus allow-list.
+**Ruled 26 November 2026:** a deny list, not an allow list.
 
 Request, from the client to the upstream:
 
@@ -688,7 +689,7 @@ Response, from the upstream to the client:
 upstream the author runs, that's the point; for a third party, it's
 personal data leaving the service. The default follows the brief
 (`X-Forwarded-*` added), with `@forwardedFor(false)` to turn it off;
-**Maintainer ruling needed** on whether the default should be off instead.
+**Ruled 26 November 2026:** on by default, with `@forwardedFor(false)` to opt out.
 
 Rejected: **an allow list** of headers to forward (`accept*`, `if-*`,
 `range` …). Safer on paper, but the set of benign end-to-end headers is
@@ -725,7 +726,7 @@ route's cap.**
 
 **[DECISION D16] Redirects are returned, not followed; a `Location` into the
 upstream origin is rewritten onto the proxy; any other passes unchanged.**
-**Maintainer ruling needed** on passing off-origin redirects through.
+**Ruled 26 November 2026:** off-origin redirects pass through.
 
 - `forward` always sends with `redirect: "manual"`.
 - A `Location` is resolved against the URL that was sent. If its origin is
@@ -999,7 +1000,7 @@ matches `/blog` with an empty rest (D4). The manifest carries B9's routes in
 **[DECISION D21] "Behaviourally equivalent" means: the ten TypeScript tests,
 restated as Bynk suite cases and a workerd case, pass against the Bynk
 Worker, with only these intended differences, each documented in the port's
-PR.** **Maintainer ruling needed** on accepting each difference.
+PR.** **Ruled 26 November 2026:** all seven differences below are accepted.
 
 | Behaviour | TypeScript | Bynk | Why the difference |
 |---|---|---|---|
@@ -1016,8 +1017,8 @@ PR.** **Maintainer ruling needed** on accepting each difference.
 
 **[DECISION D22] The port replaces `proxy/` in `bynk-lang/blog`, which
 already owns the deploy workflow and its secrets; the showcase links to it.**
-**Maintainer ruling needed** — #3752's sketch put it in
-`bynk-lang/showcase`. Rejected: a copy in each (two deploys of one route).
+**Ruled 26 November 2026:** the port replaces `proxy/` in `bynk-lang/blog`. #3752's sketch
+had put it in `bynk-lang/showcase`. Rejected: a copy in each (two deploys of one route).
 
 ## 12. The 1.0 position
 
@@ -1054,9 +1055,10 @@ recommendations avoid it:
 
 **[DECISION D23] Separately from this track, decide before 1.0 whether
 `HttpResult` should be extensible** (a `match` on it needs a wildcard), so
-the RFC 9110 vocabulary (ADR 0126) can grow through 1.x. **Maintainer ruling
-needed.** It's a breaking change now (every exhaustive `match` gains a
-wildcard), and cheap before 1.0; this track doesn't depend on it.
+the RFC 9110 vocabulary (ADR 0126) can grow through 1.x. **Ruled 26 November 2026:** yes,
+before 1.0, as its own increment outside this track. It's a breaking change
+now (every exhaustive `match` gains a wildcard), and cheap before 1.0; this
+track doesn't depend on it.
 
 All new items enter as experimental (`[unstable] allow`), so none join the
 frozen surface until promoted.
@@ -1120,26 +1122,26 @@ route form and its suspensions (slice 3, relating to ADR 0162, 0163, 0159,
 
 | | Decision | Ruling |
 |---|---|---|
-| D1 | Pass-through in the ordinary service tier, as a distinct route form | **Maintainer ruling needed** |
+| D1 | Pass-through in the ordinary service tier, as a distinct route form | Ruled: as recommended |
 | D2 | `*name`, last segment only | |
 | D3 | The rest binds a raw `String` | |
 | D4 | Edge cases; zero-or-more matching | |
 | D5 | Rest is the weakest segment; an `ANY` route owns only the paths it matches more specifically than every ordinary route | |
 | D6 | Router and naming changes | |
-| D7 | `on ANY(…)` with `Effect[PassThrough]` | **Maintainer ruling needed** |
+| D7 | `on ANY(…)` with `Effect[PassThrough]` | Ruled: as recommended |
 | D8 | `PassThrough = Forward(Forwarded) \| Respond(HttpResult[()])` | |
 | D9 | What `Forward` suspends and keeps | |
 | D10 | No `cors` in a service with an `ANY` route | |
 | D11 | `InboundRequest` | |
 | D12 | `RequestHeaders.entries()`; no multi-value form | |
-| D13 | `Upstream` with a declared origin; portable `bynk` | **Maintainer ruling needed** (placement) |
-| D14 | Deny-list header policy; credentials opt-in; `X-Forwarded-*` | **Maintainer ruling needed** (deny versus allow list; `X-Forwarded-For` default) |
+| D13 | `Upstream` with a declared origin; portable `bynk` | Ruled: portable `bynk` |
+| D14 | Deny-list header policy; credentials opt-in; `X-Forwarded-*` | Ruled: deny list; `X-Forwarded-For` on by default |
 | D15 | Method and streamed body under the cap | |
-| D16 | Manual redirects; `Location` rewrite; off-origin passes | **Maintainer ruling needed** (off-origin) |
+| D16 | Manual redirects; `Location` rewrite; off-origin passes | Ruled: off-origin passes |
 | D17 | `by` allowed | |
 | D18 | `traceparent` opt-in | |
 | D19 | Failures mapped by the handler, `504` and `502` | |
 | D20 | The `Upstream` double: `exchange` beneath the policy, `forward` for the handler | |
-| D21 | Equivalence, and its intended differences | **Maintainer ruling needed** |
-| D22 | The port lives in `bynk-lang/blog` | **Maintainer ruling needed** |
-| D23 | `HttpResult` extensible before 1.0 (outside this track) | **Maintainer ruling needed** |
+| D21 | Equivalence, and its intended differences | Ruled: all seven accepted |
+| D22 | The port lives in `bynk-lang/blog` | Ruled: `bynk-lang/blog` `proxy/` |
+| D23 | `HttpResult` extensible before 1.0 (outside this track) | Ruled: yes, as its own increment |
