@@ -1029,7 +1029,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     rv = pre.bind_temp(rv, cx);
                 }
                 let (lc, rc) = super::lower::expect_narrowing::narrowing_proof(
-                    *op,
+                    (*op == BinOp::Eq || *op == BinOp::NotEq).then_some(*op == BinOp::Eq),
                     lv.clone(),
                     rv.clone(),
                     cx,

@@ -5,8 +5,6 @@
 //! even though the Bynk is valid. The lowering therefore widens such a read to its base type in
 //! every later comparison, so no check relies on narrowing.
 
-use bynk_syntax::ast::BinOp;
-
 use super::super::lower_ctx::LowerCtx;
 
 /// The TypeScript base type a literal operand has, when it is a number, string or boolean literal.
@@ -44,17 +42,18 @@ fn read_key(e: &bynk_ts::TsExpr) -> Option<String> {
 /// #3775: `expect a == 1500` throws unless `a === 1500`, so TypeScript narrows `a` to `1500` for
 /// the statements after it, and a later `expect a == 7` is a TS2367 error. After one `==` of a
 /// read against a literal, the read is widened to the literal's base type (`a as number`) in every
-/// later comparison, so the check never relies on narrowing.
+/// later comparison, so the check never relies on narrowing. `equality` is `Some(true)` for `==`,
+/// `Some(false)` for `!=` and `None` for any other operator, which narrows nothing.
 pub(in crate::emitter) fn narrowing_proof(
-    op: BinOp,
+    equality: Option<bool>,
     lv: bynk_ts::TsExpr,
     rv: bynk_ts::TsExpr,
     cx: &mut LowerCtx,
 ) -> (bynk_ts::TsExpr, bynk_ts::TsExpr) {
     use bynk_ts::TsType;
-    if !matches!(op, BinOp::Eq | BinOp::NotEq) {
+    let Some(is_eq) = equality else {
         return (lv, rv);
-    }
+    };
     let (read, base, read_is_left) = match (literal_base(&lv), literal_base(&rv)) {
         (None, Some(base)) => (&lv, base, true),
         (Some(base), None) => (&rv, base, false),
@@ -66,7 +65,7 @@ pub(in crate::emitter) fn narrowing_proof(
     let seen = cx.expect_narrowed.contains(&key);
     // `b != false` narrows a boolean to `true`, as `b == true` does; for a number or a string a
     // `!=` leaves the type as it was.
-    if op == BinOp::Eq || base == "boolean" {
+    if is_eq || base == "boolean" {
         cx.expect_narrowed.insert(key);
     }
     if !seen {
@@ -99,8 +98,8 @@ pub(in crate::emitter) fn narrowing_proof_cond(
                 let left = narrowing_proof_cond(*left, cx);
                 (left, narrowing_proof_cond(*right, cx))
             }
-            TsBinaryOp::StrictEq => narrowing_proof(BinOp::Eq, *left, *right, cx),
-            TsBinaryOp::StrictNotEq => narrowing_proof(BinOp::NotEq, *left, *right, cx),
+            TsBinaryOp::StrictEq => narrowing_proof(Some(true), *left, *right, cx),
+            TsBinaryOp::StrictNotEq => narrowing_proof(Some(false), *left, *right, cx),
             other @ (TsBinaryOp::NullishCoalescing
             | TsBinaryOp::GreaterThan
             | TsBinaryOp::InstanceOf
