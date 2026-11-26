@@ -491,7 +491,7 @@ disposal (`bynk.held.use_after_consume`), and branches that dispose inconsistent
 A `service … from websocket(in:, out:)` produces connections. The upgrade
 **authenticates at the edge** — like an HTTP route, `on open` must name its actor
 with `by` (there is no anonymous upgrade; a browser `WebSocket` carries a Bearer
-token in the `Sec-WebSocket-Protocol` subprotocol, since it cannot set an
+token in the `Sec-WebSocket-Protocol` subprotocols (`["bynk.bearer", token]`), since it cannot set an
 `Authorization` header) — and the handler receives a fresh, owned `Connection[out]`
 it must dispose, the canonical disposal being transfer into an agent:
 
