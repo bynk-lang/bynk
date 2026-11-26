@@ -290,8 +290,8 @@ pub(super) fn lower_record_construction(
             match bynk_check::wire_default::field_default_value(init, &declared.type_ref, types) {
                 Ok(v) => {
                     slots.push(FieldSlot::Prop(declared.name.name.clone()));
-                    // #3759: a refined value in it is cast to its position's type.
-                    let slot = match v.holds_refined() {
+                    // #3759, #3842: a refined or opaque value in it is cast to its position's type.
+                    let slot = match v.holds_branded() {
                         true => default_slot(e, type_name, &declared.name.name, cx),
                         false => Slot::Unbranded,
                     };

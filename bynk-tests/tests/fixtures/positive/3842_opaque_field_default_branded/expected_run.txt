@@ -1,0 +1,3 @@
+# #3842: an omitted opaque field default is branded as its opaque type, even where the opaque
+# type is not imported.
+passed=4 failed=0

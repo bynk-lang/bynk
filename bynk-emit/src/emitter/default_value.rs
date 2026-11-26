@@ -74,14 +74,24 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
         DefaultValue::Decimal { coefficient, scale } => {
             super::lower::decimal_lit(coefficient, *scale)
         }
-        DefaultValue::Refined { name, value } => {
+        // #3759, #3842: a refined or an opaque value, branded as its slot is. An opaque type's TS
+        // type is a brand alias like a refined one (ADR 0182), so the same cast brands it where the
+        // type is not nameable; test scaffolding has no declared type to cast to, so it brands an
+        // opaque value through `Name.unsafe(…)` and a refined one with a cast.
+        DefaultValue::Branded {
+            name,
+            value,
+            opaque,
+        } => {
             let base = default_value_node(value, &Slot::Unbranded);
             match slot {
                 Slot::Typed(ty) => TsExpr::Paren(Box::new(TsExpr::As {
                     expr: Box::new(base),
                     ty: ty.clone(),
                 })),
-                Slot::Scaffold => super::ts_types::unchecked_construct_test_node(name, base, false),
+                Slot::Scaffold => {
+                    super::ts_types::unchecked_construct_test_node(name, base, *opaque)
+                }
                 Slot::Unbranded => base,
             }
         }
@@ -131,7 +141,7 @@ pub(super) fn wire_default_node(value: &DefaultValue) -> TsExpr {
         DefaultValue::Decimal { coefficient, scale } => TsExpr::Lit(TsLit::Str(
             bynk_syntax::decimal::render(coefficient, *scale),
         )),
-        DefaultValue::Refined { value, .. } => wire_default_node(value),
+        DefaultValue::Branded { value, .. } => wire_default_node(value),
         DefaultValue::Record(fields) => TsExpr::object_entries(entries(fields)),
         DefaultValue::Sum { variant, fields } => wire_kind(variant, entries(fields)),
         DefaultValue::Some(v) => wire_kind("Some", vec![wire_prop("value", v)]),
@@ -217,9 +227,17 @@ mod tests {
         }
     }
     fn refined(name: &str, v: DefaultValue) -> DefaultValue {
-        DefaultValue::Refined {
+        DefaultValue::Branded {
             name: name.to_string(),
             value: Box::new(v),
+            opaque: false,
+        }
+    }
+    fn opaque(name: &str, v: DefaultValue) -> DefaultValue {
+        DefaultValue::Branded {
+            name: name.to_string(),
+            value: Box::new(v),
+            opaque: true,
         }
     }
     fn print(value: &DefaultValue) -> String {
@@ -258,6 +276,8 @@ mod tests {
             // #3759: a refined value is its base value; the caller brands the whole field.
             (refined("Age", num("3")), "3"),
             (DefaultValue::List(vec![refined("Age", num("1"))]), "[1]"),
+            // #3842: so is an opaque value.
+            (opaque("Tok", text("k")), "\"k\""),
             (
                 record(vec![("n", num("7")), ("s", text("i"))]),
                 "{ n: 7, s: \"i\" }",
@@ -355,6 +375,39 @@ mod tests {
             print_expr(&default_value_node(&value, &Slot::Scaffold)),
             "[{ tag: \"Some\" as const, value: (3 as any) }]"
         );
+    }
+
+    /// #3842: an opaque leaf is branded as its field is, by the same cast where the type is not
+    /// nameable (an opaque type's TS type is a brand alias like a refined one), and in test
+    /// scaffolding as an opaque test literal is there, through `Name.unsafe(…)`.
+    #[test]
+    fn an_opaque_leaf_is_branded_like_a_refined_one() {
+        let slot = TsType::Indexed {
+            object: Box::new(TsType::named("Holder")),
+            index: Box::new(TsType::StringLiteral("tok".to_string())),
+        };
+        let tok = opaque("Tok", text("k"));
+        assert_eq!(
+            print_expr(&default_value_node(&tok, &Slot::Typed(slot))),
+            "(\"k\" as Holder[\"tok\"])"
+        );
+        assert_eq!(
+            print_expr(&default_value_node(
+                &DefaultValue::List(vec![some(tok.clone())]),
+                &Slot::Scaffold
+            )),
+            "[{ tag: \"Some\" as const, value: Tok.unsafe(\"k\") }]"
+        );
+        // A refined leaf beside it keeps its cast, which a refined type has no `unsafe` for.
+        assert_eq!(
+            print_expr(&default_value_node(
+                &refined("Age", num("3")),
+                &Slot::Scaffold
+            )),
+            "(3 as any)"
+        );
+        // And the wire form is the base value, as a refined one's is.
+        assert_eq!(print_expr(&wire_default_node(&tok)), "\"k\"");
     }
 
     /// Decision C1: a record with no fields prints `{}` on the node path, where the deleted
