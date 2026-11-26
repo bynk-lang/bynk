@@ -159,9 +159,15 @@ ceiling with `limits { maxFrame: <bytes> }`, a positive `Int` literal of at most
 ```bynk,fragment
 service Audio from websocket(in: Bytes, out: Bytes) {
   limits { maxFrame: 262_144 }
-  on open (room: RoomId) -> Effect[()] by user: Participant { … }
-  on message (room: RoomId, frame: Bytes) -> Effect[()] by user: Participant { … }
-  on close (room: RoomId) -> Effect[()] by user: Participant { … }
+  on open (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).join(user.identity, connection)
+  }
+  on message (room: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+  }
+  on close (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).leave(user.identity)
+  }
 }
 ```
 
