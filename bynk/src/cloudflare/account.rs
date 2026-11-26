@@ -73,6 +73,17 @@ impl<'a> Account<'a> {
     }
 }
 
+/// `name`, refused unless it can be a bucket name, before it reaches a request path.
+fn bucket_name(name: &str) -> Result<(), CloudflareError> {
+    if rest::r2::is_bucket_name(name) {
+        Ok(())
+    } else {
+        Err(CloudflareError::Other(format!(
+            "`{name}` is not a valid R2 bucket name, so nothing was sent"
+        )))
+    }
+}
+
 /// An answer that succeeded but did not hold what the operation reads.
 fn unreadable(request: &Request, missing: &str) -> CloudflareError {
     let method = match request.method {
@@ -147,16 +158,50 @@ impl CloudflareApi for Account<'_> {
             .d1_migrations_apply(worker_dir, binding, environment)
     }
 
-    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError> {
-        self.wrangler.d1_create(name, jurisdiction)
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, CloudflareError> {
+        let request = rest::d1::create(name, jurisdiction);
+        let body = self.send(Purpose::D1, &request)?;
+        rest::d1::created(&body).ok_or_else(|| unreadable(&request, "database id"))
     }
 
-    fn d1_list(&self) -> Result<String, WranglerError> {
-        self.wrangler.d1_list()
+    /// Every page of the name search until the exact name turns up, followed as the plan's own
+    /// D1 listing is (while a page is full: the answer carries no `total_pages`). Only a database
+    /// named exactly `name` is found, so a longer name the search also matches is never adopted.
+    fn d1_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let mut found = None;
+        let rule = Numbered {
+            cap: None,
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::d1::find_page(name, page);
+            let body = self.send(Purpose::D1, &request)?;
+            let (id, entries) = rest::d1::found(&body, name)
+                .ok_or_else(|| unreadable(&request, "`result` list"))?;
+            let done = id.is_some();
+            if found.is_none() {
+                found = id;
+            }
+            Ok(Page::of(&body, entries).done_if(done))
+        })?;
+        Ok(found)
     }
 
-    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), WranglerError> {
-        self.wrangler.r2_create(name, jurisdiction)
+    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), CloudflareError> {
+        bucket_name(name)?;
+        self.send(Purpose::R2, &rest::r2::create(name, jurisdiction))
+            .map(drop)
+    }
+
+    /// 404 is "not this account's"; any other failure is the error.
+    fn r2_owned(&self, name: &str, jurisdiction: Option<&str>) -> Result<bool, CloudflareError> {
+        bucket_name(name)?;
+        match self.send(Purpose::R2, &rest::r2::bucket(name, jurisdiction)) {
+            Ok(_) => Ok(true),
+            Err(e) if e.status() == Some(404) => Ok(false),
+            Err(e) => Err(e),
+        }
     }
 
     fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
@@ -355,6 +400,71 @@ mod tests {
         assert_eq!(
             e.to_string(),
             "`../../workers/scripts/api` in bynk.deploy.lock is not a KV namespace id, so nothing was deleted"
+        );
+    }
+
+    /// 1D.4b: the name search is followed while pages are full (the answer has no
+    /// `total_pages`) until the exact name turns up; a longer name it also matches is not it.
+    #[test]
+    fn a_database_is_found_by_exact_name_across_full_pages() {
+        let full: &'static str = Box::leak(
+            format!(
+                r#"{{"success":true,"result":[{}],"result_info":{{"page":1,"per_page":100,"count":100}}}}"#,
+                (0..100)
+                    .map(|i| format!(r#"{{"name":"shop-db-{i}","uuid":"u{i}"}}"#))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+            .into_boxed_str(),
+        );
+        let answers: &'static [(u16, &'static str)] = Box::leak(Box::new([
+            (200, full),
+            (
+                200,
+                r#"{"success":true,"result":[{"name":"shop-db","uuid":"the-one"}],"result_info":{"page":2,"per_page":100,"count":1}}"#,
+            ),
+        ]));
+        let (base, seen) = answering_in_turn(answers);
+        let root = std::env::temp_dir();
+        assert_eq!(
+            account(base, &root).d1_find("shop-db").unwrap().as_deref(),
+            Some("the-one")
+        );
+        assert_eq!(
+            seen.join().unwrap(),
+            [
+                "GET /accounts/acct/d1/database?name=shop-db&per_page=100&page=1",
+                "GET /accounts/acct/d1/database?name=shop-db&per_page=100&page=2",
+            ]
+        );
+        let (base, _) = answering_in_turn(&[(
+            200,
+            r#"{"success":true,"result":[{"name":"shop-db-old","uuid":"u"}],"result_info":{"page":1,"per_page":100,"count":1}}"#,
+        )]);
+        assert_eq!(account(base, &root).d1_find("shop-db").unwrap(), None);
+    }
+
+    /// 1D.4b: the account answers for its own bucket; a 404 is a bucket it does not hold, and
+    /// any other failure is the error. A name that is not a bucket name is never sent.
+    #[test]
+    fn a_bucket_is_owned_only_when_the_account_answers_for_it() {
+        let root = std::env::temp_dir();
+        let (base, seen) = answering_in_turn(&[
+            (200, r#"{"success":true,"result":{"name":"shop-files"}}"#),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10006,"message":"The specified bucket does not exist."}]}"#,
+            ),
+            (403, r#"{"success":false,"errors":[{"code":10000}]}"#),
+        ]);
+        let account = account(base, &root);
+        assert!(account.r2_owned("shop-files", Some("eu")).unwrap());
+        assert!(!account.r2_owned("shop-files", None).unwrap());
+        assert!(account.r2_owned("shop-files", None).is_err());
+        assert_eq!(seen.join().unwrap().len(), 3);
+        assert_eq!(
+            account.r2_create("../x", None).unwrap_err().to_string(),
+            "`../x` is not a valid R2 bucket name, so nothing was sent"
         );
     }
 

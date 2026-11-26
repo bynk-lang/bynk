@@ -277,10 +277,15 @@ impl ResourceKind for D1 {
                 db.binding
             )));
         }
+        let done = if adopted {
+            format!("adopted the D1 database `{physical}` already on the account")
+        } else {
+            format!("created the D1 database `{physical}`")
+        };
         let record = cx.recording(
             &db.binding,
             D1Record::of(&physical, &id, db.jurisdiction.as_deref()),
-            &format!("created the D1 database `{physical}`"),
+            &done,
         );
         Ok(Applied::bound(&db.binding, (physical, id)).with(record))
     }
@@ -415,8 +420,12 @@ pub(crate) fn apply_d1_migrations(
 }
 
 /// Create the D1 database `name` and return its `database_id` and whether it was adopted (not
-/// created), the one already there under that name (P4a, #2602). Run from the project root, as KV
-/// and buckets are.
+/// created), the one already there under that name (P4a, #2602).
+///
+/// Since 1D.4b (#4056) the adoption is read from the account, not from an error code: Cloudflare's
+/// reference documents no "already exists" code for D1. A create that Cloudflare refused
+/// ([`CloudflareError::is_refusal`]) is followed by a lookup of that exact name, and the database
+/// is adopted only when it is found; otherwise the create's own error stands.
 pub(crate) fn create_d1(
     api: &dyn CloudflareApi,
     name: &str,
@@ -426,36 +435,17 @@ pub(crate) fn create_d1(
         Ok(id) => return Ok((id, false)),
         Err(e) => e,
     };
-    if !e.already_exists() {
-        return Err(e.into());
+    if !e.is_refusal() {
+        return Err(e);
     }
-    let listed = api.d1_list().map_err(|e| -> CloudflareError {
-        if e.ran_and_failed() {
-            format!("it already exists, and listing the account's databases failed: {e}").into()
-        } else {
-            e.into()
-        }
-    })?;
-    parse_d1_listed_id(&listed, name)
-        .map(|id| (id, true))
-        .ok_or_else(|| "it already exists, but `wrangler d1 list` does not show it".into())
-}
-
-/// The `uuid` of database `name` in `wrangler d1 list --json`'s array.
-fn parse_d1_listed_id(json: &str, name: &str) -> Option<String> {
-    // From the first line starting with `[` that the rest parses from, so a
-    // bracketed banner line (`[WARNING] …`) before the array is skipped.
-    let listed: Vec<serde_json::Value> = std::iter::once(0)
-        .chain(json.match_indices('\n').map(|(i, _)| i + 1))
-        .map(|i| json[i..].trim_start())
-        .filter(|rest| rest.starts_with('['))
-        .find_map(|rest| serde_json::from_str(rest).ok())?;
-    listed
-        .iter()
-        .find(|db| db.get("name").and_then(|n| n.as_str()) == Some(name))?
-        .get("uuid")?
-        .as_str()
-        .map(str::to_string)
+    match api.d1_find(name) {
+        Ok(Some(id)) => Ok((id, true)),
+        Ok(None) => Err(e),
+        Err(lookup) => Err(format!(
+            "{e} (looking the database up by name to adopt it also failed: {lookup})"
+        )
+        .into()),
+    }
 }
 
 /// One D1 database's step (1D.2b): the declaration, its name in this environment, and the id the
@@ -494,42 +484,159 @@ fn d1_step<'r>(cx: &PlanCx<'_>, db: &'r D1Decl) -> D1Step<'r> {
     }
 }
 
+/// Whether this run's D1 steps call the account (#4056 Decision E): a database in `cx.order` the
+/// ledger does not record under this environment's name, which is created (or adopted). A
+/// recorded database is reused with no call; its migrations still run through wrangler, which a
+/// `wrangler login` session covers.
+pub(crate) fn d1_calls_the_account(cx: &ProjectCx<'_>) -> bool {
+    cx.order.iter().any(|worker| {
+        let plan = PlanCx {
+            ledger: cx.ledger,
+            worker,
+        };
+        cx.resources[worker]
+            .d1_databases
+            .iter()
+            .any(|db| d1_step(&plan, db).recorded.is_none())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// 1D.4b (#4056 Decision E): an unrecorded bucket or database needs the credentials and is
+    /// refused without them, the first kind in order reporting; a redeploy with everything
+    /// recorded asks for nothing, whatever it migrates.
     #[test]
-    fn the_d1_id_is_read_from_either_snippet_format() {
-        let exists = |stderr: &str| {
-            crate::cloudflare::fake::failed(
-                &crate::cloudflare::Op::D1Create {
-                    name: "d",
-                    jurisdiction: None,
-                },
-                "",
-                stderr,
-            )
-            .already_exists()
-        };
-        assert!(exists("✘ [ERROR] A database with that name already exists"));
-        assert!(!exists("✘ [ERROR] Authentication error"));
-        assert_eq!(
-            parse_d1_listed_id(
-                "[{\"uuid\": \"u-1\", \"name\": \"a\"}, {\"uuid\": \"u-2\", \"name\": \"b\"}]",
-                "b"
-            )
-            .as_deref(),
-            Some("u-2")
+    fn the_pre_flight_refuses_an_unrecorded_bucket_or_database_without_credentials() {
+        use crate::cloudflare::CloudflareError;
+        use crate::cloudflare::rest::Purpose;
+        use crate::deploy::config::tests::project;
+        let mut recorded = DeployLock::default();
+        recorded.record::<D1>(
+            "default",
+            "shop",
+            "D1_ORDERS",
+            D1Record::of("shop-orders", "id-1", None),
         );
-        assert_eq!(parse_d1_listed_id("[]", "b"), None);
-        // A bracketed banner before the array is skipped.
-        assert_eq!(
-            parse_d1_listed_id(
-                "[WARNING] a newer wrangler is available\n[\n  {\"uuid\": \"u-3\", \"name\": \"c\"}\n]\n",
-                "c"
+        recorded.record::<R2>(
+            "default",
+            "shop",
+            "R2_FILES",
+            R2Bucket::of("shop-files", None),
+        );
+        let mut declared = Resources::default()
+            .d1_databases(&[("D1_ORDERS", "shop-orders")])
+            .r2_buckets(&[("R2_FILES", "shop-files", None)]);
+        declared.d1_databases[0].migrations = vec!["0001_init.sql".to_string()];
+        let resources = project(vec![("shop", declared)]);
+        let order = vec!["shop".to_string()];
+        let asked = std::cell::RefCell::new(Vec::new());
+        let missing = |purpose: Purpose| -> Result<(), CloudflareError> {
+            asked.borrow_mut().push(purpose);
+            Err(CloudflareError::Credentials(format!(
+                "set CLOUDFLARE_API_TOKEN to {}: {} and the account it belongs to",
+                purpose.doing(),
+                purpose.needs()
+            )))
+        };
+        let run = |lock: &DeployLock| {
+            crate::deploy::gates::resource_credentials(
+                &ProjectCx {
+                    ledger: LedgerView::of(lock, "default"),
+                    resources: &resources,
+                    order: &order,
+                },
+                &[],
+                false,
+                missing,
             )
-            .as_deref(),
-            Some("u-3")
+        };
+        assert_eq!(run(&recorded), Ok(()));
+        assert!(
+            asked.borrow().is_empty(),
+            "everything recorded: nothing asked"
+        );
+        // Nothing recorded: R2 comes before D1 and reports.
+        let refusal = run(&DeployLock::default()).unwrap_err();
+        assert_eq!(
+            refusal,
+            "set CLOUDFLARE_API_TOKEN to create the account's R2 buckets: an API token with \"Workers R2 Storage: Edit\" (a `wrangler login` session is not enough: the deploy calls Cloudflare's API directly) and the account it belongs to"
+        );
+        assert_eq!(asked.borrow().as_slice(), [Purpose::R2]);
+        // Only the database unrecorded: D1 reports, naming its own permission.
+        let mut bucket_only = DeployLock::default();
+        bucket_only.record::<R2>(
+            "default",
+            "shop",
+            "R2_FILES",
+            R2Bucket::of("shop-files", None),
+        );
+        let refusal = run(&bucket_only).unwrap_err();
+        assert!(
+            refusal.contains("to create the account's D1 databases")
+                && refusal.contains("\"D1: Edit\""),
+            "{refusal}"
+        );
+    }
+
+    /// 1D.4b (#4056): a refused create adopts only the database the account holds under exactly
+    /// that name, whatever code the refusal carried; a denied or failed create is never followed
+    /// by a lookup.
+    #[test]
+    fn a_refused_create_adopts_by_exact_name_whatever_the_code() {
+        use crate::cloudflare::fake::Recording;
+        use crate::cloudflare::{CloudflareError, Op, RestError};
+        let run = |create: (u16, &'static str), found: &'static str| {
+            let api = Recording::new(move |op| -> Result<String, CloudflareError> {
+                match op {
+                    Op::D1Create { .. } => {
+                        Err(RestError::answered("POST", "/d1/database", create.0, create.1).into())
+                    }
+                    Op::D1List => Ok(found.to_string()),
+                    _ => Ok(String::new()),
+                }
+            });
+            (create_d1(&api, "shop-orders", None), api.calls())
+        };
+        // An undocumented code, a 409 and a plain 400 adopt alike when the name is found.
+        for refusal in [
+            (
+                400,
+                r#"[{"code":7502,"message":"A database with that name already exists"}]"#,
+            ),
+            (409, r#"[{"code":10073}]"#),
+            (400, "[]"),
+        ] {
+            let (got, calls) = run(refusal, "u-1");
+            assert_eq!(got.unwrap(), ("u-1".to_string(), true));
+            assert_eq!(calls, ["d1 create shop-orders", "d1 list --json"]);
+        }
+        // Not found: the create's own error stands.
+        let (got, _) = run((400, r#"[{"code":7502}]"#), "");
+        assert_eq!(
+            got.unwrap_err().to_string(),
+            r#"POST /d1/database: Cloudflare answered 400 [{"code":7502}]"#
+        );
+        // A denied token or a server error is never answered by a lookup.
+        for failure in [(403, r#"[{"code":10000}]"#), (500, "[]")] {
+            let (got, calls) = run(failure, "u-1");
+            assert!(got.is_err());
+            assert_eq!(calls, ["d1 create shop-orders"]);
+        }
+        // A lookup that fails says so, after the create's own error.
+        let api = Recording::new(|op| -> Result<String, CloudflareError> {
+            match op {
+                Op::D1Create { .. } => {
+                    Err(RestError::answered("POST", "/d1/database", 400, "[]").into())
+                }
+                _ => Err(RestError::answered("GET", "/d1/database?name=x", 500, "[]").into()),
+            }
+        });
+        assert_eq!(
+            create_d1(&api, "x", None).unwrap_err().to_string(),
+            "POST /d1/database: Cloudflare answered 400 [] (looking the database up by name to adopt it also failed: GET /d1/database?name=x: Cloudflare answered 500 [])"
         );
     }
 
@@ -805,12 +912,12 @@ mod tests {
         // #3820: `d1 create` says it already exists, so nothing was created in the jurisdiction.
         let adopting = || {
             crate::cloudflare::fake::Recording::new(|op| match op {
-                crate::cloudflare::Op::D1Create { .. } => Err(crate::cloudflare::fake::failed(
-                    op,
-                    "",
-                    "A database with that name already exists",
-                )),
-                _ => Ok("[{\"uuid\": \"u-1\", \"name\": \"shop-orders\"}]".to_string()),
+                crate::cloudflare::Op::D1Create { .. } => {
+                    Err(crate::cloudflare::CloudflareError::from(
+                        crate::cloudflare::RestError::answered("POST", "/d1/database", 400, "[]"),
+                    ))
+                }
+                _ => Ok("u-1".to_string()),
             })
         };
         assert_eq!(
