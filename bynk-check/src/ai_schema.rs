@@ -245,9 +245,9 @@ fn named_schema(
                 let key = f.wire_name().unwrap_or_else(|| f.name.name.clone());
                 let at = format!("{name}.{}", f.name.name);
                 let j = field_schema(f, &at, types, stack)?;
-                if !matches!(f.type_ref, TypeRef::Option(..)) {
-                    required.push(J::Str(key.clone()));
-                }
+                // An `Option` field is required and nullable, as the published schema of a
+                // plain-JSON route has it (the plain writer always writes the key).
+                required.push(J::Str(key.clone()));
                 properties.push((key, j));
             }
             Ok(J::Obj(vec![
@@ -481,13 +481,13 @@ mod tests {
         assert!(s.contains("\"enum\":[\"Low\",\"Medium\",\"High\"]"), "{s}");
         assert!(s.contains("\"maxLength\":200"), "{s}");
         assert!(s.contains("\"minimum\":0,\"maximum\":10"), "{s}");
-        // `note` is an `Option`: nullable, and not required.
+        // `note` is an `Option`: nullable, and still required, as the plain writer has it.
         assert!(
             s.contains("\"note\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]}"),
             "{s}"
         );
         assert!(
-            s.ends_with("\"required\":[\"severity\",\"summary\",\"tags\",\"score\"],\"additionalProperties\":false}"),
+            s.ends_with("\"required\":[\"severity\",\"summary\",\"tags\",\"note\",\"score\"],\"additionalProperties\":false}"),
             "{s}"
         );
     }

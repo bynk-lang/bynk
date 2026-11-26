@@ -575,7 +575,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[Secret]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
@@ -1372,6 +1372,50 @@ caller can reach. In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.
+
+#### Typed output: `Ai.generateValue[T]`
+
+`Ai.generateValue[T](model, request)` asks the model for structured data and gives it back as a
+`T`: it returns `Effect[Result[T, AiError]]`. The compiler writes `T`'s JSON Schema into the call,
+the binding asks Workers AI for schema-constrained JSON (`response_format`), and the reply is
+decoded and checked as `T` by the ordinary decoder, refinements included.
+
+```bynk,fragment
+type Severity = enum { Low, Medium, High }
+type Triage = { severity: Severity, summary: String where MaxLength(200), tags: List[String] }
+
+let t <- Ai.generateValue[Triage]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", GenerateRequest {
+	messages: [ChatMessage { role: ChatRole.System, content: "Classify the ticket." },
+	           ChatMessage { role: ChatRole.User, content: body }],
+})
+match t {
+	Ok(triage) => …,
+	Err(BadReply(why)) => …,   // did not decode as Triage; `why` is the path, never the text
+	Err(_) => …,
+}
+```
+
+The schema is the shape a plain-JSON route writes: an `enum` is a string, an `Option` is the value
+or `null`, a `String`-keyed `Map` is an object, an `Instant` is RFC 3339 text and a sum with
+payloads is an object with `"kind"` beside the payload fields. `T` may be a record, an enum, a sum,
+a `List`, an `Option` or a refined base type. A type with no schema (one that contains itself, a
+generic type, a `Map` with a key that is not a `String`) is `bynk.types.ai_value_shape`, naming the
+field.
+
+A reply that is not JSON, or that does not decode as `T`, is `Err(BadReply(message))`, never a
+fault: models do not always follow a schema. The message names the kind of failure and the path
+(`the reply is not a Triage (StructuralMismatch at $.severity)`) and never the model's text, which
+may echo what the user wrote. A model that does not take `response_format` is refused by the
+platform and that refusal is the `Err` as it comes, usually `InvalidInput` with the platform's
+message: Bynk does not fall back to asking in prose. Which models take a schema is Cloudflare's to
+say, and changes; see its [JSON mode](https://developers.cloudflare.com/workers-ai/features/json-mode/)
+page. The reply is still untrusted input: it is checked as `T`, not trusted because it matched.
+
+In a test, `generateValue` reads the text of a stubbed `generate`: `stub Ai.generate(_, _) returns
+Ok(Generation { text: "{…}", usage: None })` is the JSON the model answered, and the case runs the
+same decode production does. Unstubbed, it faults, like every `Ai` operation. `generateValue` is
+experimental: list `"bynk.cloudflare.Ai.generateValue"` under `[unstable] allow`, beside
+`"bynk.cloudflare.Ai"`. In the editor, hovering the call shows the schema it sends.
 
 ### Images: `Images`
 
