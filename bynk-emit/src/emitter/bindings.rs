@@ -148,14 +148,29 @@ fn context_bindings(
         .iter()
         .map(|c| singleton_binding(c))
         .collect();
-    ordered(
+    let mut bindings = ordered(
         &agents,
         &targets,
         unit.bare_kv,
         instances,
         singletons,
         unit.publishes,
-    )
+    );
+    // #3819: an agent's `@jurisdiction` rides its binding to `deploy`, which records it per class.
+    for binding in &mut bindings {
+        if let BindingSource::Agent {
+            class_name,
+            jurisdiction,
+        } = &mut binding.source
+        {
+            *jurisdiction = table
+                .agents
+                .get(class_name)
+                .and_then(|a| bynk_check::agent_jurisdiction::jurisdiction_of(a))
+                .map(str::to_string);
+        }
+    }
+    bindings
 }
 
 /// #3878: the producer binding of each queue consumer's dead-letter queue, in queue order, by the
@@ -198,7 +213,10 @@ fn instance_binding(cap: &str, d: &DerivedInstance, signs_to: Option<&String>) -
         (firstparty::CLOUDFLARE_UNIT, "Analytics") => {
             BindingSource::AnalyticsDataset { capability }
         }
-        (firstparty::CLOUDFLARE_UNIT, "D1") => BindingSource::D1Database { capability },
+        (firstparty::CLOUDFLARE_UNIT, "D1") => BindingSource::D1Database {
+            capability,
+            jurisdiction: d.jurisdiction().map(str::to_string),
+        },
         (firstparty::CLOUDFLARE_UNIT, "Queue") => BindingSource::QueueProducer {
             capability,
             queue: d.queue().unwrap_or_default().to_string(),
@@ -393,6 +411,7 @@ pub(crate) fn agent_binding(class_name: &str) -> WorkerBinding {
         name: agent_binding_name(class_name),
         source: BindingSource::Agent {
             class_name: class_name.to_string(),
+            jurisdiction: None,
         },
     }
 }
@@ -611,6 +630,7 @@ mod tests {
                 "D1_H",
                 BindingSource::D1Database {
                     capability: cap("H"),
+                    jurisdiction: None,
                 },
             ),
             bynk_check::worker_bindings::idempotency_binding(),

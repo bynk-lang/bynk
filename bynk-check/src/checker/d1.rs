@@ -410,7 +410,7 @@ fn is_analytics_instance(info: &CapabilityInfo) -> bool {
 /// (a capability is not one), so it is checked here and left out of the generic argument typing.
 /// The instance's identifier is recorded as a `dataset` read of that capability, which is how the
 /// emitter knows to pass its table: the rule is decided once, here.
-pub(crate) fn check_analytics_sql_query(args: &[Expr], ctx: &mut Ctx) {
+pub(crate) fn check_analytics_sql_query(op: &str, args: &[Expr], ctx: &mut Ctx) {
     if let Some(first) = args.first() {
         let instance = match &first.kind {
             ExprKind::Ident(id) => Some(id),
@@ -467,8 +467,9 @@ pub(crate) fn check_analytics_sql_query(args: &[Expr], ctx: &mut Ctx) {
                 CompileError::new(
                     "bynk.types.argument_mismatch",
                     first.span,
-                    "the first argument of `AnalyticsSql.query` is the `Analytics` instance whose dataset the query reads"
-                        .to_string(),
+                    format!(
+                        "the first argument of `AnalyticsSql.{op}` is the `Analytics` instance whose dataset the query reads"
+                    ),
                 )
                 .with_note(ANALYTICS_QUERY_HELP),
             ),
@@ -478,8 +479,12 @@ pub(crate) fn check_analytics_sql_query(args: &[Expr], ctx: &mut Ctx) {
         && sql_literal_text(sql, ctx).is_none()
     {
         ctx.errors.push(
-            sql_not_literal_with(sql.span, "the SQL of `AnalyticsSql.query`", "`$1`, `$2`")
-                .with_note(ANALYTICS_QUERY_HELP),
+            sql_not_literal_with(
+                sql.span,
+                &format!("the SQL of `AnalyticsSql.{op}`"),
+                "`$1`, `$2`",
+            )
+            .with_note(ANALYTICS_QUERY_HELP),
         );
     }
 }
@@ -804,7 +809,7 @@ pub fn select_columns_quoted(
 
 /// Whether a literal tail fails to start at `FROM` (case-insensitive, after
 /// whitespace): the compiler writes `SELECT` and the column list ahead of it.
-fn begins_without_from(tail: &str) -> bool {
+pub(crate) fn begins_without_from(tail: &str) -> bool {
     let t = tail.trim_start();
     !t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case("from"))
         || t[4..]

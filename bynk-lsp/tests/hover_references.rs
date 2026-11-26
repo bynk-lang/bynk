@@ -1465,3 +1465,77 @@ fn a_cors_origins_constant_gets_the_constant_semantic_token() {
     }
     assert_eq!(found, vec![("PartnerOrigin".len() as u32, constant)]);
 }
+
+/// #4393 — a handler's `by s: Authenticated`, where `Authenticated` refines the prelude `Sender`,
+/// hovers with the verdicts it admits and the refusal, and as the declaration does (ADR 0190 D2).
+/// A refinement that names two verdicts by negation reads through the checker's own evaluation.
+#[test]
+fn a_sender_refinement_reference_hovers_with_what_it_admits() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3888_sender_refinement/src",
+        "support.bynk",
+    );
+    let hover = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "by s: Authenticated", "Authenticated"),
+    )
+    .expect("hover on the `Authenticated` actor reference");
+    assert!(
+        hover.contains("actor Authenticated = Sender where Dmarc(DmarcPass)"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("it admits mail whose DMARC verdict is `DmarcPass`"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("refuses any other mail before the handler runs"),
+        "{hover}"
+    );
+    let decl = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "actor Authenticated", "Authenticated"),
+    )
+    .expect("hover on the declaration");
+    assert_eq!(hover, decl);
+
+    // `!Dmarc(DmarcFail)`, written by name in `by NotFailed` on the service.
+    let not_failed = hover_at(
+        &r,
+        &rel,
+        &text,
+        &root,
+        at(&text, "by NotFailed", "NotFailed"),
+    )
+    .expect("hover on the `NotFailed` reference");
+    assert!(
+        not_failed.contains("is `DmarcPass` or `DmarcNone`"),
+        "{not_failed}"
+    );
+}
+
+/// #4393 — a `Producer` refinement hovers with the contexts it admits and that it requires signatures.
+#[test]
+fn a_producer_refinement_hovers_with_what_it_admits() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3899_producer_refinement_declared/src",
+        "shop.bynk",
+    );
+    let hover = hover_at(&r, &rel, &text, &root, at(&text, "actor Shop", "Shop"))
+        .expect("hover on the `Shop` actor");
+    assert!(
+        hover.contains("actor Shop = Producer where IsContext(shop)"),
+        "{hover}"
+    );
+    assert!(
+        hover.contains("requires signatures and admits only messages signed by `shop`"),
+        "{hover}"
+    );
+    assert!(hover.contains("never reaches the handler"), "{hover}");
+}

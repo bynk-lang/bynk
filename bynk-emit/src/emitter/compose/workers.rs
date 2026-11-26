@@ -22,6 +22,7 @@ use crate::emitter::RuntimeUse;
 use crate::emitter::bindings::{BindingSource, WorkerBinding, events_fanout_binding};
 use crate::emitter::workers::*;
 use crate::emitter::workers_sum::emit_http_sum_wrapper;
+use crate::emitter::workers_ws_auth::WsCredential;
 use crate::emitter::wrangler::binding_ts_type;
 use crate::ts_build::{as_expr, call, const_, ident, member, method_call, return_, str_lit};
 use bynk_check::symbols::MessageBundleInfo;
@@ -465,10 +466,10 @@ pub fn emit_worker_compose(
                     // An actor sum (`by who: A | B`) resolves member by member at the
                     // edge; `bearer_seam_for` would see only its first member.
                     let sum = bynk_check::actors::sum_members_for(h, &table.actors);
-                    let seam = if sum.is_some() {
+                    let credential = if sum.is_some() {
                         None
                     } else {
-                        bynk_check::actors::bearer_seam_for(h, &table.actors)
+                        WsCredential::for_handler(h, service, &table.actors)
                     };
                     let local_agents: HashSet<String> = table.agents.keys().cloned().collect();
                     // #1818: hosting agents that read their key are forwarded it.
@@ -478,13 +479,22 @@ pub fn emit_worker_compose(
                         .filter(|(_, a)| crate::emitter::emit::agent_reads_key(a))
                         .map(|(n, _)| n.clone())
                         .collect();
+                    let jurisdictions: HashMap<String, String> = table
+                        .agents
+                        .iter()
+                        .filter_map(|(n, a)| {
+                            bynk_check::agent_jurisdiction::jurisdiction_of(a)
+                                .map(|j| (n.clone(), j.to_string()))
+                        })
+                        .collect();
                     return_entries.push(emit_websocket_upgrade(
                         sname,
                         h,
-                        seam.as_ref(),
+                        credential.as_ref(),
                         sum.as_deref(),
                         &local_agents,
                         &key_readers,
+                        &jurisdictions,
                         &visible_consts,
                         &mut const_imports,
                     ));

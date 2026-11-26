@@ -1,0 +1,20 @@
+context demo
+
+consumes bynk.cloudflare { Analytics, AnalyticsReadError, AnalyticsSql }
+
+type Signup = { plan: String, seats: Int }
+type R = { plan: String }
+
+capability Signups = Analytics
+
+service s from http {
+	on POST("/w") () -> Effect[HttpResult[Int]] by Visitor given Signups {
+		let _ <- Signups.writeValue(Signup { plan: "a", seats: 1 })
+		Ok(1)
+	}
+
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let _ <- AnalyticsSql.select[R](Signups, "SELECT plan FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' HOUR", [])
+		Ok(1)
+	}
+}

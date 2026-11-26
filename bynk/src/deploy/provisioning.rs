@@ -857,12 +857,12 @@ mod tests {
             Op::D1MigrationsApply { binding, .. } if binding.starts_with("D1_BROKEN") => {
                 Err(failed(op, "", "✘ [ERROR] Migration 0001_bad.sql failed\n"))
             }
-            Op::D1Create { name } if name.contains("taken") => Err(failed(
+            Op::D1Create { name, .. } if name.contains("taken") => Err(failed(
                 op,
                 "",
                 "✘ [ERROR] A database with that name already exists\n",
             )),
-            Op::D1Create { name } => {
+            Op::D1Create { name, .. } => {
                 Ok(format!("0d1d0000-0000-4000-8000-00000000000{}", name.len()))
             }
             Op::D1List => Ok(

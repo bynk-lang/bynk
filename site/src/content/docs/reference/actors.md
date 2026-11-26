@@ -21,10 +21,10 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | Scheme | Config | Identity | Protocols | Verification |
 |---|---|---|---|---|
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
-| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http`, `websocket` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
-| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
-| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http`, `websocket` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
+| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http`, `websocket` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
 
@@ -38,7 +38,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 - The seam **consumes** a `Bearer`, `Oidc` or `Signature` credential, as it does a `SignedCookie`'s: the
   handler's `headers: RequestHeaders` omits the `Authorization` header (so `bearer()` is `None`), or the
   signature header, and the handler sees only the identity ([Request headers](/reference/http/#request-headers)).
-- On a **WebSocket**, a `Bearer` token's `exp` is checked once at the upgrade and again at every frame: a
+- On a **WebSocket**, a `Bearer` or `Oidc` token's `exp`, or a session cookie's, is checked once at the upgrade and again at every frame: a
   frame that arrives after it closes the connection with `1008 authentication expired` before
   `on message` runs ([WebSocket](/reference/websocket/#a-credential-that-expires-on-a-live-connection)).
 - A `Signature` actor takes **no** `identity` and a handler using it **must** take
@@ -385,7 +385,9 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   an unsigned or wrongly signed message is acknowledged, reported and never handled, and a
   replayed one likewise. A refinement of `Producer` (`actor Shop = Producer where
   IsContext(shop)`) admits only messages a Bynk producer in one of those contexts signed, and a
-  `Queue` instance in such a context signs what it sends with nothing written. A `Foreign` actor or a
+  `Queue` instance in such a context signs what it sends with nothing written. Hover on a
+  `Producer` refinement, or on its name in a `by` clause, lists the contexts it admits and says
+  it requires signatures. A `Foreign` actor or a
   refinement beside an unsigned one, or alone with a binder, is `bynk.actor.queue_actor_not_enforced`.
   Foreign actors and refinements may share a sum, `by who: Legacy | Shop`; a refinement's member carries
   the sending context's name. An email `on message` handler writes at least `by Sender`, the explicit
@@ -428,7 +430,10 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   `Sender`; over another base it is `bynk.actor.refinement_predicate_unsupported`.
   The refinement inherits `Sender`'s scheme and `SenderIdentity`, so `by s: Authenticated`
   binds the same record. `Sender` and its refinements share the `Internal` scheme, so at
-  most one of them appears in a sum.
+  most one of them appears in a sum. Hover on the refinement, or on its name in a `by`
+  clause, lists the verdicts it admits and says the Worker refuses the rest before the
+  handler runs; a unit that declares its own actor named `Sender` shadows the prelude one,
+  and then hover says nothing of the kind.
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
   own actor, never by `Caller`, so a handler that names only `Caller` refuses

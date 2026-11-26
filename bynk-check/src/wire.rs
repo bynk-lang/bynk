@@ -233,6 +233,10 @@ pub struct WireField {
     /// for an unrefined field and for every sum-variant payload field (the
     /// grammar gives those no `where`).
     pub predicates: Vec<PredKind>,
+    /// #3793: the key this field was renamed from (`new: T replaces old`), read on input when
+    /// the field's own key is absent. Empty for a field never renamed and for every sum-variant
+    /// payload field. The value is written under `name` only.
+    pub renamed_from: Vec<String>,
 }
 
 /// #1969: the JSON key a sum value's variant name travels under (`{"kind":
@@ -1516,8 +1520,14 @@ fn wire_fields(fields: &[RecordField], types: &HashMap<String, Arc<TypeDecl>>) -
             path_segment: f.name.name.clone(),
             default: f.init.as_ref().map(|e| (e.clone(), f.type_ref.clone())),
             predicates: field_predicates(f),
+            renamed_from: field_renamed_from(f),
         })
         .collect()
+}
+
+/// #3793: the key a record field was renamed from, if it declares `replaces`.
+pub fn field_renamed_from(f: &RecordField) -> Vec<String> {
+    f.replaces.iter().map(|old| old.name.clone()).collect()
 }
 
 /// #1969: a record field's inline refinement predicates, in declaration order
@@ -1551,6 +1561,7 @@ fn wire_sum(body: &SumBody, types: &HashMap<String, Arc<TypeDecl>>) -> WireSum {
                         // surface grammar (`VariantField` has no `init`).
                         default: None,
                         predicates: Vec::new(),
+                        renamed_from: Vec::new(),
                     })
                     .collect(),
             })

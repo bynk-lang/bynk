@@ -193,6 +193,26 @@ pub(super) fn emit_record_codec(
             .as_ref()
             .and_then(|(e, t)| field_default_value(e, t, types).ok());
         let fname = &field.name;
+        // #3793: `name: T replaces old` reads the old key when the new one is absent. `"new" in
+        // obj` is the test, as for a default, so a key present with an explicit value (or an
+        // explicit `null`) is never replaced; the new key wins when both arrive.
+        let present = |key: &str| binary(TsBinaryOp::In, str_lit(key.to_string()), ident("obj"));
+        let keyed = |key: &str| index(ident("obj"), str_lit(key.to_string()));
+        let read_old = field
+            .renamed_from
+            .iter()
+            .rev()
+            .fold(None, |rest: Option<TsExpr>, old| {
+                Some(match rest {
+                    // `"old" in obj ? obj["old"] : <rest>`, the rest being the older names.
+                    Some(rest) => TsExpr::Conditional {
+                        test: Box::new(present(old)),
+                        consequent: Box::new(keyed(old)),
+                        alternate: Box::new(rest),
+                    },
+                    None => keyed(old),
+                })
+            });
         let access = if let Some(d) = &default {
             // `"<field>" in obj ? obj["<field>"] : <default>`: `d` is the default's tree
             // (`field_default_value`), rendered in its wire form (`wire_default_node`). As a
@@ -200,19 +220,39 @@ pub(super) fn emit_record_codec(
             // position, which (per `bynk-ts/src/printer/expr.rs`'s own `Conditional` render arm)
             // never adds parens around either branch, whatever the branch's shape.
             let d_name = format!("__d_{fname}");
+            // With a rename: the older names when present, otherwise the default.
+            let fallback =
+                field
+                    .renamed_from
+                    .iter()
+                    .rev()
+                    .fold(wire_default_node(d), |rest, old| TsExpr::Conditional {
+                        test: Box::new(present(old)),
+                        consequent: Box::new(keyed(old)),
+                        alternate: Box::new(rest),
+                    });
             body.push(TsStmt::const_stmt(
                 TsBindingName::Ident(d_name.clone()),
                 Some(TsType::named("__JsonValue")),
                 TsExpr::Conditional {
-                    test: Box::new(binary(TsBinaryOp::In, str_lit(fname.clone()), ident("obj"))),
-                    consequent: Box::new(index(ident("obj"), str_lit(fname.clone()))),
-                    alternate: Box::new(wire_default_node(d)),
+                    test: Box::new(present(fname)),
+                    consequent: Box::new(keyed(fname)),
+                    alternate: Box::new(fallback),
                 },
                 None,
             ));
             ident(d_name)
+        } else if let Some(old) = read_old {
+            // Without a default, an absent key must still reach the codec as `undefined`, so the
+            // lenient `Option` decoder reads `None` and every other codec rejects: the old key
+            // is read only when it is present.
+            TsExpr::Conditional {
+                test: Box::new(present(fname)),
+                consequent: Box::new(keyed(fname)),
+                alternate: Box::new(old),
+            }
         } else {
-            index(ident("obj"), str_lit(fname.clone()))
+            keyed(fname)
         };
         let sub_path = path_field(&field.path_segment);
         // #1439 (Arc E slice 3): `emit_field_deserialise_wire` returns a
@@ -630,6 +670,7 @@ mod emit_sum_codec_tests {
                             path_segment: "tracking".to_string(),
                             default: None,
                             predicates: Vec::new(),
+                            renamed_from: Vec::new(),
                         },
                         WireField {
                             name: "weight".to_string(),
@@ -642,6 +683,7 @@ mod emit_sum_codec_tests {
                             path_segment: "weight".to_string(),
                             default: None,
                             predicates: Vec::new(),
+                            renamed_from: Vec::new(),
                         },
                     ],
                 },

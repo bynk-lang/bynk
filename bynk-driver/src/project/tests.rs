@@ -106,6 +106,7 @@ fn a_group_members_d1_migrations_are_staged_where_wrangler_points() {
         name: "D1_ORDERS".to_string(),
         source: emitter::bindings::BindingSource::D1Database {
             capability: "Orders".to_string(),
+            jurisdiction: None,
         },
     }];
     let database = emitter::wrangler::d1_database_name(&layout.dir("shop.orders"), "D1_ORDERS");

@@ -458,22 +458,32 @@ fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
 /// #3900: the statements reading a Bearer upgrade's offered subprotocols into `__offer`, refusing the
 /// old single-element form with `400`. With `require_token`, an offer with no token is `401` too, so
 /// `__offer` is a `Token` after them.
-fn bearer_offer_stmts(require_token: bool) -> Vec<TsStmt> {
+pub(super) fn bearer_offer_stmts(require_token: bool, marker: &str) -> Vec<TsStmt> {
+    // #3904: an `Oidc` upgrade offers `["bynk.oidc", token]`; the default marker is left implicit.
+    let marker_args = |mut args: Vec<TsExpr>| {
+        if marker != "bynk.bearer" {
+            args.push(str_lit(marker));
+        }
+        args
+    };
     let mut stmts = vec![
         const_(
             "__offer",
             call(
                 ident("__webSocketBearerOffer"),
-                vec![method_call(
+                marker_args(vec![method_call(
                     member(ident("request"), "headers"),
                     "get",
                     vec![str_lit("Sec-WebSocket-Protocol")],
-                )],
+                )]),
             ),
         ),
         if_(
             strict_eq(member(ident("__offer"), "tag"), str_lit("Legacy")),
-            return_(Some(call(ident("__webSocketBearerRefusal"), vec![]))),
+            return_(Some(call(
+                ident("__webSocketBearerRefusal"),
+                marker_args(vec![]),
+            ))),
         ),
     ];
     if require_token {
@@ -503,10 +513,11 @@ fn bearer_offer_stmts(require_token: bool) -> Vec<TsStmt> {
 pub(super) fn emit_websocket_upgrade(
     sname: &str,
     h: &Handler,
-    seam: Option<&bynk_check::actors::BearerSeam>,
+    credential: Option<&super::workers_ws_auth::WsCredential>,
     sum: Option<&[bynk_check::actors::SumMember]>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
+    jurisdictions: &HashMap<String, String>,
     consts: &HashMap<String, bynk_check::consts::VisibleConst<'_>>,
     const_imports: &mut BTreeMap<String, (String, String)>,
 ) -> TsObjectEntry {
@@ -577,7 +588,7 @@ pub(super) fn emit_websocket_upgrade(
             .iter()
             .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
         {
-            stmts.extend(bearer_offer_stmts(false));
+            stmts.extend(bearer_offer_stmts(false, "bynk.bearer"));
             stmts.push(TsStmt::let_stmt(
                 TsBindingName::Ident("__exp".to_string()),
                 Some(TsType::named("number | undefined")),
@@ -631,47 +642,12 @@ pub(super) fn emit_websocket_upgrade(
         ));
     }
 
-    if let Some(seam) = seam {
-        let secret = crate::emitter::escape_ts_string(&seam.secret);
-        // #3900: the token is the subprotocol after `bynk.bearer`; the old `[token]` form is a
-        // `400` naming the form that works, and no token at all is a `401`.
-        stmts.extend(bearer_offer_stmts(true));
-        stmts.push(const_("__token", member(ident("__offer"), "token")));
-        // The hosting context's `Env` carries the DO binding (a non-empty object
-        // type), so the secret probe casts through `unknown` to index it.
-        stmts.push(const_("__secret", secret_probe_expr(&secret)));
-        stmts.push(if_(
-            strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        stmts.push(const_(
-            "__claims",
-            await_expr(call(
-                ident("__verifyBearerJwtHs256"),
-                vec![ident("__token"), ident("__secret")],
-            )),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        // A refinement actor's authorisation invariant: scheme verified (401
-        // above), a failed claim predicate is 403, checked against verified claims.
-        if let Some(pred) = &seam.authorization {
-            stmts.push(if_(
-                super::claim_predicate::claim_predicate_denied(pred),
-                return_(Some(new_response(vec![
-                    str_lit("Forbidden"),
-                    status_object("403"),
-                ]))),
-            ));
-        }
+    // A lone actor's credential (#3900 Bearer, #3904 Oidc and SignedCookie) is verified here, in the
+    // Worker, fail closed, and its identity minted, before the request is forwarded.
+    let mut verified = credential.map(super::workers_ws_auth::ws_credential_stmts);
+    let has_identity = verified.as_ref().is_some_and(|v| v.has_identity);
+    if let Some(v) = &mut verified {
+        stmts.append(&mut v.stmts);
     }
 
     // DECISION B: resolve the hosting Durable Object from the single connection
@@ -699,28 +675,6 @@ pub(super) fn emit_websocket_upgrade(
         return internal_error(stmts, params);
     }
     let binding = agent_binding(target.agent).name;
-    // The verified identity (when the actor binds one) is forwarded in the trusted
-    // internal header alongside the route arguments. A binder-less `by` verifies
-    // but mints no identity.
-    let has_identity = seam.is_some_and(|s| s.binder.is_some());
-    if has_identity {
-        let id_ty = &seam.unwrap().identity_type;
-        stmts.push(const_(
-            "__id",
-            method_call(
-                member(ident("handlers"), id_ty.clone()),
-                "of",
-                vec![member(member(ident("__claims"), "value"), "sub")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-    }
     // The route params arrive attacker-controlled (the upgrade URL's query string).
     // Validate each refined / opaque param through its `.of` constructor fail-closed
     // — a `400` with a `RefinementViolation`, exactly as the HTTP path validates a
@@ -850,13 +804,23 @@ pub(super) fn emit_websocket_upgrade(
                 .unwrap_or_else(|| ident(wire_ident(&p.name.name)))
         })
         .collect();
+    // #3819: an agent pinned with `@jurisdiction` resolves its stub through the restricted
+    // namespace, as `makeAgent` does, so the id is the one every other caller mints.
+    let namespace = member_chain(ident("deps"), &["env", &binding]);
+    let namespace = match jurisdictions.get(target.agent) {
+        Some(j) => call(
+            ident("__agentNamespace"),
+            vec![namespace, str_lit(j.as_str())],
+        ),
+        None => namespace,
+    };
     stmts.push(const_(
         "__ns",
         // `member_chain`, not a single `Member { property: "env.{binding}" }`
         // node — the printed text is two chained accesses (`deps.env.<binding>`),
         // and a `format!`-built dotted-property slot would claim it is one
         // property literally named "env.<binding>" (review of #1322, finding 3).
-        member_chain(ident("deps"), &["env", &binding]),
+        namespace,
     ));
     stmts.push(const_(
         "__stub",
@@ -877,7 +841,7 @@ pub(super) fn emit_websocket_upgrade(
             vec![member(ident("request"), "headers")],
         ),
     ));
-    let exp = ws_credential_exp(seam.is_some(), sum);
+    let exp = ws_credential_exp(verified.as_ref().map(|v| v.exp.clone()), sum);
     let key = key_readers.contains(target.agent).then(|| {
         (
             crate::emitter::emit::agent_key_codec_name(target.agent),
@@ -1217,7 +1181,7 @@ fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<
 }
 
 /// `__claims.value.claims.exp`: the verified token's expiry (#3903).
-fn claims_exp() -> TsExpr {
+pub(super) fn claims_exp() -> TsExpr {
     member(member(member(ident("__claims"), "value"), "claims"), "exp")
 }
 
@@ -1226,12 +1190,12 @@ fn claims_exp() -> TsExpr {
 /// sum with a `Bearer` member recorded it in `__exp` when that member verified (it stays `undefined`
 /// when a `None` member resolved, so such a connection never expires). A `None` upgrade has none.
 fn ws_credential_exp(
-    bearer_seam: bool,
+    lone_exp: Option<TsExpr>,
     sum: Option<&[bynk_check::actors::SumMember]>,
 ) -> Option<TsExpr> {
     use bynk_check::actors::SumMemberSeam;
-    if bearer_seam {
-        return Some(claims_exp());
+    if lone_exp.is_some() {
+        return lone_exp;
     }
     sum.filter(|members| {
         members
@@ -1426,9 +1390,6 @@ fn oidc_seam_stmts(
     seam: &bynk_check::actors::OidcSeam,
     failure: Failure,
 ) -> (Vec<TsStmt>, SeamPrincipal) {
-    let issuer = crate::emitter::escape_ts_string(&seam.issuer);
-    let audience = crate::emitter::escape_ts_string(&seam.audience);
-    let jwks = crate::emitter::escape_ts_string(&seam.jwks);
     let mut stmts: Vec<TsStmt> = Vec::new();
     stmts.push(const_(
         "__authz",
@@ -1449,6 +1410,24 @@ fn oidc_seam_stmts(
         ),
         refused(failure, "Unauthorized"),
     ));
+    let token = method_call(ident("__authz"), "slice", vec![num_lit("7")]);
+    let (verify, principal) = oidc_verify_stmts(seam, token, failure);
+    stmts.extend(verify);
+    (stmts, principal)
+}
+
+/// An `Oidc` actor's verification of the token `token` (the bearer token of an HTTP request, or the
+/// subprotocol after `bynk.oidc` of a WebSocket upgrade, #3904): the trust roots, the JWT and the
+/// identity mint, every refusal going through `failure`.
+pub(super) fn oidc_verify_stmts(
+    seam: &bynk_check::actors::OidcSeam,
+    token: TsExpr,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let issuer = crate::emitter::escape_ts_string(&seam.issuer);
+    let audience = crate::emitter::escape_ts_string(&seam.audience);
+    let jwks = crate::emitter::escape_ts_string(&seam.jwks);
+    let mut stmts: Vec<TsStmt> = Vec::new();
     // #2380 (L5): `trustFrom`'s variable, when set, replaces the declared
     // trust roots; set but malformed refuses the request (fail closed).
     let (issuer, audience, jwks) = match &seam.trust_from {
@@ -1481,12 +1460,7 @@ fn oidc_seam_stmts(
         "__claims",
         await_expr(call(
             ident("__verifyOidcJwt"),
-            vec![
-                method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                issuer,
-                audience,
-                jwks,
-            ],
+            vec![token, issuer, audience, jwks],
         )),
     ));
     stmts.push(if_(
@@ -1645,7 +1619,7 @@ pub(super) fn csrf_origins(service: &ServiceDecl) -> Vec<String> {
 /// `sessions = true` actor, the session-live check. Every refusal goes through
 /// `failure`, in the order they always ran, so nothing here is skipped when the step
 /// runs ahead of the body.
-fn signed_cookie_seam_stmts(
+pub(super) fn signed_cookie_seam_stmts(
     method: bynk_model::IrHttpMethod,
     seam: &bynk_check::actors::SignedCookieSeam,
     csrf_origins: &[String],

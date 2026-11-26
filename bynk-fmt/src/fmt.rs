@@ -1771,6 +1771,10 @@ impl<'a> Formatter<'a> {
             self.push(" where ");
             self.format_refinement(r);
         }
+        // #3793: `name: T replaces old`.
+        if let Some(old) = &field.replaces {
+            self.push(&format!(" replaces {}", old.name));
+        }
         if let Some(init) = &field.init {
             self.push(" = ");
             self.format_expr(init);
@@ -2479,6 +2483,10 @@ impl<'a> Formatter<'a> {
         // v0.85 (ADR 0111): annotations follow the kind, one space-separated each.
         for ann in &sf.annotations {
             self.push(&format!(" {}", annotation_to_string(ann)));
+        }
+        // #3793: `store name: Kind[T] replaces old`.
+        if let Some(old) = &sf.replaces {
+            self.push(&format!(" replaces {}", old.name));
         }
         if let Some(init) = &sf.init {
             self.push(" = ");
@@ -4443,6 +4451,23 @@ mod tests {
             "cell write not formatted: {out}"
         );
         assert_eq!(out, fmt(&out), "formatter not idempotent: {out}");
+    }
+
+    /// #3793: `replaces old` after a field's type, refinement and annotations, before a default.
+    #[test]
+    fn formats_a_field_replaces_clause() {
+        let src = "context shop {\ntype User = { displayName: String replaces name, age: Int where Positive replaces years = 18 }\nagent Counter {\nkey id: String\nstore count: Cell[Int] replaces total = 0\non call get() -> Effect[Int] {\ncount\n}\n}\n}";
+        let out = fmt(src);
+        assert!(out.contains("displayName: String replaces name"), "{out}");
+        assert!(
+            out.contains("age: Int where Positive replaces years = 18"),
+            "{out}"
+        );
+        assert!(
+            out.contains("store count: Cell[Int] replaces total = 0"),
+            "{out}"
+        );
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
 
     #[test]

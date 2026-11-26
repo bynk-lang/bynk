@@ -6,11 +6,11 @@
 // The plain names stay exported for the runtime's own tests.
 import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
-import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
+import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
-import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
-import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketErrored, webSocketUpgradeResponse } from "./connection.ts";
+import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
+import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
@@ -180,6 +180,7 @@ export {
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,
   readCapped as __readBodyCapped,
+  renameStoredFields as __renameStoredFields,
   reportUnknownStoredKeys as __reportUnknownStoredKeys,
   resolveConnection as __resolveConnection,
   responseToHttpOutcome as __responseToHttpOutcome,
@@ -188,6 +189,7 @@ export {
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
   agentBusyAfter as __agentBusyAfter,
+  agentNamespace as __agentNamespace,
   agentBusyResponse as __agentBusyResponse,
   callAgentOutcome as __callAgentOutcome,
   stubAgents as __stubAgents,
@@ -214,6 +216,7 @@ export {
   webSocketBearerOffer as __webSocketBearerOffer,
   webSocketBearerProtocol as __webSocketBearerProtocol,
   webSocketBearerRefusal as __webSocketBearerRefusal,
+  webSocketOriginAllowed as __webSocketOriginAllowed,
   webSocketClosing as __webSocketClosing,
   webSocketErrored as __webSocketErrored,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,

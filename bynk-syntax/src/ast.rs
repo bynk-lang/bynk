@@ -2041,6 +2041,9 @@ pub struct StoreField {
     /// before the initialiser); the checker validates names against the closed
     /// registry and gates each to the slice that implements it.
     pub annotations: Vec<Annotation>,
+    /// #3793: `store name: Kind[T] replaces old` — the field was renamed from `old`, so its
+    /// stored value is read under the old name until the next commit writes the new one.
+    pub replaces: Option<Ident>,
     /// The fresh-key initial value (`= expr`), if given — same disposition as a
     /// `state` field's initialiser (ADRs 0003/0004 carry forward).
     pub init: Option<Expr>,
@@ -3309,6 +3312,11 @@ pub struct RecordField {
     pub name: Ident,
     pub type_ref: TypeRef,
     pub refinement: Option<Refinement>,
+    /// #3793: `name: T replaces old` — the field was renamed from `old`. A stored or
+    /// locked field is read under the old name too, and a wire field accepts the old key
+    /// on input; the checker records the rename in the schema lock. `None` for a field
+    /// that was never renamed.
+    pub replaces: Option<Ident>,
     /// v0.11: an optional initial-value expression. Only meaningful on agent
     /// `state` fields (the field's fresh-key value); ignored / rejected on
     /// record-type fields by the checker.

@@ -292,6 +292,26 @@ Add a further defaulted field later and the next compile bumps `schema` to
 `2` on its own — commit the updated lock file alongside the source change,
 the same way you would `Cargo.lock`.
 
+### Renaming an event field
+
+Renaming a field is a removal plus an addition, which the registry refuses. To rename one, say so
+with `replaces` after the field's type:
+
+```bynk,fragment
+event PaymentConfirmed = {
+	orderId: String,
+	total: Int replaces amount,
+}
+```
+
+The registry then reads the recorded `amount` as `total`: a rename on its own is additive, so it bumps
+the version by one and records `renamed_from = ["amount"]` on the field. An event written under the old
+schema still decodes, because the decoder reads the old key when the new one is absent, and a subscriber
+built against it keeps working. A rename beside a retype, or a field removed or added without a default,
+is still `bynk.event.non_additive_schema_change`; naming an old field the registry does not record is
+`bynk.field.replaces_unknown`. Keep the clause until no event written under the old name can still be
+delivered, then delete it: the recorded history stays in the lock.
+
 ### Checking against the lock without writing it
 
 `bynk check` and `bynk test` reconcile against

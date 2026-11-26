@@ -75,6 +75,7 @@
     - [Generic code that crosses the boundary](guides/type-system/generic-code-that-crosses-the-boundary.md)
     - [Constructors for generic types](guides/type-system/constructors-for-generic-types.md)
     - [Recursive generic types](guides/type-system/recursive-generic-types.md)
+    - [Rename a field safely](guides/type-system/rename-a-field-safely.md)
   - Structuring code
     - [Consume another context's services](guides/program-structure/consume-services.md)
     - [Add an option without breaking callers](guides/program-structure/add-an-option.md)
@@ -156,6 +157,7 @@
     - [Run your project locally](guides/projects-build-and-deployment/run-locally.md)
     - [Deploy to Cloudflare](guides/projects-build-and-deployment/deploy-to-cloudflare.md)
     - [Deploy from CI](guides/projects-build-and-deployment/deploy-from-ci.md)
+    - [Keep a project's data in one jurisdiction](guides/projects-build-and-deployment/keep-data-in-a-jurisdiction.md)
     - [Roll back a deployment](guides/projects-build-and-deployment/roll-back-a-deployment.md)
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
     - [Follow a request across contexts](guides/projects-build-and-deployment/follow-a-request-across-contexts.md)

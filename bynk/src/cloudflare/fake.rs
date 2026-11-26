@@ -92,8 +92,8 @@ impl CloudflareApi for Recording {
         .map(drop)
     }
 
-    fn d1_create(&self, name: &str) -> Result<String, WranglerError> {
-        self.call(Op::D1Create { name })
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError> {
+        self.call(Op::D1Create { name, jurisdiction })
     }
 
     fn d1_list(&self) -> Result<String, WranglerError> {

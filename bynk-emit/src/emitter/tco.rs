@@ -274,6 +274,7 @@ fn self_call_args<'e>(
         | Callee::Capability { .. }
         | Callee::D1Select { .. }
         | Callee::AnalyticsWrite { .. }
+        | Callee::AnalyticsSelect { .. }
         | Callee::D1Sql(_)
         | Callee::D1Peek { .. }
         | Callee::D1Decode(_)

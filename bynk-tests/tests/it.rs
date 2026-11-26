@@ -319,6 +319,8 @@ mod system {
     mod alias_service_workerd;
     #[path = "analyse_mode_corpus.rs"]
     mod analyse_mode_corpus;
+    #[path = "analytics_mapping_lock.rs"]
+    mod analytics_mapping_lock;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
@@ -417,6 +419,12 @@ mod system {
     mod failure_explanation_behaviour;
     #[path = "fetch_headers.rs"]
     mod fetch_headers;
+    #[path = "field_rename_behaviour.rs"]
+    mod field_rename_behaviour;
+    #[path = "field_rename_lock.rs"]
+    mod field_rename_lock;
+    #[path = "field_rename_workerd.rs"]
+    mod field_rename_workerd;
     #[path = "float_codec_behaviour.rs"]
     mod float_codec_behaviour;
     #[path = "header_question_lint.rs"]

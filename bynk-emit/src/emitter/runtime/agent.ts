@@ -25,6 +25,37 @@ export interface DurableObjectStub {
 export interface DurableObjectNamespace {
   idFromName(name: string): unknown;
   get(id: unknown): DurableObjectStub;
+  /** Cloudflare's jurisdiction-restricted view of the namespace (#3819); workerd throws "not implemented". */
+  jurisdiction?(jurisdiction: string): DurableObjectNamespace;
+}
+
+// #3819 (DECISION B): `@jurisdiction("eu")` mints an agent's ids through `namespace.jurisdiction("eu")`, a
+// *different* id from the unrestricted namespace's for the same name. Local `wrangler dev` (workerd)
+// does not implement jurisdictions and throws `Jurisdiction restrictions are not implemented in workerd`,
+// so locally, and only on that message,
+// the unscoped namespace is used, with one warning per isolate. Any other failure throws, so a deployed
+// Worker can never silently lose the restriction.
+let warnedJurisdictionFallback = false;
+const WORKERD_JURISDICTION_UNSUPPORTED = "Jurisdiction restrictions are not implemented in workerd";
+
+export function agentNamespace(binding: DurableObjectNamespace, jurisdiction?: string): DurableObjectNamespace {
+  if (jurisdiction === undefined) return binding;
+  try {
+    if (typeof binding.jurisdiction !== "function") {
+      throw new Error(`the Durable Object namespace has no jurisdiction(): cannot pin it to "${jurisdiction}"`);
+    }
+    return binding.jurisdiction(jurisdiction);
+  } catch (e) {
+    const notImplemented = e instanceof Error && e.message.includes(WORKERD_JURISDICTION_UNSUPPORTED);
+    if (!notImplemented) throw e;
+    if (!warnedJurisdictionFallback) {
+      warnedJurisdictionFallback = true;
+      globalThis.console.warn(
+        `bynk: warning: this runtime does not implement Durable Object jurisdictions, so an agent pinned to "${jurisdiction}" uses the unrestricted namespace here; a deployed Worker is restricted`,
+      );
+    }
+    return binding;
+  }
 }
 
 // Serialise an agent key to a stable string. Two semantically-equal keys must
@@ -222,8 +253,10 @@ export function makeWorkersAgent<C>(
   key: unknown,
   wire?: AgentWire,
   keyCodec?: WireCodec,
+  jurisdiction?: string,
 ): C {
-  const stub = binding.get(binding.idFromName(serialiseAgentKey(key)));
+  const scoped = agentNamespace(binding, jurisdiction);
+  const stub = scoped.get(scoped.idFromName(serialiseAgentKey(key)));
   // Encoded per call, not here, so a key that cannot encode fails at the call,
   // as an argument that cannot encode does.
   const sentKey = (): JsonValue | undefined =>
@@ -260,9 +293,10 @@ export function makeAgent<C>(
   constructBundle: (state: DurableObjectState) => C,
   wire?: AgentWire,
   keyCodec?: WireCodec,
+  jurisdiction?: string,
 ): C {
   if (binding !== undefined) {
-    return makeWorkersAgent<C>(binding, key, wire, keyCodec);
+    return makeWorkersAgent<C>(binding, key, wire, keyCodec, jurisdiction);
   }
   const state = registry.getOrCreate(key);
   return serialiseBundleAgent(state, constructBundle(state));
@@ -878,5 +912,5 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, agentBusyAfter as __agentBusyAfter, agentBusyResponse as __agentBusyResponse, callAgentOutcome as __callAgentOutcome, stubAgents as __stubAgents, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
+export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, agentBusyAfter as __agentBusyAfter, agentNamespace as __agentNamespace, agentBusyResponse as __agentBusyResponse, callAgentOutcome as __callAgentOutcome, stubAgents as __stubAgents, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
 export type { AgentWire as __AgentWire, DurableObjectNamespace as __DurableObjectNamespace };

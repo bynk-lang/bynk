@@ -112,7 +112,18 @@ fn describe_indexed(
     def_text: &str,
 ) -> Option<String> {
     if key.kind != SymbolKind::Unit {
-        return crate::symbols::describe_key(key.kind, def_text, &key.name);
+        // #4393: an actor's description depends on the rest of its unit's files (a shadowing
+        // `Sender`), so it sees every other file; the other kinds do not need them.
+        let others: Vec<&str> = if key.kind == SymbolKind::Actor {
+            a.snapshots
+                .iter()
+                .filter(|(p, _)| p.as_path() != def_path)
+                .map(|(_, t)| t.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        return crate::symbols::describe_key_with(key.kind, def_text, &key.name, &others);
     }
     let mut siblings: Vec<(&PathBuf, &String)> = a
         .snapshots
@@ -131,6 +142,36 @@ fn describe_indexed(
         }
         None => format!("{described}\nDeclared in `{file}`.\n"),
     })
+}
+
+/// What a resolved key's hover gains after everything `describe_symbol` rendered. This changes only the
+/// *tail* of what rung 1 already returns `Some` for, never whether it answers.
+///
+/// - #855: a `Service` symbol (the declaration's own name, or a cross-context/test-service call site, which
+///   both record this kind, see `bynk-check/src/symbols.rs`) gets its wire contract.
+/// - #4453: a record `Field` of a type a plain-JSON route writes says which shape it takes there.
+fn with_kind_appendix(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+    def_path: &Path,
+    def_text: &str,
+) -> String {
+    match key.kind {
+        SymbolKind::Service => match wire_contract_for_service_key(a, key, def_path, def_text) {
+            Some(model) => format!("{content}{}", wire_contract_appendix(&model)),
+            None => content,
+        },
+        SymbolKind::Field => {
+            match key.name.split_once('.').and_then(|(ty, field)| {
+                crate::plain_shape::field_section(ty, field, a.boundary_info)
+            }) {
+                Some(section) => format!("{content}{section}"),
+                None => content,
+            }
+        }
+        _ => content,
+    }
 }
 
 /// `content` with [`used_name_note`] appended when there is one.
@@ -201,20 +242,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 &key.unit,
                 Some(&ctx),
             );
-            // #855: a resolved `Service` symbol (the declaration's own name,
-            // or a cross-context/test-service call site — both record this
-            // kind, see `bynk-check/src/symbols.rs`) gets its wire
-            // contract appended after everything `describe_symbol` already
-            // rendered. This changes only the *tail* of what rung 1 already
-            // returns `Some` for — never whether it answers.
-            let content = if key.kind == SymbolKind::Service {
-                match wire_contract_for_service_key(a, key, &def.path, def_text) {
-                    Some(model) => format!("{content}{}", wire_contract_appendix(&model)),
-                    None => content,
-                }
-            } else {
-                content
-            };
+            let content = with_kind_appendix(content, a, key, &def.path, def_text);
             return Some(with_capability_path(
                 with_used_name_note(content, a, key),
                 a,

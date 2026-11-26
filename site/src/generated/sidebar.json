@@ -286,6 +286,10 @@
           {
             "label": "Recursive generic types",
             "link": "/book/guides/type-system/recursive-generic-types/"
+          },
+          {
+            "label": "Rename a field safely",
+            "link": "/book/guides/type-system/rename-a-field-safely/"
           }
         ]
       },
@@ -632,6 +636,10 @@
           {
             "label": "Deploy from CI",
             "link": "/book/guides/projects-build-and-deployment/deploy-from-ci/"
+          },
+          {
+            "label": "Keep a project's data in one jurisdiction",
+            "link": "/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/"
           },
           {
             "label": "Roll back a deployment",

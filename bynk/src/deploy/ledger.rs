@@ -197,6 +197,17 @@ pub(crate) struct Environment {
     /// `default`ed, so an older ledger still reads.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     renamed_classes: BTreeMap<String, BTreeMap<String, String>>,
+    /// #3819: per Worker, each agent class its last successful push hosted, with the
+    /// `@jurisdiction` its Durable Object ids were minted under (`"none"` for an agent with
+    /// none: the unrestricted namespace). An id minted under another jurisdiction is a
+    /// different id for the same name, so a changed value would orphan every instance, and the
+    /// next plan compares against this record and asks to confirm the change. Replaced on every
+    /// push of the Worker, so a class that is later removed leaves nothing behind. A record of
+    /// what was pushed, never a claim about the namespace, which Cloudflare owns. Additive and
+    /// `default`ed, so an older ledger still reads (a class it does not list reads as
+    /// unrestricted, which is what every agent was before `@jurisdiction`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    agent_jurisdictions: BTreeMap<String, BTreeMap<String, String>>,
     /// #3328: per Worker, the Email Routing `addresses` its last successful push
     /// carried in this environment. Wrangler deletes the rule of an address no
     /// longer listed, so mail to it would bounce: the next deploy compares the
@@ -207,6 +218,10 @@ pub(crate) struct Environment {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     email_addresses: BTreeMap<String, BTreeSet<String>>,
 }
+
+/// #3819: what the ledger records for an agent class whose ids come from the unrestricted
+/// namespace. Not a jurisdiction name, so it cannot be mistaken for one.
+pub(crate) const UNRESTRICTED_AGENT: &str = "none";
 
 /// P3 (#2342): the `namespace_id` this project allocated for one rate limiter.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,6 +274,10 @@ pub(crate) struct D1Record {
     pub(crate) name: String,
     /// Cloudflare's `database_id` for it.
     pub(crate) id: String,
+    /// #3820: the jurisdiction it was created in, if any. A database's jurisdiction is fixed when
+    /// it is made, so a source that now names another is refused, not recreated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) jurisdiction: Option<String>,
     /// Databases this binding used to have, under a name it no longer
     /// derives. They hold data, so they stay recorded (and are reported as
     /// orphans) until their entry is removed by hand, as R2's are.
@@ -576,6 +595,50 @@ impl DeployLock {
             .and_then(|env| env.renamed_classes.get(worker))
             .and_then(|renames| renames.get(from))
             .is_some_and(|recorded| recorded == to)
+    }
+
+    /// #3819: the jurisdiction `class` of `worker` was last pushed under in `environment`:
+    /// [`UNRESTRICTED_AGENT`] for an agent with none. `None` when the ledger does not record the
+    /// class (a ledger from before `@jurisdiction`, or a class never pushed), which callers read
+    /// as unrestricted for a Worker that has been deployed, and as new otherwise.
+    pub(crate) fn recorded_agent_jurisdiction(
+        &self,
+        environment: &str,
+        worker: &str,
+        class: &str,
+    ) -> Option<&str> {
+        self.environments
+            .get(environment)
+            .and_then(|env| env.agent_jurisdictions.get(worker))
+            .and_then(|classes| classes.get(class))
+            .map(String::as_str)
+    }
+
+    /// #3819: whether the ledger holds a record of `worker`'s classes at all, which a push after
+    /// `@jurisdiction` writes. A Worker deployed without one was last pushed by an older toolchain.
+    pub(crate) fn has_agent_jurisdictions(&self, environment: &str, worker: &str) -> bool {
+        self.environments
+            .get(environment)
+            .is_some_and(|env| env.agent_jurisdictions.contains_key(worker))
+    }
+
+    /// #3819: record the classes a successful push of `worker` hosted, and the jurisdiction each
+    /// one's ids were minted under, replacing what was recorded for it.
+    pub(crate) fn record_agent_jurisdictions(
+        &mut self,
+        environment: &str,
+        worker: &str,
+        classes: BTreeMap<String, String>,
+    ) {
+        let env = self
+            .environments
+            .entry(environment.to_string())
+            .or_default();
+        if classes.is_empty() {
+            env.agent_jurisdictions.remove(worker);
+        } else {
+            env.agent_jurisdictions.insert(worker.to_string(), classes);
+        }
     }
 
     /// #2276 Decision D: record the `renamed` tombstones a successful push of
@@ -1643,6 +1706,7 @@ pub(crate) mod tests {
                 Environment {
                     deleted_classes: BTreeMap::new(),
                     renamed_classes: BTreeMap::new(),
+                    agent_jurisdictions: BTreeMap::new(),
                     email_addresses: BTreeMap::new(),
                     kv: BTreeMap::from([("api".into(), KvNamespace { id: "abc".into() })]),
                     kv_instances: BTreeMap::from([(
@@ -1681,6 +1745,7 @@ pub(crate) mod tests {
                             D1Record {
                                 name: "api-orders".into(),
                                 id: "0d1d0000-0000-4000-8000-000000000001".into(),
+                                jurisdiction: None,
                                 superseded: vec![D1Past {
                                     name: "api-orders-old".into(),
                                     id: "0d1d0000-0000-4000-8000-000000000000".into(),
@@ -2632,13 +2697,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_OLD",
-            D1Record::of("shop-old", "id-2"),
+            D1Record::of("shop-old", "id-2", None),
         );
         let resources = BTreeMap::from([(
             "shop".to_string(),
@@ -2663,13 +2728,13 @@ pub(crate) mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "id-1"),
+            D1Record::of("shop-orders", "id-1", None),
         );
         lock.record::<D1>(
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-v2", "id-3"),
+            D1Record::of("shop-orders-v2", "id-3", None),
         );
         let orphans = find_orphans(&lock, "default", &resources);
         assert!(
@@ -2819,7 +2884,7 @@ pub(crate) mod tests {
             "staging",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders-staging", "id-7"),
+            D1Record::of("shop-orders-staging", "id-7", None),
         );
         let (root, config) = r2_project("d1-staging", D1_CONFIG, &lock);
         assert_eq!(

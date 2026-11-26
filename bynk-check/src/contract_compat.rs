@@ -107,6 +107,12 @@ pub struct Field {
     /// the normal form or the hash: a default is not hashed. Text recorded
     /// before the marker existed reads `false`, which errs towards breaking.
     pub defaulted: bool,
+    /// #3793: the keys this field was renamed from (`new: T replaces old`), most recent first.
+    /// A receiver that declares a rename reads the old key as this field, so a sender still
+    /// writing the old key is understood. Part of the stored shape text, never of the normal form
+    /// or the hash, as `defaulted` is. Text recorded before the marker existed reads empty,
+    /// which errs towards breaking.
+    pub renamed_from: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -444,6 +450,7 @@ fn named_shape(
                         .map(canon_pred_set)
                         .unwrap_or_default(),
                     defaulted: f.init.is_some(),
+                    renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
                 })
                 .collect();
             fields.sort_by_cached_key(render_field);
@@ -466,6 +473,7 @@ fn named_shape(
                             ty: shape_of(&p.type_ref, types, seen, subst),
                             preds: Vec::new(),
                             defaulted: false,
+                            renamed_from: Vec::new(),
                         })
                         .collect(),
                 })
@@ -659,6 +667,10 @@ fn field_node(f: &Field) -> Node {
     if f.defaulted {
         fa.push(Node::call("D", vec![]));
     }
+    // #3793: a trailing `R("old", …)` lists the names the field was renamed from.
+    if !f.renamed_from.is_empty() {
+        fa.push(Node::call("R", strs(&f.renamed_from).collect()));
+    }
     Node::call("F", fa)
 }
 
@@ -673,18 +685,27 @@ fn node_field(n: &Node) -> Option<Field> {
         Node::Str(s) => Some(s.clone()),
         Node::Call(..) => None,
     };
-    // #2689: a trailing `D()` marks a defaulted field; the rest are predicates.
-    let (defaulted, preds) = match fa.last() {
-        Some(Node::Call(h, a)) if fa.len() > 2 && h == "D" && a.is_empty() => {
-            (true, &fa[2..fa.len() - 1])
-        }
-        _ => (false, &fa[2..]),
+    // #3793: a trailing `R("old", …)` lists the names the field was renamed from, and
+    // #2689: a `D()` before it marks a defaulted field; the rest are predicates.
+    let mut rest = &fa[2..];
+    let mut renamed_from = Vec::new();
+    if let Some((Node::Call(h, a), head)) = rest.split_last()
+        && h == "R"
+        && !a.is_empty()
+    {
+        renamed_from = a.iter().map(string).collect::<Option<_>>()?;
+        rest = head;
+    }
+    let (defaulted, preds) = match rest.split_last() {
+        Some((Node::Call(h, a), head)) if h == "D" && a.is_empty() => (true, head),
+        _ => (false, rest),
     };
     Some(Field {
         name: string(&fa[0])?,
         ty: node_shape(&fa[1])?,
         preds: preds.iter().map(string).collect::<Option<_>>()?,
         defaulted,
+        renamed_from,
     })
 }
 
@@ -1094,8 +1115,24 @@ impl Cx {
             (Shape::Record { fields: sf, .. }, Shape::Record { fields: rf, .. }) => {
                 for rfield in rf {
                     let fpath = format!("{path}.{}", rfield.name);
-                    match sf.iter().find(|f| f.name == rfield.name) {
+                    // #3793: a receiver that declares `replaces old` reads the sender's `old`
+                    // key as this field, when the sender does not also send the new key.
+                    match sf
+                        .iter()
+                        .find(|f| f.name == rfield.name)
+                        .or_else(|| claimed_by(rfield, sf))
+                    {
                         Some(sfield) => {
+                            if sfield.name != rfield.name {
+                                self.note(
+                                    &fpath,
+                                    false,
+                                    format!(
+                                        "the {sender} sends the field under its old name `{}`, which the {receiver} reads as `{}`",
+                                        sfield.name, rfield.name
+                                    ),
+                                );
+                            }
                             self.flows(&sfield.ty, &sfield.preds, &rfield.ty, &rfield.preds, &fpath)
                         }
                         None if rfield.defaulted && !matches!(rfield.ty, Shape::Option(_)) => {
@@ -1118,7 +1155,10 @@ impl Cx {
                     }
                 }
                 for sfield in sf {
-                    if !rf.iter().any(|f| f.name == sfield.name) {
+                    if !rf.iter().any(|f| {
+                        f.name == sfield.name
+                            || claimed_by(f, sf).is_some_and(|c| c.name == sfield.name)
+                    }) {
                         self.note(
                             &format!("{path}.{}", sfield.name),
                             false,
@@ -1210,6 +1250,18 @@ impl Cx {
             );
         }
     }
+}
+
+/// #3793: the sender's field a receiver's `replaces` reads as `rfield`: the first of the
+/// receiver's old names (most recent first) the sender sends, when it does not send the new one.
+fn claimed_by<'a>(rfield: &Field, sender: &'a [Field]) -> Option<&'a Field> {
+    if sender.iter().any(|f| f.name == rfield.name) {
+        return None;
+    }
+    rfield
+        .renamed_from
+        .iter()
+        .find_map(|old| sender.iter().find(|f| &f.name == old))
 }
 
 /// A variant's payload field names, sorted.
@@ -1404,6 +1456,68 @@ mod tests {
             &format!("{REQ}type Req = {{ id: Int, note: Option[String] }}\n"),
         );
         only(&c, Direction::Request, "request.note");
+    }
+
+    // ---- #3793: a renamed field ---------------------------------------------
+
+    /// A request flows caller to callee, and the callee reads the caller's old key under its
+    /// declared `replaces`, so a rename in a request is compatible: old callers keep working.
+    #[test]
+    fn a_renamed_request_field_is_compatible() {
+        let c = compatible(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: String replaces name }}\n"),
+        );
+        only(&c, Direction::Request, "request.label");
+    }
+
+    #[test]
+    fn a_renamed_request_field_is_not_reported_as_ignored() {
+        let c = compatible(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: String replaces name }}\n"),
+        );
+        assert!(
+            !c.findings.iter().any(|f| f.path == "request.name"),
+            "the old key is read as the new field, not ignored: {c:#?}"
+        );
+    }
+
+    /// A response flows callee to caller: the callee now writes only the new key and an old caller
+    /// still requires the old one, so a rename in a response is breaking.
+    #[test]
+    fn a_renamed_response_field_is_breaking() {
+        breaking(
+            &format!("{RESP}type Resp = {{ name: String }}\n"),
+            &format!("{RESP}type Resp = {{ label: String replaces name }}\n"),
+        );
+    }
+
+    #[test]
+    fn a_rename_still_judges_the_type() {
+        breaking(
+            &format!("{REQ}type Req = {{ name: String }}\n"),
+            &format!("{REQ}type Req = {{ label: Int replaces name }}\n"),
+        );
+    }
+
+    /// The source names one old name, so a caller two renames back is not understood.
+    #[test]
+    fn only_the_named_old_key_is_read() {
+        breaking(
+            &format!("{REQ}type Req = {{ a: String }}\n"),
+            &format!("{REQ}type Req = {{ c: String replaces b }}\n"),
+        );
+    }
+
+    #[test]
+    fn a_renamed_field_round_trips_through_the_stored_text() {
+        let s = shape(&format!(
+            "{REQ}type Req = {{ label: String replaces name = \"x\" }}\n"
+        ));
+        let text = s.to_text();
+        assert!(text.contains("R(\"name\")"), "{text}");
+        assert_eq!(ServiceShape::from_text(&text).as_ref(), Some(&s));
     }
 
     #[test]
@@ -2186,6 +2300,7 @@ mod tests {
                     ty,
                     preds: Vec::new(),
                     defaulted: false,
+                    renamed_from: Vec::new(),
                 })
                 .collect(),
         }
@@ -2214,6 +2329,7 @@ mod tests {
                             ty,
                             preds: Vec::new(),
                             defaulted: false,
+                            renamed_from: Vec::new(),
                         })
                         .collect(),
                 })

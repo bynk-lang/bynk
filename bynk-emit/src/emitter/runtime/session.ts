@@ -165,7 +165,7 @@ function parseSegment(seg: string): Record<string, unknown> | null {
 }
 
 /**
- * Verify a presented session cookie for `actor`. `Ok({ sub })` only for a
+ * Verify a presented session cookie for `actor`. `Ok({ sub, exp })` only for a
  * well-formed cookie signed by `keys.secret` or `keys.previous` (selected by
  * its `kid`), made for this actor, issued no later than now (one second of
  * skew), unexpired, and whose lifetime (`exp - iat`) does not exceed
@@ -179,7 +179,7 @@ export async function verifySignedCookie(
   actor: string,
   ttlSecs: number,
   nowMs: number = Date.now(),
-): Promise<Result<{ readonly sub: string; readonly sid?: string }, string>> {
+): Promise<Result<{ readonly sub: string; readonly sid?: string; readonly exp: number }, string>> {
   // The bound on a cookie's lifetime is the actor's `ttl`; one that is not a positive whole number
   // would turn it off (`NaN` compares false), so it is a fault, as it is for the signer.
   if (!Number.isSafeInteger(ttlSecs) || ttlSecs <= 0) {
@@ -223,9 +223,9 @@ export async function verifySignedCookie(
   if (exp <= iat) return Err("malformed lifetime");
   if (exp - iat > ttlSecs) return Err("lifetime exceeds ttl");
   if (exp <= now) return Err("cookie expired");
-  if (sid === undefined) return Ok({ sub });
+  if (sid === undefined) return Ok({ sub, exp });
   if (typeof sid !== "string" || sid.length === 0) return Err("malformed sid");
-  return Ok({ sub, sid });
+  return Ok({ sub, sid, exp });
 }
 
 // -- issuing and deleting the cookie (`Actor.issue(identity)`, `Actor.expire()`) ------------------

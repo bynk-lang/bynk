@@ -116,6 +116,7 @@
 /book/guides/projects-build-and-deployment/deploy-from-ci/
 /book/guides/projects-build-and-deployment/deploy-to-cloudflare/
 /book/guides/projects-build-and-deployment/follow-a-request-across-contexts/
+/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/
 /book/guides/projects-build-and-deployment/layout/
 /book/guides/projects-build-and-deployment/roll-back-a-deployment/
 /book/guides/projects-build-and-deployment/run-a-private-registry/
@@ -154,6 +155,7 @@
 /book/guides/type-system/recursion-and-iteration/
 /book/guides/type-system/recursive-generic-types/
 /book/guides/type-system/refined-literal-admission/
+/book/guides/type-system/rename-a-field-safely/
 /book/guides/type-system/result-and-optionals/
 /book/guides/type-system/use-a-literal/
 /book/introduction/anatomy-of-a-service/
@@ -1429,6 +1431,7 @@
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /reference/diagnostics/bynk.agents.self_operation/
+/reference/diagnostics/bynk.analytics.mapping_changed/
 /reference/diagnostics/bynk.asset.duplicate/
 /reference/diagnostics/bynk.asset.invalid_at_path/
 /reference/diagnostics/bynk.asset.may_shadow_route/
@@ -1606,6 +1609,10 @@
 /reference/diagnostics/bynk.exports.undeclared_capability/
 /reference/diagnostics/bynk.exports.undeclared_type/
 /reference/diagnostics/bynk.fault.todo/
+/reference/diagnostics/bynk.field.replaces_conflict/
+/reference/diagnostics/bynk.field.replaces_needed/
+/reference/diagnostics/bynk.field.replaces_settled/
+/reference/diagnostics/bynk.field.replaces_unknown/
 /reference/diagnostics/bynk.fixture.binary_content/
 /reference/diagnostics/bynk.fixture.duplicate/
 /reference/diagnostics/bynk.fixture.invalid_encoding/
@@ -2056,6 +2063,7 @@
 /reference/diagnostics/bynk.store.kind_arity/
 /reference/diagnostics/bynk.store.kind_unsupported/
 /reference/diagnostics/bynk.store.log_needs_clock/
+/reference/diagnostics/bynk.store.replaces_collection/
 /reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
@@ -2324,6 +2332,7 @@
 /reference/diagnostics/bynk.within.timed_out_not_in_scope/
 /reference/diagnostics/bynk.ws.bad_close_code/
 /reference/diagnostics/bynk.ws.bad_close_reason/
+/reference/diagnostics/bynk.ws.cookie_needs_origins/
 /reference/diagnostics/bynk.ws.lifecycle_by_mismatch/
 /reference/diagnostics/bynk.ws.message_frame_param/
 /reference/diagnostics/bynk.ws.missing_close/

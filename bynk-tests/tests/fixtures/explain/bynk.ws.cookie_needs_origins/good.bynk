@@ -1,0 +1,20 @@
+context chat
+
+type RoomId = opaque String
+type UserId = String where NonEmpty && MaxLength(64)
+type Frame = { text: String }
+
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Frame]]
+  on call join(u: UserId, conn: Connection[Frame]) -> Effect[()] { let _ <- conns.put(u, conn) () }
+  on call leave(u: UserId) -> Effect[()] { let _ <- conns.remove(u) () }
+}
+
+service gateway from websocket(in: Frame, out: Frame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+  on open (room: RoomId) -> Effect[()] by user: Member { let _ <- Room(room).join(user.identity, connection) () }
+  on close (room: RoomId) -> Effect[()] by user: Member { let _ <- Room(room).leave(user.identity) () }
+}

@@ -310,6 +310,33 @@ pub fn bearer_seam_for(
     })
 }
 
+/// #3904: what a hosting Durable Object needs of a lone `from websocket` credential seam: the binder
+/// and the identity type, carried in a [`BearerSeam`] whatever the scheme (`Bearer`, `Oidc` or
+/// `SignedCookie`). The Worker verified the credential, so the Durable Object reads none of the
+/// seam's trust roots: `secret` is empty and there is no authorisation predicate for the other two.
+pub fn ws_principal_seam_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<BearerSeam> {
+    if let Some(seam) = bearer_seam_for(handler, actors) {
+        return Some(seam);
+    }
+    let (binder, identity_type) = match (
+        oidc_seam_for(handler, actors),
+        signed_cookie_seam_for(handler, actors),
+    ) {
+        (Some(o), _) => (o.binder, o.identity_type),
+        (None, Some(c)) => (c.binder, c.identity_type),
+        (None, None) => return None,
+    };
+    Some(BearerSeam {
+        binder,
+        secret: String::new(),
+        identity_type,
+        authorization: None,
+    })
+}
+
 /// The cookie name a `SignedCookie` actor issues and reads when `cookie` is not given.
 pub const SIGNED_COOKIE_DEFAULT_NAME: &str = "__Host-session";
 
@@ -475,10 +502,15 @@ pub fn oidc_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<OidcSea
 /// refinement of one. `None` for a sum (the binder there is the resolved arm), a handler of any
 /// other protocol, and a `by` with no binder.
 pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    // The verified claims reach a handler only on the HTTP path (a WebSocket upgrade forwards the
+    // identity and expiry alone), so a `from websocket` binder has no `.claims` (#3904).
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return None;
+    }
     if let Some(seam) = oidc_seam_for(handler, actors) {
         return seam.binder;
     }
-    if !matches!(handler.kind, HandlerKind::Http { .. }) || handler.by_clause.as_ref()?.is_sum() {
+    if handler.by_clause.as_ref()?.is_sum() {
         return None;
     }
     bearer_seam_for(handler, actors)?.binder
@@ -1161,8 +1193,15 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // subprotocol, since a browser `WebSocket` cannot set an `Authorization`
         // header. `Signature` is rejected at the WS boundary: HMAC-over-body has
         // no body on a handshake.
+        // #3904: a browser also authenticates an upgrade with a session cookie it sends by itself
+        // (`SignedCookie`, behind an `Origin` check) or a provider's token through the
+        // `bynk.oidc` subprotocol pair (`Oidc`), each a single actor; a sum takes only `None`
+        // and `Bearer` members.
         ServiceProtocol::WebSocket { .. } => {
-            matches!(scheme, Scheme::None | Scheme::Bearer)
+            matches!(
+                scheme,
+                Scheme::None | Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie
+            )
         }
         // Events track, slice 0 (spine #936): delivery is an internal,
         // runtime-triggered invocation, like `Call`/`Cron`/`Queue` — no

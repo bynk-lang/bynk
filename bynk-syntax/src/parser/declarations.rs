@@ -4271,6 +4271,11 @@ impl<'a> Parser<'a> {
             end = ann.span;
             annotations.push(ann);
         }
+        // #3793: `store name: Kind[T] replaces old`, after the annotations and before `=`.
+        let replaces = self.parse_field_replaces(false)?;
+        if let Some(r) = &replaces {
+            end = r.span;
+        }
         let init = if self.eat(TokenKind::Eq).is_some() {
             let e = self.parse_expr()?;
             end = e.span;
@@ -4282,6 +4287,7 @@ impl<'a> Parser<'a> {
             name,
             kind,
             annotations,
+            replaces,
             init,
             documentation: None,
             span: kw.span.merge(end),

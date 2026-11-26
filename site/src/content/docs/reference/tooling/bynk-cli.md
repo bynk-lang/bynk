@@ -208,7 +208,7 @@ bynk new <PATH> [--name NAME]
 ```text
 <PATH>/
 ├── bynk.toml            # [project] name/version + optional [paths] include/exclude
-├── .gitignore           # /.bynk
+├── .gitignore           # /out, /.bynk, .wrangler/, node_modules/
 ├── .gitattributes       # *.bynk text eol=lf
 ├── src/
 │   └── <name>.bynk      # context <name> — a GET "/" HTTP service
@@ -1897,6 +1897,27 @@ accepts every type whose order differs from the lock and prints each one.
 checking it, and refuses a project that does not parse. **Exit code:** `0`, or
 non-zero when the type is not found or the lock cannot be written. Accepting an
 order that is already recorded says so and writes nothing.
+
+### `bynk lock accept-analytics`
+
+```text
+bynk lock accept-analytics <INSTANCE> [--path PATH]
+bynk lock accept-analytics --all [--path PATH]
+```
+
+Accepts the new column mapping of an `Analytics` instance written with `writeValue`
+(#4105): rewrites its entry under `[analytics]` to the mapping now written. Points already
+written keep their old column positions, so a build refuses a reorder, a retyped field or a removed
+field of the written record
+([`bynk.analytics.mapping_changed`](/reference/diagnostics/bynk.analytics.mapping_changed/))
+until it is accepted. Commit the rewritten lock with the change.
+
+`INSTANCE` is the instance's name, or `<unit>.<Instance>` when two instances share a name. `--all`
+accepts every instance whose mapping differs from the lock and prints each one. `--path` is the
+project directory (default `.`). Unlike `accept-order` it checks the project, because the mapping is
+read from the checked units, and refuses one that does not check. **Exit code:** `0`, or non-zero
+when the instance is not found, the project does not check, or the lock cannot be written. Accepting
+a mapping that is already recorded says so and writes nothing.
 
 ---
 
