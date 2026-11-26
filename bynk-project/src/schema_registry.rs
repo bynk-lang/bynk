@@ -184,13 +184,6 @@ impl SchemaRegistry {
         self.version = ANALYTICS_LOCK_VERSION;
     }
 
-    /// Forget the mapping of instance `key`, when its write has gone from source. The document
-    /// falls back to the version its remaining tables need.
-    pub fn remove_analytics(&mut self, key: &str) {
-        self.analytics.remove(key);
-        self.settle_version();
-    }
-
     /// Every recorded mapping, in key order.
     pub fn analytics(&self) -> impl Iterator<Item = (&String, &AnalyticsEntry)> {
         self.analytics.iter()

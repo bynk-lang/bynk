@@ -30,7 +30,7 @@ use crate::checker::Callee;
 use crate::checker::analytics::{AnalyticsMapping, ColumnField, ColumnKind};
 
 /// One instance as the units now write it: its lock key (`<unit>.<Instance>`), the mapping and
-/// the first `writeValue` call (where a refused change is reported).
+/// the record's declaration (where a refused change is reported).
 pub struct LiveMapping {
     pub key: String,
     pub entry: AnalyticsEntry,
@@ -85,7 +85,6 @@ fn collect(
     let mut live = BTreeMap::new();
     let mut ambiguous = BTreeSet::new();
     for (key, mut sites) in found {
-        sites.sort_by_key(|(_, _, span)| (span.file, span.start));
         let records: BTreeSet<&String> = sites.iter().map(|(r, _, _)| r).collect();
         if records.len() > 1 {
             ambiguous.insert(key);
@@ -124,14 +123,47 @@ fn column_kind(column: &str) -> &str {
 /// Why moving from the recorded `old` columns to the declared `new` ones changes what a column
 /// holds, or `None` when only fields were appended or renamed in place.
 fn columns_change(family: &str, old: &[String], new: &[String]) -> Option<String> {
+    let removed = |o: &String, column: &str| {
+        format!(
+            "`{}` ({column}) is no longer written, so the columns after it move up",
+            column_name(o)
+        )
+    };
     for (i, o) in old.iter().enumerate() {
         let column = format!("{family}{}", i + 1);
+        let at = new.iter().position(|x| column_name(x) == column_name(o));
         let Some(n) = new.get(i) else {
-            return Some(format!(
-                "`{}` ({column}) is no longer written, so the columns after it move up",
-                column_name(o)
-            ));
+            return Some(match at {
+                Some(p) => format!(
+                    "`{}` was {column} and is now {family}{}",
+                    column_name(o),
+                    p + 1
+                ),
+                None => removed(o, &column),
+            });
         };
+        if column_name(o) == column_name(n) {
+            if column_kind(o) != column_kind(n) {
+                return Some(format!(
+                    "`{}` ({column}) was {} and is now {}",
+                    column_name(o),
+                    column_kind(o),
+                    column_kind(n)
+                ));
+            }
+            continue;
+        }
+        // The names differ at this column: the field moved, was removed, or was renamed in place.
+        if let Some(p) = at {
+            return Some(format!(
+                "`{}` was {column} and is now {family}{}",
+                column_name(o),
+                p + 1
+            ));
+        }
+        if old.iter().any(|x| column_name(x) == column_name(n)) {
+            return Some(removed(o, &column));
+        }
         if column_kind(o) != column_kind(n) {
             return Some(format!(
                 "`{}` ({column}) was {} and is now {}",
@@ -139,19 +171,6 @@ fn columns_change(family: &str, old: &[String], new: &[String]) -> Option<String
                 column_kind(o),
                 column_kind(n)
             ));
-        }
-        if column_name(o) != column_name(n) {
-            let moved = new.iter().any(|x| column_name(x) == column_name(o))
-                || old.iter().any(|x| column_name(x) == column_name(n));
-            if moved {
-                return Some(format!(
-                    "`{}` was {column} and is now {family}{}",
-                    column_name(o),
-                    new.iter()
-                        .position(|x| column_name(x) == column_name(o))
-                        .map_or_else(|| "?".to_string(), |p| (p + 1).to_string())
-                ));
-            }
         }
     }
     None
@@ -308,6 +327,29 @@ mod tests {
             blobs: blobs.iter().map(|s| s.to_string()).collect(),
             doubles: doubles.iter().map(|s| s.to_string()).collect(),
         }
+    }
+
+    /// Recorded `[a, b]`, now `[b, c]`: `a` was removed and `b` shifted, and the message names `a`.
+    #[test]
+    fn a_removal_plus_a_shift_reports_the_removal() {
+        let why = change(
+            &entry(None, &["a:text", "b:text"], &[]),
+            &entry(None, &["b:text", "c:text"], &[]),
+        )
+        .expect("a change");
+        assert!(why.contains("`a` (blob1) is no longer written"), "{why}");
+        assert!(!why.contains('?'), "{why}");
+    }
+
+    /// Two fields of different kinds swapped is a move, not a retype.
+    #[test]
+    fn a_swap_between_kinds_reports_the_move() {
+        let why = change(
+            &entry(None, &["a:text", "b:enum"], &[]),
+            &entry(None, &["b:enum", "a:text"], &[]),
+        )
+        .expect("a change");
+        assert!(why.contains("`a` was blob1 and is now blob2"), "{why}");
     }
 
     #[test]
