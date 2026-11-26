@@ -383,6 +383,13 @@ pub const HTML_UNIT: &str = "bynk.html";
 /// available on every target, written in Bynk over `String.replace`.
 pub const BYNK_HTML_SRC: &str = include_str!("../lib/core/bynk.html.bynk");
 
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const RANGE_UNIT: &str = "bynk.range";
+
+/// `bynk.range` (#4466) — `ifRangeHolds`, whether a `Range` request may be answered with the part
+/// given its `If-Range` header, pure and available on every target, written in Bynk.
+pub const BYNK_RANGE_SRC: &str = include_str!("../lib/core/bynk.range.bynk");
+
 /// `bynk.validation` — `ValidationRule` and `Bound`.
 pub const BYNK_VALIDATION_SRC: &str = include_str!("../lib/core/bynk.validation.bynk");
 
@@ -1467,6 +1474,22 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: RANGE_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/range.bynk",
+        source: BYNK_RANGE_SRC,
+        binding: Binding::None,
+        // 15: `bynk.html` takes 13 and `bynk.decode` (#4471) takes 14.
+        id_block: 15,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2276,6 +2299,7 @@ mod tests {
                 ("bynk.validation", 12),
                 ("bynk.html", 13),
                 ("bynk.decode", 14),
+                ("bynk.range", 15),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2311,6 +2335,7 @@ mod tests {
                 "bynk.validation",
                 "bynk.html",
                 "bynk.decode",
+                "bynk.range",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

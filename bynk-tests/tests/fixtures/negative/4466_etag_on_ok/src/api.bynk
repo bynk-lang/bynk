@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/n") () -> Effect[HttpResult[Int]] by v: Visitor {
+        Ok(1).etag("\"v1\"")
+    }
+}

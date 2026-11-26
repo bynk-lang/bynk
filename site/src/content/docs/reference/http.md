@@ -892,6 +892,8 @@ on GET("/export") () -> Effect[HttpResult[Bytes]] by v: Visitor {
 | `withHeader(name, value)` | one header line; a repeated name keeps every value | any `HttpResult` |
 | `retryAfter(delay)` | `Retry-After`, `delay` in whole seconds, rounded up | `TooManyRequests`, `ServiceUnavailable` |
 | `at(url)` | `Location` of the new resource | `Created`, `RawCreated`, `Accepted` |
+| `etag(tag)` | the handler's own `ETag` (an entity tag) | `PartialContent`, `NotModified` |
+| `lastModified(at)` | the handler's own `Last-Modified`, from an `Instant` | `PartialContent`, `NotModified` |
 | `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed`, `PartialContent` |
 
 A typed helper is written on the variant itself, after any other header methods
@@ -1415,7 +1417,7 @@ are the first and last byte, inclusive, and `total` is the size of the whole rep
 the handler works the range out (an object store such as R2 does it for you) and states what it
 sent. A range that is not one (`start` below 0 or past `end`, or `end` at or past a known `total`)
 is a fault, so the answer is `500` and the route is logged, and a malformed `Content-Range` is never
-sent. The body is streamed like `RawStreamed`'s: no `ETag`, no `content-length`, and a fault mid-body
+sent. The body is streamed like `RawStreamed`'s: no `ETag` of the router's own (the handler may attach one with [`etag`](#the-handlers-validator-and-if-range)), no `content-length`, and a fault mid-body
 aborts the response. So does a body that yields more or fewer bytes than the range says (`end - start + 1`),
 rather than going out under a `Content-Range` it does not match.
 
@@ -1424,11 +1426,54 @@ as an `If-None-Match` an object store checked against its own entity tag. It is 
 automatic `304` the router gives an eligible `GET` (see [Automatic revalidation](#automatic-revalidation-etag--304)),
 which needs no handler code.
 
-Neither variant can carry a validator yet. `ETag`, `Last-Modified`, `Cache-Control` and the other
-caching headers are ones the router owns, so [`withHeader`](#response-headers) refuses them, and these
-two variants have no argument for one as `RawTagged` has. RFC 9110 §15.4.5 says a `304` should repeat the
-validators a `200` would have sent, and a client resumes a download with `If-Range` only against an `ETag`
-on the `206`: a handler that needs either cannot send it today.
+### The handler's validator, and `If-Range`
+
+`ETag` and `Last-Modified` are headers the router owns, so [`withHeader`](#response-headers) refuses
+them. A `PartialContent` or `NotModified` takes its own through two typed helpers, written on the variant
+itself like the others:
+
+```bynk,fragment
+PartialContent(body, "video/mp4", range).etag(object.etag)
+```
+
+```bynk,fragment
+NotModified.etag(object.etag).lastModified(object.uploaded)
+```
+
+`etag(tag)` is an entity tag, quoted and optionally `W/`-prefixed (RFC 9110 §8.8.3); a literal that is
+not one is `bynk.http.invalid_response_header`, and a computed one faults the request. `lastModified(at)`
+takes an `Instant` and writes `Last-Modified` as an IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`), to the
+second. RFC 9110 §15.4.5 says a `304` should repeat the validators a `200` would have sent, and a client
+resumes a download with `If-Range` against the validator on the `206`.
+
+**`If-Range`.** A `Range` request may carry `If-Range`: the client wants the range only if its validator
+still names the current representation, and otherwise the whole body. The router cannot turn a
+part into the whole, so the handler decides. Read the header with a typed
+[`headers:` record](#typed-headers) and ask `ifRangeHolds` from `uses bynk.range`:
+
+```bynk,fragment
+if ifRangeHolds(headers.ifRange, object.etag) {
+  PartialContent(body, contentType, range).etag(object.etag)
+} else {
+  RawStreamed(wholeBody, contentType)
+}
+```
+
+`ifRangeHolds(ifRange, etag)` is `true` with no `If-Range`, and when it is exactly `etag` and neither is
+weak (the strong comparison `If-Range` requires). A date `If-Range` never holds there, so the handler
+answers the whole body, which is always correct.
+
+**The router's safety net.** A handler that forgets the check would send bytes of a changed
+representation, which is the corruption `If-Range` exists to prevent. So when the request carries
+`If-Range` and the handler returns `PartialContent`, the router compares it with the validator the handler
+attached: an entity tag against `etag` (strong comparison), a date against `Last-Modified` (exact). A
+match sends the `206`. A mismatch, or a `206` with no validator, is not sent: the route answers `500` and
+logs `PartialContent for a stale If-Range: check ifRangeHolds before answering 206`. The router does not
+fall back to a `200` itself, for it cannot build the body.
+
+The router's own conditional handling still applies, and comes first (RFC 9110 §13.2.2 evaluates
+`If-None-Match` before `If-Range`): a `GET` whose `If-None-Match` matches the validator on a handler's
+`206` is answered `304`, even if its `If-Range` is stale, since a bodyless answer cannot leak stale bytes.
 
 Both are answers to a `GET`. A route of another method that names either in its own body is
 [`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/). A variant built in a
