@@ -187,7 +187,7 @@ fn assert_firstparty_label_in_its_own_source(subcommand: &str) {
     let (primary, primary_body) = parts[0];
     let (stdlib, stdlib_body) = parts[1];
     assert!(
-        primary.ends_with("src/app/web.bynk:158:27"),
+        primary.ends_with("src/app/web.bynk:308:27"),
         "got:\n{report}"
     );
     assert!(
