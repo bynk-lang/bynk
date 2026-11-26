@@ -3166,6 +3166,11 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.match.as_on_wildcard",
+        blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
+        example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
+    },
+    Explain {
         code: "bynk.match.refined_pattern_is_range",
         blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
@@ -9552,6 +9557,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
+    warn(dg(
+        "bynk.match.as_on_wildcard",
+        "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable).",
+        &["as_pattern"],
     )),
     warn(dg(
         "bynk.match.refined_pattern_is_range",

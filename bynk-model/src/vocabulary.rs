@@ -797,6 +797,8 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
         Pattern::Or(alts, _) => alts
             .iter()
             .any(|p| !p.bound_names().is_empty() || pattern_has_nested_test(p)),
+        // #3971: `as` binds the whole value, which a `case` label cannot.
+        Pattern::As { .. } => true,
         Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => false,
     }
 }
