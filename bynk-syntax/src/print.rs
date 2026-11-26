@@ -697,6 +697,12 @@ pub fn pattern_to_string(p: &Pattern) -> String {
             .map(pattern_to_string)
             .collect::<Vec<_>>()
             .join(" | "),
+        // #3971: `as` binds tighter than `|`, so an or-pattern inside keeps
+        // its parentheses.
+        Pattern::As { inner, name, .. } => match &**inner {
+            Pattern::Or(..) => format!("({}) as {}", pattern_to_string(inner), name.name),
+            _ => format!("{} as {}", pattern_to_string(inner), name.name),
+        },
     }
 }
 

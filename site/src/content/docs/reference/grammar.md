@@ -2078,6 +2078,22 @@ value type. `|` is a pattern-position operator only, distinct from boolean
 
 **See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
 
+### as_pattern {#rule-as_pattern}
+
+{{#grammar as_pattern}}
+
+`pattern as name` (#3971) — binds `name` to the whole value the pattern matched,
+at the pattern's type: `Some(Order { status: Paid, .. } as paid)`. It never
+changes what the pattern matches, so exhaustiveness is unchanged. `as` binds
+tighter than `|`: `A | B as x` is `A | (B as x)`, and `(A | B) as x` binds either
+alternative. `_ as x` is [`bynk.match.as_on_wildcard`](/reference/diagnostics/bynk.match.as_on_wildcard/),
+a warning.
+
+**Static semantics.**
+{{#grammar-semantics as_pattern}}
+
+**See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
+
 ### paren_pattern {#rule-paren_pattern}
 
 {{#grammar paren_pattern}}

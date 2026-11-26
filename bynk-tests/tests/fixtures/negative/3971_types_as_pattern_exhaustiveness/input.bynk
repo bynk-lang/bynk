@@ -1,0 +1,17 @@
+commons demo
+
+type Status = enum { Open, Paid }
+type Order = { id: String, status: Status, total: Int }
+
+fn refutable(o: Order) -> Int {
+  match o {
+    Order { status: Paid, total, .. } as paid => paid.total
+  }
+}
+
+fn unreachable(o: Order) -> Int {
+  match o {
+    Order { total, .. } as whole => whole.total
+    Order { status: Paid, .. } as paid => paid.total
+  }
+}

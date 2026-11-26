@@ -1426,6 +1426,27 @@ checker (`bynk.types.is_range_pattern`); the tree-sitter grammar does not admit 
 there, since an arm body ending `x is 5` and the next arm starting `..9` would
 otherwise be one range. A bound's range and `lo <= hi` are well-formedness (§5.6).
 
+### §4.7.14 as_pattern {#4714-as_pattern}
+
+{{#grammar as_pattern}}
+
+`pattern as name` (#3971) — binds `name` to the whole value `pattern` matched, at
+the type of the position the pattern sits at, so a pattern can check a value's
+shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. `as` is
+a suffix on any pattern, wherever a pattern is allowed: a match arm, a variant
+payload, a record field, a list element, an or-alternative, `let … else`, and a
+lambda's record-pattern parameter (`(Item { sku, .. } as item) => …`).
+
+`as` binds tighter than `|`: `A | B as x` is `A | (B as x)`, which is
+well-formed only when `A` binds `x` too (§5.6). Write `(A | B) as x` to bind
+whichever alternative matched; the formatter keeps those parentheses. After
+`is`, the pattern in front of `as` follows the `is` restrictions: a record
+pattern MUST be parenthesised, `x is (T { f, .. } as t)`.
+
+`as` is contextual: only a pattern followed by `as` takes this reading, and `as`
+keeps every other meaning (`consumes … as Alias`, `embeds E as V`). Well-formedness:
+§5.6.
+
 ## §4.8 Statements
 
 A block is a sequence of statements ending in an optional value expression.

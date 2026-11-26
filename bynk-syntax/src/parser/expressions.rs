@@ -1672,7 +1672,25 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// One `|` alternative: an atomic pattern with an optional `as name`
+    /// suffix (#3971). `as` binds tighter than `|`, so `A | B as x` is
+    /// `A | (B as x)`; `(A | B) as x` binds either alternative.
     fn parse_pattern_base(&mut self) -> Result<Pattern, CompileError> {
+        let inner = self.parse_pattern_atom()?;
+        if self.peek_kind() != Some(TokenKind::As) {
+            return Ok(inner);
+        }
+        self.bump();
+        let name = self.expect_ident("after `as` in a pattern")?;
+        let span = inner.span().merge(name.span);
+        Ok(Pattern::As {
+            inner: Box::new(inner),
+            name,
+            span,
+        })
+    }
+
+    fn parse_pattern_atom(&mut self) -> Result<Pattern, CompileError> {
         if let Some(t) = self.peek() {
             // #474 §2.3.6: parens around a pattern are transparent grouping —
             // `is (Held(...) | Confirmed(...))` — recommended for readability

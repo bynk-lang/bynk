@@ -1,0 +1,9 @@
+commons shop.orders {
+  // `_ as order` binds what the bare name `order` already binds.
+  fn ship(o: Option[Int]) -> Int {
+    match o {
+      Some(_ as order) => order
+      None => 0
+    }
+  }
+}

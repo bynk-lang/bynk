@@ -1946,6 +1946,26 @@ In `lo..hi`, `lo..` and `..hi`:
   (`bynk.types.is_range_pattern`), as for a literal
   (`bynk.types.is_literal_pattern`).
 
+**As patterns** (#3971, [§4.7.14](/reference/spec/syntactic-grammar/#4714-as_pattern)).
+In `p as name`:
+
+- `name` is bound to the value `p` matched, at the type of its position: the sum
+  for a variant pattern, the record for a record pattern, the element type for a
+  list element. It is bound alongside the names `p` itself binds.
+- `as` never narrows what `p` matches. Exhaustiveness and reachability treat
+  `p as name` exactly as `p`, so adding or removing an `as` never changes
+  whether a `match` is exhaustive, and never makes an arm unreachable or live.
+- Under an or-pattern, `as` binds tighter than `|`, so `A | B as x` is
+  `A | (B as x)` and is subject to the or-pattern rules above: every alternative
+  binds the same names at the same types. `(A | B) as x` binds `x` once, to
+  whichever alternative matched.
+- `_ as name` is `bynk.match.as_on_wildcard`, a warning: `_` matches every value,
+  so the bare name binds the same one. The quick fix writes the name.
+- After `is`, an `as` name is bound like the flat names of its position: on the
+  whole pattern, or in place of a variant payload, record field or list element
+  name. What a nested pattern binds deeper is match-only, as everywhere after
+  `is`.
+
 A pattern MUST name a real variant (`bynk.types.unknown_variant_in_pattern`) and
 real payload fields (`bynk.types.unknown_pattern_field`), bind the right number
 of fields (`bynk.types.pattern_arity`), and MUST NOT mix named and positional

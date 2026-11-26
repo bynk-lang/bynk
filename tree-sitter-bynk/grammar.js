@@ -1722,7 +1722,14 @@ module.exports = grammar({
       choice(
         seq(
           "let",
-          field("pattern", choice($._let_pattern, alias($._let_or_pattern, $.or_pattern))),
+          field(
+            "pattern",
+            choice(
+              $._let_pattern,
+              alias($._let_or_pattern, $.or_pattern),
+              alias($._let_as_pattern, $.as_pattern),
+            ),
+          ),
           field("bind", choice("=", "<-")),
           field("value", $._expression),
           optional(field("principal", $.call_site_actor)),
@@ -1745,6 +1752,9 @@ module.exports = grammar({
         ),
       ),
     _let_paren_record_pattern: ($) => seq("(", $.record_pattern, ")"),
+    // #3971: `let Some(x) as y = …` — `as` after a pattern that may open a `let … else`.
+    _let_as_pattern: ($) =>
+      prec.left(2, seq(field("pattern", $._let_pattern), "as", field("name", $.identifier))),
     // #2010: the patterns that may open a `let … else`, mirroring the Rust
     // parser's `let_pattern_ahead`: a literal, a parenthesised pattern, or a
     // variant with a payload or a qualifier. A bare name stays a binding (and
@@ -2020,7 +2030,17 @@ module.exports = grammar({
         $.record_pattern,
         $.list_pattern,
         $.or_pattern,
+        $.as_pattern,
         $.paren_pattern,
+      ),
+    // #3971: `pattern as name` binds the whole value the pattern matched. It
+    // binds tighter than `|` (`A | B as x` is `A | (B as x)`; `(A | B) as x`
+    // binds either alternative), so its precedence is above `or_pattern`'s.
+    // Never reachable from `refined_pattern`, whose inner form is `_` alone.
+    as_pattern: ($) =>
+      prec.left(
+        2,
+        seq(field("pattern", $._pattern), "as", field("name", $.identifier)),
       ),
     // #2641 (patterns track, slice 1): `Order { status: Paid, total, .. }`. Always
     // open, with the trailing `..` mandatory so that adding a field to the record
@@ -2065,6 +2085,14 @@ module.exports = grammar({
         $.variant_pattern,
         $.list_pattern,
         $.paren_pattern,
+        alias($._is_as_pattern, $.as_pattern),
+      ),
+    // #3971: after `is`, `as` follows a base pattern; a record pattern needs
+    // its parentheses, as everywhere in that position.
+    _is_as_pattern: ($) =>
+      prec.left(
+        2,
+        seq(field("pattern", $._is_base_pattern), "as", field("name", $.identifier)),
       ),
     _is_pattern: ($) =>
       choice($._is_base_pattern, alias($._is_or_pattern, $.or_pattern)),

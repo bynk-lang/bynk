@@ -744,6 +744,64 @@
     }
   },
   {
+    "type": "as_pattern",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "pattern": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "as_pattern",
+            "named": true
+          },
+          {
+            "type": "int_range",
+            "named": true
+          },
+          {
+            "type": "list_pattern",
+            "named": true
+          },
+          {
+            "type": "literal_pattern",
+            "named": true
+          },
+          {
+            "type": "or_pattern",
+            "named": true
+          },
+          {
+            "type": "paren_pattern",
+            "named": true
+          },
+          {
+            "type": "record_pattern",
+            "named": true
+          },
+          {
+            "type": "variant_pattern",
+            "named": true
+          },
+          {
+            "type": "wildcard_pattern",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "asset_decl",
     "named": true,
     "fields": {
@@ -6347,6 +6405,10 @@
         "required": true,
         "types": [
           {
+            "type": "as_pattern",
+            "named": true
+          },
+          {
             "type": "list_pattern",
             "named": true
           },
@@ -6996,6 +7058,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "as_pattern",
+            "named": true
+          },
           {
             "type": "int_range",
             "named": true
@@ -7678,6 +7744,10 @@
       "required": false,
       "types": [
         {
+          "type": "as_pattern",
+          "named": true
+        },
+        {
           "type": "int_range",
           "named": true
         },
@@ -8031,6 +8101,10 @@
         "multiple": false,
         "required": true,
         "types": [
+          {
+            "type": "as_pattern",
+            "named": true
+          },
           {
             "type": "int_range",
             "named": true
@@ -8734,6 +8808,10 @@
         "required": true,
         "types": [
           {
+            "type": "as_pattern",
+            "named": true
+          },
+          {
             "type": "int_range",
             "named": true
           },
@@ -9186,6 +9264,10 @@
       "required": true,
       "types": [
         {
+          "type": "as_pattern",
+          "named": true
+        },
+        {
           "type": "int_range",
           "named": true
         },
@@ -9460,6 +9542,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "as_pattern",
+          "named": true
+        },
         {
           "type": "int_range",
           "named": true
@@ -10285,6 +10371,10 @@
         "multiple": false,
         "required": false,
         "types": [
+          {
+            "type": "as_pattern",
+            "named": true
+          },
           {
             "type": "identifier",
             "named": true
@@ -13945,6 +14035,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "as_pattern",
+          "named": true
+        },
         {
           "type": "int_range",
           "named": true
