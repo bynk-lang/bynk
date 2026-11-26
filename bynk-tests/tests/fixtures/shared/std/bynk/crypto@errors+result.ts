@@ -52,11 +52,13 @@ export const Signature = {
  */
 export type CryptoError =
     { readonly tag: "InvalidKey"; readonly reason: string }
-  | { readonly tag: "UnsupportedAlgorithm"; readonly name: string };
+  | { readonly tag: "UnsupportedAlgorithm"; readonly name: string }
+  | { readonly tag: "OpenFailed" };
 
 export const CryptoError = {
   InvalidKey: (reason: string): CryptoError => ({ tag: "InvalidKey", reason }),
   UnsupportedAlgorithm: (name: string): CryptoError => ({ tag: "UnsupportedAlgorithm", name }),
+  OpenFailed: { tag: "OpenFailed" } as CryptoError,
 };
 
 /**
@@ -91,6 +93,22 @@ export const VerifyKey = {
   },
   unsafe(value: globalThis.Uint8Array): VerifyKey {
     return value as VerifyKey;
+  },
+};
+
+/**
+ * A key that encrypts and decrypts, imported by `Crypto.importCipherKey` or
+ * `Crypto.importCipherKeyFromSecret`: AES-256-GCM, held non-extractable. Opaque
+ * and unstorable exactly as `SigningKey` is.
+ */
+export type CipherKey = globalThis.Uint8Array & { readonly __brand: "CipherKey" };
+
+export const CipherKey = {
+  of(value: globalThis.Uint8Array): Result<CipherKey, ValidationError> {
+    return Ok(value as CipherKey);
+  },
+  unsafe(value: globalThis.Uint8Array): CipherKey {
+    return value as CipherKey;
   },
 };
 
@@ -134,6 +152,10 @@ export interface Crypto {
   importSigningKeyFromSecret(algorithm: Signature, secret: Secret): globalThis.Promise<Result<SigningKey, CryptoError>>;
   importVerifyKey(algorithm: Signature, key: globalThis.Uint8Array): globalThis.Promise<Result<VerifyKey, CryptoError>>;
   importVerifyJwk(jwk: string): globalThis.Promise<Result<VerifyKey, CryptoError>>;
+  importCipherKey(key: globalThis.Uint8Array): globalThis.Promise<Result<CipherKey, CryptoError>>;
+  importCipherKeyFromSecret(secret: Secret): globalThis.Promise<Result<CipherKey, CryptoError>>;
+  seal(key: CipherKey, plaintext: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
+  open(key: CipherKey, sealed: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<Result<globalThis.Uint8Array, CryptoError>>;
   deriveKey(secret: globalThis.Uint8Array, salt: globalThis.Uint8Array, info: globalThis.Uint8Array, length: number): globalThis.Promise<globalThis.Uint8Array>;
   hashPassword(password: string): globalThis.Promise<string>;
   verifyPassword(password: string, stored: string): globalThis.Promise<boolean>;

@@ -6319,7 +6319,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.key_at_boundary",
-        blurb: "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform \
+        blurb: "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` is a handle to a key the platform \
                 holds non-extractable, and it lives only for the call that imported it. \
                 Storing, serialising, logging or sending it would either leak the secret or \
                 mean nothing on the other side, so one cannot be a `store` field, a record or \
@@ -11417,7 +11417,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.key_at_boundary",
-        "A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
+        "A `bynk.crypto` `SigningKey`, `VerifyKey` or `CipherKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4).",
     ),
     dg(
         "bynk.types.key_not_orderable",
