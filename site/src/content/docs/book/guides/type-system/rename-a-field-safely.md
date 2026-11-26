@@ -47,6 +47,10 @@ still decode. Commit the updated lock with the source change.
 agent Cart {
 	key id: String
 	store owner: Cell[String] replaces customer = ""
+
+	on call owner() -> Effect[String] {
+		owner
+	}
 }
 ```
 
