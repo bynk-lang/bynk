@@ -414,7 +414,15 @@ export async function wakeForMigration<S>(
     // with no collections has nothing for `load` to write, and the marker is stamped by
     // its commit).
     if (before === null || before < current || layoutBefore !== layout) await commit(state);
-    const duplicates = unique.length === 0 ? [] : await uniqueDuplicates(state as object, unique);
+    let duplicates: Awaited<ReturnType<typeof uniqueDuplicates>> = [];
+    if (unique.length > 0) {
+      // Information only (#4390): a report that cannot be read never turns a woken instance into a fault.
+      try {
+        duplicates = await uniqueDuplicates(state as object, unique);
+      } catch {
+        duplicates = [];
+      }
+    }
     return json({
       before,
       after: current,

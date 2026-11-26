@@ -345,6 +345,17 @@ test("wakeForMigration: reports the values a @unique index already has more than
   assert.equal("unique" in ((await quiet.json()) as object), false);
 });
 
+test("wakeForMigration: a duplicate report that throws drops the report, not the migration (#4390)", async () => {
+  const broken = { duplicateHolders: () => { throw new Error("storage read failed"); } };
+  let committed = false;
+  const r = await wakeForMigration({ __v: 2 }, 3, async () => ({ people: broken }), async () => { committed = true; }, undefined, [["people", "email"]]);
+  const body = (await r.json()) as { fault?: unknown; after?: unknown; unique?: unknown };
+  assert.equal(committed, true);
+  assert.equal(body.fault, undefined, "the instance is not a fault");
+  assert.equal(body.after, 3);
+  assert.equal(body.unique, undefined);
+});
+
 test("wakeForMigration: a layout this build does not know is reported as a NewerLayout fault with its layout", async () => {
   const quiet = globalThis.console.error;
   globalThis.console.error = () => {};

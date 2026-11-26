@@ -415,11 +415,12 @@ pub(super) fn wake_and_inspect_branches(
     a: &AgentDecl,
     agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
     ctx: &EmitProjectCtx,
-    unique: &[super::UniqueIndex],
+    commons: &TypedCommons,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut branches = Vec::new();
     if let Some(v) = agent_versions {
-        branches.push(migrate_wake_branch_stmt(v.version, unique));
+        let unique = super::unique_store_indexes(a, &commons.types);
+        branches.push(migrate_wake_branch_stmt(v.version, &unique));
     }
     if ctx.inspect_agents {
         branches.push(inspect_branch_stmt(a, agent_versions));

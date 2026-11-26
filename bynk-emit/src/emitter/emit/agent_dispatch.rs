@@ -7,7 +7,7 @@ use super::{
     build_deps_object_ty_with_surface, consumed_type_ns, effective_given,
     emit_ws_dispatch_handlers, events_decl_item, events_deps_const_stmt, events_flush_item,
     given_deps_const_stmt, object_assign_key, record_cast, result_closure_item, return_result_item,
-    unique_store_indexes, wake_and_inspect_branches, ws_open_fetch_branch_stmt,
+    wake_and_inspect_branches, ws_open_fetch_branch_stmt,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::ctx::{AgentStoreState, BodyMode, HandlerShared, ModuleCtx};
@@ -447,12 +447,7 @@ pub(super) fn emit_agent_dispatch(
         // (steps are key-free), loads the state (running any step), and
         // commits only a record older than this build's version. Reachable
         // only through this Worker's signed `/_bynk/migrate/` route.
-        fetch_stmts.extend(wake_and_inspect_branches(
-            a,
-            agent_versions,
-            ctx,
-            &unique_store_indexes(a, &commons.types),
-        ));
+        fetch_stmts.extend(wake_and_inspect_branches(a, agent_versions, ctx, commons));
         // `(this as unknown as Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName]`:
         // the cast chain prints bare as `Index`'s receiver and the printer brackets it.
         let dispatch_callee = crate::ts_build::index(

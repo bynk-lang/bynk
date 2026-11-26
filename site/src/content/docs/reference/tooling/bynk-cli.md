@@ -1969,7 +1969,7 @@ current version. An instance already current is read and not written.
   that already holds data is enforced only on new commits, so a value two keys already hold stays
   until a commit touches it. The wake reads each `@unique` index and the sweep reports what it
   finds under the class's line, for example
-  `@unique(by: email) on `people`: 3 values are held by more than one key: 2, 2 and 4 holders (in 2 instances)`.
+  ``@unique(by: email) on `people`: 3 values are held by more than one key: 2, 2 and 4 holders (in 2 instances)``.
   The report is the map, the field, how many values are shared and how many keys hold each. It
   never names a stored value, a hash of one or the keys that hold it. It is information: it
   neither fails the sweep nor holds a class's floor.
