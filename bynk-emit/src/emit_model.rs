@@ -639,6 +639,22 @@ pub fn instantiate_provider_ts_expr(
             args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
                 inst.binding.clone(),
             )));
+            // #3899: a producer whose queue has a signed consumer admitting this context signs
+            // what it sends: the sender, the consumer's context (whose edge key signs) and the
+            // queue's name (which the signature covers).
+            if inst.base_cap == "Queue"
+                && matches!(namespaces, ProviderNamespaces::Workers { .. })
+                && let Some(queue) = inst.queue()
+                && let Some(consumer) = bynk_check::queue_producers::signed_consumer_of(
+                    queue,
+                    provider_ctx,
+                    unit_tables,
+                )
+            {
+                for text in [provider_ctx, consumer.as_str(), queue] {
+                    args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(text.to_string())));
+                }
+            }
         } else if !(matches!(expr, bynk_ts::TsExpr::As { .. })
             && matches!(namespaces, ProviderNamespaces::Test { .. }))
         {
