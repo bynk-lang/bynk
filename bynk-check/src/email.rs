@@ -184,8 +184,12 @@ pub(crate) fn check_service_protocols_and_email(
     check_email_services(table, errors);
     for service in table.services.values() {
         crate::email_fallback::validate_fallback(service, errors);
-        crate::email_route::check_route_tags(service, errors);
+        crate::email_route::check_route_tags(service, &table.fns, errors);
     }
+    // #4486: a literal `EmailActions` is checked where it is written, in a helper fn as in a
+    // handler body. Both are checked here, into one list, so a helper that two literals call is
+    // reported once.
+    crate::email_route::check_fn_tags(&table.fns, errors);
     check_sender_only_on_email(table, errors);
 }
 
