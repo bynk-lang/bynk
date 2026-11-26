@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.contracts_lock_unwritable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy --accept-compatible-skew` could not write the older contracts it records in `bynk.contracts.lock`, so it stopped before building or pushing anything. Fix the file's permissions or path and run it again. With `--format json` the plan's `refusals` carries it with the `path`."
+}
