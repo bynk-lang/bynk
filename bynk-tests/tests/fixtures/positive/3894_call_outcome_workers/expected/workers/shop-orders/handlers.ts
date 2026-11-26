@@ -210,6 +210,16 @@ export function __serialise_PaymentError(value: shop_pay.PaymentError): __JsonVa
 }
 
 export function __deserialise_PaymentError(json: __JsonValue, path: string = "$"): Result<shop_pay.PaymentError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Declined":
+        return Ok({ tag: "Declined" } as shop_pay.PaymentError);
+      case "Down":
+        return Ok({ tag: "Down" } as shop_pay.PaymentError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

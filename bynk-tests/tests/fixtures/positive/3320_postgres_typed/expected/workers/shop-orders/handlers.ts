@@ -2,7 +2,7 @@
 // context shop.orders
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
-import { __bynkPgRow } from "../../__bynk_runtime/time.js";
+import { __bynkPgRow, __bynkInstantFromWire } from "../../__bynk_runtime/time.js";
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -138,13 +138,14 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.name`, expected: "string", actual: typeof obj["name"] });
   }
   const __name = obj["name"];
-  if (typeof obj["placed"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof obj["placed"] });
+  const __placed$ms = __bynkInstantFromWire(obj["placed"]);
+  if (typeof __placed$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "number", actual: typeof __placed$ms });
   }
-  if (!globalThis.Number.isSafeInteger(obj["placed"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(obj["placed"]) });
+  if (!globalThis.Number.isSafeInteger(__placed$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.placed`, expected: "safe integer", actual: String(__placed$ms) });
   }
-  const __placed = obj["placed"];
+  const __placed = __placed$ms;
   const __r_note = __deserialise_Option_String(obj["note"], `${path}.note`);
   if (__r_note.tag === "Err") return __r_note;
   const __note = __r_note.value;

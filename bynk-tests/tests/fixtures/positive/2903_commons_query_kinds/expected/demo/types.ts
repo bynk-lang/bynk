@@ -55,6 +55,16 @@ export function __serialise_Speed(value: Speed): __JsonValue {
 }
 
 export function __deserialise_Speed(json: __JsonValue, path: string = "$"): Result<Speed, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Slow":
+        return Ok({ tag: "Slow" } as Speed);
+      case "Fast":
+        return Ok({ tag: "Fast" } as Speed);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

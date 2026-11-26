@@ -42,6 +42,16 @@ export function __serialise_Mode(value: shop_catalogue.Mode): __JsonValue {
 }
 
 export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Result<shop_catalogue.Mode, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Fast":
+        return Ok({ tag: "Fast" } as shop_catalogue.Mode);
+      case "Slow":
+        return Ok({ tag: "Slow" } as shop_catalogue.Mode);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

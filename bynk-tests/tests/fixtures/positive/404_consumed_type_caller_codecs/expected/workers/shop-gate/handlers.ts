@@ -49,6 +49,14 @@ export function __serialise_GateError(value: GateError): __JsonValue {
 }
 
 export function __deserialise_GateError(json: __JsonValue, path: string = "$"): Result<GateError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Rejected":
+        return Ok({ tag: "Rejected" } as GateError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -144,6 +152,16 @@ export function __serialise_TokenError(value: shop_tokens.TokenError): __JsonVal
 }
 
 export function __deserialise_TokenError(json: __JsonValue, path: string = "$"): Result<shop_tokens.TokenError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Denied":
+        return Ok({ tag: "Denied" } as shop_tokens.TokenError);
+      case "Expired":
+        return Ok({ tag: "Expired" } as shop_tokens.TokenError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

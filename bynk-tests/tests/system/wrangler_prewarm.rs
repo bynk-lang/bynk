@@ -67,6 +67,66 @@ fn gated_workflows_still_require_workerd() {
     }
 }
 
+// ---- #4456: the suite never sends Wrangler's usage telemetry ----
+
+/// The value of `WRANGLER_SEND_METRICS` a command is configured with, `None` when it is not
+/// set on the command.
+fn telemetry_setting(cmd: &std::process::Command) -> Option<String> {
+    cmd.get_envs()
+        .find(|(key, _)| *key == "WRANGLER_SEND_METRICS")
+        .and_then(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+}
+
+/// Every way the harness starts a Wrangler carries `WRANGLER_SEND_METRICS=false`: the `npx`
+/// command the smokes run, the install that warms the cache, and the spawn of a Wrangler (or of
+/// the `bynk dev` that starts them), which a child inherits.
+#[test]
+fn every_wrangler_the_harness_starts_has_telemetry_off() {
+    assert_eq!(
+        telemetry_setting(&wrangler::npx_command()).as_deref(),
+        Some("false"),
+        "the `npx` wrangler command"
+    );
+    assert_eq!(
+        telemetry_setting(&wrangler::warm::provision_command(wrangler::SPEC)).as_deref(),
+        Some("false"),
+        "the cache warm-up"
+    );
+    let mut dev = std::process::Command::new("true");
+    wrangler::Wrangler::prepare(&mut dev, Path::new("registry"));
+    assert_eq!(
+        telemetry_setting(&dev).as_deref(),
+        Some("false"),
+        "a spawned wrangler, or the `bynk dev` that starts them"
+    );
+}
+
+/// CI sets it for every job, the backstop for a Wrangler the harness did not start itself: it
+/// is an entry of the workflow's top-level `env:` block, however that block is ordered or its
+/// value quoted.
+#[test]
+fn ci_turns_wrangler_telemetry_off_for_every_job() {
+    let path = workflow("ci.yml");
+    let yaml = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path:?}: {e}"));
+    let top = yaml
+        .split("\njobs:\n")
+        .next()
+        .expect("a workflow has a header before its jobs");
+    let (_, after) = top
+        .split_once("\nenv:\n")
+        .expect("ci.yml has a top-level `env:` block before its jobs (#4456)");
+    // The block is the indented lines that follow `env:`.
+    let off = after
+        .lines()
+        .take_while(|l| l.is_empty() || l.starts_with(' '))
+        .map(str::trim)
+        .any(|l| l == "WRANGLER_SEND_METRICS: \"false\"" || l == "WRANGLER_SEND_METRICS: false");
+    assert!(
+        off,
+        "ci.yml's top-level `env:` no longer sets `WRANGLER_SEND_METRICS` to false (#4456)"
+    );
+}
+
 // ---- the cross-process warm-up (1D.3d) ----
 
 use wrangler::warm::{self, Warmed};

@@ -1,0 +1,33 @@
+commons demo.hook
+
+type Action = enum { Opened, Closed, Reopened }
+
+type Slug = String where MinLength(2)
+
+type Hook = {
+  action: Action,
+  labels: Map[String, String],
+  created_at: Instant,
+  wait: Duration,
+}
+
+type Shape = | Circle(radius: Int) | Dot
+
+type Keyed = { by_slug: Map[Slug, Int], by_id: Map[Int, String] }
+
+fn sample() -> Hook {
+  Hook {
+    action: Opened,
+    labels: Map.empty().insert("bug", "red").insert("ui", "blue"),
+    created_at: Instant.fromEpochMillis(1_795_341_600_000),
+    wait: Duration.millis(2000),
+  }
+}
+
+fn plain(h: Hook) -> String { Json.encodePlain(h) }
+
+fn read(body: String) -> Result[Hook, DecodeError] { Json.decode[Hook](body) }
+
+fn read_map[T: Codable](body: String) -> Result[Map[String, T], DecodeError] {
+  Json.decode[Map[String, T]](body)
+}

@@ -63,6 +63,18 @@ export function __serialise_Rank(value: Rank): __JsonValue {
 }
 
 export function __deserialise_Rank(json: __JsonValue, path: string = "$"): Result<Rank, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Two":
+        return Ok({ tag: "Two" } as Rank);
+      case "Three":
+        return Ok({ tag: "Three" } as Rank);
+      case "Jack":
+        return Ok({ tag: "Jack" } as Rank);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
