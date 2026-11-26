@@ -676,6 +676,7 @@ pub(crate) fn resolve_selects(
             .and_then(|r| r.iter().next())
             .and_then(|record| mapping_of(record, types).ok());
         let mut columns: Vec<String> = Vec::new();
+        let mut unwritten: Vec<String> = Vec::new();
         let mut ok = true;
         for f in &read.fields {
             let field = &f.name.name;
@@ -750,25 +751,46 @@ pub(crate) fn resolve_selects(
                     continue;
                 }
                 columns.push(format!("{column} AS \"{field}\""));
+            } else if records.is_none() {
+                unwritten.push(field.clone());
+                ok = false;
             } else {
                 errors.push(
                     CompileError::new(
                         "bynk.types.sql_row_shape",
                         f.name.span,
-                        match records {
-                            Some(r) => format!(
-                                "field `{field}` of `{row_name}` is neither a field of `{}`, the record `{cap}` is written with, nor an alias of the select list",
-                                r.iter().next().map(String::as_str).unwrap_or("")
-                            ),
-                            None => format!(
-                                "no written type for `{cap}` in this context: it is never written with `writeValue`, so field `{field}` of `{row_name}` has no column, and it is not an alias of the select list either"
-                            ),
-                        },
+                        format!(
+                            "field `{field}` of `{row_name}` is neither a field of `{}`, the record `{cap}` is written with, nor an alias of the select list",
+                            records
+                                .and_then(|r| r.iter().next())
+                                .map(String::as_str)
+                                .unwrap_or("")
+                        ),
                     )
                     .with_note("name a field of the written record, or define the field in the tail: `\", count() AS n FROM {dataset} …\"`"),
                 );
                 ok = false;
             }
+        }
+        // An instance that is never written has no written type for any field: said once.
+        if !unwritten.is_empty() {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.sql_row_shape",
+                    span,
+                    format!(
+                        "no written type for `{cap}` in this context: it is never written with `writeValue`, so {} of `{row_name}` ha{} no column and {} not an alias of the select list",
+                        unwritten
+                            .iter()
+                            .map(|f| format!("`{f}`"))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        if unwritten.len() == 1 { "s" } else { "ve" },
+                        if unwritten.len() == 1 { "is" } else { "are" },
+                    ),
+                )
+                .with_note("write the instance with `writeValue` in this context, or define each field in the tail: `\", count() AS n FROM {dataset} …\"`"),
+            );
         }
         if !ok {
             continue;

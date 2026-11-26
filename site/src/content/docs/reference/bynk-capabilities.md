@@ -1106,7 +1106,7 @@ type Row = { n: Int }
 service report from http {
 	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
 		let res <- AnalyticsSql.query(Signups,
-			"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
+			"SELECT sum(_sample_interval) AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
 			[Text(country)])
 		match res {
 			Ok(r) => {
@@ -1180,12 +1180,12 @@ let seats <- AnalyticsSql.select[Seats](Signups, "FROM {dataset} WHERE timestamp
 // SELECT index1 AS "plan", double1 AS "seats" FROM {dataset} WHERE …
 
 let by_country <- AnalyticsSql.select[ByCountry](Signups,
-	", count() AS n FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY country", [])
-// SELECT blob1 AS "country", count() AS n FROM {dataset} WHERE … GROUP BY country
+	", sum(_sample_interval) AS n FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY GROUP BY country", [])
+// SELECT blob1 AS "country", sum(_sample_interval) AS n FROM {dataset} WHERE … GROUP BY country
 ```
 
 - The tail is a literal, as for `query`, and starts at `FROM`, or at a comma that continues the
-  select list with what the compiler cannot know, as `count() AS n`.
+  select list with what the compiler cannot know, as `sum(_sample_interval) AS n`.
 - Each field of `T` is a field of the record `Signups` is written with (`Signups.writeValue`
   anywhere in the context), read from its column, or an alias the tail defines with `AS`. An
   alias the tail defines takes the place of the written column of that name, so a field can total

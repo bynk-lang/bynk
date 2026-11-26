@@ -1120,7 +1120,7 @@ adapter bynk.cloudflare {
 	field of `T` named after a field of the record `instance` is written with
 	(`Signups.writeValue(…)`) reads that field's column (`blob1 AS "plan"`); a field that is not
 	written is one the `tail` computes, named by an `AS` alias in a select list the tail
-	continues with a comma (`", count() AS n FROM {dataset} … GROUP BY country"`). The `tail`
+	continues with a comma (`", sum(_sample_interval) AS n FROM {dataset} … GROUP BY country"`). The `tail`
 	is a literal, as for `query`, and starts at `FROM` or at that comma. A field that is neither
 	written nor an alias, or whose type does not read its column (text for a blob, a number for
 	a double), is a compile error naming it. The call gives `Result[List[T], AnalyticsReadError]`.
