@@ -3122,6 +3122,33 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
 /// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
 /// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
 #[allow(clippy::too_many_arguments)]
+/// #4111: a method call on a `Secret`, or `None` when the receiver is not one.
+fn check_secret_call(
+    recv_ty: TyId,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty) else {
+        return None;
+    };
+    if !crate::context_checks::is_secret_type(name, &ctx.input.types) {
+        return None;
+    }
+    let kop = SecretOp::from_name(&method.name);
+    let r = check_secret_method(method, kop, args, span, ctx);
+    Some(record_kernel(
+        ctx,
+        expr_id,
+        recv_ty,
+        kop.map(KernelOp::Secret),
+        method,
+        r,
+    ))
+}
+
 pub(crate) fn check_method_call(
     receiver: &Expr,
     method: &Ident,
@@ -3735,14 +3762,9 @@ fn check_method_call_inner(
         }
         _ => {}
     }
-    // #4111: a `Secret` has exactly `reveal` and `matches`, both compiler built-ins: an
-    // opaque value has no in-language unwrap, and the text must leave by one visible call.
-    if let Ty::Named { name, .. } = &*tys.get(recv_ty)
-        && crate::context_checks::is_secret_type(name, &ctx.input.types)
-    {
-        let kop = SecretOp::from_name(&method.name);
-        let r = check_secret_method(method, kop, args, span, ctx);
-        return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Secret), method, r);
+    // #4111: a `Secret` has only the built-ins `reveal` and `matches`.
+    if let Some(r) = check_secret_call(recv_ty, method, args, span, expr_id, ctx) {
+        return r;
     }
     // Find a named type for the receiver, then look up its instance methods.
     let type_name = match &*tys.get(recv_ty) {

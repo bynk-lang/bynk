@@ -7349,6 +7349,20 @@ pub fn is_std_bynk_type(
             .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
 
+/// #4111: `bynk.types.secret_at_boundary` for a `Secret` written at `span` in `what`.
+fn secret_at_boundary_error(span: Span, what: &str) -> CompileError {
+    CompileError::new(
+        "bynk.types.secret_at_boundary",
+        span,
+        format!(
+            "a `Secret` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
+        ),
+    )
+    .with_note(
+        "read the text with `reveal()` where it is used, or keep it in `Secrets` and read it again where it is needed",
+    )
+}
+
 /// #4111: whether `name`, in the project's type table, is the `Secret` type `bynk` exports,
 /// found by its declaration's first-party span (as `is_crypto_key_type` finds a key), so a
 /// user type that happens to be called `Secret` is not mistaken for it.
@@ -8468,18 +8482,7 @@ pub fn reject_fn_types(
         // operation is where one is returned (`Secrets.get`), in-process, so its signature
         // is exempt.
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
-            errors.push(
-                CompileError::new(
-                    "bynk.types.secret_at_boundary",
-                    id.span,
-                    format!(
-                        "a `Secret` cannot appear in {what} — it is never stored, sent, encoded or returned across a boundary"
-                    ),
-                )
-                .with_note(
-                    "read the text with `reveal()` where it is used, or keep it in `Secrets` and read it again where it is needed",
-                ),
-            );
+            errors.push(secret_at_boundary_error(id.span, what));
         }
         // #3343: a record with `@name` fields is read off an HTTP request by name,
         // so its JSON form is not its wire form: it may not be a body, a result,

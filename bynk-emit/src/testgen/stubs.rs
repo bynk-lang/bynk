@@ -1933,7 +1933,7 @@ mod tests {
         let def = env_secrets_double("bynk", "Secrets", "ns", "X").expect("a Secrets double");
         let printed = bynk_ts::print_stmt(&def, 0);
         let body = printed.split_once('\n').map_or("", |(_, rest)| rest);
-        let declared: BTreeSet<String> = ["None", "Some", "__bynkEnv"]
+        let declared: BTreeSet<String> = ["None", "Some", "__bynkEnv", "__bynkSecret"]
             .into_iter()
             .map(str::to_string)
             .collect();
