@@ -1,0 +1,45 @@
+suite shop.api as system {
+	// #3825: login CSRF, end to end through the real Worker. The driver sends `Sec-Fetch-Site: same-origin`
+	// unless a case's own headers say otherwise, as on a guarded route. A refused login never runs its
+	// body: `GET /logins` counts the bodies that ran.
+
+	case "a same-origin login is handled" {
+		let r <- api.POST("/login", Login { user: "ada" })
+		expect r is Created("welcome")
+		let n <- api.GET("/logins")
+		expect n is Ok(1)
+	}
+
+	case "a cross-site login from an unlisted origin is refused before its body runs" {
+		let before <- api.GET("/logins")
+		let r <- api.POST("/login", Login { user: "mallory" }, RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]))
+		expect r is Forbidden
+		let after <- api.GET("/logins")
+		expect after == before
+	}
+
+	case "a same-site login from an unlisted origin is refused" {
+		let r <- api.POST("/login", Login { user: "mallory" }, RequestHeaders.of(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"]))
+		expect r is Forbidden
+	}
+
+	case "a login with a null origin is refused" {
+		let r <- api.POST("/login", Login { user: "mallory" }, RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: null"]))
+		expect r is Forbidden
+	}
+
+	case "a user-initiated navigation is not a login" {
+		let r <- api.POST("/login", Login { user: "mallory" }, RequestHeaders.of(["Sec-Fetch-Site: none", "Origin: https://app.example.com"]))
+		expect r is Forbidden
+	}
+
+	case "a cross-site login from a listed origin is handled" {
+		let r <- api.POST("/login", Login { user: "ada" }, RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"]))
+		expect r is Created("welcome")
+	}
+
+	case "a route that does not issue is not checked" {
+		let r <- api.POST("/ping", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]))
+		expect r is Ok("pong")
+	}
+}

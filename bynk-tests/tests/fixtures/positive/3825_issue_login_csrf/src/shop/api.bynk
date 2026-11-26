@@ -1,0 +1,50 @@
+context shop.api
+
+consumes bynk { Cookie, Clock }
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Login = { user: String }
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+// Counts the logins whose body ran, so a case can tell a refused request from one that was handled.
+agent Logins {
+	key id: String
+	store n: Cell[Int]
+
+	on call bump() -> Effect[()] {
+		let _ <- n.update((c) => c + 1)
+		()
+	}
+
+	on call count() -> Effect[Int] {
+		n
+	}
+}
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	// #3825: the route that issues the session is `by Visitor`, so the actor cannot guard it, and it is where
+	// login CSRF happens: a hostile page makes a signed-out victim's browser post the attacker's credential.
+	// A route that calls `User.issue` gets the check a guarded route gets, before its body.
+	on POST("/login") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
+		let _ <- Logins("all").bump()
+		let Ok(id) = UserId.of(body.user) else {
+			BadRequest("bad user")
+		}
+		let c <- User.issue(id)
+		Created("welcome").withCookie(c)
+	}
+
+	// A route that does not issue is unchanged: no check.
+	on POST("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("pong")
+	}
+
+	on GET("/logins") () -> Effect[HttpResult[Int]] by v: Visitor {
+		let n <- Logins("all").count()
+		Ok(n)
+	}
+}

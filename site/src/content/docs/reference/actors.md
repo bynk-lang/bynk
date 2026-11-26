@@ -136,6 +136,25 @@ There are no attributes to get wrong, so you attach it with `withCookie` and not
 `User.expire()` is the matching deletion (same name and path, empty, `Max-Age=0`), so a logout cannot
 miss the cookie it set.
 
+### The route that issues is checked for login CSRF
+
+A route that issues a session cannot be guarded by that actor (the caller has no session yet), so it is
+the route where **login CSRF** happens: a hostile page makes a signed-out visitor's browser post the
+attacker's own credential, and the victim then works signed in as the attacker. `SameSite` does not help,
+because the attacker wants the cookie set. So a non-`GET` route whose body calls `Actor.issue(...)` is
+checked **before the body runs**, exactly as a route guarded by a signed-cookie actor is (above):
+
+- `Sec-Fetch-Site: same-origin` passes; `cross-site` and `same-site` are refused, as is `none`;
+- with no `Sec-Fetch-Site`, `Origin` must be **exactly** one of the service's `cors` origins, or this
+  request's own origin;
+- a request that sends neither header is refused, `403`, and the body never runs.
+
+The service therefore needs `cors { origins: [...], credentials: true }` for a sign-in made from another
+origin. A service with no `cors` accepts an issuing request from its own origin only. There is no opt-out.
+A non-browser client (a native app or a server) posting to a sign-in route must send an `Origin` listed in
+`cors` or `Sec-Fetch-Site: same-origin`, or use a `Bearer` actor instead. A `GET` that issues is outside the
+check and warns (`bynk.actor.signed_cookie_issue_on_safe_method`); sign in with a `POST`.
+
 A stateless cookie (the default) **cannot be revoked** before it expires: a copy a user already took keeps
 working until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl`
 short, or set `sessions = true` (below) so a session can be ended on the server.
@@ -198,7 +217,7 @@ state-changing method, `403` for a cross-site request.
 
 It **does**: reject a cookie that was forged, altered, issued for another actor, signed with a key the
 seam does not hold, expired, or sent twice; refuse a cross-site state-changing request that the service
-does not list; keep the credential out of the handler (its `cookies` and `headers` views omit it); and
+does not list, including a cross-site sign-in (login CSRF); keep the credential out of the handler (its `cookies` and `headers` views omit it); and
 keep the cookie from page scripts (`HttpOnly`), from plain HTTP (`Secure`), and from sibling subdomains
 (`__Host-` and no `Domain`).
 
@@ -496,7 +515,8 @@ them `missing_by_on_http`, `scheme_not_admissible`, `signature_requires_body`,
 `oidc_identity_not_string_constructible`,
 `foreign_missing_secret`, `foreign_reserved_secret`,
 `foreign_name_is_context_name`, `foreign_identity_unsupported`,
-`foreign_secret_not_string`, `foreign_duplicate_secret`, and the `signed_cookie_*` family.
+`foreign_secret_not_string`, `foreign_duplicate_secret`, and the `signed_cookie_*` family
+(among them `signed_cookie_issue_on_safe_method`, a warning).
 
 ## Who, not whose
 

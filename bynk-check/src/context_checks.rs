@@ -5427,6 +5427,7 @@ fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut 
     }
     check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+    warn_issue_on_safe_method(service, table, errors);
 }
 
 /// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
@@ -5510,6 +5511,40 @@ fn check_ws_cookie_origins(
                 "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
             ),
         );
+    }
+}
+
+/// #3825 (`bynk.actor.signed_cookie_issue_on_safe_method`, a warning): a `GET` that issues a session. A
+/// state-changing route that issues one is checked for login CSRF by fetch metadata and the service's
+/// `cors` origins, which a `GET` is outside of (a link click, a prefetch, an `<img>` all send one), so a
+/// sign-in done as a `GET` is unprotected. Steer the author to `POST`.
+fn warn_issue_on_safe_method(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    for handler in &service.handlers {
+        if !matches!(
+            handler.kind,
+            HandlerKind::Http {
+                method: bynk_syntax::ast::HttpMethod::Get,
+                ..
+            }
+        ) {
+            continue;
+        }
+        for actor in crate::actors::issued_cookie_actors(handler, &table.actors) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.signed_cookie_issue_on_safe_method",
+                    handler.span,
+                    format!("this `GET` route issues a `{actor}` session, so it is not checked for login CSRF"),
+                )
+                .with_note(
+                    "a route that issues a session and is not a `GET` is refused when its request is cross-site (by fetch metadata, then `Origin` against the service's `cors` origins); a `GET` is outside that check, so a hostile page can make a signed-out visitor's browser sign in as someone else. Issue the session from a `POST`",
+                ),
+            );
+        }
     }
 }
 
