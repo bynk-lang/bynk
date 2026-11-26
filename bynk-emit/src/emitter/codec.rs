@@ -44,7 +44,7 @@ pub(crate) fn has_var(ty: TyId, commons: &TypedCommons) -> bool {
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -88,7 +88,7 @@ pub(crate) fn ground_parts(ty: TyId, commons: &TypedCommons, out: &mut Vec<TyId>
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -133,7 +133,7 @@ pub(crate) fn generic_factories(ty: TyId, commons: &TypedCommons, out: &mut Vec<
         | Ty::Never
         | Ty::Base(_)
         | Ty::Effect(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection
@@ -220,7 +220,7 @@ impl<'a> CodecGen<'a> {
             | other @ Ty::Never
             | other @ Ty::Base(_)
             | other @ Ty::Effect(_)
-            | other @ Ty::HttpResult(_)
+            | other @ Ty::HttpResult(_, _)
             | other @ Ty::QueueResult
             | other @ Ty::HttpOutcome(_)
             | other @ Ty::BoundaryRejection

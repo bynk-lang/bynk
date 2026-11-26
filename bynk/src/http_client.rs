@@ -532,7 +532,7 @@ fn success_of(h: &Handler) -> Option<&TypeRef> {
         other => other,
     };
     match t {
-        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
+        TypeRef::HttpResult(inner, _, _) => Some(inner.as_ref()),
         _ => None,
     }
 }

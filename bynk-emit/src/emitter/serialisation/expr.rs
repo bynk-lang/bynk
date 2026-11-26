@@ -213,7 +213,7 @@ pub(crate) fn agent_wire_passes_through(t: &TypeRef) -> bool {
         | TypeRef::Option(inner, _)
         | TypeRef::List(inner, _)
         | TypeRef::Set(inner, _)
-        | TypeRef::HttpResult(inner, _) => agent_wire_passes_through(inner),
+        | TypeRef::HttpResult(inner, _, _) => agent_wire_passes_through(inner),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             agent_wire_passes_through(a) || agent_wire_passes_through(b)
         }
@@ -414,7 +414,7 @@ pub(crate) fn deserialise_expr_via(
         // `HttpResult<T>` through `http_result_ty` — the same type node every
         // other `HttpResult<...>` position in this file already uses —
         // instead of dropping the payload.
-        TypeRef::HttpResult(inner, _) => ok_unknown_cast(http_result_ty(inner)),
+        TypeRef::HttpResult(inner, _, _) => ok_unknown_cast(http_result_ty(inner)),
         TypeRef::QueueResult(_) => ok_unknown_cast(TsType::named("QueueResult")),
         // #1883, slice 1a: unreachable in a checked program
         // (`bynk.types.asset_at_boundary`).
@@ -646,7 +646,7 @@ mod deserialise_expr_via_error_type_tests {
     #[test]
     fn http_result_names_its_real_element_type_and_casts_through_unknown() {
         let ru = RuntimeUse::default();
-        let t = TypeRef::HttpResult(Box::new(TypeRef::Base(BaseType::Int, sp())), sp());
+        let t = TypeRef::HttpResult(Box::new(TypeRef::Base(BaseType::Int, sp())), None, sp());
         assert_eq!(
             bynk_ts::print_expr(&deserialise_expr(&t, &ident("json"), "path", &ru)),
             "Ok(json as unknown as HttpResult<number>) as Result<HttpResult<number>, __BoundaryError>"
@@ -754,7 +754,7 @@ mod serialiser_corpus_tests {
             ("Map", TypeRef::Map(b(s.clone()), b(e.clone()), sp())),
             ("Result", TypeRef::Result(b(e.clone()), b(s), sp())),
             ("Effect", TypeRef::Effect(b(e.clone()), sp())),
-            ("HttpResult", TypeRef::HttpResult(b(e.clone()), sp())),
+            ("HttpResult", TypeRef::HttpResult(b(e.clone()), None, sp())),
             (
                 "Option<List>",
                 TypeRef::Option(b(TypeRef::List(b(e.clone()), sp())), sp()),

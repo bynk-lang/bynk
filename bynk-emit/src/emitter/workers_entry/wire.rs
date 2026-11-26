@@ -70,7 +70,7 @@ pub(super) fn http_result_inner(t: &TypeRef) -> TypeRef {
     } else {
         t
     };
-    if let TypeRef::HttpResult(payload, _) = inner {
+    if let TypeRef::HttpResult(payload, _, _) = inner {
         (**payload).clone()
     } else {
         inner.clone()

@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { SseEvent }
+
+service api from http {
+  // The route says it streams `SseEvent`s, and the body is `String`s.
+  on GET("/events") () -> Effect[HttpResult[(), SseEvent]] by v: Visitor {
+    Streaming(Stream.of(["hello", "bye"]))
+  }
+}

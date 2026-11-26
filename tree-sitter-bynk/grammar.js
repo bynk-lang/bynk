@@ -756,8 +756,6 @@ module.exports = grammar({
             choice(
               alias("Option", $.builtin_type),
               alias("Effect", $.builtin_type),
-              // v0.9: HTTP result type.
-              alias("HttpResult", $.builtin_type),
               // v0.20b: the built-in list collection.
               alias("List", $.builtin_type),
               // K6a (#2596): the built-in set collection.
@@ -773,6 +771,15 @@ module.exports = grammar({
           ),
           "[",
           field("arg", $._type_ref),
+          "]",
+        ),
+        // v0.9: the HTTP result type, `HttpResult[T]`. #4394: with an optional second argument naming
+        // what a `Streaming` body carries, `HttpResult[T, E]`.
+        seq(
+          field("name", alias("HttpResult", $.builtin_type)),
+          "[",
+          field("arg", $._type_ref),
+          optional(seq(",", field("arg", $._type_ref))),
           "]",
         ),
         // Binary built-ins — `Name[K, V]`.

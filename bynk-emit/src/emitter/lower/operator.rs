@@ -514,7 +514,7 @@ fn equality_lowering(ty: TyId, tys: &Types) -> EqualityLowering {
         | Ty::List(_)
         | Ty::Set(_)
         | Ty::Map(..)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::HttpOutcome(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection

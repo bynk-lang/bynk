@@ -132,7 +132,7 @@ impl<'a> CmpGen<'a> {
             | other @ Ty::Never
             | other @ Ty::Result(..)
             | other @ Ty::Effect(_)
-            | other @ Ty::HttpResult(_)
+            | other @ Ty::HttpResult(_, _)
             | other @ Ty::QueueResult
             | other @ Ty::HttpOutcome(_)
             | other @ Ty::BoundaryRejection

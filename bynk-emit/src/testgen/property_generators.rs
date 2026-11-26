@@ -516,7 +516,7 @@ pub(super) fn ty_draws_bigint(
         | checker::Ty::Result(..)
         | checker::Ty::Option(_)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection
@@ -815,7 +815,7 @@ pub(super) fn gen_ts_for_ty(
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection
@@ -947,7 +947,7 @@ pub(super) fn canon_ts_for_ty(
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection
@@ -1194,7 +1194,7 @@ pub(super) fn binding_gen(
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Effect(_)
-        | checker::Ty::HttpResult(_)
+        | checker::Ty::HttpResult(_, _)
         | checker::Ty::QueueResult
         | checker::Ty::HttpOutcome(_)
         | checker::Ty::BoundaryRejection

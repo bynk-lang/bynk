@@ -1800,7 +1800,7 @@ impl<'a> LowerCtx<'a> {
         // checking, which is still lowered and its output discarded.
         if matches!(
             disc_node.as_deref(),
-            None | Some(Ty::HttpResult(_)) | Some(Ty::Error)
+            None | Some(Ty::HttpResult(_, _)) | Some(Ty::Error)
         ) && let Some(v) = bynk_syntax::ast::http_variant(variant)
         {
             use bynk_syntax::ast::HttpVariantPayload as P;
@@ -1840,12 +1840,12 @@ impl<'a> LowerCtx<'a> {
                 ("Err", 0) => Some(*e),
                 _ => None,
             },
-            Some(Ty::HttpResult(t)) if variant == "Ok" && idx == 0 => Some(*t),
+            Some(Ty::HttpResult(t, _)) if variant == "Ok" && idx == 0 => Some(*t),
             // #1934: `Handled(Created(i))` resolves `i`'s field through the
             // `HttpResult` it carries.
             Some(Ty::HttpOutcome(t)) if idx == 0 => match variant {
                 "Rejected" => Some(tys.intern(Ty::BoundaryRejection)),
-                "Handled" => Some(tys.intern(Ty::HttpResult(*t))),
+                "Handled" => Some(tys.intern(Ty::HttpResult(*t, None))),
                 _ => None,
             },
             Some(Ty::Option(t)) if variant == "Some" && idx == 0 => Some(*t),

@@ -574,7 +574,7 @@ fn ok_is_reachable(
 /// with `bynk openapi` so the two cannot drift.
 pub fn http_result_inner(t: &TypeRef) -> Option<&TypeRef> {
     match strip_effect(t) {
-        TypeRef::HttpResult(inner, _) => Some(inner.as_ref()),
+        TypeRef::HttpResult(inner, _, _) => Some(inner.as_ref()),
         _ => None,
     }
 }
@@ -704,7 +704,7 @@ impl<'a> ResponseWalk<'a> {
     /// `is_http_result_ident` below.
     fn is_http_result_expr(&self, span: Span) -> bool {
         match self.expr_ty(span).as_deref() {
-            Some(Ty::HttpResult(_)) => true,
+            Some(Ty::HttpResult(_, _)) => true,
             Some(_) => false,
             None => self.declared_is_http_result,
         }
@@ -721,7 +721,7 @@ impl<'a> ResponseWalk<'a> {
     /// expression the plan's risk 7 is about; a bare identifier read has no
     /// such asymmetry — unknown stays unknown.
     fn is_http_result_ident(&self, span: Span) -> bool {
-        matches!(self.expr_ty(span).as_deref(), Some(Ty::HttpResult(_)))
+        matches!(self.expr_ty(span).as_deref(), Some(Ty::HttpResult(_, _)))
     }
 
     fn push(&mut self, variant: HttpVariant, span: Span) {
@@ -785,7 +785,7 @@ impl<'a> ResponseWalk<'a> {
             }
             _ => false,
         };
-        (leaf_opaque && matches!(self.expr_ty(e.span).as_deref(), Some(Ty::HttpResult(_))))
+        (leaf_opaque && matches!(self.expr_ty(e.span).as_deref(), Some(Ty::HttpResult(_, _))))
             || expr_children(e)
                 .into_iter()
                 .any(|c| self.opaque_http_result(c))
@@ -1177,7 +1177,7 @@ service api from http {
                 .1
                 .as_deref();
             assert!(
-                matches!(ty, Some(Ty::HttpResult(_))),
+                matches!(ty, Some(Ty::HttpResult(_, _))),
                 "`{src}` should resolve to a recorded HttpResult, got {ty:?}"
             );
         }
@@ -1466,7 +1466,7 @@ service api from http {
         let tys = Types::new();
         let file = FileId(0);
         let error = tys.intern(Ty::Error);
-        let http = tys.intern(Ty::HttpResult(error));
+        let http = tys.intern(Ty::HttpResult(error, None));
         let expr_types = [
             (Span::new_in(file, 10, 20), http),
             (Span::new_in(file, 30, 40), error),
@@ -1485,7 +1485,7 @@ service api from http {
         // A reparsed span (`FileId::UNKNOWN`) over the same range matches.
         assert!(matches!(
             walk.expr_ty(Span::new(10, 20)).as_deref(),
-            Some(Ty::HttpResult(_))
+            Some(Ty::HttpResult(_, _))
         ));
         assert!(walk.is_http_result_ident(Span::new(10, 20)));
 
@@ -1551,7 +1551,7 @@ service api from http {
             walked.iter().any(|(t, ty)| t == "Found"
                 && ty
                     .as_deref()
-                    .is_some_and(|ty| !matches!(ty, Ty::HttpResult(_)))),
+                    .is_some_and(|ty| !matches!(ty, Ty::HttpResult(_, _)))),
             "the tail `Found` should resolve to its recorded non-HttpResult type: {walked:?}"
         );
 
@@ -1653,7 +1653,7 @@ service api from http {
         assert!(
             expr_types.iter().any(|(s, t)| s.file != file
                 && (s.start, s.end) == (target, target + 5)
-                && matches!(*diag.ty_intern.get(*t), Ty::HttpResult(_))),
+                && matches!(*diag.ty_intern.get(*t), Ty::HttpResult(_, _))),
             "the premise: a.bynk's expr types hold b.bynk's `Ok(1)` at the same range"
         );
 
