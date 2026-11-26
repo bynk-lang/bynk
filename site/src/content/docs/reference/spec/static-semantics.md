@@ -841,7 +841,7 @@ stripped before the value is parsed, so `1_000` and `1000` denote the same value
 As with `Float` literals, the **as-written lexeme is preserved**, so `bynk fmt`
 keeps the author's grouping verbatim.
 
-### §5.2a Record field annotations {#field-annotations}
+### §5.2c Record field annotations {#field-annotations}
 
 A record field MAY be annotated. `@name("…")` gives the field its external name on an HTTP request
 (§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
