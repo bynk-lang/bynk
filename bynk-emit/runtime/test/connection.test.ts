@@ -7,6 +7,7 @@ import {
   TestConnection,
   WorkersConnection,
   closeArguments,
+  webSocketAuthExpired,
   webSocketClosing,
   webSocketErrored,
   webSocketBearerOffer,
@@ -217,4 +218,57 @@ test("an error reports the info on_close sees as code 1011, reason error, not cl
     console.error = log;
   }
   assert.deepEqual(seen, [{ code: 1011, reason: "error", clean: false }]);
+});
+
+// #3903: a connection whose credential has expired is closed at its next frame.
+test("a credential is expired once its exp is in the past, and not before", () => {
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 99), false);
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 100), false, "the HTTP Bearer bound is exp < now");
+  assert.equal(webSocketAuthExpired({ exp: 100 }, 101), true);
+});
+
+test("a connection with no exp never expires", () => {
+  assert.equal(webSocketAuthExpired({ connId: "c" }, 1e12), false);
+  assert.equal(webSocketAuthExpired({ exp: undefined }, 1e12), false);
+  assert.equal(webSocketAuthExpired({ exp: "soon" }, 1e12), false, "a non-number exp is not an expiry");
+  assert.equal(webSocketAuthExpired(null, 1e12), false);
+});
+
+test("the default clock is the current time in seconds", () => {
+  const now = Date.now() / 1000;
+  assert.equal(webSocketAuthExpired({ exp: now - 60 }), true);
+  assert.equal(webSocketAuthExpired({ exp: now + 60 }), false);
+});
+
+test("the default clock reads whole seconds, as the HTTP Bearer check does", () => {
+  // At 100.5s a token with exp 100 is still accepted over HTTP (`100 < floor(100.5)` is false), so a
+  // connection opened with it is not closed yet; one second later it is.
+  const real = Date.now;
+  try {
+    Date.now = () => 100_500;
+    assert.equal(webSocketAuthExpired({ exp: 100 }), false);
+    Date.now = () => 101_000;
+    assert.equal(webSocketAuthExpired({ exp: 100 }), true);
+  } finally {
+    Date.now = real;
+  }
+});
+
+test("a close-first reply ends the connection with its code before on close runs", async () => {
+  const s = socket();
+  const order: string[] = [];
+  const close = s.ws.close;
+  s.ws.close = (...a: unknown[]) => {
+    order.push("close");
+    close(...a);
+  };
+  await webSocketClosing(
+    s.ws,
+    { connId: "c" },
+    { code: 1008, reason: "authentication expired", clean: false },
+    async () => void order.push("on close"),
+    "first",
+  );
+  assert.deepEqual(order, ["close", "on close"]);
+  assert.deepEqual(s.closes, [[1008, "authentication expired"]], "and it is not replied to again afterwards");
 });
