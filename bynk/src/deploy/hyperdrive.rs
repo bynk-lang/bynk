@@ -640,7 +640,10 @@ pub(crate) fn provision(
     let project = BTreeMap::new();
     let site = Site {
         tools: Tools {
-            api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+            api: &crate::cloudflare::Account::new(Wrangler::new(
+                &provenance,
+                Path::new("/nonexistent"),
+            )),
             project_root: Path::new("/nonexistent"),
         },
         environment,
@@ -681,7 +684,10 @@ pub(crate) fn prune(
         ..Lives::default()
     };
     let tools = Tools {
-        api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+        api: &crate::cloudflare::Account::new(Wrangler::new(
+            &provenance,
+            Path::new("/nonexistent"),
+        )),
         project_root: Path::new("/nonexistent"),
     };
     for orphan in orphans.iter().filter(|o| Hyperdrive::prunable(o)) {
