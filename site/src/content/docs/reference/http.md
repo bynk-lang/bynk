@@ -2114,6 +2114,12 @@ caller first and asks then, still before anything else is read. The answer is `4
 `RateLimited(detail)`, so [`on rejected`](#rendering-rejections) can render it and a `system`
 test can assert `Rejected(RateLimited(_))`.
 
+The contract says so. For every route with `@rateLimit`, `bynk openapi` lists a `429` response with a
+`Retry-After` header (the refusal's `{ kind, details }` body, or `application/problem+json` under
+`errors { format: problem }`), and the client `bynk client` generates has a `RateLimited` member in
+the route's response union. A route without the annotation lists neither, and its contract hash is
+unchanged; adding or removing `@rateLimit` moves the route's hash.
+
 - `key: clientIp` counts by the request's `CF-Connecting-IP`, which is reliable only behind
   Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without
   the header (under `bynk dev`, or a test that sets none) every request counts as one client,

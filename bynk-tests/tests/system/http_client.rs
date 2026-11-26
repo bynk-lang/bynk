@@ -616,6 +616,95 @@ fn a_problem_variant_and_a_problem_rejection_at_one_status_are_told_apart() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// #4434: a `@rateLimit` route's router `429` (`RateLimited`) and a handler's own `TooManyRequests`
+/// share a status, and the client tells them apart in both modes: by the `error` a handler's variant
+/// carries and the `kind` the router's refusal does, and in problem mode by the same `kind`.
+const RATE_LIMIT_DRIVER: &str = r#"
+import worker from "./out/workers/api/index.js";
+import { createClient } from "./dist/api.js";
+// A limiter that answers the same to every key: `allow` is whether it lets the request through.
+const limiter = (allow) => ({ limit: async () => ({ success: allow }) });
+const via = (allow) => (url, init) => worker.fetch(new Request(url, init), { RATELIMIT_SIGNUP_LIMIT: limiter(allow) });
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const refused = createClient({ baseUrl: "http://api.test", fetch: via(false) });
+const allowed = createClient({ baseUrl: "http://api.test", fetch: via(true) });
+show("router", await refused.api.postMixed("slow"));
+show("handler", await allowed.api.postMixed("slow"));
+show("fine", await allowed.api.postMixed("fine"));
+"#;
+
+fn rate_limit_project(dir: &Path, problem: bool) -> PathBuf {
+    let proj = dir.join("project");
+    fs::create_dir_all(proj.join("src")).unwrap();
+    fs::write(
+        proj.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    )
+    .unwrap();
+    let errors = if problem {
+        "  errors { format: problem }\n\n"
+    } else {
+        ""
+    };
+    fs::write(
+        proj.join("src/api.bynk"),
+        format!(
+            "context api\n\nconsumes bynk.cloudflare {{ RateLimit }}\n\n\
+             capability SignupLimit = RateLimit @limit(1) @period(60.seconds)\n\n\
+             service api from http {{\n{errors}  \
+               @rateLimit(SignupLimit, key: clientIp)\n  \
+               on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {{\n    \
+                 if body == \"slow\" {{ TooManyRequests(\"slow down\") }} else {{ Created(\"ok\") }}\n  }}\n}}\n"
+        ),
+    )
+    .unwrap();
+    proj
+}
+
+#[test]
+fn a_router_429_and_a_handler_429_are_told_apart() {
+    if skip_without_tools() {
+        return;
+    }
+    for problem in [false, true] {
+        let dir = scratch(if problem {
+            "rate-limit-problem"
+        } else {
+            "rate-limit"
+        });
+        let proj = rate_limit_project(&dir, problem);
+        generate(&proj, &dir, &[]);
+        compile_worker(&proj, &dir);
+        tsc(&dir, "the rate-limited client");
+        let out = run_driver(&dir, RATE_LIMIT_DRIVER, &[]);
+        let router: serde_json::Value = serde_json::from_str(line(&out, "router")).unwrap();
+        let handler: serde_json::Value = serde_json::from_str(line(&out, "handler")).unwrap();
+        let fine: serde_json::Value = serde_json::from_str(line(&out, "fine")).unwrap();
+        assert_eq!(router["status"], 429, "{out}");
+        assert_eq!(router["kind"], "RateLimited", "problem={problem}: {out}");
+        assert_eq!(handler["status"], 429, "{out}");
+        assert_eq!(
+            handler["kind"], "TooManyRequests",
+            "problem={problem}: {out}"
+        );
+        assert_eq!(fine["kind"], "Created", "{out}");
+        if problem {
+            assert_eq!(router["problem"]["kind"], "RateLimited", "{out}");
+            assert_eq!(
+                router["problem"]["type"], "https://bynk-lang.org/problems/rate-limited",
+                "{out}"
+            );
+            assert_eq!(handler["problem"]["type"], "about:blank", "{out}");
+            assert_eq!(handler["problem"]["detail"], "slow down", "{out}");
+        } else {
+            assert_eq!(router["error"]["kind"], "RateLimited", "{out}");
+            assert!(router["error"]["details"].is_string(), "{out}");
+            assert_eq!(handler["error"], "slow down", "{out}");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
 /// #3910: a typed path parameter is written as its text: an `Int` its digits, an enum its
 /// variant's name, and the router decodes it back.
 const PATH_DRIVER: &str = r#"

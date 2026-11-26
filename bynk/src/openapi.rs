@@ -938,10 +938,24 @@ fn responses_of(
         };
         if let ResponseOrigin::BoundaryImplicit { why } = &resp.origin {
             describe(format!("{} — {why}", resp.variant));
+            // #4434: a rate-limited refusal says when to try again, whichever way it is written.
+            if resp.variant == "RateLimited" {
+                e.headers.insert(
+                    "Retry-After".into(),
+                    json!({
+                        "description": "Seconds until the limiter's window lets the caller try again.",
+                        "required": true,
+                        "schema": { "type": "integer", "minimum": 1 },
+                    }),
+                );
+            }
             if r.problem
                 && matches!(
                     resp.variant.as_str(),
-                    "StructuralMismatch" | "PayloadTooLarge" | "UnsupportedMediaType"
+                    "StructuralMismatch"
+                        | "PayloadTooLarge"
+                        | "UnsupportedMediaType"
+                        | "RateLimited"
                 )
             {
                 components.problem_details();
@@ -957,7 +971,7 @@ fn responses_of(
                         e,
                     );
                 }
-                "PayloadTooLarge" | "UnsupportedMediaType" => body(
+                "PayloadTooLarge" | "UnsupportedMediaType" | "RateLimited" => body(
                     "application/json",
                     json!({
                         "type": "object",
@@ -1026,7 +1040,18 @@ fn responses_of(
     }
 
     let mut out = Map::new();
-    for (status, e) in by_status {
+    for (status, mut e) in by_status {
+        // #4434: the router's `429` always says when to try again, but a handler's own `429` at the
+        // same status need not (`TooManyRequests` carries `Retry-After` only if it asks for one), so
+        // the header is required only where the router's refusal is the one answer.
+        if e.descriptions.iter().any(|d| !d.starts_with("RateLimited"))
+            && let Some(h) = e
+                .headers
+                .get_mut("Retry-After")
+                .and_then(Value::as_object_mut)
+        {
+            h.insert("required".into(), json!(false));
+        }
         let mut resp = Map::new();
         resp.insert("description".into(), json!(e.descriptions.join("; ")));
         if !e.headers.is_empty() {
