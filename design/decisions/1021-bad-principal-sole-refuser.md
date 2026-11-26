@@ -1,11 +1,6 @@
----
-level: minor
-changelog: On an actor sum, a bare `by Forged`, `by Expired`, `by Stale` or `by Revoked` that exactly one member can refuse is presented to that member whatever its scheme (`Oidc` and `SignedCookie` included)
----
+# 1021 — A bare bad credential on an actor sum reaches its one refusing member, whatever the scheme
 
-## ADR: bad-principal-sole-refuser
-title: A bare bad credential on an actor sum reaches its one refusing member, whatever the scheme
-summary: the checker resolves a bare `by <Bad>` whose one refusing member is an `Oidc` or `SignedCookie` seam to that member, and the case drives it as if the member were named
+- **Status:** Accepted (v0.756)
 
 **Context.** Part A of #4385 let a bad-credential principal name the sum member it tests (`by Forged(Browser)`) and made a bare principal that two or more members could refuse an error. It kept the old bare path for a sole `Bearer` or `Signature` refuser, which has its own driver. A sole `Oidc` or `SignedCookie` refuser (`by Expired` on `Browser | Hook`, where only the cookie refuses an expired credential) had no such driver, so the bare form was refused with `expired_needs_bearer_route` even though `by Expired(Browser)` worked.
 

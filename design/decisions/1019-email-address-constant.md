@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `from email(…)` service names its address with a `String` constant, resolved to its literal before the address checks, the duplicate check and deploy
----
+# 1019 — An email service's address may be the name of a constant, resolved to its literal once
 
-## ADR: email-address-constant
-title: An email service's address may be the name of a constant, resolved to its literal once
-summary: Which constants name an address, where they resolve, and what a constant that is not an address reports
+- **Status:** Accepted (v0.754)
 
 **Context.** An address often appears in more than one place: the service header, a `Forward` in another service, a test's `to`. Each copy was a string literal, so a change had to be made everywhere and a missed copy routed mail wrongly with no error. Constants exist to write a value once (ADR 0678, 0826), and `from email(…)` was a compile-time position they could not reach. Cron's schedule already takes one (#3875); this is its email equivalent (#3889).
 

@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_abi_shapes
-raises: emit_abi_shapes — the `bynk.cloudflare` binding's `WorkersQueue` imports three more runtime names (`signQueueMessage`, `edgeKeyOf`, `EDGE_TO_PREFIX`) to sign a Bynk producer's messages under the call edge's key
-changelog: A queue consumer can name a refinement of `Producer`, `actor FromOrders = Producer where IsContext(shop.orders)`, and admits only messages a Bynk producer in one of those contexts signed, which a `Queue` instance signs with nothing written
----
+# 1027 — A Bynk producer signs its queue messages under the edge key to the consumer's context, and a Producer refinement admits the contexts it names
 
-## ADR: queue-bynk-producers
-title: A Bynk producer signs its queue messages under the edge key to the consumer's context, and a Producer refinement admits the contexts it names
-summary: A `Queue` instance whose queue has a signed consumer admitting its context signs each send with the call edge's key; the consumer verifies under the sending context's key and a `Producer` refinement's `IsContext(…)` predicate decides which contexts it admits
+- **Status:** Accepted (v0.764)
 
 **Context.** Part of #3899. The consumer half (signed envelopes, replay claims, `Foreign` senders) admitted only producers that are not Bynk, because a Bynk producer did not sign. A Bynk context should be admitted by what it is, as a `call` handler admits one, and its author should write nothing to be admitted.
 

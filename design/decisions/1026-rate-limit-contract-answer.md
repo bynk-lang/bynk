@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `bynk openapi` lists a `429` response with a `Retry-After` header for every route with `@rateLimit`, and the client `bynk client` generates has a `RateLimited` member in that route's response union
-breaking: A generated client's response union for a route with `@rateLimit` gains a `RateLimited` member (`{ status: 429, kind: "RateLimited", ... }`), so a `switch (res.kind)` that ends in an exhaustive `never` check on such a route no longer type-checks until it handles it; regenerate the client with `bynk client` and add a `case "RateLimited":` (for example, wait `Retry-After` seconds and retry). The route's contract hash moves with it, for `@rateLimit` routes only.
----
+# 1026 — A rate-limited route's 429 is part of its wire contract
 
-## ADR: rate-limit-contract-answer
-title: A rate-limited route's 429 is part of its wire contract
-summary: `@rateLimit` makes `429 RateLimited` a boundary-implicit answer in the shared wire contract, so `bynk openapi` and `bynk client` both list it, with the `Retry-After` header; routes without the annotation are unchanged
+- **Status:** Accepted (v0.762)
 
 **Context.** A route with `@rateLimit(Limiter, key: …)` can answer `429` before its body is read, with a `Retry-After` header (#3926, #4407, #4422). The wire contract that `bynk openapi` and the generated client both read listed no `429` for it, so a client generated from the spec had no typed way to handle the limit, and a caller could not tell that the route could refuse them.
 
