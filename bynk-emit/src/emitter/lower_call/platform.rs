@@ -936,8 +936,13 @@ fn name_analytics_dataset(
     if cap != "AnalyticsSql" || op != "query" || lowered.len() != 3 {
         return;
     }
-    if let Some(ExprKind::Ident(instance)) = args.first().map(|a| &a.kind)
-        && cx.has_capability(&instance.name)
+    // The checker decided this argument is an `Analytics` instance, and recorded it.
+    if let Some(first) = args.first()
+        && let ExprKind::Ident(instance) = &first.kind
+        && matches!(
+            cx.commons().callee(first.id),
+            Some(Callee::Capability { cap, op, .. }) if *cap == instance.name && op == "dataset"
+        )
     {
         let table = call(
             chain(cx.cap_deps_node(), &[instance.name.as_str(), "dataset"]),

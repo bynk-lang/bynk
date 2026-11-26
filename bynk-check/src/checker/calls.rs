@@ -2028,7 +2028,7 @@ pub(crate) fn check_static_call(
             d1::check_analytics_sql_query(args, ctx);
         }
         if op.params.len() != args.len() {
-            ctx.errors.push(CompileError::new(
+            let mut err = CompileError::new(
                 "bynk.capability.op_arity",
                 span,
                 format!(
@@ -2038,7 +2038,12 @@ pub(crate) fn check_static_call(
                     op.params.len(),
                     args.len()
                 ),
-            ));
+            );
+            // #4104: the old two-argument `query(sql, params)`, the change most programs meet.
+            if d1::is_analytics_sql_query(&type_name.name, &method.name, ctx) {
+                err = err.with_note(d1::ANALYTICS_QUERY_HELP);
+            }
+            ctx.errors.push(err);
             for a in args {
                 let _ = type_of(a, None, ctx);
             }
