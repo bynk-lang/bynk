@@ -991,6 +991,12 @@ pub const UNITS: &[Unit] = &[
             "Fetch.receiveStream",
             "Fetch.sendStream",
             "Logger.log",
+            // #3939: the API key types, experimental with the `ApiKey` scheme (track §17).
+            "ApiKeyId",
+            "ApiKeyLabel",
+            "ApiKeySecret",
+            "ApiKeyValue",
+            "TooManyKeys",
         ],
         extensible: &["FetchError", "Method", "Redirect"],
         instantiable: &[],

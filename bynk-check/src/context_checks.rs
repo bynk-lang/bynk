@@ -7743,7 +7743,7 @@ fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError 
     )
 }
 
-/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+/// #4111: which of `bynk`'s secret-carrying opaque types a declaration is (#3939 adds the third).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretKind {
     /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
@@ -7751,6 +7751,9 @@ pub enum SecretKind {
     /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
     /// `Fetch` reveals when it sends and which has no reader of its own.
     Authorization,
+    /// #3939 (D2 D): `ApiKeyValue`, the key an `ApiKey` actor's `mint` answers. It has no reader:
+    /// its one way out is a handler returning the `ApiKeySecret` that `mint` answered.
+    ApiKeyValue,
 }
 
 /// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
@@ -7769,6 +7772,8 @@ pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
         Some(SecretKind::Secret)
     } else if text.contains("type Authorization =") {
         Some(SecretKind::Authorization)
+    } else if text.contains("type ApiKeyValue =") {
+        Some(SecretKind::ApiKeyValue)
     } else {
         None
     }
@@ -9443,11 +9448,11 @@ service Api from http {
 mod secret_kind_tests {
     use super::*;
 
-    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// #4111, #3939: `secret_kind` finds `Secret`, `Authorization` and `ApiKeyValue` by their declaration, so any other
     /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
     /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
     #[test]
-    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+    fn bynk_declares_exactly_three_opaque_types_and_secret_kind_names_each() {
         let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
             .iter()
             .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
@@ -9457,13 +9462,14 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["Authorization", "Secret"],
+            ["ApiKeyValue", "Authorization", "Secret"],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );
         for (name, kind) in opaque {
             let want = match name {
                 "Secret" => SecretKind::Secret,
+                "ApiKeyValue" => SecretKind::ApiKeyValue,
                 _ => SecretKind::Authorization,
             };
             assert_eq!(kind, Some(want), "{name}");

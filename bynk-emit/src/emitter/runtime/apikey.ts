@@ -18,6 +18,8 @@
 // bytes, read from the environment; a missing or bad one is `ApiKeyPepperFault`, a faulted
 // request, and the fault names the variable, never its value.
 
+import { BynkSecret } from "./secret.ts";
+
 /** The base62 alphabet: digit value `i` is `ALPHABET[i]`, so `0` is the pad character. */
 const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
@@ -382,5 +384,73 @@ export function apiKeyDummyDigest(): Uint8Array {
   return API_KEY_DUMMY_DIGEST;
 }
 
+// ---------------------------------------------------------------------------------------------
+// `Actor.mint(identity, label)`
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The peppers of the `ApiKey` actor `actor`, threaded in `deps.__apiKey` by the Worker's compose
+ * from the environment. `callDurableObjectMethod` strips `__apiKey` from the `deps` an agent call
+ * sends, so a pepper never reaches an agent (D2 B).
+ */
+export function apiKeyPeppersOf(deps: unknown, actor: string): ApiKeyPeppers {
+  const all = (deps as { __apiKey?: Record<string, ApiKeyPeppers> } | null | undefined)?.__apiKey;
+  const peppers = all?.[actor];
+  if (peppers === undefined) pepperFault(`the API key pepper for \`${actor}\` is not available on this target`);
+  return peppers;
+}
+
+/** What `<Actor>KeyOwner.mint` is given: a fresh key's parts, under a candidate handle. */
+export interface MintRequest {
+  readonly handle: string;
+  readonly keyNo: string;
+  readonly digest: Uint8Array;
+  readonly kid: string;
+}
+
+/**
+ * `Actor.mint(identity, label)`: make a key, have the identity's `KeyOwner` store its digest
+ * (`store`, which answers the handle it used or the store's refusal), and answer the key once.
+ * The secret is drawn and hashed here, in the service handler where the pepper is, and only its
+ * digest goes to the store. The key comes back as a `BynkSecret`, which renders as `<secret>`
+ * everywhere but the one wire encoding of the `ApiKeySecret` a handler returns.
+ */
+export async function mintApiKey(
+  peppers: ApiKeyPeppers,
+  pepperName: string,
+  prefix: string,
+  label: string,
+  nowMs: number,
+  limit: number,
+  store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+): Promise<
+  | {
+      readonly tag: "Ok";
+      readonly value: {
+        readonly id: string;
+        readonly key: BynkSecret;
+        readonly label: string;
+        readonly created: number;
+        readonly expires: { readonly tag: "None" };
+      };
+    }
+  | { readonly tag: "Err"; readonly error: { readonly limit: number } }
+> {
+  const fresh = await freshApiKey(await loadApiKeyPeppers(peppers, { secret: pepperName }));
+  const stored = await store({ handle: fresh.handle, keyNo: fresh.keyNo, digest: fresh.digest, kid: fresh.kid });
+  if (stored.tag === "Err") return { tag: "Err", error: { limit } };
+  const handle = stored.value;
+  return {
+    tag: "Ok",
+    value: {
+      id: apiKeyIdOf(prefix, handle, fresh.keyNo),
+      key: new BynkSecret(formatApiKey(prefix, handle, fresh.keyNo, fresh.secret)),
+      label,
+      created: nowMs,
+      expires: { tag: "None" },
+    },
+  };
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
+export { apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };

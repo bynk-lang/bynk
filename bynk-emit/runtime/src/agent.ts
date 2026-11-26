@@ -215,9 +215,11 @@ export function encodeAgentResult(wire: AgentWire, method: string, result: unkno
 // strip covers `env` at any depth, not only the top. The runtime cannot tell a
 // provider from plain data, so one replacer drops every `env` key. Every agent
 // call (handler, service, ws lifecycle body) funnels through here.
+// #3939 (D2 B): `__apiKey` holds the `ApiKey` actors' peppers, which never enter an
+// agent, so it is dropped the same way.
 function stripRebuiltDeps(deps: unknown): unknown {
   if (typeof deps !== "object" || deps === null) return deps;
-  return JSON.parse(JSON.stringify(deps, (k, v: unknown) => (k === "env" ? undefined : v)));
+  return JSON.parse(JSON.stringify(deps, (k, v: unknown) => (k === "env" || k === "__apiKey" ? undefined : v)));
 }
 
 export async function callDurableObjectMethod(

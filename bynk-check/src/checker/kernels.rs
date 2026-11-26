@@ -2205,6 +2205,7 @@ pub(crate) fn check_cookie_call(
     ctx: &mut Ctx,
 ) -> Option<Option<TyId>> {
     check_signed_cookie_call(receiver, method, args, span, expr_id, ctx)
+        .or_else(|| super::api_key_calls::check_api_key_call(receiver, method, args, span, expr_id, ctx))
         .or_else(|| check_cookie_field_call(receiver, method, args, span, expr_id, ctx))
 }
 
@@ -2707,6 +2708,10 @@ pub(crate) fn check_secret_method(
             SecretKind::Authorization => (
                 "Authorization",
                 " — it has none: it is set as a request's `authorization` and revealed only by `Fetch`",
+            ),
+            SecretKind::ApiKeyValue => (
+                "ApiKeyValue",
+                " — it has none: a handler returns the `ApiKeySecret` that `mint` answered, which shows the key once",
             ),
         };
         ctx.errors.push(CompileError::new(

@@ -230,3 +230,52 @@ test("§7 / §13 storage leak: a fresh key's digest is under the current pepper 
   assert.match(fresh.keyNo, /^[0-9a-f]{16}$/);
   assert.notEqual(newApiKeyHandle(), newApiKeyHandle());
 });
+
+// ---- D2 B: the pepper never enters an agent ---------------------------------------------------
+
+test("D2 B / §13 storage: an agent call's body carries no `__apiKey` pepper", async () => {
+  const { callDurableObjectMethod } = await import("../src/agent.ts");
+  let body = "";
+  const stub = {
+    fetch: async (_url: string, init: { body: string }) => {
+      body = init.body;
+      return new Response("null", { status: 200 });
+    },
+  };
+  const pepper = newApiKeyPepper();
+  const deps = { __apiKey: { Client: { secret: pepper } }, nested: { __apiKey: { Client: { secret: pepper } } }, other: 1 };
+  await callDurableObjectMethod(stub as never, "verify", [], deps);
+  assert.ok(!body.includes(pepper), "the pepper must not ride the request body");
+  assert.ok(!body.includes("__apiKey"));
+  assert.ok(body.includes('"other":1'));
+});
+
+test("§9 mint: the key is a BynkSecret, the store gets only the digest, and TooManyKeys carries the limit", async () => {
+  const { mintApiKey, apiKeyPeppersOf } = await import("../src/apikey.ts");
+  const pepper = newApiKeyPepper();
+  const deps = { __apiKey: { Client: { secret: pepper } } };
+  const seen: unknown[] = [];
+  const minted = await mintApiKey(apiKeyPeppersOf(deps, "Client"), "CLIENT_KEY_PEPPER", "acme", "ci", 5, 100, async (req) => {
+    seen.push(req);
+    return { tag: "Ok", value: req.handle };
+  });
+  assert.equal(minted.tag, "Ok");
+  if (minted.tag !== "Ok") return;
+  const key = minted.value.key.reveal();
+  assert.equal(String(minted.value.key), "<secret>");
+  assert.equal(JSON.stringify({ k: minted.value.key }), '{"k":"<secret>"}');
+  const parsed = parseApiKey(key, "acme");
+  assert.ok(parsed !== null);
+  assert.equal(parsed.id, minted.value.id);
+  const req = seen[0] as { digest: Uint8Array; keyNo: string };
+  assert.ok(!JSON.stringify(req).includes(key.slice(-49)), "the store never sees the secret");
+  const [d] = await apiKeyDigests(await loadApiKeyPeppers({ secret: pepper }, NAMES), parsed.secret);
+  assert.deepEqual(req.digest, d.digest);
+  const refused = await mintApiKey({ secret: pepper }, "P", "acme", "ci", 5, 100, async () => ({ tag: "Err", error: 1 }));
+  assert.deepEqual(refused, { tag: "Err", error: { limit: 100 } });
+});
+
+test("§7 a missing pepper entry faults, naming the actor", async () => {
+  const { apiKeyPeppersOf } = await import("../src/apikey.ts");
+  assert.throws(() => apiKeyPeppersOf({}, "Client"), ApiKeyPepperFault);
+});

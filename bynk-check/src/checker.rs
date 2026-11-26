@@ -83,6 +83,7 @@ mod query_par;
 mod refined_range;
 mod refinements;
 mod result_more;
+mod api_key_calls;
 mod session_calls;
 mod sum_bad_principal;
 pub(crate) use expressions::empty_range_error;
@@ -859,6 +860,9 @@ pub enum Callee {
     /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
     /// every session of the identity in its session agent. An `Effect[()]`.
     SessionRevokeAll { actor: String },
+    /// #3939: `Actor.mint(identity, label)` on a local `ApiKey` actor: make, store and answer a key
+    /// once. An `Effect[Result[ApiKeySecret, TooManyKeys]]`.
+    ApiKeyMint { actor: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
