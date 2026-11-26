@@ -72,6 +72,7 @@ mod names;
 mod property_generators;
 mod property_tests;
 mod runtime_splice;
+mod api_key_driver;
 mod session_driver;
 pub(crate) mod show_shape;
 mod string_generators;

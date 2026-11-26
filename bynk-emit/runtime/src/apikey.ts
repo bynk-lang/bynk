@@ -443,3 +443,121 @@ export async function mintApiKey<R>(
   };
   return minted as unknown as R;
 }
+
+// ---------------------------------------------------------------------------------------------
+// The `system` test tier (track §10). These run only in a generated test module: they mint a real
+// key into the in-process key store, build the keys the failure principals present, and count the
+// key store's comparisons so a case can tell the seam did the same work (D3 B).
+// ---------------------------------------------------------------------------------------------
+
+/** The key `actor`'s principal `sub` presents in this test run: minted once per harness `env`,
+ *  through `store` (the participant's in-process `<Actor>KeyOwner.mint`), under `peppers`. */
+export async function apiKeyForTest(
+  env: Record<string, unknown>,
+  actor: string,
+  sub: string,
+  peppers: ApiKeyPeppers,
+  pepperName: string,
+  prefix: string,
+  nowMs: number,
+  store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
+): Promise<string> {
+  const memo = (env.__bynkApiKeys ??= new Map<string, string>()) as Map<string, string>;
+  const k = `${actor}:${sub}`;
+  let key = memo.get(k);
+  if (key === undefined) {
+    const minted = await mintApiKey<{ readonly tag: "Ok"; readonly value: { readonly key: BynkSecret } } | { readonly tag: "Err" }>(
+      peppers,
+      pepperName,
+      prefix,
+      "bynk-test",
+      nowMs,
+      100,
+      store,
+    );
+    if (minted.tag !== "Ok") throw new Error(`bynk: the test identity \`${sub}\` holds the most keys it may`);
+    key = minted.value.key.reveal();
+    memo.set(k, key);
+  }
+  return key;
+}
+
+/**
+ * The key a failure principal presents, made from a real minted key `real`:
+ *
+ * - `malformed`: the real key with its last checksum character changed (refused before lookup);
+ * - `unknownkey`: the real key's handle with a fresh key number and secret (never minted);
+ * - `unknownhandle`: a fresh handle, key number and secret (no store holds the handle);
+ * - `forged`: the real key's id with a fresh secret the store does not hold.
+ *
+ * Every key but `malformed` is well formed, its checksum recomputed, so the seam reaches the store.
+ */
+export function apiKeyBadKey(kind: string, real: string, prefix: string): string {
+  const parsed = parseApiKey(real, prefix);
+  if (parsed === null) throw new Error("bynk: the test key is not a key of this actor");
+  const secret = crypto.getRandomValues(new Uint8Array(API_KEY_SECRET_BYTES));
+  const keyNo = hex(crypto.getRandomValues(new Uint8Array(API_KEY_NUMBER_BYTES)));
+  switch (kind) {
+    case "malformed": {
+      const last = real.at(-1) === "0" ? "1" : "0";
+      return real.slice(0, -1) + last;
+    }
+    case "unknownkey":
+      return formatApiKey(prefix, parsed.handle, keyNo, secret);
+    case "unknownhandle":
+      return formatApiKey(prefix, newApiKeyHandle(), keyNo, secret);
+    case "forged":
+      return formatApiKey(prefix, parsed.handle, parsed.keyNo, secret);
+    default:
+      throw new Error(`bynk: no such bad API key \`${kind}\``);
+  }
+}
+
+/** The key store's comparisons so far: every `Crypto.equal`, and those against the dummy digest. */
+export interface ApiKeyCompares {
+  all: number;
+  dummy: number;
+}
+
+const COUNTED = Symbol.for("bynk.apiKeyCompares");
+
+function isDummy(b: unknown): boolean {
+  return b instanceof Uint8Array && b.length === API_KEY_DUMMY_DIGEST.length && b.every((x) => x === 0);
+}
+
+/** Count every comparison the key store makes through `provider` (the platform's `Crypto` binding
+ *  the in-process agents construct), once per class. */
+export function apiKeyCountCompares(provider: {
+  prototype: { equal(a: Uint8Array, b: Uint8Array): Promise<boolean> };
+}): ApiKeyCompares {
+  const proto = provider.prototype as unknown as Record<symbol, ApiKeyCompares | undefined> & {
+    equal(a: Uint8Array, b: Uint8Array): Promise<boolean>;
+  };
+  const existing = proto[COUNTED];
+  if (existing !== undefined) return existing;
+  const counts: ApiKeyCompares = { all: 0, dummy: 0 };
+  const equal = proto.equal;
+  proto.equal = function (this: unknown, a: Uint8Array, b: Uint8Array): Promise<boolean> {
+    counts.all += 1;
+    if (isDummy(a) || isDummy(b)) counts.dummy += 1;
+    return equal.call(this, a, b);
+  };
+  proto[COUNTED] = counts;
+  return counts;
+}
+
+/** Fail the case unless the request that ran since `before` made exactly the comparisons `want`. */
+export function apiKeyExpectCompares(
+  counts: ApiKeyCompares,
+  before: { readonly all: number; readonly dummy: number },
+  want: { readonly all: number; readonly dummy: number },
+  principal: string,
+): void {
+  const all = counts.all - before.all;
+  const dummy = counts.dummy - before.dummy;
+  if (all !== want.all || dummy !== want.dummy) {
+    throw new Error(
+      `bynk: \`by ${principal}\` made the key store compare ${all} time(s), ${dummy} against the dummy digest; the seam must compare ${want.all} time(s), ${want.dummy} against the dummy`,
+    );
+  }
+}

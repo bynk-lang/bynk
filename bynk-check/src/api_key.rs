@@ -453,6 +453,35 @@ pub(crate) fn unlimited_warning(handler: &Handler, table: &UnitTable) -> Option<
     )
 }
 
+/// #3939 (track §10): `by Malformed` or `by Unknown` on a route no `ApiKey` actor guards.
+pub(crate) fn key_principal_needs_api_key_route(name: &str, span: Span) -> CompileError {
+    let sends = if name == "Malformed" {
+        "a key with a bad checksum"
+    } else {
+        "a well-formed key that was never minted"
+    };
+    CompileError::new(
+        "bynk.test.key_principal_needs_api_key_route",
+        span,
+        format!("`by {name}` sends {sends} to an `ApiKey` seam, but this handler's route has no `ApiKey` seam to refuse it"),
+    )
+    .with_note(format!(
+        "use `by {name}` on a route guarded by an `ApiKey` actor; `by Nobody` and `by Forged` test the other seams"
+    ))
+}
+
+/// #3939: `by Expired` on an `ApiKey` route, whose keys do not expire yet.
+pub(crate) fn expired_needs_ttl(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.test.expired_needs_bearer_route",
+        span,
+        "`by Expired` sends an expired key, but this route's `ApiKey` actor's keys do not expire",
+    )
+    .with_note(
+        "an `ApiKey` actor has no `ttl` yet; test its seam with `by Nobody`, `by Malformed`, `by Unknown` or `by Forged`",
+    )
+}
+
 /// #3939 (D2 D): whether the named type is, or holds at any depth, an `ApiKeyValue`.
 pub fn carries_api_key_value(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     fn walk(

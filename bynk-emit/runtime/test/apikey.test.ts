@@ -279,3 +279,35 @@ test("§7 a missing pepper entry faults, naming the actor", async () => {
   const { apiKeyPeppersOf } = await import("../src/apikey.ts");
   assert.throws(() => apiKeyPeppersOf({}, "Client"), ApiKeyPepperFault);
 });
+
+// ---- §10: the test tier's keys and comparison counter ------------------------------------------
+
+test("§10 the failure keys: malformed fails parsing; the others parse, under the right handle", async () => {
+  const { apiKeyBadKey } = await import("../src/apikey.ts");
+  const real = sampleKey();
+  const r = parseApiKey(real, "acme")!;
+  assert.equal(parseApiKey(apiKeyBadKey("malformed", real, "acme"), "acme"), null);
+  const unknownKey = parseApiKey(apiKeyBadKey("unknownkey", real, "acme"), "acme")!;
+  assert.equal(unknownKey.handle, r.handle);
+  assert.notEqual(unknownKey.keyNo, r.keyNo);
+  const unknownHandle = parseApiKey(apiKeyBadKey("unknownhandle", real, "acme"), "acme")!;
+  assert.notEqual(unknownHandle.handle, r.handle);
+  const forged = parseApiKey(apiKeyBadKey("forged", real, "acme"), "acme")!;
+  assert.equal(forged.id, r.id);
+  assert.notDeepEqual(forged.secret, r.secret);
+});
+
+test("D3 B harness counter: compares are counted, dummy ones apart, and a mismatch fails", async () => {
+  const { apiKeyCountCompares, apiKeyExpectCompares, apiKeyDummyDigest } = await import("../src/apikey.ts");
+  class Provider {
+    async equal(a: Uint8Array, b: Uint8Array): Promise<boolean> {
+      return a.length === b.length && a.every((x, i) => x === b[i]);
+    }
+  }
+  const counts = apiKeyCountCompares(Provider);
+  assert.equal(apiKeyCountCompares(Provider), counts, "patched once");
+  const before = { ...counts };
+  await new Provider().equal(apiKeyDummyDigest(), new Uint8Array(32).fill(1));
+  apiKeyExpectCompares(counts, before, { all: 1, dummy: 1 }, "Unknown");
+  assert.throws(() => apiKeyExpectCompares(counts, before, { all: 1, dummy: 0 }, "Forged"), /dummy/);
+});
