@@ -2715,6 +2715,13 @@ pub fn resolve_given_cap_ref(
         .consumed_capabilities
         .get(&ctx_name)
         .is_some_and(|m| m.contains_key(cap_ref.key()));
+    // #4183: the context's own dotted name written as the prefix is a reference to the unit
+    // (an alias is the consuming unit's own spelling, and is not one).
+    if let Some(q) = &cap_ref.context
+        && q.joined() == ctx_name
+    {
+        refs.record_in_unit(q.span, SymbolKind::Unit, &ctx_name, &ctx_name);
+    }
     if exports_it {
         // v0.25: dotted `given B.Cap` — the name segment, in the consumed
         // unit's namespace.
