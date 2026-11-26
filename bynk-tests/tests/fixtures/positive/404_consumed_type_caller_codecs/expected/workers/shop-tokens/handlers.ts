@@ -142,6 +142,16 @@ export function __serialise_TokenError(value: TokenError): __JsonValue {
 }
 
 export function __deserialise_TokenError(json: __JsonValue, path: string = "$"): Result<TokenError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Denied":
+        return Ok({ tag: "Denied" } as TokenError);
+      case "Expired":
+        return Ok({ tag: "Expired" } as TokenError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

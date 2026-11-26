@@ -779,7 +779,8 @@ pub(in crate::emitter) fn lower_capability_call(
             Some(Callee::Capability { cap, .. }) if *cap == recv.name
         )
     {
-        let args_lowered = lower_args(args, cx, pre);
+        let mut args_lowered = lower_args(args, cx, pre);
+        name_analytics_dataset(&recv.name, &method.name, args, &mut args_lowered, cx);
         let wire = capability_wire(e, cx);
         let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
         args_lowered.extend(type_key_arg(e, type_args, cx));
@@ -824,6 +825,7 @@ pub(in crate::emitter) fn lower_capability_call(
         && cx.has_capability(&recv.name)
     {
         let mut args_lowered = lower_args(args, cx, pre);
+        name_analytics_dataset(&recv.name, &method.name, args, &mut args_lowered, cx);
         // #934: a flattened `consumes bynk { Idempotency }` local name is first-party only if
         // it's actually `bynk`'s own capability. The checker resolved that for this call
         // (`firstparty::resolve`), so a same-named capability from any other adapter or context
@@ -920,6 +922,36 @@ pub(in crate::emitter) fn lower_cross_capability_call(
 
 /// `<deps>.<cap>.<op><T>(args)`: a node when every argument is one, else the text. `deps` is the
 /// receiver as a node and as text; the type arguments are empty when there is nothing to name.
+/// #4104: `AnalyticsSql.query(Signups, sql, params)` passes the instance's table, not the instance:
+/// its first argument, which the checker required to name an `Analytics` instance, is lowered to
+/// `await deps.Signups.dataset()`, the environment's qualified table, which the binding puts where
+/// the SQL says `{dataset}`.
+fn name_analytics_dataset(
+    cap: &str,
+    op: &str,
+    args: &[Expr],
+    lowered: &mut [bynk_ts::TsExpr],
+    cx: &mut LowerCtx<'_>,
+) {
+    if cap != "AnalyticsSql" || op != "query" || lowered.len() != 3 {
+        return;
+    }
+    // The checker decided this argument is an `Analytics` instance, and recorded it.
+    if let Some(first) = args.first()
+        && let ExprKind::Ident(instance) = &first.kind
+        && matches!(
+            cx.commons().callee(first.id),
+            Some(Callee::Capability { cap, op, .. }) if *cap == instance.name && op == "dataset"
+        )
+    {
+        let table = call(
+            chain(cx.cap_deps_node(), &[instance.name.as_str(), "dataset"]),
+            Vec::new(),
+        );
+        lowered[0] = TsExpr::Await(Box::new(table));
+    }
+}
+
 fn capability_op_call(
     deps: TsExpr,
     cap: &str,

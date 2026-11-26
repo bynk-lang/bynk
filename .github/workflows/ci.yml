@@ -112,6 +112,12 @@ concurrency:
 permissions:
   contents: read
 
+# #4456: no job sends Wrangler's usage telemetry. The system-test harness sets this for every
+# Wrangler it starts; this is the backstop for any it does not (a test that runs `bynk dev`,
+# a step that calls `npx wrangler` itself).
+env:
+  WRANGLER_SEND_METRICS: "false"
+
 # The toolchain version lives in rust-toolchain.toml; the dtolnay ref below is
 # pinned to match so the runner installs exactly one toolchain (with the
 # rustfmt/clippy components the gates need). The `msrv` job installs the
@@ -991,7 +997,10 @@ jobs:
       # `raises:` them. `growth_probes_never_rise` checks the working-tree
       # table; this repeats the check against the table at the BASE revision, so
       # a hand-edited gated row cannot launder a rise. A rise needs Rust source
-      # to change, so this job's `rust` gate covers it. Checkouts are shallow,
+      # to change, so this job's `rust` gate covers it. #4428: the same step also
+      # attributes each gated probe the PR moved to the PR's OWN pending files (it
+      # runs the probes on a checkout of the base commit), so another increment's
+      # `probes:`/`raises:` no longer excuses it. Checkouts are shallow,
       # so the base commit is fetched first. On `main` the stamp is the writer
       # of the rows, so there is nothing to compare there. Event values go
       # through `env:`, never into the script.

@@ -1,0 +1,6 @@
+context shop.support
+
+service jobs from queue("jobs") {
+    fallback { forward: "ops@ops.example" }
+    on message(job: String) -> Effect[QueueResult] by Producer { Ack }
+}

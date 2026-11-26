@@ -226,12 +226,39 @@ body.
 Every outcome is settled by the runtime; nothing escapes as a throw, because the
 platform does not document what a throw does, so Bynk defines the behaviour:
 
-| What happened | Outcome | Logged |
-|---|---|---|
-| The handler faulted, or returned something that is not a verdict | `Reject("message could not be processed")` | the fault's class name |
-| The message could not be parsed, or is over a limit | `Reject("message could not be read")` or `message too large` | the parser's error code |
-| A `Reply` the platform refuses (the sender failed DMARC, a second reply) | `Reject("reply refused")` | the error's class name |
-| A `Forward` the platform refuses (the destination is not verified) | `Reject("forward refused")` | the error's class name |
+| What happened | Without a `fallback` | With a `fallback` | Logged |
+|---|---|---|---|
+| The handler faulted, or returned something that is not a verdict | `Reject("message could not be processed")` | forwarded, `X-Bynk-Fallback: handler-fault` | the fault's class name |
+| The message could not be parsed, or is over a parser limit | `Reject("message could not be read")` | forwarded, `X-Bynk-Fallback: unreadable` | the parser's error code |
+| The message is over the 25 MiB size cap | `Reject("message too large")` | rejected as without one: the platform's own cap is the same, so nothing would accept it | the fixed string |
+| A `Reply` the platform refuses (the sender failed DMARC, a second reply) | `Reject("reply refused")` | rejected as without one: the handler chose to reply | the error's class name |
+| A `Forward` the platform refuses (the destination is not verified) | `Reject("forward refused")` | rejected as without one: the fallback would be refused for the same reason | the error's class name |
+| The fallback forward itself is refused | the rejection above | the rejection above | the error's class name, `fallback forward refused` |
+
+### A fallback instead of a bounce
+
+A reject is a permanent SMTP error, and an Email Worker has no way to ask for a temporary one,
+so a few seconds' outage of something the handler depends on would bounce a customer's mail for
+good. A `fallback { forward: "<address>" }` block on the service forwards what it could not
+process to a verified address instead, labelled so a person or another system can tell why:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    fallback { forward: "ops@shop.example" }
+
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { … }
+}
+```
+
+`forward` is a string literal holding one bare address. It must be a verified destination address
+on the account (`bynk deploy` warns of one that is not, as it does for a `Forward` verdict), and
+not an address a `from email` service of the project claims, or two Bynk services could forward
+faults to each other forever (`bynk.email.fallback_claimed`). The block is valid only on a
+`from email` service (`bynk.email.fallback_not_email`), once (`bynk.parse.duplicate_fallback`),
+with the one key (`bynk.email.fallback_bad_option`). The forward adds only the `X-Bynk-Fallback`
+header, whose value is `handler-fault` or `unreadable`: nothing from the message is read or
+logged. Treat the fallback mailbox as untrusted input, because the messages that reach it may
+include ones that could not be parsed, and hostile ones.
 
 **Nothing in the message is ever logged**: not its body, headers, attachments or
 envelope. A log line is a fixed string, the address the service claims, and an
@@ -264,6 +291,27 @@ addresses = ["*@shop.example", "support@shop.example"]
 `wrangler deploy` reconciles Email Routing rules to that list. It applies to
 every environment, so it is top-level and is never copied into an `[env.*]`
 table. See [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/).
+
+### Environments
+
+The addresses a service names are the `default` environment's. A named environment
+(`bynk deploy --env staging`) **claims no address** unless `bynk.toml` maps it one:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+`bynk deploy --env staging` then writes `addresses = ["support@staging.shop.example"]`
+for that environment, and the Worker accepts mail to the mapped address and hands it
+to the same service as the source address. With no entry for `staging`, the deploy
+leaves `addresses` out, which Wrangler documents as changing no Email Routing rule, so
+staging cannot take production's rules over. `default` is never mapped.
+
+A key must be an address a `from email` service names; a mapped address must pass the
+same rules as one written in a header (`bynk.email.invalid_address`); and no address
+may be claimed by two environments, or by the source and an environment. See the
+[manifest reference](/reference/tooling/manifest/#mapping-inbound-email-addresses-per-environment).
 
 ## Running it locally
 

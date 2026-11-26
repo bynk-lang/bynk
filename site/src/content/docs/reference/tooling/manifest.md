@@ -83,6 +83,9 @@ connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the co
 [deploy.vectorize.Docs]     # no default: a `Vectorize` instance's existing index
 index = { production = "docs-prod" }   # adopted for that environment, never created or deleted
 
+[deploy.email."support@shop.example"]   # no default: a named environment's inbound-email address
+address = { staging = "support@staging.shop.example" }   # claimed for that environment instead
+
 [deploy.containers.Renderer]   # no default: a `Container` instance's prebuilt image
 image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }   # run for that environment, never built
 
@@ -749,6 +752,27 @@ since the deploy would otherwise create a new, empty index beside the one you me
 an environment the entry does not name still creates its own, and the deploy says so.
 See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
+
+### Mapping inbound-email addresses per environment
+
+Wrangler's `addresses` is top-level only, so a named environment cannot reuse the
+addresses a `from email` service names: they are production's. A named environment
+therefore claims none unless it is mapped one:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `address` | `[deploy.email."<address>"]` | table of strings | The address each deployment environment (an `--env` name; `default` cannot be mapped) claims in place of `<address>`. The Worker accepts mail to it and delivers it to the service that names `<address>`. An environment not listed claims no address and leaves `addresses` out of its configuration. |
+
+The table's key must be an address a `from email` service in the project names (an
+unknown key is an error, with a suggestion), each mapped address must be one Email
+Routing can match (`bynk.email.invalid_address`'s rule), and no address may be claimed
+by two environments or by both the source and an environment. See
+[Receiving mail](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#receiving-mail-email-routing).
 
 ### Containers
 

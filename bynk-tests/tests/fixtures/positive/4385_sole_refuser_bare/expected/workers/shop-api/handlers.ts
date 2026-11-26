@@ -45,7 +45,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_token(body: Event, deps: { who: { tag: "Machine"; identity: UserId } | { tag: "Hook" } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_token(body: Event, deps: { who: { tag: "Machine"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Hook" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "Machine": {
         const m = deps.who.identity;
@@ -215,6 +215,9 @@ export function __serialise_Map_String_Int(value: ReadonlyMap<string, number>): 
 }
 
 export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, number>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Int(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

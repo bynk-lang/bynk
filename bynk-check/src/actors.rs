@@ -484,6 +484,41 @@ pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     bearer_seam_for(handler, actors)?.binder
 }
 
+impl crate::checker::HandlerBodyCheck<'_> {
+    /// What the handler's `by` clause lets its body read of a verified token: the binder whose
+    /// `.claims` is the token's (#2380, #3937), and the `Bearer` arms of an actor sum, whose pattern
+    /// binds the claims beside the identity (#4344).
+    pub fn with_claims_of(
+        mut self,
+        handler: &Handler,
+        actors: &HashMap<String, ActorDecl>,
+    ) -> Self {
+        self.claims_binder = claims_binder_for(handler, actors);
+        self.claims_sum_arms = claims_sum_arms_for(handler, actors);
+        self
+    }
+}
+
+/// #4344: the arms of an HTTP handler's actor sum (`by who: User | Visitor`) that read a verified token,
+/// a `Bearer` or an `Oidc` arm, whose pattern may bind the token's claims beside the identity,
+/// `User(u, c)`. Empty for every other handler.
+pub fn claims_sum_arms_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Vec<String> {
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return Vec::new();
+    }
+    sum_members_for(handler, actors)
+        .into_iter()
+        .flatten()
+        .filter(|m| {
+            matches!(
+                m.seam,
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_)
+            )
+        })
+        .map(|m| m.actor_name)
+        .collect()
+}
+
 /// v0.54: the binder of a cross-context `on call … by c: Caller` handler that
 /// captures a live `CallerId` (the calling context's name, Q7). `None` unless
 /// the handler binds an identity whose contract is `CallerId` — i.e. the
@@ -715,21 +750,37 @@ pub fn call_admission_for(
     Some(admission)
 }
 
-/// #3899: the foreign senders a `from queue` consumer admits. Such a consumer admits signed
-/// messages only: each must come from one of these actors, signed under that actor's secret.
+/// #3899: who a `from queue` consumer that admits only signed messages admits. Each message must
+/// come from one of the foreign senders, signed under that actor's secret, or from a Bynk context a
+/// `Producer` refinement's predicate admits, signed under the pair's edge key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueueAdmission {
     /// The foreign senders admitted, in `by` order.
     pub foreign: Vec<ForeignCaller>,
-    /// For a sum (`by who: Legacy | Partner`), the members in `by` order: the handler's `match`
+    /// The `Producer` refinements admitted, in `by` order: the actor's name and the contexts its
+    /// predicate admits.
+    pub producers: Vec<(String, CallerPredicate)>,
+    /// For a sum (`by who: Legacy | Orders`), the members in `by` order: the handler's `match`
     /// reads which one signed the message.
     pub sum: Option<Vec<CallSumMember>>,
 }
 
+impl QueueAdmission {
+    /// Whether a Bynk context may send to the consumer: some `Producer` refinement is admitted.
+    pub fn admits_contexts(&self) -> bool {
+        !self.producers.is_empty()
+    }
+
+    /// Whether the Bynk context `context` is one a refinement admits.
+    pub fn admits_context(&self, context: &str) -> bool {
+        self.producers.iter().any(|(_, p)| p.admits(context))
+    }
+}
+
 /// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
 /// messages (`by Producer`, today's behaviour). A consumer whose `by` names only `Foreign` actors
-/// admits only messages signed under one of their secrets; the checker refuses a `by` that mixes
-/// them with an unsigned actor, so a signed consumer's every member is a foreign sender here.
+/// and `Producer` refinements admits only signed messages; the checker refuses a `by` that mixes
+/// them with an unsigned actor, so a signed consumer's every member is a signed sender here.
 pub fn queue_admission_for(
     handler: &Handler,
     protocol: &ServiceProtocol,
@@ -742,8 +793,8 @@ pub fn queue_admission_for(
 }
 
 /// [`queue_admission_for`] without the protocol, for a caller that has only the handler (the seam
-/// lowering): an `on message` whose `by` names `Foreign` actors is a queue consumer's, because the
-/// checker admits a `Foreign` actor only on `call` and queue handlers.
+/// lowering): an `on message` whose `by` names `Foreign` actors or `Producer` refinements is a queue
+/// consumer's, because the checker admits neither on any other handler but `call`.
 pub fn queue_admission_of(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -753,16 +804,23 @@ pub fn queue_admission_of(
     }
     let by = handler.by_clause.as_ref()?;
     let mut foreign = Vec::new();
+    let mut producers = Vec::new();
+    let mut members = Vec::new();
     for actor in &by.actors {
         // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
         let decl = actors.get(&actor.name)?;
+        if let Some(pred) = producer_refinement(decl, actors) {
+            producers.push((actor.name.clone(), pred.clone()));
+            members.push(CallSumMember::Refined(actor.name.clone(), pred));
+            continue;
+        }
         if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
             return None;
         }
         // Classified by scheme, not by whether the declaration is whole, as `call_admission_for`
         // does: a malformed `Foreign` actor (the checker reports it) is still a signed sender, with
         // an empty secret that no environment supplies, so the consumer refuses every message.
-        foreign.push(ForeignCaller {
+        let f = ForeignCaller {
             queue: true,
             ..foreign_caller_of(decl).unwrap_or_else(|| ForeignCaller {
                 actor: decl.name.name.clone(),
@@ -770,16 +828,16 @@ pub fn queue_admission_of(
                 worker: None,
                 queue: true,
             })
-        });
+        };
+        members.push(CallSumMember::Foreign(f.clone()));
+        foreign.push(f);
     }
-    let sum = by.is_sum().then(|| {
-        foreign
-            .iter()
-            .cloned()
-            .map(CallSumMember::Foreign)
-            .collect()
-    });
-    (!foreign.is_empty()).then_some(QueueAdmission { foreign, sum })
+    let sum = by.is_sum().then_some(members);
+    (!foreign.is_empty() || !producers.is_empty()).then_some(QueueAdmission {
+        foreign,
+        producers,
+        sum,
+    })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —
@@ -1365,6 +1423,20 @@ pub fn caller_refinement(
 ) -> Option<CallerPredicate> {
     let r = decl.refinement.as_ref()?;
     if r.base.name != "Caller" || actors.contains_key("Caller") {
+        return None;
+    }
+    parse_caller_predicate(&r.predicate).ok()
+}
+
+/// #3899: the predicate of a refinement over the prelude `Producer` actor, or `None` for any
+/// other actor (a malformed predicate reads as `None` too: the checker reports it). It uses the
+/// same `IsContext(…)` vocabulary as a `Caller` refinement, over the context that signed the message.
+pub fn producer_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<CallerPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Producer" || actors.contains_key("Producer") {
         return None;
     }
     parse_caller_predicate(&r.predicate).ok()

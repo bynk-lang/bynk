@@ -163,6 +163,16 @@ export function __serialise_Role(value: Role): __JsonValue {
 }
 
 export function __deserialise_Role(json: __JsonValue, path: string = "$"): Result<Role, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Admin":
+        return Ok({ tag: "Admin" } as Role);
+      case "Member":
+        return Ok({ tag: "Member" } as Role);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

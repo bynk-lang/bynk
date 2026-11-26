@@ -160,22 +160,24 @@ decoded by checking its shape, then any predicates.
 | `Bytes` | string (standard base64 with padding (RFC 4648 §4)) | valid base64; anything else is `StructuralMismatch` (`expected: "base64 string"`) | as is |
 | `Decimal` | string (plain decimal text, such as `"12.50"`) | an optional `-`, digits with no leading zero (`0` or `1`-`9` first), and optionally `.` and digits (at most 1000 characters and 100 fraction digits, the most any `Decimal` has); an exponent, a leading `+`, a leading zero (`007`), whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: "decimal string"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept | as is |
 | `Duration` | number (whole milliseconds) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
-| `Instant` | number (milliseconds since the Unix epoch) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
+| `Instant` | number (milliseconds since the Unix epoch) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`). A string is also read, when it is an RFC 3339 date-time with an explicit offset (`Z` or `±hh:mm`, as `Instant.fromIso` reads it): a fraction past milliseconds is truncated, and a timestamp with no offset, an impossible date or a leap second is `StructuralMismatch` (`expected: "number"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
 | `()` | `null` | anything; the value is not inspected | `null` |
 
 `Int`, `Duration` and `Instant` are limited to JavaScript's safe-integer range
 on the wire, so every JSON parser reads them exactly.
+
+A plain-JSON route and `Json.encodePlain` write an `Instant` as an RFC 3339 string in UTC with exactly three fraction digits (`"2026-11-22T10:00:00.000Z"`); `Duration` and `Decimal` are written as above.
 
 ### Composite types
 
 | Type | JSON |
 |---|---|
 | record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. |
-| sum (`enum` included) | an object with `"kind"`: the variant's name, beside the variant's payload fields: `{"kind":"Circle","radius":0.5}`, `{"kind":"Dot"}` |
+| sum (`enum` included) | an object with `"kind"`: the variant's name, beside the variant's payload fields: `{"kind":"Circle","radius":0.5}`, `{"kind":"Dot"}`. A sum with no payload variant (an `enum`) is also read from a bare string, the variant's name (`"Dot"`; matched exactly, case-sensitively), and a plain-JSON route and `Json.encodePlain` write it that way. The object form is tried first. |
 | `Result[T, E]` | `{"kind":"Ok","value":<T>}` or `{"kind":"Err","error":<E>}` |
 | `Option[T]` | `{"kind":"Some","value":<T>}` or `{"kind":"None"}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk encodes the tagged form, except in a plain HTTP route and for `Json.encodePlain`, which write `v` / `null` (`Option[Option[T]]` is refused there) |
 | `List[T]` | an array |
-| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order |
+| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order. A map whose key is a `String`, or a refined or opaque `String`, is also read from a JSON object (`{"bug":"red"}`), each key checked as the key type; a plain-JSON route and `Json.encodePlain` write it that way. The object's keys are read in the order `JSON.parse` lists them, which puts integer-like keys (`"2"`, `"10"`) first in ascending order, and a key repeated in the text keeps its last value. Any other key type keeps the pair array |
 | refined type (`type Qty = Int where NonNegative`) | its base type's encoding. The decoder checks the predicates, refusing with `RefinementViolation` |
 | opaque type | its base type's encoding. A caller cannot see the predicate, so only the owning context checks it |
 | inline field refinement (`qty: Int where Positive`) | the field's encoding. The decoder checks the predicates, like a refined type's |
@@ -271,7 +273,7 @@ service legacy {
 | `Line` | `{"sku":"A-1","qty":2,"wait":1.5,"at":1767225600000,"blob":"","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.wait` | A `Duration` is whole milliseconds. |
 | `Line` | `{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"Some","value":0.5},"at":1767225600000,"blob":"","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.delay.value` | So is a `Duration` inside an `Option`, a `List` or a variant. |
 | `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"%%","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.blob` | `Bytes` is padded base64. |
-| `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"","tags":[],"stock":{"lon":3},"rush":true}` | `StructuralMismatch` at `$.stock` | A `Map` is an array of pairs, never an object. |
+| `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"","tags":[],"stock":{"lon":3},"rush":true}` | accepted; encodes back as `{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"None"},"at":1767225600000,"blob":"","note":{"kind":"None"},"tags":[],"stock":[["lon",3]],"rush":true}` | A `Map` with a `String` key is also read from an object; it is written as an array of pairs. |
 | `Qty` | `-1` | `RefinementViolation` at `$` | A named refined type is its base value, checked against its predicates. |
 | `Price` | `"12.50"` | accepted; encodes back the same | A `Decimal` is its canonical text, and keeps its scale: `"12.50"` re-encodes as `"12.50"`, not `"12.5"`. |
 | `Price` | `"1e3"` | `StructuralMismatch` at `$` | No exponent form: a `Decimal` is plain digits, so every client reads it exactly. |
@@ -288,9 +290,9 @@ service legacy {
 
 ## Signed queue messages
 
-> **In effect for `Foreign` senders.** A queue consumer whose `by` names one `Foreign` actor (#3899) admits only messages in this format, signed under the actor's secret. A refinement of `Producer` is not yet enforced, and Bynk producers do not sign yet, so a Bynk producer cannot send to such a consumer; the compiler refuses a `Producer` refinement on a queue consumer until it can.
+> **In effect.** A queue consumer whose `by` names only `Foreign` actors and `Producer` refinements (#3899) admits only messages in this format. A Bynk producer in a context such a consumer admits signs what it sends, without the author writing anything.
 
-A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Foreign` actor, see [Queue](/reference/queue/)) receives bodies in this form, and a producer that is not Bynk follows it to be admitted. The producer's secret is the one the actor declares (`actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }`): `bynk deploy` mints it, sets it on the consumer's Worker and prints it once for the producer's operator.
+A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Foreign` actor or a `Producer` refinement, see [Queue](/reference/queue/)) receives bodies in this form. A producer that is not Bynk follows it to be admitted, under the secret the actor declares (`actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }`): `bynk deploy` mints it, sets it on the consumer's Worker and prints it once for the producer's operator. A Bynk producer signs under the key of its edge to the consumer's context (the key `bynk deploy` sets for a call between the two, one per ordered pair of contexts, which the consumer reads under the producer's name), with its own context's qualified name as `from`. The signing input starts with a different line from a call's, so one key never signs both a call and a queue message the other would accept.
 
 ```json
 {

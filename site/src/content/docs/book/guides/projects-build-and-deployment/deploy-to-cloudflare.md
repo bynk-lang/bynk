@@ -1102,6 +1102,37 @@ removes every recorded address the same way.
 
 Email Routing must be turned on for the domain; deploy does not check that.
 
+#### Environments
+
+Wrangler applies `addresses` at the top level only. `bynk deploy --env staging` would
+therefore hand it production's list, which names rules production already holds:
+interactively Wrangler asks before taking such a rule over, and non-interactively it
+refuses after the Worker is already live. So a named environment claims **no address**
+unless `bynk.toml` gives it its own:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+`bynk deploy --env staging` then writes `addresses = ["support@staging.shop.example"]`
+and the staging Worker accepts mail to that address, delivering it to the same service.
+An environment with no entry has its `addresses` left out, which Wrangler documents as
+changing no Email Routing rule (an empty list would delete the Worker's rules); the plan
+says `email: none (no mapping for `staging` in [deploy.email]; …)` rather than listing
+production's addresses, and nothing is pruned. If the environment had a mapped
+address and has lost it, that address's rule is still live (an omitted `addresses`
+changes no rule) and still points at the Worker, which no longer accepts mail to it:
+the plan names it (`email address … no longer accepted`) so you can remove the rule
+in the dashboard, and `bynk.deploy.lock` keeps the record until you do. `default` is
+unchanged, and cannot be mapped.
+
+A key that names no `from email` address, an address Email Routing cannot match, or an
+address two environments (or the source) would both claim, fails the deploy before
+anything is pushed. A mapped address on another domain needs Email Routing turned on
+there too. This follows Wrangler's documentation; it has not yet been observed against a live
+account.
+
 #### Forward destinations
 
 A `Forward(to)` destination must be a **verified destination address** in the

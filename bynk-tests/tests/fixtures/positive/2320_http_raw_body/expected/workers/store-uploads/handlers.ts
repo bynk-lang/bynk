@@ -28,7 +28,7 @@ export const uploads = {
   async http_POST_signed(body: globalThis.Uint8Array, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__bynkBytesToBase64(body));
   },
-  async http_POST_either(body: globalThis.Uint8Array, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_either(body: globalThis.Uint8Array, deps: { who: { tag: "Sender" } | { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "Sender": {
         return HttpResult.Ok(`sender ${String(__bynkBytesToBase64(body))}`);

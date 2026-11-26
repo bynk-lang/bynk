@@ -1,0 +1,45 @@
+commons app.z
+
+// #4352: a declaration reached by several spellings is one declaration: `Status` from the
+// selection, `Y.Status` through the alias and `lib.y.Status` by the full name are one type,
+// so a value of one is a value of the others and a match reads its variants.
+uses lib.y { Status, Point, describe }
+uses lib.y as Y
+
+fn viaAlias(s: Status) -> Y.Status { s }
+
+fn viaFullName(s: Y.Status) -> lib.y.Status { s }
+
+fn back(s: lib.y.Status) -> Status { s }
+
+fn same(a: Status, b: Y.Status, c: lib.y.Status) -> Bool { a == b && b == c }
+
+fn read(s: lib.y.Status) -> Int {
+  match s {
+    On => 1,
+    Off => 0,
+  }
+}
+
+fn named(s: Y.Status) -> String { "\(describe(s))\(Y.describe(s))\(lib.y.describe(s))" }
+
+fn limit() -> Int { Y.Limit + lib.y.Limit }
+
+// Mixed spellings in one record, in generics and in a record literal.
+type Pair = {
+  a: Status,
+  b: Y.Status,
+  c: lib.y.Status,
+}
+
+fn mk(s: Status) -> Pair { Pair { a: s, b: s, c: s } }
+
+fn spread(p: Pair) -> Pair { Pair { ...p, b: p.a } }
+
+fn all(xs: List[Status]) -> List[Y.Status] { xs }
+
+fn first(xs: List[lib.y.Status]) -> Option[Status] { xs.first() }
+
+fn pt() -> Point { lib.y.Point { a: 1 } }
+
+fn pt2() -> Y.Point { Point { a: 2 } }

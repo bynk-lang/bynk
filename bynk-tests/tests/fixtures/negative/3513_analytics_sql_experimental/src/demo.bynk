@@ -2,11 +2,13 @@ context demo
 
 // #3513 B: `AnalyticsSql` is experimental, so using it needs `[unstable] allow`.
 
-consumes bynk.cloudflare { AnalyticsSql }
+consumes bynk.cloudflare { Analytics, AnalyticsSql }
+
+capability Signups = Analytics
 
 service s {
-	on call() -> Effect[Int] by Caller given AnalyticsSql {
-		let r <- AnalyticsSql.query("SELECT 1", [])
+	on call() -> Effect[Int] by Caller given AnalyticsSql, Signups {
+		let r <- AnalyticsSql.query(Signups, "SELECT 1 FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' HOUR", [])
 		match r {
 			Ok(res) => Effect.pure(res.rows),
 			Err(_) => Effect.pure(0),

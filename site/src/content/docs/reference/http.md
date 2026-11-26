@@ -2040,9 +2040,20 @@ service api from http {
 
 In plain mode `Some(v)` is written `v` and `None` is written `null` (the key is
 never dropped), at any depth: in a record, a `List`, a `Map` value, a sum
-variant's field. Everything else about the encoding is unchanged. Bynk's own
-decoder reads the plain shape too ([ADR 0450](/reference/types/#the-json-codec)),
-so a Bynk client still reads the response.
+variant's field. Three more shapes follow the same rule:
+
+| Type | Plain mode writes |
+|---|---|
+| a sum with no payload variant (`enum`) | the variant's name, `"Opened"` |
+| `Map[K, V]` with a `String` key (or a refined or opaque `String`) | a JSON object, `{"bug":"red"}` |
+| `Instant` | an RFC 3339 string in UTC with three fraction digits, `"2026-11-22T10:00:00.000Z"` |
+
+Everything else about the encoding is unchanged: a sum with a payload variant
+keeps its `{"kind": …}` object, and a `Map` with any other key stays a pair array.
+`bynk openapi` describes a plain route's response this way (a string `enum`, an
+object with `additionalProperties`, `format: date-time`). Bynk's own decoder reads
+the plain shapes too ([ADR 0450](/reference/types/#the-json-codec)), so a Bynk
+client still reads the response.
 
 ### The `json { }` section and `@json`
 
@@ -2102,6 +2113,12 @@ caller first and asks then, still before anything else is read. The answer is `4
 (problem details under [`errors { format: problem }`](#error-bodies)). It is the rejection
 `RateLimited(detail)`, so [`on rejected`](#rendering-rejections) can render it and a `system`
 test can assert `Rejected(RateLimited(_))`.
+
+The contract says so. For every route with `@rateLimit`, `bynk openapi` lists a `429` response with a
+`Retry-After` header (the refusal's `{ kind, details }` body, or `application/problem+json` under
+`errors { format: problem }`), and the client `bynk client` generates has a `RateLimited` member in
+the route's response union. A route without the annotation lists neither, and its contract hash is
+unchanged; adding or removing `@rateLimit` moves the route's hash.
 
 - `key: clientIp` counts by the request's `CF-Connecting-IP`, which is reliable only behind
   Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without

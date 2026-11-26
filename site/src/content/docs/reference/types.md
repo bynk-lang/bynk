@@ -491,7 +491,7 @@ disposal (`bynk.held.use_after_consume`), and branches that dispose inconsistent
 A `service … from websocket(in:, out:)` produces connections. The upgrade
 **authenticates at the edge** — like an HTTP route, `on open` must name its actor
 with `by` (there is no anonymous upgrade; a browser `WebSocket` carries a Bearer
-token in the `Sec-WebSocket-Protocol` subprotocol, since it cannot set an
+token in the `Sec-WebSocket-Protocol` subprotocols (`["bynk.bearer", token]`), since it cannot set an
 `Authorization` header) — and the handler receives a fresh, owned `Connection[out]`
 it must dispose, the canonical disposal being transfer into an agent:
 
@@ -725,7 +725,7 @@ Four compiler-backed statics decode and encode JSON at a typed boundary:
 | Form | Type | Purpose |
 |---|---|---|
 | `Json.encode(v)` | `String` | serialise a checked value to a JSON string |
-| `Json.encodePlain(v)` | `String` | `encode` writing an `Option` as the value or `null`, as a non-Bynk API sends it (see [Plain JSON](#plain-json)) |
+| `Json.encodePlain(v)` | `String` | `encode` writing an `Option` as the value or `null`, an enum as its name, a `String`-keyed `Map` as an object and an `Instant` as an RFC 3339 string, as a non-Bynk API sends them (see [Plain JSON](#plain-json)) |
 | `Json.decode[T](s)` | `Result[T, DecodeError]` | parse a JSON string into `T`, validating structure (and any refinements) |
 | `Json.decodeSql[T](s)` | `Result[T, DecodeError]` | `decode` for a `D1` row or list of rows, which also reads `0`/`1` as a `Bool` ([SQL databases](/reference/bynk-capabilities/#sql-databases-d1)) |
 
@@ -740,7 +740,10 @@ program only as a fully-checked value. `DecodeError` is the error it returns
 `Json.encode` writes an `Option[U]` in Bynk's tagged form, `{"kind":"Some","value":v}`
 or `{"kind":"None"}`. `Json.encodePlain(v)` writes what a `json { options: plain }`
 route writes ([JSON for non-Bynk clients](/reference/http/#json-for-non-bynk-clients)):
-`Some(v)` as `v` and `None` as `null`, at any depth.
+`Some(v)` as `v` and `None` as `null`, at any depth. It also writes a sum with no
+payload variant (an `enum`) as its variant's name (`"Opened"`), a `Map` with a
+`String` key as a JSON object and an `Instant` as an RFC 3339 string in UTC
+(`"2026-11-22T10:00:00.000Z"`).
 
 ```bynk
 commons comments
@@ -765,8 +768,9 @@ fn plain(c: NewComment) -> String {
 
 Use it for the text a non-Bynk API reads or sends: an outbound `Fetch.send` body, or
 a test stubbing an external API at the wire. `Json.decode` reads the plain text back
-to the same value (the decoder accepts both forms). It changes `Option` only: sums,
-`Result` and `Map` keep their shapes.
+to the same value (the decoder accepts both forms, and reads these three shapes
+from any JSON, plain mode or not). A sum with a payload variant, `Result` and a
+`Map` with another key type keep their shapes.
 
 Two refusals keep it honest. An `Option` whose payload can itself be `null`
 (`Option[Option[T]]`, `Option[()]`) anywhere in the value's type is

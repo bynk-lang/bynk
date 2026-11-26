@@ -756,6 +756,20 @@
       "summary": "`exports` appears after other declarations."
     }
   ],
+  "fallback_policy": [
+    {
+      "code": "bynk.email.fallback_bad_option",
+      "summary": "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address."
+    },
+    {
+      "code": "bynk.email.fallback_claimed",
+      "summary": "A `fallback` address is one a `from email` service of the project claims."
+    },
+    {
+      "code": "bynk.email.fallback_not_email",
+      "summary": "A `fallback { }` block is on a service that is not `from email`."
+    }
+  ],
   "faults_expr": [
     {
       "code": "bynk.expect.ambiguous_invariant",
@@ -1790,6 +1804,10 @@
       "summary": "A service declares more than one `errors { }` policy."
     },
     {
+      "code": "bynk.parse.duplicate_fallback",
+      "summary": "A service declares more than one `fallback { }` policy."
+    },
+    {
       "code": "bynk.parse.duplicate_json",
       "summary": "A service declares more than one `json { }` policy."
     },
@@ -2014,10 +2032,6 @@
     {
       "code": "bynk.uses.name_conflict",
       "summary": "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
-    },
-    {
-      "code": "bynk.uses.second_spelling",
-      "summary": "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type."
     },
     {
       "code": "bynk.uses.self_reference",

@@ -27,7 +27,7 @@ export const UserId = {
 };
 
 export const api = {
-  async http_POST_orders(deps: { who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_orders(deps: { who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
@@ -40,7 +40,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_orders_token_first(deps: { who: { tag: "ApiClient"; identity: UserId } | { tag: "User"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_orders_token_first(deps: { who: { tag: "ApiClient"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "User"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "ApiClient": {
         const c = deps.who.identity;
@@ -53,7 +53,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_GET_orders(deps: { who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_orders(deps: { who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
@@ -66,7 +66,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_logout(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<void>> {
+  async http_POST_logout(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<void>> {
     switch (deps.who.tag) {
       case "User": {
         const c = await (async () => {
@@ -82,7 +82,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_POST_revoke_all(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<void>> {
+  async http_POST_revoke_all(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } }): globalThis.Promise<HttpResult<void>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
@@ -236,6 +236,9 @@ export function __serialise_Map_String_Int(value: ReadonlyMap<string, number>): 
 }
 
 export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, number>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Int(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

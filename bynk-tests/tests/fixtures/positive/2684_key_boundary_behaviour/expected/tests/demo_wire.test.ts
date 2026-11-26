@@ -437,6 +437,16 @@ export function __serialise_Status(value: __ns_demo_wire.Status): __JsonValue {
 }
 
 export function __deserialise_Status(json: __JsonValue, path: string = "$"): Result<__ns_demo_wire.Status, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as __ns_demo_wire.Status);
+      case "Shipped":
+        return Ok({ tag: "Shipped" } as __ns_demo_wire.Status);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -503,6 +513,9 @@ export function __serialise_Map_String_Int(value: ReadonlyMap<string, number>): 
 }
 
 export function __deserialise_Map_String_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, number>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Int(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

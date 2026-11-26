@@ -94,6 +94,40 @@ routing and deploy see `support@shop.example` as if you had written it there. A
 change is made in one place, and two services that end up claiming the same address
 are still `bynk.email.duplicate_address`.
 
+## Don't lose mail when something fails
+
+When the handler faults, or a message cannot be parsed, the message is rejected, which is a
+permanent SMTP error: the sender is told it was not accepted, even if the cause was a few
+seconds' outage of a database. A `fallback` forwards such mail to a verified address instead:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    fallback { forward: "ops@shop.example" }
+
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Tickets { … }
+}
+```
+
+The forward carries `X-Bynk-Fallback: handler-fault` (or `unreadable`) so whoever receives it
+knows why. The address must be a verified destination address on your Cloudflare account, and not
+one of your service addresses. Mail over the size limit, a `Reply` the platform refuses and a
+`Forward` it refuses are still rejected.
+
+To never reject at all, accept every message and put the work on a queue, so an outage delays
+processing instead of bouncing mail. The queue brings its retries and a dead-letter queue (see
+[Receive a queue message](/book/guides/entry-points/queue/)):
+
+```bynk,ignore
+service support from email("support@shop.example") {
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender given Work {
+        let _ <- Work.sendValue(Ticket { from: mail.from, subject: mail.subject, text: mail.text })
+        Accept
+    }
+}
+```
+
+A queue message is at most 128 KB, so put the parsed fields on the queue, not the attachments.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The

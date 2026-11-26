@@ -2047,6 +2047,9 @@ pub struct HandlerBodyCheck<'a> {
     pub borrowed_held: HashSet<String>,
     /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
     pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`).
+    pub claims_sum_arms: Vec<String>,
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
@@ -2076,6 +2079,7 @@ impl<'a> HandlerBodyCheck<'a> {
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             service_handler: false,
         }
     }
@@ -2102,6 +2106,7 @@ pub fn check_handler_body(
         store_fields,
         borrowed_held,
         claims_binder,
+        claims_sum_arms,
         service_handler: in_service_handler,
     } = check;
     let CheckSinks {
@@ -2194,7 +2199,9 @@ pub fn check_handler_body(
             ..Default::default()
         },
         in_test_body: false,
+        lambda_depth: 0,
         claims_binder,
+        claims_sum_arms,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
@@ -2370,7 +2377,9 @@ pub fn check_body(
         fold_init_expected: None,
         caps,
         in_test_body: true,
+        lambda_depth: 0,
         claims_binder: None,
+        claims_sum_arms: Vec::new(),
         test_services,
         test_actors,
         type_vars: HashSet::new(),
@@ -2384,7 +2393,12 @@ pub fn check_body(
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-        if let Some(actual) = type_of(w, Some(bool_ty), &mut ctx)
+        // #3982: the filter is a plain predicate, lowered as one, not the body that fails the
+        // case on a `?`: counting it as a lambda keeps `?` there under its ordinary rules.
+        ctx.lambda_depth += 1;
+        let filter_ty = type_of(w, Some(bool_ty), &mut ctx);
+        ctx.lambda_depth -= 1;
+        if let Some(actual) = filter_ty
             && actual.base(tys) != Some(BaseType::Bool)
         {
             ctx.errors.push(CompileError::new(
@@ -2744,7 +2758,9 @@ pub fn check_invariants(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2902,7 +2918,9 @@ pub(crate) fn check_contracts(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
@@ -3145,7 +3163,9 @@ pub fn check_transitions(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3340,7 +3360,9 @@ pub fn check_migrations(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3793,9 +3815,16 @@ pub(crate) struct Ctx<'a> {
     /// True when the body being checked is a test case body. Permits
     /// `expect` statements (v0.7; renamed from `assert` in v0.112).
     pub in_test_body: bool,
+    /// #3982: how many lambdas deep the expression being typed is, inside the body of the
+    /// function or test case being checked. A `?` in a test body fails the case only at depth
+    /// 0: inside a lambda it returns from the lambda, by the lambda's own return type.
+    pub lambda_depth: u32,
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
     pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`). Empty elsewhere.
+    pub claims_sum_arms: Vec<String>,
     /// The target unit's services, populated for test case bodies (v0.25).
     /// `svc.call(args)` in a test invokes the target's service; the checker
     /// resolves the service's `on call` handler here to check the call's

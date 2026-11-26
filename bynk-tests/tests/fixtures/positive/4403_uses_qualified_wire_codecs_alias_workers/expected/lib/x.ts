@@ -119,6 +119,14 @@ export function __serialise_IoError(value: IoError): __JsonValue {
 }
 
 export function __deserialise_IoError(json: __JsonValue, path: string = "$"): Result<IoError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Disk":
+        return Ok({ tag: "Disk" } as IoError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -222,6 +230,16 @@ export function __serialise_Status(value: Status): __JsonValue {
 }
 
 export function __deserialise_Status(json: __JsonValue, path: string = "$"): Result<Status, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as Status);
+      case "Shut":
+        return Ok({ tag: "Shut" } as Status);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

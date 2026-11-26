@@ -567,6 +567,40 @@ fn plain_json_options_are_nullable() {
     assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
 }
 
+/// #3974: a plain-JSON route writes an enum as a string enum, a `String`-keyed `Map` as an
+/// object and an `Instant` as a `date-time` string; the tagged route keeps the tagged shapes.
+#[test]
+fn plain_json_enum_map_and_instant_shapes() {
+    let dir = scratch("plain-json-shapes");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plainshapes\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Action = enum { Opened, Closed }\n\n\
+         type Hook = { action: Action, labels: Map[String, String], at: Instant, tally: Map[Int, String] }\n\n\
+         service plain from http {\n  json { options: plain }\n\n  \
+           on GET(\"/plain\") () -> Effect[HttpResult[Hook]] by v: Visitor {\n    Ok(Hook { action: Opened, labels: Map.empty(), at: Instant.fromEpochMillis(0), tally: Map.empty() })\n  }\n}\n\n\
+         service tagged from http {\n  \
+           on GET(\"/tagged\") () -> Effect[HttpResult[Hook]] by v: Visitor {\n    Ok(Hook { action: Opened, labels: Map.empty(), at: Instant.fromEpochMillis(0), tally: Map.empty() })\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let s = &d["components"]["schemas"];
+    let plain = &s["Hook.plain"]["properties"];
+    assert_eq!(plain["at"]["format"], "date-time");
+    assert_eq!(plain["labels"]["type"], "object");
+    assert_eq!(plain["labels"]["additionalProperties"]["type"], "string");
+    assert_eq!(plain["tally"]["type"], "array");
+    assert_eq!(s["Action.plain"]["enum"][0], "Opened");
+    let tagged = &s["Hook"]["properties"];
+    assert_eq!(tagged["at"]["type"], "integer");
+    assert_eq!(tagged["labels"]["type"], "array");
+    assert!(s["Action"]["oneOf"].is_array());
+}
+
 /// #3916: a `format: problem` route documents its errors as `application/problem+json`
 /// with the shared `BynkProblemDetails` schema; a route with no such section, and a
 /// route that overrides it with `@errors(format: bynk)`, keep Bynk's own bodies.
@@ -614,6 +648,115 @@ fn problem_details_routes_document_problem_json() {
         schema["required"],
         serde_json::json!(["type", "title", "status"])
     );
+}
+
+/// #4434: a `@rateLimit` route can answer `429` before its body is read, whichever key it
+/// counts by, so the document lists it with the `Retry-After` header; a route without the
+/// annotation lists none, and on a `format: problem` service the refusal is problem details.
+#[test]
+fn a_rate_limited_route_lists_its_429_and_retry_after() {
+    let dir = scratch("rate-limited");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         consumes bynk.cloudflare { RateLimit }\n\n\
+         type UserId = String where NonEmpty\n\n\
+         actor Reader { auth = Bearer(secret = \"API_TOKEN_SECRET\"), identity = UserId }\n\n\
+         capability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\
+         capability NoteLimit = RateLimit @limit(2) @period(60.seconds)\n\n\
+         service api from http {\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(NoteLimit, key: identity)\n  \
+           on POST(\"/notes\") (body: String) -> Effect[HttpResult[String]] by r: Reader {\n    Ok(\"noted\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n\n  \
+           on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"up\")\n  }\n}\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol-mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let refusal = |path: &str| d["paths"][path]["post"]["responses"]["429"].clone();
+    for path in ["/signup", "/notes"] {
+        let r = refusal(path);
+        assert!(r.is_object(), "{path} lists a 429: {r}");
+        assert_eq!(r["headers"]["Retry-After"]["required"], true, "{path}");
+        assert_eq!(
+            r["headers"]["Retry-After"]["schema"]["type"], "integer",
+            "{path}"
+        );
+        assert_eq!(
+            r["content"]["application/json"]["schema"]["properties"]["kind"]["const"],
+            "RateLimited",
+            "{path}"
+        );
+    }
+    // A route with no `@rateLimit` cannot answer one.
+    assert!(
+        d["paths"]["/health"]["get"]["responses"]
+            .get("429")
+            .is_none()
+    );
+    // On a problem-details service the refusal is `application/problem+json`, still with the header.
+    let p = refusal("/enrol");
+    assert_eq!(
+        p["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/BynkProblemDetails"
+    );
+    assert!(p["content"].get("application/json").is_none());
+    assert_eq!(p["headers"]["Retry-After"]["required"], true);
+    // Where a handler also answers `429`, one response holds both: two bodies under one media type
+    // (`oneOf`) on a plain service, one problem schema on a problem service, and `Retry-After` is
+    // no longer required because the handler's own `429` need not carry it.
+    let m = refusal("/mixed");
+    let one_of = m["content"]["application/json"]["schema"]["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a oneOf of the two bodies: {m}"));
+    assert_eq!(one_of.len(), 2, "{m}");
+    let kinds: Vec<_> = one_of
+        .iter()
+        .map(|s| {
+            s["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(kinds.contains(&vec!["error".to_string()]), "{kinds:?}");
+    assert!(
+        kinds.contains(&vec!["details".to_string(), "kind".to_string()]),
+        "{kinds:?}"
+    );
+    assert_eq!(m["headers"]["Retry-After"]["required"], false);
+    assert!(
+        m["description"]
+            .as_str()
+            .unwrap()
+            .contains("TooManyRequests")
+            && m["description"].as_str().unwrap().contains("RateLimited")
+    );
+    let pm = refusal("/enrol-mixed");
+    assert_eq!(
+        pm["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/BynkProblemDetails"
+    );
+    assert_eq!(pm["headers"]["Retry-After"]["required"], false);
+    // A route the router alone refuses keeps the header required.
+    assert_eq!(
+        refusal("/signup")["headers"]["Retry-After"]["required"],
+        true
+    );
+    golden("openapi-rate-limited.json", &pretty(&d));
 }
 
 /// #2858: a type shared by a plain route's request body and response renders the
