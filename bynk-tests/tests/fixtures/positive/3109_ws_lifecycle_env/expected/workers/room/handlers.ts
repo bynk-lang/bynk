@@ -10,7 +10,7 @@ import { __readStored, __commitStored, __readsLazily } from "../../__bynk_runtim
 import { __attachLazy } from "../../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketAdmit, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __registerFrameEncoder, __webSocketAdmit, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export type UserId = string & { readonly __brand: "room.UserId" };
 
@@ -144,7 +144,7 @@ export class Room {
     if (url.pathname === "/_bynk/ws/open/chat") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, exp: __payload.exp });
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, svc: "chat", exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
@@ -207,6 +207,8 @@ export class Room {
     });
   }
 }
+
+__registerFrameEncoder("chat", (frame: Frame) => __serialise_Frame(frame));
 
 const __RoomWire: __AgentWire = {
   join: { args: [{ enc: (__v: string) => __v as __JsonValue, dec: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }, __AGENT_WIRE_PASS], result: { enc: (__v: void) => null, dec: (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError> } },

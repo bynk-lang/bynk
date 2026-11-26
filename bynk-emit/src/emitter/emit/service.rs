@@ -57,21 +57,30 @@ fn schema_version_test(env_binder: &str, version: SchemaVersionIr) -> Option<byn
 fn ws_frame_entries(
     s: &ServiceDecl,
     protocol: &ProtocolIr,
+    commons: &TypedCommons,
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsObjectEntry> {
-    if !matches!(protocol, ProtocolIr::WebSocket { .. })
-        || matches!(ctx.target, BuildTarget::Workers)
-    {
+    let ProtocolIr::WebSocket { out_ty, .. } = protocol else {
+        return Vec::new();
+    };
+    if matches!(ctx.target, BuildTarget::Workers) {
         return Vec::new();
     }
-    vec![bynk_ts::TsObjectEntry::prop(
-        "maxFrame".to_string(),
-        crate::ts_build::num_lit(
-            s.limits
-                .as_ref()
-                .map_or(bynk_syntax::ast::DEFAULT_MAX_FRAME, |l| l.max_frame()),
+    // #4549: `encodeOut`, the codec an `out` frame is written with, which the same call hands the
+    // `TestConnection`. A plain `Bytes` frame is binary and has none.
+    let encode = super::websocket::ws_out_encoder(*out_ty, commons, ctx)
+        .unwrap_or_else(crate::emitter::internal_fault::undefined_node);
+    vec![
+        bynk_ts::TsObjectEntry::prop(
+            "maxFrame".to_string(),
+            crate::ts_build::num_lit(
+                s.limits
+                    .as_ref()
+                    .map_or(bynk_syntax::ast::DEFAULT_MAX_FRAME, |l| l.max_frame()),
+            ),
         ),
-    )]
+        bynk_ts::TsObjectEntry::prop("encodeOut".to_string(), encode),
+    ]
 }
 
 /// A service's declarations (1A.32a, Decision A of #3733): its doc comment, if any, then
@@ -90,7 +99,7 @@ pub(crate) fn emit_service(
     ctx: &EmitProjectCtx,
 ) -> Vec<bynk_ts::TsStmt> {
     let tys = UnitFacts::of(ctx).render(commons);
-    let mut entries = ws_frame_entries(s, protocol, ctx);
+    let mut entries = ws_frame_entries(s, protocol, commons, ctx);
     let mut cron_idx = 0usize;
     let mut queue_idx = 0usize;
     let ws_proto = matches!(protocol, ProtocolIr::WebSocket { .. });

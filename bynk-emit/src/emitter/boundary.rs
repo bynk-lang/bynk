@@ -365,11 +365,24 @@ pub(super) fn emit_boundary_helpers(
         // #1678: on `workers` an agent call crosses a Durable Object `fetch`, so
         // every agent handler's parameter and return types are boundary types
         // too. On `bundle` the call is in-process and needs no codec.
-        let agent_call_roots: Vec<TypeRef> = if workers {
+        let mut agent_call_roots: Vec<TypeRef> = if workers {
             agent_call_boundary_roots(&agents, ctx.inspect_agents)
         } else {
             Vec::new()
         };
+        // #4549: a `from websocket` service's `out` frame type is written by its codec on `workers`, so it is a
+        // boundary type too (its `in` type already is, as `on message`'s parameter).
+        if workers {
+            let mut names: Vec<&String> = services.keys().collect();
+            names.sort();
+            for name in names {
+                if let bynk_syntax::ast::ServiceProtocol::WebSocket { out_type, .. } =
+                    &services[name].protocol
+                {
+                    agent_call_roots.push(out_type.clone());
+                }
+            }
+        }
         let boundary_types_all =
             collect_boundary_types(&commons.types, &services, &agents, &agent_call_roots);
         // Locally-declared boundary types get full helpers in this module. On

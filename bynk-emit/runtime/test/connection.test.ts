@@ -7,6 +7,7 @@ import {
   OIDC_SUBPROTOCOL,
   TestConnection,
   WorkersConnection,
+  registerFrameEncoder,
   closeArguments,
   webSocketAdmit,
   webSocketAuthExpired,
@@ -420,4 +421,42 @@ test("a TestConnection opened by a service holds that service's maxFrame (#3905)
   await bounded.send(new Uint8Array(8));
   await assert.rejects(bounded.send(new Uint8Array(9)), /over the service's maxFrame of 8/);
   assert.equal(bounded.sent.length, 1);
+});
+
+test("a JSON frame is written by the codec registered for the service its socket names (#4549)", async () => {
+  // The runtime's own shape of an `Option` is `{ tag }`; the codec's wire form is `{ kind }`.
+  registerFrameEncoder<{ note: { tag: "None" } | { tag: "Some"; value: string } }>("codec-test", (f) => ({
+    note: f.note.tag === "Some" ? { kind: "Some", value: f.note.value } : { kind: "None" },
+  }));
+  const ws = fakeSocket({ connId: "c", max: 1000, svc: "codec-test" });
+  const conn = new WorkersConnection<{ note: { tag: "None" } | { tag: "Some"; value: string } }>(ws, "c");
+  await conn.send({ note: { tag: "Some", value: "x" } });
+  await conn.send({ note: { tag: "None" } });
+  assert.deepEqual(ws.sent, ['{"note":{"kind":"Some","value":"x"}}', '{"note":{"kind":"None"}}']);
+  // The size ceiling is judged on what goes out, not on the runtime shape.
+  const small = fakeSocket({ connId: "c", max: 20, svc: "codec-test" });
+  await assert.rejects(new WorkersConnection<never>(small, "c").send({ note: { tag: "Some", value: "xxxxxxxxxxxx" } } as never), /over the service's maxFrame of 20/);
+  // A socket that names no service, or one nothing registered, is sent as it always was.
+  const old = fakeSocket({ connId: "c" });
+  await new WorkersConnection<unknown>(old, "c").send({ tag: "None" });
+  assert.equal(old.sent[0], '{"tag":"None"}');
+  const unknown = fakeSocket({ connId: "c", svc: "not-registered" });
+  await new WorkersConnection<unknown>(unknown, "c").send({ a: 1 });
+  assert.equal(unknown.sent[0], '{"a":1}');
+  // A binary service keeps its frames binary: it has no `svc`, so no codec.
+  const bin = fakeSocket({ connId: "c", bin: true, svc: "codec-test" });
+  await new WorkersConnection<unknown>(bin, "c").send(new Uint8Array([1, 2]));
+  assert.ok(bin.sent[0] instanceof Uint8Array);
+});
+
+test("a TestConnection runs the service's codec, keeps the frame as written, and sizes the wire form (#4549)", async () => {
+  const tc = new TestConnection<{ n: bigint }>();
+  tc.remember([], {}, 12, (f) => ({ n: f.n.toString() }));
+  await tc.send({ n: 12n });
+  assert.deepEqual(tc.sent, [{ n: 12n }]);
+  await assert.rejects(tc.send({ n: 123456789n }), /over the service's maxFrame of 12/);
+  // With no codec handed over, as before.
+  const plain = new TestConnection<{ n: number }>();
+  await plain.send({ n: 1 });
+  assert.deepEqual(plain.sent, [{ n: 1 }]);
 });
