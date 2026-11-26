@@ -2128,7 +2128,18 @@ diagnostic-code links (`codeDescription`) and the language server's
 the editor never disagree.
 
 **Exit code** — `0` for any code the compiler recognises (explained or not);
-non-zero for an unrecognised code.
+non-zero for an unrecognised code. A misspelt code that is close to a real one
+also gets a `did you mean` line, found by the same search as
+`bynk check --fix=<code>`, so the two commands suggest the same code:
+
+```text
+$ bynk explain bynk.types.not_orderabel
+error: `bynk.types.not_orderabel` is not a diagnostic code the compiler emits.
+did you mean `bynk.types.not_orderable`?
+Diagnostic codes look like `bynk.resolve.unknown_type`; see … for the full list.
+```
+
+A code far from any real one gets the message without the suggestion.
 
 ---
 

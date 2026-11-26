@@ -32,6 +32,7 @@ mod http_policy;
 mod queue;
 mod respond;
 mod scheduled;
+pub(crate) mod trace_scope;
 mod websocket;
 mod wire;
 
@@ -68,9 +69,13 @@ fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
         ident("globalThis.console"),
         "error",
         vec![
-            TsExpr::template_lit(
-                vec![format!("{context} "), " faulted".to_string()],
-                vec![ident("__route")],
+            // #3895: inside a trace the line names it.
+            call(
+                ident("__withTrace"),
+                vec![TsExpr::template_lit(
+                    vec![format!("{context} "), " faulted".to_string()],
+                    vec![ident("__route")],
+                )],
             ),
             fault_detail("e"),
         ],
@@ -696,7 +701,7 @@ pub fn emit_worker_entry(
         &[],
     ));
     program.push(TsStmt::decl(
-        TsDecl::ExportDefault(TsExpr::multiline_object_entries(default_entries)),
+        TsDecl::ExportDefault(trace_scope::export_default(default_entries)),
         None,
     ));
 
