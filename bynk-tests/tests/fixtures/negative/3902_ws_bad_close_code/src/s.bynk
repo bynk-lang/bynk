@@ -1,0 +1,14 @@
+context s
+
+type ServerFrame = { text: String }
+type ClientFrame = { text: String }
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[ServerFrame]]
+
+  on call kick(conn: Connection[ServerFrame]) -> Effect[()] {
+    let _ <- conn.close(1006, "gone")
+    ()
+  }
+}

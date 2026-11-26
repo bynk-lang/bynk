@@ -18,4 +18,8 @@ agent Room {
 
 service gateway from websocket(in: Frame, out: Frame) {
   on open (room: RoomId) -> Effect[()] by user: Member { let _ <- Room(room).join(user.identity, connection) () }
+
+  on close (room: RoomId) -> Effect[()] by user: Member {
+    ()
+  }
 }

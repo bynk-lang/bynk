@@ -5039,11 +5039,16 @@ impl LanguageServer for Backend {
             return Ok(None);
         }
         // #4352: a name written through a `uses` qualifier highlights the name alone.
-        let span = crate::index_queries::narrow_qualified_span(
-            text,
-            site.span,
-            crate::index_queries::key_segment(&key.name),
-        );
+        // #4183: a unit's dotted name is the whole of what is renamed.
+        let span = if key.kind == bynk_check::index::SymbolKind::Unit {
+            site.span
+        } else {
+            crate::index_queries::narrow_qualified_span(
+                text,
+                site.span,
+                crate::index_queries::key_segment(&key.name),
+            )
+        };
         Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
             range: crate::position::span_to_range(text, span),
             placeholder: key.name.clone(),
@@ -5156,6 +5161,9 @@ impl LanguageServer for Backend {
                     .map(|d| (f.source_path.clone(), d.error.category.to_string()))
             })
             .collect();
+        // #4183: a unit rename leaves its files' paths for the user to move, which the layout
+        // diagnostic reports and the warning below says; it is not a collision.
+        let post_diags = crate::index_queries::without_expected_diagnostics(&plan, post_diags);
         crate::index_queries::no_new_diagnostics(&analysis.diag_categories(), &post_diags)
             .map_err(refused)?;
 
@@ -5189,6 +5197,13 @@ impl LanguageServer for Backend {
             &plan,
         )
         .map_err(refused)?;
+
+        // #4183 (decision B): a unit rename edits the name, not the files that lay it out.
+        for warning in crate::index_queries::layout_warnings(&plan, &analysis.snapshots) {
+            self.client
+                .show_message(MessageType::WARNING, warning)
+                .await;
+        }
 
         // Versioned edits: the client rejects the rename if a buffer drifted
         // past the analysed version rather than mis-applying it.

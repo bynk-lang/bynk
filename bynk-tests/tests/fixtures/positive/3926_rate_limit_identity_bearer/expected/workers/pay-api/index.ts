@@ -53,7 +53,7 @@ export default {
             const __v = await surface.http_POST_notes__verify(request);
             if (__v.tag === "Err") {
               const result = __v.error;
-              return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bearer realm=\"pay.api\""])), __security_api);
+              return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /notes" }), request, ["Bearer realm=\"pay.api\""])), __security_api);
             }
             if (!await __rateLimitAllowsKey(env.RATELIMIT_NOTE_LIMIT, __v.value.key)) {
               return __applySecurityHeaders(__rateLimitedResponse(60), __security_api);
@@ -84,7 +84,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_notes(body, __v.value.principal);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bearer realm=\"pay.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /notes" }), request, ["Bearer realm=\"pay.api\""])), __security_api);
           }
         }
         {

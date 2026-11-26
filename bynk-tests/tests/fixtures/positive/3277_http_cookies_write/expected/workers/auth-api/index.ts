@@ -75,7 +75,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_bad(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"auth.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /bad" }), request, ["Bynk realm=\"auth.api\""]), __security_api);
           }
         }
         {
@@ -107,21 +107,21 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_login(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"auth.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /login" }), request, ["Bynk realm=\"auth.api\""]), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/logout", path) !== null) {
             __route = "POST /logout";
             const result = await surface.http_POST_logout();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"auth.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /logout" }), request, ["Bynk realm=\"auth.api\""]), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/prefs", path) !== null) {
             __route = "POST /prefs";
             const result = await surface.http_POST_prefs();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"auth.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /prefs" }), request, ["Bynk realm=\"auth.api\""]), __security_api);
           }
         }
         if (__matchPath("/bad", path) !== null) {

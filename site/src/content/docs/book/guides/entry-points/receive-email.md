@@ -128,6 +128,26 @@ service support from email("support@shop.example") {
 
 A queue message is at most 128 KB, so put the parsed fields on the queue, not the attachments.
 
+## Forward and acknowledge
+
+One verdict can do several things: forward to billing and audit, tell the customer, and tag the
+forwards so the receiving mailbox can file them. Build it with `Route`:
+
+```bynk,ignore
+on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+        tag: Map.empty().insert("X-Ticket", "T-1234"),
+    })
+}
+```
+
+The reply goes first, then each forward. A refused action is logged and the rest still run; the
+message is rejected only when every action was refused, because a forward cannot be taken back.
+Every literal destination is checked at deploy to be a verified destination address, as for a
+plain `Forward`.
+
 ## Thread a conversation
 
 `inReplyTo` and `references` are the message ids the sender says this message answers, as

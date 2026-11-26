@@ -1762,6 +1762,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
     },
     Explain {
+        code: "bynk.email.bad_tag",
+        blurb: "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` (or `x-`, header names are case-insensitive) and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map written in a handler body that breaks this is refused when the program compiles; one built elsewhere, in a helper function or at run time, has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
+        example: "on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"Subject\", \"urgent\"),   // ✗ not an `X-` header\n    })\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"X-Ticket\", \"urgent\"),   // ✓\n    })\n}",
+    },
+    Explain {
         code: "bynk.email.duplicate_address",
         blurb: "Inbound mail is dispatched to a service by its envelope recipient, so each address belongs to one service. Addresses compare without regard to case. A literal address and the catch-all `*@domain` for the same domain may both be claimed: the literal address wins, and the catch-all takes everything else. Merge the two handlers, or claim different addresses.",
         example: "service support from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }   // ✓ its own address",
@@ -7110,6 +7115,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let r <- Pricing.quote(id).within(2.seconds)   // ✗ `TimedOut` is not in scope\n\nconsumes bynk { TimedOut }                     // ✓ in the unit's header\nlet r <- Pricing.quote(id).within(2.seconds)",
     },
     Explain {
+        code: "bynk.ws.bad_close_code",
+        blurb: "`connection.close(code, reason)` sends a close code to the client. An application may send `1000` (a normal closure) or a code from `3000` to `4999`. `1001` to `2999` belong to the protocol, and `1004`, `1005`, `1006` and `1015` are never sent on the wire. A literal code outside that is refused here; a computed one faults at run time. Use `1000`, or a code from `3000` to `4999` that your clients know.",
+        example: "agent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(1006, \"gone\")   // ✗ `1006` is never sent on the wire\n        ()\n    }\n}\n\nagent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(4001, \"room archived\")   // ✓ an application code\n        ()\n    }\n}",
+    },
+    Explain {
+        code: "bynk.ws.bad_close_reason",
+        blurb: "A close frame carries its reason in at most 123 bytes of UTF-8, the protocol's limit. A literal reason longer than that is refused here; a computed one is cut to 123 bytes on a character boundary. Shorten the reason, and put anything longer in a frame sent before closing.",
+        example: "        let _ <- conn.close(4001, \"the room was archived by an administrator after twelve months without any activity, and its members were moved to the general room\")   // ✗ over the protocol's limit\n        let _ <- conn.close(4001, \"room archived\")   // ✓",
+    },
+    Explain {
         code: "bynk.ws.lifecycle_by_mismatch",
         blurb: "The connection's principal is verified once, by `on open`'s `by`, and carried for the life of the connection; `on message` and `on close` read it and never verify again. So their `by` must name the same actor as `on open`'s, or the same members of an actor sum. The binder names may differ. Change the lifecycle handler's `by` to match `on open`.",
         example: "actor Member { … }\nactor Admin { … }\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on message (room: RoomId, frame: Frame) -> Effect[()] by admin: Admin { … }   // ✗ `on open` is `by` `Member`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
@@ -7118,6 +7133,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.ws.message_frame_param",
         blurb: "A WebSocket `on message` handler is called with a decoded inbound frame, so it needs exactly one parameter of the service's `in:` type. Any other parameters are route values recovered from the connection. Add the frame parameter. A route value whose type differs from `on open`'s is `bynk.ws.route_param_mismatch`.",
         example: "service gateway from websocket(in: Frame, out: Frame) {\n    on message (room: RoomId) -> Effect[()] by user: Member { … }                  // ✗ no `Frame` parameter\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.ws.missing_close",
+        blurb: "A WebSocket service has an `on close` handler. `on open` always hands its connection to an agent's state, and the runtime cannot tell which store entry holds it, so nothing removes it when the client leaves. Without `on close`, a departed client's dead connection stays held, and the next broadcast to it raises, so one departure breaks every later broadcast to the room. Add `on close` with the same leading route parameters and `by` as `on open`, and release the connection there. A trailing `close: CloseInfo` parameter carries the close code and reason.",
+        example: "service gateway from websocket(in: Frame, out: Frame) {   // ✗ no `on close`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n    on close (room: RoomId, close: CloseInfo) -> Effect[()] by user: Member { … }   // ✓ releases the connection\n}",
     },
     Explain {
         code: "bynk.ws.open_given_unsupported",
@@ -8217,6 +8237,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.email.bad_params",
         "An email `on message` handler does not take exactly one `InboundEmail` parameter.",
+    ),
+    d(
+        "bynk.email.bad_tag",
+        "A literal `tag` header of a `Route` verdict is not an `X-` header name with letters, digits and `-`, or its value has a line break.",
     ),
     d(
         "bynk.email.duplicate_address",
@@ -11728,12 +11752,24 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     d(
+        "bynk.ws.bad_close_code",
+        "A WebSocket `connection.close(code, reason)` names a literal close code an application may not send — only `1000` and `3000`–`4999` (#3902).",
+    ),
+    d(
+        "bynk.ws.bad_close_reason",
+        "A WebSocket `connection.close(code, reason)` names a literal reason over the protocol's 123 bytes of UTF-8 (#3902).",
+    ),
+    d(
         "bynk.ws.lifecycle_by_mismatch",
         "A WebSocket `on message`/`on close` handler's `by` clause does not name the same actor(s) as `on open`'s — the connection's principal is verified once, at `on open`, and carried for its life, so the lifecycle handlers must be the same single actor or the same actor-sum members (binder names may differ).",
     ),
     d(
         "bynk.ws.message_frame_param",
         "A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii).",
+    ),
+    d(
+        "bynk.ws.missing_close",
+        "A `from websocket` service has no `on close` handler, so a departed client's connection, held in an agent by `on open`, is never released (#3902).",
     ),
     d(
         "bynk.ws.open_given_unsupported",

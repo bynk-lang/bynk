@@ -5,6 +5,10 @@ import assert from "node:assert/strict";
 import {
   BEARER_SUBPROTOCOL,
   TestConnection,
+  WorkersConnection,
+  closeArguments,
+  webSocketClosing,
+  webSocketErrored,
   webSocketBearerOffer,
   webSocketBearerProtocol,
   webSocketBearerRefusal,
@@ -99,4 +103,118 @@ test("the 101 carries the selected subprotocol, and none when none is selected",
   assert.deepEqual(seen[0].headers, { "Sec-WebSocket-Protocol": "bynk.bearer" });
   assert.equal(seen[1].status, 101);
   assert.equal(seen[1].headers, undefined);
+});
+
+// #3902: close(code?, reason?), and the close handshake the Durable Object completes.
+test("a TestConnection records the code and reason it was closed with", async () => {
+  const tc = new TestConnection<string>();
+  await tc.close(4001, "room archived");
+  assert.equal(tc.closed, true);
+  assert.equal(tc.closeCode, 4001);
+  assert.equal(tc.closeReason, "room archived");
+  assert.deepEqual(tc.closeCodeOption(), { tag: "Some", value: 4001 });
+  assert.deepEqual(tc.closeReasonOption(), { tag: "Some", value: "room archived" });
+  const bare = new TestConnection<string>();
+  await bare.close();
+  assert.equal(bare.closeCode, undefined);
+  assert.equal(bare.closeCodeOption().tag, "None");
+  assert.equal(bare.closeReasonOption().tag, "None");
+});
+
+test("a computed close code outside 1000 and 3000-4999 faults; a long reason is cut on a character boundary", () => {
+  for (const bad of [999, 1001, 1004, 1005, 1006, 1015, 2999, 5000, 1000.5]) {
+    assert.throws(() => closeArguments(bad), /not a close code/, String(bad));
+  }
+  assert.deepEqual(closeArguments(1000), { code: 1000 });
+  assert.deepEqual(closeArguments(3000, "ok"), { code: 3000, reason: "ok" });
+  // 40 three-byte characters are 120 bytes; 41 are 123; 42 are 126 and are cut to 41.
+  const cut = closeArguments(4000, "€".repeat(42));
+  assert.equal(cut.reason, "€".repeat(41));
+  assert.ok(new TextEncoder().encode(cut.reason).length <= 123);
+});
+
+test("a WorkersConnection closes with exactly the arguments it was given", async () => {
+  const calls: unknown[][] = [];
+  const ws = { send: () => {}, close: (...a: unknown[]) => void calls.push(a) };
+  const c = new WorkersConnection<string>(ws, "id");
+  await c.close();
+  await c.close(4001);
+  await c.close(4001, "bye");
+  assert.deepEqual(calls, [[], [4001], [4001, "bye"]]);
+});
+
+function socket() {
+  const closes: unknown[][] = [];
+  const attachments: unknown[] = [];
+  return {
+    closes,
+    attachments,
+    ws: {
+      close: (...a: unknown[]) => void closes.push(a),
+      serializeAttachment: (v: unknown) => void attachments.push(v),
+    },
+  };
+}
+
+test("webSocketClosing runs the handler with the peer's details, marks the socket, then echoes the code", async () => {
+  const s = socket();
+  const seen: unknown[] = [];
+  await webSocketClosing(s.ws, { connId: "c" }, { code: 4001, reason: "bye", clean: true }, async (i) => void seen.push(i));
+  assert.deepEqual(seen, [{ code: 4001, reason: "bye", clean: true }]);
+  assert.deepEqual(s.attachments, [{ connId: "c", closed: true }]);
+  assert.deepEqual(s.closes, [[4001, "bye"]]);
+});
+
+test("a close code that cannot be sent is acknowledged with a bare close()", async () => {
+  for (const code of [1005, 1006, 1004, 1015, 0, 5000]) {
+    const s = socket();
+    await webSocketClosing(s.ws, { connId: "c" }, { code, reason: "", clean: false }, async () => {});
+    assert.deepEqual(s.closes, [[]], String(code));
+  }
+});
+
+test("the handshake completes after a faulting handler, and the fault still propagates", async () => {
+  const s = socket();
+  await assert.rejects(
+    webSocketClosing(s.ws, { connId: "c" }, { code: 1000, reason: "", clean: true }, async () => {
+      throw new Error("boom");
+    }),
+    /boom/,
+  );
+  assert.deepEqual(s.closes, [[1000, ""]]);
+});
+
+test("a socket already closed by an error replies but does not run the handler again", async () => {
+  const s = socket();
+  let runs = 0;
+  const run = async () => void (runs += 1);
+  const errors: unknown[] = [];
+  const log = console.error;
+  console.error = (...a: unknown[]) => void errors.push(a);
+  try {
+    const att = { connId: "c" };
+    await webSocketErrored(s.ws, att, new TypeError("secret frame text"), run);
+    assert.equal(runs, 1);
+    assert.deepEqual(s.closes, [[1011, "error"]]);
+    // The platform then delivers the close for the same socket, whose attachment is now marked.
+    await webSocketClosing(s.ws, s.attachments[0], { code: 1011, reason: "error", clean: false }, run);
+    assert.equal(runs, 1);
+  } finally {
+    console.error = log;
+  }
+  assert.deepEqual(errors, [["websocket error: TypeError"]]);
+  assert.ok(!JSON.stringify(errors).includes("secret frame text"));
+});
+
+test("an error reports the info on_close sees as code 1011, reason error, not clean", async () => {
+  const s = socket();
+  const seen: unknown[] = [];
+  const log = console.error;
+  console.error = () => {};
+  try {
+    await webSocketErrored(s.ws, { connId: "c" }, "nope", async (i) => void seen.push(i));
+  } finally {
+    console.error = log;
+  }
+  assert.deepEqual(seen, [{ code: 1011, reason: "error", clean: false }]);
 });

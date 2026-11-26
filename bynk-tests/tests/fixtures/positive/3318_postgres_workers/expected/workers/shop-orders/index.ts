@@ -55,7 +55,7 @@ export default {
             const __raw_name = __m.params["name"];
             const name = __raw_name;
             const result = await surface.http_POST_orders_Param_name(name);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.orders\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /orders/:name" }), request, ["Bynk realm=\"shop.orders\""]), __security_api);
           }
         }
         if (__matchPath("/orders", path) !== null) {

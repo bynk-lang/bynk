@@ -11,7 +11,38 @@ import type { DurableObjectState } from "./storage.ts";
 
 export interface Connection<F> {
   send(frame: F): Promise<void>;
-  close(): Promise<void>;
+  close(code?: number, reason?: string): Promise<void>;
+}
+
+// #3902: the close code and reason a `close(code?, reason?)` carries. An application code is `1000` or
+// `3000`–`4999` (RFC 6455 reserves the rest, and `1004`, `1005`, `1006` and `1015` are never sent). A
+// literal outside that is a compile error, so one reaching here was computed: it faults. A computed
+// reason is cut to the protocol's 123 bytes of UTF-8 on a character boundary.
+const CLOSE_REASON_MAX_BYTES = 123;
+
+export function closeArguments(code?: number, reason?: string): { code?: number; reason?: string } {
+  if (code === undefined) {
+    return {};
+  }
+  if (!Number.isInteger(code) || (code !== 1000 && (code < 3000 || code > 4999))) {
+    throw new Error(`Connection.close: ${code} is not a close code an application may send (1000, or 3000 to 4999)`);
+  }
+  if (reason === undefined) {
+    return { code };
+  }
+  const encoder = new TextEncoder();
+  if (encoder.encode(reason).length <= CLOSE_REASON_MAX_BYTES) {
+    return { code, reason };
+  }
+  let cut = "";
+  let bytes = 0;
+  for (const ch of reason) {
+    const n = encoder.encode(ch).length;
+    if (bytes + n > CLOSE_REASON_MAX_BYTES) break;
+    cut += ch;
+    bytes += n;
+  }
+  return { code, reason: cut };
 }
 
 // v0.103: the bundle/test realisation of a `Connection[F]` — a capture-and-inspect
@@ -22,14 +53,30 @@ export interface Connection<F> {
 export class TestConnection<F> implements Connection<F> {
   readonly sent: F[] = [];
   closed = false;
+  // #3902: the code and reason the server closed with, when it gave them.
+  closeCode: number | undefined = undefined;
+  closeReason: string | undefined = undefined;
 
   async send(frame: F): Promise<void> {
     if (this.closed) throw new Error("send on a closed TestConnection");
     this.sent.push(frame);
   }
 
-  async close(): Promise<void> {
+  async close(code?: number, reason?: string): Promise<void> {
+    const given = closeArguments(code, reason);
     this.closed = true;
+    this.closeCode = given.code;
+    this.closeReason = given.reason;
+  }
+
+  /** The code the server closed with, as `Option[Int]`: `None` before a close, or when it gave none. */
+  closeCodeOption(): Option<number> {
+    return this.closeCode === undefined ? None : Some(this.closeCode);
+  }
+
+  /** The reason the server closed with, as `Option[String]`. */
+  closeReasonOption(): Option<string> {
+    return this.closeReason === undefined ? None : Some(this.closeReason);
   }
 
   // #3051: what a case's `svc.open(tc, …)` records so a later `svc.message(tc, …)`
@@ -76,10 +123,10 @@ export class WorkersConnection<F> implements Connection<F> {
   // Explicit fields + assignment, not constructor parameter properties — Node's
   // `--experimental-strip-types` (the `--inspect` debug path runs the emitted `.ts`
   // directly) rejects parameter properties, which are not erasable.
-  private readonly ws: { send(data: string): void; close(): void };
+  private readonly ws: { send(data: string): void; close(code?: number, reason?: string): void };
   readonly connId: string;
 
-  constructor(ws: { send(data: string): void; close(): void }, connId: string) {
+  constructor(ws: { send(data: string): void; close(code?: number, reason?: string): void }, connId: string) {
     this.ws = ws;
     this.connId = connId;
   }
@@ -88,8 +135,15 @@ export class WorkersConnection<F> implements Connection<F> {
     this.ws.send(JSON.stringify(frame));
   }
 
-  async close(): Promise<void> {
-    this.ws.close();
+  async close(code?: number, reason?: string): Promise<void> {
+    const given = closeArguments(code, reason);
+    if (given.code === undefined) {
+      this.ws.close();
+    } else if (given.reason === undefined) {
+      this.ws.close(given.code);
+    } else {
+      this.ws.close(given.code, given.reason);
+    }
   }
 }
 
@@ -231,5 +285,76 @@ export function webSocketBearerRefusal(): Response {
   return new Response('Offer the subprotocols ["bynk.bearer", <token>]', { status: 400 });
 }
 
+// #3902: what the Durable Object's `webSocketClose` and `webSocketError` run. A close frame whose code
+// can be echoed gets the platform's recommended reply, `close(code, reason)`; one that cannot (`1004`,
+// `1005`, `1006`, `1015`, or anything outside `1000`–`4999`; an abnormal disconnection has no frame to
+// acknowledge) gets `close()` with no arguments. The reply is sent after the service's `on close` has
+// run, even when it faults, and is harmless under `web_socket_auto_reply_to_close` (a closed socket's
+// `close` is ignored, and a throw is swallowed here).
+export interface WsCloseInfo {
+  code: number;
+  reason: string;
+  clean: boolean;
+}
+
+interface WsClosingSocket {
+  serializeAttachment(value: unknown): void;
+  close(code?: number, reason?: string): void;
+}
+
+const UNSENDABLE_CLOSE_CODES: ReadonlySet<number> = new Set([1004, 1005, 1006, 1015]);
+
+function echoable(code: number): boolean {
+  return Number.isInteger(code) && code >= 1000 && code <= 4999 && !UNSENDABLE_CLOSE_CODES.has(code);
+}
+
+function completeClose(ws: WsClosingSocket, info: WsCloseInfo, reply: "echo" | "error"): void {
+  try {
+    if (reply === "error") {
+      ws.close(1011, "error");
+    } else if (echoable(info.code)) {
+      ws.close(info.code, info.reason);
+    } else {
+      ws.close();
+    }
+  } catch {
+    // Already closed: nothing left to acknowledge.
+  }
+}
+
+/** Run `run(info)` once for this socket, then complete the close handshake. The attachment is marked
+ * closed before the handler runs, so a later `webSocketClose` for the same socket replies without
+ * running it again. */
+export async function webSocketClosing(
+  ws: WsClosingSocket,
+  attachment: unknown,
+  info: WsCloseInfo,
+  run: (info: WsCloseInfo) => Promise<void>,
+  reply: "echo" | "error" = "echo",
+): Promise<void> {
+  const state = (attachment ?? {}) as { closed?: boolean };
+  try {
+    if (state.closed !== true) {
+      ws.serializeAttachment({ ...state, closed: true });
+      await run(info);
+    }
+  } finally {
+    completeClose(ws, info, reply);
+  }
+}
+
+/** A non-disconnection error: log its class name (never a frame), then close with `1011` and run `on
+ * close` with `{ code: 1011, reason: "error", clean: false }`. */
+export async function webSocketErrored(
+  ws: WsClosingSocket,
+  attachment: unknown,
+  error: unknown,
+  run: (info: WsCloseInfo) => Promise<void>,
+): Promise<void> {
+  const name = error instanceof Error ? error.constructor.name : typeof error;
+  console.error(`websocket error: ${name}`);
+  await webSocketClosing(ws, attachment, { code: 1011, reason: "error", clean: false }, run, "error");
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketUpgradeResponse as __webSocketUpgradeResponse };
+export { WorkersConnection as __WorkersConnection, acceptHibernatableConnection as __acceptHibernatableConnection, connIdOf as __connIdOf, newWebSocketPair as __newWebSocketPair, resolveConnection as __resolveConnection, webSocketBearerOffer as __webSocketBearerOffer, webSocketBearerProtocol as __webSocketBearerProtocol, webSocketBearerRefusal as __webSocketBearerRefusal, webSocketClosing as __webSocketClosing, webSocketErrored as __webSocketErrored, webSocketUpgradeResponse as __webSocketUpgradeResponse };

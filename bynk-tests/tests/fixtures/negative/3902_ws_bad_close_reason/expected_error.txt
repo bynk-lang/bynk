@@ -1,0 +1,2 @@
+bynk.ws.bad_close_reason the close reason is 124 bytes of UTF-8, but the protocol allows at most 123
+# exact

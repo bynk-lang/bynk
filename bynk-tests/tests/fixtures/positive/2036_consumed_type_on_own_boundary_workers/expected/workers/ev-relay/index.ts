@@ -155,7 +155,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_hooks);
             const body = __r_body.value;
             const result = await surface.http_POST_batches(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"ev.relay\""]), __security_hooks);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /batches" }), request, ["Bynk realm=\"ev.relay\""]), __security_hooks);
           }
         }
         if (__matchPath("/batches", path) !== null) {

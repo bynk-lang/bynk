@@ -339,7 +339,9 @@ commit (one pass over the map, once; the same happens when an index is added, re
 its key scheme, as `@indexed` to `@unique` does on an `Option` field). Entries written before the
 annotation are then found, and a put that collides with one is refused. Existing duplicates cannot
 be checked at build time: a commit that touches a duplicated value is refused, and one that does
-not is unaffected.
+not is unaffected. [`bynk migrate sweep`](/reference/tooling/bynk-cli/#bynk-migrate-sweep) lists them:
+it reports, for each `@unique` map, how many values more than one key holds and by how many keys each
+is held, so you can clean them up before they refuse a commit.
 
 `@unique` takes one `by:` field. `@unique(by: first, by: last)` is refused rather than read as a
 constraint over the pair, which is not supported; a bare `@unique` is refused too.

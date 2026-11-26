@@ -14,4 +14,8 @@ service Gateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- connection.send(ServerFrame { text: "hi" })
     ()
   }
+
+  on close (room: Int) -> Effect[()] by user: Participant {
+    ()
+  }
 }

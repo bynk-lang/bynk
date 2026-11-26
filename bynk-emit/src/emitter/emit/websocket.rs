@@ -206,22 +206,6 @@ fn ws_frame_json_expr() -> bynk_ts::TsExpr {
     }
 }
 
-/// `void code; void reason; void wasClean;`: the close handler's parameters, marked used.
-fn ws_close_unused_params() -> Vec<bynk_ts::TsStmt> {
-    ["code", "reason", "wasClean"]
-        .into_iter()
-        .map(|name| {
-            bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Unary {
-                    op: bynk_ts::TsUnaryOp::Void,
-                    expr: Box::new(bynk_ts::TsExpr::Ident(name.to_string())),
-                },
-                None,
-            )
-        })
-        .collect()
-}
-
 /// `try { <target> = <value>; } catch { ws.close(1003, "<reason>"); return; }`:
 /// one step of decoding an incoming WebSocket frame, closing the socket and
 /// returning when it fails.
@@ -415,10 +399,12 @@ pub(super) fn wake_and_inspect_branches(
     a: &AgentDecl,
     agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
     ctx: &EmitProjectCtx,
+    commons: &TypedCommons,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut branches = Vec::new();
     if let Some(v) = agent_versions {
-        branches.push(migrate_wake_branch_stmt(v.version));
+        let unique = super::unique_store_indexes(a, &commons.types);
+        branches.push(migrate_wake_branch_stmt(v.version, &unique));
     }
     if ctx.inspect_agents {
         branches.push(inspect_branch_stmt(a, agent_versions));
@@ -488,7 +474,11 @@ fn inspect_branch_stmt(
 /// "/_bynk/migrate") return await __wakeForMigration(await
 /// this.state.storage.get("state"), <version>, () => this.loadState(), (s) =>
 /// this.commitState(s));`
-fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
+///
+/// #4390: a class with `@unique(by:)` indexes passes them as the wake's last argument, `[["map", "field"], …]`
+/// (after `undefined` for the layout, which the runtime defaults), so the answer reports the values more than one
+/// key already holds.
+fn migrate_wake_branch_stmt(version: i64, unique: &[super::UniqueIndex]) -> bynk_ts::TsStmt {
     let arrow = |params: Vec<bynk_ts::TsParam>, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
         params,
         is_async: false,
@@ -518,7 +508,10 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
                 vec![bynk_ts::TsParam::new("s".to_string(), None)],
                 this_call("commitState", vec![bynk_ts::TsExpr::Ident("s".to_string())]),
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(unique_wake_args(unique))
+        .collect(),
     }));
     bynk_ts::TsStmt::if_stmt(
         bynk_ts::TsExpr::Binary {
@@ -534,6 +527,22 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
         bynk_ts::TsStmt::return_stmt(Some(wake), None),
         None,
     )
+}
+
+/// #4390: the wake's trailing `undefined, [["map", "field"], …]`, empty for a class with no `@unique(by:)`.
+fn unique_wake_args(unique: &[super::UniqueIndex]) -> Vec<bynk_ts::TsExpr> {
+    if unique.is_empty() {
+        return Vec::new();
+    }
+    let str_lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
+    let pairs = unique
+        .iter()
+        .map(|u| bynk_ts::TsExpr::array(vec![str_lit(&u.map), str_lit(&u.field)]))
+        .collect();
+    vec![
+        bynk_ts::TsExpr::Ident("undefined".to_string()),
+        bynk_ts::TsExpr::array(pairs),
+    ]
 }
 
 /// `const __eventsDeps = { __eventsDispatch: (events) => __dispatchToEventsFanout(env.EVENTS_FANOUT, events) };`
@@ -1039,7 +1048,7 @@ pub(super) fn emit_ws_dispatch_handlers(
     };
     // The firing socket's minimal structural surface (attachment + send/close), so
     // emitted code stays free of `@cloudflare/workers-types`.
-    let ws_ty = "{ deserializeAttachment(): unknown; send(data: string): void; close(code?: number, reason?: string): void }";
+    let ws_ty = super::websocket_close::WS_CLOSE_TY;
     let deps_arg = ws_attachment_deps_arg(host);
     let att_or_null = bynk_ts::TsType::union(vec![
         bynk_ts::TsType::named(att_ty.clone()),
@@ -1260,49 +1269,13 @@ pub(super) fn emit_ws_dispatch_handlers(
     }
 
     if let Some(c) = host.close {
-        let method = ws_close_do_method_name(host.service);
-        let mut stmts = ws_close_unused_params();
-        att_guard(&mut stmts);
-        stmts.extend(host.rebuild.stmts());
-        let mut call_args = vec![ident("connection")];
-        for (i, p) in c.params.iter().enumerate() {
-            call_args.push(ws_arg_cast("__att", i, &p.type_ref));
-        }
-        stmts.push(bynk_ts::TsStmt::expr_stmt(
-            bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Member {
-                    object: Box::new(bynk_ts::TsExpr::Ident("this".to_string())),
-                    property: method,
-                }),
-                args: call_args.into_iter().chain([deps_arg]).collect(),
-            })),
-            None,
-        ));
-        let close_method = bynk_ts::TsClassMethod::new(
-            "webSocketClose",
-            true,
-            vec![
-                bynk_ts::TsParam::new("ws".to_string(), Some(bynk_ts::TsType::named(ws_ty))),
-                bynk_ts::TsParam::new("code".to_string(), Some(bynk_ts::TsType::named("number"))),
-                bynk_ts::TsParam::new("reason".to_string(), Some(bynk_ts::TsType::named("string"))),
-                bynk_ts::TsParam::new(
-                    "wasClean".to_string(),
-                    Some(bynk_ts::TsType::named("boolean")),
-                ),
-            ],
-            Some(bynk_ts::TsType::named_with_args(
-                "globalThis.Promise",
-                vec![bynk_ts::TsType::named("void")],
-            )),
-            stmts,
-        );
-        methods.push(close_method);
+        super::websocket_close::emit_close_methods(methods, host, c, types, &att_guard, &deps_arg);
     }
 }
 
 /// `<holder>.args[<i>] as <type>`: a wire argument recovered from a hibernated connection's
 /// attachment (or the forwarded payload), read at its declared type.
-fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
+pub(super) fn ws_arg_cast(holder: &str, i: usize, ty: &TypeRef) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::Index {
             object: Box::new(member(ident(holder), "args")),

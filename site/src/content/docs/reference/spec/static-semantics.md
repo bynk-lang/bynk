@@ -2438,8 +2438,16 @@ connection-lifecycle handlers:
   (`bynk.ws.open_transfer_key`).
 - **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
   route params plus the decoded frame of type `I`.
-- **`on close`** (v0.106) — the connection ended; the stored connection is
-  disposed (typically via the owning agent).
+- **`on close`** (v0.106) — **required**, exactly one: the connection ended, and the
+  stored connection is disposed (typically via the owning agent). `on open` always transfers its
+  connection into an agent's state and the runtime cannot tell which store entry holds it, so
+  a service without `on close` is `bynk.ws.missing_close`. Its leading parameters are a
+  type-compatible prefix of `on open`'s, and an optional trailing `close: CloseInfo` (the `bynk`
+  record `{ code: Int, reason: String, clean: Bool }`) carries why the connection ended.
+  `connection.close(code?, reason?)` closes with a code that MUST be `1000` or `3000`–`4999`
+  (`bynk.ws.bad_close_code` for a literal outside that, and faulting for a computed one) and a
+  reason of at most 123 bytes of UTF-8 (`bynk.ws.bad_close_reason` for a literal over it; a
+  computed one is cut on a character boundary).
 
 Inbound frames are dispatched to the agent that owns the connection, so the
 service holds **exactly one** `on open` and broadcasts by iterating a held

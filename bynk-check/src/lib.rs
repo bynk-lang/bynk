@@ -57,6 +57,7 @@ pub mod d1_migrations;
 pub mod d1_sql;
 pub mod email;
 pub mod email_fallback;
+pub mod email_route;
 pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;

@@ -60,6 +60,12 @@ export interface StoreMapHandle<V> {
   byIndex(index: string, by: string): Awaitable<readonly V[]>;
   /** Whether any value of the `@unique` index `index` is held by more than one entry (#4038), judged on what this handler has staged. */
   hasDuplicate(index: string): Awaitable<boolean>;
+  /**
+   * The number of holders of each value of the `@unique` index `index` that more than one entry holds (#4390), one
+   * number per such value and none for a value with a single holder. It reads the whole index, for `bynk migrate sweep`
+   * to report duplicates stored before the constraint was declared; it never names a value.
+   */
+  duplicateHolders(index: string): Awaitable<number[]>;
   /** The same values a page at a time, in **no promised order** (a storage-backed handle pages by primary key), for a scan that does not need one. */
   lazyByIndex(index: string, by: string): AsyncIterable<V> | Iterable<V>;
 }
@@ -193,6 +199,12 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
     for (const by of this.touched.get(index) ?? []) if ((buckets.get(by)?.length ?? 0) > 1) return true;
     return false;
+  }
+
+  duplicateHolders(index: string): number[] {
+    const buckets = this.postings.get(index);
+    if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
+    return [...buckets.values()].map((pks) => pks.length).filter((n) => n > 1);
   }
 
   *lazyByIndex(index: string, by: string): Generator<V> {
