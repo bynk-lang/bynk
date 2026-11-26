@@ -229,6 +229,11 @@ pub struct ProjectAnalysis {
     /// Only contexts/adapters have an entry; empty when the pipeline bails
     /// before the checker.
     pub boundary_info: HashMap<String, ContextBoundaryInfo>,
+    /// #4502: the column mapping of each `Analytics` instance written with `writeValue`, keyed
+    /// `<unit>.<Instance>`, for the editor's hover on a written field's column and the completion
+    /// of a typed read's fields. Empty when no unit writes a typed point.
+    pub analytics:
+        std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
     /// #848: qualified unit name → its doc-comment intra-doc-link search
     /// order — itself first, then its `uses` targets, then its `consumes`
     /// targets, in that order. Empty when the pipeline bails before the
@@ -317,6 +322,7 @@ fn bailed(
         sequence_info: HashMap::new(),
         architecture_facts: Default::default(),
         boundary_info: HashMap::new(),
+        analytics: Default::default(),
         doc_scope: HashMap::new(),
         contract_diff: ContractDiff::default(),
     }
@@ -910,9 +916,11 @@ fn analyse_project_inner(
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
     let mut contract_diff = ContractDiff::default();
+    let mut lock_as_read: Option<bynk_project::schema_registry::SchemaRegistry> = None;
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
+                lock_as_read = Some(existing_reg.clone());
                 // #2467: the same registry, reported as a diff (read-only).
                 contract_diff.lock = LockState::Read;
                 contract_diff.changes = crate::schema_registry::diff_against_lock(
@@ -1213,6 +1221,24 @@ fn analyse_project_inner(
         doc_scope.insert(name.clone(), scope);
     }
 
+    // #4502: the Analytics column mappings, for the editor, and the lock's check of them (which
+    // needs the checked units, so it runs here and not with the declaration-only passes).
+    if let Some(existing) = &lock_as_read {
+        let mut scratch = existing.clone();
+        let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+        crate::analytics_lock::reconcile_analytics(
+            existing,
+            &mut scratch,
+            &unit_callees,
+            &mut analytics_errors,
+        );
+        errors.extend_attributed_by_span(&parsed, analytics_errors);
+    }
+    let analytics = crate::analytics_lock::live_mappings(&unit_callees)
+        .into_iter()
+        .map(|(key, live)| (key, live.entry))
+        .collect();
+
     crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
@@ -1228,6 +1254,7 @@ fn analyse_project_inner(
         sequence_info,
         architecture_facts,
         boundary_info,
+        analytics,
         doc_scope,
         contract_diff,
     }

@@ -461,6 +461,10 @@ fn resolve_qualified_from(
             }
         }
     });
+    // #4502: `AnalyticsSql.select[T]` is compiler-lowered over `query`, so declared nowhere.
+    if out.is_none() && recv == "AnalyticsSql" {
+        out = typed_read("AnalyticsSql", member).map(str::to_string);
+    }
     match (out, derived_base) {
         // #2865: a derived `D1`'s typed reads are lowered by the compiler, so
         // `D1` declares no operation for them.
@@ -499,12 +503,19 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
         ("MySql", "firstAs") => Some(
             "firstAs[T](tail: String, params: List[MySqlValue]) -> Effect[Result[Option[T], MySqlReadError]]",
         ),
+        // #4502: `Analytics.writeValue[T]` writes a record's mapped columns; `AnalyticsSql.select[T]`
+        // reads them back (the SQL tail may continue the select list).
+        ("Analytics", "writeValue") => Some("writeValue[T](value: T) -> Effect[()]"),
+        ("AnalyticsSql", "select") => Some(
+            "select[T](dataset: Analytics instance, tail: String, params: List[SqlValue]) -> Effect[Result[List[T], AnalyticsReadError]]",
+        ),
         _ => None,
     }
 }
 
 /// The bases whose derived instances have the compiler-lowered typed reads.
-pub(crate) const TYPED_READ_BASES: [&str; 3] = ["D1", "Postgres", "MySql"];
+pub(crate) const TYPED_READ_BASES: [&str; 5] =
+    ["D1", "Postgres", "MySql", "Analytics", "AnalyticsSql"];
 
 /// Whether `label` is the typed-read signature of the member `callee` names, so a
 /// user's own `select` operation is never taken for one.
@@ -720,6 +731,22 @@ mod tests {
                 .is_some_and(|l| l.starts_with("peek(<participant>"))
         );
         assert!(resolve_label("Orders.all", DOC, None).is_some());
+    }
+
+    /// #4502: the typed Analytics operations have signature help for their type argument.
+    #[test]
+    fn the_typed_analytics_operations_have_signatures() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Analytics, AnalyticsSql }\n\ncapability Signups = Analytics\n";
+        assert_eq!(
+            resolve_label("Signups.writeValue", DOC, None).as_deref(),
+            Some("writeValue[T](value: T) -> Effect[()]")
+        );
+        let select = resolve_label("AnalyticsSql.select", DOC, None).expect("a signature");
+        assert!(
+            select.starts_with("select[T](dataset: Analytics instance, tail: String"),
+            "{select}"
+        );
+        assert!(select.contains("AnalyticsReadError"), "{select}");
     }
 
     /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`

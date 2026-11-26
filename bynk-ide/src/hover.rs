@@ -79,6 +79,9 @@ pub struct HoverAnalysis<'a> {
     /// second "context" and `NoCrossContextReason::SingleContext` would
     /// almost never fire).
     pub context_count: usize,
+    /// #4502: the round's recorded Analytics column mappings, by `<unit>.<Instance>`.
+    pub analytics:
+        &'a std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry>,
 }
 
 /// Everything the ladder reads.
@@ -163,12 +166,18 @@ fn with_kind_appendix(
             None => content,
         },
         SymbolKind::Field => {
-            match key.name.split_once('.').and_then(|(ty, field)| {
+            let split = key.name.split_once('.');
+            let plain = split.and_then(|(ty, field)| {
                 crate::plain_shape::field_section(ty, field, a.boundary_info)
-            }) {
-                Some(section) => format!("{content}{section}"),
-                None => content,
-            }
+            });
+            let column = split.and_then(|(ty, field)| {
+                crate::analytics_tooling::column_section(ty, field, a.analytics)
+            });
+            format!(
+                "{content}{}{}",
+                plain.unwrap_or_default(),
+                column.unwrap_or_default()
+            )
         }
         _ => content,
     }
@@ -208,6 +217,12 @@ fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
 /// The rung order is the contract; see the module doc. Each rung is tried in
 /// turn and the first `Some` wins.
 pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
+    // #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+    if let Some((text, offset)) = input.doc
+        && let Some(content) = crate::analytics_tooling::dataset_hover_at(text, offset)
+    {
+        return Some(content);
+    }
     if let Some(a) = &input.analysis {
         let tys = a.tys;
         // 1. v0.25: binding-index path — a resolved symbol reference, described
