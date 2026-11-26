@@ -14,7 +14,7 @@ function __bynkTest_Secrets(): __ns_bynk.Secrets {
   return {
     async get(key) {
       const v = __bynkEnv[key];
-      return v === undefined ? None : Some(__bynkSecret(v));
+      return v === undefined ? None : Some(__bynkSecret(v) as never);
     },
   };
 }

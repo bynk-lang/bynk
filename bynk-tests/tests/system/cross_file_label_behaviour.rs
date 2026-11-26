@@ -139,7 +139,7 @@ fn missing_headers_project(tag: &str) -> Scratch {
         "[project]\nname = \"demo\"\nversion = \"0.1.0\"\n",
     )
     .unwrap();
-    let padding: String = (1..=150)
+    let padding: String = (1..=300)
         .map(|i| format!("// padding line {i}\n"))
         .collect();
     let web = format!(

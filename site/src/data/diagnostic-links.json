@@ -2380,13 +2380,10 @@
     "/reference/types/#decimal"
   ],
   "bynk.types.secret_at_boundary": [
-    "/reference/bynk-capabilities/#secret"
+    "/reference/bynk-capabilities/#the-secret-type"
   ],
   "bynk.types.secret_not_comparable": [
-    "/reference/bynk-capabilities/#secret"
-  ],
-  "bynk.types.secret_of_outside_test": [
-    "/reference/bynk-capabilities/#secret"
+    "/reference/bynk-capabilities/#the-secret-type"
   ],
   "bynk.types.select_tail_has_select": [
     "/reference/bynk-capabilities/#d1-typed-reads"

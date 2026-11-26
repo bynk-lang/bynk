@@ -2052,9 +2052,6 @@ pub struct HandlerBodyCheck<'a> {
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
-    /// #4111: the body is a test's value (a `stub`'s), so test-only constructors such as
-    /// `Secret.of` are allowed in it.
-    pub test_values: bool,
 }
 
 impl<'a> HandlerBodyCheck<'a> {
@@ -2083,7 +2080,6 @@ impl<'a> HandlerBodyCheck<'a> {
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             service_handler: false,
-            test_values: false,
         }
     }
 }
@@ -2111,7 +2107,6 @@ pub fn check_handler_body(
         claims_binder,
         claims_sum_arms,
         service_handler: in_service_handler,
-        test_values,
     } = check;
     let CheckSinks {
         tys,
@@ -2215,7 +2210,7 @@ pub fn check_handler_body(
         in_agent_handler: agent_state_ty.is_some(),
         in_service_handler,
         in_fn_body: false,
-        test_values,
+        test_values: false,
     };
     // Check the body and validate it matches the return type.
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {

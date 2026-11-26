@@ -2278,23 +2278,6 @@ pub(crate) fn check_static_call(
             ));
             return None;
         }
-        // #4111: a `Secret` is minted only by the platform's secret store. `Secret.of` is
-        // a test fixture, so text in source never becomes a secret in a deployed program.
-        if crate::context_checks::is_secret_type(&type_name.name, &ctx.input.types)
-            && !ctx.in_test_body
-            && !ctx.test_values
-        {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.types.secret_of_outside_test",
-                    method.span,
-                    "`Secret.of` is only valid inside a test case body",
-                )
-                .with_note(
-                    "a deployed program reads a secret from `Secrets.get` or `StoredSecret.get`; `Secret.of(\"…\")` writes the value into source, so it exists only to stand in for one in a test",
-                ),
-            );
-        }
         let arg = &args[0];
         let expected = tys.intern(Ty::Base(base));
         let arg_ty = type_of(arg, Some(expected), ctx)?;

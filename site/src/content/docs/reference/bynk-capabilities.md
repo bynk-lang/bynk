@@ -96,7 +96,7 @@ a value read from the platform's secret store, built so it cannot leak by accide
   `==` and `!=` on a `Secret`, or on a type that holds one, is
   `bynk.types.secret_not_comparable`.
 - **It is never written in source.** `Secret.of("…")` is valid only inside a test case
-  body (`bynk.types.secret_of_outside_test`), where it stands in for a secret the
+  body (`bynk.context.external_construction` in a context), where it stands in for a secret the
   platform would supply. Its `of` returns the `Secret` directly: there is no predicate to fail.
 
 Two methods read one:
@@ -116,11 +116,13 @@ context gate
 consumes bynk { Secrets }
 
 service api from http {
-	on POST("/admin/:token") (token: String) -> Effect[HttpResult[String]] by Visitor given Secrets {
+	on POST("/admin/:token") (
+		token: String
+	) -> Effect[HttpResult[String]] by Visitor given Secrets {
 		let expected <- Secrets.get("ADMIN_TOKEN")
 		match expected {
-			Some(secret) => if secret.matches(token) { Ok("welcome") } else { Ok("denied") }
-			None => Ok("denied")
+			Some(secret) => if secret.matches(token) { Ok("welcome") } else { Ok("denied") },
+			None => Ok("denied"),
 		}
 	}
 }

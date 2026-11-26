@@ -160,14 +160,16 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 				Some(t) => if !model.matchesRegex("@(cf|hf)/[a-z0-9_-]+/[a-z0-9_-][a-z0-9._-]*") {
 					Effect.pure(Err("invalid model id"))
 				} else {
-					let res <- Fetch.send(Request {
-						method: Post,
-						url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
-						contentType: Some("application/json"),
-						authorization: Some("Bearer \(t.reveal())"),
-						headers: Map.empty(),
-						body: Some(body),
-					})
+					let res <- Fetch.send(
+						Request {
+							method: Post,
+							url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
+							contentType: Some("application/json"),
+							authorization: Some("Bearer \(t.reveal())"),
+							headers: Map.empty(),
+							body: Some(body),
+						}
+					)
 					match res {
 						Ok(r) => if r.status == 200 {
 							Effect.pure(Ok(r.body))

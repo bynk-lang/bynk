@@ -9,6 +9,6 @@ export class PlainGreeter implements Greeter {
   async hello(name: string): Promise<string> {
     const key = await this.deps.Secrets.get("GREETING");
     const now = await this.deps.Clock.now();
-    return `${key.tag === "Some" ? key.value : "hello"}, ${name} at ${now}`;
+    return `${key.tag === "Some" ? key.value.reveal() : "hello"}, ${name} at ${now}`;
   }
 }

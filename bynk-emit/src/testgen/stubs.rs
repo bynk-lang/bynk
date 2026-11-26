@@ -1811,7 +1811,7 @@ pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -
         ns,
         cap,
         Vec::new(),
-        "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(__bynkSecret(v));\n    },\n  };\n".to_string(),
+        "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(__bynkSecret(v) as never);\n    },\n  };\n".to_string(),
         &["None", "Some", "__bynkEnv", "__bynkSecret"],
     ))
 }

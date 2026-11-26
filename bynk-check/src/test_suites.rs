@@ -2761,11 +2761,7 @@ fn value_errors(
     let mut errs: Vec<CompileError> = Vec::new();
     checker::check_handler_body(
         resolved,
-        // A `stub`'s value is a test value, so `Secret.of` may stand in for a secret in it.
-        checker::HandlerBodyCheck {
-            test_values: true,
-            ..checker::HandlerBodyCheck::new(&block, return_type, params, &[])
-        },
+        checker::HandlerBodyCheck::new(&block, return_type, params, &[]),
         checker::CheckSinks {
             tys,
             expr_types: &mut expr_types,

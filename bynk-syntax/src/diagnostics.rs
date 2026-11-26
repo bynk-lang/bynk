@@ -6671,15 +6671,6 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   fn same(a: Secret, b: Secret) -> Bool {\n    a.matches(b.reveal())        // ✓ constant-time\n}",
     },
     Explain {
-        code: "bynk.types.secret_of_outside_test",
-        blurb: "`Secret.of(\"…\")` writes a secret's text into the source, which a deployed \
-                program must never do: its secrets come from `Secrets.get` or `StoredSecret.get`. \
-                It exists so a test can stand in for one, so it is valid only inside a test case \
-                body.",
-        example: "fn fabricated() -> Secret {\n    Secret.of(\"hunter2\")      // ✗ outside a test case\n}\n\n\
-                  // ✓ read it at run time\n// let key <- Secrets.get(\"API_KEY\")",
-    },
-    Explain {
         code: "bynk.types.select_tail_has_select",
         blurb: "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
         example: "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
@@ -11448,10 +11439,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.secret_not_comparable",
         "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
-    ),
-    d(
-        "bynk.types.secret_of_outside_test",
-        "`Secret.of` outside a test case body: a deployed program reads its secrets from `Secrets.get` or `StoredSecret.get`, never from text in source (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",
