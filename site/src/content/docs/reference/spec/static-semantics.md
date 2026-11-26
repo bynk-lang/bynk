@@ -2794,7 +2794,7 @@ is judged by the positions inside it, as a stored value is (§5.4.3), rooted at 
 field's wire name: a nested field removed or retyped, added without a default, or that
 lost a default, is a non-additive change, a nested field added with a default or a new
 variant is additive, and a nested wire key (`@name`) or field that changed is accepted
-only when the field says `replaces <the old key>`. A record type's own name is no part
+only when the field says `replaces <the old key>`. A record type's own name is no part (renaming it, fields unchanged, leaves the schema number as it was)
 of the shape, since the wire carries its fields and not its name. A lock written before
 this records no positions for such a field: an unchanged build keeps its version and
 fills them in, and a field whose type changed is a retype as before. A field declared `replaces old` is the

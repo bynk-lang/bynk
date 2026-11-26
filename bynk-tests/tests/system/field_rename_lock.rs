@@ -666,6 +666,18 @@ fn a_renamed_record_type_with_the_same_fields_is_not_a_retype() {
     p.ok(&paid(MONEY, MONEY_VALUES));
     let renamed = paid(MONEY, MONEY_VALUES).replace("Money", "Cash");
     p.ok(&renamed);
+    // And it is no step either: the schema number stays, so an explicit `@schema(1)` still holds.
+    assert_eq!(schema(&p.lock()), "1");
+}
+
+#[test]
+fn a_field_that_stops_reaching_a_record_is_a_retype() {
+    // The lock holds the record's positions; a type of the same name that is now a plain value
+    // has lost every one of them.
+    let p = event_project("payload-flattened");
+    p.ok(&paid(MONEY, MONEY_VALUES));
+    let flat = "context shop\n\nconsumes bynk { Events }\n\ntype Money = Int\n\nevent Paid = {\n  id: String,\n  amount: Money,\n}\n\nservice pay {\n  on call(id: String) -> Effect[()] by Caller given Events {\n    Events.emit[Paid](Paid { id: id, amount: 1 })\n  }\n}\n";
+    refused(&p.err(flat));
 }
 
 #[test]

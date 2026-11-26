@@ -228,7 +228,7 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
             fields: current.to_vec(),
         };
     };
-    if current == stored.fields.as_slice() {
+    if same_wire_shape(current, &stored.fields) {
         // #3793: a rename leaves every shape equal once the recorded field is renamed, but it
         // is a change: the new build reads the old key, and the lock records the step.
         if renamed {
@@ -259,8 +259,9 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
     // are each a problem), and a record type is not part of what a payload carries: the wire holds
     // its fields, not its name. A field with none is judged by its type, as before.
     let by_paths = |old_field: &FieldShape, new_field: &FieldShape| {
-        (!old_field.paths.is_empty() && !new_field.paths.is_empty())
-            .then(|| compare_paths(&old_field.paths, &new_field.paths))
+        // A field that once reached a record or a sum and no longer does has lost every
+        // recorded position, which `compare_paths` reports as removed.
+        (!old_field.paths.is_empty()).then(|| compare_paths(&old_field.paths, &new_field.paths))
     };
     let retyped: Vec<String> = old
         .iter()
@@ -309,6 +310,46 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
             added_without_default,
         }
     }
+}
+
+/// Whether `current` is `stored` as far as the wire is concerned: equal, except that a field
+/// with recorded paths on both sides, and equal ones, may carry another type name (#4523: the wire
+/// holds a record's fields, not its name).
+fn same_wire_shape(current: &[FieldShape], stored: &[FieldShape]) -> bool {
+    current.len() == stored.len()
+        && current.iter().zip(stored).all(|(c, s)| {
+            c == s
+                || (!c.paths.is_empty()
+                    && FieldShape {
+                        ty: s.ty.clone(),
+                        ..c.clone()
+                    } == *s)
+        })
+}
+
+/// #4523: the changes inside the records of fields both shapes have, in the diagnostic's words:
+/// what a nested path added, a sum gained, or a `replaces` renamed. Empty when there are none.
+fn nested_change_parts(stored: &[FieldShape], current: &[FieldShape]) -> Vec<String> {
+    let mut parts = Vec::new();
+    for old in stored.iter().filter(|f| !f.paths.is_empty()) {
+        let Some(new) = current.iter().find(|f| f.name == old.name) else {
+            continue;
+        };
+        let change = compare_paths(&old.paths, &new.paths);
+        for (label, list) in [
+            ("added with a default", &change.added),
+            ("gained a default", &change.gained),
+            ("variant(s) added", &change.variants),
+        ] {
+            if !list.is_empty() {
+                parts.push(format!("`{}`: {label}: {}", old.name, list.join(", ")));
+            }
+        }
+        if !change.renamed.is_empty() {
+            parts.push(format!("`{}`: renamed in place", old.name));
+        }
+    }
+    parts
 }
 
 /// Reconcile every event across every unit against the given registry.
@@ -1729,6 +1770,7 @@ pub fn diff_against_lock(
                             added.join(", ")
                         ));
                     }
+                    parts.extend(nested_change_parts(&view.fields, &current));
                     let detail = if parts.is_empty() {
                         "changed additively (a field gained a default, or fields were reordered)"
                             .to_string()
