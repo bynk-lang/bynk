@@ -68,7 +68,7 @@ export default {
             const __raw_token = __m.params["token"];
             const token = __raw_token;
             const result = await surface.http_PUT_api_Param_token(token);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"registry.publish\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"registry.publish\""]), __security_api);
           }
         }
         if (__matchPath("/api/:token", path) !== null) {
