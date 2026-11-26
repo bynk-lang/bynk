@@ -129,7 +129,7 @@ const PASSWORD_ITERATION_CAP: number | undefined = 100000;
 // #4117: authenticated encryption, AES-256-GCM over `crypto.subtle`. The value a `seal` returns is
 // `version (1 byte) || nonce (12) || ciphertext || tag (16)`, version 1, so a later algorithm can be
 // added and every value already stored still opens. The nonce is always drawn here, never taken from
-// a caller; the context is GCM's associated data.
+// a caller; the scope is GCM's associated data.
 const CIPHER_KEY_BYTES = 32;
 const SEAL_VERSION = 1;
 const SEAL_NONCE_BYTES = 12;
@@ -266,15 +266,18 @@ export class CryptoProvider implements Crypto {
     return out;
   }
 
-  // One failure for every cause (a wrong key, a wrong context, tampering, truncation, an unknown version),
+  // One failure for every cause (a wrong key, a wrong scope, tampering, truncation, an unknown version),
   // so which one it was is not revealed.
   async open(key: CipherKey, sealed: Bytes, scope: Bytes): Promise<Result<Bytes, CryptoError>> {
     const k = key as unknown as CryptoKey;
     if (sealed.length < 1 + SEAL_NONCE_BYTES + SEAL_TAG_BYTES || sealed[0] !== SEAL_VERSION) {
       return Err(CryptoError.OpenFailed);
     }
+    // A platform without Web Crypto fails loudly (as `importCipherKey` does); only a failed decrypt is
+    // `OpenFailed`.
+    const s = subtle();
     try {
-      const plain = await subtle().decrypt(
+      const plain = await s.decrypt(
         {
           name: "AES-GCM",
           iv: sealed.subarray(1, 1 + SEAL_NONCE_BYTES) as BufferSource,

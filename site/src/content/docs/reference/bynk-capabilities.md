@@ -2714,9 +2714,14 @@ truncated value and an unknown version alike, so which one it was is not
 revealed.
 
 ```bynk,fragment
-let key <- Crypto.importCipherKey(rawKey)
-let sealed <- Crypto.seal(k, Bytes.fromUtf8(email), Bytes.fromUtf8(customerId))
-let back <- Crypto.open(k, sealed, Bytes.fromUtf8(customerId))
+let imported <- Crypto.importCipherKey(rawKey)
+match imported {
+	Ok(key) => {
+		let sealed <- Crypto.seal(key, Bytes.fromUtf8(email), Bytes.fromUtf8(customerId))
+		Crypto.open(key, sealed, Bytes.fromUtf8(customerId))
+	},
+	Err(e) => Effect.pure(Err(e)),
+}
 ```
 
 A random 96-bit nonce is safe for about 2^32 messages under one key. Rotate keys
