@@ -125,8 +125,11 @@ pub fn check(
             errs.join("\n")
         )
     })?;
+    // The files only another increment owns: a note about "another pending file" must never point
+    // at this PR's own.
     let elsewhere: BTreeSet<String> = tree
         .iter()
+        .filter(|f| !own.contains(f))
         .filter_map(|(name, text)| crate::validate(name, text).ok())
         .flat_map(|p| {
             p.probes
@@ -340,6 +343,37 @@ mod tests {
         assert!(check(&base, &pr, &tree, &base_files, ("", "")).is_ok());
     }
 
+    /// The "another pending file names it" note is for a file only another increment owns. When the
+    /// PR's own file is the only one naming a probe, the half-done fix (a `probes:` with no
+    /// `raises:`, or the other way round) must not send the author looking for a file that is not
+    /// there.
+    #[test]
+    fn the_note_never_points_at_the_prs_own_file() {
+        let base = [probe("ts_writes", "475")];
+        let pr = [probe("ts_writes", "476")];
+
+        // Own `probes:` only: the rise is unraised, and no other file is named.
+        let tree = vec![file("l2-mine.md", "probes: ts_writes\n")];
+        let e = check(&base, &pr, &tree, &[], ("", "")).unwrap_err();
+        assert!(e.contains("ts_writes rose 475 -> 476"), "{e}");
+        assert!(!e.contains("another pending file"), "{e}");
+
+        // Own `raises:` only: the move is unnamed, and again no other file is named.
+        let tree = vec![file(
+            "l2-mine.md",
+            "raises: ts_writes — one more site (#2)\n",
+        )];
+        let e = check(&base, &pr, &tree, &[], ("", "")).unwrap_err();
+        assert!(e.contains("ts_writes moved"), "{e}");
+        assert!(!e.contains("another pending file"), "{e}");
+
+        // With a genuinely other file naming it too, the note is back.
+        let other = file("l8-other.md", "probes: ts_writes\n");
+        let tree = vec![other.clone(), file("l2-mine.md", "")];
+        let e = check(&base, &pr, &tree, std::slice::from_ref(&other), ("", "")).unwrap_err();
+        assert!(e.contains("another pending file names it"), "{e}");
+    }
+
     /// A stamp PR deletes the pending files it consumes and changes no code: it moves no probe,
     /// owes no declaration, and its tree has no pending file of its own.
     #[test]
@@ -414,9 +448,20 @@ mod tests {
     }
 
     fn git(dir: &Path, args: &[&str]) {
+        // Hermetic: a developer's own git config (a signing key, a hook, a template) must not decide
+        // whether this test passes.
         let out = Command::new("git")
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=",
+                "-c",
+                "init.templateDir=",
+            ])
             .args(args)
             .current_dir(dir)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("GIT_AUTHOR_NAME", "t")
             .env("GIT_AUTHOR_EMAIL", "t@example.com")
             .env("GIT_COMMITTER_NAME", "t")

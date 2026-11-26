@@ -669,7 +669,8 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
         ],
     )
     .unwrap_or_default();
-    let consumed = xtask::consumed_raised_probes(&base_pending(&root, &base), &root);
+    let base_files = base_pending(&root, &base);
+    let consumed = xtask::consumed_raised_probes(&base_files, &root);
     let live = xtask::greenfield_status::run_gated(&root);
     match xtask::greenfield_status::check_growth_against(
         &live,
@@ -685,7 +686,6 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
     }
     // #4428: the growth check above, like the table gate, is excused by any pending file in the
     // tree, including another increment's. What this PR moved must be named by this PR's own.
-    let base_files = base_pending(&root, &base);
     let tree = match xtask::pr_attribution::BaseTree::checkout(&root, &base) {
         Ok(tree) => tree,
         Err(e) => {
