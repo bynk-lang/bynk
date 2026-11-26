@@ -99,7 +99,7 @@ fn each_call_service_is_dispatched_under_the_internal_prefix() {
     // An unknown internal service is a 404, not a fall-through to the routes.
     assert!(
         ts.contains(
-            "default:\n            return new globalThis.Response(\"Not found\", { status: 404 });"
+            "default:\n              return new globalThis.Response(\"Not found\", { status: 404 });"
         ),
         "{ts}"
     );
