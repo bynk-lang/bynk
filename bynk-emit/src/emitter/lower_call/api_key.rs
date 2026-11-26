@@ -7,10 +7,12 @@
 
 use bynk_ts::{TsExpr, TsParam, TsType};
 
+use super::super::Expr;
 use super::super::lower::Pre;
 use super::super::lower_ctx::LowerCtx;
-use super::super::Expr;
-use crate::ts_build::{arrow_with, await_expr, call, ident, member, method_call, num_lit, paren, str_lit};
+use crate::ts_build::{
+    arrow_with, await_expr, call, ident, member, method_call, num_lit, paren, str_lit,
+};
 
 /// `mint`'s lowering, or `None` when the call is not an `ApiKey` actor's `mint`.
 pub(in crate::emitter) fn lower_api_key_mint(
@@ -41,7 +43,10 @@ pub(in crate::emitter) fn lower_api_key_mint(
     let owner = bynk_check::api_key::key_owner_agent_name(actor);
     cx.record_agent_call(&owner, "mint");
     let instance = cx.agent_construct_node(&owner, ident("__sub"));
-    let now = await_expr(call(member(member(deps_node.clone(), "Clock"), "now"), vec![]));
+    let now = await_expr(call(
+        member(member(deps_node.clone(), "Clock"), "now"),
+        vec![],
+    ));
     // The store step: `KeyOwner(identity).mint(handle, keyNo, digest, kid, label, now, cap)`.
     let req = |f: &str| member(ident("__req"), f);
     let store = arrow_with(

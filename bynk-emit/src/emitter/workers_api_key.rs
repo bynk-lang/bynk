@@ -47,7 +47,10 @@ pub(super) fn api_key_seam_stmts(
         // 1. The credential.
         const_(
             "__rawKey",
-            call(ident("__apiKeyCredentialOf"), vec![ident("request"), header]),
+            call(
+                ident("__apiKeyCredentialOf"),
+                vec![ident("request"), header],
+            ),
         ),
         if_(
             strict_eq(ident("__rawKey"), null_lit()),
@@ -91,11 +94,17 @@ pub(super) fn api_key_seam_stmts(
     ];
     // 4. The store: one call, one constant-time comparison.
     let agent = bynk_check::api_key::keys_agent_name(&seam.actor);
-    let factory = member(ident("handlers"), crate::emitter::agent_factory_name(&agent));
+    let factory = member(
+        ident("handlers"),
+        crate::emitter::agent_factory_name(&agent),
+    );
     stmts.push(const_(
         "__owner",
         await_expr(method_call(
-            call(factory, vec![member(ident("__key"), "handle"), ident("env")]),
+            call(
+                factory,
+                vec![member(ident("__key"), "handle"), ident("env")],
+            ),
             "verify",
             vec![
                 member(ident("__key"), "keyNo"),
@@ -205,7 +214,10 @@ pub(super) fn api_key_deps_entry(table: &bynk_check::symbols::UnitTable) -> Opti
         .map(|s| {
             (
                 esc(&s.actor),
-                TsExpr::object(vec![("secret".to_string(), secret_probe_expr(&esc(&s.secret)))]),
+                TsExpr::object(vec![(
+                    "secret".to_string(),
+                    secret_probe_expr(&esc(&s.secret)),
+                )]),
             )
         })
         .collect();

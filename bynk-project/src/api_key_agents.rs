@@ -82,9 +82,11 @@ const CONSUMES_CRYPTO: &str = " consumes bynk.crypto { Crypto }";
 fn consumes_crypto(ctx: &Context) -> bool {
     ctx.consumes.iter().any(|c| {
         c.target.joined() == "bynk.crypto"
-            && c.selected
-                .as_ref()
-                .is_some_and(|items| items.iter().any(|i| i.name.name == "Crypto" && i.alias.is_none()))
+            && c.selected.as_ref().is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|i| i.name.name == "Crypto" && i.alias.is_none())
+            })
     })
 }
 
@@ -100,7 +102,9 @@ fn crypto_insert_at(source: &str, ctx: &Context) -> Option<usize> {
 
 /// Whether an item of the context already has `name`.
 fn is_taken(items: &[CommonsItem], name: &str) -> bool {
-    items.iter().any(|i| i.name().is_some_and(|n| n.name == name))
+    items
+        .iter()
+        .any(|i| i.name().is_some_and(|n| n.name == name))
 }
 
 /// The identity type's name when `actor` declares the `ApiKey` scheme with a named identity.

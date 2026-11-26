@@ -3164,7 +3164,8 @@ fn member_candidates_from(
                 }
                 // #3939: an `ApiKey` actor mints its keys.
                 CommonsItem::Actor(a)
-                    if a.name.name == receiver && crate::api_key_completion::is_api_key_actor(a) =>
+                    if a.name.name == receiver
+                        && crate::api_key_completion::is_api_key_actor(a) =>
                 {
                     for (label, sig) in crate::api_key_completion::members(a) {
                         if seen.insert(label.to_string()) {

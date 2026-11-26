@@ -2205,7 +2205,9 @@ pub(crate) fn check_cookie_call(
     ctx: &mut Ctx,
 ) -> Option<Option<TyId>> {
     check_signed_cookie_call(receiver, method, args, span, expr_id, ctx)
-        .or_else(|| super::api_key_calls::check_api_key_call(receiver, method, args, span, expr_id, ctx))
+        .or_else(|| {
+            super::api_key_calls::check_api_key_call(receiver, method, args, span, expr_id, ctx)
+        })
         .or_else(|| check_cookie_field_call(receiver, method, args, span, expr_id, ctx))
 }
 

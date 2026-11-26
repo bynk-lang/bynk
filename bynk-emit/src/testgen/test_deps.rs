@@ -329,7 +329,11 @@ pub(super) fn emit_test_deps(
             },
         ));
     }
-    entries.extend(credential_keys_entries(target_name, target_kind, unit_tables));
+    entries.extend(credential_keys_entries(
+        target_name,
+        target_kind,
+        unit_tables,
+    ));
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
         .map(|(k, v)| TsObjectEntry::prop(k, v))

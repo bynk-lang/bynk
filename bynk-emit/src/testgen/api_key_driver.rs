@@ -80,9 +80,9 @@ impl ApiKeyDriver {
     /// `await __apiKeyForTest(…)`: `sub`'s real key, minted once per harness into the store.
     fn real_key(&self, sub: TsExpr) -> TsExpr {
         let env = member(call(ident("__makeHarness"), Vec::new()), self.env.clone());
-        let factory = crate::emitter::agent_factory_name(&bynk_check::api_key::key_owner_agent_name(
-            &self.actor,
-        ));
+        let factory = crate::emitter::agent_factory_name(
+            &bynk_check::api_key::key_owner_agent_name(&self.actor),
+        );
         let req = |f: &str| member(ident("__req"), f);
         let now = binary(
             TsBinaryOp::Mul,
@@ -95,7 +95,10 @@ impl ApiKeyDriver {
             method_call(
                 call(
                     member(ident(self.ns.clone()), factory),
-                    vec![crate::ts_build::as_expr(sub.clone(), TsType::named("never")), env.clone()],
+                    vec![
+                        crate::ts_build::as_expr(sub.clone(), TsType::named("never")),
+                        env.clone(),
+                    ],
                 ),
                 "mint",
                 vec![
@@ -221,10 +224,19 @@ pub(super) fn push_api_key_drivers(
             ));
         }
     }
-    let prefixes: &[bool] = if route.raw.is_some() { &[false, true] } else { &[false] };
+    let prefixes: &[bool] = if route.raw.is_some() {
+        &[false, true]
+    } else {
+        &[false]
+    };
     for (principal, written, keys) in PRINCIPALS {
         for &raw in prefixes {
-            routes.push(principal_driver((sname, key), raw, (principal, written), keys));
+            routes.push(principal_driver(
+                (sname, key),
+                raw,
+                (principal, written),
+                keys,
+            ));
         }
     }
 }
@@ -250,7 +262,9 @@ fn principal_driver(
         let before = format!("__before{i}");
         body.push(const_(
             &before,
-            TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::Spread(ident("__apiKeyCompares"))]),
+            TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::Spread(ident(
+                "__apiKeyCompares",
+            ))]),
         ));
         body.push(const_(
             &out,

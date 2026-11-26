@@ -76,6 +76,9 @@ mod tests {
         let labels: Vec<&str> = items.iter().map(|c| c.label.as_str()).collect();
         assert_eq!(labels, ["prefix", "header"]);
         assert!(key_candidates("  auth = ApiKey(secret = \"P\")").is_none());
-        assert_eq!(key_candidates("  auth = ApiKey(secret = ").map(|v| v.len()), Some(0));
+        assert_eq!(
+            key_candidates("  auth = ApiKey(secret = ").map(|v| v.len()),
+            Some(0)
+        );
     }
 }

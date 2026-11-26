@@ -978,7 +978,12 @@ pub(super) fn emit_system_http_support(
                     raw: (!h.params.is_empty()).then_some((&raw_params, &raw_url, &raw_body_init)),
                     request: (verb, &content_type, &headers_spread),
                 };
-                push_api_key_drivers(&mut routes, driver, (sname, &key, &binding, &payload), &route);
+                push_api_key_drivers(
+                    &mut routes,
+                    driver,
+                    (sname, &key, &binding, &payload),
+                    &route,
+                );
             }
             // #3052: on an `Oidc` route, `by Forged` (signed by a key the
             // JWKS does not publish), `by Expired`, `by WrongIssuer` and

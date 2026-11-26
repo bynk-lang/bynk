@@ -2023,6 +2023,8 @@ mod call_site_principal_tests {
             ("WrongAlgorithm", "wrongalgorithm"),
             ("NoSubject", "nosubject"),
             ("Revoked", "revoked"),
+            ("Malformed", "malformed"),
+            ("Unknown", "unknown"),
         ];
         assert_eq!(drivers.len(), BadCredential::ALL.len());
         for (name, driver) in drivers {

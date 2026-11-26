@@ -28,6 +28,7 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+pub mod api_key_agents;
 pub mod assets;
 pub mod consistency;
 pub mod containers;
@@ -51,7 +52,6 @@ pub mod paths;
 pub mod roots;
 pub mod schema_registry;
 pub mod session_agents;
-pub mod api_key_agents;
 pub mod snapshots;
 pub mod vars;
 pub mod vectorize;

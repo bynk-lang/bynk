@@ -518,18 +518,18 @@ pub(super) fn emit_integration_module(
                     bynk_check::api_key::remote_unsupported_api_key(input.case, &callees, actors)
                 })
                 .or_else(|| {
-                (!remote.dev)
-                    .then(|| {
-                        bynk_check::test_env::remote_env_disagreement(
-                            &input.case.name,
-                            input.case.name_span,
-                            &input.env,
-                            &remote.vars,
-                            &remote.secrets,
-                        )
-                    })
-                    .flatten()
-            });
+                    (!remote.dev)
+                        .then(|| {
+                            bynk_check::test_env::remote_env_disagreement(
+                                &input.case.name,
+                                input.case.name_span,
+                                &input.env,
+                                &remote.vars,
+                                &remote.secrets,
+                            )
+                        })
+                        .flatten()
+                });
             let Some(refusal) = refusal else {
                 if remote.dev {
                     if !envs.contains(&input.env) {

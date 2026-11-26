@@ -64,6 +64,7 @@ use bynk_syntax::ast::{Case, Visibility};
 
 // -- v0.7 / v0.118: test declaration processing --
 
+mod api_key_driver;
 mod case_body;
 mod collection_generators;
 mod harness;
@@ -72,7 +73,6 @@ mod names;
 mod property_generators;
 mod property_tests;
 mod runtime_splice;
-mod api_key_driver;
 mod session_driver;
 pub(crate) mod show_shape;
 mod string_generators;
