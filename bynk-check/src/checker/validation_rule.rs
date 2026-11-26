@@ -23,8 +23,7 @@ pub(crate) fn validation_rule_ty(ctx: &Ctx) -> Option<TyId> {
     Some(named_ty(decl, ctx.tys))
 }
 
-/// The type of `e.rule`, or an error when `bynk.validation` is not reachable
-/// (a single-file program has no other unit to reach, and a type of the unit's
+/// The type of `e.rule`, or an error when `bynk.validation` is not reachable (a type of the unit's
 /// own named `ValidationRule` hides it).
 pub(crate) fn rule_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
     if let Some(ty) = validation_rule_ty(ctx) {
@@ -37,7 +36,7 @@ pub(crate) fn rule_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
             "`e.rule` is a `ValidationRule` from `bynk.validation`, which is not in scope here",
         )
         .with_note(
-            "a single-file program cannot reach `bynk.validation`; put the code in a project. A type of your own named `ValidationRule` also hides it",
+            "a type of your own named `ValidationRule` or `Bound` hides it; rename yours to use the `ValidationRule` of `bynk.validation`",
         ),
     );
     None
