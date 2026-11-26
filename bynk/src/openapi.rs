@@ -134,6 +134,11 @@ pub fn run(
             return ExitCode::FAILURE;
         }
     };
+    if let Ok(selected) = select_services(&analysis, &service.into_iter().collect::<Vec<_>>()) {
+        for s in rest_routes_left_out(&selected) {
+            emsg!("bynk: warning: skipped {s}");
+        }
+    }
     let format = format.unwrap_or_else(|| match out.and_then(|p| p.extension()) {
         Some(e) if e == "yaml" || e == "yml" => OpenapiFormatArg::Yaml,
         _ => OpenapiFormatArg::Json,
@@ -325,6 +330,31 @@ pub(crate) fn select_services<'a>(
         .collect())
 }
 
+/// #3752 (D6): why `bynk openapi` and `bynk client` leave out a route with a
+/// `*name` rest. An OpenAPI path parameter can't contain `/`, and a client that
+/// sent the rest as one segment would encode its slashes.
+pub(crate) const REST_LEFT_OUT: &str = "a `*` rest segment matches any number of segments, which an OpenAPI path parameter and a client's encoded segment can't express";
+
+/// The routes of `selected` that hold a rest, which the document leaves out,
+/// each as `` `GET /x` of `service`: why ``.
+fn rest_routes_left_out(selected: &[Selected]) -> Vec<String> {
+    let mut out = Vec::new();
+    for sel in selected {
+        for h in &sel.service.handlers {
+            if let IrHandlerKind::Http { method, path } = lower_handler_kind_ir(&h.kind)
+                && bynk_check::http_rest::rest_name(&path).is_some()
+            {
+                out.push(format!(
+                    "`{} {path}` of `{}`: {REST_LEFT_OUT}",
+                    method.as_str(),
+                    sel.service.name.name
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Build the OpenAPI document for `analysis`' `from http` services — every
 /// one, or only `service` (matched as `Name` or `unit.Name`).
 pub fn document(
@@ -345,7 +375,11 @@ pub fn document(
     for sel in &selected {
         let expr_types = unit_expr_types(analysis, sel.unit);
         for h in &sel.service.handlers {
-            if !matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Http { .. }) {
+            let IrHandlerKind::Http { path, .. } = lower_handler_kind_ir(&h.kind) else {
+                continue;
+            };
+            // #3752: left out, and named on stderr by `run`.
+            if bynk_check::http_rest::rest_name(&path).is_some() {
                 continue;
             }
             if let Some(m) = wire_contract_for_service(

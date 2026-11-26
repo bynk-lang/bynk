@@ -396,6 +396,16 @@ fn routes_of(
         let BoundaryKind::Http { method, path } = &model.kind else {
             continue;
         };
+        // #3752 (D6): a rest binds a path with `/` in it, which one encoded segment can't carry.
+        if bynk_check::http_rest::rest_name(path).is_some() {
+            skipped.push(format!(
+                "`{} {path}` of `{}`: {}",
+                method.as_str(),
+                sel.service.name.name,
+                crate::openapi::REST_LEFT_OUT
+            ));
+            continue;
+        }
         match route_of(sel, h, &model, *method, path) {
             Ok(r) => routes.push(r),
             Err(why) => skipped.push(format!(

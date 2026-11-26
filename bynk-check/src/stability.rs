@@ -449,7 +449,8 @@ mod tests {
                 "bynk.cloudflare.Kv.getValue",
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
-                "bynk.RequestHeaders.entries"
+                "bynk.RequestHeaders.entries",
+                "bynk.http.rest"
             ]
         );
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));

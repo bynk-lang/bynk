@@ -1106,6 +1106,10 @@
       "summary": "A field of a `@form` body record has a type a form cannot carry."
     },
     {
+      "code": "bynk.http.handler_name_collision",
+      "summary": "Two HTTP handlers of a service would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
+    },
+    {
       "code": "bynk.http.headers_field_consumed",
       "summary": "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`."
     },
@@ -1147,7 +1151,15 @@
     },
     {
       "code": "bynk.http.reserved_route_syntax",
-      "summary": "A route segment contains `*`, `{` or `}`, which are reserved for a future route form."
+      "summary": "A route segment contains `{` or `}`, or a `*` other than a final `*name` rest, which are reserved for a future route form."
+    },
+    {
+      "code": "bynk.http.rest_param_type",
+      "summary": "The parameter a route's `*name` rest segment binds is not typed `String`."
+    },
+    {
+      "code": "bynk.http.rest_unnamed",
+      "summary": "A route's last segment is a bare `*`, a rest segment with no name to bind."
     },
     {
       "code": "bynk.http.return_not_effect_http_result",

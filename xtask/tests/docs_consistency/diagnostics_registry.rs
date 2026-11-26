@@ -53,6 +53,8 @@ const NON_DIAGNOSTIC_LOOKALIKES: &[&str] = &[
     "bynk.list.reverse",
     "bynk.string.join",
     "bynk.text.shout",
+    // #3752: the rest segment's `[unstable] allow` entry, a route form's item path.
+    "bynk.http.rest",
 ];
 
 /// Collect every `"bynk.x.y"` string literal across the compiler source,

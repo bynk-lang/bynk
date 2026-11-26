@@ -130,6 +130,51 @@ test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", ()
   assert.equal(decodePath("/a/%E0%A4%A"), null);
 });
 
+// #3752 (D3): every row of the track's §5.2, for `/blog/*path`.
+test("matchPath: a rest binds the raw rest of the path (#3752)", () => {
+  const rest = (path: string) => matchPath("/blog/*path", path)?.params.path;
+  assert.equal(rest("/blog"), "");
+  assert.equal(rest("/blog/"), "/");
+  assert.equal(rest("/blog/posts/money/"), "/posts/money/");
+  assert.equal(rest("/blog/posts/money"), "/posts/money");
+  assert.equal(rest("/blog//x"), "//x");
+  assert.equal(rest("/blog/caf%C3%A9"), "/caf%C3%A9");
+  assert.equal(rest("/blog/a%2Fb"), "/a%2Fb");
+  // Empty segments before the rest are insignificant, as for every route.
+  assert.equal(rest("//blog/posts/x"), "/posts/x");
+  // The prefix is matched decoded; another path doesn't match.
+  assert.equal(matchPath("/blog/*path", "/blogs/x"), null);
+  assert.equal(matchPath("/café/*p", "/caf%C3%A9/x")?.params.p, "/x");
+});
+
+test("matchPath: a root rest, and parameters before a rest (#3752)", () => {
+  assert.deepEqual(matchPath("/*path", "/"), { params: { path: "/" } });
+  assert.deepEqual(matchPath("/*path", "/a/b"), { params: { path: "/a/b" } });
+  assert.deepEqual(matchPath("/t/:tenant/*key", "/t/a%20b/x/y.png"), {
+    params: { tenant: "a b", key: "/x/y.png" },
+  });
+  assert.equal(matchPath("/t/:tenant/*key", "/t"), null);
+  // `/_bynk/` is never a rest's.
+  assert.equal(matchPath("/*path", "/_bynk/inspect"), null);
+  assert.equal(matchPath("/*path", "//_bynk"), null);
+  assert.equal(matchPath("/:x/*rest", "/_bynk/call/x"), null);
+  assert.deepEqual(matchPath("/*path", "/_bynkish"), { params: { path: "/_bynkish" } });
+});
+
+test("matchPath: a rest is never decoded, but a dot segment in it is malformed (#3752, D4)", () => {
+  // A malformed escape inside the rest is the handler's to judge.
+  assert.deepEqual(matchPath("/files/*key", "/files/%E0%A4%A"), { params: { key: "/%E0%A4%A" } });
+  // One before it is the usual `400 MalformedPath`.
+  const before = matchPath("/f/:d/*key", "/f/%E0%A4%A/x");
+  assert.ok(before !== null && typeof before.malformed === "string");
+  for (const dots of ["/files/..", "/files/a/./b", "/files/%2e%2E/x", "/files/.%2e", "/files/%2e"]) {
+    const m = matchPath("/files/*key", dots);
+    assert.ok(m !== null && typeof m.malformed === "string", dots);
+  }
+  // Dots inside a segment are an ordinary name.
+  assert.deepEqual(matchPath("/files/*key", "/files/a..b/.env"), { params: { key: "/a..b/.env" } });
+});
+
 const id = (v: number): JsonValue => v;
 
 test("httpResultToResponse: 412 and 428 render as problem details with their reason phrase", async () => {

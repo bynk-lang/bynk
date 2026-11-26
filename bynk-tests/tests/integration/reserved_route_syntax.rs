@@ -1,5 +1,7 @@
-//! #3753: `*`, `{` and `}` are reserved in a route, so a rest-segment form
-//! (#3752) can be added later without changing what an existing route means.
+//! #3753: `*`, `{` and `}` are reserved in a route, so a route form can be
+//! added later without changing what an existing route means. #3752 spent `*`
+//! on a final `*name` rest (the `3752_*` fixtures); a `*` anywhere else is still
+//! reserved.
 //! The refusals are pinned by the `3753_http_reserved_route_*` negative
 //! fixtures; this pins the other half, that ordinary routes are unaffected.
 
@@ -43,7 +45,8 @@ fn ordinary_routes_still_compile() {
 #[test]
 fn reserved_characters_are_refused_once() {
     for route in [
-        "/files/*key",
+        "/files/*key/raw",
+        "/files/*key.txt",
         "/files/:key*",
         "/files/{key}",
         "/files/{...key}",

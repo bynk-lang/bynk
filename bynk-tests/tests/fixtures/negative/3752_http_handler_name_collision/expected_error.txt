@@ -1,0 +1,2 @@
+bynk.http.handler_name_collision
+would be emitted as `http_GET_a_b`
