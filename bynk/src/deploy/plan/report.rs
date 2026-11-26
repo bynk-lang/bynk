@@ -88,6 +88,7 @@ pub(crate) mod code {
     pub(crate) const PROJECT_UNDEPLOYABLE: &str = "bynk.deploy.project_undeployable";
     pub(crate) const PREFLIGHT_FAILED: &str = "bynk.deploy.preflight_failed";
     pub(crate) const CONTEXT_NOT_FOUND: &str = "bynk.deploy.context_not_found";
+    pub(crate) const NO_WORKERS_BUILT: &str = "bynk.deploy.no_workers_built";
     pub(crate) const WORKERS_UNREADABLE: &str = "bynk.deploy.workers_unreadable";
     pub(crate) const EMAIL_CLAIM_REFUSED: &str = "bynk.deploy.email_claim_refused";
     pub(crate) const SECRETS_SOURCE_UNREADABLE: &str = "bynk.deploy.secrets_source_unreadable";

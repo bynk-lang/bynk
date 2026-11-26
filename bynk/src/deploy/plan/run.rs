@@ -349,11 +349,7 @@ fn deploy(
     let available = workers::discover_workers(&workers_dir);
     let selected = match select_workers(opts, project_root, &available) {
         Ok(selected) => selected,
-        Err(e) => {
-            return Err(Stop::error(
-                Entry::new(code::CONTEXT_NOT_FOUND, e).with("requested", opts.context.clone()),
-            ));
-        }
+        Err(entry) => return Err(Stop::error(entry)),
     };
     // Read spans the *whole* project even under `--context`: D4 needs the
     // selected context's binding targets to check they are live, and they are
@@ -615,32 +611,43 @@ fn select_workers(
     opts: &DeployOptions,
     project_root: &Path,
     available: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, Entry> {
+    // #3797: the name a refusal is about, for the entries that have one.
+    let not_found = |message: String| {
+        Entry::new(code::CONTEXT_NOT_FOUND, message).with("requested", opts.context.clone())
+    };
     let Some(name) = opts.context.as_deref().filter(|_| opts.by_worker) else {
         let found = workers::select_contexts(available, opts.context.as_slice());
         return found.map_err(|e| match (e, &opts.context) {
             (workers::SelectError::NotFound { .. }, Some(context)) => {
                 match GroupNames::of(project_root).holding(context) {
-                    Some(worker) => format!(
+                    Some(worker) => not_found(format!(
                         "context `{context}` is in Worker `{worker}`, which deploys as a unit: use `--worker {worker}`"
+                    ))
+                    .with("worker", worker),
+                    None => not_found(
+                        workers::SelectError::NotFound {
+                            requested: context.clone(),
+                            available: available.to_vec(),
+                        }
+                        .to_string(),
                     ),
-                    None => workers::SelectError::NotFound {
-                        requested: context.clone(),
-                        available: available.to_vec(),
-                    }
-                    .to_string(),
                 }
             }
-            (e, _) => e.to_string(),
+            // An empty build is no `--context` problem: it has its own code.
+            (e @ workers::SelectError::NoneBuilt, _) => {
+                Entry::new(code::NO_WORKERS_BUILT, e.to_string())
+            }
+            (e, _) => not_found(e.to_string()),
         });
     };
     if available.iter().any(|worker| worker == name) {
         return Ok(vec![name.to_string()]);
     }
-    Err(format!(
+    Err(not_found(format!(
         "no Worker `{name}` was built (available: {})",
         available.join(", ")
-    ))
+    )))
 }
 
 /// #3941 decision H: each `env(…)` constant with its resolved value and where it

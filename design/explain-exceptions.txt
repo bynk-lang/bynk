@@ -51,6 +51,7 @@ bynk.deploy.email_claim_refused: needs the network, git, a registry, lockfile st
 bynk.deploy.env_passthrough_conflict: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.ledger_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.preflight_failed: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.no_workers_built: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.project_undeployable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.rebuild_failed: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.secrets_source_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example

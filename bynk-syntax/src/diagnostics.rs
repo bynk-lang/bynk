@@ -8201,6 +8201,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path.",
     ),
     d(
+        "bynk.deploy.no_workers_built",
+        "`bynk deploy` found nothing to deploy: the build produced no Workers, because the project defines no contexts. Add a context, or check `[paths] include` in `bynk.toml`.",
+    ),
+    d(
         "bynk.deploy.not_a_context",
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),

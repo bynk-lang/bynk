@@ -289,3 +289,19 @@ fn a_context_bound_to_a_worker_never_deployed_is_a_refusal_entry_naming_both() {
     assert_eq!(r["worker"], "shop-orders");
     assert_eq!(r["dependencies"], serde_json::json!(["shop-billing"]));
 }
+
+#[test]
+fn a_project_with_no_contexts_is_not_an_unknown_context() {
+    let dir = scratch("no_workers");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"empty\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+    );
+    write(
+        &dir.join("src/shop/types.bynk"),
+        "commons shop.types\n\nfn one() -> Int { 1 }\n",
+    );
+    let r = only_refusal(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(r["code"], "bynk.deploy.no_workers_built");
+    assert!(r.get("requested").is_none(), "{r}");
+}

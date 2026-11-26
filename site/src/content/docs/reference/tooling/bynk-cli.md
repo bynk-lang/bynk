@@ -703,6 +703,7 @@ refusal or warning, never as a pass.
 | `bynk.deploy.project_undeployable` | `refusals` | none: the `[deploy.workers]` table does not read, or the build profile checks contracts. |
 | `bynk.deploy.preflight_failed` | `refusals` | none: the environment is not ready for a deploy; the message is the doctor's report. |
 | `bynk.deploy.context_not_found` | `refusals` | `requested`: the `--context` or `--worker` name no build produced. |
+| `bynk.deploy.no_workers_built` | `refusals` | none: the build produced no Workers (the project defines no contexts). |
 | `bynk.deploy.workers_unreadable` | `refusals` | none: a built Worker's declarations could not be read. |
 | `bynk.deploy.email_claim_refused` | `refusals` | `environment`: `[deploy.email]` could not be applied. |
 | `bynk.deploy.secrets_source_unreadable` | `refusals` | none: `--secrets-file` did not read. |

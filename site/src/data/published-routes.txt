@@ -367,6 +367,7 @@
 /book/reference/diagnostics/bynk.deploy.group_name_conflict/
 /book/reference/diagnostics/bynk.deploy.ledger_unreadable/
 /book/reference/diagnostics/bynk.deploy.multiple_websocket_members/
+/book/reference/diagnostics/bynk.deploy.no_workers_built/
 /book/reference/diagnostics/bynk.deploy.not_a_context/
 /book/reference/diagnostics/bynk.deploy.preflight_failed/
 /book/reference/diagnostics/bynk.deploy.project_undeployable/
@@ -1549,6 +1550,7 @@
 /reference/diagnostics/bynk.deploy.group_name_conflict/
 /reference/diagnostics/bynk.deploy.ledger_unreadable/
 /reference/diagnostics/bynk.deploy.multiple_websocket_members/
+/reference/diagnostics/bynk.deploy.no_workers_built/
 /reference/diagnostics/bynk.deploy.not_a_context/
 /reference/diagnostics/bynk.deploy.preflight_failed/
 /reference/diagnostics/bynk.deploy.project_undeployable/
