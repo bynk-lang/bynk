@@ -2263,12 +2263,15 @@ t("WorkersAi.generateStream: reads `choices[0].delta.content` too, and skips eve
     'data: {"response":null}\n\n',
     'data: {"choices":[{"delta":{"content":""}}]}\n\n',
     'data: {"response":"b"}\n\n',
+    'data: {"response":"","choices":[{"delta":{"content":"c"}}]}\n\n',
+    'data: {"response":null,"choices":[{"delta":{"content":"d"}}]}\n\n',
+    'data: {"id":"x","object":"chat.completion.chunk","created":1,"model":"m","choices":[],"usage":{"prompt_tokens":3}}\n\n',
     'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n',
     'data: {"usage":{"prompt_tokens":3,"completion_tokens":2}}\n\n',
     'data: {"usage":{"prompt_tokens":3,"completion_tokens":2},"p":"abcdef"}\n\n',
     "data: [DONE]\n\n",
   ]);
-  assert.deepEqual(await collect(r.value), ["a", "b"]);
+  assert.deepEqual(await collect(r.value), ["a", "b", "c", "d"]);
 });
 
 t("WorkersAi.generateStream: an event with no text that is not a known one faults the stream naming its keys and never its values", async () => {

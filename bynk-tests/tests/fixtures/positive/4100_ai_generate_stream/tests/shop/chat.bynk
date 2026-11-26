@@ -15,7 +15,7 @@ case "the text deltas are re-served as a stream" {
 	match r {
 		Streaming(body) => {
 			let parts <- body.collect()
-			expect parts.length() == 2
+			expect parts == ["Hel", "lo"]
 		}
 		_ => expect false
 	}
