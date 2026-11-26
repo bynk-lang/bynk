@@ -1,0 +1,2 @@
+bynk.types.extensible_match_needs_wildcard `HttpResult` may gain variants in a minor release, so this `match` must cover them — `Some(_)` is not covered
+# exact

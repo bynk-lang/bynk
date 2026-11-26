@@ -5694,7 +5694,8 @@ fn describe_pattern(pat: &Pattern) -> String {
     }
 }
 
-/// The extensible enum a first-party unit exports that `ty` is, if any. Types
+/// The extensible enum a first-party unit exports that `ty` is, if any, or the
+/// built-in `HttpResult` (#4536). Types
 /// carry no owning unit, so whether a name is one comes from
 /// [`crate::resolver::ResolvedCommons::extensible_enums`], decided once per unit
 /// from its provenance. A user's own enum of the same name is never imported
@@ -5710,6 +5711,16 @@ pub(super) fn extensible_enum(ty: TyId, ctx: &Ctx) -> Option<String> {
             .extensible_enums
             .contains(name)
             .then(|| name.clone()),
+        // #4536: the built-in `HttpResult` is not a first-party enum; the set
+        // holds it when the flag beside its variant registry marks it
+        // extensible. `HttpResult` is a reserved type name, so no user type
+        // shares it, and an input without the set (a suite case body) is
+        // under the rule no more than for `FetchError`.
+        Ty::HttpResult(..) => ctx
+            .input
+            .extensible_enums
+            .contains("HttpResult")
+            .then(|| "HttpResult".to_string()),
         _ => None,
     }
 }
