@@ -549,6 +549,7 @@ mod tests {
                     order: &order,
                 },
                 &[],
+                &[],
                 false,
                 missing,
             )

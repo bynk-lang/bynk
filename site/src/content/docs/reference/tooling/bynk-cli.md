@@ -776,11 +776,13 @@ access to the kinds listed. Without the variables, the plan stays the ledger's
 and a note says so. A listing that fails is a warning, never a failure.
 
 **Credentials for account resources.** The push runs through wrangler, so
-`wrangler login` is enough for it. Creating or deleting a KV namespace, and
-creating an R2 bucket or a D1 database, goes through Cloudflare's API, as
-Hyperdrive and the linked kinds already do. That needs `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV Storage: Edit", "Workers R2
-Storage: Edit" or "D1: Edit" for the kinds it touches. When a step needs them,
+`wrangler login` is enough for it. Creating or deleting a KV namespace, creating
+an R2 bucket or a D1 database, and every Vectorize call, go through Cloudflare's
+API, as Hyperdrive and the linked kinds already do. That needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV
+Storage: Edit", "Workers R2 Storage: Edit", "D1: Edit" or "Vectorize: Edit" for
+the kinds it touches. A project with a `Vectorize` needs them on every deploy,
+because each deploy checks its indexes. When a step needs them,
 `deploy` checks for both after the plan and before the confirmation, and
 refuses, with nothing created, naming the missing variable and the permission.
 A run that needs nothing asks nothing: a redeploy whose namespaces, buckets and

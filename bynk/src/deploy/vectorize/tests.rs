@@ -46,7 +46,7 @@ impl Account {
     fn answer(
         &mut self,
         op: &crate::cloudflare::Op<'_>,
-    ) -> Result<String, crate::cloudflare::WranglerError> {
+    ) -> Result<String, crate::cloudflare::CloudflareError> {
         use crate::cloudflare::Op;
         let Op::Vectorize(call) = op else {
             return Err(crate::cloudflare::WranglerError::exit(
@@ -54,7 +54,8 @@ impl Account {
                 crate::cloudflare::error::Exit::Code(2),
                 "",
                 "",
-            ));
+            )
+            .into());
         };
         Ok(match call {
             VectorizeOp::List => self.list.clone(),
@@ -62,11 +63,14 @@ impl Account {
             VectorizeOp::CreateMetadataIndex { .. } => {
                 self.created = true;
                 if self.exists {
-                    return Err(crate::cloudflare::fake::failed(
-                        op,
-                        "",
-                        "metadata index already exists for this name [code: 40004]",
-                    ));
+                    // The reference documents no code for it: a refusal, whatever its code.
+                    return Err(crate::cloudflare::RestError::answered(
+                        "POST",
+                        "/vectorize/v2/indexes/shop-docs/metadata_index/create",
+                        409,
+                        r#"[{"code":40004,"message":"metadata index already exists for this name"}]"#,
+                    )
+                    .into());
                 }
                 String::new()
             }
@@ -184,32 +188,6 @@ impl Drop for Fake {
 }
 
 const MATCHING: &str = r#"{"name":"shop-docs","config":{"dimensions":768,"metric":"cosine"}}"#;
-
-#[test]
-fn the_account_output_is_read_defensively() {
-    let top = parse_index_config(r#"{"dimensions":3,"metric":"DOT_PRODUCT"}"#).unwrap();
-    assert_eq!((top.dimensions, top.metric.as_str()), (3, "dot-product"));
-    assert_eq!(parse_index_config(MATCHING).unwrap().dimensions, 768);
-    assert_eq!(parse_index_config(r#"{"name":"x"}"#), None);
-    assert_eq!(parse_index_config("not json"), None);
-    assert_eq!(
-        parse_index_names(r#"[{"name":"a"},{"name":"b"}]"#).unwrap(),
-        ["a", "b"]
-    );
-    assert_eq!(parse_index_names(r#"{"name":"a"}"#), None);
-    assert_eq!(
-        parse_metadata_indexes(r#"[{"propertyName":"category","indexType":"String"}]"#).unwrap(),
-        ["category:string"]
-    );
-    assert_eq!(
-        parse_metadata_indexes(
-            r#"{"metadataIndexes":[{"property_name":"y","index_type":"number"}]}"#
-        )
-        .unwrap(),
-        ["y:number"]
-    );
-    assert_eq!(parse_metadata_indexes(r#"[{"x":1}]"#), None);
-}
 
 #[test]
 fn metadata_index_changes_are_additions_and_removals() {
@@ -796,13 +774,76 @@ fn the_unlisted_metadata_index_warning_allows_for_one_still_being_built() {
 }
 
 #[test]
-fn a_bare_authentication_error_names_the_permission_needed() {
+fn a_denied_token_names_the_permission_needed() {
     // #3495
-    let said = "Authentication error [code: 10000]".to_string();
-    let hinted = with_permission_hint(said.clone());
-    assert!(hinted.starts_with(&said), "{hinted}");
+    use crate::cloudflare::RestError;
+    let denied: CloudflareError = RestError::answered(
+        "GET",
+        "/vectorize/v2/indexes",
+        403,
+        r#"[{"code":10000,"message":"Authentication error"}]"#,
+    )
+    .into();
+    let hinted = with_permission_hint(&denied);
+    assert!(hinted.starts_with(&denied.to_string()), "{hinted}");
     assert!(hinted.contains("Account > Vectorize > Edit"), "{hinted}");
     // Any other failure is passed through untouched.
-    let other = "index not found [code: 3002]".to_string();
-    assert_eq!(with_permission_hint(other.clone()), other);
+    let other: CloudflareError =
+        RestError::answered("GET", "/vectorize/v2/indexes/x", 404, r#"[{"code":3002}]"#).into();
+    assert_eq!(with_permission_hint(&other), other.to_string());
+}
+
+/// 1D.4c (#4056): a refused metadata-index create that is never listed fails at the timeout,
+/// and says what Cloudflare refused, rather than reading as a plain timeout.
+#[test]
+fn a_refused_metadata_index_that_never_appears_says_so_at_the_timeout() {
+    let fake = Fake::new("refused-never", "[]", MATCHING, "[]");
+    fake.metadata_index_exists();
+    let mut lock = DeployLock::default();
+    let failure = fake
+        .run(&resources(&["category:string"]), &mut lock, "default")
+        .unwrap_err();
+    assert!(
+        failure.message.contains("not listed after")
+            && failure.message.contains("Cloudflare refused creating one")
+            && failure.message.contains("40004"),
+        "{}",
+        failure.message
+    );
+}
+
+/// 1D.4c (#4056 Decision E): every deploy of a declared index needs the credentials, recorded
+/// or not, and so does a `--prune` of an orphan the project made; an adopted orphan is never
+/// pruned, so it asks nothing.
+#[test]
+fn every_deploy_of_an_index_calls_the_account() {
+    use crate::deploy::config::tests::project;
+    let lock = DeployLock::default();
+    let declared = project(vec![
+        ("shop", resources(&[])),
+        ("plain", Resources::default()),
+    ]);
+    let call = |order: &[&str], orphans: &[OrphanVectorize], prune: bool| {
+        let order: Vec<String> = order.iter().map(|w| w.to_string()).collect();
+        vectorize_calls_the_account(
+            &ProjectCx {
+                ledger: LedgerView::of(&lock, "default"),
+                resources: &declared,
+                order: &order,
+            },
+            orphans,
+            prune,
+        )
+    };
+    assert!(call(&["shop"], &[], false));
+    assert!(!call(&["plain"], &[], false));
+    let orphan = |adopted| OrphanVectorize {
+        worker: "gone".into(),
+        binding: "VECTORIZE_DOCS".into(),
+        index: "gone-docs".into(),
+        adopted,
+    };
+    assert!(call(&["plain"], &[orphan(false)], true));
+    assert!(!call(&["plain"], &[orphan(false)], false));
+    assert!(!call(&["plain"], &[orphan(true)], true));
 }

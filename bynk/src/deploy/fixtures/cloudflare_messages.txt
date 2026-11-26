@@ -138,207 +138,6 @@
    call: d1 migrations apply DB --remote --env staging
    -> ok ()
 
-== vectorize list · wrangler missing
-   -> error wrangler not found
-== vectorize list · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize list · exits 1, stderr only
-   call: vectorize list --json
-   -> error it went wrong on stderr
-== vectorize list · exits 1, stdout only
-   call: vectorize list --json
-   -> error it went wrong on stdout
-== vectorize list · exits 1, both streams
-   call: vectorize list --json
-   -> error wrong on stderr
-      and on stdout
-== vectorize list · exits 3, silent
-   call: vectorize list --json
-   -> error wrangler exited 3
-== vectorize list · killed by SIGTERM, silent
-   call: vectorize list --json
-   -> error wrangler exited 143
-== vectorize list · exits 0, unreadable output
-   call: vectorize list --json
-   -> error could not read the list of Vectorize indexes from wrangler's output
-== vectorize list · listed
-   call: vectorize list --json
-   -> ok true
-== vectorize list · not listed
-   call: vectorize list --json
-   -> ok false
-== vectorize list · no permission, code 10000
-   call: vectorize list --json
-   -> error Authentication error [code: 10000]
-        hint: the API token needs the Account > Vectorize > Edit permission
-
-== vectorize get · wrangler missing
-   -> error wrangler not found
-== vectorize get · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize get · exits 1, stderr only
-   call: vectorize get docs --json
-   -> error it went wrong on stderr
-== vectorize get · exits 1, stdout only
-   call: vectorize get docs --json
-   -> error it went wrong on stdout
-== vectorize get · exits 1, both streams
-   call: vectorize get docs --json
-   -> error wrong on stderr
-      and on stdout
-== vectorize get · exits 3, silent
-   call: vectorize get docs --json
-   -> error wrangler exited 3
-== vectorize get · killed by SIGTERM, silent
-   call: vectorize get docs --json
-   -> error wrangler exited 143
-== vectorize get · exits 0, unreadable output
-   call: vectorize get docs --json
-   -> error could not read the dimensions and metric of `docs` from wrangler's output, so it was not checked against the source
-== vectorize get · config at the top level
-   call: vectorize get docs --json
-   -> ok IndexConfig { dimensions: 768, metric: "cosine" }
-== vectorize get · config nested
-   call: vectorize get docs --json
-   -> ok IndexConfig { dimensions: 3, metric: "dot-product" }
-
-== vectorize create · wrangler missing
-   -> error wrangler not found
-== vectorize create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize create · exits 1, stderr only
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> error it went wrong on stderr
-== vectorize create · exits 1, stdout only
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> error it went wrong on stdout
-== vectorize create · exits 1, both streams
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> error wrong on stderr
-      and on stdout
-== vectorize create · exits 3, silent
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> error wrangler exited 3
-== vectorize create · killed by SIGTERM, silent
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> error wrangler exited 143
-== vectorize create · exits 0, unreadable output
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> ok ()
-== vectorize create · created
-   call: vectorize create docs --dimensions 768 --metric cosine
-   -> ok ()
-
-== vectorize list-metadata-index · wrangler missing
-   -> error wrangler not found
-== vectorize list-metadata-index · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize list-metadata-index · exits 1, stderr only
-   call: vectorize list-metadata-index docs --json
-   -> error it went wrong on stderr
-== vectorize list-metadata-index · exits 1, stdout only
-   call: vectorize list-metadata-index docs --json
-   -> error it went wrong on stdout
-== vectorize list-metadata-index · exits 1, both streams
-   call: vectorize list-metadata-index docs --json
-   -> error wrong on stderr
-      and on stdout
-== vectorize list-metadata-index · exits 3, silent
-   call: vectorize list-metadata-index docs --json
-   -> error wrangler exited 3
-== vectorize list-metadata-index · killed by SIGTERM, silent
-   call: vectorize list-metadata-index docs --json
-   -> error wrangler exited 143
-== vectorize list-metadata-index · exits 0, unreadable output
-   call: vectorize list-metadata-index docs --json
-   -> error could not read the metadata indexes from wrangler's output
-== vectorize list-metadata-index · listed
-   call: vectorize list-metadata-index docs --json
-   -> ok ["category:string"]
-
-== vectorize create-metadata-index · wrangler missing
-   -> error wrangler not found
-== vectorize create-metadata-index · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize create-metadata-index · exits 1, stderr only
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> error it went wrong on stderr
-== vectorize create-metadata-index · exits 1, stdout only
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> error it went wrong on stdout
-== vectorize create-metadata-index · exits 1, both streams
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> error wrong on stderr
-      and on stdout
-== vectorize create-metadata-index · exits 3, silent
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> error wrangler exited 3
-== vectorize create-metadata-index · killed by SIGTERM, silent
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> error wrangler exited 143
-== vectorize create-metadata-index · exits 0, unreadable output
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> ok ()
-== vectorize create-metadata-index · created
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> ok ()
-== vectorize create-metadata-index · already exists
-   call: vectorize create-metadata-index docs --propertyName category --type string
-   -> ok ()
-
-== vectorize create-metadata-index (not name:type) · wrangler missing
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · wrangler does not start
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · exits 1, stderr only
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · exits 1, stdout only
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · exits 1, both streams
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · exits 3, silent
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · killed by SIGTERM, silent
-   -> error `category` is not `name:type`
-== vectorize create-metadata-index (not name:type) · exits 0, unreadable output
-   -> error `category` is not `name:type`
-
-== vectorize delete · wrangler missing
-   -> error wrangler not found
-== vectorize delete · wrangler does not start
-   -> error No such file or directory (os error 2)
-== vectorize delete · exits 1, stderr only
-   call: vectorize list --json
-   -> error it went wrong on stderr
-== vectorize delete · exits 1, stdout only
-   call: vectorize list --json
-   -> error it went wrong on stdout
-== vectorize delete · exits 1, both streams
-   call: vectorize list --json
-   -> error wrong on stderr
-      and on stdout
-== vectorize delete · exits 3, silent
-   call: vectorize list --json
-   -> error wrangler exited 3
-== vectorize delete · killed by SIGTERM, silent
-   call: vectorize list --json
-   -> error wrangler exited 143
-== vectorize delete · exits 0, unreadable output
-   call: vectorize list --json
-   -> error could not read the list of Vectorize indexes from wrangler's output
-== vectorize delete · deleted
-   call: vectorize list --json
-   call: vectorize delete docs --force
-   -> ok ()
-== vectorize delete · already gone
-   call: vectorize list --json
-   -> ok ()
-== vectorize delete · the delete fails
-   call: vectorize list --json
-   call: vectorize delete docs --force
-   -> error Authentication error [code: 10000]
-        hint: the API token needs the Account > Vectorize > Edit permission
-
 == deploy · wrangler missing
    -> exit 1 wrangler not found
 == deploy · wrangler does not start
@@ -655,6 +454,9 @@
    call: stdin: 
    -> ok ()
 
+== Vectorize create metadata index (REST, not name:type) · nothing sent
+   -> error `category` is not `name:type`
+
 == KV create (REST) · unreachable
    -> error POST /storage/kv/namespaces: io: Connection refused (os error N)
 == KV create (REST) · 200, success
@@ -838,4 +640,169 @@
 == R2 create (REST, jurisdiction eu) · 200, unreadable
    request: POST /accounts/acct/r2/buckets [cf-r2-jurisdiction: eu] {"name":"shop-files"}
    -> error POST /r2/buckets: unreadable answer (expected value at line 1 column 1)
+
+== Vectorize list (REST) · unreachable
+   -> error GET /vectorize/v2/indexes?page=1: io: Connection refused (os error N)
+== Vectorize list (REST) · 200, success
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare's answer has no list of index names
+== Vectorize list (REST) · 200, success false
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Vectorize list (REST) · 404 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== Vectorize list (REST) · 403 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
+== Vectorize list (REST) · 500 without errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 500 
+== Vectorize list (REST) · 200, unreadable
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: unreadable answer (expected value at line 1 column 1)
+== Vectorize list (REST) · listed
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> ok true
+== Vectorize list (REST) · not listed
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> ok false
+
+== Vectorize get (REST) · unreachable
+   -> error GET /vectorize/v2/indexes/docs: io: Connection refused (os error N); so `docs` was not checked against the source
+== Vectorize get (REST) · 200, success
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare's answer has no dimensions and metric; so `docs` was not checked against the source
+== Vectorize get (REST) · 200, success false
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 200 [{"code":7003,"message":"No route"}]; so `docs` was not checked against the source
+== Vectorize get (REST) · 404 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 404 [{"code":10007,"message":"not found"}]; so `docs` was not checked against the source
+== Vectorize get (REST) · 403 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission; so `docs` was not checked against the source
+== Vectorize get (REST) · 500 without errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: Cloudflare answered 500 ; so `docs` was not checked against the source
+== Vectorize get (REST) · 200, unreadable
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> error GET /vectorize/v2/indexes/docs: unreadable answer (expected value at line 1 column 1); so `docs` was not checked against the source
+== Vectorize get (REST) · config, dot-product
+   request: GET /accounts/acct/vectorize/v2/indexes/docs
+   -> ok IndexConfig { dimensions: 3, metric: "dot-product" }
+
+== Vectorize create (REST) · unreachable
+   -> error POST /vectorize/v2/indexes: io: Connection refused (os error N)
+== Vectorize create (REST) · 200, success
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> ok ()
+== Vectorize create (REST) · 200, success false
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> error POST /vectorize/v2/indexes: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Vectorize create (REST) · 404 with errors
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> error POST /vectorize/v2/indexes: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== Vectorize create (REST) · 403 with errors
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> error POST /vectorize/v2/indexes: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
+== Vectorize create (REST) · 500 without errors
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> error POST /vectorize/v2/indexes: Cloudflare answered 500 
+== Vectorize create (REST) · 200, unreadable
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> error POST /vectorize/v2/indexes: unreadable answer (expected value at line 1 column 1)
+== Vectorize create (REST) · created
+   request: POST /accounts/acct/vectorize/v2/indexes {"config":{"dimensions":768,"metric":"cosine"},"name":"docs"}
+   -> ok ()
+
+== Vectorize list metadata indexes (REST) · unreachable
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: io: Connection refused (os error N)
+== Vectorize list metadata indexes (REST) · 200, success
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: Cloudflare's answer has no list of metadata indexes
+== Vectorize list metadata indexes (REST) · 200, success false
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Vectorize list metadata indexes (REST) · 404 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== Vectorize list metadata indexes (REST) · 403 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
+== Vectorize list metadata indexes (REST) · 500 without errors
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: Cloudflare answered 500 
+== Vectorize list metadata indexes (REST) · 200, unreadable
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> error GET /vectorize/v2/indexes/docs/metadata_index/list: unreadable answer (expected value at line 1 column 1)
+== Vectorize list metadata indexes (REST) · listed
+   request: GET /accounts/acct/vectorize/v2/indexes/docs/metadata_index/list
+   -> ok ["category:string"]
+
+== Vectorize create metadata index (REST) · unreachable
+   -> error POST /vectorize/v2/indexes/docs/metadata_index/create: io: Connection refused (os error N)
+== Vectorize create metadata index (REST) · 200, success
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> ok None
+== Vectorize create metadata index (REST) · 200, success false
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> error POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Vectorize create metadata index (REST) · 404 with errors
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> ok Some("POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 404 [{\"code\":10007,\"message\":\"not found\"}]")
+== Vectorize create metadata index (REST) · 403 with errors
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> error POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
+== Vectorize create metadata index (REST) · 500 without errors
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> error POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 500 
+== Vectorize create metadata index (REST) · 200, unreadable
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> error POST /vectorize/v2/indexes/docs/metadata_index/create: unreadable answer (expected value at line 1 column 1)
+== Vectorize create metadata index (REST) · enqueued
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> ok None
+== Vectorize create metadata index (REST) · refused, left to the listing wait
+   request: POST /accounts/acct/vectorize/v2/indexes/docs/metadata_index/create {"indexType":"string","propertyName":"category"}
+   -> ok Some("POST /vectorize/v2/indexes/docs/metadata_index/create: Cloudflare answered 409 [{\"code\":40004,\"message\":\"metadata index already exists\"}]")
+
+== Vectorize delete (REST) · unreachable
+   -> error GET /vectorize/v2/indexes?page=1: io: Connection refused (os error N)
+== Vectorize delete (REST) · 200, success
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare's answer has no list of index names
+== Vectorize delete (REST) · 200, success false
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== Vectorize delete (REST) · 404 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== Vectorize delete (REST) · 403 with errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
+== Vectorize delete (REST) · 500 without errors
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: Cloudflare answered 500 
+== Vectorize delete (REST) · 200, unreadable
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> error GET /vectorize/v2/indexes?page=1: unreadable answer (expected value at line 1 column 1)
+== Vectorize delete (REST) · deleted
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   request: DELETE /accounts/acct/vectorize/v2/indexes/docs
+   -> ok ()
+== Vectorize delete (REST) · already gone
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   -> ok ()
+== Vectorize delete (REST) · the delete is denied
+   request: GET /accounts/acct/vectorize/v2/indexes?page=1
+   request: DELETE /accounts/acct/vectorize/v2/indexes/docs
+   -> error DELETE /vectorize/v2/indexes/docs: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+        hint: the API token needs the Account > Vectorize > Edit permission
 

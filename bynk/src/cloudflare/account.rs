@@ -11,10 +11,11 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::api::{CloudflareApi, PushCall, PushRun, VectorizeOp};
+use super::api::{CloudflareApi, PushCall, PushRun};
 use super::error::{CloudflareError, WranglerError};
 use super::paging::{MissingTotal, Numbered, Page};
 use super::process::Wrangler;
+use super::rest::vectorize::IndexConfig;
 use super::rest::{self, Purpose, Request, Rest};
 
 /// The account, over both transports.
@@ -80,6 +81,17 @@ fn bucket_name(name: &str) -> Result<(), CloudflareError> {
     } else {
         Err(CloudflareError::Other(format!(
             "`{name}` is not a valid R2 bucket name, so nothing was sent"
+        )))
+    }
+}
+
+/// `name`, refused unless it can be a Vectorize index name, before it reaches a request path.
+fn index_name(name: &str) -> Result<(), CloudflareError> {
+    if rest::vectorize::is_index_name(name) {
+        Ok(())
+    } else {
+        Err(CloudflareError::Other(format!(
+            "`{name}` is not a valid Vectorize index name, so nothing was sent"
         )))
     }
 }
@@ -204,8 +216,73 @@ impl CloudflareApi for Account<'_> {
         }
     }
 
-    fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError> {
-        self.wrangler.vectorize(op)
+    /// Followed as the plan's own Vectorize listing is: while a page is full, which, with no
+    /// paging documented, is one request.
+    fn vectorize_names(&self) -> Result<Vec<String>, CloudflareError> {
+        let mut names = Vec::new();
+        let rule = Numbered {
+            cap: None,
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::vectorize::list_page(page);
+            let body = self.send(Purpose::Vectorize, &request)?;
+            let (listed, entries) = rest::vectorize::listed(&body)
+                .ok_or_else(|| unreadable(&request, "list of index names"))?;
+            names.extend(listed);
+            Ok(Page::of(&body, entries))
+        })?;
+        Ok(names)
+    }
+
+    fn vectorize_config(&self, name: &str) -> Result<IndexConfig, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::get(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::config(&body).ok_or_else(|| unreadable(&request, "dimensions and metric"))
+    }
+
+    fn vectorize_create(
+        &self,
+        name: &str,
+        dimensions: i64,
+        metric: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::create(name, dimensions, metric),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_metadata_indexes(&self, name: &str) -> Result<Vec<String>, CloudflareError> {
+        index_name(name)?;
+        let request = rest::vectorize::metadata_list(name);
+        let body = self.send(Purpose::Vectorize, &request)?;
+        rest::vectorize::metadata(&body)
+            .ok_or_else(|| unreadable(&request, "list of metadata indexes"))
+    }
+
+    fn vectorize_create_metadata_index(
+        &self,
+        name: &str,
+        property: &str,
+        ty: &str,
+    ) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(
+            Purpose::Vectorize,
+            &rest::vectorize::metadata_create(name, property, ty),
+        )
+        .map(drop)
+    }
+
+    fn vectorize_delete(&self, name: &str) -> Result<(), CloudflareError> {
+        index_name(name)?;
+        self.send(Purpose::Vectorize, &rest::vectorize::delete(name))
+            .map(drop)
     }
 
     fn push(&self, call: PushCall<'_>) -> Result<PushRun, WranglerError> {

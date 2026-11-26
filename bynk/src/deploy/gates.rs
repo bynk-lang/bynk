@@ -482,7 +482,7 @@ pub(crate) struct AccountCx<'a> {
 }
 
 /// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
-/// (KV since 1D.4a, R2 and D1 since 1D.4b) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// (KV since 1D.4a, R2 and D1 since 1D.4b, Vectorize since 1D.4c) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
 /// the plan and before the confirmation, so a missing one is refused before anything is created.
 /// The first kind in list order that needs them reports, in its own words. A run that needs
 /// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
@@ -492,9 +492,14 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
         resources: cx.resources,
         order: cx.order,
     };
-    let checked = resource_credentials(&project, &cx.plan.orphans.kv, cx.opts.prune, |purpose| {
-        crate::cloudflare::rest::for_kind(purpose).map(drop)
-    });
+    let orphans = &cx.plan.orphans;
+    let checked = resource_credentials(
+        &project,
+        &orphans.kv,
+        &orphans.vectorize,
+        cx.opts.prune,
+        |purpose| crate::cloudflare::rest::for_kind(purpose).map(drop),
+    );
     checked.map_err(|refusal| {
         emsg!("bynk: error: {refusal}");
         ExitCode::FAILURE
@@ -507,6 +512,7 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
 pub(crate) fn resource_credentials(
     project: &ProjectCx<'_>,
     kv_orphans: &[OrphanKv],
+    vectorize_orphans: &[OrphanVectorize],
     prune: bool,
     credentials: impl Fn(
         crate::cloudflare::rest::Purpose,
@@ -520,6 +526,10 @@ pub(crate) fn resource_credentials(
         ),
         (Purpose::R2, r2_calls_the_account(project)),
         (Purpose::D1, d1_calls_the_account(project)),
+        (
+            Purpose::Vectorize,
+            vectorize_calls_the_account(project, vectorize_orphans, prune),
+        ),
     ];
     for (purpose, _) in needed.into_iter().filter(|(_, needed)| *needed) {
         credentials(purpose).map_err(|e| e.to_string())?;
