@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.workers_unreadable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` could not read what each built Worker declares from its generated `wrangler.toml` and manifests, so it stopped before planning. Rebuild and run it again; the message names the file."
+}

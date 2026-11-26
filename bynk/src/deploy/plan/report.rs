@@ -5,6 +5,9 @@
 //! carries a stable `code`, the human `message`, the facts of its subject (`context`, `from`, …)
 //! and, where one flag overrides it, `override`. The stderr lines are as before.
 
+use std::process::ExitCode;
+
+use bynk_driver::emsg;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -77,4 +80,76 @@ pub(crate) fn refused_report(
         "{}\n",
         serde_json::to_string_pretty(&doc).expect("a refusal report serialises")
     )
+}
+
+/// The codes of the refusals a run stops on before it reads the account (#3797, part 2).
+pub(crate) mod code {
+    pub(crate) const ENV_PASSTHROUGH_CONFLICT: &str = "bynk.deploy.env_passthrough_conflict";
+    pub(crate) const PROJECT_UNDEPLOYABLE: &str = "bynk.deploy.project_undeployable";
+    pub(crate) const PREFLIGHT_FAILED: &str = "bynk.deploy.preflight_failed";
+    pub(crate) const CONTEXT_NOT_FOUND: &str = "bynk.deploy.context_not_found";
+    pub(crate) const WORKERS_UNREADABLE: &str = "bynk.deploy.workers_unreadable";
+    pub(crate) const EMAIL_CLAIM_REFUSED: &str = "bynk.deploy.email_claim_refused";
+    pub(crate) const SECRETS_SOURCE_UNREADABLE: &str = "bynk.deploy.secrets_source_unreadable";
+    pub(crate) const LEDGER_UNREADABLE: &str = "bynk.deploy.ledger_unreadable";
+    pub(crate) const DEPENDENCY_NOT_DEPLOYED: &str = "bynk.deploy.dependency_not_deployed";
+    pub(crate) const CONTRACTS_MANIFEST_UNREADABLE: &str =
+        "bynk.deploy.contracts_manifest_unreadable";
+    pub(crate) const CONTRACTS_LOCK_UNWRITABLE: &str = "bynk.deploy.contracts_lock_unwritable";
+    pub(crate) const REBUILD_FAILED: &str = "bynk.deploy.rebuild_failed";
+    pub(crate) const UPLOAD_ORDER_CYCLE: &str = "bynk.deploy.upload_order_cycle";
+}
+
+/// Why `deploy` stopped (#3797): the exit code, and what a client asked for JSON reads of it. A
+/// stop with no entries is one the run explained some other way (a build's own diagnostics, a
+/// declined confirmation, a failed push); a stop with `refusals` prints them as the plan document.
+#[derive(Debug)]
+pub(crate) struct Stop {
+    pub(crate) code: ExitCode,
+    pub(crate) refusals: Vec<Entry>,
+    pub(crate) warnings: Vec<Entry>,
+    /// The upload order, when the run had one.
+    pub(crate) order: Vec<String>,
+}
+
+impl From<ExitCode> for Stop {
+    fn from(code: ExitCode) -> Self {
+        Self {
+            code,
+            refusals: Vec::new(),
+            warnings: Vec::new(),
+            order: Vec::new(),
+        }
+    }
+}
+
+impl Stop {
+    /// A stop that says why, as one refusal.
+    pub(crate) fn refused(entry: Entry) -> Self {
+        Self {
+            refusals: vec![entry],
+            ..Self::from(ExitCode::FAILURE)
+        }
+    }
+
+    /// The `bynk: error: <message>` line a run has always printed, and the refusal behind it.
+    pub(crate) fn error(entry: Entry) -> Self {
+        emsg!("bynk: error: {}", entry.message);
+        Self::refused(entry)
+    }
+
+    /// A refusal whose text the run prints itself, as it always did (it starts `bynk: error: ` and
+    /// may run over several lines): the entry carries the text without that prefix.
+    pub(crate) fn printed(code: &str, printed: &str, subject: &[(&str, Value)]) -> Self {
+        bynk_driver::colour::eprint(printed);
+        let message = printed
+            .strip_prefix("bynk: error: ")
+            .unwrap_or(printed)
+            .trim_end();
+        let mut entry = Entry::new(code, message);
+        for (key, value) in subject {
+            entry = entry.with(key, value.clone());
+        }
+        Self::refused(entry)
+    }
 }

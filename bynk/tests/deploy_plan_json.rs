@@ -158,3 +158,134 @@ fn the_short_format_prints_no_document_for_a_refusal() {
         String::from_utf8_lossy(&out.stdout)
     );
 }
+
+/// A project with one plain context and no ledger.
+fn plain_project(name: &str) -> PathBuf {
+    let dir = scratch(name);
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plain\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+    );
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nservice ping {\n\ton call() -> Effect[Int] by Caller {\n\t\t1\n\t}\n}\n",
+    );
+    dir
+}
+
+/// The one refusal of a stopped run's document: its code and the whole entry.
+fn only_refusal(o: &Output) -> Value {
+    assert!(!o.status.success(), "a refused run must exit non-zero");
+    let doc = stdout_json(o);
+    assert_eq!(doc["environment"], "default", "{doc}");
+    assert_eq!(doc["warnings"], serde_json::json!([]), "{doc}");
+    let refusals = doc["refusals"].as_array().expect("refusals is an array");
+    assert_eq!(refusals.len(), 1, "{doc}");
+    refusals[0].clone()
+}
+
+#[test]
+fn a_context_the_build_did_not_produce_is_a_refusal_entry() {
+    let dir = plain_project("context_not_found");
+    let r = only_refusal(&deploy(
+        &dir,
+        &["--format", "json", "--context", "shop.nowhere"],
+    ));
+    assert_eq!(r["code"], "bynk.deploy.context_not_found");
+    assert_eq!(r["requested"], "shop.nowhere");
+    assert!(r.get("override").is_none(), "{r}");
+}
+
+#[test]
+fn an_unreadable_ledger_is_a_refusal_entry_with_its_path() {
+    let dir = plain_project("ledger_unreadable");
+    write(&dir.join("bynk.deploy.lock"), "this is = not [valid toml\n");
+    let r = only_refusal(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(r["code"], "bynk.deploy.ledger_unreadable");
+    assert!(
+        r["path"].as_str().unwrap().ends_with("bynk.deploy.lock"),
+        "{r}"
+    );
+}
+
+#[test]
+fn an_unreadable_secrets_file_is_a_refusal_entry() {
+    let dir = plain_project("secrets_source");
+    let r = only_refusal(&deploy(
+        &dir,
+        &["--format", "json", "--secrets-file", "no-such-secrets.env"],
+    ));
+    assert_eq!(r["code"], "bynk.deploy.secrets_source_unreadable");
+}
+
+#[test]
+fn a_second_env_flag_after_the_separator_is_a_refusal_entry() {
+    let dir = plain_project("env_conflict");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk"))
+        .args([
+            "deploy",
+            "--dry-run",
+            "--format",
+            "json",
+            "--env",
+            "staging",
+        ])
+        .arg(&dir)
+        .args(["--", "--env", "other"])
+        .env("BYNK_NO_INSTALL", "1")
+        .output()
+        .expect("runs bynk");
+    assert!(!out.status.success());
+    let doc = stdout_json(&out);
+    assert_eq!(doc["environment"], "staging", "{doc}");
+    let r = &doc["refusals"][0];
+    assert_eq!(r["code"], "bynk.deploy.env_passthrough_conflict");
+    assert_eq!(r["environment"], "staging");
+    assert_eq!(r["flag"], "--env");
+}
+
+#[test]
+fn a_deploy_workers_table_that_does_not_read_is_a_refusal_entry() {
+    let dir = plain_project("undeployable");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plain\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n\n[deploy.workers]\nbroken = 3\n",
+    );
+    let r = only_refusal(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(r["code"], "bynk.deploy.project_undeployable");
+}
+
+#[test]
+fn a_stop_that_is_not_a_refusal_prints_no_document() {
+    // A project that does not build stops with the compiler's diagnostics, not a refusal.
+    let dir = plain_project("build_error");
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nthis is not bynk\n",
+    );
+    let out = deploy(&dir, &["--format", "json"]);
+    assert!(!out.status.success());
+    assert!(
+        out.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+}
+
+#[test]
+fn a_context_bound_to_a_worker_never_deployed_is_a_refusal_entry_naming_both() {
+    let dir = plain_project("dependency");
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nconsumes shop.billing as Billing\n\nservice place {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tlet r <- Billing.charge(n)\n\t\tr\n\t}\n}\n",
+    );
+    write(
+        &dir.join("src/shop/billing.bynk"),
+        "context shop.billing\n\nservice charge {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tn\n\t}\n}\n",
+    );
+    let out = deploy(&dir, &["--format", "json", "--context", "shop.orders"]);
+    let r = only_refusal(&out);
+    assert_eq!(r["code"], "bynk.deploy.dependency_not_deployed");
+    assert_eq!(r["worker"], "shop-orders");
+    assert_eq!(r["dependencies"], serde_json::json!(["shop-billing"]));
+}

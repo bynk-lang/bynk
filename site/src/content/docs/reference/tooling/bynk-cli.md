@@ -682,6 +682,19 @@ refusal or warning, never as a pass.
 | `bynk.deploy.agent_move_refused` | `refusals` | `reason` (`not_accepted`, `renamed_in_place` or `old_script_stays`), `context`, `agents`, `from` and `to` (the scripts). `override` is `--accept-fresh-agent <context>` for `not_accepted`; the other two cannot be accepted. |
 | `bynk.deploy.accept_fresh_agent_unused` | `refusals` | `name`: an `--accept-fresh-agent` name that matches no move of this run. |
 | `bynk.deploy.agent_starts_fresh` | `warnings` | `context`, `agents`, `from`, `to`: an accepted move, whose old script keeps the data. |
+| `bynk.deploy.env_passthrough_conflict` | `refusals` | `environment`, `flag`: a second `--env` or `--environment` after `--`. |
+| `bynk.deploy.project_undeployable` | `refusals` | none: the `[deploy.workers]` table does not read, or the build profile checks contracts. |
+| `bynk.deploy.preflight_failed` | `refusals` | none: the environment is not ready for a deploy; the message is the doctor's report. |
+| `bynk.deploy.context_not_found` | `refusals` | `requested`: the `--context` or `--worker` name no build produced. |
+| `bynk.deploy.workers_unreadable` | `refusals` | none: a built Worker's declarations could not be read. |
+| `bynk.deploy.email_claim_refused` | `refusals` | `environment`: `[deploy.email]` could not be applied. |
+| `bynk.deploy.secrets_source_unreadable` | `refusals` | none: `--secrets-file` did not read. |
+| `bynk.deploy.ledger_unreadable` | `refusals` | `path`: `bynk.deploy.lock` did not read. |
+| `bynk.deploy.dependency_not_deployed` | `refusals` | `worker`, `dependencies`: a `--context` Worker binds to Workers never deployed. |
+| `bynk.deploy.contracts_manifest_unreadable` | `refusals` | `worker`: its contracts manifest did not read. |
+| `bynk.deploy.contracts_lock_unwritable` | `refusals` | `path`: the older contracts `--accept-compatible-skew` records could not be written. |
+| `bynk.deploy.rebuild_failed` | `refusals` | `path`: the rebuild after recording them failed. |
+| `bynk.deploy.upload_order_cycle` | `refusals` | `cycle`: the Workers that bind to each other in a cycle. |
 
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:
 
