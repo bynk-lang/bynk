@@ -183,6 +183,12 @@ fn with_kind_appendix(
     }
 }
 
+/// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
+    let (text, offset) = input.doc?;
+    crate::analytics_tooling::dataset_hover_at(text, offset)
+}
+
 /// `content` with [`used_name_note`] appended when there is one.
 fn with_used_name_note(
     content: String,
@@ -217,12 +223,6 @@ fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
 /// The rung order is the contract; see the module doc. Each rung is tried in
 /// turn and the first `Some` wins.
 pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
-    // #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
-    if let Some((text, offset)) = input.doc
-        && let Some(content) = crate::analytics_tooling::dataset_hover_at(text, offset)
-    {
-        return Some(content);
-    }
     if let Some(a) = &input.analysis {
         let tys = a.tys;
         // 1. v0.25: binding-index path — a resolved symbol reference, described
@@ -265,7 +265,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.
-        if let Some(section) = capability_path_section(a) {
+        if let Some(section) = capability_path_section(a).or_else(|| dataset_hover(input)) {
             return Some(section);
         }
         // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the

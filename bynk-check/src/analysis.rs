@@ -572,6 +572,38 @@ fn per_unit_infos(
     (sequence_info, boundary_info)
 }
 
+/// The lock's registry as read, and as the round reconciled it so far; neither is written anywhere.
+type LockRegistries = (
+    bynk_project::schema_registry::SchemaRegistry,
+    bynk_project::schema_registry::SchemaRegistry,
+);
+
+/// #4502: the Analytics column mappings the checked units write, for the editor, and the lock's
+/// check of them (which needs the checked units, so it runs after them and not with the
+/// declaration-only passes). The registry is the scratch copy the round already reconciled; the
+/// lock is never written.
+fn analytics_round(
+    lock_state: Option<LockRegistries>,
+    unit_callees: &project_model::UnitCallees,
+    parsed: &[ParsedFile],
+    errors: &mut ErrorSink,
+) -> std::collections::BTreeMap<String, bynk_project::schema_registry::AnalyticsEntry> {
+    if let Some((existing, mut scratch)) = lock_state {
+        let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+        crate::analytics_lock::reconcile_analytics(
+            &existing,
+            &mut scratch,
+            unit_callees,
+            &mut analytics_errors,
+        );
+        errors.extend_attributed_by_span(parsed, analytics_errors);
+    }
+    crate::analytics_lock::live_mappings(unit_callees)
+        .into_iter()
+        .map(|(key, live)| (key, live.entry))
+        .collect()
+}
+
 /// The callees of a unit's checked files that later passes read (events emits, cross-context
 /// service calls and agent calls), merged into the project-wide accumulator.
 fn retain_unit_callees(
@@ -916,12 +948,7 @@ fn analyse_project_inner(
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
     let mut contract_diff = ContractDiff::default();
-    // The registry as read and as reconciled so far, for the Analytics check once the units are
-    // checked (#4502); neither is written anywhere.
-    let mut lock_state: Option<(
-        bynk_project::schema_registry::SchemaRegistry,
-        bynk_project::schema_registry::SchemaRegistry,
-    )> = None;
+    let mut lock_state: Option<LockRegistries> = None; // for `analytics_round` (#4502)
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
@@ -1226,23 +1253,7 @@ fn analyse_project_inner(
         doc_scope.insert(name.clone(), scope);
     }
 
-    // #4502: the Analytics column mappings, for the editor, and the lock's check of them (which
-    // needs the checked units, so it runs here and not with the declaration-only passes).
-    if let Some((existing, mut scratch)) = lock_state {
-        let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
-        crate::analytics_lock::reconcile_analytics(
-            &existing,
-            &mut scratch,
-            &unit_callees,
-            &mut analytics_errors,
-        );
-        errors.extend_attributed_by_span(&parsed, analytics_errors);
-    }
-    let analytics = crate::analytics_lock::live_mappings(&unit_callees)
-        .into_iter()
-        .map(|(key, live)| (key, live.entry))
-        .collect();
-
+    let analytics = analytics_round(lock_state, &unit_callees, &parsed, &mut errors);
     crate::phase_timing::finish();
     ProjectAnalysis {
         snapshots,
