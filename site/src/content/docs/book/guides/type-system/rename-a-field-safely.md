@@ -66,10 +66,13 @@ A record that a `store` field holds is renamed the same way, in a `Cell` or in t
 ```bynk,fragment
 context shop
 
-type Prefs = { size: Int replaces width }
+type Prefs = {
+	size: Int replaces width,
+}
 
 agent Cart {
 	key id: String
+
 	store prefs: Cell[Prefs]
 	store named: Map[String, Prefs]
 
