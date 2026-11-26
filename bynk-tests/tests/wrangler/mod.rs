@@ -43,6 +43,13 @@ pub const SPEC: &str = warm::SPEC;
 #[allow(dead_code)]
 pub fn npx() -> std::process::Command {
     warm::warm();
+    npx_command()
+}
+
+/// [`npx`] without the provisioning: the command itself. #4456: it carries
+/// `WRANGLER_SEND_METRICS=false`, so no Wrangler a test starts sends telemetry.
+#[allow(dead_code)]
+pub fn npx_command() -> std::process::Command {
     let mut c = if cfg!(windows) {
         let mut c = std::process::Command::new("cmd");
         c.args(["/C", "npx"]);
@@ -50,7 +57,8 @@ pub fn npx() -> std::process::Command {
     } else {
         std::process::Command::new("npx")
     };
-    c.args(["-y", SPEC]);
+    c.args(["-y", SPEC])
+        .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1);
     c
 }
 
@@ -203,16 +211,26 @@ impl Wrangler {
         cmd: &mut std::process::Command,
         registry: &std::path::Path,
     ) -> std::io::Result<Self> {
-        #[cfg(unix)]
-        std::os::unix::process::CommandExt::process_group(cmd, 0);
         Ok(Wrangler {
-            child: cmd
-                .env("WRANGLER_REGISTRY_PATH", registry)
-                .stdin(std::process::Stdio::null())
-                .spawn()?,
+            child: Self::prepare(cmd, registry).spawn()?,
             terminated: None,
             stopped: false,
         })
+    }
+
+    /// What [`Wrangler::spawn`] sets on `cmd` before starting it: its own process group (Unix),
+    /// the registry, a closed stdin and (#4456) no telemetry. The command may be `bynk dev`,
+    /// which starts the Wranglers, so the variable is set here as well as on [`npx`]: the
+    /// child inherits it either way.
+    pub fn prepare<'a>(
+        cmd: &'a mut std::process::Command,
+        registry: &std::path::Path,
+    ) -> &'a mut std::process::Command {
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(cmd, 0);
+        cmd.env("WRANGLER_REGISTRY_PATH", registry)
+            .env(warm::TELEMETRY_OFF.0, warm::TELEMETRY_OFF.1)
+            .stdin(std::process::Stdio::null())
     }
 
     /// The spawned child, for reading its piped output. Read a pipe only

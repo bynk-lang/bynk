@@ -66,6 +66,17 @@ impl WsOpenHost<'_> {
         self.message.is_some() || self.close.is_some()
     }
 
+    /// #3900: whether the upgrade reads a Bearer token from `Sec-WebSocket-Protocol`: a lone `Bearer`
+    /// actor, or an actor sum with a `Bearer` member.
+    pub(super) fn reads_bearer_token(&self) -> bool {
+        self.seam.is_some()
+            || self.sum.as_ref().is_some_and(|members| {
+                members
+                    .iter()
+                    .any(|m| matches!(m.seam, bynk_check::actors::SumMemberSeam::Bearer { .. }))
+            })
+    }
+
     /// #3109: whether any of the service's hosted lifecycle bodies reaches the
     /// Worker `env` (a consumed context's service or a local agent).
     pub(super) fn reaches_env(&self, commons: &TypedCommons) -> bool {
@@ -898,15 +909,38 @@ pub(super) fn ws_open_fetch_branch_stmt(
         },
         None,
     ));
+    let mut upgrade_args = vec![bynk_ts::TsExpr::Member {
+        object: Box::new(bynk_ts::TsExpr::Ident("__pair".to_string())),
+        property: "client".to_string(),
+    }];
+    // #3900: a Bearer upgrade selects the `bynk.bearer` subprotocol the client offered, so a browser,
+    // which fails a connection whose response selects none of the subprotocols it offered, keeps it.
+    // An upgrade with no Bearer seam offers none and is answered with none.
+    if host.reads_bearer_token() {
+        upgrade_args.push(bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident(
+                "__webSocketBearerProtocol".to_string(),
+            )),
+            args: vec![bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Member {
+                    object: Box::new(bynk_ts::TsExpr::Member {
+                        object: Box::new(bynk_ts::TsExpr::Ident("request".to_string())),
+                        property: "headers".to_string(),
+                    }),
+                    property: "get".to_string(),
+                }),
+                args: vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                    "Sec-WebSocket-Protocol".to_string(),
+                ))],
+            }],
+        });
+    }
     stmts.push(bynk_ts::TsStmt::return_stmt(
         Some(bynk_ts::TsExpr::Call {
             callee: Box::new(bynk_ts::TsExpr::Ident(
                 "__webSocketUpgradeResponse".to_string(),
             )),
-            args: vec![bynk_ts::TsExpr::Member {
-                object: Box::new(bynk_ts::TsExpr::Ident("__pair".to_string())),
-                property: "client".to_string(),
-            }],
+            args: upgrade_args,
         }),
         None,
     ));

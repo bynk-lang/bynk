@@ -42,7 +42,8 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 The upgrade **authenticates at the edge** through the `by` clause — exactly like an
 HTTP route, and fail-closed: there is no anonymous upgrade, so `on open` *must*
 name its actor. (A browser `WebSocket` cannot set an `Authorization` header, so a
-`Bearer` token rides the `Sec-WebSocket-Protocol` subprotocol; the boundary admits
+`Bearer` token rides the `Sec-WebSocket-Protocol` subprotocols, as the pair
+`new WebSocket(url, ["bynk.bearer", token])`; the boundary admits
 `None`/`Bearer` and rejects `Signature`.) Only on success is the handler run with a
 fresh, **owned** `connection: Connection[ServerFrame]`.
 

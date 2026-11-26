@@ -214,6 +214,18 @@ export function __serialise_Phase(value: Phase): __JsonValue {
 }
 
 export function __deserialise_Phase(json: __JsonValue, path: string = "$"): Result<Phase, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Open":
+        return Ok({ tag: "Open" } as Phase);
+      case "Closed":
+        return Ok({ tag: "Closed" } as Phase);
+      case "Archived":
+        return Ok({ tag: "Archived" } as Phase);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -241,6 +253,16 @@ export function __serialise_Power(value: Power): __JsonValue {
 }
 
 export function __deserialise_Power(json: __JsonValue, path: string = "$"): Result<Power, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Idle":
+        return Ok({ tag: "Idle" } as Power);
+      case "Running":
+        return Ok({ tag: "Running" } as Power);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

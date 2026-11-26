@@ -67,6 +67,16 @@ export function __serialise_Region(value: Region): __JsonValue {
 }
 
 export function __deserialise_Region(json: __JsonValue, path: string = "$"): Result<Region, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Here":
+        return Ok({ tag: "Here" } as Region);
+      case "There":
+        return Ok({ tag: "There" } as Region);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -214,6 +224,16 @@ export function __serialise_shop_order__Region(value: shop_order.Region): __Json
 }
 
 export function __deserialise_shop_order__Region(json: __JsonValue, path: string = "$"): Result<shop_order.Region, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Domestic":
+        return Ok({ tag: "Domestic" } as shop_order.Region);
+      case "International":
+        return Ok({ tag: "International" } as shop_order.Region);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -262,6 +282,16 @@ export function __serialise_shop_post__Region(value: shop_post.Region): __JsonVa
 }
 
 export function __deserialise_shop_post__Region(json: __JsonValue, path: string = "$"): Result<shop_post.Region, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "North":
+        return Ok({ tag: "North" } as shop_post.Region);
+      case "South":
+        return Ok({ tag: "South" } as shop_post.Region);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

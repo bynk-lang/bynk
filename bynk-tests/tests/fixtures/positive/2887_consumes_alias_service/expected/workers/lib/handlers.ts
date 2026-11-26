@@ -58,6 +58,16 @@ export function __serialise_Code(value: Code): __JsonValue {
 }
 
 export function __deserialise_Code(json: __JsonValue, path: string = "$"): Result<Code, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Alpha":
+        return Ok({ tag: "Alpha" } as Code);
+      case "Beta":
+        return Ok({ tag: "Beta" } as Code);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

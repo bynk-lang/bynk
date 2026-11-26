@@ -29,8 +29,8 @@ pub(crate) use factory::{
     codec_factory_ground_roots, codec_factory_ident, codec_factory_name, codec_factory_root,
     emit_codec_factory,
 };
-pub(crate) use generics::emit_generic_helpers;
 pub use generics::emit_generic_helpers_qualified;
+pub(crate) use generics::{emit_generic_helpers, is_string_key_ref};
 
 use std::sync::Arc;
 

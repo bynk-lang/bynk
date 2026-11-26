@@ -256,6 +256,9 @@ export function __serialise_Map_String_Index(value: ReadonlyMap<string, Index>, 
 }
 
 export function __deserialise_Map_String_Index(json: __JsonValue, path: string = "$", depth: number = 0): Result<ReadonlyMap<string, Index>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Index(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path, depth);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

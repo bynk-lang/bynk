@@ -193,12 +193,25 @@ fn shell(program: &str) -> Command {
     }
 }
 
+/// #4456: the variable that turns off Wrangler's usage telemetry, and its value. The test
+/// suite never sends any, so every Wrangler it starts, however it starts one, carries this.
+#[allow(dead_code)]
+pub const TELEMETRY_OFF: (&str, &str) = ("WRANGLER_SEND_METRICS", "false");
+
+/// The `npx -y <spec> --version` command [`provision`] runs.
+#[allow(dead_code)]
+pub fn provision_command(spec: &str) -> Command {
+    let mut c = shell("npx");
+    c.args(["-y", spec, "--version"])
+        .env(TELEMETRY_OFF.0, TELEMETRY_OFF.1);
+    c
+}
+
 /// `npx -y <spec> --version`, which installs `spec` into the npx cache when it
 /// is not there, given at most [`INSTALL_TIMEOUT`]: one past it is killed and
 /// counts as a failure.
 fn provision(spec: &str) -> bool {
-    let Ok(mut child) = shell("npx")
-        .args(["-y", spec, "--version"])
+    let Ok(mut child) = provision_command(spec)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

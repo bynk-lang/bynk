@@ -88,6 +88,16 @@ export function __serialise_Gate(value: Gate): __JsonValue {
 }
 
 export function __deserialise_Gate(json: __JsonValue, path: string = "$"): Result<Gate, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Locked":
+        return Ok({ tag: "Locked" } as Gate);
+      case "Unlocked":
+        return Ok({ tag: "Unlocked" } as Gate);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
