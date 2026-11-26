@@ -514,3 +514,29 @@ fn a_trust_from_variable_that_is_set_replaces_the_declared_claims() {
         (Some("partner"), Some("stg-api"))
     );
 }
+
+#[test]
+fn a_trust_from_variable_the_seam_would_refuse_is_an_error_not_a_token_that_always_401s() {
+    // #3821: the seam refuses every token for a variable that is set but unreadable, so minting one
+    // that quietly falls back to the declared values would give a token that always fails, with no hint.
+    for bad in ["not json", "[]", r#"{"issuer":3}"#, r#"{"audience":""}"#] {
+        let out = Command::new(bynk())
+            .arg("token")
+            .arg("Partner")
+            .args(["--sub", "ada"])
+            .arg("--input")
+            .arg(manifest_dir().join("tests/fixtures/token_claims"))
+            .env("AUTH_SECRET", "s1")
+            .env("PLAIN_SECRET", "s2")
+            .env("PARTNER_SECRET", "s3")
+            .env("PARTNER_TRUST", bad)
+            .output()
+            .expect("run bynk");
+        assert!(!out.status.success(), "{bad} should be refused");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("PARTNER_TRUST") && err.contains("refuses every token"),
+            "{bad}: {err}"
+        );
+    }
+}

@@ -38,6 +38,22 @@ export default {
         }
 
         {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/admin", path) !== null) {
+            __route = "GET /admin";
+            const result = await surface.http_GET_admin(request);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/either", path) !== null) {
+            __route = "GET /either";
+            const result = await surface.http_GET_either(request);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\"", "Bynk realm=\"api\""])), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
           if ((method === "GET" || method === "HEAD") && __matchPath("/internal", path) !== null) {
             __route = "GET /internal";
             const result = await surface.http_GET_internal(request);
@@ -54,6 +70,14 @@ export default {
           }
         }
         {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/open", path) !== null) {
+            __route = "GET /open";
+            const result = await surface.http_GET_open(request);
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
           if ((method === "GET" || method === "HEAD") && __matchPath("/partner", path) !== null) {
             __route = "GET /partner";
             const result = await surface.http_GET_partner(request);
@@ -61,12 +85,27 @@ export default {
             return method === "HEAD" ? __headResponse(__response) : __response;
           }
         }
+        if (__matchPath("/admin", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
+        if (__matchPath("/either", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
         if (__matchPath("/internal", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__res, __security_api);
         }
         if (__matchPath("/me", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__res, __security_api);
+        }
+        if (__matchPath("/open", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__res, __security_api);

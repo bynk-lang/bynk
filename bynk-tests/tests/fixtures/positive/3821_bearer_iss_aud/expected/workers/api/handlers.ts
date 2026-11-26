@@ -30,4 +30,22 @@ export const api = {
   async http_GET_partner(deps: { identity: LearnerId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
+  async http_GET_open(deps: { identity: LearnerId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(deps.identity);
+  },
+  async http_GET_admin(deps: { identity: LearnerId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok(deps.identity);
+  },
+  async http_GET_either(deps: { who: { tag: "Learner"; identity: LearnerId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+    switch (deps.who.tag) {
+      case "Learner": {
+        const l = deps.who.identity;
+        return HttpResult.Ok(l);
+      }
+      case "Visitor": {
+        return HttpResult.Ok("anyone");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
 };

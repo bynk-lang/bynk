@@ -2453,7 +2453,24 @@ fn check_bearer_actor(
     table: &UnitTable,
     errors: &mut Vec<CompileError>,
 ) {
-    for arg in &actor.auth_config {
+    for (i, arg) in actor.auth_config.iter().enumerate() {
+        // A repeated key would be read once and the other dropped, which is what a check you wrote must
+        // never do (the shared-secret rule below compares the one value that is read).
+        if actor.auth_config[..i]
+            .iter()
+            .any(|earlier| earlier.key.name == arg.key.name)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_bad_arg",
+                    arg.key.span,
+                    format!("the `Bearer` config key `{}` is given more than once", arg.key.name),
+                )
+                .with_note(
+                    "the first would win quietly in a scheme that guards a token; give each key once",
+                ),
+            );
+        }
         if !BEARER_KEYS.contains(&arg.key.name.as_str()) {
             errors.push(
                 CompileError::new(
@@ -2514,7 +2531,30 @@ fn check_bearer_actor(
             continue;
         }
         let theirs = other.scheme_arg("audience").and_then(|a| a.value.as_str());
-        if mine.is_some() && theirs.is_some() && mine != theirs {
+        // One `trustFrom` variable shared by the pair would give both the same audience at run time
+        // (a staging override is the natural use), whatever each declares.
+        let my_trust = actor.scheme_arg("trustFrom").and_then(|a| a.value.as_str());
+        let shared_trust = my_trust.is_some()
+            && my_trust == other.scheme_arg("trustFrom").and_then(|a| a.value.as_str());
+        if !shared_trust && mine.is_some() && theirs.is_some() && mine != theirs {
+            continue;
+        }
+        if shared_trust {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.bearer_secret_shared",
+                    auth.span,
+                    format!(
+                        "`Bearer` actors `{}` and `{}` share the secret `{secret}` and the `trustFrom` variable `{}`, so that variable can give both the same audience and a token minted for one is accepted by the other",
+                        other.name.name,
+                        actor.name.name,
+                        my_trust.unwrap_or_default()
+                    ),
+                )
+                .with_note(
+                    "give each actor its own `trustFrom` variable (or none), and declare a different `audience` on each; mint each actor's tokens with its own audience, which `bynk token <Actor>` does. Or give each actor its own secret",
+                ),
+            );
             continue;
         }
         errors.push(

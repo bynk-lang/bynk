@@ -169,6 +169,28 @@ for (const bad of ["not json", "[]", '{"issuer":3}']) {
 }
 console.error = log;
 
+// A refinement of Learner follows its base: the same iss/aud, then the claim (403).
+const admin = (claims: Record<string, unknown>) => web({ admin: true, ...claims });
+assert((await status("/admin", await admin({ iss: "agilearn-web", aud: "agilearn-api" }), base)) === 200, "a refinement admits its base's claims plus its own");
+assert((await status("/admin", await admin({ iss: "agilearn-web", aud: "agilearn-internal" }), base)) === 401, "a refinement refuses a wrong audience (401)");
+assert((await status("/admin", await admin({ aud: "agilearn-api" }), base)) === 401, "a refinement refuses a missing issuer (401)");
+assert((await status("/admin", ok, base)) === 403, "a refinement refuses a token without its claim (403)");
+// A sum with a Bearer member: a token the member refuses falls through to Visitor, so it is answered as one.
+const body = async (path: string, token: string | null, env: Record<string, unknown>): Promise<unknown> => JSON.parse(await (await worker.fetch(new Request(`http://x${path}`, token === null ? {} : { headers: { authorization: `Bearer ${token}` } }), env)).text());
+assert((await body("/either", ok, base)) === "ada", "the member that verifies is the sum's actor");
+assert((await body("/either", internal, base)) === "anyone", "a token the member refuses falls through to Visitor");
+assert((await body("/either", null, base)) === "anyone", "no token is a Visitor");
+// Open: trustFrom and no literal claim. Unset fails closed; set, only what it supplies is checked.
+const open = (claims: Record<string, unknown>) => sign({ sub: "ada", exp, ...claims }, "open-secret");
+const openBase = { ...base, OPEN_SECRET: "open-secret" };
+console.error = () => {};
+assert((await status("/open", await open({ iss: "open", aud: "open-api" }), openBase)) === 401, "trustFrom with no literal claim and the variable unset refuses every token");
+assert((await status("/open", await open({ iss: "open", aud: "open-api" }), { ...openBase, OPEN_TRUST: "" })) === 401, "an empty trustFrom variable refuses too");
+console.error = log;
+const openSet = { ...openBase, OPEN_TRUST: JSON.stringify({ audience: "open-api" }) };
+assert((await status("/open", await open({ aud: "open-api" }), openSet)) === 200, "set, the audience it supplies is checked");
+assert((await status("/open", await open({ aud: "other" }), openSet)) === 401, "set, a different audience is a 401");
+
 console.log("ALL OK");
 "#;
 

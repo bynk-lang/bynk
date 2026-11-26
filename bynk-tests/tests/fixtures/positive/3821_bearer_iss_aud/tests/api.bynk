@@ -5,7 +5,9 @@ suite api as system {
 	// driven by `bynk-tests/tests/system/bearer_claims_seam.rs`, which signs its own tokens.
 	env {
 		AUTH_SECRET = "test-shared-secret",
-		PARTNER_SECRET = "test-partner-secret"
+		PARTNER_SECRET = "test-partner-secret",
+		OPEN_SECRET = "test-open-secret",
+		OPEN_TRUST = "{\"issuer\":\"open\",\"audience\":\"open-api\"}"
 	}
 
 	case "a learner token carries its declared issuer and audience and is admitted" {
@@ -39,5 +41,28 @@ suite api as system {
 		expect issuer is Rejected(Unauthorized)
 		expect audience is Rejected(Unauthorized)
 		expect internal is Rejected(Unauthorized)
+	}
+
+	case "a refinement of Learner is admitted with its base's claims and the claim it checks" {
+		let r <- api.GET("/admin") by Admin("root")
+		expect r is Ok("root")
+	}
+
+	case "a sum member checks the same claims and an absent token falls through to Visitor" {
+		let learner <- api.GET("/either") by Learner("ada")
+		let visitor <- api.GET("/either") by Visitor
+		expect learner is Ok("ada")
+		expect visitor is Ok("anyone")
+	}
+
+	case "the driver mints the claims a trustFrom variable supplies, so the seam that reads it admits the principal" {
+		let open <- api.GET("/open") by Open("ada")
+		expect open is Ok("ada")
+	}
+
+	case "a case env that sets a declared actor's trustFrom variable is what its token carries" {
+		env { PARTNER_TRUST = "{\"issuer\":\"partner-stg\",\"audience\":\"stg-api\"}" }
+		let r <- api.GET("/partner") by Partner("ada")
+		expect r is Ok("ada")
 	}
 }

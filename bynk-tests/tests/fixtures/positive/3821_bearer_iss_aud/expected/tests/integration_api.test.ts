@@ -32,6 +32,8 @@ function __makeHarness() {
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["AUTH_SECRET"] = "__bynk_test_secret";
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["OPEN_SECRET"] = "__bynk_test_secret";
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["PARTNER_SECRET"] = "__bynk_test_secret";
 async function __sysdrive_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
@@ -108,7 +110,7 @@ async function __sysdrive_wrongaudience_api_http_GET_internal(__extraHeaders: { 
 }
 async function __sysdrive_api_http_GET_partner(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600, iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_TRUST"] ?? ""), undefined) }, (__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? ""))}` } });
   const __res = await __h.env.API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -119,30 +121,151 @@ async function __sysdrive_noauth_api_http_GET_partner(__extraHeaders: { get(name
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_expired_api_http_GET_partner(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, iss: "partner", aud: "partner-api" }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, ...__bynkBearerClaimsOf({ iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_TRUST"] ?? ""), undefined) }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_forged_api_http_GET_partner(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "partner", aud: "partner-api" }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "") + "!"))}`;
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_TRUST"] ?? ""), undefined) }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "") + "!"))}`;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongissuer_api_http_GET_partner(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "partner-not-the-expected", aud: "partner-api" }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_TRUST"] ?? ""), "iss") }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
   const __res = await __h.env.API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_wrongaudience_api_http_GET_partner(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
-  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "partner", aud: "partner-api-not-the-expected" }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: "partner", aud: "partner-api" }, (__bynkEnv["PARTNER_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_TRUST"] ?? ""), "aud") }, ((__bynkEnv["PARTNER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["PARTNER_SECRET"] ?? "")))}`;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/partner`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_open(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/open`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: undefined, aud: undefined }, (__bynkEnv["OPEN_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_TRUST"] ?? ""), undefined) }, (__bynkEnv["OPEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_SECRET"] ?? ""))}` } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_open(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/open`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_open(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, ...__bynkBearerClaimsOf({ iss: undefined, aud: undefined }, (__bynkEnv["OPEN_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_TRUST"] ?? ""), undefined) }, ((__bynkEnv["OPEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/open`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_open(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, ...__bynkBearerClaimsOf({ iss: undefined, aud: undefined }, (__bynkEnv["OPEN_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_TRUST"] ?? ""), undefined) }, ((__bynkEnv["OPEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["OPEN_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/open`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api" }, (__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}` } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongissuer_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web-not-the-expected", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongaudience_api_http_GET_admin(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api-not-the-expected" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/admin`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Learner") {
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api" }, (__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? ""))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongissuer_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web-not-the-expected", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_wrongaudience_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api-not-the-expected" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_sumbad_api_http_GET_either(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __bad: string, __sub: string, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Learner") {
+    if (__bad === "forged") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "") + "!"))}`;
+    if (__bad === "expired") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600, iss: "agilearn-web", aud: "agilearn-api" }, ((__bynkEnv["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_SECRET"] ?? "")))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
   const __res = await __h.env.API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -155,12 +278,12 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_a_learner_token_carries_its_declared_issuer_and_audience_and_is_admitted() {
   try {
-    __bynkEnv = { AUTH_SECRET: "test-shared-secret", PARTNER_SECRET: "test-partner-secret" };
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(undefined, ("ada" as any), {});
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:13:10", 636, 650, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:15:10", 738, 752, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -172,12 +295,12 @@ async function test_a_learner_token_carries_its_declared_issuer_and_audience_and
 
 async function test_an_internal_token__on_the_same_secret__is_admitted_at_the_internal_route() {
   try {
-    __bynkEnv = { AUTH_SECRET: "test-shared-secret", PARTNER_SECRET: "test-partner-secret" };
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_internal(undefined, ("ada" as any), {});
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:18:10", 798, 812, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:20:10", 900, 914, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -189,12 +312,12 @@ async function test_an_internal_token__on_the_same_secret__is_admitted_at_the_in
 
 async function test_a_partner_token_is_admitted() {
   try {
-    __bynkEnv = { AUTH_SECRET: "test-shared-secret", PARTNER_SECRET: "test-partner-secret" };
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_partner(undefined, ("ada" as any), {});
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:23:10", 913, 927, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:25:10", 1015, 1029, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -206,16 +329,16 @@ async function test_a_partner_token_is_admitted() {
 
 async function test_a_missing__forged_or_expired_token_is_refused() {
   try {
-    __bynkEnv = { AUTH_SECRET: "test-shared-secret", PARTNER_SECRET: "test-partner-secret" };
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const none = await __sysdrive_noauth_api_http_GET_me(undefined, "");
     const forged = await __sysdrive_forged_api_http_GET_me(undefined, "");
     const expired = await __sysdrive_expired_api_http_GET_me(undefined, "");
-    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 1120, 1150, "expect none is Rejected(Unauthorized)", "none", () => __bynkShow(none)); }
-    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1160, 1192, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
-    if (!(((__c: boolean) => __c)(expired.tag === "Rejected" && expired.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1202, 1235, "expect expired is Rejected(Unauthorized)", "expired", () => __bynkShow(expired)); }
+    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1222, 1252, "expect none is Rejected(Unauthorized)", "none", () => __bynkShow(none)); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 1262, 1294, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
+    if (!(((__c: boolean) => __c)(expired.tag === "Rejected" && expired.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:34:10", 1304, 1337, "expect expired is Rejected(Unauthorized)", "expired", () => __bynkShow(expired)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -227,16 +350,86 @@ async function test_a_missing__forged_or_expired_token_is_refused() {
 
 async function test_a_token_for_another_issuer_or_another_audience_is_refused_where_the_actor_declares_one() {
   try {
-    __bynkEnv = { AUTH_SECRET: "test-shared-secret", PARTNER_SECRET: "test-partner-secret" };
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const issuer = await __sysdrive_wrongissuer_api_http_GET_me(undefined, "");
     const audience = await __sysdrive_wrongaudience_api_http_GET_me(undefined, "");
     const internal = await __sysdrive_wrongaudience_api_http_GET_internal(undefined, "");
-    if (!(((__c: boolean) => __c)(issuer.tag === "Rejected" && issuer.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:39:10", 1498, 1530, "expect issuer is Rejected(Unauthorized)", "issuer", () => __bynkShow(issuer)); }
-    if (!(((__c: boolean) => __c)(audience.tag === "Rejected" && audience.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:40:10", 1540, 1574, "expect audience is Rejected(Unauthorized)", "audience", () => __bynkShow(audience)); }
-    if (!(((__c: boolean) => __c)(internal.tag === "Rejected" && internal.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1584, 1618, "expect internal is Rejected(Unauthorized)", "internal", () => __bynkShow(internal)); }
+    if (!(((__c: boolean) => __c)(issuer.tag === "Rejected" && issuer.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1600, 1632, "expect issuer is Rejected(Unauthorized)", "issuer", () => __bynkShow(issuer)); }
+    if (!(((__c: boolean) => __c)(audience.tag === "Rejected" && audience.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:42:10", 1642, 1676, "expect audience is Rejected(Unauthorized)", "audience", () => __bynkShow(audience)); }
+    if (!(((__c: boolean) => __c)(internal.tag === "Rejected" && internal.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1686, 1720, "expect internal is Rejected(Unauthorized)", "internal", () => __bynkShow(internal)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_refinement_of_Learner_is_admitted_with_its_base_s_claims_and_the_claim_it_checks() {
+  try {
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_admin(undefined, ("root" as any), { "admin": true });
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "root"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 1873, 1888, "expect r is Ok(\"root\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_sum_member_checks_the_same_claims_and_an_absent_token_falls_through_to_Visitor() {
+  try {
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const learner = await __sysdrive_api_http_GET_either(undefined, ("ada" as any), {}, "Learner");
+    const visitor = await __sysdrive_api_http_GET_either(undefined, "", {}, "Visitor");
+    if (!(((__c: boolean) => __c)(learner.tag === "Ok" && learner.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:54:10", 2094, 2114, "expect learner is Ok(\"ada\")", "learner", () => __bynkShow(learner)); }
+    if (!(((__c: boolean) => __c)(visitor.tag === "Ok" && visitor.value === "anyone"))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 2124, 2147, "expect visitor is Ok(\"anyone\")", "visitor", () => __bynkShow(visitor)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_the_driver_mints_the_claims_a_trustFrom_variable_supplies__so_the_seam_that_reads_it_admits_the_principal() {
+  try {
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const open = await __sysdrive_api_http_GET_open(undefined, ("ada" as any), {});
+    if (!(((__c: boolean) => __c)(open.tag === "Ok" && open.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:60:10", 2323, 2340, "expect open is Ok(\"ada\")", "open", () => __bynkShow(open)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_case_env_that_sets_a_declared_actor_s_trustFrom_variable_is_what_its_token_carries() {
+  try {
+    __bynkEnv = { AUTH_SECRET: "test-shared-secret", OPEN_SECRET: "test-open-secret", OPEN_TRUST: "{\"issuer\":\"open\",\"audience\":\"open-api\"}", PARTNER_SECRET: "test-partner-secret", PARTNER_TRUST: "{\"issuer\":\"partner-stg\",\"audience\":\"stg-api\"}" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_GET_partner(undefined, ("ada" as any), {});
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2580, 2594, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -248,7 +441,7 @@ async function test_a_token_for_another_issuer_or_another_audience_is_refused_wh
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a learner token carries its declared issuer and audience and is admitted", "an internal token, on the same secret, is admitted at the internal route", "a partner token is admitted", "a missing, forged or expired token is refused", "a token for another issuer or another audience is refused where the actor declares one"];
+export const __bynkCases: readonly string[] = ["a learner token carries its declared issuer and audience and is admitted", "an internal token, on the same secret, is admitted at the internal route", "a partner token is admitted", "a missing, forged or expired token is refused", "a token for another issuer or another audience is refused where the actor declares one", "a refinement of Learner is admitted with its base's claims and the claim it checks", "a sum member checks the same claims and an absent token falls through to Visitor", "the driver mints the claims a trustFrom variable supplies, so the seam that reads it admits the principal", "a case env that sets a declared actor's trustFrom variable is what its token carries"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -280,6 +473,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a token for another issuer or another audience is refused where the actor declares one")) {
     const started = __bynkCaseNow();
     const r = { name: "a token for another issuer or another audience is refused where the actor declares one", ...(await test_a_token_for_another_issuer_or_another_audience_is_refused_where_the_actor_declares_one()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a refinement of Learner is admitted with its base's claims and the claim it checks")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a refinement of Learner is admitted with its base's claims and the claim it checks", ...(await test_a_refinement_of_Learner_is_admitted_with_its_base_s_claims_and_the_claim_it_checks()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a sum member checks the same claims and an absent token falls through to Visitor")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a sum member checks the same claims and an absent token falls through to Visitor", ...(await test_a_sum_member_checks_the_same_claims_and_an_absent_token_falls_through_to_Visitor()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the driver mints the claims a trustFrom variable supplies, so the seam that reads it admits the principal")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the driver mints the claims a trustFrom variable supplies, so the seam that reads it admits the principal", ...(await test_the_driver_mints_the_claims_a_trustFrom_variable_supplies__so_the_seam_that_reads_it_admits_the_principal()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a case env that sets a declared actor's trustFrom variable is what its token carries")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a case env that sets a declared actor's trustFrom variable is what its token carries", ...(await test_a_case_env_that_sets_a_declared_actor_s_trustFrom_variable_is_what_its_token_carries()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

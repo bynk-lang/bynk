@@ -44,5 +44,49 @@ export function compose(env: Env) {
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_partner({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
+    async http_GET_open(request: globalThis.Request) {
+      const __authz = request.headers.get("Authorization");
+      if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
+      const __secret = (env as unknown as globalThis.Record<string, unknown>)["OPEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["OPEN_SECRET"];
+      if (typeof __secret !== "string") return HttpResult.Unauthorized;
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret, __bearerTrust((env as unknown as globalThis.Record<string, unknown>)["OPEN_TRUST"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["OPEN_TRUST"], undefined, undefined, "OPEN_TRUST"));
+      if (__claims.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.LearnerId.of(__claims.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_open({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
+    },
+    async http_GET_admin(request: globalThis.Request) {
+      const __authz = request.headers.get("Authorization");
+      if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
+      const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_SECRET"];
+      if (typeof __secret !== "string") return HttpResult.Unauthorized;
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret, { issuer: "agilearn-web", audience: "agilearn-api" });
+      if (__claims.tag === "Err") return HttpResult.Unauthorized;
+      if (!(globalThis.Boolean(__claims.value.claims["admin"]))) return HttpResult.Forbidden;
+      const __id = handlers.LearnerId.of(__claims.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_admin({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
+    },
+    async http_GET_either(request: globalThis.Request) {
+      let __who: any = undefined;
+      if (__who === undefined) {
+        const __authz = request.headers.get("Authorization");
+        if (__authz !== null && __authz.startsWith("Bearer ")) {
+          const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_SECRET"];
+          if (typeof __secret === "string") {
+            const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret, { issuer: "agilearn-web", audience: "agilearn-api" });
+            if (__claims.tag === "Ok") {
+              const __id = handlers.LearnerId.of(__claims.value.sub);
+              if (__id.tag === "Ok") __who = { tag: "Learner", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
+            }
+          }
+        }
+      }
+      if (__who === undefined) {
+        __who = { tag: "Visitor" };
+      }
+      if (__who === undefined) return HttpResult.Unauthorized;
+      return handlers.api.http_GET_either({ ...deps, who: __who });
+    },
   };
 }

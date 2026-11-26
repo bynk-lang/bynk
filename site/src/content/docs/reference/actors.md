@@ -336,11 +336,13 @@ actor Internal { auth = Bearer(secret = "AUTH_SECRET", audience = "agilearn-inte
   An actor with `trustFrom` and **no** literal `issuer` or `audience` fails closed when the variable is unset,
   empty or supplies neither: every request is refused, and one log line names the variable, so a forgotten
   production variable is never a silent accept. With a literal on either claim, an unset variable keeps it.
-- **Two `Bearer` actors on one secret** must each declare an `audience`, and different ones
+- **Two `Bearer` actors on one secret** must each declare an `audience`, and different ones, and must not share
+  a `trustFrom` variable, which could give both the same audience at run time
   (`bynk.actor.bearer_secret_shared`); otherwise a token minted for one is accepted by the other. Declare a
   distinct `audience` on each and mint each actor's tokens with its own, which `bynk token <Actor>` does. A
   refinement of an actor shares its base's secret by design and is exempt.
-- The config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other is
+- The config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`, each given once (a repeated
+  key is `bynk.actor.bearer_bad_arg`). Any other is
   `bynk.actor.bearer_unknown_key`, because an ignored key is a check you believed you had written, and an empty or
   non-string value is `bynk.actor.bearer_bad_arg`.
 - `bynk token <Actor>` mints with the declared `iss` and `aud`, and the `system` tier signs a valid principal's token

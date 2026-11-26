@@ -17,7 +17,7 @@ pub(super) struct SumAuth {
 
 pub(super) enum SumCredential {
     /// A Bearer member: how the driver reads its secret, and the `iss`/`aud` its tokens carry (#3821).
-    Bearer(TsExpr, bynk_check::actors::BearerClaims),
+    Bearer(TsExpr, super::system_request::BearerMint),
     /// A `Signature` member.
     Signature(SigDriver),
     /// #3936: an `Oidc` member: the expression for its trust roots, which the test issuer mints a
@@ -183,7 +183,7 @@ impl SumAuth {
 
     /// #2864: the first Bearer member's secret read: what `by Forged` and
     /// `by Expired` sign a token with on a sum with no `Signature` member.
-    pub(super) fn bearer(&self) -> Option<(&TsExpr, &bynk_check::actors::BearerClaims)> {
+    pub(super) fn bearer(&self) -> Option<(&TsExpr, &super::system_request::BearerMint)> {
         self.members.iter().find_map(|(_, c)| match c {
             SumCredential::Bearer(secret_read, claims) => Some((secret_read, claims)),
             SumCredential::Signature(_) | SumCredential::Oidc(_) | SumCredential::Cookie(_) => None,
@@ -214,7 +214,10 @@ pub(super) fn sum_auth_for(
                 bynk_check::actors::SumMemberSeam::None => return None,
                 bynk_check::actors::SumMemberSeam::Bearer { secret, claims, .. } => {
                     secrets.insert(secret.clone());
-                    SumCredential::Bearer(secret_read_of(&secret), claims)
+                    SumCredential::Bearer(
+                        secret_read_of(&secret),
+                        super::system_request::BearerMint::of(claims, secret_read_of),
+                    )
                 }
                 bynk_check::actors::SumMemberSeam::Signature(seam) => {
                     secrets.insert(seam.secret.clone());

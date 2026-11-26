@@ -105,7 +105,7 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
     let mut claims = refinement_claims(found)?;
     // #3821: the `iss` and `aud` the actor declares, so the token passes its seam. A `trustFrom` variable
     // that is set in the environment replaces them, as the seam reads it.
-    claims.extend(declared_claims(&signer.decl));
+    claims.extend(declared_claims(&signer.decl)?);
 
     let secret = match std::env::var(&env_var) {
         Ok(v) if !v.is_empty() => v,
@@ -134,14 +134,38 @@ fn run_inner(root: &Path, req: &Request) -> Result<String, String> {
 }
 
 /// #3821: the `iss` and `aud` a `Bearer` actor declares, read through its `trustFrom` variable when that
-/// is set to JSON `{ "issuer"?, "audience"? }`, as the seam reads it.
-fn declared_claims(decl: &ActorDecl) -> Vec<(String, serde_json::Value)> {
+/// is set to JSON `{ "issuer"?, "audience"? }`, as the seam reads it. A variable that is set but that the
+/// seam would refuse (not JSON, not an object, or a non-string or empty `issuer`/`audience`) is an error
+/// here too, so the token is not one that always `401`s with no hint why.
+fn declared_claims(decl: &ActorDecl) -> Result<Vec<(String, serde_json::Value)>, String> {
     let declared = bynk_check::actors::BearerClaims::of(decl);
-    let from_env: Option<serde_json::Value> = declared
-        .trust_from
-        .as_deref()
-        .and_then(|var| std::env::var(var).ok())
-        .and_then(|raw| serde_json::from_str(&raw).ok());
+    let mut from_env: Option<serde_json::Value> = None;
+    if let Some(var) = declared.trust_from.as_deref()
+        && let Ok(raw) = std::env::var(var)
+        && !raw.is_empty()
+    {
+        let bad = |why: &str| {
+            format!(
+                "`{var}` is the `trustFrom` variable of the `{}` actor and {why}, so its seam refuses every token: set it to JSON like {{\"issuer\": \"...\", \"audience\": \"...\"}} or unset it",
+                decl.name.name
+            )
+        };
+        let parsed: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|_| bad("is not JSON"))?;
+        let object = parsed
+            .as_object()
+            .ok_or_else(|| bad("is not a JSON object"))?;
+        for key in ["issuer", "audience"] {
+            if let Some(v) = object.get(key)
+                && v.as_str().is_none_or(str::is_empty)
+            {
+                return Err(bad(&format!(
+                    "has a `{key}` that is not a non-empty string"
+                )));
+            }
+        }
+        from_env = Some(parsed);
+    }
     let pick = |key: &str, declared: Option<String>| {
         from_env
             .as_ref()
@@ -150,13 +174,13 @@ fn declared_claims(decl: &ActorDecl) -> Vec<(String, serde_json::Value)> {
             .map(str::to_string)
             .or(declared)
     };
-    [
+    Ok([
         ("iss", pick("issuer", declared.issuer.clone())),
         ("aud", pick("audience", declared.audience.clone())),
     ]
     .into_iter()
     .filter_map(|(name, value)| Some((name.to_string(), serde_json::Value::String(value?))))
-    .collect()
+    .collect())
 }
 
 /// `name` (the claim `true`, as the `system` harness signs a present claim) or

@@ -20,6 +20,16 @@ actor Partner {
   identity = LearnerId
 }
 
+// `trustFrom` and no literal claim: what the variable supplies is all that is checked, and with the
+// variable unset nothing would be, so the seam refuses every request (fail closed).
+actor Open {
+  auth = Bearer(secret = "OPEN_SECRET", trustFrom = "OPEN_TRUST"),
+  identity = LearnerId
+}
+
+// A refinement follows its base: the same `iss`/`aud` check, then the claim (403).
+actor Admin = Learner where hasClaim("admin")
+
 service api from http {
   on GET("/me") () -> Effect[HttpResult[String]] by user: Learner {
     Ok(user.identity)
@@ -31,5 +41,22 @@ service api from http {
 
   on GET("/partner") () -> Effect[HttpResult[String]] by user: Partner {
     Ok(user.identity)
+  }
+
+  on GET("/open") () -> Effect[HttpResult[String]] by user: Open {
+    Ok(user.identity)
+  }
+
+  on GET("/admin") () -> Effect[HttpResult[String]] by user: Admin {
+    Ok(user.identity)
+  }
+
+  // An actor sum with a `Bearer` member: the member checks the same claims, and a token it refuses falls
+  // through to `Visitor`.
+  on GET("/either") () -> Effect[HttpResult[String]] by who: Learner | Visitor {
+    match who {
+      Learner(l) => Ok(l)
+      Visitor => Ok("anyone")
+    }
   }
 }

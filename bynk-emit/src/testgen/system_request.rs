@@ -161,65 +161,95 @@ pub(super) fn object_of(entries: Vec<(&str, TsExpr)>) -> TsExpr {
     )
 }
 
-/// #3821: the `iss` and `aud` an actor declares, as the claims a token minted for it carries, so a valid
-/// token passes its seam. An actor that declares none adds none.
-pub(super) fn bearer_claim_entries(
-    claims: &bynk_check::actors::BearerClaims,
+/// #3821: how a Bearer actor's test tokens get their `iss` and `aud`: the declared values, and, with
+/// `trustFrom`, the expression that reads the variable the case's `env` (or the process) may set, so a
+/// token passes the seam that reads the same variable.
+#[derive(Clone)]
+pub(super) struct BearerMint {
+    pub(super) claims: bynk_check::actors::BearerClaims,
+    trust: Option<TsExpr>,
+}
+
+impl BearerMint {
+    pub(super) fn of(
+        claims: bynk_check::actors::BearerClaims,
+        secret_read_of: &dyn Fn(&str) -> TsExpr,
+    ) -> Self {
+        let trust = claims.trust_from.as_deref().map(secret_read_of);
+        BearerMint { claims, trust }
+    }
+}
+
+/// #3821: the `iss` and `aud` a token minted for the actor carries, so a valid token passes its seam.
+/// `wrong` (`"iss"` or `"aud"`) names the one claim that instead names another party. An actor that
+/// declares none adds none.
+fn bearer_claim_entries_with(
+    mint: &BearerMint,
+    wrong: Option<&str>,
 ) -> Vec<bynk_ts::TsObjectEntry> {
-    [("iss", &claims.issuer), ("aud", &claims.audience)]
+    let claims = &mint.claims;
+    let Some(read) = &mint.trust else {
+        return [
+            ("iss", &claims.issuer, "iss"),
+            ("aud", &claims.audience, "aud"),
+        ]
         .into_iter()
-        .filter_map(|(k, v)| {
-            Some(bynk_ts::TsObjectEntry::prop(
-                k.to_string(),
-                str_lit(v.clone()?),
-            ))
+        .filter_map(|(k, v, key)| {
+            let v = v.as_ref()?;
+            let v = if wrong == Some(key) {
+                [v.as_str(), "-not-the-expected"].concat()
+            } else {
+                v.clone()
+            };
+            Some(bynk_ts::TsObjectEntry::prop(k.to_string(), str_lit(v)))
         })
-        .collect()
+        .collect();
+    };
+    let lit = |v: &Option<String>| v.clone().map(str_lit).unwrap_or_else(super::names::absent);
+    let which = wrong.map(str_lit).unwrap_or_else(super::names::absent);
+    vec![bynk_ts::TsObjectEntry::Spread(call(
+        ident("__bynkBearerClaimsOf"),
+        vec![
+            object_of(vec![
+                ("iss", lit(&claims.issuer)),
+                ("aud", lit(&claims.audience)),
+            ]),
+            read.clone(),
+            which,
+        ],
+    ))]
+}
+
+pub(super) fn bearer_claim_entries(mint: &BearerMint) -> Vec<bynk_ts::TsObjectEntry> {
+    bearer_claim_entries_with(mint, None)
 }
 
 /// #3821: the claims of a `by Forged` or `by Expired` Bearer token: a valid `sub`, the `exp` that makes
 /// it expired (or an hour ahead), and the actor's declared `iss`/`aud`, so only the signature or the
 /// expiry is wrong.
-pub(super) fn bearer_bad_claims(exp: TsExpr, claims: &bynk_check::actors::BearerClaims) -> TsExpr {
+pub(super) fn bearer_bad_claims(exp: TsExpr, mint: &BearerMint) -> TsExpr {
     TsExpr::object_entries(
         [
             bynk_ts::TsObjectEntry::prop("sub".to_string(), str_lit("bynk-test")),
             bynk_ts::TsObjectEntry::prop("exp".to_string(), exp),
         ]
         .into_iter()
-        .chain(bearer_claim_entries(claims))
+        .chain(bearer_claim_entries(mint))
         .collect(),
     )
 }
 
 /// #3821: the claims of a `by WrongIssuer` or `by WrongAudience` Bearer token: correctly signed and
 /// unexpired, with the declared `iss` and `aud` except the one under test, which names another party.
-pub(super) fn bearer_wrong_claims(
-    exp: TsExpr,
-    claims: &bynk_check::actors::BearerClaims,
-    wrong_issuer: bool,
-) -> TsExpr {
-    let wrong = |v: &Option<String>, is_wrong: bool| {
-        v.as_ref().map(|v| {
-            str_lit(if is_wrong {
-                [v.as_str(), "-not-the-expected"].concat()
-            } else {
-                v.clone()
-            })
-        })
-    };
+pub(super) fn bearer_wrong_claims(exp: TsExpr, mint: &BearerMint, wrong_issuer: bool) -> TsExpr {
     let mut entries = vec![
         bynk_ts::TsObjectEntry::prop("sub".to_string(), str_lit("bynk-test")),
         bynk_ts::TsObjectEntry::prop("exp".to_string(), exp),
     ];
-    entries.extend(
-        wrong(&claims.issuer, wrong_issuer)
-            .map(|v| bynk_ts::TsObjectEntry::prop("iss".to_string(), v)),
-    );
-    entries.extend(
-        wrong(&claims.audience, !wrong_issuer)
-            .map(|v| bynk_ts::TsObjectEntry::prop("aud".to_string(), v)),
-    );
+    entries.extend(bearer_claim_entries_with(
+        mint,
+        Some(if wrong_issuer { "iss" } else { "aud" }),
+    ));
     TsExpr::object_entries(entries)
 }
 
@@ -248,15 +278,11 @@ pub(super) fn bearer_variants(
 }
 
 /// #3821: the claims of the bad Bearer token a driver `name` presents.
-pub(super) fn bearer_variant_claims(
-    name: &str,
-    exp: TsExpr,
-    claims: &bynk_check::actors::BearerClaims,
-) -> TsExpr {
+pub(super) fn bearer_variant_claims(name: &str, exp: TsExpr, mint: &BearerMint) -> TsExpr {
     match name {
-        "wrongissuer" => bearer_wrong_claims(exp, claims, true),
-        "wrongaudience" => bearer_wrong_claims(exp, claims, false),
-        _ => bearer_bad_claims(exp, claims),
+        "wrongissuer" => bearer_wrong_claims(exp, mint, true),
+        "wrongaudience" => bearer_wrong_claims(exp, mint, false),
+        _ => bearer_bad_claims(exp, mint),
     }
 }
 

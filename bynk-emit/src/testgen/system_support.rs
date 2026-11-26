@@ -378,7 +378,7 @@ pub(super) fn emit_system_http_support(
             // #2019: a refinement-guarded route's signing drivers take the
             // claims the acting actor presents, signed next to `sub`.
             let mut signs_claims = false;
-            let mut lone_bearer_read: Option<(TsExpr, bynk_check::actors::BearerClaims)> = None;
+            let mut lone_bearer_read: Option<(TsExpr, system_request::BearerMint)> = None;
             // #3052: the expression for an `Oidc` route's trust roots.
             let mut oidc_trust: Option<TsExpr> = None;
             let auth_header: Entries = match bynk_check::actors::bearer_seam_for(h, &table.actors) {
@@ -399,7 +399,8 @@ pub(super) fn emit_system_http_support(
                         binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
                     ));
                     // #3821: the actor's declared `iss`/`aud`, so a valid principal passes its seam.
-                    claim_entries.extend(system_request::bearer_claim_entries(&seam.claims));
+                    let mint = system_request::BearerMint::of(seam.claims.clone(), &secret_read_of);
+                    claim_entries.extend(system_request::bearer_claim_entries(&mint));
                     // P7.2: `Record<string, string>`, not `emitter/workers.rs`'s own
                     // `Record<string, unknown>` marker — this expression feeds
                     // `__bynkSignHs256` directly with no `typeof` narrowing step in
@@ -410,7 +411,7 @@ pub(super) fn emit_system_http_support(
                     // fixed test secret, as it does at the seam, which reads
                     // the participant's `env` first.
                     let secret_read = secret_read_of(&seam.secret);
-                    lone_bearer_read = Some((secret_read.clone(), seam.claims.clone()));
+                    lone_bearer_read = Some((secret_read.clone(), mint));
                     vec![header(
                         "authorization",
                         bearer_token(TsExpr::object_entries(claim_entries), secret_read),
@@ -496,7 +497,7 @@ pub(super) fn emit_system_http_support(
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
-            let bearer_read: Option<(TsExpr, bynk_check::actors::BearerClaims)> = if is_sum {
+            let bearer_read: Option<(TsExpr, system_request::BearerMint)> = if is_sum {
                 sum.as_ref()
                     .and_then(SumAuth::bearer)
                     .map(|(read, claims)| (read.clone(), claims.clone()))
@@ -902,8 +903,11 @@ pub(super) fn emit_system_http_support(
                     ]),
                     raw_token_body.clone(),
                 );
-                let variants =
-                    system_request::bearer_variants(secret_read, bearer_claims, sig.is_none());
+                let variants = system_request::bearer_variants(
+                    secret_read,
+                    &bearer_claims.claims,
+                    sig.is_none(),
+                );
                 for (name, secret, sign) in variants {
                     // A valid `sub`, so only the signature (`Forged`) or the
                     // `exp` (`Expired`) is wrong. The `sub` is fixed rather
