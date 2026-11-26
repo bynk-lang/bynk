@@ -788,7 +788,7 @@ rewrites it too). Its fields let a failed decode be explained in Bynk:
 
 | Field | Meaning |
 |---|---|
-| `kind` | what went wrong, a `DecodeErrorKind` (below): `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate); `Yaml.decode` adds the refusals listed under [`Yaml.decode`](#yamldecode) |
+| `kind` | what went wrong, a `DecodeErrorKind` (below): `Malformed` (the text is not JSON), `StructuralMismatch` (the JSON has the wrong shape or a wrong-typed value), or `RefinementViolation` (a value broke a refined type's predicate); `Yaml.decode` adds the refusals listed under [`Yaml.decode`](#yaml-decode) |
 | `path` | where, as a path from the root `$`: `$` for the whole document, `$.qty` for a field, `$.items[2].id` for a list element's field |
 | `message` | a human-readable description, such as `expected number, got string` |
 
