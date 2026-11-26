@@ -1,5 +1,8 @@
 context raw
 
+type ResumeHeaders = { @name("last-event-id") lastId: Option[String] }
+type WatchCookies = { watcher: String }
+
 service api from http {
 	limits { maxBody: 4096 }
 
@@ -49,6 +52,15 @@ service api from http {
 	// Server-sent events: each stream element is one event.
 	on GET("/ticks") () -> Effect[HttpResult[()]] by v: Visitor {
 		Streaming(Stream.of(["tick-1", "two\nlines", "", "tick-4"]).take(4))
+	}
+
+	// #3918: streamed answers that read a header and a cookie, which an `EventSource` cannot send.
+	on GET("/resume") (headers: ResumeHeaders) -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["resumed"]).take(1))
+	}
+
+	on GET("/watch") (cookies: WatchCookies) -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["watching"]).take(1))
 	}
 
 	// An element holding a bare carriage return.

@@ -624,7 +624,7 @@ pub fn lower_protocol_ir_from_commons(
         ServiceProtocol::Http => ProtocolIr::Http,
         ServiceProtocol::Cron => ProtocolIr::Cron,
         ServiceProtocol::Queue { name } => ProtocolIr::Queue { name: name.clone() },
-        ServiceProtocol::Email { address } => ProtocolIr::Email {
+        ServiceProtocol::Email { address, .. } => ProtocolIr::Email {
             address: address.clone(),
         },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolIr::WebSocket {
@@ -1068,6 +1068,13 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
     }
     if let Some(members) =
         bynk_check::actors::call_admission_for(handler, actors).and_then(|a| a.sum)
+    {
+        return ActorSeamIr::CallSum(members);
+    }
+    // #3899: a queue consumer's sum of `Foreign` senders, `by who: Legacy | Partner`, resolved by the
+    // message's signer.
+    if let Some(members) =
+        bynk_check::actors::queue_admission_of(handler, actors).and_then(|a| a.sum)
     {
         return ActorSeamIr::CallSum(members);
     }

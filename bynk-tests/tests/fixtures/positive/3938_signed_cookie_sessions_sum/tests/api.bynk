@@ -98,4 +98,15 @@ suite shop.api as system {
 		let bobAfter <- api.GET("/orders") by User("bob")
 		expect bobAfter is Ok("cookie bob")
 	}
+
+	// #4385: a sum's cookie arm refuses each bad cookie, named by the member: forged, expired, and a
+	// correctly signed cookie for a session that was then revoked.
+	case "the cookie arm refuses a forged, an expired and a revoked session cookie" {
+		let forged <- api.GET("/orders") by Forged(User)
+		expect forged is Rejected(Unauthorized)
+		let expired <- api.GET("/orders") by Expired(User)
+		expect expired is Rejected(Unauthorized)
+		let revoked <- api.GET("/orders") by Revoked(User)
+		expect revoked is Rejected(Unauthorized)
+	}
 }

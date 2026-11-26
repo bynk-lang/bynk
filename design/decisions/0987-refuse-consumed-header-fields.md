@@ -1,0 +1,9 @@
+# 0987 — A typed headers field cannot read a header the route's actor consumes
+
+- **Status:** Accepted (v0.723)
+
+**Context.** The router hides a credential its actor's seam consumed from a typed `headers` record: `authorization` on a `Bearer`, `Oidc` or `Signature`-sum route, the signature header, and the session cookie out of `cookie` on a `SignedCookie` route. A field that reads one therefore never sees it, and a required field answers `400` on every request, so the route compiled but could never succeed (for the session cookie, only when no other cookie was sent).
+
+**Decision.** The checker now sees the route's `by` clause and its seam. A required field whose wire name (its name, or its `@name`, without case) is a consumed header is `bynk.http.headers_field_consumed`, naming the field, the header and the actor that consumes it, with a note that the value is available through the actor's principal. An `Option` or `List` field is allowed and draws the warning `bynk.http.headers_field_consumed_optional`, since it is always `None` or empty. A `SignedCookie` route consumes only its own cookie, so a required `cookie` field is refused even though it can succeed when the request carries another cookie: the issue asks for it, because a route that depends on the session cookie being accompanied is fragile, and the note points to a `cookies` record, which the session cookie is also removed from. The consumed-header set is the one the emitter hides, now a single function in `bynk-check` the emitter calls.
+
+**Consequences.** A route that could never succeed no longer compiles, and one that depended on a second cookie is refused on purpose. Existing programs that declared such a field stop compiling until the field is dropped, which is a correction, not a loss: it never held a value. A `Visitor` or `Internal` route consumes nothing and is unchanged.

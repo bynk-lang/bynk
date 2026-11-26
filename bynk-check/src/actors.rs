@@ -721,6 +721,9 @@ pub fn call_admission_for(
 pub struct QueueAdmission {
     /// The foreign senders admitted, in `by` order.
     pub foreign: Vec<ForeignCaller>,
+    /// For a sum (`by who: Legacy | Partner`), the members in `by` order: the handler's `match`
+    /// reads which one signed the message.
+    pub sum: Option<Vec<CallSumMember>>,
 }
 
 /// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
@@ -732,13 +735,25 @@ pub fn queue_admission_for(
     protocol: &ServiceProtocol,
     actors: &HashMap<String, ActorDecl>,
 ) -> Option<QueueAdmission> {
-    if !matches!(protocol, ServiceProtocol::Queue { .. })
-        || !matches!(handler.kind, HandlerKind::Message)
-    {
+    if !matches!(protocol, ServiceProtocol::Queue { .. }) {
         return None;
     }
+    queue_admission_of(handler, actors)
+}
+
+/// [`queue_admission_for`] without the protocol, for a caller that has only the handler (the seam
+/// lowering): an `on message` whose `by` names `Foreign` actors is a queue consumer's, because the
+/// checker admits a `Foreign` actor only on `call` and queue handlers.
+pub fn queue_admission_of(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(handler.kind, HandlerKind::Message) {
+        return None;
+    }
+    let by = handler.by_clause.as_ref()?;
     let mut foreign = Vec::new();
-    for actor in &handler.by_clause.as_ref()?.actors {
+    for actor in &by.actors {
         // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
         let decl = actors.get(&actor.name)?;
         if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
@@ -757,7 +772,14 @@ pub fn queue_admission_for(
             })
         });
     }
-    (!foreign.is_empty()).then_some(QueueAdmission { foreign })
+    let sum = by.is_sum().then(|| {
+        foreign
+            .iter()
+            .cloned()
+            .map(CallSumMember::Foreign)
+            .collect()
+    });
+    (!foreign.is_empty()).then_some(QueueAdmission { foreign, sum })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —
@@ -1682,6 +1704,63 @@ impl BadCredential {
                 | BadCredential::NoSubject
         )
     }
+}
+
+/// #4385: the member a bad-credential principal names on an actor sum, `Session` in
+/// `by Forged(Session)`: its argument when that is a bare identifier. A value (`by User("ada")`) is
+/// an identity, never an arm.
+pub fn bad_principal_arm(p: &bynk_syntax::ast::CallSiteActor) -> Option<&str> {
+    match p.identity.as_deref().map(|e| &e.kind) {
+        Some(ExprKind::Ident(id)) if p.claims.is_none() => Some(id.name.as_str()),
+        _ => None,
+    }
+}
+
+impl BadCredential {
+    /// #4385: whether a member declared as `decl` has a seam that refuses this credential, for the
+    /// principals a sum's arm can be named for. `Forged` reaches any of `Bearer`, `Signature`,
+    /// `Oidc` and `SignedCookie`; `Expired` any but `Signature`; `Stale` a `Signature` declaring a
+    /// `timestamp` and a `tolerance`; `Revoked` a `SignedCookie` with `sessions = true`. The
+    /// `Oidc`-only principals are not offered on a sum.
+    pub fn refused_by(self, decl: &ActorDecl) -> bool {
+        let Some(scheme) = decl
+            .auth
+            .as_ref()
+            .and_then(|a| Scheme::from_name(a.name.as_str()))
+        else {
+            return false;
+        };
+        match (self, scheme) {
+            (
+                BadCredential::Forged,
+                Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie,
+            ) => true,
+            (BadCredential::Expired, Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie) => true,
+            (BadCredential::Stale, Scheme::Signature) => signature_seam_from_decl(decl)
+                .is_some_and(|s| s.timestamp_header.is_some() && s.tolerance_secs.is_some()),
+            (BadCredential::Revoked, Scheme::SignedCookie) => {
+                signed_cookie_seam_of(decl, None).is_some_and(|s| s.sessions)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// #4385: the members of the sum `by` whose seam refuses `bad`, in declared order. Empty when the
+/// sum admits an open member (`Visitor`), whose catch-all means no credential is ever refused.
+pub fn sum_refusing_arms(
+    by: &ByClause,
+    bad: BadCredential,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<String> {
+    if sum_has_open_member(by, actors) {
+        return Vec::new();
+    }
+    by.actors
+        .iter()
+        .filter(|a| actors.get(&a.name).is_some_and(|d| bad.refused_by(d)))
+        .map(|a| a.name.clone())
+        .collect()
 }
 
 /// What a call-site principal (`by <Name>[(<identity>)]`) is: an actor, the reserved

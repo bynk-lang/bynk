@@ -277,7 +277,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor in a sum or with a binder, because nothing binds the resolved actor in a queue handler yet. Write `by Producer`, which says what is true (any producer on the account may send), or name one `Foreign` actor alone, with no binder.",
+        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor beside an unsigned one in a sum, or alone with a binder, because the message of an unsigned actor carries no signature to tell it from a signed one and a lone actor identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors, a lone one with no binder.",
         example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
@@ -1773,7 +1773,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.email.invalid_address",
-        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address. The address may be written as the name of a constant declared exactly `String` and bound to such a literal; a constant of any other type, refined or not, is this error with a note naming it.",
         example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
     },
     Explain {
@@ -1862,8 +1862,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.env.not_initialiser",
-        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
-        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value",
+        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list, nor appear in a function or handler body. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value\n\nfn origin() -> String { env(APP_ORIGIN) }   // ✗ `env` in a function body\n\nfn origin() -> String { Origin }   // ✓ name the constant",
     },
     Explain {
         code: "bynk.env.unsupported_type",
@@ -5224,6 +5224,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
     },
     Explain {
+        code: "bynk.test.bad_principal_needs_arm",
+        blurb: "A bad credential is presented to one member's seam, so on an actor sum \
+                `by Forged`, `by Expired`, `by Stale` and `by Revoked` must say which \
+                member's refusal the case checks, when more than one member could \
+                refuse it. Name the member in parentheses, as `by Forged(Browser)`. \
+                The name is a bare member name of the handler's `by` sum, not a value: \
+                an actor's identity is a value (`by Browser(\"ada\")`), a bad credential \
+                carries none. A member that cannot refuse the credential is refused \
+                with the principal's own error.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/me\") () -> Effect[HttpResult[String]] by who: Browser | Partner { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Forged            // ✗ the cookie's or the token's?\n\
+                  let r <- api.GET(\"/me\") by Forged(Browser)   // ✓",
+    },
+    Explain {
         code: "bynk.test.call_needs_in_process",
         blurb: "A service with an `on call` handler is internal to a deployment: \
                 it has no public route, and a `system` case can only send requests \
@@ -7314,7 +7330,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, which nothing enforces yet.",
+        "A queue consumer names a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, which nothing enforces yet.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",
@@ -10532,6 +10548,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.asset_address_method",
         "A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.bad_principal_needs_arm",
+        "A case drives `by Forged`, `by Expired`, `by Stale` or `by Revoked` at an actor sum with more than one member that could refuse it, without naming the member (`by Forged(Browser)`).",
         &["case"],
     ),
     dg(

@@ -1,0 +1,12 @@
+{
+  "blurb": "A bad credential is presented to one member's seam, so on an actor sum `by Forged`, `by Expired`, `by Stale` and `by Revoked` must say which member's refusal the case checks, when more than one member could refuse it. Name the member in parentheses, as `by Forged(Browser)`. The name is a bare member name of the handler's `by` sum, not a value: an actor's identity is a value (`by Browser(\"ada\")`), a bad credential carries none. A member that cannot refuse the credential is refused with the principal's own error.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.bad_principal_needs_arm",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\non GET(\"/me\") () -> Effect[HttpResult[String]] by who: Browser | Partner { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by Forged            // ✗ the cookie's or the token's?\nlet r <- api.GET(\"/me\") by Forged(Browser)   // ✓",
+  "severity": "error",
+  "summary": "A case drives `by Forged`, `by Expired`, `by Stale` or `by Revoked` at an actor sum with more than one member that could refuse it, without naming the member (`by Forged(Browser)`)."
+}

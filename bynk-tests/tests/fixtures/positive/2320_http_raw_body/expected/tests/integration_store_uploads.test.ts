@@ -208,6 +208,53 @@ async function __sysdrive_rawexpired_uploads_http_POST_either(body: string, __ex
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_sumbad_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __bad: string, __sub: string, __as: string) {
+  const __body = body;
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Sender") {
+    if (__bad === "forged") {
+      const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
+      __auth["X-Sig"] = __sig.signature;
+      __auth["X-Ts"] = __sig.timestamp;
+    }
+    if (__bad === "stale") {
+      const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
+      __auth["X-Sig"] = __sig.signature;
+      __auth["X-Ts"] = __sig.timestamp;
+    }
+  }
+  if (__as === "User") {
+    if (__bad === "forged") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;
+    if (__bad === "expired") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: __body as BufferSource });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawsumbad_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __bad: string, __sub: string, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Sender") {
+    if (__bad === "forged") {
+      const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), true, 0);
+      __auth["X-Sig"] = __sig.signature;
+      __auth["X-Ts"] = __sig.timestamp;
+    }
+    if (__bad === "stale") {
+      const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 360);
+      __auth["X-Sig"] = __sig.signature;
+      __auth["X-Ts"] = __sig.timestamp;
+    }
+  }
+  if (__as === "User") {
+    if (__bad === "forged") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;
+    if (__bad === "expired") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: body });
+  const __res = await __h.env.STORE_UPLOADS.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_uploads_http_POST_json(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(__bynkBytesToBase64(body) as __JsonValue);
   const __h = __makeHarness();
@@ -355,14 +402,14 @@ async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__o
           const payload = __d.value;
           const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", "Sender");
           const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), "User");
-          const forged = await __sysdrive_forged_uploads_http_POST_either(payload, undefined, "");
-          if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1747, 1773, "expect a is Ok(\"sender gP8AAf7/\")", "a", () => __bynkShow(a)); }
-          if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1785, 1808, "expect b is Ok(\"bob gP8AAf7/\")", "b", () => __bynkShow(b)); }
-          if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1820, 1852, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
+          const forged = await __sysdrive_sumbad_uploads_http_POST_either(payload, undefined, "forged", "", "Sender");
+          if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1755, 1781, "expect a is Ok(\"sender gP8AAf7/\")", "a", () => __bynkShow(a)); }
+          if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1793, 1816, "expect b is Ok(\"bob gP8AAf7/\")", "b", () => __bynkShow(b)); }
+          if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/uploads.bynk:55:12", 1828, 1860, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
           return undefined;
         }
         case "None": {
-          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:58:12", 1882, 1887, "expect false"); }
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:58:12", 1890, 1895, "expect false"); }
           return undefined;
         }
       }
@@ -385,8 +432,8 @@ async function test_a_multi_actor_raw_route_counts_the_bytes_read() {
     const deps = __makeHarness();
     const ok = await __sysdrive_raw_uploads_http_POST_either("short", undefined, "", "Sender");
     const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", undefined, "", "Sender");
-    if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ="))) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2163, 2199, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))", "ok", () => __bynkShow(ok)); }
-    if (!(((__c: boolean) => __c)(big.tag === "Handled" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2209, 2243, "expect big is Handled(PayloadTooLarge(_))", "big", () => __bynkShow(big)); }
+    if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ="))) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2171, 2207, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))", "ok", () => __bynkShow(ok)); }
+    if (!(((__c: boolean) => __c)(big.tag === "Handled" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2217, 2251, "expect big is Handled(PayloadTooLarge(_))", "big", () => __bynkShow(big)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -407,11 +454,11 @@ async function test_a_Bytes_body_without__raw_is_still_base64_in_JSON() {
         case "Some": {
           const b = __d.value;
           const r = await __sysdrive_uploads_http_POST_json(b, undefined, "");
-          if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2408, 2423, "expect r is Ok(\"aGk=\")", "r", () => __bynkShow(r)); }
+          if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "aGk="))) { throw __bynkExpectFailure("tests/uploads.bynk:74:12", 2416, 2431, "expect r is Ok(\"aGk=\")", "r", () => __bynkShow(r)); }
           return undefined;
         }
         case "None": {
-          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:77:12", 2453, 2458, "expect false"); }
+          if (!(false)) { throw __bynkExpectFailure("tests/uploads.bynk:77:12", 2461, 2466, "expect false"); }
           return undefined;
         }
       }

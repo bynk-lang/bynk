@@ -210,9 +210,11 @@ the dead-letter consumer never receives an injected message. The consumer rememb
 it, as for `Idempotency`). A secret that is missing from the Worker's environment admits nothing.
 
 `bynk deploy` mints the secret, sets it on the consumer's Worker and prints it once for the producer's
-operator. A `Foreign` actor is named alone, with no binder: beside other actors in a sum, with a binder, or
-beside `Producer` or a refinement of it is `bynk.actor.queue_actor_not_enforced` for now. Signing is covered by the format's
-integrity guarantee, not confidentiality: anyone with access to the account can still read a queued body.
+operator. Several `Foreign` actors may stand in one sum, `by who: Legacy | Partner`, and the body
+`match`es on which one signed the message. A lone `Foreign` actor takes no binder, and a `Foreign` actor
+beside `Producer` or a refinement of it is `bynk.actor.queue_actor_not_enforced` for now. Signing is
+covered by the format's integrity guarantee, not confidentiality: anyone with access to the account
+can still read a queued body.
 
 A `system` case sends as a foreign producer with `by`, signing the message as the producer would, and
 sending the same message twice replays it:
