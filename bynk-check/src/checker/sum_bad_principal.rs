@@ -63,7 +63,7 @@ pub(super) fn check(
             );
             return true;
         }
-        return false;
+        return sole_refuser_names_itself(p, bad, &refusing, ctx);
     };
     if !by.actors.iter().any(|a| a.name == arm) {
         let members = by
@@ -127,5 +127,36 @@ pub(super) fn check(
             },
         );
     }
+    true
+}
+
+/// A bare principal that exactly one member can refuse. A `Bearer` or `Signature` member is what a
+/// bare principal always drove, so the single-actor rules keep it (`false`). Any other member (`Oidc`,
+/// `SignedCookie`) has no such driver, so the checker records it as the arm and the case drives it
+/// as if written `by <Bad>(<member>)` (`true`).
+fn sole_refuser_names_itself(
+    p: &bynk_syntax::ast::CallSiteActor,
+    bad: BadCredential,
+    refusing: &[String],
+    ctx: &mut Ctx,
+) -> bool {
+    let [member] = refusing else {
+        return false;
+    };
+    let scheme = ctx
+        .test_actors
+        .get(member)
+        .and_then(|d| d.auth.as_ref())
+        .map(|a| a.name.as_str());
+    if !matches!(scheme, Some("Oidc" | "SignedCookie")) || p.identity.is_some() {
+        return false;
+    }
+    ctx.callees.insert(
+        p.id,
+        Callee::Principal(crate::actors::CallSitePrincipal::BadCredentialArm(
+            bad,
+            member.clone(),
+        )),
+    );
     true
 }
