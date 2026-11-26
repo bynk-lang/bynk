@@ -1952,6 +1952,18 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
+        // #4105: `writeValue[T]` on a derived `Analytics`, lowered over `write`.
+        if super::analytics::is_write_value(cap.derived_from.as_ref(), &method.name) {
+            return super::analytics::check_write_value(
+                &type_name.name,
+                method,
+                type_args,
+                args,
+                span,
+                expr_id,
+                ctx,
+            );
+        }
         if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
             return d1::check_typed_read(
                 cap.derived_from.as_ref(),

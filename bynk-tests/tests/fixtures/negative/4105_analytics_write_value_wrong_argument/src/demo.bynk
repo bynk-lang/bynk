@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+type P = { a: String }
+type Q = { a: String }
+
+capability Signups = Analytics
+
+service s from http {
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given Signups {
+		let _ <- Signups.writeValue[P](Q { a: "x" })
+		Ok(1)
+	}
+}

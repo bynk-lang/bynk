@@ -6647,6 +6647,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = '\\(id)'\", [])         // ✗ built at run time\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])      // ✓ bound",
     },
     Explain {
+        code: "bynk.types.analytics_point_shape",
+        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
+        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })    // ✗ `hops` has no column\n\ntype Visit = { @index path: String, ms: Float, hops: Int }\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })    // ✓",
+    },
+    Explain {
         code: "bynk.types.sql_row_shape",
         blurb: "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
         example: "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
@@ -11387,6 +11392,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.sql_not_literal",
         "A `D1` or `Postgres` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or the `sql` of a `SqlStatement` or a `PgStatement`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` or `PgValue` parameter (standard-library P4c, Hyperdrive H1 and H3).",
         &["method_call", "record_construction", "record_spread"],
+    ),
+    dg(
+        "bynk.types.analytics_point_shape",
+        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
+        &["method_call"],
     ),
     dg(
         "bynk.types.sql_row_shape",
