@@ -112,6 +112,12 @@ concurrency:
 permissions:
   contents: read
 
+# #4456: no job sends Wrangler's usage telemetry. The system-test harness sets this for every
+# Wrangler it starts; this is the backstop for any it does not (a test that runs `bynk dev`,
+# a step that calls `npx wrangler` itself).
+env:
+  WRANGLER_SEND_METRICS: "false"
+
 # The toolchain version lives in rust-toolchain.toml; the dtolnay ref below is
 # pinned to match so the runner installs exactly one toolchain (with the
 # rustfmt/clippy components the gates need). The `msrv` job installs the
