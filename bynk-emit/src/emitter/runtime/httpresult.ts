@@ -11,6 +11,13 @@ export interface SseEvent {
   readonly retry: Opt<number>;
 }
 
+// #4389: the `bynk` record `ContentRange`, as a `PartialContent` answer carries it.
+export interface ContentRange {
+  readonly start: number;
+  readonly end: number;
+  readonly total: Opt<number>;
+}
+
 export type HttpResult<T> =
   // 2xx success — carries the serialised value.
   | { readonly tag: "Ok"; readonly value: T }
@@ -41,6 +48,15 @@ export type HttpResult<T> =
   | { readonly tag: "Created"; readonly value: T }
   | { readonly tag: "Accepted"; readonly value: T }
   | { readonly tag: "NoContent" }
+  // 206 a raw body streamed chunk by chunk, answering a range request, with its `Content-Range` (#4389).
+  | {
+      readonly tag: "PartialContent";
+      readonly body: AsyncIterable<Uint8Array>;
+      readonly contentType: string;
+      readonly range: ContentRange;
+    }
+  // 304 bodyless, a conditional answer the handler worked out itself (#4389).
+  | { readonly tag: "NotModified" }
   // 3xx redirection — carries the target URL, emitted as a Location header.
   | { readonly tag: "MovedPermanently"; readonly location: string }
   | { readonly tag: "Found"; readonly location: string }
@@ -110,6 +126,14 @@ export const HttpResult = {
   Created: <T>(value: T): HttpResult<T> => ({ tag: "Created", value }),
   Accepted: <T>(value: T): HttpResult<T> => ({ tag: "Accepted", value }),
   NoContent: { tag: "NoContent" } as HttpResult<never>,
+  // 206 — the chunks, their content-type and the range they cover.
+  PartialContent: (body: AsyncIterable<Uint8Array>, contentType: string, range: ContentRange): HttpResult<never> => ({
+    tag: "PartialContent",
+    body,
+    contentType,
+    range,
+  }),
+  NotModified: { tag: "NotModified" } as HttpResult<never>,
   // 3xx redirection — the argument is the target URL (Location header).
   MovedPermanently: (location: string): HttpResult<never> => ({ tag: "MovedPermanently", location }),
   Found: (location: string): HttpResult<never> => ({ tag: "Found", location }),

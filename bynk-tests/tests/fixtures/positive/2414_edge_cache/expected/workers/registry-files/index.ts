@@ -89,7 +89,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
         const __raw_hex = __m.params["hex"];
         const hex = __raw_hex;
         const result = await surface.http_POST_takedown_Param_hex(hex);
-        return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), request, ["Bynk realm=\"registry.files\""]), __security_files);
+        return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"registry.files\""]), __security_files);
       }
     }
     if (__matchPath("/bad-tag", path) !== null) {

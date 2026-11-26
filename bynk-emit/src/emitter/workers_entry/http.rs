@@ -1533,14 +1533,16 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
 /// The response of a route that is not a `GET`: the result, serialised, with no validator. A route that
 /// answers its errors as problem details says so (#3916), and one that does not is unchanged.
 fn plain_response(route: &HttpRoute, ser_fn: TsExpr) -> TsExpr {
-    let mut args = vec![ident("result"), ser_fn];
+    // #4389: `notGet` makes the runtime fault a `PartialContent` or `NotModified` returned here, which
+    // answer a `GET` (the compiler refuses one named in this handler's own body).
+    let mut opts = vec![("notGet".to_string(), bool_lit(true))];
     if route.error_problem {
-        args.push(TsExpr::object(vec![(
-            "problem".to_string(),
-            bool_lit(true),
-        )]));
+        opts.push(("problem".to_string(), bool_lit(true)));
     }
-    call(ident("__httpResultToResponse"), args)
+    call(
+        ident("__httpResultToResponse"),
+        vec![ident("result"), ser_fn, TsExpr::object(opts)],
+    )
 }
 
 /// #3922: `@cache(noStore: true)` sends `no-store`, on a route of any method.
