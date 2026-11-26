@@ -36,12 +36,17 @@ pub(crate) trait CloudflareApi {
         binding: &str,
         environment: &str,
     ) -> Result<(), WranglerError>;
-    /// `d1 create <name> [--jurisdiction <j>]`: the new database's id.
-    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, WranglerError>;
-    /// `d1 list --json`: what it printed.
-    fn d1_list(&self) -> Result<String, WranglerError>;
-    /// `r2 bucket create <name> [--jurisdiction <j>]`.
-    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), WranglerError>;
+    /// Create the D1 database `name`, in `jurisdiction` when given (REST, `POST /d1/database`):
+    /// its id.
+    fn d1_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<String, CloudflareError>;
+    /// The id of the account's D1 database named exactly `name`, if it has one (REST, `GET
+    /// /d1/database?name=…`, every page read).
+    fn d1_find(&self, name: &str) -> Result<Option<String>, CloudflareError>;
+    /// Create the R2 bucket `name`, in `jurisdiction` when given (REST, `POST /r2/buckets`).
+    fn r2_create(&self, name: &str, jurisdiction: Option<&str>) -> Result<(), CloudflareError>;
+    /// Whether this account holds the R2 bucket `name` in `jurisdiction` (REST, `GET
+    /// /r2/buckets/{name}`): answered for a bucket of its own, and 404 for any other.
+    fn r2_owned(&self, name: &str, jurisdiction: Option<&str>) -> Result<bool, CloudflareError>;
     /// One of the six Vectorize calls: what it printed.
     fn vectorize(&self, op: VectorizeOp<'_>) -> Result<String, WranglerError>;
 
@@ -183,12 +188,21 @@ pub(crate) enum Op<'a> {
         binding: &'a str,
         environment: &'a str,
     },
+    // Over REST since 1D.4b: logged by the fake, never run.
+    #[cfg(test)]
     D1Create {
         name: &'a str,
         jurisdiction: Option<&'a str>,
     },
+    #[cfg(test)]
     D1List,
+    #[cfg(test)]
     R2Create {
+        name: &'a str,
+        jurisdiction: Option<&'a str>,
+    },
+    #[cfg(test)]
+    R2Owned {
         name: &'a str,
         jurisdiction: Option<&'a str>,
     },
@@ -272,6 +286,9 @@ impl Op<'_> {
                 }
                 argv
             }
+            // D1's and R2's lines are the wrangler calls they made before 1D.4b, kept for the
+            // fake's log; `r2 bucket info` stands for the ownership check that has no such call.
+            #[cfg(test)]
             Op::D1Create { name, jurisdiction } => {
                 let mut argv = words(&["d1", "create", name]);
                 if let Some(jurisdiction) = jurisdiction {
@@ -279,9 +296,19 @@ impl Op<'_> {
                 }
                 argv
             }
+            #[cfg(test)]
             Op::D1List => words(&["d1", "list", "--json"]),
+            #[cfg(test)]
             Op::R2Create { name, jurisdiction } => {
                 let mut argv = words(&["r2", "bucket", "create", name]);
+                if let Some(jurisdiction) = jurisdiction {
+                    argv.extend(words(&["--jurisdiction", jurisdiction]));
+                }
+                argv
+            }
+            #[cfg(test)]
+            Op::R2Owned { name, jurisdiction } => {
+                let mut argv = words(&["r2", "bucket", "info", name]);
                 if let Some(jurisdiction) = jurisdiction {
                     argv.extend(words(&["--jurisdiction", jurisdiction]));
                 }
@@ -387,9 +414,11 @@ impl Op<'_> {
             #[cfg(test)]
             Op::KvCreate { .. } | Op::KvList | Op::KvDelete { .. } => return None,
             Op::D1MigrationsApply { .. } => OpKind::D1MigrationsApply,
-            Op::D1Create { .. } => OpKind::D1Create,
-            Op::D1List => OpKind::D1List,
-            Op::R2Create { .. } => OpKind::R2Create,
+            // Over REST (1D.4b).
+            #[cfg(test)]
+            Op::D1Create { .. } | Op::D1List | Op::R2Create { .. } | Op::R2Owned { .. } => {
+                return None;
+            }
             Op::Vectorize(VectorizeOp::List) => OpKind::VectorizeList,
             Op::Vectorize(VectorizeOp::Get { .. }) => OpKind::VectorizeGet,
             Op::Vectorize(VectorizeOp::Create { .. }) => OpKind::VectorizeCreate,

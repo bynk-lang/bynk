@@ -26,7 +26,7 @@ stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: Cloudflare 
 +125 [environments.default.workers.shop-cart.expects]
 +126 
 -- call 5 fails: r2 bucket create shop-archive --jurisdiction eu
-stopped: exit 1: could not create the R2 bucket `shop-archive` for `shop`'s `R2_ARCHIVE`: ✘ [ERROR] the stand-in failed call 5
+stopped: exit 1: could not create the R2 bucket `shop-archive` for `shop`'s `R2_ARCHIVE`: Cloudflare answered 500 to call 5
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -44,7 +44,7 @@ stopped: exit 1: could not create the R2 bucket `shop-archive` for `shop`'s `R2_
 +128 [environments.default.workers.shop-cart.expects]
 +129 
 -- call 6 fails: r2 bucket create shop-new
-stopped: exit 1: could not create the R2 bucket `shop-new` for `shop`'s `R2_NEW`: ✘ [ERROR] the stand-in failed call 6
+stopped: exit 1: could not create the R2 bucket `shop-new` for `shop`'s `R2_NEW`: Cloudflare answered 500 to call 6
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -116,7 +116,7 @@ stopped: exit 1: could not create the Vectorize index `shop-new` for `shop`'s `V
 +135 [environments.default.workers.shop-cart.expects]
 +136 
 -- call 15 fails: d1 create shop-new
-stopped: exit 1: could not create the D1 database `shop-new` for `shop`'s `D1_NEW`: ✘ [ERROR] the stand-in failed call 15
+stopped: exit 1: could not create the D1 database `shop-new` for `shop`'s `D1_NEW`: Cloudflare answered 500 to call 15
 + 20 [environments.default.kv_instances.shop.KV_CART]
 + 21 id = "kv-shop-cart"
 + 22 
@@ -1909,7 +1909,7 @@ stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop`: Cloudfl
 +162 
 +163 [environments.staging.workers.shop-cart.expects]
 -- call 6 fails: r2 bucket create shop-archive-staging --jurisdiction eu
-stopped: exit 1: could not create the R2 bucket `shop-archive-staging` for `shop`'s `R2_ARCHIVE`: ✘ [ERROR] the stand-in failed call 6
+stopped: exit 1: could not create the R2 bucket `shop-archive-staging` for `shop`'s `R2_ARCHIVE`: Cloudflare answered 500 to call 6
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -1933,7 +1933,7 @@ stopped: exit 1: could not create the R2 bucket `shop-archive-staging` for `shop
 +162 
 +163 [environments.staging.workers.shop-cart.expects]
 -- call 7 fails: r2 bucket create shop-files-staging
-stopped: exit 1: could not create the R2 bucket `shop-files-staging` for `shop`'s `R2_FILES`: ✘ [ERROR] the stand-in failed call 7
+stopped: exit 1: could not create the R2 bucket `shop-files-staging` for `shop`'s `R2_FILES`: Cloudflare answered 500 to call 7
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -1961,7 +1961,7 @@ stopped: exit 1: could not create the R2 bucket `shop-files-staging` for `shop`'
 +166 
 +167 [environments.staging.workers.shop-cart.expects]
 -- call 8 fails: r2 bucket create shop-new-staging
-stopped: exit 1: could not create the R2 bucket `shop-new-staging` for `shop`'s `R2_NEW`: ✘ [ERROR] the stand-in failed call 8
+stopped: exit 1: could not create the R2 bucket `shop-new-staging` for `shop`'s `R2_NEW`: Cloudflare answered 500 to call 8
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -2068,7 +2068,7 @@ stopped: exit 1: could not create the Vectorize index `shop-new-staging` for `sh
 +176 
 +177 [environments.staging.workers.shop-cart.expects]
 -- call 17 fails: d1 create shop-new-staging
-stopped: exit 1: could not create the D1 database `shop-new-staging` for `shop`'s `D1_NEW`: ✘ [ERROR] the stand-in failed call 17
+stopped: exit 1: could not create the D1 database `shop-new-staging` for `shop`'s `D1_NEW`: Cloudflare answered 500 to call 17
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
