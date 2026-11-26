@@ -26,7 +26,7 @@ pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
     BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp, InstantOp,
     IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
-    RequestQueryOp, ResultOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    RequestQueryOp, ResultOp, SecretOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
 };
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
@@ -82,6 +82,8 @@ pub const REQUEST_QUERY_METHODS: &[KernelMethod] = RequestQueryOp::TABLE;
 pub const REQUEST_COOKIES_METHODS: &[KernelMethod] = RequestCookiesOp::TABLE;
 /// An `Oidc` binder's claims (#2380).
 pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = TokenClaimsOp::TABLE;
+/// A `bynk` `Secret` (#4111): `reveal` and `matches`, the only two readers.
+pub const SECRET_METHODS: &[KernelMethod] = SecretOp::TABLE;
 /// A case's recording `TestConnection[F]` (#3051).
 pub const TEST_CONNECTION_METHODS: &[KernelMethod] = TestConnectionOp::TABLE;
 
@@ -135,6 +137,7 @@ pub const ALL_METHODS: &[(&str, &[KernelMethod])] = &[
     ("RequestCookies", REQUEST_COOKIES_METHODS),
     ("TokenClaims", TOKEN_CLAIMS_METHODS),
     ("TestConnection", TEST_CONNECTION_METHODS),
+    ("Secret", SECRET_METHODS),
 ];
 
 /// The value methods of a receiver type, or `&[]` for a type with no kernel
@@ -165,6 +168,14 @@ pub fn methods_for(ty: TyId, tys: &Types) -> &'static [KernelMethod] {
         // combinators (and `within`, `race`); any other `Effect[_]` offers those two alone.
         Ty::Effect(inner) if matches!(&*tys.get(*inner), Ty::Result(_, _)) => EFFECT_RESULT_METHODS,
         Ty::Effect(_) => EFFECT_METHODS,
+        // #4111: a `Secret` offers `reveal` and `matches`. Found by name and shape, as this
+        // function has no declaration to ask, so a user's own `opaque String` called `Secret`
+        // is offered them too (completion only: the checker tells the two apart).
+        Ty::Named {
+            name,
+            kind: NamedKind::Opaque(BaseType::String),
+            ..
+        } if name == "Secret" => SECRET_METHODS,
         // #561: a refined receiver inherits its base type's read-only kernel
         // methods (after its own declared methods, which the completion layer
         // merges in), so `.`-member completion offers them. `Bool` has no

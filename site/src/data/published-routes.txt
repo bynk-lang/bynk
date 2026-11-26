@@ -849,9 +849,9 @@
 /book/reference/diagnostics/bynk.store.kind_arity/
 /book/reference/diagnostics/bynk.store.kind_unsupported/
 /book/reference/diagnostics/bynk.store.log_needs_clock/
+/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unkeyable_key/
 /book/reference/diagnostics/bynk.store.unknown_annotation/
-/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unknown_kind/
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
@@ -2052,9 +2052,9 @@
 /reference/diagnostics/bynk.store.kind_arity/
 /reference/diagnostics/bynk.store.kind_unsupported/
 /reference/diagnostics/bynk.store.log_needs_clock/
+/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
-/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/
@@ -2266,6 +2266,8 @@
 /reference/diagnostics/bynk.types.request_query_at_boundary/
 /reference/diagnostics/bynk.types.return_mismatch/
 /reference/diagnostics/bynk.types.rounding_mode_position/
+/reference/diagnostics/bynk.types.secret_at_boundary/
+/reference/diagnostics/bynk.types.secret_not_comparable/
 /reference/diagnostics/bynk.types.select_tail_has_select/
 /reference/diagnostics/bynk.types.sequence_needs_result/
 /reference/diagnostics/bynk.types.some_value_mismatch/

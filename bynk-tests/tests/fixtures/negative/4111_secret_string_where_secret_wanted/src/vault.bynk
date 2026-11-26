@@ -1,0 +1,11 @@
+context vault
+
+consumes bynk { Secret }
+
+fn take(s: Secret) -> Bool {
+    s.matches("x")
+}
+
+fn caller() -> Bool {
+    take("plain text")
+}

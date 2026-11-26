@@ -20,7 +20,7 @@ provides Mode = SecretMode given Secrets {
 	fn current() -> Effect[String] {
 		let m <- Secrets.get("APP_MODE")
 		match m {
-			Some(v) => v,
+			Some(v) => v.reveal(),
 			None => "default",
 		}
 	}

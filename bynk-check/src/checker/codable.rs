@@ -51,6 +51,8 @@ pub(crate) fn json_codable(
         Ty::Error | Ty::Never => true,
         // #2784: a `bynk.crypto` key is non-extractable and never sent, so it has no codec.
         Ty::Named { name, .. } if crate::context_checks::is_crypto_key_type(name, types) => false,
+        // #4111: a `Secret` is never encoded, stored, sent or returned across a boundary.
+        Ty::Named { name, .. } if crate::context_checks::is_secret_type(name, types) => false,
         // K-streams (#2623): a record or sum carrying a `Stream` has no codec.
         Ty::Named { name, .. } if bynk_syntax::ast::type_carries_stream(name, types) => false,
         // v0.174 (#592): a generic record instantiation is boundary-serialisable

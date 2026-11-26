@@ -27,7 +27,7 @@ use crate::project_model::{ErrorSink, UnitCallees};
 use crate::symbols::UnitTable;
 
 /// The context names an `IsContext(…)` predicate mentions, with where each is written.
-fn mentioned_names(e: &Expr, out: &mut Vec<(String, Span)>) {
+pub(crate) fn mentioned_names(e: &Expr, out: &mut Vec<(String, Span)>) {
     match &e.kind {
         ExprKind::Paren(inner) | ExprKind::UnaryOp(UnaryOp::Not, inner) => {
             mentioned_names(inner, out)

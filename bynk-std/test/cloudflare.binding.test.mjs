@@ -2250,11 +2250,14 @@ t("WorkersStoredSecret.get: reads the instance's own binding and returns the val
     },
   });
   const env = { SECRET_STRIPE_KEY: secret("sk_one"), SECRET_WEBHOOK_KEY: secret("whsec_two") };
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_WEBHOOK_KEY").get(), "whsec_two");
+  const read = async (binding) => (await new WorkersStoredSecret(env, binding).get()).reveal();
+  assert.equal(await read("SECRET_STRIPE_KEY"), "sk_one");
+  assert.equal(await read("SECRET_WEBHOOK_KEY"), "whsec_two");
+  // #4111: the value is a `Secret`, so it never shows its text.
+  assert.equal(String(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get()), "<secret>");
   // Each read goes to the platform; the provider keeps no copy.
-  assert.equal(await new WorkersStoredSecret(env, "SECRET_STRIPE_KEY").get(), "sk_one");
-  assert.deepEqual(calls, ["sk_one", "whsec_two", "sk_one"]);
+  assert.equal(await read("SECRET_STRIPE_KEY"), "sk_one");
+  assert.deepEqual(calls, ["sk_one", "whsec_two", "sk_one", "sk_one"]);
 });
 
 t("WorkersStoredSecret.get: a missing binding names it and the stanza, and a platform refusal propagates", async () => {

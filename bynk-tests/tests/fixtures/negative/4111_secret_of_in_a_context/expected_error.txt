@@ -1,0 +1,2 @@
+bynk.context.external_construction
+cannot construct `Secret.of` here

@@ -60,7 +60,13 @@ pub fn prepare_rename<'a>(
     path: &Path,
     offset: usize,
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
-    index.symbol_at(path, offset)
+    // #4183: a unit is indexed (hover, definition, references, tokens), but
+    // renaming one is a separate step: it changes a dotted name wherever it is
+    // written, and the file layout that names it, so it is refused here until
+    // it is planned as one.
+    index
+        .symbol_at(path, offset)
+        .filter(|(key, _)| key.kind != SymbolKind::Unit)
 }
 
 /// v0.26 rider (ADR 0055): `workspace/symbol` — every index definition whose
@@ -182,6 +188,10 @@ pub fn prepare_call_hierarchy<'a>(
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
     // #3582: also a service handler's `on` keyword.
     let (key, _) = index.call_symbol_at(path, offset)?;
+    // #4183: a unit is indexed now, but it is not something that is called.
+    if key.kind == SymbolKind::Unit {
+        return None;
+    }
     Some((key, index.symbols.get(key)?.def.as_ref()?))
 }
 
@@ -1042,12 +1052,15 @@ pub fn plan_rename(
     new_name: &str,
 ) -> Result<RenamePlan, String> {
     validate_new_name(new_name)?;
-    let (key, _) = index.symbol_at(path, offset).ok_or_else(|| {
-        "no renameable symbol at the cursor — types, fns, methods, record fields, \
-         capability ops, capabilities, services, agents and providers rename; \
-         local bindings and unit names are not yet supported"
-            .to_string()
-    })?;
+    let (key, _) = index
+        .symbol_at(path, offset)
+        .filter(|(key, _)| key.kind != SymbolKind::Unit)
+        .ok_or_else(|| {
+            "no renameable symbol at the cursor — types, fns, methods, record fields, \
+             capability ops, capabilities, services, agents and providers rename; \
+             local bindings and unit names are not yet supported"
+                .to_string()
+        })?;
     if key_segment(&key.name) == new_name {
         return Err(format!("`{new_name}` is already the symbol's name"));
     }

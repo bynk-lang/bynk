@@ -13,7 +13,7 @@ service demo {
       method: Get,
       url: url,
       contentType: None,
-      authorization: tok,
+      authorization: tok.map((t) => t.reveal()),
       headers: Map.empty(),
       body: None,
     }
