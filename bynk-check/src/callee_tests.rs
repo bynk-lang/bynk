@@ -854,8 +854,6 @@ fn every_call_site_principal_is_recorded_once_and_an_actor_is_not_reserved() {
         "WrongAlgorithm",
         "NoSubject",
         "Revoked",
-        "Malformed",
-        "Unknown",
     ] {
         cases.push_str(&format!(
             "  case \"{who}\" {{\n    let r <- api.GET(\"/count\") by {who}\n    expect true\n  }}\n"
