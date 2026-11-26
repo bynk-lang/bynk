@@ -89,6 +89,26 @@ only: below it the seam is skipped. See
 [the failure principals](/reference/testing/#failure-principals) for the
 full table.
 
+## Bind a token to its purpose: `issuer` and `audience`
+
+A token signed with the actor's secret is accepted whatever it was minted for. Where one secret is shared
+between token types, say who a token is for with `issuer` and `audience`; the seam then requires the token's
+`iss` and `aud` to match (`aud` may be an array that contains the audience), after the signature and the
+expiry, and answers `401` otherwise:
+
+```bynk,fragment
+actor Learner { auth = Bearer(secret = "AUTH_SECRET", issuer = "web", audience = "api"), identity = UserId }
+actor Internal { auth = Bearer(secret = "AUTH_SECRET", audience = "internal"), identity = UserId }
+```
+
+Two `Bearer` actors on one secret must each declare a different `audience`
+(`bynk.actor.bearer_secret_shared`), or a token minted for one is accepted by the other. A `trustFrom`
+variable can replace the declared values per environment, but two actors on one secret cannot share one.
+Mint each actor's tokens with its own claims: `bynk token Learner --sub alice` adds the declared `iss` and
+`aud`, and the `system` tier does the same for a valid principal. `by WrongIssuer` and `by WrongAudience`
+send an otherwise valid token whose `iss` or `aud` names another party, on a route whose actor declares
+that claim, and must be refused. See [the reference](/reference/actors/#issuer-and-audience-for-a-bearer-token).
+
 ## Verify a token without capturing the identity
 
 Drop the binder when you only need to *gate* a route, not read who it was:

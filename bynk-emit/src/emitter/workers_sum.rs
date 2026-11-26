@@ -181,7 +181,8 @@ pub(super) fn emit_http_sum_wrapper(
             SumMemberSeam::Bearer {
                 secret,
                 identity_type,
-            } => inner.extend(sum_bearer_arm(&tag, secret, identity_type)),
+                claims,
+            } => inner.extend(sum_bearer_arm(&tag, secret, identity_type, claims)),
             SumMemberSeam::Oidc(seam) => inner.extend(sum_oidc_arm(&tag, seam)),
             SumMemberSeam::SignedCookie(seam) => inner.extend(sum_cookie_arm(
                 &tag,
@@ -284,7 +285,12 @@ pub(super) fn emit_http_sum_wrapper(
 /// A `Bearer` sum member: an `Authorization: Bearer …` HS256 token whose `sub` constructs the
 /// identity resolves `__who`; any failure leaves it unset so the next member is tried.
 #[allow(clippy::vec_init_then_push)]
-fn sum_bearer_arm(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
+fn sum_bearer_arm(
+    tag: &str,
+    secret: &str,
+    identity_type: &str,
+    claims: &bynk_check::actors::BearerClaims,
+) -> Vec<TsStmt> {
     let tag = tag.to_string();
     let mut inner: Vec<TsStmt> = Vec::new();
     inner.push(const_(
@@ -302,10 +308,11 @@ fn sum_bearer_arm(tag: &str, secret: &str, identity_type: &str) -> Vec<TsStmt> {
         "__claims",
         await_expr(call(
             ident("__verifyBearerJwtHs256"),
-            vec![
+            bearer_verify_args(
                 method_call(ident("__authz"), "slice", vec![num_lit("7")]),
                 ident("__secret"),
-            ],
+                claims,
+            ),
         )),
     ));
     secret_body.push(if_(
