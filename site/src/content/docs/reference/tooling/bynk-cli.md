@@ -2265,7 +2265,7 @@ bynk registry resign <DIR> --key <SIGNING-KEY>
 
 | Subcommand | What it does |
 |---|---|
-| `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. |
+| `init` | Writes `<DIR>/config.json` and a new ed25519 signing key (default `./<ID>.key`, refused inside `<DIR>`), and prints the `key = "…"` line consumers pin. The id follows `[a-z][a-z0-9-]*` and is not a `[registries]` name, so `bynk`, the first-party registry's own id, is accepted here even though a project's `[registries.bynk]` is refused. |
 | `add` | Signs with the newest chain key or a valid, unrevoked delegate. Packs the package (its sources; never `out/`, `node_modules/` or hidden files), signs its index line with the registry's current key, and appends it. A version already present with a different tree, or a `path`/`git` dependency, is refused; the identical tree again changes nothing. |
 | `yank` | Marks a version yanked (`--undo` clears it): kept for locked builds, never newly chosen. Nothing is deleted or re-signed. `--undo` refuses a withdrawn version. |
 | `withdraw` | [Withdraws](/reference/tooling/registry-protocol/#withdrawals) a version — a takedown: yanks its line, records `--reason` (one line, at most 500 characters) as its `withdrawn`, and deletes its archive, unless another version names the same tree (kept, with a warning). Nothing is re-signed. Re-run after a failure, it finishes deleting the archive. Final: it otherwise refuses a version already withdrawn, and `add`, the publish API and `yank --undo` then refuse that version too. |

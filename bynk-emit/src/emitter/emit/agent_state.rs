@@ -1410,8 +1410,8 @@ fn check_stored_version_stmt(
     )
 }
 
-/// #4482: `await __moveRenamedEntries(this, this.state.storage, [[kind, old, new], …]);`, one pair per
-/// `Map` or `Set` field a `replaces` renamed, `kind` the key tag its entries sit under (`m` or `s`).
+/// #4482: `await __moveRenamedEntries(this, this.state.storage, stored, steps, [{ kind, from, to }, …]);`, one
+/// entry per collection field (a `Map`, `Set`, `Cache` or `Log`) a `replaces` renamed.
 fn move_renamed_entries_stmt(
     a: &AgentDecl,
     versions: Option<&bynk_check::schema_registry::AgentVersions>,
@@ -1423,15 +1423,19 @@ fn move_renamed_entries_stmt(
         .filter_map(|(old, new)| {
             let field = a.store_fields.iter().find(|f| &f.name.name == new)?;
             let kind = match field.kind.head.name.as_str() {
-                "Map" => "m",
-                "Set" => "s",
+                "Map" => "map",
+                "Set" => "set",
+                "Cache" => "cache",
+                "Log" => "log",
                 _ => return None,
             };
-            Some(bynk_ts::TsExpr::object_entries(vec![
-                bynk_ts::TsObjectEntry::prop("kind", str_lit(kind.to_string())),
-                bynk_ts::TsObjectEntry::prop("from", str_lit(old.clone())),
-                bynk_ts::TsObjectEntry::prop("to", str_lit(new.clone())),
-            ]))
+            let mut entries = vec![bynk_ts::TsObjectEntry::prop(
+                "kind",
+                str_lit(kind.to_string()),
+            )];
+            entries.push(bynk_ts::TsObjectEntry::prop("from", str_lit(old.clone())));
+            entries.push(bynk_ts::TsObjectEntry::prop("to", str_lit(new.clone())));
+            Some(bynk_ts::TsExpr::object_entries(entries))
         })
         .collect();
     if pairs.is_empty() {

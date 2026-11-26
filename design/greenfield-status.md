@@ -42,7 +42,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `diagnostic_coverage` | yes | unasserted=37 (asserted 968/1005) |
 | `model_readers_beyond_emit` | yes | 7 (bynk-model::EntryHandler, bynk-model::EntryParam, bynk-model::EntryShape, bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::entry_handlers, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
-| `explained_codes` | yes | explained=897 (of 1005) |
+| `explained_codes` | yes | explained=896 (of 1004) |
 
 ## Trend probes (not gated)
 
