@@ -2466,9 +2466,9 @@ pub(crate) fn check_request_headers_method(
     let string = tys.intern(Ty::Base(BaseType::String));
     let params: Vec<TyId> = match op {
         Some(RequestHeadersOp::Get) => vec![string],
-        Some(
-            RequestHeadersOp::Bearer | RequestHeadersOp::ClientIp | RequestHeadersOp::Entries,
-        ) => vec![],
+        Some(RequestHeadersOp::Bearer | RequestHeadersOp::ClientIp | RequestHeadersOp::Entries) => {
+            vec![]
+        }
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",

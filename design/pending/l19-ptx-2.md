@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics
 changelog: `RequestHeaders.entries()` lists every request header as a `Map[String, String]` of lower-case names, a repeated field combined with `", "` (`Cookie` with `"; "`) and the route's consumed credential absent; experimental, behind `bynk.RequestHeaders.entries` in `[unstable] allow`
 ---
 
