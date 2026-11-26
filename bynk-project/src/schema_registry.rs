@@ -369,6 +369,11 @@ pub struct PathShape {
     /// alone leaves stored data readable, as for [`StoreShape::refinement`].
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub refinement: String,
+    /// #4483: the name this record field was renamed from (`replaces old`), on the field's own
+    /// path. A recorded path under the old name is read as this one, as a top-level `replaces`
+    /// reads it, so the rename needs no `migrate from`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub renamed_from: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
