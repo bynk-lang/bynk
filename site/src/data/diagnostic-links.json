@@ -2125,6 +2125,9 @@
   "bynk.types.duplicate_literal_arm": [
     "/reference/types/#exhaustiveness-and-reachability"
   ],
+  "bynk.types.duplicate_pattern_binding": [
+    "/reference/types/#each-name-once"
+  ],
   "bynk.types.duplicate_pattern_field": [
     "/reference/types/#record-patterns"
   ],
