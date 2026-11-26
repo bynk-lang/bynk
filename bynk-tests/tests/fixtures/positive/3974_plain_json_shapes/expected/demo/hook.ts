@@ -186,7 +186,7 @@ export function __deserialise_Hook(json: __JsonValue, path: string = "$"): Resul
 
 export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
   if ((globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true) {
-    const object: Record<string, __JsonValue> = globalThis.Object.create(null);
+    const object: globalThis.Record<string, __JsonValue> = globalThis.Object.create(null);
     for (const [k, v] of value) {
       object[k as __JsonValue as string] = v as __JsonValue;
     }

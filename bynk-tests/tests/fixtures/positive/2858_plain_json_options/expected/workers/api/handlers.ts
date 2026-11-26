@@ -287,7 +287,7 @@ export function __deserialise_List_Option_String(json: __JsonValue, path: string
 
 export function __serialise_Map_String_Option_Int(value: ReadonlyMap<string, Option<number>>): __JsonValue {
   if ((globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true) {
-    const object: Record<string, __JsonValue> = globalThis.Object.create(null);
+    const object: globalThis.Record<string, __JsonValue> = globalThis.Object.create(null);
     for (const [k, v] of value) {
       object[k as __JsonValue as string] = __serialise_Option_Int(v);
     }

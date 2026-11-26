@@ -194,17 +194,17 @@ their types:
 
 ```bynk
 commons hooks {
-  type Action = enum { Opened, Closed, Reopened }
+	type Action = enum { Opened, Closed, Reopened }
 
-  type IssueHook = {
-    action: Action,
-    labels: Map[String, String],
-    created_at: Instant,
-  }
+	type IssueHook = {
+		action: Action,
+		labels: Map[String, String],
+		created_at: Instant,
+	}
 
-  fn read(body: String) -> Result[IssueHook, DecodeError] {
-    Json.decode[IssueHook](body)
-  }
+	fn read(body: String) -> Result[IssueHook, DecodeError] {
+		Json.decode[IssueHook](body)
+	}
 }
 ```
 

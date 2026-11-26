@@ -273,7 +273,7 @@ service legacy {
 | `Line` | `{"sku":"A-1","qty":2,"wait":1.5,"at":1767225600000,"blob":"","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.wait` | A `Duration` is whole milliseconds. |
 | `Line` | `{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"Some","value":0.5},"at":1767225600000,"blob":"","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.delay.value` | So is a `Duration` inside an `Option`, a `List` or a variant. |
 | `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"%%","tags":[],"stock":[],"rush":true}` | `StructuralMismatch` at `$.blob` | `Bytes` is padded base64. |
-| `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"","tags":[],"stock":{"lon":3},"rush":true}` | `StructuralMismatch` at `$.stock` | A `Map` is an array of pairs, never an object. |
+| `Line` | `{"sku":"A-1","qty":2,"wait":1500,"at":1767225600000,"blob":"","tags":[],"stock":{"lon":3},"rush":true}` | accepted; encodes back as `{"sku":"A-1","qty":2,"wait":1500,"delay":{"kind":"None"},"at":1767225600000,"blob":"","note":{"kind":"None"},"tags":[],"stock":[["lon",3]],"rush":true}` | A `Map` with a `String` key is also read from an object; it is written as an array of pairs. |
 | `Qty` | `-1` | `RefinementViolation` at `$` | A named refined type is its base value, checked against its predicates. |
 | `Price` | `"12.50"` | accepted; encodes back the same | A `Decimal` is its canonical text, and keeps its scale: `"12.50"` re-encodes as `"12.50"`, not `"12.5"`. |
 | `Price` | `"1e3"` | `StructuralMismatch` at `$` | No exponent form: a `Decimal` is plain digits, so every client reads it exactly. |
