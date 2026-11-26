@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: diagnostic_coverage
+probes: diagnostic_coverage, emit_diagnostics, explained_codes
 changelog: A Cache, a Log or an indexed Map store field can be renamed with `replaces` too, so every storage kind keeps its entries, expiries and index postings across a rename
 ---
 
