@@ -1353,7 +1353,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 function, which is where a set is bounded and is not followed. Serve the route `by` \
                 an authenticated actor, or choose the name from a fixed set. A refined type limits \
                 the shape of a name, not how many there are, so pair a keyed instance with an \
-                authenticated actor or a `RateLimit`.",
+                authenticated actor or a `RateLimit`. A later release is expected to let an \
+                instance declare a typed key that bounds its names, and a name from such a key \
+                will then not warn; that is not available yet.",
         example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
                   service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
                   service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.tenant, req)         // ✓ the authenticated identity chooses\n        …\n    }\n}",
