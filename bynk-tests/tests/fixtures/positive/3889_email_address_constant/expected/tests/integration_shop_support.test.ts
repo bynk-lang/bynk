@@ -46,7 +46,7 @@ async function test_a_constant_names_the_support_address() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_support({ from: "a@b.example", to: "support@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "billing@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:4:12", 203, 239, "expect r is Forward(\"billing@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -62,7 +62,7 @@ async function test_a_same_file_constant_names_the_sales_address() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_sales({ from: "a@b.example", to: "sales@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_sales({ from: "a@b.example", to: "sales@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "support@shop.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:9:12", 421, 457, "expect r is Forward(\"support@shop.example\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -78,7 +78,7 @@ async function test_a_literal_address_still_works_beside_the_constants() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_legal({ from: "a@b.example", to: "legal@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_legal({ from: "a@b.example", to: "legal@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "not handled here"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:14:12", 645, 676, "expect r is Reject(\"not handled here\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -94,7 +94,7 @@ async function test_a_constant_that_names_another_constant_resolves_through_the_
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_returns({ from: "a@b.example", to: "billing@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await __sysdrive_message_returns({ from: "a@b.example", to: "billing@shop.example", subject: "hello", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:19:12", 883, 894, "expect r is Accept", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

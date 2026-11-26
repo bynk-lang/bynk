@@ -608,8 +608,13 @@ export const InboundAttachment = {
  * envelope recipient the service was routed by. `headers` holds the message's
  * headers by lower-case name. `text`, `html` and `attachments` come from the
  * parsed MIME body (`None` or empty when the message has no such part); a test
- * builds them directly. `size` is the raw message in bytes. Every field after
- * `to` has a default, so a test writes only what it cares about.
+ * builds them directly. `size` is the raw message in bytes. `subaddress` is the
+ * text after the first `+` of the envelope recipient's local part (RFC 5233, as
+ * Email Routing defines it), so mail to `support+1234@shop.example` reaches the
+ * service claiming `support@shop.example` with `subaddress = Some("1234")`; it
+ * is `None` without a `+`. `to` keeps the full recipient. A case at the `system`
+ * tier posts `to` through the Worker's entry, which reads the tag from it. Every
+ * field after `to` has a default, so a test writes only what it cares about.
  */
 export interface InboundEmail {
   readonly from: string;
@@ -621,6 +626,7 @@ export interface InboundEmail {
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
   readonly size: number;
+  readonly subaddress: Option<string>;
 }
 
 export const InboundEmail = {
