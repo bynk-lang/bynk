@@ -1,0 +1,15 @@
+context api
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+actor Learner { auth = Bearer(secret = "AUTH_SECRET", audience = "api"), identity = UserId }
+actor Internal { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by user: Learner {
+    Ok(user.identity)
+  }
+  on GET("/internal") () -> Effect[HttpResult[String]] by user: Internal {
+    Ok(user.identity)
+  }
+}

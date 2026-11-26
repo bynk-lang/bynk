@@ -16,8 +16,8 @@ pub(super) struct SumAuth {
 }
 
 pub(super) enum SumCredential {
-    /// A Bearer member: how the driver reads its secret.
-    Bearer(TsExpr),
+    /// A Bearer member: how the driver reads its secret, and the `iss`/`aud` its tokens carry (#3821).
+    Bearer(TsExpr, super::system_request::BearerMint),
     /// A `Signature` member.
     Signature(SigDriver),
     /// #3936: an `Oidc` member: the expression for its trust roots, which the test issuer mints a
@@ -43,17 +43,22 @@ impl SumAuth {
         for (name, cred) in &self.members {
             let set: Vec<TsStmt> = match cred {
                 // #4344: beside the principal's claims (`__claims`, which `sub` and `exp` override).
-                SumCredential::Bearer(secret_read) => vec![assign(
+                SumCredential::Bearer(secret_read, bearer_claims) => vec![assign(
                     auth("authorization"),
                     bearer_token(
-                        TsExpr::object_entries(vec![
-                            TsObjectEntry::Spread(ident("__claims")),
-                            TsObjectEntry::prop("sub", ident("__sub")),
-                            TsObjectEntry::prop(
-                                "exp",
-                                binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
-                            ),
-                        ]),
+                        TsExpr::object_entries(
+                            [
+                                TsObjectEntry::Spread(ident("__claims")),
+                                TsObjectEntry::prop("sub", ident("__sub")),
+                                TsObjectEntry::prop(
+                                    "exp",
+                                    binary(TsBinaryOp::Add, now_secs(), num_lit("3600")),
+                                ),
+                            ]
+                            .into_iter()
+                            .chain(super::system_request::bearer_claim_entries(bearer_claims))
+                            .collect(),
+                        ),
                         secret_read.clone(),
                     ),
                 )],
@@ -110,7 +115,7 @@ impl SumAuth {
         for (name, cred) in &self.members {
             let mut set: Vec<TsStmt> = Vec::new();
             match cred {
-                SumCredential::Bearer(secret_read) => {
+                SumCredential::Bearer(secret_read, bearer_claims) => {
                     for (bad, secret, sign) in [
                         (
                             "forged",
@@ -124,10 +129,10 @@ impl SumAuth {
                             assign(
                                 auth("authorization"),
                                 bearer_token(
-                                    object_of(vec![
-                                        ("sub", str_lit("bynk-test")),
-                                        ("exp", binary(sign, now_secs(), num_lit("3600"))),
-                                    ]),
+                                    super::system_request::bearer_bad_claims(
+                                        binary(sign, now_secs(), num_lit("3600")),
+                                        bearer_claims,
+                                    ),
                                     secret,
                                 ),
                             ),
@@ -178,9 +183,9 @@ impl SumAuth {
 
     /// #2864: the first Bearer member's secret read: what `by Forged` and
     /// `by Expired` sign a token with on a sum with no `Signature` member.
-    pub(super) fn bearer(&self) -> Option<&TsExpr> {
+    pub(super) fn bearer(&self) -> Option<(&TsExpr, &super::system_request::BearerMint)> {
         self.members.iter().find_map(|(_, c)| match c {
-            SumCredential::Bearer(secret_read) => Some(secret_read),
+            SumCredential::Bearer(secret_read, claims) => Some((secret_read, claims)),
             SumCredential::Signature(_) | SumCredential::Oidc(_) | SumCredential::Cookie(_) => None,
         })
     }
@@ -189,7 +194,7 @@ impl SumAuth {
     pub(super) fn signature(&self) -> Option<&SigDriver> {
         self.members.iter().find_map(|(_, c)| match c {
             SumCredential::Signature(z) => Some(z),
-            SumCredential::Bearer(_) | SumCredential::Oidc(_) | SumCredential::Cookie(_) => None,
+            SumCredential::Bearer(..) | SumCredential::Oidc(_) | SumCredential::Cookie(_) => None,
         })
     }
 }
@@ -207,9 +212,12 @@ pub(super) fn sum_auth_for(
         .filter_map(|m| {
             let cred = match m.seam {
                 bynk_check::actors::SumMemberSeam::None => return None,
-                bynk_check::actors::SumMemberSeam::Bearer { secret, .. } => {
+                bynk_check::actors::SumMemberSeam::Bearer { secret, claims, .. } => {
                     secrets.insert(secret.clone());
-                    SumCredential::Bearer(secret_read_of(&secret))
+                    SumCredential::Bearer(
+                        secret_read_of(&secret),
+                        super::system_request::BearerMint::of(claims, secret_read_of),
+                    )
                 }
                 bynk_check::actors::SumMemberSeam::Signature(seam) => {
                     secrets.insert(seam.secret.clone());

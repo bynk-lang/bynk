@@ -7,7 +7,7 @@
 // algorithm parameters are fixed by the enums, never caller-chosen; a platform
 // without `crypto.subtle` fails loudly.
 import { CryptoError } from "./crypto.js";
-import type { Crypto, Digest, Signature, SigningKey, VerifyKey } from "./crypto.js";
+import type { CipherKey, Crypto, Digest, Signature, SigningKey, VerifyKey } from "./crypto.js";
 import type { Secret } from "../bynk.js";
 import { Err, Ok, type Result } from "../__bynk_runtime/result.js";
 
@@ -126,6 +126,23 @@ const PASSWORD_ITERATIONS = 100000;
 const PASSWORD_ITERATION_CAP: number | undefined = 100000;
 // --- end platform ------------------------------------------------------------
 
+// #4117: authenticated encryption, AES-256-GCM over `crypto.subtle`. The value a `seal` returns is
+// `version (1 byte) || nonce (12) || ciphertext || tag (16)`, version 1, so a later algorithm can be
+// added and every value already stored still opens. The nonce is always drawn here, never taken from
+// a caller; the scope is GCM's associated data.
+const CIPHER_KEY_BYTES = 32;
+const SEAL_VERSION = 1;
+const SEAL_NONCE_BYTES = 12;
+const SEAL_TAG_BYTES = 16;
+
+function asCipher(key: CryptoKey): CipherKey {
+  return key as unknown as CipherKey;
+}
+
+function randomNonce(): Bytes {
+  return globalThis.crypto.getRandomValues(new Uint8Array(SEAL_NONCE_BYTES));
+}
+
 // #4118: key derivation and password hashing, over `crypto.subtle` alone.
 //
 // HKDF-SHA-256 (RFC 5869): `deriveBits` with the key imported as raw HKDF key material. The output is
@@ -193,6 +210,88 @@ function parseStored(stored: string): StoredPassword | undefined {
 }
 
 export class CryptoProvider implements Crypto {
+
+  // The nonce source is a constructor argument only so a test can fix it, to pin the format with a known
+  // answer; the compiled program constructs the provider with none, and no operation takes a nonce.
+  private readonly nextNonce: () => Bytes;
+
+  constructor(nextNonce: () => Bytes = randomNonce) {
+    this.nextNonce = nextNonce;
+  }
+
+  async importCipherKey(key: Bytes): Promise<Result<CipherKey, CryptoError>> {
+    if (key.length !== CIPHER_KEY_BYTES) {
+      return Err(CryptoError.InvalidKey(`an AES-256-GCM key is exactly ${CIPHER_KEY_BYTES} bytes`));
+    }
+    const s = subtle();
+    try {
+      const imported = await s.importKey("raw", key as BufferSource, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+      return Ok(asCipher(imported));
+    } catch (e) {
+      return Err(importError(e, "AES-GCM", "raw key"));
+    }
+  }
+
+  // #4111: the key arrives as a `Secret` holding its base64, so the text never has to be a `String` in
+  // the program. A failure names no text.
+  async importCipherKeyFromSecret(secret: Secret): Promise<Result<CipherKey, CryptoError>> {
+    let raw: Bytes;
+    try {
+      const binary = globalThis.atob(secret.reveal());
+      raw = new globalThis.Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) raw[i] = binary.charCodeAt(i);
+    } catch {
+      return Err(CryptoError.InvalidKey("the secret is not base64"));
+    }
+    return this.importCipherKey(raw);
+  }
+
+  async seal(key: CipherKey, plaintext: Bytes, scope: Bytes): Promise<Bytes> {
+    const k = key as unknown as CryptoKey;
+    const nonce = this.nextNonce();
+    if (nonce.length !== SEAL_NONCE_BYTES) {
+      throw new Error("Crypto.seal needs a 12-byte nonce");
+    }
+    const sealed = new Uint8Array(
+      await subtle().encrypt(
+        { name: "AES-GCM", iv: nonce as BufferSource, additionalData: scope as BufferSource, tagLength: SEAL_TAG_BYTES * 8 },
+        k,
+        plaintext as BufferSource,
+      ),
+    );
+    const out = new Uint8Array(1 + SEAL_NONCE_BYTES + sealed.length);
+    out[0] = SEAL_VERSION;
+    out.set(nonce, 1);
+    out.set(sealed, 1 + SEAL_NONCE_BYTES);
+    return out;
+  }
+
+  // One failure for every cause (a wrong key, a wrong scope, tampering, truncation, an unknown version),
+  // so which one it was is not revealed.
+  async open(key: CipherKey, sealed: Bytes, scope: Bytes): Promise<Result<Bytes, CryptoError>> {
+    const k = key as unknown as CryptoKey;
+    if (sealed.length < 1 + SEAL_NONCE_BYTES + SEAL_TAG_BYTES || sealed[0] !== SEAL_VERSION) {
+      return Err(CryptoError.OpenFailed);
+    }
+    // A platform without Web Crypto fails loudly (as `importCipherKey` does); only a failed decrypt is
+    // `OpenFailed`.
+    const s = subtle();
+    try {
+      const plain = await s.decrypt(
+        {
+          name: "AES-GCM",
+          iv: sealed.subarray(1, 1 + SEAL_NONCE_BYTES) as BufferSource,
+          additionalData: scope as BufferSource,
+          tagLength: SEAL_TAG_BYTES * 8,
+        },
+        k,
+        sealed.subarray(1 + SEAL_NONCE_BYTES) as BufferSource,
+      );
+      return Ok(new Uint8Array(plain));
+    } catch {
+      return Err(CryptoError.OpenFailed);
+    }
+  }
   async digest(algorithm: Digest, data: Bytes): Promise<Bytes> {
     return new Uint8Array(await subtle().digest(hashName(algorithm), data as BufferSource));
   }

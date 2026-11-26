@@ -284,6 +284,9 @@ fn complete_base(
     if let Some(keys) = signed_cookie_key_candidates(line_prefix) {
         return keys;
     }
+    if let Some(keys) = bearer_key_candidates(line_prefix) {
+        return keys;
+    }
     if auth_scheme_position(line_prefix) {
         return auth_scheme_candidates();
     }
@@ -2856,6 +2859,53 @@ fn auth_scheme_candidates() -> Vec<Completion> {
     .collect()
 }
 
+/// #3821: inside the parentheses of `auth = Bearer(…`, the config keys not yet written.
+fn bearer_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
+    let open = line_prefix.rfind("Bearer(")? + "Bearer(".len();
+    let args = &line_prefix[open..];
+    if args.contains(')') {
+        return None;
+    }
+    let current = args.rsplit(',').next().unwrap_or(args);
+    if current.contains('=') {
+        return Some(Vec::new());
+    }
+    let written: Vec<&str> = args
+        .split(',')
+        .filter_map(|part| part.split('=').next().map(str::trim))
+        .collect();
+    Some(
+        [
+            (
+                "secret",
+                "the environment variable holding the signing secret (required)",
+            ),
+            (
+                "issuer",
+                "the `iss` a token must carry; unchecked when not given",
+            ),
+            (
+                "audience",
+                "the `aud` a token must carry (or contain, for an array); unchecked when not given. Two actors on one secret need different ones",
+            ),
+            (
+                "trustFrom",
+                "an environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces the declared values at run time",
+            ),
+        ]
+        .into_iter()
+        .filter(|(key, _)| !written.contains(key))
+        .map(|(key, detail)| {
+            Completion::item(
+                key,
+                CompletionKind::Field,
+                Some(format!("Bearer key — {detail}")),
+            )
+        })
+        .collect(),
+    )
+}
+
 /// #3386: inside the parentheses of `auth = SignedCookie(…`, the config keys not yet written.
 fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
     let open = line_prefix.rfind("SignedCookie(")? + "SignedCookie(".len();
@@ -5208,6 +5258,38 @@ mod tests {
         assert!(!auth_scheme_position(
             "actor User { auth = Bearer(secret = \"K\"), identity = "
         ));
+    }
+
+    #[test]
+    fn a_bearer_actor_completes_its_claim_keys() {
+        // #3821
+        let keys = complete(
+            "actor User { auth = Bearer(secret = \"K\", ",
+            "context a.b\n",
+            None,
+        );
+        for key in ["issuer", "audience", "trustFrom"] {
+            assert!(find(&keys, key, CompletionKind::Field).is_some(), "{key}");
+        }
+        assert!(
+            find(&keys, "secret", CompletionKind::Field).is_none(),
+            "already written"
+        );
+        let after_issuer = complete(
+            "actor User { auth = Bearer(secret = \"K\", issuer = \"web\", ",
+            "context a.b\n",
+            None,
+        );
+        assert!(find(&after_issuer, "issuer", CompletionKind::Field).is_none());
+        assert!(find(&after_issuer, "audience", CompletionKind::Field).is_some());
+        assert!(
+            complete(
+                "actor User { auth = Bearer(issuer = ",
+                "context a.b\n",
+                None
+            )
+            .is_empty()
+        );
     }
 
     #[test]
