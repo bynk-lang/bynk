@@ -460,6 +460,66 @@
         ]
       }
     },
+    "/enrol-mixed": {
+      "post": {
+        "operationId": "problems_post_enrol_mixed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkProblemDetails"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkProblemDetails"
+                }
+              }
+            },
+            "description": "PayloadTooLarge — the body is counted as it is read and cut off at the route's cap (1 MiB unless `@limit` or `limits` says otherwise)"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkProblemDetails"
+                }
+              }
+            },
+            "description": "TooManyRequests; RateLimited — the route's `@rateLimit` limiter refused the request before its body was read (a `Retry-After` header says when to try again)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limiter's window lets the caller try again.",
+                "required": false,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "problems"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "api_get_health",
@@ -473,6 +533,105 @@
               }
             },
             "description": "Ok"
+          }
+        },
+        "tags": [
+          "api"
+        ]
+      }
+    },
+    "/mixed": {
+      "post": {
+        "operationId": "api_post_mixed",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BynkBoundaryError"
+                }
+              }
+            },
+            "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "details": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "PayloadTooLarge"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "details"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "PayloadTooLarge — the body is counted as it is read and cut off at the route's cap (1 MiB unless `@limit` or `limits` says otherwise)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "details": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "RateLimited"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "details"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "TooManyRequests; RateLimited — the route's `@rateLimit` limiter refused the request before its body was read (a `Retry-After` header says when to try again)",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the limiter's window lets the caller try again.",
+                "required": false,
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
           }
         },
         "tags": [

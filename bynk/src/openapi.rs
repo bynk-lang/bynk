@@ -1040,7 +1040,18 @@ fn responses_of(
     }
 
     let mut out = Map::new();
-    for (status, e) in by_status {
+    for (status, mut e) in by_status {
+        // #4434: the router's `429` always says when to try again, but a handler's own `429` at the
+        // same status need not (`TooManyRequests` carries `Retry-After` only if it asks for one), so
+        // the header is required only where the router's refusal is the one answer.
+        if e.descriptions.iter().any(|d| !d.starts_with("RateLimited"))
+            && let Some(h) = e
+                .headers
+                .get_mut("Retry-After")
+                .and_then(Value::as_object_mut)
+        {
+            h.insert("required".into(), json!(false));
+        }
         let mut resp = Map::new();
         resp.insert("description".into(), json!(e.descriptions.join("; ")));
         if !e.headers.is_empty() {

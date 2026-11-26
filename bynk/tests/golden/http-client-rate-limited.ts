@@ -748,6 +748,15 @@ export type PostNotesResponse =
   | { readonly status: 429; readonly kind: "RateLimited"; readonly error: { readonly kind: "RateLimited"; readonly details: string } };
 
 /**
+ * What `POST /mixed` answers, by `status`.
+ */
+export type PostMixedResponse =
+    { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } }
+  | { readonly status: 429; readonly kind: "TooManyRequests"; readonly error: string }
+  | { readonly status: 429; readonly kind: "RateLimited"; readonly error: { readonly kind: "RateLimited"; readonly details: string } };
+
+/**
  * What `GET /health` answers, by `status`.
  */
 export type GetHealthResponse =
@@ -760,6 +769,15 @@ export type PostEnrolResponse =
     { readonly status: 200; readonly kind: "Ok"; readonly body: string }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly problem: Problem }
   | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly problem: Problem }
+  | { readonly status: 429; readonly kind: "RateLimited"; readonly problem: Problem };
+
+/**
+ * What `POST /enrol-mixed` answers, by `status`.
+ */
+export type PostEnrolMixedResponse =
+    { readonly status: 400; readonly kind: "StructuralMismatch"; readonly problem: Problem }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly problem: Problem }
+  | { readonly status: 429; readonly kind: "TooManyRequests"; readonly problem: Problem }
   | { readonly status: 429; readonly kind: "RateLimited"; readonly problem: Problem };
 
 
@@ -787,6 +805,17 @@ const __route_api_postNotes: __Route = {
   },
 };
 
+const __route_api_postMixed: __Route = {
+  method: "POST",
+  path: "/mixed",
+  contract: "21580739b14d54fe",
+  replies: {
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
+    429: [{ kind: "TooManyRequests", body: "message" }, { kind: "RateLimited", body: "boundary" }],
+  },
+};
+
 const __route_api_getHealth: __Route = {
   method: "GET",
   path: "/health",
@@ -808,6 +837,17 @@ const __route_problems_postEnrol: __Route = {
   },
 };
 
+const __route_problems_postEnrolMixed: __Route = {
+  method: "POST",
+  path: "/enrol-mixed",
+  contract: "dbe377d9ba4489d7",
+  replies: {
+    400: [{ kind: "StructuralMismatch", body: "problem-rejection" }],
+    413: [{ kind: "PayloadTooLarge", body: "problem-rejection" }],
+    429: [{ kind: "TooManyRequests", body: "problem" }, { kind: "RateLimited", body: "problem-rejection" }],
+  },
+};
+
 /**
  * The contract of each service and route this client was generated for: a hash of
  * what a client acts on (the route's method and path, what it takes, what it can
@@ -816,17 +856,19 @@ const __route_problems_postEnrol: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "e5086994baef6e9b",
+    service: "dd99a022b53c8903",
     routes: {
       postSignup: "28cc7767fded53d1",
       postNotes: "887947a855fdf8ae",
+      postMixed: "21580739b14d54fe",
       getHealth: "5f0b288b4a863f26",
     },
   },
   problems: {
-    service: "0524cd973a04a0a8",
+    service: "c4aaaebad5a779ea",
     routes: {
       postEnrol: "cd4281d864978c2f",
+      postEnrolMixed: "dbe377d9ba4489d7",
     },
   },
 } as const;
@@ -848,6 +890,11 @@ export function createClient(options: ClientOptions = {}) {
         if (__b.tag === "Err") return __b;
         return Ok({ params: {}, body: __b.value });
       }) as globalThis.Promise<PostNotesResponse | CallFailure>,
+      postMixed: (body: string, init?: globalThis.RequestInit): globalThis.Promise<PostMixedResponse | CallFailure> => __call(options, init, __route_api_postMixed, () => {
+        const __b = __checked(body as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostMixedResponse | CallFailure>,
       getHealth: (init?: globalThis.RequestInit): globalThis.Promise<GetHealthResponse | CallFailure> => __call(options, init, __route_api_getHealth, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetHealthResponse | CallFailure>,
@@ -858,6 +905,11 @@ export function createClient(options: ClientOptions = {}) {
         if (__b.tag === "Err") return __b;
         return Ok({ params: {}, body: __b.value });
       }) as globalThis.Promise<PostEnrolResponse | CallFailure>,
+      postEnrolMixed: (body: string, init?: globalThis.RequestInit): globalThis.Promise<PostEnrolMixedResponse | CallFailure> => __call(options, init, __route_problems_postEnrolMixed, () => {
+        const __b = __checked(body as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j), "$");
+        if (__b.tag === "Err") return __b;
+        return Ok({ params: {}, body: __b.value });
+      }) as globalThis.Promise<PostEnrolMixedResponse | CallFailure>,
     },
   } as const;
 }

@@ -639,10 +639,14 @@ fn a_rate_limited_route_lists_its_429_and_retry_after() {
            on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
            @rateLimit(NoteLimit, key: identity)\n  \
            on POST(\"/notes\") (body: String) -> Effect[HttpResult[String]] by r: Reader {\n    Ok(\"noted\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n\n  \
            on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"up\")\n  }\n}\n\n\
          service problems from http {\n  errors { format: problem }\n\n  \
            @rateLimit(SignupLimit, key: clientIp)\n  \
-           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n}\n",
+           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol-mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n}\n",
     );
     let d = doc(&dir, &[]);
     assert_valid(&d);
@@ -675,6 +679,49 @@ fn a_rate_limited_route_lists_its_429_and_retry_after() {
     );
     assert!(p["content"].get("application/json").is_none());
     assert_eq!(p["headers"]["Retry-After"]["required"], true);
+    // Where a handler also answers `429`, one response holds both: two bodies under one media type
+    // (`oneOf`) on a plain service, one problem schema on a problem service, and `Retry-After` is
+    // no longer required because the handler's own `429` need not carry it.
+    let m = refusal("/mixed");
+    let one_of = m["content"]["application/json"]["schema"]["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a oneOf of the two bodies: {m}"));
+    assert_eq!(one_of.len(), 2, "{m}");
+    let kinds: Vec<_> = one_of
+        .iter()
+        .map(|s| {
+            s["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(kinds.contains(&vec!["error".to_string()]), "{kinds:?}");
+    assert!(
+        kinds.contains(&vec!["details".to_string(), "kind".to_string()]),
+        "{kinds:?}"
+    );
+    assert_eq!(m["headers"]["Retry-After"]["required"], false);
+    assert!(
+        m["description"]
+            .as_str()
+            .unwrap()
+            .contains("TooManyRequests")
+            && m["description"].as_str().unwrap().contains("RateLimited")
+    );
+    let pm = refusal("/enrol-mixed");
+    assert_eq!(
+        pm["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/BynkProblemDetails"
+    );
+    assert_eq!(pm["headers"]["Retry-After"]["required"], false);
+    // A route the router alone refuses keeps the header required.
+    assert_eq!(
+        refusal("/signup")["headers"]["Retry-After"]["required"],
+        true
+    );
     golden("openapi-rate-limited.json", &pretty(&d));
 }
 
