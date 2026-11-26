@@ -1,5 +1,0 @@
-commons orders
-
-uses lib.billing { Amount }
-
-type Order = { a: Amount, b: lib.billing.Amount }

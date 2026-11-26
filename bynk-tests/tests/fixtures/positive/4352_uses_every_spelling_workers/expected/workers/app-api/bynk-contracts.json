@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "echo": "37498f0c3a44b402"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"h\",Rec(\"Holder\",F(\"a\",Sum(\"Status\",V(\"Off\"),V(\"On\"))),F(\"b\",N(\"Y.Status\")),F(\"c\",N(\"lib.y.Status\")))),Ret(Rec(\"Holder\",F(\"a\",Sum(\"Status\",V(\"Off\"),V(\"On\"))),F(\"b\",N(\"Y.Status\")),F(\"c\",N(\"lib.y.Status\")))))"
+  }
+}

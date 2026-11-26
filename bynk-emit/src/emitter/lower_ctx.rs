@@ -1763,7 +1763,8 @@ impl<'a> LowerCtx<'a> {
         // carried in the `identity` field of the tagged object.
         let disc_node = discriminant_ty.map(|t| tys.get(t));
         if let Some(Ty::ActorSum(_)) = disc_node.as_deref() {
-            return "identity".to_string();
+            // #4344: a `Bearer` arm's second binder reads its verified claims.
+            return if idx == 1 { "claims" } else { "identity" }.to_string();
         }
         // #1934: the payloads a case binds from a queue verdict and a
         // boundary rejection, named as `queue.ts` and `http.ts` name them.

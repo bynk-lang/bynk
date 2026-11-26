@@ -1,0 +1,18 @@
+// #4352: a record whose fields read one declaration by three spellings has one wire codec for
+// it: each spelling is the same type, so the helper bound for one serves the others.
+context app.api
+
+uses lib.y { Status }
+uses lib.y as Y
+
+type Holder = {
+  a: Status,
+  b: Y.Status,
+  c: lib.y.Status,
+}
+
+service echo {
+  on call(h: Holder) -> Effect[Holder] by Caller {
+    Effect.pure(h)
+  }
+}

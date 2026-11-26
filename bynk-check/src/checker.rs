@@ -2046,6 +2046,9 @@ pub struct HandlerBodyCheck<'a> {
     pub borrowed_held: HashSet<String>,
     /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
     pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`).
+    pub claims_sum_arms: Vec<String>,
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
@@ -2075,6 +2078,7 @@ impl<'a> HandlerBodyCheck<'a> {
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             service_handler: false,
         }
     }
@@ -2101,6 +2105,7 @@ pub fn check_handler_body(
         store_fields,
         borrowed_held,
         claims_binder,
+        claims_sum_arms,
         service_handler: in_service_handler,
     } = check;
     let CheckSinks {
@@ -2194,6 +2199,7 @@ pub fn check_handler_body(
         },
         in_test_body: false,
         claims_binder,
+        claims_sum_arms,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
@@ -2370,6 +2376,7 @@ pub fn check_body(
         caps,
         in_test_body: true,
         claims_binder: None,
+        claims_sum_arms: Vec::new(),
         test_services,
         test_actors,
         type_vars: HashSet::new(),
@@ -2744,6 +2751,7 @@ pub fn check_invariants(
             },
             in_test_body: false,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2902,6 +2910,7 @@ pub(crate) fn check_contracts(
             },
             in_test_body: false,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
@@ -3145,6 +3154,7 @@ pub fn check_transitions(
             },
             in_test_body: false,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3340,6 +3350,7 @@ pub fn check_migrations(
             },
             in_test_body: false,
             claims_binder: None,
+            claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3795,6 +3806,9 @@ pub(crate) struct Ctx<'a> {
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
     pub claims_binder: Option<String>,
+    /// #4344: the `Bearer` arms of an HTTP handler's actor sum, whose pattern also binds the verified
+    /// claims (`User(u, c)`). Empty elsewhere.
+    pub claims_sum_arms: Vec<String>,
     /// The target unit's services, populated for test case bodies (v0.25).
     /// `svc.call(args)` in a test invokes the target's service; the checker
     /// resolves the service's `on call` handler here to check the call's

@@ -5,7 +5,9 @@ import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runt
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
 import * as X from "../../lib/x.js";
+export { X };
 import * as Y from "../../lib/y.js";
+export { Y };
 import { __serialise_Level as __serialise_X_Level, __deserialise_Level as __deserialise_X_Level, __serialise_Point as __serialise_X_Point, __deserialise_Point as __deserialise_X_Point, __serialise_Status as __serialise_X_Status, __deserialise_Status as __deserialise_X_Status } from "../../lib/x.js";
 import { __serialise_Status as __serialise_Y_Status, __deserialise_Status as __deserialise_Y_Status } from "../../lib/y.js";
 

@@ -59,7 +59,7 @@ async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, bod
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string, __as: string) {
+async function __sysdrive_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Sender") {
@@ -67,21 +67,21 @@ async function __sysdrive_api_http_POST_notes_Param_id(id: string, body: string,
     __auth["X-Sig"] = __sig.signature;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: __body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string, __as: string) {
+async function __sysdrive_raw_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Sender") {
     const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), false, 0);
     __auth["X-Sig"] = __sig.signature;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: body });
@@ -276,9 +276,9 @@ async function test_under_a_sum_of_actors__headers_keep_their_declared_place() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const u = await __sysdrive_api_http_POST_notes_Param_id("n1", "hi", __requestHeaders(["X-Trace: t9"]), ("bob" as any), "User");
+    const u = await __sysdrive_api_http_POST_notes_Param_id("n1", "hi", __requestHeaders(["X-Trace: t9"]), ("bob" as any), {}, "User");
     if (!(((__c: boolean) => __c)(u.tag === "Ok" && u.value === "bob n1 hi t9"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 2012, 2035, "expect u is Ok(\"bob n1 hi t9\")", "u", () => __bynkShow(u)); }
-    const s = await __sysdrive_api_http_POST_notes_Param_id("n2", "yo", __requestHeaders(["X-Trace: t8"]), "", "Sender");
+    const s = await __sysdrive_api_http_POST_notes_Param_id("n2", "yo", __requestHeaders(["X-Trace: t8"]), "", {}, "Sender");
     if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "sender n2 yo t8"))) { throw __bynkExpectFailure("tests/api.bynk:58:10", 2137, 2163, "expect s is Ok(\"sender n2 yo t8\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
