@@ -178,7 +178,7 @@ ADR 0290, and withdrawn by D4) and a future replay log (not built; see §11).
 > hand its emissions off faults instead of completing.**
 
 "Delivered" means the subscriber's handler runs to completion on it once, or the event reaches
-that subscriber's dead-letter queue after `retries` failed attempts. Duplicates are possible
+that subscriber's dead-letter queue after `retries` + 1 failed attempts. Duplicates are possible
 on the wire. Built-in deduplication (D11) means the handler normally runs to completion once
 per subscriber.
 
@@ -206,8 +206,9 @@ every target. What changes is what "release" means on Workers:
 ### 4.3 Retries, dead-lettering and visibility
 
 On the subscriber (D5): a handler that faults is retried, with a delay of
-`retryDelay × attempts` (default `retryDelay` 10 seconds), up to `retries` (default 3) times.
-After the last failed attempt the platform moves the message to the subscriber's dead-letter
+`retryDelay × attempts` (default `retryDelay` 10 seconds). `retries` (default 3) counts
+*retries*, not attempts: with `retries: N` the handler runs at most N + 1 times. After the last
+failed attempt (attempt N + 1) the platform moves the message to the subscriber's dead-letter
 queue. The generated entry knows the attempt count (`message.attempts`) and logs
 `EventDelivery dead-lettered` with the event type, subscriber, `eventId` and attempts on that
 last attempt, so a dead letter shows in the Worker's logs rather than only on the dashboard.
@@ -237,6 +238,18 @@ non-empty, it also sets the DO alarm about 30 seconds ahead.
   row, it sends to every queue in the *current* routing table that is not in `sent`, then
   deletes the row; a partial flush updates `sent`. Computing the targets at flush time means a
   row written before a redeploy goes to the subscribers the running build knows.
+- **Single flight.** While a flush awaits its sends, the DO's input gate is open, so a later
+  request's flush or the alarm could list the same `o/` rows. If two flushes ran at once,
+  one could update `sent` on a row the other had just deleted and bring it back, causing
+  another round of resends. So:
+  - each instance runs **at most one flush at a time**. An in-memory `flushing` flag is set
+    for the flush's duration. A commit or alarm that finds it set does not flush: it makes
+    sure the alarm is set, and the running flush takes the new rows on its next pass, since it
+    loops until a listing finds no rows;
+  - each row's bookkeeping is **conditional**: the `sent` update and the delete each run in a
+    transaction that first reads the row and does nothing if it is gone. A second flush in a
+    new isolate, where the flag does not reach, therefore cannot resurrect a row. It can only
+    resend, which D11 absorbs.
 - **Backstop:** the alarm handler runs the same flush. A DO alarm has at-least-once execution
   and is retried with exponential backoff, up to 6 retries
   ([alarms](https://developers.cloudflare.com/durable-objects/api/alarms/)). The handler
@@ -246,10 +259,35 @@ non-empty, it also sets the DO alarm about 30 seconds ahead.
   Backoff runs from 30 seconds up to 1 hour.
 - **Duplicates:** a crash between a send and the row's delete resends with the same
   `eventId`; D11 absorbs it.
-- **Erasure:** a commit that erases the instance (`self.erase()`) must keep pending outbox rows
-  and the alarm. The erase writes them back after its `deleteAll` in the same transaction.
-  `bynk migrate sweep` and agent moves (#3819) preserve or flush the outbox before they touch
-  storage.
+- **Erasure.** Today `self.erase()` commits as `storage.deleteAll()`
+  (`entries.ts:eraseStored`). That call cannot run inside a transaction: the runtime's
+  `DurableObjectTransaction` has no `deleteAll`, and `InMemoryStorage.deleteAll` throws inside
+  one (`runtime/src/storage.ts`), as the platform does. On the compatibility date Bynk emits
+  (`2026-08-11`, in every generated `wrangler.toml`), `deleteAll()` **also deletes the alarm**:
+  *"For Workers with a compatibility date of `2026-02-24` or later, `deleteAll()` also deletes
+  any active alarm"*
+  ([storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/#deleteall)).
+  So pending rows cannot survive a plain `deleteAll`, and writing them back afterwards is not
+  atomic: a crash in between would lose committed emissions. Erasure therefore becomes two
+  phases when there is anything to deliver:
+  1. **A logical erase, committed atomically.** When the outbox holds rows, or the erasing
+     handler emitted, the commit runs one transaction. It writes the handler's own outbox rows
+     and an erasure marker, the reserved key `e`, and sets the alarm. `loadState` treats an
+     instance with `e` as erased (zero state, as after `deleteAll` today), so the erasure is
+     visible from the moment that transaction commits. No state key is read or deleted in it.
+  2. **A physical erase, once the outbox is empty.** When a flush deletes the last `o/` row
+     and finds `e`, it calls `deleteAll()`. That is atomic on SQLite-backed objects (the same
+     page), and clears every remaining key, the marker and the alarm in one step. Between the
+     phases the old state keys stay stored but unreadable, and are billed as storage, which
+     ends when the outbox drains.
+
+  With an empty outbox and no emissions, `self.erase()` stays the single `deleteAll()` it is
+  today. A commit that writes state to an instance carrying `e` (the agent used again before
+  the physical erase) first deletes every non-`o/` key except `e` in the same transaction,
+  then removes `e`. It is the one path that pays a full delete inside a transaction, and only
+  in that window.
+- **Sweeps and moves.** `bynk migrate sweep` and agent moves (#3819) preserve or flush the
+  outbox before they touch storage, and honour `e`.
 - **One alarm per DO.** No agent uses the DO alarm today: nothing in `bynk-emit` calls
   `setAlarm`. If a user-facing agent alarm lands later, the runtime multiplexes the two
   (store each due time and set the alarm to the earliest), which is the pattern Cloudflare
@@ -266,7 +304,7 @@ non-empty, it also sets the DO alarm about 30 seconds ahead.
   `__events` buffer (`lower_call/platform.rs:lower_events_emit_call`). Nothing is sent at the
   emit call. After the body returns without a fault, the wrapper sends the buffer
   (`handlers.rs:events_release_body`, whose flush moves from `deps.__eventsDispatch` to the
-  queue sends), all queues concurrently, one `sendBatch` per queue per handler.
+  queue sends), all queues concurrently, with one or more `sendBatch` calls per queue within the limits in D3.
 - **A body that faults sends nothing,** as today. Release-at-commit holds for services in the
   sense ADR 0109 gives it.
 - **A failed send** is retried twice (after 100 ms and 400 ms). If it still fails, the handler
@@ -317,8 +355,12 @@ queue message. Subscribers verify through the shared path before they decode. (R
 **Names.** A subscriber service's queue is `bynk-ev-<slug>-<hash>` and its dead-letter queue
 is `bynk-dl-<slug>-<hash>`:
 
-- `<hash>` is the first 8 hex digits of SHA-256 over `<qualified context>/<service>`, which
-  makes the name injective;
+- `<hash>` is the first 8 hex digits of SHA-256 over `<qualified context>/<service>`. That
+  makes a collision unlikely, not impossible, and the slug may be truncated, so the names are
+  **collision-checked**, not injective. Every name in a project is known when it is compiled,
+  so the compiler refuses two subscribing services whose queue names coincide
+  (`bynk.event.queue_name_collision`) and names both. The fix is to rename one. Two services
+  sharing a name would share a queue, which allows only one consumer;
 - `<slug>` is that pair, lower-cased, with every character outside `[a-z0-9]` written `-`, and
   truncated so that the whole name, plus `-<environment>` from `env_qualify`, fits Cloudflare's
   63 characters.
@@ -349,10 +391,16 @@ message still verifies against its source.
 
 **Verification, in the subscriber's `queue` entry, before anything is decoded:**
 
-1. `admitQueueBody(received, batch.queue, [], env, {}, admitsContext)` (`queue_admit.ts`), with
-   `admitsContext` admitting exactly one context: the owner of `E`, known at compile time.
-   This is the same function `Producer`-refinement consumers use, so there is one signing
-   format and one verification path (the input from #3898's 2026-11-22 comment).
+1. `queueAdmit(received, "<context>.<service>", batch.queue, ports)` (`queue_admit.ts`),
+   with ports built as `admitQueueBody` builds them: `queueForeignKeys(env, {}, admitsContext)`
+   and the D1 claim, confirm and release. `admitsContext` admits exactly one context, the
+   owner of `E`, known at compile time. This is the core `admitQueueBody` and
+   `Producer`-refinement consumers already run, so there is one signing format and one
+   verification path (the input from #3898's 2026-11-22 comment). The entry calls it directly,
+   not through `admitQueueBody`, for two reasons. An event queue has no dead-letter *sources*
+   to try. And `admitQueueBody` passes the queue's name as `queueAdmit`'s `consumer`, whereas
+   the event entry passes the subscribing service's qualified name, which keeps the D11 key
+   readable as the subscriber it belongs to.
 2. `body.envelope.publisherId` must equal the verified `from`, and `body.type` must be the
    event the service subscribes to.
 
@@ -364,8 +412,9 @@ What a failed check does follows #3899 F:
 - unsigned, malformed, another version, a sender that is not the owner, or a bad signature:
   acknowledged, reported as a fault, counted, never handled, never retried or dead-lettered;
 - a verified message whose `publisherId` or `type` disagrees with the signer: a compiler or
-  deploy bug, not an attack, so it goes to the dead-letter queue (as an undecodable body would,
-  D5) and is reported.
+  deploy bug, not an attack. It goes to the dead-letter queue (as an undecodable body would,
+  D5) and is reported, and its claim is **released**, so a redrive after the fix is admitted
+  (D5).
 
 **Key rotation.** A message can wait up to 15 days (14 of retention plus 1 of delay), so a key
 rotation must keep the previous key that long. This is a **prerequisite, and a gap in shipped
@@ -467,10 +516,13 @@ handler. The alternatives are product trade-offs:
 
 - **(i) keep (a)** by sending one handler's emissions to a subscriber as *one* message, an
   array, so their order is intrinsic. The subscriber's generated entry would then iterate, with
-  one acknowledgement covering several events. A failure of event 3 of 5 then retries all five,
-  and deduplication (D11), which is per `eventId`, skips the two that completed. This is
-  feasible, but it couples the events' fates and makes the message size limit apply to the
-  sum;
+  one acknowledgement covering several events. A failure of event 3 of 5 then retries all five.
+  D11 as designed cannot skip the two that completed: `queueAdmit` claims the *message's*
+  `bynk.id`, so a retried array either meets `in_flight`/`replayed` on that one id or re-runs
+  every event in it. Skipping completed events needs **new deduplication machinery**: a
+  per-event claim loop inside the entry, with its own lease and settle rules. On top of that,
+  it couples the events' fates and makes the size limit apply to the sum. This option is
+  feasible, but costs a second deduplication design;
 - **(ii) keep neither** (recommended): one message per event, uniform semantics, and the
   simplest dead-letter story.
 
@@ -501,7 +553,11 @@ success means acknowledge. (Recommended.)**
   deploy. They are sent to the dead-letter queue unchanged through the consumer's own
   `__BYNK_DLQ_<QUEUE>` producer binding, then acknowledged and logged, as #3878 already does
   for a `from queue` consumer with a `deadLetter`. They are never retried, since the same bytes
-  will never decode.
+  will never decode. **Their claim is released** (`settle(false)`), as on the fault path, and
+  not confirmed. `queueAdmit` has already claimed the `eventId` by the time decoding fails,
+  and a confirmed claim would refuse the redrive that R2's recovery relies on as `replayed`
+  for 15 days. Dead-lettering is not handling: only a completed handler, or a guard that
+  excludes the event, confirms.
 - **Attempts:** not exposed to the handler in this track. `QueueDelivery` (#3880) is a
   `bynk.cloudflare` type, and accepting it on a portable `on event` handler would tie the
   source to Workers. The envelope identifies the *emission*, so a per-delivery count does not
@@ -513,7 +569,22 @@ success means acknowledge. (Recommended.)**
   consumer will persist for four (4) days before being deleted"*,
   [dead-letter queues](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/)).
   Redriving by hand works: the message still verifies against its source queue, and its claim
-  was released when it failed, so D11 admits it once.
+  was released when it failed or was dead-lettered as undecodable, so D11 admits it once.
+- **How long a dead letter can be redriven.** Two clocks bound it, and the earlier wins:
+  - **the dead-letter queue's retention.** Bynk creates every event queue and dead-letter queue
+    with the longest retention, 14 days on Workers Paid (24 hours, fixed, on Free;
+    [limits](https://developers.cloudflare.com/queues/platform/limits/)), rather than the
+    4-day default. The dead-letter queue has no consumer, so its messages persist for its
+    retention;
+  - **D11's stale window.** A message signed more than 15 days ago is refused as `stale`
+    (`queueAdmit`), because by then its claim may have lapsed. `ts` is set when the publisher
+    signs, and a redrive by hand cannot re-sign. So a dead letter can be redriven until **15
+    days after the publisher signed it**, however long it spent in its source queue first. On
+    Workers Paid, that is the binding limit for any message that waited more than a day in
+    its source queue.
+
+  The guide states both clocks. A Bynk-run redrive that re-signs at the publisher, and so
+  resets `ts`, belongs to #3545 part 4.
 
 **Rejected:** `QueueResult` on every subscriber (a breaking change to every `on event` handler,
 for a choice subscribers don't have); a user-declared `deadLetter` (it would reopen D2's
@@ -576,7 +647,18 @@ edges:
    - a subscriber that *calls* its publisher pushes after it (the former cycle, P7).
 3. In the window where a new publisher runs before its subscriber's new version, emissions
    wait in the subscriber's queue, which exists from step 1, and are delivered once the
-   subscriber's consumer is attached. Nothing is lost while the queue retains them.
+   subscriber's consumer is attached. That window is short in a whole-project deploy. It is
+   bounded by the queue's retention: 14 days on Workers Paid, as Bynk creates event queues
+   (D5), but **24 hours on Free**. After that, Cloudflare deletes the messages without trace,
+   which is exactly the at-most-once loss this track removes. So a deploy must not leave the
+   window open:
+   - **A `--context` deploy of a post-cut-over publisher** whose subscribers' deployed
+     Workers are still pre-cut-over (no consumer on their event queue) is **refused** by the
+     plan. The ledger records each Worker's event-delivery generation at push. The refusal
+     names each such subscriber and the command that deploys them. `--force` overrides it with
+     a warning that names the retention deadline;
+   - the reverse case, an old publisher and a new subscriber, is covered by the overlap below
+     and by slice 8's refusal.
 
 **In-flight events at the cut-over.** The fan-out DO stores nothing (P3). What is in flight at
 the moment a publisher's new version goes live is a fan-out request mid-loop in the old
@@ -713,9 +795,11 @@ Worker's `queue` entry. (Recommended.)**
 - **What is deduplicated:** one emission delivered more than once to one subscriber service,
   whether by a platform redelivery, an outbox resend (D1), or someone with account access
   putting a copy back on the queue.
-- **Keyed on:** `queueReplayKey(<subscriber context>.<service>, <queue>, <eventId>)`
-  (`queue_signing.ts`). The key is per subscriber, so two subscribers of one event never
-  collide, and per queue, so environments never collide.
+- **Keyed on:** `queueReplayKey("<subscriber context>.<service>", <queue>, <eventId>)`
+  (`queue_signing.ts`). The entry calls `queueAdmit` directly with the service's qualified
+  name as `consumer` (D2, step 1), not through `admitQueueBody`, which would pass the queue's
+  name there. The key is per subscriber, so two subscribers of one event never collide, and
+  per queue, so environments never collide.
 - **How:** `queueAdmit`'s existing protocol. It claims after the signature verifies, so
   unsigned traffic cannot fill the store. A 15-minute lease covers the handler's run. The
   claim is **confirmed** for the window when the handler completes, or when the guard excludes
@@ -835,7 +919,8 @@ verification or deduplication (slices 1, 3, 4 and 5), per ADR 0076's security-re
   It is separate from `Queue`, so the plan shows *"event delivery"*, and so pruning and reuse
   have their own rules. An event queue is always Bynk's: one found already on the account with
   a reserved name is adopted (recorded as created), since no one else may own that name.
-- **Before the push:** both queues of every subscribing service are created if missing (REST,
+- **Before the push:** both queues of every subscribing service are created if missing, with
+  the longest message retention the plan allows (14 days on Workers Paid; D5) (REST,
   per the back-half paydown's Q4 boundary). Cloudflare would also auto-create a missing
   dead-letter queue
   ([dead-letter queues](https://developers.cloudflare.com/queues/configuration/dead-letter-queues/)),
@@ -910,8 +995,8 @@ them. Each check names the slice that needs its result before it lands.
 | L2 | `exports.__EventsFanout` set to `state = "deleted"` on a Worker whose class never stored anything, with a fan-out request in flight during the deploy: the push succeeds, and the in-flight request completes or fails cleanly. | slice 4 |
 | L3 | **The agent outbox's latency** (#3898 Q1's measurement): p50/p99 of an emitting agent handler with the outbox write in its commit, against today's dispatch, and the time from commit to subscriber invocation, at 1, 10 and 100 emissions per handler. | slice 5 |
 | L4 | The largest event that sends: the exact byte budget including the signed wrapper and the platform's metadata, at the boundary of 128 KB, and `sendBatch` at 100 messages and 256 KB. | slice 4 |
-| L5 | Dead-lettering: with `retries: 2`, a faulting subscriber is invoked 3 times with `attempts` 1–3; the message reaches the dead-letter queue unchanged; it still verifies against its source queue; and redriving it by hand runs the handler once. | slice 3 |
-| L6 | Provisioning and pruning: creating 2 queues per subscriber in a named environment; whether the queue API reports a backlog count before deletion; deleting a queue with a backlog. | slice 3 |
+| L5 | Dead-lettering: with `retries: 2`, a faulting subscriber is invoked 3 times with `attempts` 1–3; the message reaches the dead-letter queue unchanged; it still verifies against its source queue; and redriving it by hand runs the handler once. The same for a message dead-lettered as undecodable (skew), redriven after the subscriber is fixed: it is admitted (its claim was released) and handled once. | slice 3 |
+| L6 | Provisioning and pruning: creating 2 queues per subscriber in a named environment, with a 14-day message retention set at creation (and what the Free plan does with that setting); whether the queue API reports a backlog count before deletion; deleting a queue with a backlog. | slice 3 |
 | L7 | A publisher and a subscriber that calls it deploy in one run from empty, and from a pre-cut-over deployment (the former cycle, P7). | slice 4 |
 | L8 | The outbox's backstop: with the queue producer made to fail (a queue deleted out of band), the alarm retries past Cloudflare's 6 attempts by rescheduling, and delivers once the queue is back. | slice 5 |
 | L9 | Cost accounting over a day of synthetic traffic: queue operations, D1 rows written and DO requests, against D9's model. | slice 8 |
@@ -962,9 +1047,12 @@ changes for users yet: nothing sends to the new queues.
 - Undecodable messages go to the dead-letter queue; refusals are acknowledged and reported.
 - `D1_IDEMPOTENCY` is declared for subscriber Workers.
 - The `/_bynk/event/` route stays.
-- Deploy: the `EventQueue` kind, creation before push, the ledger, `--prune` as §7, and
-  environments.
-- `system`: `svc.event` through the queue entry, with D10's cases.
+- Deploy: the `EventQueue` kind, creation before push with 14-day retention (D5), the ledger,
+  `--prune` as §7, and environments.
+- `system`: `svc.event` through the queue entry, with D10's cases, plus **a redrive after
+  skew**: an undecodable message is dead-lettered with its claim released, and the same
+  message, delivered again once the subscriber decodes it, runs the handler once.
+- The compiler's `bynk.event.queue_name_collision` check (D2).
 - The size measurement in `Events.emit`, warning only (`EventNearLimit`), and the
   `bynk.event.unbounded_payload` warning (§8.1), so projects find their large events a release
   before the cap faults.
@@ -984,6 +1072,9 @@ two-context project in `default` and in a named environment; L5, L6 and L10 have
   `BindingSource::EventsFanout`, the fan-out bindings, `cycle_publishers` and the cycle
   refusal's event paragraph are deleted (D8). The structural guard in
   `xtask/src/delivery_isolation.rs` moves to the new single home.
+- The plan's refusal of a `--context` publisher deploy that would leave pre-cut-over
+  subscribers without a consumer (D8, step 3), with the ledger's event-delivery generation
+  per Worker.
 - The changelog marks it breaking; `upgrading.md` gets §8's table.
 
 *Done when:* the events run fixtures pass on Workers; a fixture with a subscriber that calls
@@ -991,15 +1082,23 @@ its publisher deploys in the plan tests; no reference to `__EventsFanout` remain
 tombstone; L2, L4 and L7 have passed.
 
 **Slice 5: The agent outbox.** Depends on: 4.
-- Outbox rows in `commitStored`'s transaction (`o/<seq>`, `v: 1`), the post-reply flush, the
-  alarm backstop with self-rescheduling, erase, sweep and move preservation, and the row format
-  ADR from 0(e).
+- Outbox rows in `commitStored`'s transaction (`o/<seq>`, `v: 1`), the post-reply flush with
+  its single-flight rule and conditional bookkeeping, the alarm backstop with
+  self-rescheduling, the two-phase erase (the `e` marker), sweep and move preservation, and
+  the row format ADR from 0(e).
 - This is where "at least once from a committed emission" becomes true from end to end for
   agents.
 
-*Done when:* runtime tests cover a crash after commit and before the send (the alarm
-delivers), a partial flush (only the missing queues are resent), erase with pending rows, and
-a row written by an older runtime version; L3 and L8 have passed and their numbers are recorded
+*Done when:* runtime tests cover:
+- a crash after commit and before the send (the alarm delivers);
+- a partial flush (only the missing queues are resent);
+- **two overlapping flushes**: a post-commit flush and the alarm, and two isolates, with no
+  row brought back after its delete;
+- erase with pending rows: the logical erase is visible at once, the physical `deleteAll`
+  runs only after the last row is sent, and a crash between the phases loses no row;
+- a row written by an older runtime version.
+
+Also: L3 and L8 have passed and their numbers are recorded
 in the ADR.
 
 **Slice 6: Filtering at the publisher.** Depends on: 4.
