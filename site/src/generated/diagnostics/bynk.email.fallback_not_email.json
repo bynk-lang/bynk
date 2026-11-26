@@ -1,0 +1,12 @@
+{
+  "blurb": "A `fallback { }` block says where mail a handler faulted on is forwarded, so only a `from email` service, which receives mail, can have one. A queue's equivalent is its `delivery { }` dead-letter queue.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.fallback_not_email",
+  "constructs": [
+    "fallback_policy"
+  ],
+  "example": "service jobs from queue(\"jobs\") {\n    delivery { deadLetter: None }\n    fallback { forward: \"ops@ops.example\" }   // ✗ not a `from email` service\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice jobs from queue(\"jobs\") {\n    delivery { deadLetter: \"jobs-dead\" }   // ✓ a queue's counterpart\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}",
+  "severity": "error",
+  "summary": "A `fallback { }` block is on a service that is not `from email`."
+}

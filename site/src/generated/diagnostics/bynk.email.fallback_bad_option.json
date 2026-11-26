@@ -1,0 +1,12 @@
+{
+  "blurb": "A `fallback { }` block on a `from email` service has one field, `forward`: the address mail a handler faulted on, or that could not be read, is forwarded to. It is a string literal holding a bare address, not a display name and not a domain's catch-all, and it must be a verified destination address on the account (`bynk deploy` warns of one that is not). A second `forward`, any other field or a missing `forward` is this error.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.fallback_bad_option",
+  "constructs": [
+    "fallback_policy"
+  ],
+  "example": "service support from email(\"support@shop.example\") {\n    fallback { forward: \"*@ops.example\" }   // ✗ a catch-all, not one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+  "severity": "error",
+  "summary": "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address."
+}

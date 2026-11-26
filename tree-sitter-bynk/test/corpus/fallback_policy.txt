@@ -1,0 +1,42 @@
+================================================================================
+Fallback policy on a from-email service
+================================================================================
+
+context mail
+
+service support from email("support@shop.example") {
+  fallback {
+    forward: "ops@shop.example",
+  }
+
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol
+        (string_literal))
+      (fallback_policy
+        (fallback_field
+          (identifier)
+          (string_literal)))
+      (handler
+        (queue_handler
+          (param
+            (identifier)
+            (identifier))
+          (generic_type_ref
+            (builtin_type)
+            (identifier))
+          (by_clause
+            (identifier))
+          (block
+            (identifier)))))))
