@@ -2569,11 +2569,32 @@ pub fn phase_function_type_boundaries(parsed: &[ParsedFile], errors: &mut ErrorS
     let types = collect_type_decls(parsed.iter().flat_map(|pf| pf.items()));
     for pf in parsed {
         let mut file_errors: Vec<CompileError> = Vec::new();
-        check_function_type_boundary_items(pf.items(), &types, &mut file_errors);
+        // #4111: `consumes bynk { Secret as Token }` writes the type as `Token` here, so a
+        // file that renames a type sees it under the new name too.
+        let aliased = with_consumed_type_aliases(&types, pf.consumes());
+        check_function_type_boundary_items(pf.items(), aliased.as_ref().unwrap_or(&types), &mut file_errors);
         for err in file_errors {
             errors.push_for(Some(&pf.identity_path()), err);
         }
     }
+}
+
+/// `types` plus, for each `consumes U { T as Alias }` of a file, `Alias` naming the declaration
+/// of `T`; `None` when the file renames nothing, so the common case copies nothing.
+fn with_consumed_type_aliases(
+    types: &HashMap<String, Arc<TypeDecl>>,
+    consumes: &[ConsumesDecl],
+) -> Option<HashMap<String, Arc<TypeDecl>>> {
+    let mut out: Option<HashMap<String, Arc<TypeDecl>>> = None;
+    for item in consumes.iter().flat_map(|c| c.selected.iter().flatten()) {
+        let (Some(alias), Some(decl)) = (&item.alias, types.get(&item.name.name)) else {
+            continue;
+        };
+        out.get_or_insert_with(|| types.clone())
+            .entry(alias.name.clone())
+            .or_insert_with(|| Arc::clone(decl));
+    }
+    out
 }
 
 /// v0.174 (#592): a `name -> TypeDecl` table over a set of items, for the

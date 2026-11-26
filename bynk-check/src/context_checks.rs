@@ -7364,19 +7364,22 @@ fn secret_at_boundary_error(span: Span, what: &str) -> CompileError {
 }
 
 /// #4111: whether `name`, in the project's type table, is the `Secret` type `bynk` exports,
-/// found by its declaration's first-party span (as `is_crypto_key_type` finds a key), so a
+/// found by its declaration's first-party span, whatever it is spelled here (as `is_crypto_key_type` finds a key), so a
 /// user type that happens to be called `Secret` is not mistaken for it.
 pub fn is_secret_type(
     name: &str,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> bool {
-    name == "Secret" && types.get(name).is_some_and(|decl| is_secret_decl(decl))
+    // By declaration, not spelling: `consumes bynk { Secret as Token }` keys the table by `Token`.
+    types.get(name).is_some_and(|decl| is_secret_decl(decl))
 }
 
 /// #4111: whether `decl` is the `Secret` declaration `bynk` itself ships, which the emitter
 /// builds as a runtime `BynkSecret` rather than a branded string.
 pub fn is_secret_decl(decl: &TypeDecl) -> bool {
-    decl.name.name == "Secret"
+    // The one opaque type `bynk` declares, found by where it is declared and not by what it is
+    // called here: `consumes bynk { Secret as Token }` renames it.
+    matches!(decl.body, bynk_syntax::ast::TypeBody::Opaque { .. })
         && crate::firstparty::unit(bynk_std::BYNK_UNIT)
             .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
