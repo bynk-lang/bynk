@@ -3260,12 +3260,7 @@ fn check_method_call_inner(
         if let Some(chain) = flatten_ident_chain(receiver)
             && let Some((consumed, cap)) = ctx.input.cross_context.resolve_cross_capability(&chain)
         {
-            // v0.25: the capability name-segment (`Cap` in `B.Cap` /
-            // `Alias.Cap`) is the outermost field of the receiver chain.
-            if let ExprKind::FieldAccess { field, .. } = &receiver.kind {
-                ctx.refs
-                    .record_in_unit(field.span, SymbolKind::Capability, &cap, &consumed);
-            }
+            record_cross_capability_sites(receiver, &cap, &consumed, ctx);
             return check_cross_context_capability_call(
                 receiver, &consumed, &cap, method, type_args, args, span, expr_id, ctx,
             );
@@ -4841,7 +4836,10 @@ fn check_ws_address(
             address: HandlerAddress::Ws(match which {
                 "open" => WsAddress::Open,
                 "message" => WsAddress::Message { frame: None },
-                _ => WsAddress::Close { params: None },
+                _ => WsAddress::Close {
+                    params: None,
+                    info: false,
+                },
             }),
             extra_headers: false,
         },
@@ -4926,31 +4924,70 @@ fn check_ws_address(
                 );
             }
         }
-        _ => {
-            ctx.callees.insert(
-                expr_id,
-                Callee::TestService {
-                    service: service.clone(),
-                    address: HandlerAddress::ws_close(handler.params.len()),
-                    extra_headers: false,
-                },
-            );
-            if !rest.is_empty() {
-                ctx.errors.push(CompileError::new(
-                    "bynk.test.service_call_arity",
-                    method.span,
-                    format!(
-                        "`{service}.close` takes only the connection, but {} argument(s) were given",
-                        args.len()
-                    ),
-                ));
-                for a in rest {
-                    let _ = type_of(a, None, ctx);
-                }
-            }
-        }
+        _ => check_ws_close_call(&handler, &service, method, args, expr_id, ctx),
     }
     handler_outcome(&handler, ctx)
+}
+
+/// #3902: `svc.close(tc)` and `svc.close(tc, info)`. The connection's route values were given at `open`;
+/// `info` is the `CloseInfo` the handler's trailing `close: CloseInfo` parameter receives. A bare
+/// `svc.close(tc)` runs it with a normal, clean closure: `CloseInfo { code: 1000, reason: "", clean: true }`.
+fn check_ws_close_call(
+    handler: &TestHandler,
+    service: &str,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) {
+    let info_param = handler
+        .params
+        .last()
+        .filter(|p| crate::context_checks::is_close_info_param(p, &ctx.input.types));
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: service.to_string(),
+            address: HandlerAddress::ws_close(handler.params.len(), info_param.is_some()),
+            extra_headers: false,
+        },
+    );
+    let rest = &args[1..];
+    if rest.len() > 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_call_arity",
+            method.span,
+            format!(
+                "`{service}.close` takes the connection and optionally the `CloseInfo`, but {} argument(s) were given",
+                args.len()
+            ),
+        ));
+    }
+    let Some(info) = rest.first() else {
+        return;
+    };
+    match info_param.and_then(|p| resolve_type_ref(&p.type_ref, &ctx.input.types, ctx.tys)) {
+        Some(ty) => check_arg(
+            info,
+            ty,
+            &format!("the `CloseInfo` of `{service}.close`"),
+            ctx,
+        ),
+        None => {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.test.service_call_arity",
+                    info.span,
+                    format!("`{service}`'s `on close` takes no `CloseInfo`, so `{service}.close` takes only the connection"),
+                )
+                .with_note("declare `close: CloseInfo` as the handler's last parameter to read the code and reason"),
+            );
+            let _ = type_of(info, None, ctx);
+        }
+    }
+    for extra in rest.iter().skip(1) {
+        let _ = type_of(extra, None, ctx);
+    }
 }
 
 /// #1934: what a case's call to `handler` yields — its declared return type,
@@ -6333,6 +6370,32 @@ pub(super) fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String>
     info.resolve_prefix(candidate.as_str())
 }
 
+/// The sites of a qualified cross-context capability receiver (`B.Cap` / `Alias.Cap` /
+/// `ops.billing.Cap`): v0.25, the capability name-segment is the outermost field of the
+/// receiver chain; #4183, what precedes it is the consumed context's name.
+fn record_cross_capability_sites(receiver: &Expr, cap: &str, consumed: &str, ctx: &mut Ctx) {
+    if let ExprKind::FieldAccess {
+        receiver: prefix,
+        field,
+    } = &receiver.kind
+    {
+        ctx.refs
+            .record_in_unit(field.span, SymbolKind::Capability, cap, consumed);
+        record_unit_prefix(prefix, consumed, ctx);
+    }
+}
+
+/// #4183: a cross-context call whose prefix is the consumed context's full dotted name
+/// (`ops.billing.refunds(…)`) is a reference to that unit, so renaming the unit rewrites it.
+/// A prefix written as an alias (`consumes ops.billing as B`, `B.refunds(…)`) is the unit's own
+/// spelling for it, not the name, and is left alone.
+fn record_unit_prefix(prefix: &Expr, consumed: &str, ctx: &mut Ctx) {
+    if flatten_ident_chain(prefix).as_deref() == Some(consumed) {
+        ctx.refs
+            .record_in_unit(prefix.span, SymbolKind::Unit, consumed, consumed);
+    }
+}
+
 /// Flatten an `Ident`/`FieldAccess` chain into its dotted name, or None if
 /// any segment isn't a bare identifier.
 fn flatten_ident_chain(expr: &Expr) -> Option<String> {
@@ -7040,6 +7103,7 @@ pub(super) fn check_cross_context_call(
             service: method.name.clone(),
         },
     );
+    record_unit_prefix(receiver, consumed, ctx);
     // The consuming context must be effectful at this call site (services
     // and agent handlers are; pure free fns are not).
     if !ctx.effectful {

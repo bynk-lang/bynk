@@ -18,4 +18,8 @@ agent Room {
 service Gw from websocket(in: ClientFrame, out: ServerFrame) {
   on open (roomId: RoomId) -> Effect[()] by user: Participant { let _ <- Room(roomId).join(user.identity, connection) () }
   on message (roomId: RoomId) -> Effect[()] by user: Participant { () }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    ()
+  }
 }

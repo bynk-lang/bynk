@@ -23,6 +23,10 @@ service chat from websocket(in: Frame, out: Frame) {
 	on message(room: RoomKey, frame: Frame) -> Effect[()] by u: User {
 		let _ <- Room(room).say(frame.text)
 	}
+
+	on close (room: RoomKey) -> Effect[()] by u: User {
+	  ()
+	}
 }
 
 agent Room {

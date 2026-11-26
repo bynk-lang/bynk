@@ -70,6 +70,11 @@ the unit names it declares and every `uses`/`consumes` that refers to them. VS
 Code shows the edit for review first. Moving units into a different project is
 left for you to fix by hand.
 
+The other direction works too: renaming a context or commons name in the source
+(**Rename Symbol** on `shop.pay`) rewrites the name wherever it is written, in
+every file. It does not move the files, so the editor warns where each one
+should now live; move them, and the project checks clean again.
+
 The editor's **fix all** applies a file's auto-fixable problems as one edit. The
 same fixes are available without an editor as
 [`bynk check --fix`](/reference/tooling/bynk-cli/#applying-fixes), which repeats them until

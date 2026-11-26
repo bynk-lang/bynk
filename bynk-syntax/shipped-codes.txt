@@ -916,8 +916,11 @@ bynk.within.in_agent_handler
 bynk.within.in_pure_context
 bynk.within.outside_handler
 bynk.within.timed_out_not_in_scope
+bynk.ws.bad_close_code
+bynk.ws.bad_close_reason
 bynk.ws.lifecycle_by_mismatch
 bynk.ws.message_frame_param
+bynk.ws.missing_close
 bynk.ws.open_given_unsupported
 bynk.ws.open_transfer_cross_file
 bynk.ws.open_transfer_key

@@ -1,7 +1,7 @@
-// #3051: the chat service here declares no `on close` has no close address.
+// #3051: the chat service here declares no `on message`, so it has no message address.
 suite chat {
-  case "close on a service without on close" {
+  case "message on a service without on message" {
     let tc = TestConnection[ServerFrame]()
-    let _ <- ChatGateway.close(tc)
+    let _ <- ChatGateway.message(tc, ClientFrame { text: "hi" })
   }
 }

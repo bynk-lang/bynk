@@ -1671,10 +1671,43 @@ pub fn renamed_unit_name(old_rel: &Path, old_name: &str, new_rel: &Path) -> Opti
     None
 }
 
+/// The leading `include`-root components of a project-relative path (`src` for
+/// `src/ops/admin.bynk` declaring `ops.admin`), found the way [`renamed_unit_name`]
+/// finds them: `name` as a suffix of the path's stem (single file) or of its parent
+/// directory (one file of a multi-file unit). `None` when the path fits neither.
+pub fn include_prefix_of_unit(rel_path: &Path, name: &str) -> Option<PathBuf> {
+    let name_parts: Vec<&str> = name.split('.').collect();
+    let stem = stem_parts(rel_path);
+    let ends_with_name = |parts: &[String]| {
+        parts.len() >= name_parts.len()
+            && parts[parts.len() - name_parts.len()..]
+                .iter()
+                .zip(name_parts.iter())
+                .all(|(a, b)| a == b)
+    };
+    let prefix_len = if ends_with_name(&stem) {
+        stem.len() - name_parts.len()
+    } else if !stem.is_empty() && ends_with_name(&stem[..stem.len() - 1]) {
+        stem.len() - 1 - name_parts.len()
+    } else {
+        return None;
+    };
+    Some(stem[..prefix_len].iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn include_prefix_of_unit_finds_the_include_root() {
+        let p = |s: &str, n: &str| include_prefix_of_unit(Path::new(s), n);
+        assert_eq!(p("src/ops/admin.bynk", "ops.admin"), Some("src".into()));
+        assert_eq!(p("src/ops/admin/a.bynk", "ops.admin"), Some("src".into()));
+        assert_eq!(p("ops/admin.bynk", "ops.admin"), Some(PathBuf::new()));
+        assert_eq!(p("src/other.bynk", "ops.admin"), None);
+    }
 
     // -- is_unpinned_range ----------------------------------------------------
     #[test]

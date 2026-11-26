@@ -1161,7 +1161,13 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   offering of the token alone is `400`, a missing or bad token `401`, and the `101`
   selects `bynk.bearer`) and forwards it to the addressed Durable
   Object, which accepts the socket via the **hibernatable-WebSocket** API
-  (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). A held
+  (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). The Durable Object's
+  `webSocketClose` runs the service's `on close` with the client's `CloseInfo` and then
+  completes the close handshake, replying with the client's code and reason when that code can
+  be sent (`1000`–`4999` except `1004`, `1005`, `1006`, `1015`) and with a bare `close()`
+  otherwise, even if `on close` faults; `webSocketError` logs the error's class name, closes
+  with `1011` and runs `on close` with `CloseInfo { code: 1011, reason: "error", clean: false }`,
+  once per socket. A held
   `Map[K, Connection]` cannot be JSON-persisted (a live socket), so it lives in an
   in-memory side-table split out of the durable record. `parForEach` over the map
   lowers to `await Promise.all(xs.map(f))`. Only modules that use streams or

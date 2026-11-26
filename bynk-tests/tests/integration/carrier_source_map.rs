@@ -324,6 +324,10 @@ const WALLET_MAP: &str = "\
 // now print one statement per line, so extra generated lines joined the snapshot. They are
 // the ruled re-layout, and each repeats an anchor that was already there: the decoded anchor
 // sequence is identical across all 3162 corpus maps, and no mapping moved.
+// #3902: `webSocketClose` and the new `webSocketError` run `on close` through the runtime's
+// `__webSocketClosing`/`__webSocketErrored`, so the trailing run of `33`s (the dispatch methods' span)
+// is eight lines longer: the new `webSocketError` joins `webSocketClose`, each calling `on close`
+// through an arrow. No mapping moved.
 const CHAT_MAP: &str = "\
 - - - - - - - - - - - 2 2 2 2 2
 2 2 2 2 3 3 3 3 3 3 3 3 3 4 4 4
@@ -342,7 +346,8 @@ const CHAT_MAP: &str = "\
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
-33 33 33 33 33 33 33 33 33 33
+33 33 33 33 33 33 33 33 33 33 33 33 33 33 33 33
+33 33
 ";
 
 const MONEY: &str = "commons commerce.money {

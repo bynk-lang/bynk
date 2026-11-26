@@ -1,0 +1,43 @@
+// #3902: a case sets the `CloseInfo` an `on close` receives with `svc.close(tc, info)`, a bare
+// `svc.close(tc)` is a normal, clean closure, and `tc.closeCode()` / `tc.closeReason()` read what
+// the server closed a connection with.
+suite room {
+  consumes bynk { CloseInfo }
+
+  case "a client that leaves with a code is released with that code" as integration {
+    let tc = TestConnection[Frame]()
+    let id = RoomId.unsafe("r1")
+    let _ <- Gateway.open(tc, id) by Member(UserId.unsafe("alice"))
+    let _ <- Gateway.close(tc, CloseInfo { code: 4002, reason: "bye", clean: false })
+    let code <- Room(id).code()
+    let clean <- Room(id).clean()
+    expect code == 4002
+    expect clean == false
+  }
+
+  case "a bare close is a normal, clean closure" as integration {
+    let tc = TestConnection[Frame]()
+    let id = RoomId.unsafe("r2")
+    let _ <- Gateway.open(tc, id) by Member(UserId.unsafe("alice"))
+    let _ <- Gateway.close(tc)
+    let code <- Room(id).code()
+    let clean <- Room(id).clean()
+    expect code == 1000
+    expect clean == true
+  }
+
+  case "the server closes a connection with a code and reason" as integration {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, RoomId.unsafe("r3")) by Member(UserId.unsafe("banned"))
+    expect tc.closed() == true
+    expect tc.closeCode() == Some(4001)
+    expect tc.closeReason() == Some("banned")
+  }
+
+  case "a connection the server did not close has no close code" as integration {
+    let tc = TestConnection[Frame]()
+    let _ <- Gateway.open(tc, RoomId.unsafe("r4")) by Member(UserId.unsafe("alice"))
+    expect tc.closed() == false
+    expect tc.closeCode() == None
+  }
+}

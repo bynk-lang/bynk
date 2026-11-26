@@ -15,6 +15,7 @@ adapter bynk {
 		Cookie,
 		SameSite,
 		SseEvent,
+		CloseInfo,
 		ContentRange,
 		FetchOptions,
 		ParOptions,
@@ -283,6 +284,21 @@ adapter bynk {
 		event: Option[String] = None,
 		id: Option[String] = None,
 		retry: Option[Duration] = None,
+	}
+
+	---
+	Why a WebSocket connection ended, as an `on close` handler receives it as a
+	trailing `close: CloseInfo` parameter. `code` and `reason` are the close
+	frame's: `1000` is a normal closure, `1001` a client navigating away, and
+	`1006` an abnormal disconnection with no close frame (its `reason` is `""` and
+	`clean` is `false`). `clean` is whether the close handshake completed. A
+	connection ended by a non-disconnection error is `CloseInfo { code: 1011,
+	reason: "error", clean: false }`.
+	---
+	type CloseInfo = {
+		code: Int,
+		reason: String,
+		clean: Bool,
 	}
 
 	---
