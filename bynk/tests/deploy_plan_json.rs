@@ -142,6 +142,9 @@ fn a_name_that_matches_no_move_is_a_refusal_entry() {
     assert_eq!(refusals.len(), 1, "{doc}");
     assert_eq!(refusals[0]["code"], "bynk.deploy.accept_fresh_agent_unused");
     assert_eq!(refusals[0]["name"], "shop.typo");
+    // A refused run goes ahead with nothing, so it has no warnings, as on stderr: `shop.orders`
+    // was accepted, but it is not happening.
+    assert_eq!(doc["warnings"], serde_json::json!([]), "{doc}");
 }
 
 #[test]

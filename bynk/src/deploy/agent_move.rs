@@ -274,19 +274,13 @@ pub(crate) fn gate(moves: &[AgentMove], accepted: &[String]) -> (Vec<Entry>, Vec
             .with("name", name),
         );
     }
-    // Only a move that goes ahead warns: one refused (not named, or not supportable) is said by its
-    // refusal, not as though it were happening.
-    let warnings = moves
-        .iter()
-        .filter(|m| {
-            accepted
-                .iter()
-                .any(|a| a == &m.context || a.replace('-', ".") == m.context)
-                && !m.renamed_in_place
-                && !m.old_script_built
-        })
-        .map(fresh_warning)
-        .collect();
+    // Warnings say what a run goes ahead with, so a refused run has none: its refusals are the
+    // whole story, as on stderr. (A move that is refused is said by its refusal, not as though it
+    // were happening.)
+    if !refusals.is_empty() {
+        return (refusals, Vec::new());
+    }
+    let warnings = moves.iter().map(fresh_warning).collect();
     (refusals, warnings)
 }
 
