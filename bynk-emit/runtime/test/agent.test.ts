@@ -19,6 +19,7 @@ import { checkStoredLayout, type BoundaryError, type JsonValue } from "../src/bo
 import { Ok, Err } from "../src/result.ts";
 import { type DurableObjectState } from "../src/storage.ts";
 import { makeIntegrationDoNamespace, makeIntegrationKv } from "../src/testing/bindings.ts";
+import { StoreMap } from "../src/store.ts";
 
 test("serialiseAgentKey: strings are identity, primitives are JSON", () => {
   assert.equal(serialiseAgentKey("abc"), "abc");
@@ -327,6 +328,32 @@ test("wakeForMigration: reports the layout a record was in and the one this buil
   // A marker that is not a positive integer is reported as unknown, not as a layout.
   const odd = await wakeForMigration({ __v: 3, __layout: "x" }, 3, async () => ({}), async () => {}, 2);
   assert.equal(((await odd.json()) as { layoutBefore: unknown }).layoutBefore, null);
+});
+
+test("wakeForMigration: reports the values a @unique index already has more than one holder of, never a value (#4390)", async () => {
+  const people = StoreMap.from<{ email: string }>(
+    [["a", { email: "x@e" }], ["b", { email: "x@e" }], ["c", { email: "y@e" }], ["d", { email: "z@e" }], ["e", { email: "z@e" }], ["f", { email: "z@e" }], ["g", { email: "z@e" }], ["h", { email: "w@e" }], ["i", { email: "w@e" }]],
+    [{ index: "email", of: (v) => v.email, unique: true }],
+  );
+  const r = await wakeForMigration({ __v: 3 }, 3, async () => ({ people }), async () => {}, undefined, [["people", "email"]]);
+  const body = (await r.json()) as { unique?: unknown };
+  assert.deepEqual(body.unique, [{ map: "people", by: "email", holders: [2, 2, 4] }]);
+  assert.equal(JSON.stringify(body).includes("@e"), false, "no stored value is named");
+  // No duplicate, no report.
+  const clean = StoreMap.from<{ email: string }>([["a", { email: "x@e" }]], [{ index: "email", of: (v) => v.email, unique: true }]);
+  const quiet = await wakeForMigration({ __v: 3 }, 3, async () => ({ people: clean }), async () => {}, undefined, [["people", "email"]]);
+  assert.equal("unique" in ((await quiet.json()) as object), false);
+});
+
+test("wakeForMigration: a duplicate report that throws drops the report, not the migration (#4390)", async () => {
+  const broken = { duplicateHolders: () => { throw new Error("storage read failed"); } };
+  let committed = false;
+  const r = await wakeForMigration({ __v: 2 }, 3, async () => ({ people: broken }), async () => { committed = true; }, undefined, [["people", "email"]]);
+  const body = (await r.json()) as { fault?: unknown; after?: unknown; unique?: unknown };
+  assert.equal(committed, true);
+  assert.equal(body.fault, undefined, "the instance is not a fault");
+  assert.equal(body.after, 3);
+  assert.equal(body.unique, undefined);
 });
 
 test("wakeForMigration: a layout this build does not know is reported as a NewerLayout fault with its layout", async () => {

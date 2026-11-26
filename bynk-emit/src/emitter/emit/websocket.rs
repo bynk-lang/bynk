@@ -415,10 +415,12 @@ pub(super) fn wake_and_inspect_branches(
     a: &AgentDecl,
     agent_versions: &Option<bynk_check::schema_registry::AgentVersions>,
     ctx: &EmitProjectCtx,
+    commons: &TypedCommons,
 ) -> Vec<bynk_ts::TsStmt> {
     let mut branches = Vec::new();
     if let Some(v) = agent_versions {
-        branches.push(migrate_wake_branch_stmt(v.version));
+        let unique = super::unique_store_indexes(a, &commons.types);
+        branches.push(migrate_wake_branch_stmt(v.version, &unique));
     }
     if ctx.inspect_agents {
         branches.push(inspect_branch_stmt(a, agent_versions));
@@ -488,7 +490,11 @@ fn inspect_branch_stmt(
 /// "/_bynk/migrate") return await __wakeForMigration(await
 /// this.state.storage.get("state"), <version>, () => this.loadState(), (s) =>
 /// this.commitState(s));`
-fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
+///
+/// #4390: a class with `@unique(by:)` indexes passes them as the wake's last argument, `[["map", "field"], …]`
+/// (after `undefined` for the layout, which the runtime defaults), so the answer reports the values more than one
+/// key already holds.
+fn migrate_wake_branch_stmt(version: i64, unique: &[super::UniqueIndex]) -> bynk_ts::TsStmt {
     let arrow = |params: Vec<bynk_ts::TsParam>, body: bynk_ts::TsExpr| bynk_ts::TsExpr::Arrow {
         params,
         is_async: false,
@@ -518,7 +524,10 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
                 vec![bynk_ts::TsParam::new("s".to_string(), None)],
                 this_call("commitState", vec![bynk_ts::TsExpr::Ident("s".to_string())]),
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(unique_wake_args(unique))
+        .collect(),
     }));
     bynk_ts::TsStmt::if_stmt(
         bynk_ts::TsExpr::Binary {
@@ -534,6 +543,22 @@ fn migrate_wake_branch_stmt(version: i64) -> bynk_ts::TsStmt {
         bynk_ts::TsStmt::return_stmt(Some(wake), None),
         None,
     )
+}
+
+/// #4390: the wake's trailing `undefined, [["map", "field"], …]`, empty for a class with no `@unique(by:)`.
+fn unique_wake_args(unique: &[super::UniqueIndex]) -> Vec<bynk_ts::TsExpr> {
+    if unique.is_empty() {
+        return Vec::new();
+    }
+    let str_lit = |s: &str| bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(s.to_string()));
+    let pairs = unique
+        .iter()
+        .map(|u| bynk_ts::TsExpr::array(vec![str_lit(&u.map), str_lit(&u.field)]))
+        .collect();
+    vec![
+        bynk_ts::TsExpr::Ident("undefined".to_string()),
+        bynk_ts::TsExpr::array(pairs),
+    ]
 }
 
 /// `const __eventsDeps = { __eventsDispatch: (events) => __dispatchToEventsFanout(env.EVENTS_FANOUT, events) };`
