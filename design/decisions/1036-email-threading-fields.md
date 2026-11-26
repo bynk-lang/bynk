@@ -1,0 +1,9 @@
+# 1036 — InboundEmail gains the threading, recipient and date fields the parser already reads, and every header occurrence
+
+- **Status:** Accepted (v0.773)
+
+**Context.** #3886. A support or ticketing handler needs to know which message this one answers, where to answer, who else received it and when it was written. `postal-mime` parses all of these, but the runtime mapped only some, and `headers` keeps only each header's first occurrence, so reading them meant re-parsing address lists and dates by hand and a repeated header could not be read at all.
+
+**Decision.** (A) `replyTo` and `cc` are `List[String]` of bare addresses: display names dropped (as `from` and `to` are envelope addresses), address groups unwrapped; a typed address with a name is deferred. (B) `date` is `Option[Instant]`, `None` when the header is missing or cannot be read, and documented as the sender's claim, not the arrival time. (C) `inReplyTo: Option[String]` and `references: List[String]` hold message ids as `messageId` is written (`<id@host>`), so they compare with it, in the message's order; the reply writer now builds its `References` chain from `references`. (D) `headers` is kept and `headerList: List[EmailHeader]` (`name` lower-case, `value`) holds every occurrence in order, because changing `headers` to hold lists would break every handler that reads it. (E) Every new field counts toward the existing limits: header bytes are capped over every part, so `headerList` cannot grow past that, and nothing new is logged. All fields have defaults, so a test builds only what it needs; the `system` harness writes them as the headers the runtime reads back.
+
+**Consequences.** Additive: a handler that names no new field is unaffected, and the `bynk.cloudflare` golden type lists move. Hover on a field shows its type, and the meaning and claim status are in `InboundEmail`'s documentation, as for every existing field.

@@ -17,6 +17,50 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.791.1
+
+a literal `Route` tag that breaks the header rules (not `X-`, characters other than letters, digits and `-`, a line break in a value) written in a helper function is now the error `bynk.email.bad_tag`, as it already was in a handler body; before, the runtime dropped the entry. Rename the tag or fix the value.
+
+## v0.787.2
+
+A WebSocket client that closes with a code now sees that code and reason echoed back in the server's close frame where it used to see `1005` (no status) when `on close` removed the held connection; a client that relied on `1005` there sees its own code.
+
+## v0.786.2
+
+A WebSocket connection opened with a Bearer token is now closed with `1008` at the first frame after that token's `exp`, where it used to keep acting indefinitely; the client reconnects with a fresh token. A connection accepted before this release has no `exp` recorded and is not closed until it reconnects.
+
+## v0.786.0
+
+a `Producer` refinement that names a context declaring no `Queue @name(...)` for the queue is now the error `bynk.queue.producer_never_sends`; declare the `Queue` in that context or remove the name from the refinement.
+
+## v0.784.0
+
+`Request.authorization` is now `Option[Authorization]`, not `Option[String]`. Build one from a `Secret`: `authorization: Some(token.bearer())`, or `Some(password.basic("alice"))` for HTTP Basic; a string such as `Some("Bearer …")` no longer type-checks, and a credential that must be text goes in `headers` with a visible `reveal()`. A request is no longer `Codable` or comparable with `==`, because it holds a secret. A hand-written `Fetch` binding reads `req.authorization.value.reveal()`.
+
+## v0.781.0
+
+A `from websocket` service without an `on close` handler is now the error `bynk.ws.missing_close`; add an `on close` that releases the connection `on open` handed to an agent (with the same leading route parameters and `by` as `on open`), which a departed client's connection needed anyway, since a later broadcast to it raised.
+
+## v0.777.0
+
+`DecodeError.kind` is a `DecodeErrorKind`, not a `String`, so `e.kind == "Malformed"` and `e.kind.concat(…)` are type errors (`bynk.types.type_mismatch`; `bynk check --fix` rewrites a comparison with a kind's name to `e.kind == Malformed`, and a string that names no kind gets no fix), and `"\(e.kind)"` still prints the name. A single-file program can no longer read `e.kind` at all: `DecodeErrorKind` is declared in the first-party `bynk.decode` commons, which a single-file program cannot reach (as it cannot reach `ValidationRule` to read `e.rule`), so there `e.kind` is `bynk.types.unknown_field` where it was a `String`; move the code into a project to keep reading it (#4475 tracks lifting this for every prelude type). The `400` bodies are unchanged.
+
+## v0.776.0
+
+`Secrets.get(name)` is now `Effect[Option[Secret]]` and `StoredSecret.get()` is `Effect[Secret]`, not `String`. Read the text where it must leave with `secret.reveal()`, compare with `secret.matches(candidate)` (`==` and `!=` on a `Secret` are `bynk.types.secret_not_comparable`), and stub one with `Some(Secret.of("…"))` (`consumes bynk { Secret }`). A `Secret` cannot be interpolated, JSON-encoded, used as a `Key`, or put in a record, event or `store` field, or a handler's parameter or result (`bynk.types.secret_at_boundary`). A hand-written binding that reads `Secrets.get` gets a `Secret`, not a string: call `.reveal()`.
+
+## v0.771.0
+
+A plain-JSON route and `Json.encodePlain` now write a payload-less sum (`enum`) as its variant's name (`"Opened"`, not `{"kind":"Opened"}`), a `String`-keyed `Map` as a JSON object and an `Instant` as an RFC 3339 string; a non-Bynk client of such a route must read those shapes. Bynk's decoder reads both forms, and tagged mode and cross-context calls are unchanged.
+
+## v0.770.1
+
+A WebSocket client that offers the Bearer token alone, `new WebSocket(url, [token])`, is now refused with `400` and a fixed message; offer the pair `["bynk.bearer", token]`. Only a client that does not enforce the subprotocol standard (Node's `ws`, a test harness) could use the old form.
+
+## v0.768.0
+
+`AnalyticsSql.query(sql, params)` is now `AnalyticsSql.query(dataset, sql, params)` and refuses SQL built at run time (`bynk.types.sql_not_literal`): pass the `Analytics` instance first and write `{dataset}` where the table name was interpolated; `stub AnalyticsSql.query(_, _)` becomes `_, _, _`.
+
 ## v0.762.0
 
 A generated client's response union for a route with `@rateLimit` gains a `RateLimited` member (`{ status: 429, kind: "RateLimited", ... }`), so a `switch (res.kind)` that ends in an exhaustive `never` check on such a route no longer type-checks until it handles it; regenerate the client with `bynk client` and add a `case "RateLimited":` (for example, wait `Retry-After` seconds and retry). The route's contract hash moves with it, for `@rateLimit` routes only.
