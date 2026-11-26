@@ -290,11 +290,42 @@ fn a_store_rename_onto_a_recorded_field_is_refused() {
 }
 
 #[test]
-fn a_collection_cannot_be_renamed_with_replaces() {
+fn a_map_and_a_set_are_renamed_with_replaces() {
     let p = agent_project("store-collection");
-    p.ok(&cart("  store seen: Map[String, Int]"));
-    let err = p.err(&cart("  store visited: Map[String, Int] replaces seen"));
-    assert!(err.contains("bynk.store.replaces_collection"), "{err}");
+    p.ok(&cart(
+        "  store seen: Map[String, Int]\n  store tags: Set[String]",
+    ));
+    assert_eq!(agent_version(&p.lock()), "1");
+    p.ok(&cart(
+        "  store visited: Map[String, Int] replaces seen\n  store labels: Set[String] replaces tags",
+    ));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "a rename is a step: {lock}");
+    assert!(lock.contains("renamed_from = [\"seen\"]"), "{lock}");
+    assert!(lock.contains("renamed_from = [\"tags\"]"), "{lock}");
+    // The clause stays: no change.
+    p.ok(&cart(
+        "  store visited: Map[String, Int] replaces seen\n  store labels: Set[String] replaces tags",
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+#[test]
+fn a_cache_a_log_and_an_indexed_map_cannot_yet_be_renamed_with_replaces() {
+    let p = agent_project("store-collection-refused");
+    for (kind, extra) in [
+        ("Cache[String, Int]", " @ttl(5.minutes)"),
+        ("Log[Int]", ""),
+        ("Map[String, Int]", " @indexed(by: id)"),
+    ] {
+        let err = p.err(&cart(&format!(
+            "  store visited: {kind}{extra} replaces seen"
+        )));
+        assert!(
+            err.contains("bynk.store.replaces_collection"),
+            "{kind}: {err}"
+        );
+    }
 }
 
 #[test]

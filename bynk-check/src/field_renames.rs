@@ -17,8 +17,18 @@ use bynk_syntax::error::CompileError;
 /// The code every rule here reports.
 pub const REPLACES_CONFLICT: &str = "bynk.field.replaces_conflict";
 
-/// A collection `store` field cannot be renamed by `replaces`.
+/// A collection `store` field `replaces` cannot rename (yet): a `Cache` or `Log`, or a `Map` with an
+/// `@indexed` index. A `Map` or `Set` is renamed (#4482), by moving its entries to the new name.
 pub const STORE_REPLACES_COLLECTION: &str = "bynk.store.replaces_collection";
+
+/// Whether `replaces` can rename this `store` field: a `Cell`, or a `Map` or `Set` that keeps no index.
+fn renamable(f: &bynk_syntax::ast::StoreField) -> bool {
+    match f.kind.head.name.as_str() {
+        "Cell" | "Set" => true,
+        "Map" => !f.annotations.iter().any(|a| a.name.name == "indexed"),
+        _ => false,
+    }
+}
 
 /// The clauses of one record (a type or an event body).
 pub(crate) fn check_record(body: &RecordBody) -> Vec<CompileError> {
@@ -33,12 +43,13 @@ pub(crate) fn check_record(body: &RecordBody) -> Vec<CompileError> {
 /// The clauses of one agent's `store` fields.
 pub(crate) fn check_store(agent: &AgentDecl) -> Vec<CompileError> {
     // A `Map`, `Set`, `Cache` or `Log` keeps every entry under a key of its own that carries the
-    // field's name, so a rename moves storage keys rather than reading an old one. Refused for
-    // every layout: which layout a record is in is not the author's to see.
+    // field's name, so a rename moves storage keys rather than reading an old one. A `Map` and a
+    // `Set` are moved (#4482); the rest are refused for every layout, as which layout a record is in
+    // is not the author's to see.
     let mut errors: Vec<CompileError> = agent
         .store_fields
         .iter()
-        .filter(|f| f.kind.head.name != "Cell")
+        .filter(|f| !renamable(f))
         .filter_map(|f| f.replaces.as_ref().map(|old| (f, old)))
         .map(|(f, old)| {
             CompileError::new(
@@ -50,10 +61,10 @@ pub(crate) fn check_store(agent: &AgentDecl) -> Vec<CompileError> {
                 ),
             )
             .with_note(
-                "only a `Cell` field is renamed by `replaces`: a collection keeps every entry \
-                 under a storage key of its own that carries the field's name. Keep the \
-                 collection's name, or move its entries with a `migrate from` step into a new \
-                 field",
+                "a `Cell`, a `Set` and a `Map` without `@indexed` are renamed by `replaces`; a \
+                 `Cache`, a `Log` and an indexed `Map` keep every entry, expiry or posting under \
+                 a storage key of its own that carries the field's name. Keep the collection's \
+                 name, or move its entries with a `migrate from` step into a new field",
             )
         })
         .collect();

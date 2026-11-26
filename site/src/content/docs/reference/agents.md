@@ -714,9 +714,11 @@ values are not carried over, and the build is refused (`bynk.agent.non_additive_
   (`bynk.field.replaces_unknown`), and not one the lock records beside the new name
   (`bynk.field.replaces_conflict`). It cannot name the field itself, a field the agent still declares, or a
   name another field replaces (`bynk.field.replaces_conflict`).
-- **A `Cell` only.** A `Map`, `Set`, `Cache` or `Log` keeps each entry under a storage key that carries
-  the field's name, so renaming one moves keys rather than reading an old one
-  (`bynk.store.replaces_collection`). Keep the collection's name, or move its entries with a
+- **A `Cell`, a `Set` or a `Map`.** A `Map` or `Set` keeps each entry under a storage key that carries the
+  field's name, so the first load after the deploy moves its entries to the new name, in batches, and then
+  records that it has (a collection's cost grows with its size, and a crash part-way resumes on the next
+  load). A `Cache`, a `Log` and a `Map` with `@indexed` are not renamed this way yet
+  (`bynk.store.replaces_collection`): keep the collection's name, or move its entries with a
   [`migrate from` step](#migrations).
 - **Keep the clause while a version needs it.** While any stored version the lock still holds keeps the
   value under the old name, deleting the clause would read those records as the field's zero, so the build is

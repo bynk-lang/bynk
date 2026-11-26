@@ -1327,7 +1327,8 @@ between its `store` fields and its handlers.
 `Cell` field `Old` was renamed to `New`.
 - **What may be named.** `Old` MUST NOT be the field itself, another field the agent
   declares, or a name another field replaces (`bynk.field.replaces_conflict`). Only a
-  `Cell` field MAY carry the clause (`bynk.store.replaces_collection`).
+  `Cell`, `Set` or `Map` field without `@indexed` MAY carry the clause
+  (`bynk.store.replaces_collection`).
 - **What the lock does.** With a lock, `Old` MUST be a field the class's current
   snapshot records, unless the rename has already been recorded
   (`bynk.field.replaces_unknown`), and `New` MUST NOT be recorded beside it
@@ -1335,7 +1336,11 @@ between its `store` fields and its handlers.
   before comparing, so a rename on its own is additive: the class's version increments
   and the new snapshot lists `New` with `renamed_from` naming `Old` and the names `Old`
   was itself renamed from. Earlier snapshots keep their names.
-- **What loading does.** A stored record is read under `New`, or under a recorded old
+- **What loading does.** A `Map` or `Set` has every entry under `Old`'s storage keys moved
+  to `New`'s, in bounded batches that each commit together, before the first read; an
+  entry already under `New` wins, a failure part-way leaves each entry under exactly one
+  name and the next load continues, and a marker records that the move is done. A stored
+  record is read under `New`, or under a recorded old
   name when `New` is absent, after any `migrate` step and before the zero-merge and the
   rehydration validation; `New` wins when both are present. The first commit writes
   `New` alone.

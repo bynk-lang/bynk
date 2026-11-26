@@ -16,7 +16,7 @@ import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, t
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { admitQueueBody } from "./queue_admit.ts";
 import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
-import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
+import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, moveRenamedEntries, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
@@ -145,6 +145,7 @@ export {
   multipartForm as __multipartForm,
   multipartMediaTypeMatches as __multipartMediaTypeMatches,
   multipartObject as __multipartObject,
+  moveRenamedEntries as __moveRenamedEntries,
   readStored as __readStored,
   readsLazily as __readsLazily,
   then as __bynkThen,

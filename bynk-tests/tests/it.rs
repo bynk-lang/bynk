@@ -347,6 +347,8 @@ mod system {
     mod check_warning_reporting_behaviour;
     #[path = "cli_rooting.rs"]
     mod cli_rooting;
+    #[path = "collection_rename_workerd.rs"]
+    mod collection_rename_workerd;
     #[path = "commons_type_in_capability_behaviour.rs"]
     mod commons_type_in_capability_behaviour;
     #[path = "compatibility_flags_cli.rs"]

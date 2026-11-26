@@ -154,6 +154,11 @@ pub(super) fn emit_agent_load_commit_state(
         if let Some(v) = &agent_versions {
             stmts.push(check_stored_version_stmt(&a.name.name, v, step_plans));
         }
+        // #4482: a `Map` or `Set` renamed with `replaces` keeps its entries under keys that carry its
+        // name, so they are moved to the new name before anything reads them.
+        if let Some(moves) = move_renamed_entries_stmt(a, agent_versions.as_ref()) {
+            stmts.push(moves);
+        }
         // Per-entry storage (#3189): join the entries a per-entry record keeps
         // outside `"state"` back into the wholesale-shaped record (a wholesale one
         // is returned as it is, and split by its first commit). Everything below
@@ -1403,6 +1408,45 @@ fn check_stored_version_stmt(
         },
         None,
     )
+}
+
+/// #4482: `await __moveRenamedEntries(this, this.state.storage, [[kind, old, new], …]);`, one pair per
+/// `Map` or `Set` field a `replaces` renamed, `kind` the key tag its entries sit under (`m` or `s`).
+fn move_renamed_entries_stmt(
+    a: &AgentDecl,
+    versions: Option<&bynk_check::schema_registry::AgentVersions>,
+) -> Option<bynk_ts::TsStmt> {
+    let pairs: Vec<bynk_ts::TsExpr> = versions?
+        .renames
+        .iter()
+        .filter_map(|(old, new)| {
+            let field = a.store_fields.iter().find(|f| &f.name.name == new)?;
+            let kind = match field.kind.head.name.as_str() {
+                "Map" => "m",
+                "Set" => "s",
+                _ => return None,
+            };
+            Some(bynk_ts::TsExpr::object_entries(vec![
+                bynk_ts::TsObjectEntry::prop("kind", str_lit(kind.to_string())),
+                bynk_ts::TsObjectEntry::prop("from", str_lit(old.clone())),
+                bynk_ts::TsObjectEntry::prop("to", str_lit(new.clone())),
+            ]))
+        })
+        .collect();
+    if pairs.is_empty() {
+        return None;
+    }
+    Some(bynk_ts::TsStmt::expr_stmt(
+        bynk_ts::TsExpr::Await(Box::new(call(
+            ident("__moveRenamedEntries"),
+            vec![
+                ident("this"),
+                ident("this.state.storage"),
+                bynk_ts::TsExpr::array(pairs),
+            ],
+        ))),
+        None,
+    ))
 }
 
 /// #3793: `const __renamed = __renameStoredFields(<src>, [[old, new], …]) as typeof <src>;`. Each pair

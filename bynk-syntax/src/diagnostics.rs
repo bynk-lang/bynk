@@ -4940,8 +4940,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.store.replaces_collection",
-        blurb: "`store name: Cell[T] replaces old` reads a stored value under its old key. A `Map`, `Set`, `Cache` or `Log` keeps every entry, posting and expiry under a storage key of its own that carries the field's name, so renaming one moves keys rather than reading an old one, and `replaces` does not do that. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
-        example: "store visited: Map[String, Int] replaces seen   // ✗ a `Map` cannot be renamed with `replaces`\n\nstore visited: Cell[Int] replaces seen         // ✓ a `Cell` can",
+        blurb: "`replaces` renames a `Cell`, a `Set`, or a `Map` that has no `@indexed` index: a `Cell` is read under its old key, and a `Map` or `Set` has its entries moved under the new name on the first load. A `Cache`, a `Log` and an indexed `Map` keep every expiry, posting and entry under a storage key of its own that carries the field's name, which `replaces` does not move yet. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
+        example: "store visited: Log[Int] replaces seen   // ✗ a `Log` cannot be renamed with `replaces`\n\nstore visited: Set[String] replaces seen   // ✓ a `Set` can",
     },
     Explain {
         code: "bynk.store.unique_implies_indexed",
@@ -10531,7 +10531,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.store.replaces_collection",
-        "`replaces` renames a `Cell` store field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry the field's name, so it cannot be renamed this way.",
+        "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an indexed `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet.",
         &["store_field"],
     ),
     warn(d(
