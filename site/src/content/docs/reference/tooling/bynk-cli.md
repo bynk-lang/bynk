@@ -818,8 +818,8 @@ and hints alone.
 | `file` | The file as you'd type it from the working directory, with `/` on every platform, the same path `short` and `fmt` report. `null` for a diagnostic with no file. |
 | `start`, `end` | Where the diagnostic points, or `null` with no file. `line` and `column` are 1-based; `column` counts **UTF-16 code units**, the unit the Language Server Protocol and JavaScript string indices use, so an astral character such as `🦀` is two. `byteOffset` is the 0-based byte position in the file, for a consumer that slices the bytes. |
 | `message`, `notes` | The primary message and the further notes the `rich` rendering prints. |
-| `labels` | Secondary spans, each with `message` and its own `file`, `start` and `end`: a label can lie in another file of the same unit (a duplicate's "previously declared here"). They are `null` when that file's text isn't available. |
-| `fixes` | Suggested changes. Each has a `message`, an `applicability` and `edits`, each edit replacing the span `start`–`end` of its `file` with `replacement` (empty deletes; an empty span inserts). `machine` means exactly right and safe to apply mechanically, as [`--fix`](#applying-fixes) does; `suggested` means a person should read it first, because it holds placeholder text or changes what the program means. |
+| `labels` | Secondary spans, each with `message` and its own `file`, `start` and `end`: a label can lie in another file of the same unit (a duplicate's "previously declared here"). A label into a built-in unit names it by its bare identity path (such as `bynk.bynk`), which is not a file on disk. They are `null` when that file's text isn't available. |
+| `fixes` | Suggested changes. Each has a `message`, an `applicability` and `edits`, each edit replacing the span `start`–`end` of its `file` with `replacement` (empty deletes; an empty span inserts). `machine` means the fix is exactly right in itself; `suggested` means a person should read it first, because it holds placeholder text or changes what the program means. `applicability` is the suggestion's own, not a promise that [`--fix`](#applying-fixes) takes it: `--fix` also skips a hint unless you name its code, and leaves alone a diagnostic that offers more than one candidate fix, where two alternatives would conflict. A tool that applies fixes itself should apply one per diagnostic. |
 | `summary` | The count of `errors`, `warnings` and `hints`, which add up to the length of `diagnostics`. |
 
 In `ndjson` each diagnostic line is the same object with `"type": "diagnostic"`
@@ -848,10 +848,11 @@ jq -r '.diagnostics[] | select(.severity == "error")
 exit "${status:-0}"
 ```
 
-Count what a pull request adds without failing on warnings, with
-`jq '.summary.warnings' diagnostics.json`; list the one-click fixes a bot could
-apply with `select(.fixes[]?.applicability == "machine")`. A `ndjson` stream
-pipes straight into `jq -c 'select(.type == "diagnostic")'`.
+Count the warnings a pull request leaves, without failing on them, with
+`jq '.summary.warnings' diagnostics.json`; list each diagnostic that offers a
+`machine` fix once with
+`select(any(.fixes[]; .applicability == "machine"))`. An `ndjson` stream pipes
+straight into `jq -c 'select(.type == "diagnostic")'`.
 
 ### A directory of projects
 

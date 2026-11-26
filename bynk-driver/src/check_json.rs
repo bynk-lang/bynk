@@ -78,7 +78,9 @@ impl<'a> Home<'a> {
 }
 
 /// A secondary label: a span of the code with a short message. `file` is absent
-/// (with the positions) for a label into a file whose text is not available.
+/// (with the positions) for a label into a file whose text is not available. A
+/// label into a built-in unit names it by its bare identity path (`bynk.bynk`),
+/// which is not a file on disk.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Label {
     pub file: Option<String>,
@@ -97,10 +99,13 @@ pub struct Edit {
     pub replacement: String,
 }
 
-/// A suggested change. `applicability` is `"machine"` for a fix that is exactly
-/// right and safe to apply mechanically (what `check --fix` takes), or
-/// `"suggested"` for one a person must read first: it carries placeholder text
-/// or changes what the program means.
+/// A suggested change. `applicability` is the suggestion's own: `"machine"` for
+/// a fix that is exactly right in itself, or `"suggested"` for one a person must
+/// read first, because it carries placeholder text or changes what the program
+/// means. It is not a promise that `check --fix` applies the fix: `--fix` also
+/// skips a hint unless its code is named, and leaves alone a diagnostic that
+/// offers more than one candidate fix, where two alternatives would conflict. A
+/// consumer that applies fixes should apply one per diagnostic.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Fix {
     pub message: String,
