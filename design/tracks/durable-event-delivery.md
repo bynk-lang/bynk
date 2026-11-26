@@ -823,9 +823,15 @@ below. (Recommended.)**
     and a redelivery look identical at the entry.
   - **One open risk,** checked live (§9 L11): on Free, queue retention is fixed at 24 hours
     (§3), so a message delayed to midnight may meet its retention first if it already waited
-    hours. If L11 shows retention counts from the original send, the delay is capped at what
-    the message has left, minus a margin, and the plan warns a Free-plan project with events
-    that a day over the cap can lose events.
+    hours. Until L11 settles it, the **Free-plan loss warning** applies: *a day over the cap
+    may lose events whose 24-hour retention runs out first*. The events guide, `bynk doctor`
+    and the deploy plan all state it for a Free-plan project with subscribers. L11's result
+    then decides what stays:
+    - **if retention counts from the original send,** the delay is capped at what the message
+      has left, minus a margin, and the warning stays on all three surfaces, because the risk
+      is real;
+    - **if it does not** (a delayed message keeps its full retention), the warning is removed
+      from all three.
   - `bynk doctor` and the deploy plan state the Free-plan figure (about 3,300 deliveries a
     day, D1 permitting) for a project with subscribers, so the cap is known before it bites.
 - **Throughput:** 5,000 messages per second per queue (§3) bounds one *subscriber*, not one
@@ -923,9 +929,10 @@ about 3,300 deliveries a day, with D1's daily rows behind it. The options were:
     for a project with subscribers;
   - the events guide says that production event workloads need Workers Paid;
   - past the cap, the behaviour is D9's: a service faults, an agent's outbox defers to
-    00:00 UTC, and deduplication fails closed. Until L11 settles retention on Free, a day over
-    the cap may lose events whose 24-hour retention runs out first, and the guide and
-    `bynk doctor` say so.
+    00:00 UTC, and deduplication fails closed. The Free-plan loss warning applies too (D9):
+    until L11 settles retention on Free, a day over the cap may lose events whose 24-hour
+    retention runs out first. The events guide, `bynk doctor` and the deploy plan say so, and
+    L11's result decides whether the warning stays.
 - **B. A Free-plan fallback** to a lighter path, for example in-request delivery without a
   queue. Rejected: it would keep a second delivery mechanism with a weaker guarantee, and with
   different semantics to test and document, which is the shape this track removes.
@@ -1158,8 +1165,9 @@ changes for users yet: nothing sends to the new queues.
   skew**: an undecodable message is dead-lettered with its claim released, and the same
   message, delivered again once the subscriber decodes it, runs the handler once.
 - The compiler's `bynk.event.queue_name_collision` check (D2).
-- `bynk doctor` and the deploy plan state the Free-plan planning figure, about 3,300
-  deliveries a day, for a project with subscribers (D13).
+- `bynk doctor` and the deploy plan state, for a Free-plan project with subscribers, the
+  planning figure (about 3,300 deliveries a day) and the Free-plan loss warning, until L11
+  settles it (D9, D13).
 - The D1 daily-limit deferral: a claim that fails on the limit retries with a delay to 00:00 UTC, failing closed (D9, the Free plan).
 - The size measurement in `Events.emit`, warning only (`EventNearLimit`), and the
   `bynk.event.unbounded_payload` warning (§8.1), so projects find their large events a release
@@ -1349,8 +1357,8 @@ None of these pages is edited by this settling PR. Each is updated by the slice 
   - `book/guides/events/index.md` and `book/concepts/events/understand-events.md`
     (slices 3, 4 and 7): a "Delivery settings" section for `delivery { }` on a subscriber; the
     size budget, with what to do about a large payload; the dead-letter queue and how long a
-    dead letter can be redriven (D5); the Free-plan figure (D9), and the statement that
-    production event workloads need Workers Paid (D13).
+    dead letter can be redriven (D5); the Free-plan figure and the Free-plan loss warning (D9),
+    and the statement that production event workloads need Workers Paid (D13).
   - `reference/queue.md`, "Delivery policy" (slice 7): a note that event subscribers take the
     same section, without `deadLetter`.
   - The generated diagnostic index (`/reference/diagnostics/`, built from the compiler's
