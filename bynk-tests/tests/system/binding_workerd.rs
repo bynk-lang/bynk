@@ -1608,6 +1608,8 @@ fn upstream() -> u16 {
                 let reply = match path {
                     "/redirect" => "HTTP/1.1 302 Found\r\nlocation: /landed\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string(),
                     "/landed" => "HTTP/1.1 200 OK\r\ncontent-length: 6\r\nconnection: close\r\n\r\nlanded".to_string(),
+                    // #4115: two `Set-Cookie` headers, the first with an `Expires` comma.
+                    "/cookies" => "HTTP/1.1 200 OK\r\nset-cookie: a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT\r\nset-cookie: b=2\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".to_string(),
                     _ => {
                         std::thread::sleep(Duration::from_secs(30));
                         return;
@@ -1639,6 +1641,14 @@ service api from http {{
 \t\t}}
 \t}}
 
+\ton GET(\"/cookies\") () -> Effect[HttpResult[String]] by Visitor given Fetch {{
+\t\tlet res <- Fetch.send(Request {{ method: Get, url: \"http://127.0.0.1:{upstream}/cookies\" }})
+\t\tmatch res {{
+\t\t\tOk(r) => Ok(r.setCookies.fold(\"\", (acc, c) => acc.concat(\"[\").concat(c).concat(\"]\")))
+\t\t\tErr(_) => Ok(\"other\")
+\t\t}}
+\t}}
+
 \ton GET(\"/ready\") () -> Effect[HttpResult[String]] by Visitor {{
 \t\tOk(\"ready\")
 \t}}
@@ -1662,6 +1672,12 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
                 ("/go/redirect/follow/long", 200, r#""200 landed""#),
                 ("/go/redirect/manual/long", 200, r#""302 ""#),
                 ("/go/hang/follow/short", 200, r#""timeout""#),
+                // #4115: both cookies reach `setCookies` intact on workerd, the `Expires` comma included.
+                (
+                    "/cookies",
+                    200,
+                    r#""[a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT][b=2]""#,
+                ),
             ],
         )
     }) else {
