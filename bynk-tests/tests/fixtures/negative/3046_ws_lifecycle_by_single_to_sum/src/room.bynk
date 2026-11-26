@@ -19,6 +19,10 @@ service chat from websocket(in: Frame, out: Frame) {
     }
     let _ <- Room(room).join(n, connection)
   }
+
+  on close (room: RoomKey) -> Effect[()] by u: User {
+    ()
+  }
 }
 
 agent Room {

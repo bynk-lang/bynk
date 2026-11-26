@@ -20,12 +20,12 @@ class __Stub_Greeter {
   }
 
   async hello(name: string): globalThis.Promise<string> {
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
-    type Authorization = __ns_bynk.Authorization;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
     type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -65,12 +65,12 @@ class __Stub_Secrets {
   }
 
   async get(name: string): globalThis.Promise<Option<__ns_bynk.Secret>> {
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
-    type Authorization = __ns_bynk.Authorization;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
     type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -126,12 +126,12 @@ function __makeTestDeps(__case?: string) {
 async function test_the_binding_reads_its_secret() {
   try {
     const deps = __makeTestDeps("the binding reads its secret");
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
-    type Authorization = __ns_bynk.Authorization;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
     type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -167,12 +167,12 @@ async function test_the_binding_reads_its_secret() {
 async function test_the_binding_falls_back_without_one() {
   try {
     const deps = __makeTestDeps();
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
-    type Authorization = __ns_bynk.Authorization;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
     type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -208,12 +208,12 @@ async function test_the_binding_falls_back_without_one() {
 async function test_a_stub_on_the_adapter_s_capability_answers_instead() {
   try {
     const deps = __makeTestDeps("a stub on the adapter's capability answers instead");
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
-    type Authorization = __ns_bynk.Authorization;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
+    type CloseInfo = __ns_bynk.CloseInfo;
     type ContentRange = __ns_bynk.ContentRange;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;

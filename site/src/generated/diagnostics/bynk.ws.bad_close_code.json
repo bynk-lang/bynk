@@ -1,0 +1,10 @@
+{
+  "blurb": "`connection.close(code, reason)` sends a close code to the client. An application may send `1000` (a normal closure) or a code from `3000` to `4999`. `1001` to `2999` belong to the protocol, and `1004`, `1005`, `1006` and `1015` are never sent on the wire. A literal code outside that is refused here; a computed one faults at run time. Use `1000`, or a code from `3000` to `4999` that your clients know.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.bad_close_code",
+  "constructs": [],
+  "example": "agent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(1006, \"gone\")   // ✗ `1006` is never sent on the wire\n        ()\n    }\n}\n\nagent Room {\n    key id: String\n    on call kick(conn: Connection[Frame]) -> Effect[()] {\n        let _ <- conn.close(4001, \"room archived\")   // ✓ an application code\n        ()\n    }\n}",
+  "severity": "error",
+  "summary": "A WebSocket `connection.close(code, reason)` names a literal close code an application may not send — only `1000` and `3000`–`4999` (#3902)."
+}

@@ -9,6 +9,10 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- Room(roomId).join(connection)
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Room {

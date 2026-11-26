@@ -15,4 +15,8 @@ service Gw from websocket(in: ClientFrame, out: ServerFrame) {
     let _ <- connection.close()
     ()
   }
+
+  on close (roomId: RoomId) -> Effect[()] by user: Participant {
+    ()
+  }
 }

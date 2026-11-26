@@ -797,7 +797,13 @@ fn a_websocket_lifecycle_address_records_its_typed_form() {
             }),
         },
     );
-    has("Gateway ws close", WsAddress::Close { params: Some(1) });
+    has(
+        "Gateway ws close",
+        WsAddress::Close {
+            params: Some(1),
+            info: false,
+        },
+    );
 }
 
 /// `run.id`, a test run's identity, is its own intrinsic.

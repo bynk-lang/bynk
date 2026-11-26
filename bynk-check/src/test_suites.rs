@@ -6344,6 +6344,7 @@ pub fn integration_view(
             "InboundAttachment",
             "EmailHeader",
             "EmailVerdict",
+            "EmailActions",
             "EmailReply",
             "DmarcVerdict",
             "SenderIdentity",

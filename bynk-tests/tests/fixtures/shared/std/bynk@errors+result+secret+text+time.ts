@@ -429,6 +429,24 @@ export const SseEvent = {
 };
 
 /**
+ * Why a WebSocket connection ended, as an `on close` handler receives it as a
+ * trailing `close: CloseInfo` parameter. `code` and `reason` are the close
+ * frame's: `1000` is a normal closure, `1001` a client navigating away, and
+ * `1006` an abnormal disconnection with no close frame (its `reason` is `""` and
+ * `clean` is `false`). `clean` is whether the close handshake completed. A
+ * connection ended by a non-disconnection error is `CloseInfo { code: 1011,
+ * reason: "error", clean: false }`.
+ */
+export interface CloseInfo {
+  readonly code: number;
+  readonly reason: string;
+  readonly clean: boolean;
+}
+
+export const CloseInfo = {
+};
+
+/**
  * The part of a representation a `PartialContent(...)` response carries, as the
  * `Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
  * bytes in all (`None` when the total is not known, written `*`). `start` is at

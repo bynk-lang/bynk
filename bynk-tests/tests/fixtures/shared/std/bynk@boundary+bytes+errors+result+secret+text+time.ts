@@ -431,6 +431,24 @@ export const SseEvent = {
 };
 
 /**
+ * Why a WebSocket connection ended, as an `on close` handler receives it as a
+ * trailing `close: CloseInfo` parameter. `code` and `reason` are the close
+ * frame's: `1000` is a normal closure, `1001` a client navigating away, and
+ * `1006` an abnormal disconnection with no close frame (its `reason` is `""` and
+ * `clean` is `false`). `clean` is whether the close handshake completed. A
+ * connection ended by a non-disconnection error is `CloseInfo { code: 1011,
+ * reason: "error", clean: false }`.
+ */
+export interface CloseInfo {
+  readonly code: number;
+  readonly reason: string;
+  readonly clean: boolean;
+}
+
+export const CloseInfo = {
+};
+
+/**
  * The part of a representation a `PartialContent(...)` response carries, as the
  * `Content-Range` header states it: bytes `start` to `end` inclusive, of `total`
  * bytes in all (`None` when the total is not known, written `*`). `start` is at
@@ -796,6 +814,37 @@ export function __deserialise_Claim(json: __JsonValue, path: string = "$"): Resu
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_CloseInfo(value: CloseInfo): __JsonValue {
+  return {
+    code: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.code),
+    reason: value.reason as __JsonValue,
+    clean: value.clean as __JsonValue,
+  };
+}
+
+export function __deserialise_CloseInfo(json: __JsonValue, path: string = "$"): Result<CloseInfo, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["code"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "number", actual: typeof obj["code"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["code"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.code`, expected: "safe integer", actual: String(obj["code"]) });
+  }
+  const __code = obj["code"];
+  if (typeof obj["reason"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.reason`, expected: "string", actual: typeof obj["reason"] });
+  }
+  const __reason = obj["reason"];
+  if (typeof obj["clean"] !== "boolean") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.clean`, expected: "boolean", actual: typeof obj["clean"] });
+  }
+  const __clean = obj["clean"];
+  return Ok({ code: __code, reason: __reason, clean: __clean } as CloseInfo);
 }
 
 export function __serialise_ContentRange(value: ContentRange): __JsonValue {

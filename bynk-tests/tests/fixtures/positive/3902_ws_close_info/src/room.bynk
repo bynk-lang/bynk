@@ -1,0 +1,57 @@
+context room
+
+consumes bynk { CloseInfo }
+
+type RoomId = opaque String
+type UserId = opaque String
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+// #3902: `on close` is required and may take a trailing `close: CloseInfo`: why the connection
+// ended. The room records the code and whether the closure was clean, and releases the connection.
+service Gateway from websocket(in: Frame, out: Frame) {
+  on open (roomId: RoomId) -> Effect[()] by user: Member {
+    let _ <- Room(roomId).join(user.identity, connection)
+    ()
+  }
+
+  on close (roomId: RoomId, close: CloseInfo) -> Effect[()] by user: Member {
+    let _ <- Room(roomId).leave(user.identity, close.code, close.clean)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Frame]]
+  store lastCode: Cell[Int]
+  store lastClean: Cell[Bool]
+
+  // A banned member's connection is closed with a code and reason of the agent's choosing;
+  // anyone else is held.
+  on call join(u: UserId, conn: Connection[Frame]) -> Effect[()] {
+    if u == UserId.unsafe("banned") {
+      let _ <- conn.close(4001, "banned")
+      ()
+    } else {
+      let _ <- conns.put(u, conn)
+      ()
+    }
+  }
+
+  on call leave(u: UserId, code: Int, clean: Bool) -> Effect[()] {
+    let _ <- conns.remove(u)
+    lastCode := code
+    lastClean := clean
+    ()
+  }
+
+  on call code() -> Effect[Int] {
+    lastCode
+  }
+
+  on call clean() -> Effect[Bool] {
+    lastClean
+  }
+}

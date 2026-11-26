@@ -1405,18 +1405,7 @@ pub(crate) fn check_connection_method(
             Some(tys.intern(eff_unit()))
         }
         Some(ConnectionOp::Close) => {
-            if !args.is_empty() {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.method_arity",
-                    span,
-                    format!("`Connection.close` takes no arguments, got {}", args.len()),
-                ));
-                for a in args {
-                    let _ = type_of(a, None, ctx);
-                }
-                return None;
-            }
-            Some(tys.intern(eff_unit()))
+            check_close_arguments(args, span, ctx).then(|| tys.intern(eff_unit()))
         }
         None => {
             ctx.errors.push(CompileError::new(
@@ -1436,6 +1425,66 @@ pub(crate) fn check_connection_method(
     }
 }
 
+/// #3902: `connection.close(code?, reason?)`. An application may send `1000` or `3000`-`4999`
+/// (RFC 6455 reserves the rest, and `1004`, `1005`, `1006` and `1015` are never sent), and a reason
+/// is at most 123 bytes of UTF-8. A literal outside either is a compile error; a computed one is
+/// held to the same at run time (a code faults, a reason is cut on a character boundary).
+fn check_close_arguments(args: &[Expr], span: Span, ctx: &mut Ctx) -> bool {
+    let tys = ctx.tys;
+    if args.len() > 2 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Connection.close` takes at most 2 arguments (`close(code?, reason?)`), got {}",
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return false;
+    }
+    if let Some(code) = args.first() {
+        let int = tys.intern(Ty::Base(BaseType::Int));
+        check_arg(code, int, "the `Connection.close` code", ctx);
+        if let ExprKind::IntLit { value, .. } = &code.kind
+            && !(*value == 1000 || (3000..=4999).contains(value))
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.ws.bad_close_code",
+                    code.span,
+                    format!("`{value}` is not a close code an application may send"),
+                )
+                .with_note(
+                    "close with `1000` (normal) or a code from `3000` to `4999` for the application's own reasons; `1001` to `2999` are the protocol's, and `1004`, `1005`, `1006` and `1015` are never sent",
+                ),
+            );
+        }
+    }
+    if let Some(reason) = args.get(1) {
+        let string = tys.intern(Ty::Base(BaseType::String));
+        check_arg(reason, string, "the `Connection.close` reason", ctx);
+        if let ExprKind::StrLit(text) = &reason.kind
+            && text.len() > 123
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.ws.bad_close_reason",
+                    reason.span,
+                    format!(
+                        "the close reason is {} bytes of UTF-8, but the protocol allows at most 123",
+                        text.len()
+                    ),
+                )
+                .with_note("shorten the reason; a computed reason is cut to 123 bytes on a character boundary"),
+            );
+        }
+    }
+    true
+}
+
 /// #3051: the operations on a case's `TestConnection[F]`. `sent()` is the frames
 /// the server wrote, `closed()` whether the server closed it, `connection()` the
 /// owned `Connection[F]` an agent receives (once per handle).
@@ -1451,6 +1500,15 @@ pub(crate) fn check_test_connection_method(
     let ret = match op {
         Some(TestConnectionOp::Sent) => Some(tys.intern(Ty::List(frame))),
         Some(TestConnectionOp::Closed) => Some(tys.intern(Ty::Base(BaseType::Bool))),
+        // #3902: the code and reason the server closed with, when it gave them.
+        Some(TestConnectionOp::CloseCode) => {
+            let int = tys.intern(Ty::Base(BaseType::Int));
+            Some(tys.intern(Ty::Option(int)))
+        }
+        Some(TestConnectionOp::CloseReason) => {
+            let string = tys.intern(Ty::Base(BaseType::String));
+            Some(tys.intern(Ty::Option(string)))
+        }
         Some(TestConnectionOp::Connection) => Some(tys.intern(Ty::Connection(frame))),
         None => None,
     };
@@ -1459,7 +1517,7 @@ pub(crate) fn check_test_connection_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()` and `connection()`",
+                "`TestConnection[{}]` has no method `{}` — it has `sent()`, `closed()`, `closeCode()`, `closeReason()` and `connection()`",
                 frame.display(tys),
                 method.name
             ),

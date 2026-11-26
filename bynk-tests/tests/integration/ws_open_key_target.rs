@@ -20,6 +20,10 @@ service feed from websocket(in: Frame, out: Frame) {
     let _ <- Room(room).join(connection)
     ()
   }
+
+  on close () -> Effect[()] by v: Visitor {
+    ()
+  }
 }
 
 agent Room {
@@ -49,6 +53,10 @@ service feed from websocket(in: Frame, out: Frame) {
       let other <- pick(\"other\")
     }
     let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on close (room: String) -> Effect[()] by v: Visitor {
     ()
   }
 }

@@ -678,24 +678,52 @@ export const EmailReply = {
 };
 
 /**
+ * Everything a `Route` verdict does with one message. `reply` answers the
+ * sender, and is applied first. Each `forward` destination, which must be a
+ * verified destination address in the account, then gets the message, de-duplicated
+ * without regard to case; at most 20 are allowed, and more is a handler fault.
+ * `tag` is added to each forward as headers: a name starts with `X-` and holds only
+ * letters, digits and `-`, and a value has no line break (a literal map that breaks
+ * this is `bynk.email.bad_tag`, and a bad entry built at run time is dropped, with
+ * its name logged and never written). Tags apply to forwards only, since a reply's
+ * headers are the runtime's.
+ */
+export interface EmailActions {
+  readonly forward: readonly string[];
+  readonly reply: Option<EmailReply>;
+  readonly tag: ReadonlyMap<string, string>;
+}
+
+export const EmailActions = {
+};
+
+/**
  * What a `from email` handler decides about a message, returned as
  * `Effect[EmailVerdict]` (the agency rule of ADR 0078, as `QueueResult` is).
  * `Accept` handles it and nothing else happens; `Reject(reason)` refuses it
  * permanently with an SMTP rejection carrying `reason`; `Forward(to)` passes it
  * to one destination, which must be a verified destination address in the
- * account; `Reply(message)` answers the sender. One decision per message.
+ * account; `Reply(message)` answers the sender. `Route(actions)` does any
+ * combination of these, `Forward(to)` and `Reply(m)` being shorthands for a
+ * `Route` with only that action; a `Route` with nothing to do behaves as `Accept`.
+ * A `Route` is applied reply first, then each forward; a refusal is logged and
+ * the rest still run, the message is rejected (with the reason of the first
+ * refusal) only when every action was refused, and handled when any succeeded,
+ * because a forward cannot be taken back.
  */
 export type EmailVerdict =
     { readonly tag: "Accept" }
   | { readonly tag: "Reject"; readonly reason: string }
   | { readonly tag: "Forward"; readonly to: string }
-  | { readonly tag: "Reply"; readonly message: EmailReply };
+  | { readonly tag: "Reply"; readonly message: EmailReply }
+  | { readonly tag: "Route"; readonly actions: EmailActions };
 
 export const EmailVerdict = {
   Accept: { tag: "Accept" } as EmailVerdict,
   Reject: (reason: string): EmailVerdict => ({ tag: "Reject", reason }),
   Forward: (to: string): EmailVerdict => ({ tag: "Forward", to }),
   Reply: (message: EmailReply): EmailVerdict => ({ tag: "Reply", message }),
+  Route: (actions: EmailActions): EmailVerdict => ({ tag: "Route", actions }),
 };
 
 /**
@@ -2780,6 +2808,34 @@ export function __deserialise_DmarcVerdict(json: __JsonValue, path: string = "$"
   }
 }
 
+export function __serialise_EmailActions(value: EmailActions): __JsonValue {
+  return {
+    forward: __serialise_List_String(value.forward),
+    reply: __serialise_Option_EmailReply(value.reply),
+    tag: __serialise_Map_String_String(value.tag),
+  };
+}
+
+export function __deserialise_EmailActions(json: __JsonValue, path: string = "$"): Result<EmailActions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_forward: __JsonValue = "forward" in obj ? obj["forward"] : [];
+  const __r_forward = __deserialise_List_String(__d_forward, `${path}.forward`);
+  if (__r_forward.tag === "Err") return __r_forward;
+  const __forward = __r_forward.value;
+  const __d_reply: __JsonValue = "reply" in obj ? obj["reply"] : { kind: "None" };
+  const __r_reply = __deserialise_Option_EmailReply(__d_reply, `${path}.reply`);
+  if (__r_reply.tag === "Err") return __r_reply;
+  const __reply = __r_reply.value;
+  const __d_tag: __JsonValue = "tag" in obj ? obj["tag"] : [];
+  const __r_tag = __deserialise_Map_String_String(__d_tag, `${path}.tag`);
+  if (__r_tag.tag === "Err") return __r_tag;
+  const __tag = __r_tag.value;
+  return Ok({ forward: __forward, reply: __reply, tag: __tag } as EmailActions);
+}
+
 export function __serialise_EmailAttachment(value: EmailAttachment): __JsonValue {
   return {
     filename: value.filename as __JsonValue,
@@ -2987,6 +3043,9 @@ export function __serialise_EmailVerdict(value: EmailVerdict): __JsonValue {
     case "Reply": {
       return { kind: "Reply", message: __serialise_EmailReply(value.message) };
     }
+    case "Route": {
+      return { kind: "Route", actions: __serialise_EmailActions(value.actions) };
+    }
   }
 }
 
@@ -3018,6 +3077,12 @@ export function __deserialise_EmailVerdict(json: __JsonValue, path: string = "$"
       if (__r_message.tag === "Err") return __r_message;
       const __message = __r_message.value;
       return Ok({ tag: "Reply", message: __message } as EmailVerdict);
+    }
+    case "Route": {
+      const __r_actions = __deserialise_EmailActions(obj["actions"], `${path}.actions`);
+      if (__r_actions.tag === "Err") return __r_actions;
+      const __actions = __r_actions.value;
+      return Ok({ tag: "Route", actions: __actions } as EmailVerdict);
     }
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
@@ -5776,23 +5841,44 @@ export function __deserialise_List_Float(json: __JsonValue, path: string = "$"):
   return Ok(out);
 }
 
-export function __serialise_List_EmailAttachment(value: readonly EmailAttachment[]): __JsonValue {
-  return value.map((v) => __serialise_EmailAttachment(v));
+export function __serialise_Option_EmailReply(value: Option<EmailReply>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_EmailReply(value.value) };
+  return { kind: "None" };
 }
 
-export function __deserialise_List_EmailAttachment(json: __JsonValue, path: string = "$"): Result<readonly EmailAttachment[], __BoundaryError> {
-  if (!globalThis.Array.isArray(json)) {
-    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+function __option_value_EmailReply(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_EmailReply(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_EmailReply(json: __JsonValue, path: string = "$"): Result<Option<EmailReply>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<EmailReply>);
   }
-  const out: EmailAttachment[] = [];
-  for (let i = 0; i < json.length; i++) {
-    const item = json[i];
-    const __r_el = __deserialise_EmailAttachment(item, `${path}[${i}]`);
-    if (__r_el.tag === "Err") return __r_el;
-    const __el = __r_el.value;
-    out.push(__el as EmailAttachment);
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<EmailReply>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_EmailReply(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as EmailReply) as Option<EmailReply>);
+    }
   }
-  return Ok(out);
+  const __b = __option_value_EmailReply(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as EmailReply) as Option<EmailReply>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
@@ -5830,6 +5916,25 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
     }
     const __v = entryV;
     out.set(__k as string, __v as string);
+  }
+  return Ok(out);
+}
+
+export function __serialise_List_EmailAttachment(value: readonly EmailAttachment[]): __JsonValue {
+  return value.map((v) => __serialise_EmailAttachment(v));
+}
+
+export function __deserialise_List_EmailAttachment(json: __JsonValue, path: string = "$"): Result<readonly EmailAttachment[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: EmailAttachment[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_EmailAttachment(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as EmailAttachment);
   }
   return Ok(out);
 }

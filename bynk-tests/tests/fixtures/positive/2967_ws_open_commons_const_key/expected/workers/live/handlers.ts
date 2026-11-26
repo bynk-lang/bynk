@@ -7,7 +7,7 @@ import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } fr
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __decodeAgentKey, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export interface Frame {
   readonly text: string;
@@ -111,13 +111,17 @@ export class Room {
     return undefined;
   }
 
+  async __wsClose_feed(connection: Connection<Frame>, deps: {}): globalThis.Promise<void> {
+    return undefined;
+  }
+
   async fetch(request: globalThis.Request): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
     if (url.pathname === "/_bynk/ws/open/feed") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; key: unknown };
       this.__key = __decodeAgentKey(__RoomKey, __payload.key) as string;
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server);
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: "", args: __payload.args, key: __payload.key });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_feed(connection, { ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
@@ -130,6 +134,28 @@ export class Room {
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__RoomWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
     return new globalThis.Response("Not Found", { status: 404 });
+  }
+
+  async webSocketClose(ws: { deserializeAttachment(): unknown; serializeAttachment(value: unknown): void; send(data: string): void; close(code?: number, reason?: string): void }, code: number, reason: string, wasClean: boolean): globalThis.Promise<void> {
+    const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[]; key: unknown } | null;
+    if (__att === null) { ws.close(1011, "no session"); return; }
+    const connection = new __WorkersConnection<Frame>(ws, __att.connId);
+    this.__key = __decodeAgentKey(__RoomKey, __att.key) as string;
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    await __webSocketClosing(ws, __att, { code: code, reason: reason, clean: wasClean }, async (__info) => {
+      await this.__wsClose_feed(connection, { ...{ env: env as never } });
+    });
+  }
+
+  async webSocketError(ws: { deserializeAttachment(): unknown; serializeAttachment(value: unknown): void; send(data: string): void; close(code?: number, reason?: string): void }, error: unknown): globalThis.Promise<void> {
+    const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[]; key: unknown } | null;
+    if (__att === null) { ws.close(1011, "no session"); return; }
+    const connection = new __WorkersConnection<Frame>(ws, __att.connId);
+    this.__key = __decodeAgentKey(__RoomKey, __att.key) as string;
+    const env = this.__env as unknown as globalThis.Record<string, unknown>;
+    await __webSocketErrored(ws, __att, error, async (__info) => {
+      await this.__wsClose_feed(connection, { ...{ env: env as never } });
+    });
   }
 }
 

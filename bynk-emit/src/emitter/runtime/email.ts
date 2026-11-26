@@ -112,11 +112,19 @@ export interface EmailReply {
   readonly html: Option<string>;
 }
 
+/** #3887: everything a `Route` verdict does with one message. */
+export interface EmailActions {
+  readonly forward: readonly string[];
+  readonly reply: Option<EmailReply>;
+  readonly tag: ReadonlyMap<string, string>;
+}
+
 export type EmailVerdict =
   | { readonly tag: "Accept" }
   | { readonly tag: "Reject"; readonly reason: string }
   | { readonly tag: "Forward"; readonly to: string }
-  | { readonly tag: "Reply"; readonly message: EmailReply };
+  | { readonly tag: "Reply"; readonly message: EmailReply }
+  | { readonly tag: "Route"; readonly actions: EmailActions };
 
 /** The part of `postal-mime`'s `Header` this module reads. */
 interface ParsedHeader {
@@ -682,7 +690,94 @@ export function rejectReason(reason: string): string {
   return line === "" ? EMAIL_REJECT_FAULT : line;
 }
 
-const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply"]);
+const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply", "Route"]);
+
+/** The most destinations one `Route` forwards to (#3887): more is a handler fault. */
+export const EMAIL_MAX_ROUTE_FORWARDS = 20;
+
+/** A `tag` header name: `X-` (or `x-`, names are case-insensitive) and letters, digits and `-`, the only headers `forward()` keeps. */
+const TAG_NAME = /^[Xx]-[A-Za-z0-9-]*$/;
+
+/**
+ * The destinations of a `Route`, de-duplicated without regard to case (the first spelling stays),
+ * or a fault if the handler gave more than [`EMAIL_MAX_ROUTE_FORWARDS`] distinct ones.
+ */
+export function routeDestinations(actions: EmailActions): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const to of actions.forward) {
+    const key = String(to).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(String(to));
+  }
+  if (out.length > EMAIL_MAX_ROUTE_FORWARDS) throw new RangeError("too many destinations");
+  return out;
+}
+
+/** The tags `forward()` may carry, and the names of those it dropped (a bad name, or a value with a line break or one `Headers` refuses). */
+export function routeTags(tag: ReadonlyMap<string, string>): { readonly headers: Headers; readonly dropped: string[] } {
+  const headers = new Headers();
+  const dropped: string[] = [];
+  for (const [name, value] of tag) {
+    if (TAG_NAME.test(name) && !/[\r\n]/.test(value)) {
+      try {
+        headers.set(name, value);
+        continue;
+      } catch {
+        // #3887: a value `Headers` refuses (a NUL, a character outside Latin-1) is dropped like any other bad tag.
+      }
+    }
+    dropped.push(oneLine(String(name)).slice(0, 64));
+  }
+  return { headers, dropped };
+}
+
+/**
+ * A `Route` (#3887): the reply first, then each destination, de-duplicated. A refusal is logged by
+ * its class name and the rest still run. The message is rejected, with the reason of the first
+ * refusal, only when every action was refused; if any succeeded it is handled, because a forward
+ * cannot be taken back. A route with nothing to do is `Accept`.
+ */
+async function applyRoute(
+  message: InboundMessage,
+  actions: EmailActions,
+  mail: InboundEmail,
+  makeReply: ReplyFactory,
+  where: string,
+  log: EmailLog,
+): Promise<void> {
+  const destinations = routeDestinations(actions);
+  const { headers, dropped } = routeTags(actions.tag);
+  for (const name of dropped) log(`${where}: tag dropped (${name})`);
+  let succeeded = 0;
+  let firstRefusal: string | undefined;
+  if (actions.reply.tag === "Some") {
+    try {
+      const rawReply = replyMime(mail, actions.reply.value, message.to);
+      await message.reply(await makeReply(message.to, message.from, rawReply));
+      succeeded++;
+    } catch (e) {
+      log(`${where}: reply refused (${errorName(e)})`);
+      firstRefusal ??= EMAIL_REJECT_REPLY;
+    }
+  }
+  for (const to of destinations) {
+    try {
+      await (hasTags(headers) ? message.forward(to, headers) : message.forward(to));
+      succeeded++;
+    } catch (e) {
+      log(`${where}: forward refused (${errorName(e)})`);
+      firstRefusal ??= EMAIL_REJECT_FORWARD;
+    }
+  }
+  if (succeeded === 0 && firstRefusal !== undefined) message.setReject(firstRefusal);
+}
+
+function hasTags(headers: Headers): boolean {
+  for (const _ of headers) return true;
+  return false;
+}
 
 /**
  * A message the service could not process: forwarded to its fallback address, labelled with the
@@ -775,6 +870,8 @@ export async function handleEmail(
     if (verdict === null || typeof verdict !== "object" || !VERDICT_TAGS.has(verdict.tag)) {
       throw new TypeError("not an EmailVerdict");
     }
+    // #3887: a `Route` with too many destinations is a handler fault, settled as any other.
+    if (verdict.tag === "Route") routeDestinations(verdict.actions);
   } catch (e) {
     log(`${where}: handler faulted (${errorName(e)})`);
     await fallBack(message, route, "handler-fault", EMAIL_REJECT_FAULT, where, log);
@@ -802,6 +899,9 @@ export async function handleEmail(
         log(`${where}: reply refused (${errorName(e)})`);
         message.setReject(EMAIL_REJECT_REPLY);
       }
+      return;
+    case "Route":
+      await applyRoute(message, verdict.actions, parsed.mail, makeReply, where, log);
       return;
   }
 }
