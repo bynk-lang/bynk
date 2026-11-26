@@ -73,6 +73,7 @@ pub mod hints;
 pub mod http_rate_limit;
 pub mod icu;
 mod implicit_uses;
+pub use implicit_uses::inline_prelude_units;
 pub mod index;
 pub mod kernel_methods;
 pub mod kernel_op;

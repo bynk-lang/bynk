@@ -1511,9 +1511,9 @@ commons and context, as `Option` can. A unit that names `Ordering` or calls
 written `uses bynk.ordering`; a unit that never mentions them is unchanged, and
 nothing is emitted for it. A type of your own named `Ordering` takes precedence
 in your unit. Building `Ordering.Less` inside a context is not a rebrand
-construction: the type is shared by every context as it is. `compare` is not
-available in a single-file program (`bynk check page.bynk`), which has no other
-units to reach.
+construction: the type is shared by every context as it is. A single-file
+program (`bynk check page.bynk`) has no other unit to `uses`, so the commons is
+merged into it instead, on the same words, and `compare` works there too.
 
 Its variants name an `Ordering` only where the context says so: an expected type
 (`-> Ordering { Less }`), the other operand of `==`, `!=` or an ordering

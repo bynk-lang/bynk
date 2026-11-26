@@ -467,8 +467,7 @@ pub(crate) fn check_compare_method(
         return None;
     }
     let Some(ordering) = ordering_ty(ctx) else {
-        // No `bynk.ordering` to answer with: a single-file program has no other
-        // unit to reach, and a type of the unit's own named `Ordering` is not it.
+        // No `bynk.ordering` to answer with: a type of the unit's own named `Ordering` is not it.
         // Say so for a receiver that would otherwise be orderable.
         if not_orderable(recv_ty, ctx).is_none() {
             ctx.errors.push(CompileError::new(
@@ -477,7 +476,7 @@ pub(crate) fn check_compare_method(
                 "`compare` answers an `Ordering` from `bynk.ordering`, which is not in scope here"
                     .to_string(),
             ).with_note(
-                "a single-file program cannot reach `bynk.ordering`; put the code in a project. A type of your own named `Ordering` also hides it",
+                "a type of your own named `Ordering` hides it, and `bynk.ordering` is then not the `Ordering` in scope",
             ));
             for a in args {
                 let _ = super::type_of(a, None, ctx);
