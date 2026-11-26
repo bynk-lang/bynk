@@ -1323,12 +1323,11 @@ between its `store` fields and its handlers.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
 
-**Renaming a `store` field.** `store New: Cell[T] replaces Old` declares that the
-`Cell` field `Old` was renamed to `New`.
+**Renaming a `store` field.** `store New: Kind[T] replaces Old` declares that the
+field `Old` was renamed to `New`.
 - **What may be named.** `Old` MUST NOT be the field itself, another field the agent
-  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Only a
-  `Cell`, `Set` or `Map` field without `@indexed` or `@unique` MAY carry the clause
-  (`bynk.store.replaces_collection`).
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Any
+  storage kind MAY carry the clause.
 - **What the lock does.** With a lock, `Old` MUST be a field the class's current
   snapshot records, unless the rename has already been recorded
   (`bynk.field.replaces_unknown`), and `New` MUST NOT be recorded beside it
@@ -1336,7 +1335,8 @@ between its `store` fields and its handlers.
   before comparing, so a rename on its own is additive: the class's version increments
   and the new snapshot lists `New` with `renamed_from` naming `Old` and the names `Old`
   was itself renamed from. Earlier snapshots keep their names.
-- **What loading does.** A `Map` or `Set` has every entry under `Old`'s storage keys moved
+- **What loading does.** A `Map`, `Set`, `Cache` or `Log` has every key under `Old`'s
+  storage prefixes (its entries, a `Cache`'s expiries, the postings of its indexes) moved
   to `New`'s, in bounded batches that each commit together, before the first read; an
   entry already under `New` wins (and a collection with entries under both names has its
   count and next sequence merged), and a failure part-way leaves each entry under exactly

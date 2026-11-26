@@ -2062,7 +2062,6 @@
 /reference/diagnostics/bynk.store.kind_arity/
 /reference/diagnostics/bynk.store.kind_unsupported/
 /reference/diagnostics/bynk.store.log_needs_clock/
-/reference/diagnostics/bynk.store.replaces_collection/
 /reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/

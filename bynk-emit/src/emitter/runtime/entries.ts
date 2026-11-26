@@ -572,8 +572,9 @@ export async function readStored<S extends object>(
 // ─────────────────────────────────────────────────────────────────────────────
 // A collection `store` field renamed with `replaces` (#4482).
 //
-// A `Map` or `Set` keeps each entry under a key that carries the field's name, so a rename moves
-// keys; reading the old name is not enough. `moveRenamedEntries` moves them in bounded batches, each
+// A `Map`, `Set`, `Cache` or `Log` keeps each entry (and a `Cache`'s expiry, and a `Map`'s index
+// postings) under a key that carries the field's name, so a rename moves keys; reading the old name
+// is not enough. `moveRenamedEntries` moves them in bounded batches, each
 // a transaction that writes the entries under the new name and deletes them from the old one, so
 // an entry is always under exactly one name and a crash between batches leaves a state the next
 // load continues from. An entry already under the new name wins and the old one is dropped. The
@@ -584,11 +585,21 @@ export async function readStored<S extends object>(
 // shaped it (the old name, which the join below gives it), and the commit that follows writes the
 // entries under the new name and deletes the old keys.
 
-/** One collection rename: `from` is the field's earlier name, `to` its name now. `kind` is its key tag. */
+/**
+ * One collection rename: `from` is the field's earlier name, `to` its name now. `kind` says which key
+ * families the field has, and `indexed` that it keeps index postings (`@indexed` or `@unique`).
+ */
 export interface CollectionRename {
-  readonly kind: "m" | "s";
+  readonly kind: "map" | "set" | "cache" | "log";
+  readonly indexed?: boolean;
   readonly from: string;
   readonly to: string;
+}
+
+/** The key tags a collection's entries sit under: entries first, then a `Cache`'s expiries and index postings. */
+function renameTags(r: CollectionRename): string[] {
+  const entries = r.kind === "set" ? "s" : r.kind === "log" ? "l" : "m";
+  return [entries, ...(r.kind === "cache" ? ["x"] : []), ...(r.indexed === true ? ["i"] : [])];
 }
 
 /** How many entries one batch moves: Cloudflare's limit on keys per batched write. */
@@ -620,32 +631,35 @@ export async function moveRenamedEntries(
 type Meta = { size?: number; seq?: number } & Record<string, unknown>;
 
 async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename, batch: number): Promise<void> {
-  const oldPrefix = `${r.kind}/${encodeKeyPart(r.from)}/`;
-  const newPrefix = `${r.kind}/${encodeKeyPart(r.to)}/`;
   const oldMeta = await storage.get<Meta>(metaKey(r.from));
   const newMeta = await storage.get<Meta>(metaKey(r.to));
   // Entries under both names (a rolled-back deploy wrote under the old one): the old entries take
   // insertion sequences after the new field's, so none collides with one the new field hands out.
   const offset = newMeta === undefined ? 0 : (newMeta.seq ?? 0);
   let movedEntries = 0;
-  for (;;) {
-    const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
-    if (page.size === 0) break;
-    const oldKeys = [...page.keys()];
-    const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
-    const present = await storage.get<unknown>(newKeys);
-    const moved: Record<string, unknown> = {};
-    oldKeys.forEach((k, at) => {
-      if (present.has(newKeys[at]!)) return;
-      const value = page.get(k) as { i?: number };
-      moved[newKeys[at]!] =
-        offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
-    });
-    movedEntries += Object.keys(moved).length;
-    await storage.transaction(async (txn) => {
-      await txn.put(moved);
-      await txn.delete(oldKeys);
-    });
+  for (const [at, tag] of renameTags(r).entries()) {
+    const oldPrefix = `${tag}/${encodeKeyPart(r.from)}/`;
+    const newPrefix = `${tag}/${encodeKeyPart(r.to)}/`;
+    for (;;) {
+      const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
+      if (page.size === 0) break;
+      const oldKeys = [...page.keys()];
+      const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
+      const present = await storage.get<unknown>(newKeys);
+      const moved: Record<string, unknown> = {};
+      oldKeys.forEach((k, i) => {
+        if (present.has(newKeys[i]!)) return;
+        const value = page.get(k) as { i?: number };
+        moved[newKeys[i]!] =
+          offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
+      });
+      // Only the entries count: an expiry or a posting is not one.
+      if (at === 0) movedEntries += Object.keys(moved).length;
+      await storage.transaction(async (txn) => {
+        if (Object.keys(moved).length > 0) await txn.put(moved);
+        await txn.delete(oldKeys);
+      });
+    }
   }
   if (oldMeta === undefined) return;
   // The metadata (the entry count and the next insertion sequence) moves with the entries. When the

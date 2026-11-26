@@ -784,7 +784,7 @@ test("a renamed Map's entries and metadata move under the new name", async () =>
     [metaKey("seen")]: { size: 2, seq: 2 },
     state: PER_ENTRY,
   });
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   assert.deepEqual(
     [...(await storage.list({ prefix: "m/" })).keys()],
     [mapKey("visited", "a"), mapKey("visited", "b/c")],
@@ -802,7 +802,7 @@ test("a renamed Set moves, and an entry already under the new name wins", async 
     [setKey("tags", "y")]: { i: 1 },
     [setKey("labels", "y")]: { i: 7 },
   });
-  await move({}, storage, [{ kind: "s", from: "tags", to: "labels" }]);
+  await move({}, storage, [{ kind: "set", from: "tags", to: "labels" }]);
   assert.deepEqual(await storage.get(setKey("labels", "y")), { i: 7 });
   assert.deepEqual(await storage.get(setKey("labels", "x")), { i: 0 });
   assert.equal((await storage.list({ prefix: "s/tags/" })).size, 0);
@@ -819,7 +819,7 @@ test("entries under both names merge their counts and keep insertion sequences a
     [mapKey("seen", "c")]: { i: 1, v: 3 },
     [metaKey("seen")]: { size: 2, seq: 2 },
   });
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   assert.deepEqual(await storage.get(mapKey("visited", "b")), { i: 1, v: 2 }, "the new name's entry wins");
   assert.deepEqual(await storage.get(mapKey("visited", "c")), { i: 3, v: 3 }, "after the new field's sequences");
   // `b` did not move in, so only `c` is added to the count; the next sequence clears every one.
@@ -830,11 +830,11 @@ test("entries under both names merge their counts and keep insertion sequences a
 test("a rename after a rollback moves the entries the old build wrote", async () => {
   const storage = new InMemoryStorage();
   await storage.put({ [mapKey("seen", "a")]: { i: 0, v: 1 }, [metaKey("seen")]: { size: 1, seq: 1 } });
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   // The deploy is rolled back: the old build reads `seen` (empty) and writes under it again.
   await storage.put({ [mapKey("seen", "z")]: { i: 0, v: 26 }, [metaKey("seen")]: { size: 1, seq: 1 } });
   // Rolled forward again, in a new isolate: nothing is stranded under the old name.
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   assert.equal((await storage.list({ prefix: "m/seen/" })).size, 0);
   assert.deepEqual(
     [...(await storage.list({ prefix: "m/visited/" })).keys()],
@@ -847,17 +847,17 @@ test("a record a migrate step covers, or in the wholesale layout, is left for th
   const storage = new InMemoryStorage();
   await storage.put({ [mapKey("seen", "a")]: { i: 0, v: 1 }, [metaKey("seen")]: { size: 1, seq: 1 } });
   // The record at version 1 is covered by a step from 1: its step reads `old.seen`, so nothing moves.
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }], { steps: [[1, 1]] });
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }], { steps: [[1, 1]] });
   assert.equal((await storage.list({ prefix: "m/seen/" })).size, 1);
   assert.equal((await storage.list({ prefix: "m/visited/" })).size, 0);
   // A record in the wholesale layout has no per-entry keys to move.
-  await move({}, storage, [{ kind: "m", from: "seen", to: "visited" }], { stored: { __v: 1 } });
+  await move({}, storage, [{ kind: "map", from: "seen", to: "visited" }], { stored: { __v: 1 } });
   assert.equal((await storage.list({ prefix: "m/seen/" })).size, 1);
   // An isolate that has finished checks nothing further.
   const self = {};
-  await move(self, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move(self, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   storage.resetStats();
-  await move(self, storage, [{ kind: "m", from: "seen", to: "visited" }]);
+  await move(self, storage, [{ kind: "map", from: "seen", to: "visited" }]);
   assert.equal(storage.stats.lists, 0);
 });
 
@@ -875,7 +875,7 @@ test("a collection larger than a batch moves in batches, and a crash between the
     if (commits === 3) throw new Error("crash");
     return real(closure);
   }) as typeof storage.transaction;
-  const rename = { kind: "m", from: "seen", to: "visited" } as const;
+  const rename = { kind: "map", from: "seen", to: "visited" } as const;
   await assert.rejects(move({}, storage, [rename], { batch: 10 }), /crash/);
   // Per-entry all-or-nothing: every entry is under exactly one name, and the metadata has not moved.
   const old = (await storage.list({ prefix: "m/seen/" })).size;
@@ -889,4 +889,64 @@ test("a collection larger than a batch moves in batches, and a crash between the
   assert.equal((await storage.list({ prefix: "m/seen/" })).size, 0);
   assert.equal((await storage.list({ prefix: "m/visited/" })).size, n);
   assert.deepEqual(await storage.get(metaKey("visited")), { size: n, seq: n });
+});
+
+test("a renamed Cache moves its entries and its expiry entries", async () => {
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [mapKey("sessions", "a")]: { v: 1, exp: 100, i: 0 },
+    [expiryKey("sessions", 100, "a")]: 1,
+    [metaKey("sessions")]: { size: 1, seq: 1 },
+  });
+  await move({}, storage, [{ kind: "cache", from: "sessions", to: "live" }]);
+  assert.deepEqual([...(await storage.list({ prefix: "m/" })).keys()], [mapKey("live", "a")]);
+  assert.deepEqual([...(await storage.list({ prefix: "x/" })).keys()], [expiryKey("live", 100, "a")]);
+  assert.equal(storage.size, 3, "the entry, its expiry and the metadata");
+});
+
+test("a renamed Log moves its entries, whose keys carry a time and a sequence", async () => {
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [logKey("events", 5, 0)]: { t: 5, v: "a" },
+    [logKey("events", 6, 1)]: { t: 6, v: "b" },
+    [metaKey("events")]: { size: 2, seq: 2 },
+  });
+  await move({}, storage, [{ kind: "log", from: "events", to: "journal" }]);
+  assert.deepEqual(
+    [...(await storage.list({ prefix: "l/" })).keys()],
+    [logKey("journal", 5, 0), logKey("journal", 6, 1)],
+  );
+  assert.deepEqual(await storage.get(metaKey("journal")), { size: 2, seq: 2 });
+});
+
+test("a renamed indexed Map moves its index postings with its entries", async () => {
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [mapKey("orders", "o1")]: { i: 0, v: 1 },
+    [postingKey("orders", "byCustomer", "ada", "o1")]: 1,
+    [metaKey("orders")]: { size: 1, seq: 1 },
+  });
+  await move({}, storage, [{ kind: "map", indexed: true, from: "orders", to: "purchases" }]);
+  assert.deepEqual(
+    [...(await storage.list({ prefix: "i/" })).keys()],
+    [postingKey("purchases", "byCustomer", "ada", "o1")],
+  );
+  assert.equal((await storage.list({ prefix: "m/orders/" })).size, 0);
+  assert.equal((await storage.list({ prefix: "i/orders/" })).size, 0);
+});
+
+test("postings moved beside entries that merge do not change the entry count", async () => {
+  // Both names hold entries (a rolled-back deploy): only the moved entries are counted, not the
+  // postings that came with them.
+  const storage = new InMemoryStorage();
+  await storage.put({
+    [mapKey("purchases", "o1")]: { i: 0, v: 1 },
+    [metaKey("purchases")]: { size: 1, seq: 1 },
+    [mapKey("orders", "o2")]: { i: 0, v: 2 },
+    [postingKey("orders", "byCustomer", "bob", "o2")]: 1,
+    [metaKey("orders")]: { size: 1, seq: 1 },
+  });
+  await move({}, storage, [{ kind: "map", indexed: true, from: "orders", to: "purchases" }]);
+  assert.deepEqual(await storage.get(metaKey("purchases")), { size: 2, seq: 2 });
+  assert.equal((await storage.list({ prefix: "i/purchases/" })).size, 1);
 });
