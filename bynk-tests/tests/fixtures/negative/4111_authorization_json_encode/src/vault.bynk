@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Authorization }
+
+fn dump(a: Authorization) -> String {
+    Json.encode(a)
+}

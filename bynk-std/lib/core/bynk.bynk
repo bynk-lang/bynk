@@ -1,7 +1,7 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
-	exports opaque { Secret }
+	exports opaque { Secret, Authorization }
 	exports transparent {
 		Uuid,
 		CronSchedule,
@@ -37,6 +37,17 @@ adapter bynk {
 	text, and `matches(candidate)` the constant-time comparison.
 	---
 	type Secret = opaque String
+
+	---
+	The credential of a request's `Authorization` header: `token.bearer()` for
+	`Bearer <token>` and `password.basic(user)` for `Basic <user:password>`,
+	made from a `Secret`. It carries the secret without ever being text: it has
+	no string form, is not `Eq`, a `Key` or `Codable`, and cannot be stored or
+	sent (`bynk.types.secret_at_boundary`), and it has no reader of its own,
+	because `Fetch` is the only place it is revealed. It is set on a request as
+	`authorization: Some(token.bearer())`.
+	---
+	type Authorization = opaque String
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -88,7 +99,7 @@ adapter bynk {
 		method: Method,
 		url: String,
 		contentType: Option[String],
-		authorization: Option[String],
+		authorization: Option[Authorization],
 		headers: Map[String, String],
 		body: Option[String],
 	}

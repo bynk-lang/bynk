@@ -1604,7 +1604,7 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                     super::equality::NotComparable::Secret => (
                         "bynk.types.secret_not_comparable",
                         format!(
-                            "operator `{}` cannot compare `{shown}` — a `Secret` is compared with `matches`, never `{}`: comparing text is variable-time",
+                            "operator `{}` cannot compare `{shown}` — a `Secret` is compared with `matches`, never `{}`, and an `Authorization` is not compared at all: comparing text is variable-time",
                             op.name(),
                             op.name()
                         ),

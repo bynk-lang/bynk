@@ -6654,7 +6654,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.secret_at_boundary",
         blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
-                stored, sent or encoded form: putting one in a record, event or `store` field, \
+                stored, sent or encoded form (nor has the `Authorization` made from one): putting one in a record, event or `store` field, \
                 or passing one into or out of a handler, would write the secret into data that \
                 is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
                 or a function parameter and use it where it is read, with `matches(candidate)` \
@@ -6668,7 +6668,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.secret_not_comparable",
         blurb: "`==` on text stops at the first character that differs, so how long it takes \
                 tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
-                never compared with `==` or `!=`, nor held in a type that is (a record or sum \
+                never compared with `==` or `!=` (and an `Authorization` not at all), nor held in a type that is (a record or sum \
                 that derives equality). Compare with `secret.matches(candidate)`, which takes \
                 the same time however the two differ, or call `reveal()` where the text itself \
                 is needed.",
@@ -11443,11 +11443,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.secret_at_boundary",
-        "A `bynk` `Secret` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+        "A `bynk` `Secret` or `Authorization` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
     ),
     d(
         "bynk.types.secret_not_comparable",
-        "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
+        "`==` or `!=` on a `bynk` `Secret` or `Authorization`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",

@@ -1,0 +1,2 @@
+bynk.types.some_value_mismatch
+expects `Option[Authorization]`
