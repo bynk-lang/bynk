@@ -67,7 +67,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_json(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"upload.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /json" }), request, ["Bynk realm=\"upload.api\""]), __security_api);
           }
         }
         {
@@ -97,7 +97,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = globalThis.Object.assign({}, __r_body.value, __f.files);
             const result = await surface.http_POST_tiny(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"upload.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /tiny" }), request, ["Bynk realm=\"upload.api\""]), __security_api);
           }
         }
         {
@@ -127,7 +127,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = globalThis.Object.assign({}, __r_body.value, __f.files);
             const result = await surface.http_POST_upload(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"upload.api\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /upload" }), request, ["Bynk realm=\"upload.api\""]), __security_api);
           }
         }
         if (__matchPath("/json", path) !== null) {

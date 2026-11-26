@@ -49,7 +49,7 @@ export default {
           if (method === "POST" && __matchPath("/logout", path) !== null) {
             __route = "POST /logout";
             const result = await surface.http_POST_logout(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /logout" }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -58,7 +58,7 @@ export default {
             const __v = await surface.http_POST_rename__verify(request);
             if (__v.tag === "Err") {
               const result = __v.error;
-              return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+              return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /rename" }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
             }
             if (!await __rateLimitAllowsKey(env.RATELIMIT_RENAME_LIMIT, __v.value.key)) {
               return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
@@ -89,7 +89,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_rename(body, __v.value.principal);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /rename" }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -98,7 +98,7 @@ export default {
             const __v = await surface.http_POST_rename_from__verify(request);
             if (__v.tag === "Err") {
               const result = __v.error;
-              return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+              return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /rename-from" }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
             }
             if (!await __rateLimitAllowsKey(env.RATELIMIT_RENAME_LIMIT, __v.value.key)) {
               return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
@@ -129,7 +129,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_rename_from(__requestHeaders(request, "__Host-session"), body, __v.value.principal);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /rename-from" }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/logout", path) !== null) {

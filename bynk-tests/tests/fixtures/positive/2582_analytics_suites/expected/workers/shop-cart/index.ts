@@ -68,7 +68,7 @@ export default {
             const __raw_plan = __m.params["plan"];
             const plan = __raw_plan;
             const result = await surface.http_POST_signup_Param_plan(plan);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.cart\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /signup/:plan" }), request, ["Bynk realm=\"shop.cart\""]), __security_api);
           }
         }
         if (__matchPath("/signup/:plan", path) !== null) {

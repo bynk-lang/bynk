@@ -44,7 +44,7 @@ export default {
           if (method === "POST" && __matchPath("/bump", path) !== null) {
             __route = "POST /bump";
             const result = await surface.http_POST_bump();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: true }), request, ["Bynk realm=\"counter\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /bump" }), request, ["Bynk realm=\"counter\""]), __security_api);
           }
         }
         if (__matchPath("/bump", path) !== null) {

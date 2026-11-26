@@ -43,7 +43,7 @@ export default {
           if (method === "POST" && __matchPath("/paid", path) !== null) {
             __route = "POST /paid";
             const result = await surface.http_POST_paid();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.paid\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /paid" }), request, ["Bynk realm=\"shop.paid\""]), __security_api);
           }
         }
         if (__matchPath("/paid", path) !== null) {
