@@ -610,6 +610,14 @@ impl DeployLock {
             .map(String::as_str)
     }
 
+    /// #3819: whether the ledger holds a record of `worker`'s classes at all, which a push after
+    /// `@jurisdiction` writes. A Worker deployed without one was last pushed by an older toolchain.
+    pub(crate) fn has_agent_jurisdictions(&self, environment: &str, worker: &str) -> bool {
+        self.environments
+            .get(environment)
+            .is_some_and(|env| env.agent_jurisdictions.contains_key(worker))
+    }
+
     /// #3819: record the classes a successful push of `worker` hosted, and the jurisdiction each
     /// one's ids were minted under, replacing what was recorded for it.
     pub(crate) fn record_agent_jurisdictions(

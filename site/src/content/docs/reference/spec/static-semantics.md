@@ -1001,7 +1001,7 @@ returns (ADR 0109). Constructing or calling an agent MUST use the right key arit
 and type and a declared handler (`bynk.agent.construction_arity`,
 `bynk.agent.key_mismatch`, `bynk.agent.handler_arity`, `bynk.agent.handler_not_found`).
 
-An agent MAY carry `@busyAfter(d)` and `@jurisdiction("eu" | "fedramp")` immediately before `agent`,
+An agent MAY carry `@busyAfter(d)` and `@jurisdiction("eu" | "fedramp" | "us")` immediately before `agent`,
 each at most once, each with one positional literal (`bynk.agent.bad_annotation`,
 `bynk.agent.busy_after_out_of_range`). `@jurisdiction` pins every instance's Durable Object ids to that
 jurisdiction (#3819), the values being those of an `R2` bucket's `@jurisdiction`. The id of a pinned
@@ -1609,7 +1609,7 @@ and `expect` apply to it unchanged. The rules:
   `@worker`, `@jurisdiction` and `@name`, a positive `Int` for `@limit`, a
   `Duration` for `@period`. Every option `K` requires MUST be present
   (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
-  `@jurisdiction("eu" | "fedramp")`. `RateLimit` requires `@limit(n)` and
+  `@jurisdiction("eu" | "fedramp" | "us")`. `RateLimit` requires `@limit(n)` and
   `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
   `Service` requires `@worker("name")`, where `name` is 1 to 63 lowercase
   letters, digits, `-` or `_`, not starting or ending with `-`, and not the

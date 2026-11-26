@@ -740,7 +740,7 @@ capability Indexes = R2 @jurisdiction("eu")
 ```
 
 `Archives` binds as `env.R2_ARCHIVES`, an `[[r2_buckets]]` entry. The second
-`consumes` line names the types below. `@jurisdiction("eu")` (or `"fedramp"`)
+`consumes` line names the types below. `@jurisdiction("eu")` (or `"fedramp"` or `"us"`)
 pins the bucket's jurisdiction when `bynk deploy` creates it; any other value
 is `bynk.capability.invalid_option`. An agent takes the same annotation
 ([data residency](/reference/agents/#jurisdiction)).

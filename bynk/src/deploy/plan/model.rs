@@ -335,7 +335,7 @@ pub(super) fn confirm_destructive(
     lock: &DeployLock,
 ) -> bool {
     confirm_deletions(plan, &opts.confirm_delete, lock)
-        && confirm_jurisdiction_changes(plan, &opts.confirm_jurisdiction)
+        && confirm_jurisdiction_changes(plan, &opts.confirm_jurisdiction, lock)
         && confirm_address_removals(plan, opts.prune, opts.yes)
 }
 
@@ -440,17 +440,21 @@ pub(super) fn confirm_deletions(plan: &Plan<'_>, confirmed: &[String], lock: &De
 }
 
 /// #3819: each agent class of `worker` whose declared `@jurisdiction` differs from the one it was
-/// last pushed under. The ledger's record is what the last push hosted; a Worker that has been
-/// deployed but whose ledger does not list a class (one recorded before `@jurisdiction`) was pushed
-/// unrestricted, since every agent was. A Worker never pushed, and a class the ledger would
-/// call new, have nothing to orphan.
+/// last pushed under. The ledger's record is what the last push hosted. A Worker that has been
+/// deployed but whose ledger holds no record of its classes at all (one from before `@jurisdiction`)
+/// was pushed unrestricted, since every agent was. Once the Worker has a record, a class missing
+/// from it is new, and so is a Worker never pushed: neither has instances to orphan. A class that
+/// is the target of a rename (`agent New replaces Old`) keeps its namespace and its instances, so
+/// it is compared with the old class's record, unless it has been pushed under its new name since.
 fn jurisdiction_changes(
     lock: &DeployLock,
     environment: &str,
     worker: &str,
     objects: &[DurableObject],
+    renames: &[(String, String)],
 ) -> Vec<PlanJurisdictionChange> {
     let deployed = lock.is_deployed(environment, worker);
+    let recorded_any = lock.has_agent_jurisdictions(environment, worker);
     objects
         .iter()
         .filter_map(|object| {
@@ -458,8 +462,15 @@ fn jurisdiction_changes(
             let before = match lock.recorded_agent_jurisdiction(environment, worker, &object.class)
             {
                 Some(recorded) => recorded,
-                None if deployed => UNRESTRICTED_AGENT,
-                None => return None,
+                None => match renames.iter().find(|(_, to)| *to == object.class) {
+                    // The rename's old class was deployed, so it was recorded, or, in a ledger
+                    // from before `@jurisdiction`, was unrestricted.
+                    Some((from, _)) => lock
+                        .recorded_agent_jurisdiction(environment, worker, from)
+                        .or(deployed.then_some(UNRESTRICTED_AGENT))?,
+                    None if deployed && !recorded_any => UNRESTRICTED_AGENT,
+                    None => return None,
+                },
             };
             (before != now).then(|| PlanJurisdictionChange {
                 class: qualified_class(worker, &object.class),
@@ -472,16 +483,26 @@ fn jurisdiction_changes(
 
 /// #3819: a changed `@jurisdiction` orphans every instance of the class, so it must be confirmed
 /// by name — by `--confirm-jurisdiction`, or by typing it at an interactive prompt. `--yes` never
-/// stands in, and a confirmation for a class whose jurisdiction does not change is refused, so a
-/// stale CI flag cannot approve a different change.
-pub(super) fn confirm_jurisdiction_changes(plan: &Plan<'_>, confirmed: &[String]) -> bool {
+/// stands in. A confirmation for a class this plan does not change is refused, so a stale CI flag
+/// cannot approve a different change, unless the ledger already records the class under this Worker:
+/// the change was applied by an earlier deploy (or a deploy that stopped part-way), which is harmless,
+/// as `--confirm-delete` treats a deletion already applied.
+pub(super) fn confirm_jurisdiction_changes(
+    plan: &Plan<'_>,
+    confirmed: &[String],
+    lock: &DeployLock,
+) -> bool {
     let changes: Vec<&PlanJurisdictionChange> = plan
         .contexts
         .iter()
         .flat_map(|c| c.jurisdiction_changes.iter())
         .collect();
     for name in confirmed {
-        if !changes.iter().any(|c| &c.class == name) {
+        let applied = name.rsplit_once('.').is_some_and(|(context, class)| {
+            lock.recorded_agent_jurisdiction(plan.environment, &context.replace('.', "-"), class)
+                .is_some()
+        });
+        if !changes.iter().any(|c| &c.class == name) && !applied {
             emsg!(
                 "bynk: error: --confirm-jurisdiction {name} names no class whose jurisdiction this plan changes; refusing"
             );
@@ -968,6 +989,7 @@ pub(crate) fn derive_plan<'a>(
                         environment,
                         worker,
                         &declared.durable_objects,
+                        &declared.renamed_durable_objects,
                     ),
                     deleted_durable_objects: declared
                         .deleted_durable_objects

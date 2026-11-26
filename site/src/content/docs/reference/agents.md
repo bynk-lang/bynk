@@ -647,9 +647,13 @@ change jurisdiction of durable object shop.Learner (none → eu; its existing in
 
 (`bynk deploy --dry-run` shows it and changes nothing). The deploy refuses until you confirm it by
 name, at the prompt or with `--confirm-jurisdiction shop.Learner` (repeatable); `--yes` never stands
-in, and a flag for a class whose jurisdiction does not change is refused. A deployed Worker whose
-ledger predates this record reads as unrestricted, which is what every agent was, so adding
-`@jurisdiction` to an agent you already deployed asks for the confirmation.
+in, and a flag for a class whose jurisdiction does not change is refused, unless the ledger already
+records the class (an earlier deploy applied the change, so a flag left in a CI script is harmless). A
+deployed Worker whose ledger predates this record reads as unrestricted, which is what every agent
+was, so adding `@jurisdiction` to an agent you already deployed asks for the confirmation. Once the
+ledger records a Worker's classes, a class added later is new and asks for nothing, and a renamed
+class (`agent New replaces Old`) is compared with the old class's jurisdiction, since a rename keeps
+the instances.
 
 **Locally.** `bynk dev` and `wrangler dev` run workerd, which does not implement jurisdictions: it
 throws `Jurisdiction restrictions are not implemented in workerd`. Only on that exact message, the

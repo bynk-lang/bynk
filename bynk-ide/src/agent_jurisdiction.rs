@@ -69,7 +69,7 @@ mod tests {
 
     #[test]
     fn an_invalid_jurisdiction_says_it_is_not_applied() {
-        let src = SRC.replace("\"eu\"", "\"us\"");
+        let src = SRC.replace("\"eu\"", "\"asia\"");
         let at = src.find("jurisdiction").unwrap() + 2;
         let hover = describe_jurisdiction_at(&src, at).expect("hover");
         assert!(hover.contains("not valid"), "{hover}");
