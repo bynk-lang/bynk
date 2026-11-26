@@ -2153,6 +2153,7 @@
 /reference/diagnostics/bynk.transition.may_violate/
 /reference/diagnostics/bynk.transition.no_step_reference/
 /reference/diagnostics/bynk.transition.not_bool/
+/reference/diagnostics/bynk.types.analytics_point_shape/
 /reference/diagnostics/bynk.types.argument_mismatch/
 /reference/diagnostics/bynk.types.asset_at_boundary/
 /reference/diagnostics/bynk.types.bad_field_default/
