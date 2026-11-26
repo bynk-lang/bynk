@@ -2821,7 +2821,11 @@ pub fn check_function_type_boundary_items(
                             reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
-                    reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    if matches!(h.kind, HandlerKind::Http { .. }) {
+                        crate::api_key::reject_http_result(&h.return_type, types, errors);
+                    } else {
+                        reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    }
                 }
             }
             CommonsItem::Agent(a) => {

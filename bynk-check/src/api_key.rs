@@ -425,6 +425,68 @@ pub fn is_generated_agent(agent: &bynk_syntax::ast::AgentDecl) -> bool {
         .is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
 }
 
+/// #3939 (D2 D): whether the named type is, or holds at any depth, an `ApiKeyValue`.
+pub fn carries_api_key_value(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+    fn walk(
+        name: &str,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        seen: &mut HashSet<String>,
+    ) -> bool {
+        let Some(decl) = types.get(name) else {
+            return false;
+        };
+        if crate::context_checks::secret_kind(decl)
+            == Some(crate::context_checks::SecretKind::ApiKeyValue)
+        {
+            return true;
+        }
+        if !seen.insert(name.to_string()) {
+            return false;
+        }
+        let fields: Vec<&TypeRef> = match &decl.body {
+            bynk_syntax::ast::TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
+            bynk_syntax::ast::TypeBody::Sum(s) => s
+                .variants
+                .iter()
+                .flat_map(|v| v.payload.iter().map(|f| &f.type_ref))
+                .collect(),
+            _ => Vec::new(),
+        };
+        fields.into_iter().any(|f| {
+            bynk_syntax::ast::type_ref_heads(f)
+                .iter()
+                .any(|h| walk(h, types, seen))
+        })
+    }
+    walk(name, types, &mut HashSet::new())
+}
+
+/// #3939 (D2 D): an HTTP handler's result. `Effect[HttpResult[ApiKeySecret]]` is the one place a
+/// minted key leaves the service: an `ApiKeySecret` exists only as `mint` answered it (no Bynk
+/// code can build an `ApiKeyValue`), and its codec shows the key that once. Every other result
+/// takes the ordinary boundary rule.
+pub(crate) fn reject_http_result(
+    r: &TypeRef,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut inner = r;
+    if let TypeRef::Effect(t, _) = inner {
+        inner = t;
+    }
+    if let TypeRef::HttpResult(t, _, _) = inner
+        && let TypeRef::Named(id) = &**t
+        && types.get(&id.name).is_some_and(|d| {
+            crate::context_checks::is_firstparty_decl(d)
+                && matches!(d.body, bynk_syntax::ast::TypeBody::Record(_))
+                && d.name.name == "ApiKeySecret"
+        })
+    {
+        return;
+    }
+    crate::context_checks::reject_fn_types(r, "a service handler signature", types, errors);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

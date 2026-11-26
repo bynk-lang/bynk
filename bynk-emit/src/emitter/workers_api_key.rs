@@ -185,3 +185,32 @@ pub(super) fn emit_http_api_key_wrapper(
         span: None,
     }
 }
+
+/// `deps.__apiKey`: the peppers of this context's `ApiKey` actors by name, read from the
+/// environment, for a handler's `Actor.mint`. `None` when it has none. `callDurableObjectMethod`
+/// drops the entry from the `deps` an agent call sends, so a pepper never reaches an agent.
+pub(super) fn api_key_deps_entry(table: &bynk_check::symbols::UnitTable) -> Option<TsObjectEntry> {
+    let mut seams: Vec<ApiKeySeam> = table
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::api_key::api_key_seam_of(a, None))
+        .collect();
+    if seams.is_empty() {
+        return None;
+    }
+    seams.sort_by(|a, b| a.actor.cmp(&b.actor));
+    let esc = crate::emitter::escape_ts_string;
+    let peppers = seams
+        .iter()
+        .map(|s| {
+            (
+                esc(&s.actor),
+                TsExpr::object(vec![("secret".to_string(), secret_probe_expr(&esc(&s.secret)))]),
+            )
+        })
+        .collect();
+    Some(TsObjectEntry::prop(
+        "__apiKey".to_string(),
+        TsExpr::object(peppers),
+    ))
+}

@@ -8959,6 +8959,14 @@ pub fn reject_fn_types(
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
         }
+        // #3939 (D2 D): a record or sum that holds an `ApiKeyValue` (the `ApiKeySecret` that `mint`
+        // answers) would carry the key into storage, a wire body or a log. Its one exit is an HTTP
+        // handler returning it (`api_key::reject_http_result`), which never reaches here.
+        TypeRef::Named(id)
+            if what != CAPABILITY_SIGNATURE && crate::api_key::carries_api_key_value(&id.name, types) =>
+        {
+            errors.push(secret_at_boundary_error(id.span, &id.name, what));
+        }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload
         // may carry one (that is how a `@multipart` body names its parts), but it

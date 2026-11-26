@@ -255,7 +255,7 @@ test("§9 mint: the key is a BynkSecret, the store gets only the digest, and Too
   const pepper = newApiKeyPepper();
   const deps = { __apiKey: { Client: { secret: pepper } } };
   const seen: unknown[] = [];
-  const minted = await mintApiKey(apiKeyPeppersOf(deps, "Client"), "CLIENT_KEY_PEPPER", "acme", "ci", 5, 100, async (req) => {
+  const minted = await mintApiKey<{ tag: "Ok"; value: { id: string; key: { reveal(): string }; } } | { tag: "Err" }>(apiKeyPeppersOf(deps, "Client"), "CLIENT_KEY_PEPPER", "acme", "ci", 5, 100, async (req) => {
     seen.push(req);
     return { tag: "Ok", value: req.handle };
   });
@@ -271,7 +271,7 @@ test("§9 mint: the key is a BynkSecret, the store gets only the digest, and Too
   assert.ok(!JSON.stringify(req).includes(key.slice(-49)), "the store never sees the secret");
   const [d] = await apiKeyDigests(await loadApiKeyPeppers({ secret: pepper }, NAMES), parsed.secret);
   assert.deepEqual(req.digest, d.digest);
-  const refused = await mintApiKey({ secret: pepper }, "P", "acme", "ci", 5, 100, async () => ({ tag: "Err", error: 1 }));
+  const refused = await mintApiKey<unknown>({ secret: pepper }, "P", "acme", "ci", 5, 100, async () => ({ tag: "Err", error: 1 }));
   assert.deepEqual(refused, { tag: "Err", error: { limit: 100 } });
 });
 

@@ -415,7 +415,7 @@ export interface MintRequest {
  * digest goes to the store. The key comes back as a `BynkSecret`, which renders as `<secret>`
  * everywhere but the one wire encoding of the `ApiKeySecret` a handler returns.
  */
-export async function mintApiKey(
+export async function mintApiKey<R>(
   peppers: ApiKeyPeppers,
   pepperName: string,
   prefix: string,
@@ -423,24 +423,15 @@ export async function mintApiKey(
   nowMs: number,
   limit: number,
   store: (req: MintRequest) => Promise<{ readonly tag: "Ok"; readonly value: string } | { readonly tag: "Err"; readonly error: number }>,
-): Promise<
-  | {
-      readonly tag: "Ok";
-      readonly value: {
-        readonly id: string;
-        readonly key: BynkSecret;
-        readonly label: string;
-        readonly created: number;
-        readonly expires: { readonly tag: "None" };
-      };
-    }
-  | { readonly tag: "Err"; readonly error: { readonly limit: number } }
-> {
+): Promise<R> {
   const fresh = await freshApiKey(await loadApiKeyPeppers(peppers, { secret: pepperName }));
   const stored = await store({ handle: fresh.handle, keyNo: fresh.keyNo, digest: fresh.digest, kid: fresh.kid });
-  if (stored.tag === "Err") return { tag: "Err", error: { limit } };
+  // `R` is the call's checked `Result[ApiKeySecret, TooManyKeys]`, whose `ApiKeyId` and
+  // `ApiKeyLabel` are brands: the id is well-formed by construction and the label was checked
+  // as an `ApiKeyLabel` before the call, so the structural value is that type.
+  if (stored.tag === "Err") return { tag: "Err", error: { limit } } as unknown as R;
   const handle = stored.value;
-  return {
+  const minted = {
     tag: "Ok",
     value: {
       id: apiKeyIdOf(prefix, handle, fresh.keyNo),
@@ -450,4 +441,5 @@ export async function mintApiKey(
       expires: { tag: "None" },
     },
   };
+  return minted as unknown as R;
 }

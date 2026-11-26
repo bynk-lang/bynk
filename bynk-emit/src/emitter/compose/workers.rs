@@ -405,6 +405,7 @@ pub fn emit_worker_compose(
     }
     // Divergence 6 of #3928: the session entry is the Workers' alone.
     deps_entries.extend(session_deps_entry(table));
+    deps_entries.extend(crate::emitter::workers_api_key::api_key_deps_entry(table));
     // v0.79: the execution context rides in `deps.__exec` for `detach` sends.
     // Divergence 4 of #3928, the `__exec` gate and value: any handler that
     // needs it, and the request's own `exec` (the Bundle: `call` handlers only,
