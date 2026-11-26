@@ -569,6 +569,101 @@ export async function readStored<S extends object>(
   return joinStored(stored, entries) as S;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A collection `store` field renamed with `replaces` (#4482).
+//
+// A `Map` or `Set` keeps each entry under a key that carries the field's name, so a rename moves
+// keys; reading the old name is not enough. `moveRenamedEntries` moves them in bounded batches, each
+// a transaction that writes the entries under the new name and deletes them from the old one, so
+// an entry is always under exactly one name and a crash between batches leaves a state the next
+// load continues from. An entry already under the new name wins and the old one is dropped. The
+// field's metadata (`c/`) moves last. There is no "done" marker: a rolled-back deploy writes under
+// the old name again, so the check (one bounded `list` per rename, once per isolate) has to repeat.
+//
+// A record a `migrate` step covers is not moved here. The step reads the record as the stored version
+// shaped it (the old name, which the join below gives it), and the commit that follows writes the
+// entries under the new name and deletes the old keys.
+
+/** One collection rename: `from` is the field's earlier name, `to` its name now. `kind` is its key tag. */
+export interface CollectionRename {
+  readonly kind: "m" | "s";
+  readonly from: string;
+  readonly to: string;
+}
+
+/** How many entries one batch moves: Cloudflare's limit on keys per batched write. */
+export const RENAME_BATCH = 128;
+
+// Instances whose renames this isolate has finished, so only the first load pays for the check.
+const renamesDone = new WeakMap<object, true>();
+
+/**
+ * Move every entry of each renamed collection from under its old name to its new one. Called from a
+ * load, which an instance runs one handler at a time, before anything reads the collection. The
+ * first load after a deploy does the whole move, and its cost grows with the collection. `stored`
+ * and `steps` are what `readStored` takes: a record in the wholesale layout, or one a step covers,
+ * keeps its entries where they are.
+ */
+export async function moveRenamedEntries(
+  self: object,
+  storage: DurableObjectStorage,
+  stored: Readonly<Record<string, unknown>>,
+  steps: ReadonlyArray<readonly [number, number]>,
+  renames: readonly CollectionRename[],
+  batch: number = RENAME_BATCH,
+): Promise<void> {
+  if (renamesDone.has(self) || !canReadLazily(stored, steps)) return;
+  for (const rename of renames) await moveOneRename(storage, rename, batch);
+  renamesDone.set(self, true);
+}
+
+type Meta = { size?: number; seq?: number } & Record<string, unknown>;
+
+async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename, batch: number): Promise<void> {
+  const oldPrefix = `${r.kind}/${encodeKeyPart(r.from)}/`;
+  const newPrefix = `${r.kind}/${encodeKeyPart(r.to)}/`;
+  const oldMeta = await storage.get<Meta>(metaKey(r.from));
+  const newMeta = await storage.get<Meta>(metaKey(r.to));
+  // Entries under both names (a rolled-back deploy wrote under the old one): the old entries take
+  // insertion sequences after the new field's, so none collides with one the new field hands out.
+  const offset = newMeta === undefined ? 0 : (newMeta.seq ?? 0);
+  let movedEntries = 0;
+  for (;;) {
+    const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
+    if (page.size === 0) break;
+    const oldKeys = [...page.keys()];
+    const newKeys = oldKeys.map((k) => newPrefix + k.slice(oldPrefix.length));
+    const present = await storage.get<unknown>(newKeys);
+    const moved: Record<string, unknown> = {};
+    oldKeys.forEach((k, at) => {
+      if (present.has(newKeys[at]!)) return;
+      const value = page.get(k) as { i?: number };
+      moved[newKeys[at]!] =
+        offset > 0 && typeof value.i === "number" ? { ...value, i: value.i + offset } : value;
+    });
+    movedEntries += Object.keys(moved).length;
+    await storage.transaction(async (txn) => {
+      await txn.put(moved);
+      await txn.delete(oldKeys);
+    });
+  }
+  if (oldMeta === undefined) return;
+  // The metadata (the entry count and the next insertion sequence) moves with the entries. When the
+  // new name has its own, it counts the entries that moved in, and the next sequence clears both.
+  await storage.transaction(async (txn) => {
+    if (newMeta === undefined) {
+      await txn.put(metaKey(r.to), oldMeta);
+    } else {
+      await txn.put(metaKey(r.to), {
+        ...newMeta,
+        size: (newMeta.size ?? 0) + movedEntries,
+        seq: offset + (oldMeta.seq ?? 0),
+      });
+    }
+    await txn.delete(metaKey(r.from));
+  });
+}
+
 // Join every per-entry key found in storage back into a wholesale-shaped record. It is
 // driven by what is stored, not by the current class's field list: a migration step runs
 // on the record as the *stored* version shaped it, so a collection the current version
@@ -939,4 +1034,4 @@ export async function uniqueDuplicates(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { commitStored as __commitStored, eraseStored as __eraseStored, markErased as __markErased, newErasure as __newErasure, checkUnique as __checkUnique, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };
+export { commitStored as __commitStored, eraseStored as __eraseStored, markErased as __markErased, newErasure as __newErasure, checkUnique as __checkUnique, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, moveRenamedEntries as __moveRenamedEntries, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };
