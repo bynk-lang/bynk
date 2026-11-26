@@ -8666,7 +8666,7 @@ pub fn reject_fn_types(
                     ),
                 )
                 .with_note(
-                    "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey` / `Crypto.importVerifyKey`)",
+                    "keep the key bytes in `Secrets` and import the key again where it is used (`Crypto.importSigningKey`, `Crypto.importVerifyKey` or `Crypto.importCipherKey`)",
                 ),
             );
         }

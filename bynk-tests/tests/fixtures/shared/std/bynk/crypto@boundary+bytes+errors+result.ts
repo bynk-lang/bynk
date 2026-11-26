@@ -54,11 +54,13 @@ export const Signature = {
  */
 export type CryptoError =
     { readonly tag: "InvalidKey"; readonly reason: string }
-  | { readonly tag: "UnsupportedAlgorithm"; readonly name: string };
+  | { readonly tag: "UnsupportedAlgorithm"; readonly name: string }
+  | { readonly tag: "OpenFailed" };
 
 export const CryptoError = {
   InvalidKey: (reason: string): CryptoError => ({ tag: "InvalidKey", reason }),
   UnsupportedAlgorithm: (name: string): CryptoError => ({ tag: "UnsupportedAlgorithm", name }),
+  OpenFailed: { tag: "OpenFailed" } as CryptoError,
 };
 
 /**
@@ -97,6 +99,22 @@ export const VerifyKey = {
 };
 
 /**
+ * A key that encrypts and decrypts, imported by `Crypto.importCipherKey` or
+ * `Crypto.importCipherKeyFromSecret`: AES-256-GCM, held non-extractable. Opaque
+ * and unstorable exactly as `SigningKey` is.
+ */
+export type CipherKey = globalThis.Uint8Array & { readonly __brand: "CipherKey" };
+
+export const CipherKey = {
+  of(value: globalThis.Uint8Array): Result<CipherKey, ValidationError> {
+    return Ok(value as CipherKey);
+  },
+  unsafe(value: globalThis.Uint8Array): CipherKey {
+    return value as CipherKey;
+  },
+};
+
+/**
  * Cryptography over Web Crypto (`crypto.subtle`): digests, HMAC, constant-time
  * comparison, and signing and verification with imported keys. Every operation
  * is an `Effect` because `crypto.subtle` is asynchronous on every platform, so
@@ -121,11 +139,30 @@ export interface Crypto {
   importSigningKeyFromSecret(algorithm: Signature, secret: Secret): globalThis.Promise<Result<SigningKey, CryptoError>>;
   importVerifyKey(algorithm: Signature, key: globalThis.Uint8Array): globalThis.Promise<Result<VerifyKey, CryptoError>>;
   importVerifyJwk(jwk: string): globalThis.Promise<Result<VerifyKey, CryptoError>>;
+  importCipherKey(key: globalThis.Uint8Array): globalThis.Promise<Result<CipherKey, CryptoError>>;
+  importCipherKeyFromSecret(secret: Secret): globalThis.Promise<Result<CipherKey, CryptoError>>;
+  seal(key: CipherKey, plaintext: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
+  open(key: CipherKey, sealed: globalThis.Uint8Array, scope: globalThis.Uint8Array): globalThis.Promise<Result<globalThis.Uint8Array, CryptoError>>;
   sign(key: SigningKey, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
   verify(key: VerifyKey, data: globalThis.Uint8Array, signature: globalThis.Uint8Array): globalThis.Promise<boolean>;
 }
 
 export const __CryptoToken: symbol = globalThis.Symbol("Crypto");
+
+export function __serialise_CipherKey(value: CipherKey): __JsonValue {
+  return __bynkBytesToBase64(value as unknown as globalThis.Uint8Array);
+}
+
+export function __deserialise_CipherKey(json: __JsonValue, path: string = "$"): Result<CipherKey, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "base64 string", actual: typeof json });
+  }
+  const __b = __bynkBytesFromBase64(json);
+  if (__b.tag === "None") {
+    return Err({ kind: "StructuralMismatch", path, expected: "base64 string", actual: "invalid base64" });
+  }
+  return Ok(__b.value as unknown as CipherKey);
+}
 
 export function __serialise_CryptoError(value: CryptoError): __JsonValue {
   switch (value.tag) {
@@ -135,6 +172,8 @@ export function __serialise_CryptoError(value: CryptoError): __JsonValue {
     case "UnsupportedAlgorithm": {
       return { kind: "UnsupportedAlgorithm", name: value.name as __JsonValue };
     }
+    case "OpenFailed":
+      return { kind: "OpenFailed" };
   }
 }
 
@@ -159,6 +198,8 @@ export function __deserialise_CryptoError(json: __JsonValue, path: string = "$")
       const __name = obj["name"];
       return Ok({ tag: "UnsupportedAlgorithm", name: __name } as CryptoError);
     }
+    case "OpenFailed":
+      return Ok({ tag: "OpenFailed" } as CryptoError);
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }

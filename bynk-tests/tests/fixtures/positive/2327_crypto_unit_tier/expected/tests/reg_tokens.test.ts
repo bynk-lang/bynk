@@ -17,6 +17,10 @@ type __Crypto_importSigningKey_Call = { algorithm: __ns_bynk_crypto.Signature; p
 type __Crypto_importSigningKeyFromSecret_Call = { algorithm: __ns_bynk_crypto.Signature; secret: __ns_bynk.Secret };
 type __Crypto_importVerifyKey_Call = { algorithm: __ns_bynk_crypto.Signature; key: globalThis.Uint8Array };
 type __Crypto_importVerifyJwk_Call = { jwk: string };
+type __Crypto_importCipherKey_Call = { key: globalThis.Uint8Array };
+type __Crypto_importCipherKeyFromSecret_Call = { secret: __ns_bynk.Secret };
+type __Crypto_seal_Call = { key: __ns_bynk_crypto.CipherKey; plaintext: globalThis.Uint8Array; scope: globalThis.Uint8Array };
+type __Crypto_open_Call = { key: __ns_bynk_crypto.CipherKey; sealed: globalThis.Uint8Array; scope: globalThis.Uint8Array };
 type __Crypto_sign_Call = { key: __ns_bynk_crypto.SigningKey; data: globalThis.Uint8Array };
 type __Crypto_verify_Call = { key: __ns_bynk_crypto.VerifyKey; data: globalThis.Uint8Array; signature: globalThis.Uint8Array };
 type __Random_uuid_Call = {};
@@ -62,7 +66,8 @@ class __Stub_Crypto {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -143,7 +148,8 @@ async function test_a_token_is_hashed_with_SHA_256() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -192,7 +198,8 @@ async function test_equal_digests_match_and_different_ones_do_not() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -243,7 +250,8 @@ async function test_an_HMAC_matches_RFC_4231_test_case_2() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -292,7 +300,8 @@ async function test_a_webhook_MAC_verifies__and_a_wrong_one_does_not() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -345,7 +354,8 @@ async function test_random_bytes_are_deterministic_under_test() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -394,7 +404,8 @@ async function test_an_Ed25519_signature_matches_RFC_8032_test_1() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -443,7 +454,8 @@ async function test_that_signature_verifies__and_fails_for_other_data() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -495,7 +507,8 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -516,7 +529,7 @@ async function test_a_bad_key_is_an_error_value__not_a_fault() {
 async function test_a_stubbed_digest_is_observed() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["digest", "equal", "hmac", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "sign", "verify", "verifyHmac"], Random: ["bytes", "int", "uuid"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed digest is observed"), { Crypto: ["digest", "equal", "hmac", "importCipherKey", "importCipherKeyFromSecret", "importSigningKey", "importSigningKeyFromSecret", "importVerifyJwk", "importVerifyKey", "open", "seal", "sign", "verify", "verifyHmac"], Random: ["bytes", "int", "uuid"] }, __obs);
     const { hashing, mac, matching, signing, token, verifying, webhook } = __ns_reg_tokens;
     const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type Authorization = __ns_bynk.Authorization;
@@ -545,7 +558,8 @@ async function test_a_stubbed_digest_is_observed() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
