@@ -2848,6 +2848,70 @@ fn check_retry_after(
 const MIN_RETRY_DELAY_MS: i64 = 1_000;
 const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 
+/// `Streaming(s)` (#4394): the stream body of an `HttpResult`. A route that names the element it streams,
+/// `HttpResult[T, E]`, has a body that is exactly a `Stream[E]`; one that names none accepts a
+/// `Stream[String]` or a `Stream[SseEvent]`, as it always did. `(expected_t, expected_e)` are the
+/// surrounding context's `T` and `E`.
+fn check_streaming_variant(
+    span: Span,
+    variant: HttpVariant,
+    args: &[Expr],
+    (expected_t, expected_e): (Option<TyId>, Option<TyId>),
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+
+    let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+                "bynk.types.variant_arity",
+                span,
+                format!(
+                    "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
+                    variant.name,
+                    args.len(),
+                ),
+            ));
+        return None;
+    }
+    if let Some(element) = expected_e {
+        // #4394: the route declares what it streams, `HttpResult[T, E]`: the body is exactly
+        // a `Stream[E]`, and a mismatch is a type error.
+        let want = tys.intern(Ty::Stream(element));
+        let arg_ty = type_of(&args[0], Some(want), ctx)?;
+        if !compatible(arg_ty, want, tys) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `{}` body, because the route declares `HttpResult[_, {}]`, but got `{}`",
+                        variant.name,
+                        want.display(tys),
+                        element.display(tys),
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    } else {
+        let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
+        if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
+            ctx.errors.push(CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    args[0].span,
+                    format!(
+                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
+                        variant.name,
+                        arg_ty.display(tys),
+                    ),
+                ));
+            return None;
+        }
+    }
+    let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
+    Some(tys.intern(Ty::HttpResult(t_ty, expected_e)))
+}
+
 /// Type-check construction of an `HttpResult[T]` variant (v0.9 §4.3).
 ///
 /// Variants come in six payload shapes:
@@ -2984,59 +3048,11 @@ pub(crate) fn check_http_variant(
             let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
             Some(tys.intern(Ty::HttpResult(t_ty, None)))
         }
-        // v0.101 (real-time track slice 1): `Streaming(s)` carries a
-        // `Stream[String]` body, SSE-framed at the boundary. Like the redirect
-        // and message shapes, the JSON body parameter `T` is irrelevant.
+        // v0.101 (real-time track slice 1): `Streaming(s)` carries a stream body, SSE-framed at the
+        // boundary (#4394: exactly a `Stream[E]` when the route names `E`). Like the redirect and
+        // message shapes, the JSON body parameter `T` is irrelevant.
         HttpVariantPayload::Streamed => {
-            let stream_str = Ty::Stream(tys.intern(Ty::Base(BaseType::String)));
-            if args.len() != 1 {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.variant_arity",
-                    span,
-                    format!(
-                        "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
-                        variant.name,
-                        args.len(),
-                    ),
-                ));
-                return None;
-            }
-            if let Some(element) = expected_e {
-                // #4394: the route declares what it streams, `HttpResult[T, E]`: the body is exactly
-                // a `Stream[E]`, and a mismatch is a type error.
-                let want = tys.intern(Ty::Stream(element));
-                let arg_ty = type_of(&args[0], Some(want), ctx)?;
-                if !compatible(arg_ty, want, tys) {
-                    ctx.errors.push(CompileError::new(
-                        "bynk.types.argument_mismatch",
-                        args[0].span,
-                        format!(
-                            "`HttpResult.{}` expects a `{}` body, because the route declares `HttpResult[_, {}]`, but got `{}`",
-                            variant.name,
-                            want.display(tys),
-                            element.display(tys),
-                            arg_ty.display(tys),
-                        ),
-                    ));
-                    return None;
-                }
-            } else {
-                let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
-                if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
-                    ctx.errors.push(CompileError::new(
-                        "bynk.types.argument_mismatch",
-                        args[0].span,
-                        format!(
-                            "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
-                            variant.name,
-                            arg_ty.display(tys),
-                        ),
-                    ));
-                    return None;
-                }
-            }
-            let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-            Some(tys.intern(Ty::HttpResult(t_ty, expected_e)))
+            check_streaming_variant(span, variant, args, (expected_t, expected_e), ctx)
         }
         // v0.111: `Raw(body, contentType)` — the first two-argument shape. The
         // body is a `Bytes` written straight into the response; the content-type

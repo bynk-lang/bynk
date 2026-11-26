@@ -1218,13 +1218,13 @@ exactly a `Stream[E]`, so a `Stream[String]` under `HttpResult[(), SseEvent]` is
 a unit-tier test that matches `Streaming(s)` reads `s` as a `Stream[E]`, with the fields of an
 `SseEvent` to hand:
 
-```bynk
+```bynk,fragment
 on GET("/events") () -> Effect[HttpResult[(), SseEvent]] by v: Visitor {
 	Streaming(Stream.of([SseEvent { data: "hello", event: Some("greeting") }]))
 }
 ```
 
-```bynk
+```bynk,fragment
 case "the events are read as events" {
 	let r <- Events.GET("/events") by Visitor
 	match r {

@@ -4442,6 +4442,7 @@ pub fn type_carries_stream(
 
 /// Every type name a type mentions (heads of applications and named types,
 /// descending through wrappers and generic arguments), pushed onto `out`.
+#[cfg(test)]
 pub(crate) fn collect_type_heads(t: &TypeRef, out: &mut Vec<String>) {
     heads(t, out)
 }
