@@ -1,7 +1,7 @@
 ---
 level: minor
 changelog: `DecodeError.kind` is a closed `DecodeErrorKind` sum shared by every decoder, so a `match` on it is checked for exhaustiveness
-breaking: `DecodeError.kind` is a `DecodeErrorKind`, not a `String`, so `e.kind == "Malformed"` and `e.kind.concat(…)` are type errors (`bynk.types.type_mismatch`; `bynk check --fix` rewrites a comparison with a kind's name to `e.kind == Malformed`, and a string that names no kind gets no fix), and `"\(e.kind)"` still prints the name. A single-file program cannot reach `bynk.decode`, so `e.kind` needs a project. The `400` bodies are unchanged.
+breaking: `DecodeError.kind` is a `DecodeErrorKind`, not a `String`, so `e.kind == "Malformed"` and `e.kind.concat(…)` are type errors (`bynk.types.type_mismatch`; `bynk check --fix` rewrites a comparison with a kind's name to `e.kind == Malformed`, and a string that names no kind gets no fix), and `"\(e.kind)"` still prints the name. A single-file program can no longer read `e.kind` at all: `DecodeErrorKind` is declared in the first-party `bynk.decode` commons, which a single-file program cannot reach (as it cannot reach `ValidationRule` to read `e.rule`), so there `e.kind` is `bynk.types.unknown_field` where it was a `String`; move the code into a project to keep reading it (#4475 tracks lifting this for every prelude type). The `400` bodies are unchanged.
 ---
 
 ## ADR: decode-error-kind

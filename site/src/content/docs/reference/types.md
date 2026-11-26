@@ -821,7 +821,8 @@ fn explain(e: DecodeError) -> String {
 Comparing `e.kind` with a string, `e.kind == "Malformed"`, is a type error with a fix to
 `e.kind == Malformed` (`bynk check --fix`); a string that names no kind gets no fix, and
 the error says so. An HTTP `400` body still writes the kind as text. A single-file
-program cannot reach `bynk.decode`, so `e.kind` is available in a project only.
+program cannot reach `bynk.decode`, so it can no longer read `e.kind` at all (it was a `String` there
+before): `e.kind` is available in a project only, as `e.rule` on a `ValidationError` is.
 
 `Json.decode` accepts the tagged form and also the forms other JSON producers
 use for an optional value:
