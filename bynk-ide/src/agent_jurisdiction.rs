@@ -1,4 +1,4 @@
-//! #3819: hover on an agent's `@jurisdiction("eu" | "fedramp")`: where its state lives, and what a
+//! #3819: hover on an agent's `@jurisdiction("eu" | "fedramp" | "us")`: where its state lives, and what a
 //! change costs.
 
 use bynk_syntax::ast::{CommonsItem, SourceUnit};

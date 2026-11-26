@@ -9,7 +9,7 @@ Bynk creates your resources, so you state the jurisdiction in the source and the
 
 ## Agents
 
-Put `@jurisdiction("eu")` before `agent`:
+Put `@jurisdiction("eu")` before `agent` (the values are `"eu"`, `"fedramp"` and `"us"`, the same for agents, `R2` and `D1`):
 
 ```bynk,fragment
 @jurisdiction("eu")
@@ -31,7 +31,7 @@ already deployed an agent, create a new agent class in the jurisdiction and move
 yourself.
 
 Locally, workerd does not implement jurisdictions, so the Worker uses the unrestricted namespace and
-warns once; a deployed Worker is restricted. Confirm it on the account after the first deploy.
+warns once; a deployed Worker is restricted.
 
 ## R2 buckets
 
@@ -46,7 +46,8 @@ old one, with its objects, where it is.
 
 ## What to check yourself
 
-A jurisdiction is invisible to a query and to `bynk test`, so nothing in a test run proves it. After the
-first deploy, look at the resource in the Cloudflare dashboard (or with `wrangler`) and confirm its
-jurisdiction. See [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
+A jurisdiction is invisible to a query and to `bynk test`, so nothing in a test run proves it. Bynk
+cannot show it either. For an agent, Cloudflare reports it from inside the Durable Object, as
+`ctx.id.jurisdiction`, so a check on a deployed Worker has to read it there. For an `R2` bucket or a `D1`
+database, look at the resource in the Cloudflare dashboard. See [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 for how the plan reports a change.

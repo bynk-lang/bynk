@@ -2,8 +2,8 @@ context demo
 
 consumes bynk.cloudflare { R2 }
 
-// #2323: only `"eu"` and `"fedramp"` are R2 jurisdictions.
-capability Archives = R2 @jurisdiction("us")
+// #2323: only `"eu"`, `"fedramp"` and `"us"` are R2 jurisdictions.
+capability Archives = R2 @jurisdiction("asia")
 
 service probe {
   on call() -> Effect[Int] by Caller {

@@ -609,7 +609,7 @@ storage.
 
 ## Data residency: `@jurisdiction` {#jurisdiction}
 
-`@jurisdiction("eu")` (or `"fedramp"`) before `agent` (#3819) keeps every instance's state in that
+`@jurisdiction("eu")` (or `"fedramp"` or `"us"`) before `agent` (#3819) keeps every instance's state in that
 Cloudflare jurisdiction:
 
 ```bynk,fragment
@@ -627,7 +627,7 @@ agent Learner {
 
 The values are the ones an `R2` bucket and a `D1` database take. The annotation is on the agent, and
 there is no context-wide default. It is written once and takes one string literal; a second
-`@jurisdiction`, a value that is not `"eu"` or `"fedramp"`, or an argument that is not a literal is
+`@jurisdiction`, a value that is not `"eu"`, `"fedramp"` or `"us"`, or an argument that is not a literal is
 `bynk.agent.bad_annotation`. It combines with `@busyAfter` in either order.
 
 An agent's calls, `bynk test` and the generated client are unchanged. The generated Worker reaches the
@@ -652,10 +652,12 @@ ledger predates this record reads as unrestricted, which is what every agent was
 `@jurisdiction` to an agent you already deployed asks for the confirmation.
 
 **Locally.** `bynk dev` and `wrangler dev` run workerd, which does not implement jurisdictions: it
-throws `Jurisdiction restrictions are not implemented in workerd`. Only on that exact error, the
+throws `Jurisdiction restrictions are not implemented in workerd`. Only on that exact message, the
 generated Worker uses the unrestricted namespace and warns once per isolate. Any other failure
 throws, so a deployed Worker can never silently lose the restriction. A jurisdiction is not visible
-in a query or in `bynk test`; check it with `wrangler` or the dashboard after a deploy.
+from Bynk, in a query or in `bynk test`. Cloudflare reports it inside the object, as `ctx.id.jurisdiction`
+in a Durable Object (the value survives a round trip through the id's string form), which is where a live
+check can read it.
 
 See also [keep a project's data in one jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/).
 

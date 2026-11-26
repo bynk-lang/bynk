@@ -1,6 +1,6 @@
 context shop
 
-@jurisdiction("us")
+@jurisdiction("asia")
 agent Learner {
     key id: String
     store n: Cell[Int]

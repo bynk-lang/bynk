@@ -31,10 +31,12 @@ export interface DurableObjectNamespace {
 
 // #3819 (DECISION B): `@jurisdiction("eu")` mints an agent's ids through `namespace.jurisdiction("eu")`, a
 // *different* id from the unrestricted namespace's for the same name. Local `wrangler dev` (workerd)
-// does not implement jurisdictions and throws a "not implemented" error, so locally, and only then,
+// does not implement jurisdictions and throws `Jurisdiction restrictions are not implemented in workerd`,
+// so locally, and only on that message,
 // the unscoped namespace is used, with one warning per isolate. Any other failure throws, so a deployed
 // Worker can never silently lose the restriction.
 let warnedJurisdictionFallback = false;
+const WORKERD_JURISDICTION_UNSUPPORTED = "Jurisdiction restrictions are not implemented in workerd";
 
 export function agentNamespace(binding: DurableObjectNamespace, jurisdiction?: string): DurableObjectNamespace {
   if (jurisdiction === undefined) return binding;
@@ -44,7 +46,7 @@ export function agentNamespace(binding: DurableObjectNamespace, jurisdiction?: s
     }
     return binding.jurisdiction(jurisdiction);
   } catch (e) {
-    const notImplemented = e instanceof Error && /jurisdiction.*not implemented|not implemented.*jurisdiction/i.test(e.message);
+    const notImplemented = e instanceof Error && e.message.includes(WORKERD_JURISDICTION_UNSUPPORTED);
     if (!notImplemented) throw e;
     if (!warnedJurisdictionFallback) {
       warnedJurisdictionFallback = true;

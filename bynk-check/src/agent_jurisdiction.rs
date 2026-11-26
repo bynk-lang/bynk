@@ -1,4 +1,4 @@
-//! #3819: the agent annotation `@jurisdiction("eu" | "fedramp")`, which keeps every instance's
+//! #3819: the agent annotation `@jurisdiction("eu" | "fedramp" | "us")`, which keeps every instance's
 //! state in one Cloudflare jurisdiction.
 //!
 //! A Durable Object id minted through `namespace.jurisdiction("eu")` is a *different* id from the

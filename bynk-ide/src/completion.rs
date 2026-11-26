@@ -2032,6 +2032,7 @@ pub const JURISDICTIONS: &[(&str, &str)] = &[
         "\"fedramp\"",
         "keeps the data in FedRAMP-compliant data centres",
     ),
+    ("\"us\"", "keeps the data in the United States"),
 ];
 
 /// P3 (#2342): the instance completions on a `capability X = …` line, as
@@ -6237,7 +6238,7 @@ fn Box.size(self) -> Int { 1 }
                 .iter()
                 .map(|(v, _)| *v)
                 .collect();
-            assert_eq!(offered, ["\"eu\"", "\"fedramp\""], "{doc}");
+            assert_eq!(offered, ["\"eu\"", "\"fedramp\"", "\"us\""], "{doc}");
         }
         let doc = "service api from http {\n  @period(";
         assert!(instance_option_values(doc, doc.len()).is_empty());

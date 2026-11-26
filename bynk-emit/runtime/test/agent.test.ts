@@ -476,8 +476,9 @@ test("makeWorkersAgent: a jurisdiction reaches the Durable Object through the re
   }
   await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "eu").ping({});
   await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "fedramp").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "us").ping({});
   await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }).ping({});
-  assert.deepEqual(seen, ["eu/k", "fedramp/k", "k"]);
+  assert.deepEqual(seen, ["eu/k", "fedramp/k", "us/k", "k"]);
 });
 
 test("agentNamespace: no jurisdiction is the namespace itself", () => {
@@ -515,6 +516,15 @@ test("agentNamespace: any other failure throws, so a deployed Worker never loses
     },
   };
   assert.throws(() => agentNamespace(broken, "eu"), /the namespace is unavailable/);
+  // A message that merely mentions the words is not workerd's: it must throw too.
+  const similar: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("the jurisdiction is not implemented for this account");
+    },
+  };
+  assert.throws(() => agentNamespace(similar, "eu"), /not implemented for this account/);
   const none: DurableObjectNamespace = { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("null") }) };
   assert.throws(() => agentNamespace(none, "eu"), /has no jurisdiction\(\)/);
 });

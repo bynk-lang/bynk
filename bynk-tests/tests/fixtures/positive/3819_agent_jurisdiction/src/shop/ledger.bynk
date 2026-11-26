@@ -2,7 +2,7 @@ context shop.ledger
 
 // #3819: `@jurisdiction("eu")` keeps every instance's state in the EU. The generated Worker reaches
 // the agent's Durable Object through `namespace.jurisdiction("eu")`, so every caller mints the
-// same restricted id; the value is "eu" or "fedramp".
+// same restricted id; the value is "eu", "fedramp" or "us".
 @jurisdiction("eu")
 agent Learner {
 	key id: String

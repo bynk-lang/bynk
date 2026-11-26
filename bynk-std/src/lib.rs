@@ -700,24 +700,24 @@ pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
 
 /// The jurisdictions a resource may be pinned to, as `@jurisdiction(…)` takes them: an `R2`
 /// bucket (`wrangler r2 bucket create --jurisdiction`), a `D1` database and an agent's Durable
-/// Object namespace (`namespace.jurisdiction(…)`) all take the same two (#3819, #3820).
-pub const JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+/// Object namespace (`namespace.jurisdiction(…)`) all take the same three (#3819, #3820).
+/// Cloudflare lists `eu`, `fedramp` and `us` for each of the three.
+pub const JURISDICTIONS: &[&str] = &["eu", "fedramp", "us"];
 
 /// Whether `text` names a jurisdiction (the shared check of `R2`, `D1` and `agent`).
 pub fn is_jurisdiction(text: &str) -> bool {
     JURISDICTIONS.contains(&text)
 }
 
-/// The note every invalid `@jurisdiction` carries: `the jurisdictions are "eu" and "fedramp"`.
+/// The note every invalid `@jurisdiction` carries: `the jurisdictions are "eu", "fedramp" and "us"`.
 pub fn jurisdictions_note() -> String {
-    format!(
-        "the jurisdictions are {}",
-        JURISDICTIONS
-            .iter()
-            .map(|j| format!("`\"{j}\"`"))
-            .collect::<Vec<_>>()
-            .join(" and ")
-    )
+    let quoted: Vec<String> = JURISDICTIONS.iter().map(|j| format!("`\"{j}\"`")).collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => {
+            format!("the jurisdictions are {} and {last}", rest.join(", "))
+        }
+        _ => format!("the jurisdictions are {}", quoted.join(" and ")),
+    }
 }
 
 /// The Worker binding prefix of a `RateLimit` instance (standard-library P3,
