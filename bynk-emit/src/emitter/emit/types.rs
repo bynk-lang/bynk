@@ -172,7 +172,7 @@ fn emit_refined_type(
     let base_ty = bynk_ts::TsType::named(ts_base(base));
     // #4111: a `Secret` is a runtime `BynkSecret`, not a string, so its text never reaches
     // `String(...)`, `JSON.stringify` or a log line; the brand sits on the wrapper.
-    let is_secret = is_opaque && bynk_check::context_checks::is_secret_decl(t);
+    let is_secret = is_opaque && bynk_check::context_checks::is_secret_carrier(t);
     let carrier_ty = if is_secret {
         bynk_ts::TsType::named("__BynkSecret")
     } else {
@@ -197,7 +197,8 @@ fn emit_refined_type(
         expr: Box::new(branded_carrier(is_secret)),
         ty: bynk_ts::TsType::named(name.clone()),
     };
-    let total = is_secret || bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
+    let total = (is_opaque && bynk_check::context_checks::is_secret_decl(t))
+        || bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
     let of_body = refined_of_body(
         t,
         &name,
@@ -297,7 +298,7 @@ pub(in crate::emitter) fn refined_of_body(
     }
     let cast = bynk_ts::TsExpr::As {
         expr: Box::new(branded_carrier(
-            is_opaque && bynk_check::context_checks::is_secret_decl(t),
+            is_opaque && bynk_check::context_checks::is_secret_carrier(t),
         )),
         ty: bynk_ts::TsType::named(cast_name.to_string()),
     };

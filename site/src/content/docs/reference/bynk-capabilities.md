@@ -99,12 +99,31 @@ a value read from the platform's secret store, built so it cannot leak by accide
   body (`bynk.context.external_construction` in a context), where it stands in for a secret the
   platform would supply. Its `of` returns the `Secret` directly: there is no predicate to fail.
 
-Two methods read one:
+Four methods use one:
 
 | Method | Result |
 |---|---|
-| `reveal()` | the secret's text, as a `String`. The one deliberate exit: write it where the value has to leave, such as an `Authorization` header or a key import. |
+| `reveal()` | the secret's text, as a `String`. The one deliberate exit: write it where the value has to leave. |
 | `matches(candidate: String)` | `true` if `candidate` is the secret. It takes the same time however the two differ, and never returns early on a length mismatch. |
+| `bearer()` | the `Authorization` `Bearer <secret>`, to set as a request's `authorization`. |
+| `basic(user: String)` | the `Authorization` `Basic <user:secret>` (RFC 7617), with this secret as the password. A `user` holding `:` or a control character is not a Basic user and faults. |
+
+An `Authorization` carries a secret into `Fetch` without ever being text. It has every
+restriction a `Secret` has (no string form, not `Eq`, a `Key` or `Codable`, never stored,
+sent or returned) and no reader at all: `Fetch.send` is the one place it is revealed.
+Set it as `authorization: Some(token.bearer())`:
+
+```bynk,fragment
+let res <- Fetch.send(Request {
+	method: Get,
+	url: "https://api.example.test/me",
+	authorization: Some(token.bearer()),
+})
+```
+
+A secret with a stray newline makes `Fetch.send` return `Err(InvalidHeader)` before anything is
+sent. Header values in `Request.headers` stay `String`, so a credential put there is written
+with a visible `reveal()`.
 
 At run time a `Secret` is a wrapper whose `toString`, `toJSON` and inspection all render
 as `<secret>`, so one that reaches a log line or a thrown error's message through a path
@@ -283,7 +302,7 @@ emitting handler itself commits, so an aborted handler emits nothing. See
 model, the subscriber side (`from Events(E)`, `on event`), and how delivery
 differs between Cloudflare and Bundle targets.
 
-The `bynk` unit also exports the transparent types these operations use:
+The `bynk` unit also exports the types these operations use (`Authorization` is opaque):
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -302,11 +321,13 @@ type ParOptions = {
   limit: Int,
 }
 
+type Authorization = opaque String  // made from a Secret: see "The Secret type"
+
 type Request = {
   method: Method,
   url: String,
   contentType: Option[String],
-  authorization: Option[String],
+  authorization: Option[Authorization],
   headers: Map[String, String],
   body: Option[String],
 }
@@ -331,10 +352,12 @@ type EventEnvelope = {
 ### Request and response headers
 
 `contentType` and `authorization` are typed slots for the two common request
-headers. Any other header goes in `headers`. All four optional fields of a
-`Request` (`contentType`, `authorization`, `headers` and `body`) default to
-`None` or an empty map, so a request that sends none of them is just
-`Request { method: Get, url: "…" }`:
+headers. `authorization` takes an [`Authorization`](#the-secret-type), which is
+made from a `Secret` (`token.bearer()`, `password.basic("alice")`), so a
+credential never has to be text. Any other header goes in `headers`. All four
+optional fields of a `Request` (`contentType`, `authorization`, `headers` and
+`body`) default to `None` or an empty map, so a request that sends none of
+them is just `Request { method: Get, url: "…" }`:
 
 ```bynk,fragment
 let req = Request {
@@ -2536,6 +2559,7 @@ No third-party crypto runs and nothing is polyfilled.
 | `verifyHmac(algorithm: Digest, key: Bytes, data: Bytes, mac: Bytes)` | `Effect[Bool]`, compared in constant time. |
 | `equal(a: Bytes, b: Bytes)` | `Effect[Bool]`, compared in constant time for equal lengths. |
 | `importSigningKey(algorithm: Signature, pkcs8: Bytes)` | `Effect[Result[SigningKey, CryptoError]]`. |
+| `importSigningKeyFromSecret(algorithm: Signature, secret: Secret)` | `Effect[Result[SigningKey, CryptoError]]`. The key is the base64 PKCS#8 a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. A secret that is not base64, or not a key for the algorithm, is `InvalidKey`, and the failure names none of its text. |
 | `importVerifyKey(algorithm: Signature, key: Bytes)` | `Effect[Result[VerifyKey, CryptoError]]` — SPKI, or the 32 raw bytes of an Ed25519 key. |
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
@@ -2558,7 +2582,8 @@ the key non-extractable, so its bytes can't be read back. Like a `Stream`, a key
 lives for the call that imported it. It can't be stored, serialised, logged or
 sent, so using one in a `store`, a record or event field, a handler parameter or
 result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
-[`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify.
+[`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify
+(`importSigningKeyFromSecret` takes the secret itself).
 
 **Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
 differing byte, so they are the way to compare a secret, a MAC, a signature or a

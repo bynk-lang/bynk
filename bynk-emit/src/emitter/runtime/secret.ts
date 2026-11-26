@@ -40,6 +40,30 @@ export class BynkSecret {
     return diff === 0;
   }
 
+  /**
+   * The `Authorization` header value `Bearer <secret>`, itself a secret. The result type is the
+   * caller's: the emitted code brands it as the `Authorization` it is assigned to.
+   */
+  bearer<A = BynkSecret>(): A {
+    return new BynkSecret(`Bearer ${this.#value}`) as unknown as A;
+  }
+
+  /**
+   * The `Authorization` header value `Basic <base64(user:secret)>` (RFC 7617), with this secret
+   * as the password. A `user` holding `:` or a control character is not a Basic user and faults,
+   * naming neither the user nor the password.
+   */
+  basic<A = BynkSecret>(user: string): A {
+    // eslint-disable-next-line no-control-regex
+    if (user.includes(":") || /[\u0000-\u001f\u007f]/.test(user)) {
+      throw new Error("bynk: a Basic `Authorization` user cannot hold `:` or a control character");
+    }
+    const bytes = encoder.encode(`${user}:${this.#value}`);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return new BynkSecret(`Basic ${btoa(binary)}`) as unknown as A;
+  }
+
   toString(): string {
     return REDACTED;
   }

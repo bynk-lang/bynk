@@ -1,0 +1,2 @@
+bynk.types.secret_not_comparable
+operator `==` cannot compare `Request`

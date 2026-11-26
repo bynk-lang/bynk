@@ -1,0 +1,14 @@
+context vault
+
+consumes bynk { Fetch, Method, Request }
+
+fn request(url: String) -> Request {
+    Request {
+        method: Get,
+        url: url,
+        contentType: None,
+        authorization: Some("Bearer plain-text"),
+        headers: Map.empty(),
+        body: None,
+    }
+}

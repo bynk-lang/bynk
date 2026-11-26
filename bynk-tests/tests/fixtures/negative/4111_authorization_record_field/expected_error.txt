@@ -1,0 +1,2 @@
+bynk.types.secret_at_boundary
+a `Authorization` cannot appear in a record field

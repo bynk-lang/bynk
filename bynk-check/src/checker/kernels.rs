@@ -1970,43 +1970,47 @@ fn std_cookie_decl() -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
     std_decl("Cookie")
 }
 
-/// A record of the `bynk` adapter by name, from its embedded source (parsed once).
+/// A type of the `bynk` adapter by name, from its embedded source (parsed once).
 pub(crate) fn std_decl(name: &str) -> Option<std::sync::Arc<bynk_syntax::ast::TypeDecl>> {
-    use bynk_syntax::ast::{CommonsItem, SourceUnit};
-    type Decls = Vec<std::sync::Arc<bynk_syntax::ast::TypeDecl>>;
-    static TYPES: std::sync::OnceLock<Decls> = std::sync::OnceLock::new();
-    TYPES
-        .get_or_init(|| {
-            let parsed_types = || -> Option<Decls> {
-                let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
-                let file = crate::project_model::firstparty_file_id(unit);
-                let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
-                let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
-                    + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
-                let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
-                    &tokens,
-                    unit.source,
-                    &mut next_id,
-                )
-                .ok()?;
-                let SourceUnit::Adapter(a) = &parsed else {
-                    return None;
-                };
-                Some(
-                    a.items
-                        .iter()
-                        .filter_map(|i| match i {
-                            CommonsItem::Type(t) => Some(std::sync::Arc::new(t.clone())),
-                            _ => None,
-                        })
-                        .collect(),
-                )
-            };
-            parsed_types().unwrap_or_default()
-        })
+    std_type_decls()
         .iter()
         .find(|t| t.name.name == name)
         .cloned()
+}
+
+/// Every type the `bynk` adapter declares, from its embedded source (parsed once).
+pub(crate) fn std_type_decls() -> &'static [std::sync::Arc<bynk_syntax::ast::TypeDecl>] {
+    use bynk_syntax::ast::{CommonsItem, SourceUnit};
+    type Decls = Vec<std::sync::Arc<bynk_syntax::ast::TypeDecl>>;
+    static TYPES: std::sync::OnceLock<Decls> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        let parsed_types = || -> Option<Decls> {
+            let unit = crate::firstparty::unit(bynk_std::BYNK_UNIT)?;
+            let file = crate::project_model::firstparty_file_id(unit);
+            let tokens = bynk_syntax::lexer::tokenize_in(unit.source, file).ok()?;
+            let mut next_id = crate::project_model::FIRSTPARTY_ID_BASE
+                + unit.id_block * crate::project_model::FIRSTPARTY_ID_BLOCK;
+            let (parsed, _) = bynk_syntax::parser::parse_unit_with_warnings_from(
+                &tokens,
+                unit.source,
+                &mut next_id,
+            )
+            .ok()?;
+            let SourceUnit::Adapter(a) = &parsed else {
+                return None;
+            };
+            Some(
+                a.items
+                    .iter()
+                    .filter_map(|i| match i {
+                        CommonsItem::Type(t) => Some(std::sync::Arc::new(t.clone())),
+                        _ => None,
+                    })
+                    .collect(),
+            )
+        };
+        parsed_types().unwrap_or_default()
+    })
 }
 
 /// #3386: the `SignedCookie` actor `name` declared in this context, if it is one.
@@ -2679,33 +2683,46 @@ pub(crate) fn check_token_claims_method(
     Some(tys.intern(ret))
 }
 
-/// #4111: type a method on a `Secret`. `reveal()` hands the text back as a `String`, which
-/// is the one deliberate exit; `matches(candidate)` compares in constant time and answers a
-/// `Bool`. A `Secret` has nothing else, so any other spelling is a missing method.
+/// #4111: type a method on a `Secret`. `reveal()` hands the text back as a `String`, the one
+/// deliberate exit; `matches(candidate)` compares in constant time and answers a `Bool`;
+/// `bearer()` and `basic(user)` make the `Authorization` a request carries. An `Authorization`
+/// has no methods of its own: `Fetch` is where it is revealed.
 pub(crate) fn check_secret_method(
+    kind: crate::context_checks::SecretKind,
     method: &Ident,
     op: Option<SecretOp>,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
+    use crate::context_checks::SecretKind;
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
-    let Some(op) = op else {
+    let Some(op) = op.filter(|_| kind == SecretKind::Secret) else {
+        let (name, has) = match kind {
+            SecretKind::Secret => (
+                "Secret",
+                " — it has `reveal()`, `matches(candidate)`, `bearer()` and `basic(user)`",
+            ),
+            SecretKind::Authorization => (
+                "Authorization",
+                " — it has none: it is set as a request's `authorization` and revealed only by `Fetch`",
+            ),
+        };
         ctx.errors.push(CompileError::new(
             "bynk.types.method_not_found",
             method.span,
-            format!(
-                "`Secret` has no method `{}` — it has `reveal()` and `matches(candidate)`",
-                method.name
-            ),
+            format!("`{name}` has no method `{}`{has}", method.name),
         ));
         for a in args {
             let _ = type_of(a, None, ctx);
         }
         return None;
     };
-    let expected_args = usize::from(op == SecretOp::Matches);
+    let expected_args = match op {
+        SecretOp::Reveal | SecretOp::Bearer => 0,
+        SecretOp::Matches | SecretOp::Basic => 1,
+    };
     if args.len() != expected_args {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_arity",
@@ -2723,11 +2740,27 @@ pub(crate) fn check_secret_method(
         return None;
     }
     if let Some(a) = args.first() {
-        check_arg(a, string, "the `Secret.matches` candidate", ctx);
+        let what = match op {
+            SecretOp::Matches => "the `Secret.matches` candidate",
+            _ => "the `Secret.basic` user",
+        };
+        check_arg(a, string, what, ctx);
     }
     Some(match op {
         SecretOp::Reveal => string,
         SecretOp::Matches => tys.intern(Ty::Base(BaseType::Bool)),
+        SecretOp::Bearer | SecretOp::Basic => {
+            // The `Authorization` the `bynk` adapter exports: the caller's own entry for it, or its
+            // embedded declaration when the caller consumes no `Authorization` by name.
+            let decl = ctx
+                .input
+                .types
+                .values()
+                .find(|d| crate::context_checks::secret_kind(d) == Some(SecretKind::Authorization))
+                .cloned()
+                .or_else(|| std_decl("Authorization"))?;
+            crate::checker::named_ty(&decl, tys)
+        }
     })
 }
 
