@@ -910,7 +910,7 @@ impl<'a> Plan<'a> {
             return self;
         };
         let mut plan = self;
-        plan.account_notes.push(kv_unchecked_note(&why.to_string()));
+        plan.account_notes.push(kv_unchecked_note(&why));
         plan
     }
 
@@ -1224,12 +1224,20 @@ pub(super) fn confirm(yes: bool) -> bool {
         && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
-/// The note [`Plan::noting_unchecked_kv`] adds, with `why` the credentials are unavailable.
-pub(crate) fn kv_unchecked_note(why: &str) -> String {
-    format!(
-        "bynk: note: the KV drift check was skipped because CLOUDFLARE_API_TOKEN and \
-         CLOUDFLARE_ACCOUNT_ID are not both set: each `reuse` of a KV namespace is what \
-         `bynk.deploy.lock` records, not checked against the account, so one deleted by hand is \
-         not created again; {why}"
-    )
+/// The note [`Plan::noting_unchecked_kv`] adds, for `why` the account cannot be listed: the
+/// missing variables, said as such, or another failure's own text. It speaks of the listing it
+/// skips, never of a create or delete, which a reuse does not make.
+pub(crate) fn kv_unchecked_note(why: &crate::cloudflare::CloudflareError) -> String {
+    let skipped = "each `reuse` of a KV namespace is what `bynk.deploy.lock` records, not checked \
+                   against the account's list of namespaces, so one deleted by hand is not \
+                   created again";
+    match why {
+        crate::cloudflare::CloudflareError::Credentials(_) => format!(
+            "bynk: note: the KV drift check was skipped because CLOUDFLARE_API_TOKEN and \
+             CLOUDFLARE_ACCOUNT_ID are not both set: {skipped}; set both, the token with \"{}\", \
+             to check it",
+            crate::cloudflare::rest::Purpose::Kv.permission()
+        ),
+        other => format!("bynk: note: the KV drift check was skipped: {skipped}; {other}"),
+    }
 }

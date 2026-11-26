@@ -126,7 +126,14 @@ impl CloudflareApi for Account<'_> {
         Ok(ids)
     }
 
+    /// The id comes from `bynk.deploy.lock`, a committed file: one that could not be a namespace
+    /// id is refused before it is put in a request path.
     fn kv_delete(&self, id: &str) -> Result<(), CloudflareError> {
+        if !rest::kv::is_namespace_id(id) {
+            return Err(CloudflareError::Other(format!(
+                "`{id}` in bynk.deploy.lock is not a KV namespace id, so nothing was deleted"
+            )));
+        }
         self.send(Purpose::Kv, &rest::kv::delete(id)).map(drop)
     }
 
@@ -335,6 +342,19 @@ mod tests {
                 "DELETE /accounts/acct/storage/kv/namespaces/0123abcd",
                 "DELETE /accounts/acct/storage/kv/namespaces/0123abcd",
             ]
+        );
+    }
+
+    /// An id that could leave the namespaces path is refused before any request is sent.
+    #[test]
+    fn an_id_that_is_not_a_namespace_id_is_never_sent() {
+        let root = std::env::temp_dir();
+        // A port nothing listens on: a request that was sent would fail differently.
+        let account = account("http://127.0.0.1:9".into(), &root);
+        let e = account.kv_delete("../../workers/scripts/api").unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "`../../workers/scripts/api` in bynk.deploy.lock is not a KV namespace id, so nothing was deleted"
         );
     }
 

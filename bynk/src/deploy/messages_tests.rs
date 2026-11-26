@@ -1141,14 +1141,16 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
     );
     // 1D.4 (#4056 Decision E): the deploy's pre-flight for a REST-managed kind, and the plan's
     // note when KV's drift read is skipped.
-    let kv = crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv)
-        .err()
-        .map(|e| e.to_string())
-        .unwrap_or_default();
-    said("KV namespaces (pre-flight)", kv.clone());
+    let kv = crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv).err();
+    said(
+        "KV namespaces (pre-flight)",
+        kv.as_ref().map(|e| e.to_string()).unwrap_or_default(),
+    );
     said(
         "KV drift read (plan note)",
-        super::plan::kv_unchecked_note(&kv),
+        kv.as_ref()
+            .map(super::plan::kv_unchecked_note)
+            .unwrap_or_default(),
     );
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src/deploy/fixtures/cloudflare_credentials.txt");

@@ -61,7 +61,14 @@ pub(crate) fn listed(body: &serde_json::Value) -> Option<(BTreeSet<String>, usiz
     Some((ids, entries.len()))
 }
 
-/// `DELETE /storage/kv/namespaces/{id}`.
+/// Whether `id` can be a namespace id: Cloudflare's are 32 hex characters, so anything that is
+/// not plain ASCII alphanumeric (a `/`, `..`, `?` or `#` from an edited `bynk.deploy.lock`) is
+/// refused before it can reach a request path.
+pub(crate) fn is_namespace_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
+/// `DELETE /storage/kv/namespaces/{id}`, for an id that [`is_namespace_id`].
 pub(crate) fn delete(id: &str) -> Request {
     Request {
         method: Method::Delete,
@@ -92,6 +99,25 @@ mod tests {
             (delete.method, delete.path.as_str(), delete.body),
             (Method::Delete, "/storage/kv/namespaces/0123abcd", None)
         );
+    }
+
+    #[test]
+    fn only_a_plain_alphanumeric_id_is_a_namespace_id() {
+        assert!(is_namespace_id("0f2a9c1d2e3f40516273849506a7b8c9"));
+        assert!(is_namespace_id("kvabc"));
+        for bad in [
+            "",
+            "../workers/scripts/x",
+            "a/b",
+            "a?b",
+            "a#b",
+            "a b",
+            "a%2Fb",
+            "é",
+        ] {
+            assert!(!is_namespace_id(bad), "{bad:?}");
+        }
+        assert!(!is_namespace_id(&"a".repeat(65)));
     }
 
     #[test]

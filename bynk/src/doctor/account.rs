@@ -38,13 +38,24 @@ const REMEDY: &str = "set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: `bynk 
 /// Docker row: a comment that spells one counts.
 pub(crate) fn declares_account_resources(root: &std::path::Path) -> bool {
     any_bynk_line(root, |line| {
-        capability_of(line, ACCOUNT_KINDS) || line.contains("queue(") || uses_bare_kv(line)
+        capability_of(line, ACCOUNT_KINDS) || has_queue_source(line) || uses_bare_kv(line)
     })
+}
+
+/// Whether `line` names a `queue(…)` source: `queue(` not preceded by an identifier character,
+/// so `enqueue(` and `dequeue(` do not count.
+fn has_queue_source(line: &str) -> bool {
+    starts_a_word(line, "queue(")
 }
 
 /// Whether `line` calls the bare `Kv` (`Kv.get(…)`), which declares the Worker's own namespace.
 fn uses_bare_kv(line: &str) -> bool {
-    line.match_indices("Kv.").any(|(at, _)| {
+    starts_a_word(line, "Kv.")
+}
+
+/// Whether `needle` occurs in `line` with no identifier character just before it.
+fn starts_a_word(line: &str, needle: &str) -> bool {
+    line.match_indices(needle).any(|(at, _)| {
         !line[..at]
             .chars()
             .next_back()
@@ -93,7 +104,7 @@ mod tests {
             "\tlet stored <- Kv.get(keyOf(name))",
         ] {
             assert!(
-                capability_of(line, ACCOUNT_KINDS) || line.contains("queue(") || uses_bare_kv(line),
+                capability_of(line, ACCOUNT_KINDS) || has_queue_source(line) || uses_bare_kv(line),
                 "{line}"
             );
         }
@@ -103,10 +114,12 @@ mod tests {
             "capability Cache = EdgeCache",
             "capability Store = Kvv",
             "let x <- MyKv.get(k)",
+            "do jobs.enqueue(item)",
+            "let next <- dequeue(q)",
         ] {
             assert!(
                 !(capability_of(line, ACCOUNT_KINDS)
-                    || line.contains("queue(")
+                    || has_queue_source(line)
                     || uses_bare_kv(line)),
                 "{line}"
             );

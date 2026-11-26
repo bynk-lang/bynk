@@ -3765,10 +3765,12 @@ fn a_skipped_kv_drift_check_is_noted_with_both_variables() {
         notes[0]
     );
     assert!(
-        notes[0].ends_with("the account it belongs to"),
+        notes[0].ends_with("set both, the token with \"Workers KV Storage: Edit\", to check it"),
         "{}",
         notes[0]
     );
+    // It speaks of the listing it skipped, never of a create or delete.
+    assert!(!notes[0].contains("create or delete"), "{}", notes[0]);
     let set = plan_of(&order, &declared, &recorded).noting_unchecked_kv_with(true, || Ok(()));
     assert!(set.account_notes().is_empty());
     let dry = plan_of(&order, &declared, &recorded).noting_unchecked_kv_with(false, missing);
