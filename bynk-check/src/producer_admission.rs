@@ -18,7 +18,7 @@
 //! keeps the signed envelope its source received (`bynk.queue.dead_letter_signing_mismatch`).
 //! A name that is no context of the project is `bynk.actor.unknown_context`, reported elsewhere.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use bynk_project::{ParsedFile, UnitKind};
@@ -47,6 +47,9 @@ pub fn phase_producer_admission(
         .collect();
     let direct = direct_producers(&contexts, unit_tables);
     let dead_letters = dead_letter_sources(parsed, groups, kinds);
+    // Where an error is already written: a source consumer and its dead-letter consumer that share
+    // an actor would otherwise report one name twice.
+    let mut written: HashSet<bynk_syntax::span::Span> = HashSet::new();
     for ctx_name in &contexts {
         let Some(table) = unit_tables.get(*ctx_name) else {
             continue;
@@ -80,7 +83,7 @@ pub fn phase_producer_admission(
                         &decl
                             .1
                             .map_or_else(|| file.clone(), |f| parsed[f].identity_path()),
-                        errors,
+                        (errors, &mut written),
                     );
                 }
             }
@@ -195,7 +198,7 @@ fn check_refinement(
     producing: &BTreeSet<&str>,
     contexts: &[&str],
     file: &Path,
-    errors: &mut ErrorSink,
+    (errors, written): (&mut ErrorSink, &mut HashSet<bynk_syntax::span::Span>),
 ) {
     let (Some(refinement), Some(predicate)) = (
         actor.refinement.as_ref(),
@@ -218,15 +221,18 @@ fn check_refinement(
             continue;
         }
         reported = true;
-        errors.push_for(
-            Some(file),
-            never_sends(&actor.name.name, &name, queue, span, producing),
-        );
+        if written.insert(span) {
+            errors.push_for(
+                Some(file),
+                never_sends(&actor.name.name, &name, queue, span, producing),
+            );
+        }
     }
     if !reported
         && !contexts
             .iter()
             .any(|c| predicate.admits(c) && producing.contains(c))
+        && written.insert(refinement.predicate.span)
     {
         errors.push_for(
             Some(file),
@@ -391,7 +397,7 @@ mod tests {
             .iter()
             .filter(|c| **c == "bynk.queue.producer_never_sends")
             .count();
-        assert!(n >= 1, "{cats:?}");
+        assert_eq!(n, 1, "{cats:?}");
     }
 
     #[test]
@@ -408,5 +414,22 @@ mod tests {
             !cats.contains(&"bynk.queue.producer_never_sends"),
             "{cats:?}"
         );
+    }
+
+    #[test]
+    fn a_name_shared_by_a_source_and_its_dead_letter_consumer_is_reported_once() {
+        let source = "context shop.fulfil\n\ntype Order = { id: String }\n\nactor FromOrders = Producer where IsContext(shop.orders)\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: \"order-dead\" }\n  on message(order: Order) -> Effect[QueueResult] by FromOrders { Ack }\n}\n\nservice review from queue(\"order-dead\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by FromOrders { Ack }\n}\n";
+        let cats = categories(&[
+            ("shop/fulfil.bynk", source.to_string()),
+            (
+                "shop/orders.bynk",
+                QUIET.replace("shop.audit", "shop.orders"),
+            ),
+        ]);
+        let n = cats
+            .iter()
+            .filter(|c| **c == "bynk.queue.producer_never_sends")
+            .count();
+        assert_eq!(n, 1, "{cats:?}");
     }
 }
