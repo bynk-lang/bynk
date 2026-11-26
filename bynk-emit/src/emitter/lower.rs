@@ -368,7 +368,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             // decide between `Result.Ok` and `HttpResult.Ok`.
             let http = matches!(
                 cx.commons().expr_ty(e.id).as_deref(),
-                Some(Ty::HttpResult(_))
+                Some(Ty::HttpResult(_, _))
             );
             pre.finish(runtime_ctor_call(http.then_some("HttpResult"), "Ok", child))
         }

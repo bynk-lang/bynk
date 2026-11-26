@@ -57,7 +57,7 @@ pub fn ty_to_type_ref(t: TyId, tys: &Types) -> Option<TypeRef> {
         | Ty::Stream(_)
         | Ty::TestConnection(_)
         | Ty::Connection(_)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::HttpOutcome(_)
         | Ty::QueueResult
         | Ty::BoundaryRejection
