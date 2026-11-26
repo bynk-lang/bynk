@@ -381,6 +381,7 @@ pub(crate) fn check_fn_in(
         store_fields: HashMap::new(),
         in_agent_handler: false,
         in_service_handler: false,
+        http_non_get: false,
         in_fn_body: true,
         test_values,
     };
@@ -563,6 +564,7 @@ fn type_static_initialiser(
             store_fields: HashMap::new(),
             in_agent_handler: false,
             in_service_handler: false,
+            http_non_get: false,
             in_fn_body: false,
             test_values: false,
         };

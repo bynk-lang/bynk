@@ -567,6 +567,7 @@
 /book/reference/diagnostics/bynk.http.security_invalid_field/
 /book/reference/diagnostics/bynk.http.security_not_http/
 /book/reference/diagnostics/bynk.http.security_unknown_field/
+/book/reference/diagnostics/bynk.http.status_needs_get/
 /book/reference/diagnostics/bynk.http.stream_body_not_raw/
 /book/reference/diagnostics/bynk.http.stream_body_on_sum_route/
 /book/reference/diagnostics/bynk.http.stream_body_signature/
@@ -1745,6 +1746,7 @@
 /reference/diagnostics/bynk.http.security_invalid_field/
 /reference/diagnostics/bynk.http.security_not_http/
 /reference/diagnostics/bynk.http.security_unknown_field/
+/reference/diagnostics/bynk.http.status_needs_get/
 /reference/diagnostics/bynk.http.stream_body_not_raw/
 /reference/diagnostics/bynk.http.stream_body_on_sum_route/
 /reference/diagnostics/bynk.http.stream_body_signature/

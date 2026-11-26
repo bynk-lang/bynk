@@ -402,6 +402,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | `Created(value)` | 201 | the value, as JSON |
 | `Accepted(value)` | 202 | the value, as JSON |
 | `NoContent` | 204 | none |
+| `PartialContent(body, contentType, range)` | 206 | a `Stream[Bytes]` body and the `ContentRange` it covers, sent as `Content-Range` (see [Partial content](#partial-content)) |
 
 ### 3xx redirection
 
@@ -413,6 +414,7 @@ body.
 | `MovedPermanently(url)` | 301 | `Location` header |
 | `Found(url)` | 302 | `Location` header |
 | `SeeOther(url)` | 303 | `Location` header |
+| `NotModified` | 304 | none (see [Partial content](#partial-content)) |
 | `TemporaryRedirect(url)` | 307 | `Location` header |
 | `PermanentRedirect(url)` | 308 | `Location` header |
 
@@ -1356,6 +1358,45 @@ stream to a response consumes it, since [a stream is read once](/reference/types
 A unit-tier test matches `RawStreamed(body, contentType)` and drains `body` with
 `.collect()`; at the system tier it reads as `Ok(_)`, with the body's text as the
 value.
+
+### Partial content {#partial-content}
+
+`PartialContent(body, contentType, range)` answers a range request with a **206**. `body` is a
+[`Stream[Bytes]`](/reference/types/#stream), as for `RawStreamed`, holding just the bytes the
+client asked for, and `range` is the `ContentRange` (from `bynk`) they cover:
+
+```bynk,fragment
+consumes bynk { ContentRange }
+
+service files from http {
+  on GET("/files/:key") (key: String, headers: Range) -> Effect[HttpResult[()]] by v: Visitor given Blobs {
+    let part <- Blobs.readRange(key, headers.start, headers.end)
+    PartialContent(part.body, part.contentType, ContentRange { start: headers.start, end: headers.end, total: Some(part.size) })
+  }
+}
+```
+
+`ContentRange { start, end, total }` is `Content-Range: bytes start-end/total`: `start` and `end`
+are the first and last byte, inclusive, and `total` is the size of the whole representation, or
+`None` when it is not known (written `*`). The router does not read the request's `Range` header:
+the handler works the range out (an object store such as R2 does it for you) and states what it
+sent. A range that is not one (`start` below 0 or past `end`, or `end` at or past a known `total`)
+is a fault, so the answer is `500` and the route is logged, and a malformed `Content-Range` is never
+sent. The body is streamed like `RawStreamed`'s: no `ETag`, no `content-length`, and a fault mid-body
+aborts the response.
+
+`NotModified` is a **304** with no body, for a conditional read the handler has resolved itself, such
+as an `If-None-Match` an object store checked against its own entity tag. It is separate from the
+automatic `304` the router gives an eligible `GET` (see [Automatic revalidation](#automatic-revalidation-etag--304)),
+which needs no handler code; add the validator headers you want with the [response header
+operations](#response-headers).
+
+Both are answers to a `GET`: a route of another method that names either is
+[`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/), and a `HEAD` is
+answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
+`Content-Range` header, and the generated client reads it as a raw body. A unit-tier test matches
+`PartialContent(body, contentType, range)`; at the system tier a `206` reads back as
+`PartialContent` with the range parsed from `Content-Range`, and a `304` as `NotModified`.
 
 ## Raw request bodies
 

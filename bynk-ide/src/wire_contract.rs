@@ -612,6 +612,7 @@ pub fn response_body(resp: &HttpResponse, success: Option<&WireRef>) -> Option<R
         HttpVariantPayload::Raw
         | HttpVariantPayload::RawTagged
         | HttpVariantPayload::RawStreamed
+        | HttpVariantPayload::Partial
         | HttpVariantPayload::RawError => ResponseBody::Raw,
         HttpVariantPayload::None => return None,
     })

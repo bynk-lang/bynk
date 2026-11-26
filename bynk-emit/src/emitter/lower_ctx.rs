@@ -1811,6 +1811,7 @@ impl<'a> LowerCtx<'a> {
                 P::Streamed => &["stream"],
                 P::Raw | P::RawStreamed => &["body", "contentType"],
                 P::RawTagged => &["body", "contentType", "etag"],
+                P::Partial => &["body", "contentType", "range"],
                 P::RawError => &["status", "body", "contentType"],
             };
             if let Some(field) = fields.get(idx) {

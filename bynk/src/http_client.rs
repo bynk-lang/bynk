@@ -568,6 +568,7 @@ fn replies_of(model: &WireContractModel, problem: bool) -> Result<Vec<ReplyInput
                 HttpVariantPayload::Raw if resp.variant == "Raw" => ReplyPayload::RawEtag,
                 HttpVariantPayload::Raw
                 | HttpVariantPayload::RawStreamed
+                | HttpVariantPayload::Partial
                 | HttpVariantPayload::RawError => ReplyPayload::Raw,
             }
         };

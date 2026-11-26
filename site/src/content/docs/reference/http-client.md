@@ -143,7 +143,7 @@ documents for the route: the declared success when the handler can return it, ea
 | the same, on a route that answers its errors as [problem details](/reference/http/#problem-details) | `{ status, kind, problem: Problem }`, where `Problem` is `{ type, title, status, detail?, kind?, path?, expected?, actual?, violation? }`; on such a route the boundary's `400`, `413` and `415` are `problem: Problem` too, told apart from a handler's error variant at the same status by the `kind` only a router rejection carries |
 | a redirect | `{ status, kind, location: string }` |
 | the boundary's `400` | `{ status: 400, kind: "StructuralMismatch", error: BoundaryError }` |
-| `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
+| `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `PartialContent`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
 | `Streaming(s)` | `{ status, kind, events: AsyncIterable<string> }`; see [Server-sent events](#server-sent-events) |
 
 `kind` is the `HttpResult` variant's name. Two answers can share a status (the
@@ -319,7 +319,7 @@ which Chromium-based browsers, Node and Workers can make; other browsers cannot,
 a `Blob` or bytes there.
 
 An answer whose body the author owns (`Raw`, `RawTagged`, `RawCreated`, `RawStreamed`,
-`RawError`) is not read or decoded. Its member is
+`PartialContent`, `RawError`) is not read or decoded. Its member is
 
 ```ts
 { status, kind, contentType: string, etag?: string | null,

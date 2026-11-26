@@ -1011,9 +1011,17 @@ fn responses_of(
             HttpVariantPayload::Raw
             | HttpVariantPayload::RawTagged
             | HttpVariantPayload::RawStreamed
+            | HttpVariantPayload::Partial
             | HttpVariantPayload::RawError => {
                 // Author-owned bytes under an author-chosen media type; no codec.
                 body("*/*", json!({ "type": "string", "format": "binary" }), e);
+                // #4389: the part's range, `bytes first-last/total` (`*` for an unknown total).
+                if v.payload == HttpVariantPayload::Partial {
+                    e.headers.insert(
+                        "Content-Range".into(),
+                        json!({ "required": true, "schema": { "type": "string" } }),
+                    );
+                }
                 if v.payload == HttpVariantPayload::RawTagged {
                     e.headers.insert(
                         "ETag".into(),

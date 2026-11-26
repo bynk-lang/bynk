@@ -2875,7 +2875,12 @@ pub(crate) fn check_http_variant(
     let expected_t = expected
         .and_then(|t| peel_to_http_result(t, tys))
         .or_else(|| peel_to_http_result(ctx.return_ty, tys));
+    super::partial_content::refuse_off_get(span, variant, ctx);
     match variant.payload {
+        // #4389: `PartialContent(body, contentType, range)`.
+        HttpVariantPayload::Partial => {
+            super::partial_content::check_partial_content(span, variant, args, expected_t, ctx)
+        }
         HttpVariantPayload::Value => {
             if args.len() != 1 {
                 ctx.errors.push(CompileError::new(

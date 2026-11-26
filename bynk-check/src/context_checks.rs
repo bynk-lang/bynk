@@ -3881,6 +3881,10 @@ fn check_service_decls(
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
+                    http_non_get: matches!(
+                        &handler.kind,
+                        HandlerKind::Http { method, .. } if *method != HttpMethod::Get
+                    ),
                     ..checker::HandlerBodyCheck::new(
                         &handler.body,
                         &handler.return_type,
