@@ -76,6 +76,7 @@ pub mod firstparty;
 pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
+pub mod http_pass_through;
 pub mod http_rate_limit;
 pub mod http_rest;
 #[cfg(test)]

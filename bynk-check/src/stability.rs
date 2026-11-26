@@ -451,6 +451,7 @@ mod tests {
                 "bynk.crypto",
                 "bynk.RequestHeaders.entries",
                 "bynk.given.parameters",
+                "bynk.http.ANY",
                 "bynk.http.rest"
             ]
         );

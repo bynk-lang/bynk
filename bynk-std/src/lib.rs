@@ -1589,6 +1589,7 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
     "bynk.given.parameters",
+    "bynk.http.ANY",
     "bynk.http.rest",
 ];
 
@@ -2230,6 +2231,8 @@ mod tests {
                 "bynk.RequestHeaders.entries",
                 // #3959: capability parameters, a language form with no unit.
                 "bynk.given.parameters",
+                // #3752 (D7): the pass-through route form.
+                "bynk.http.ANY",
                 // #3752 (D2): the rest segment, a route form.
                 "bynk.http.rest"
             ]
