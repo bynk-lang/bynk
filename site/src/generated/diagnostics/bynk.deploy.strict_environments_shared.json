@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.strict_environments_shared",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`--strict-environments` found that the environment shares values with `default`, which the flag forbids. The refusal names the environment; give it values of its own."
+}

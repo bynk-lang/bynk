@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.pins_unreadable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk deploy` could not read the agent pin file, so it stopped before planning. The message names the file and why; fix or remove it and run again."
+}

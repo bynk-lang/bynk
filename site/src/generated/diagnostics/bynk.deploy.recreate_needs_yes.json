@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.recreate_needs_yes",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` refuses to plan that without `--yes`; move the data first, then re-run with `--yes`."
+}
