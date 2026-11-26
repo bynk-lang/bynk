@@ -117,6 +117,13 @@ pub fn describe_symbol(source: &str, name: &str) -> Option<String> {
         return Some(describe_fixture(f));
     }
     for item in items {
+        // #4393: an actor is rendered with its siblings in view, to tell a refinement of the
+        // prelude `Sender` / `Producer` from one of a local actor that shadows it.
+        if let CommonsItem::Actor(a) = item
+            && a.name.name == name
+        {
+            return Some(crate::actor_refinement::describe_actor_in(a, items));
+        }
         if let Some(summary) = describe_item(item, name) {
             return Some(summary);
         }

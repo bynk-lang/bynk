@@ -144,7 +144,7 @@ pub fn documentation_model(text: &str) -> Option<DocModel> {
     let (unit_kind, unit_name, unit_span, unit_doc, items) = page_parts(&unit)?;
     let mut entries = Vec::new();
     for item in items {
-        push_item(&mut entries, item);
+        push_item(&mut entries, item, items);
     }
     Some(DocModel {
         unit_name,
@@ -197,7 +197,7 @@ pub fn documentation_model_merged<'a>(
         }
         let start = entries.len();
         for item in items {
-            push_item(&mut entries, item);
+            push_item(&mut entries, item, items);
         }
         for e in &mut entries[start..] {
             e.file = Some(path.to_path_buf());
@@ -219,7 +219,7 @@ pub fn documentation_model_merged<'a>(
 /// will not compile until it is given a page entry, which is the guard against
 /// the "silently-missed declaration kind" risk. Nested members reuse the same
 /// discipline against their own child lists.
-fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem) {
+fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem, unit_items: &[CommonsItem]) {
     match item {
         CommonsItem::Type(t) => {
             out.push(DocEntry {
@@ -332,7 +332,7 @@ fn push_item(out: &mut Vec<DocEntry>, item: &CommonsItem) {
             name: a.name.name.clone(),
             kind: "actor",
             depth: 0,
-            markdown: symbols::describe_actor(a),
+            markdown: crate::actor_refinement::describe_actor_in(a, unit_items),
             documented: a.documentation.is_some(),
             span: a.name.span,
             file: None,
@@ -672,6 +672,28 @@ agent Counter {
                 ("Outcome.Pass", 1, Some(pb)),
             ]
         );
+    }
+
+    /// #4393: the documentation view renders an actor through the same builder hover does, so a
+    /// `Sender` refinement carries what it admits there too, and a shadowed base does not.
+    #[test]
+    fn a_sender_refinement_documents_what_it_admits() {
+        let src = "context demo.mail\n\nactor Authenticated = Sender where Dmarc(DmarcPass)\n";
+        let model = documentation_model(src).expect("a model");
+        let entry = model
+            .entries
+            .iter()
+            .find(|e| e.name == "Authenticated" && e.kind == "actor")
+            .expect("the actor entry");
+        assert!(
+            entry.markdown.contains("Refines `Sender`"),
+            "{}",
+            entry.markdown
+        );
+        let shadowed = "context demo.mail\n\nactor Sender { auth = None }\n\nactor A = Sender where Dmarc(DmarcPass)\n";
+        let model = documentation_model(shadowed).expect("a model");
+        let entry = model.entries.iter().find(|e| e.name == "A").expect("entry");
+        assert!(!entry.markdown.contains("Refines"), "{}", entry.markdown);
     }
 
     #[test]
