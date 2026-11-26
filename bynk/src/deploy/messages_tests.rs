@@ -7,6 +7,10 @@
 //! only stderr, only stdout, both or neither, a signal, and a successful exit whose output cannot
 //! be read) and the answers each kind treats as success ("already exists", "already gone").
 //!
+//! A kind that moves to REST (1D.4, #4056 Decision G) leaves the wrangler cases and gains REST
+//! ones at the end: each operation against a stub that answers each of [`REST_SHAPES`], and its
+//! own successes.
+//!
 //! `fixtures/cloudflare_messages.txt` is the result. A diff in it is a stop-and-report, never a
 //! bless: the typed errors must keep today's text byte for byte.
 
@@ -213,15 +217,6 @@ const OPERATIONS: &[(&str, Run)] = &[
         format!("{:?}", queue_exists(p, "jobs"))
     }),
     ("queues delete", |p, _| shown(delete_queue(p, "jobs"))),
-    ("kv namespace create", |p, _| {
-        shown(create_kv(p, "shop-api"))
-    }),
-    ("kv namespace list", |p, _| {
-        format!("{:?}", live_kv_namespace_ids(p))
-    }),
-    ("kv namespace delete", |p, _| {
-        shown(delete_kv_namespace(p, "0123abcd"))
-    }),
     ("d1 migrations apply (default)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "default"))
     }),
@@ -302,53 +297,6 @@ const SPECIAL: &[(&str, &str, Script)] = &[
                 "Queue \"jobs\" does not exist. To create it, run: wrangler queues create jobs\n",
             ),
         )]),
-    ),
-    (
-        "kv namespace create",
-        "TOML snippet",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "[[kv_namespaces]]\nbinding = \"shop_api\"\nid = \"0123abcd\"\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "kv namespace create",
-        "JSON snippet",
-        Script::Answers(&[(
-            "*",
-            answer(
-                0,
-                "{\n  \"kv_namespaces\": [\n    { \"binding\": \"shop_api\", \"id\": \"4567ef\" }\n  ]\n}\n",
-                "",
-            ),
-        )]),
-    ),
-    (
-        "kv namespace list",
-        "two namespaces",
-        Script::Answers(&[(
-            "*",
-            answer(0, "[{\"id\":\"b2\",\"title\":\"x\"},{\"id\":\"a1\"}]\n", ""),
-        )]),
-    ),
-    (
-        "kv namespace delete",
-        "deleted",
-        Script::Answers(&[("*", answer(0, "Deleted.\n", ""))]),
-    ),
-    (
-        "kv namespace delete",
-        "not found, code 10013",
-        Script::Answers(&[("*", answer(1, "", "namespace not found [code: 10013]\n"))]),
-    ),
-    (
-        "kv namespace delete",
-        "not found, prose",
-        Script::Answers(&[("*", answer(1, "", "Namespace Not Found\n"))]),
     ),
     (
         "d1 migrations apply (default)",
@@ -766,6 +714,7 @@ fn case_with(
         Reached::Provenance(provenance) => Wrangler::new(provenance, &scratch.dir),
         Reached::Script(script) => Wrangler::scripted(script, &scratch.dir),
     };
+    let api = crate::cloudflare::Account::new(api);
     let result = run(&Cx {
         api: &api,
         root: &scratch.dir,
@@ -804,6 +753,103 @@ fn messages() -> String {
         }
         out.push('\n');
     }
+    out.push_str(&rest_kind_messages());
+    out
+}
+
+// ---- 1D.4 (#4056 Decision G): the moved kinds' operations, over REST ----
+
+/// The operations that moved to REST, by the name the fixture gives them: KV (1D.4a).
+const REST_OPERATIONS: &[(&str, Run)] = &[
+    ("KV create (REST)", |p, _| shown(create_kv(p, "shop-api"))),
+    ("KV list (REST)", |p, _| {
+        format!("{:?}", live_kv_namespace_ids(p))
+    }),
+    ("KV delete (REST)", |p, _| {
+        shown(delete_kv_namespace(p, "0123abcd"))
+    }),
+];
+
+/// The answers each moved operation treats specially: its success, and a failure it reads as one.
+const REST_SPECIAL: &[(&str, &str, u16, &str)] = &[
+    (
+        "KV create (REST)",
+        "created",
+        200,
+        r#"{"success":true,"errors":[],"result":{"id":"0123abcd","title":"shop-api"}}"#,
+    ),
+    (
+        "KV create (REST)",
+        "title taken, code 10014",
+        400,
+        r#"{"success":false,"errors":[{"code":10014,"message":"a namespace with this account ID and title already exists"}],"result":null}"#,
+    ),
+    (
+        "KV list (REST)",
+        "two namespaces, one page",
+        200,
+        r#"{"success":true,"result":[{"id":"b2","title":"x"},{"id":"a1","title":"y"}],"result_info":{"page":1,"per_page":100,"count":2,"total_count":2,"total_pages":1}}"#,
+    ),
+    (
+        "KV delete (REST)",
+        "deleted",
+        200,
+        r#"{"success":true,"errors":[],"result":null}"#,
+    ),
+    (
+        "KV delete (REST)",
+        "not found, code 10013",
+        404,
+        r#"{"success":false,"errors":[{"code":10013,"message":"delete namespace: 'namespace not found'"}],"result":null}"#,
+    ),
+];
+
+/// One moved operation's case: its request, and what it returned.
+fn rest_case(
+    operation: &str,
+    run: Run,
+    shape: &str,
+    answer: Option<(u16, &'static str)>,
+) -> String {
+    let (base, seen) = match answer {
+        // A port nothing listens on: the connection is refused.
+        None => ("http://127.0.0.1:9".to_string(), None),
+        Some((status, body)) => {
+            let (base, seen) = answering(status, body);
+            (base, Some(seen))
+        }
+    };
+    let scratch = Scratch::new();
+    // A wrangler that fails loudly: a moved operation that reached it would say so.
+    let api = crate::cloudflare::Account::with_rest(
+        Wrangler::scripted("echo \"wrangler ran: $*\" >&2; exit 1", &scratch.dir),
+        crate::migrate::live::tests::rest(base.clone()),
+    );
+    let result = run(&api, &scratch.dir);
+    let mut out = format!("== {operation} · {shape}\n");
+    if let Some(seen) = seen {
+        out.push_str(&format!("   request: {}\n", seen.join().unwrap()));
+    }
+    let result = os_error_number(&result.replace(&base, "<base>"));
+    for (i, line) in result.lines().enumerate() {
+        out.push_str(if i == 0 { "   -> " } else { "      " });
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+fn rest_kind_messages() -> String {
+    let mut out = String::new();
+    for (operation, run) in REST_OPERATIONS {
+        for (shape, answer) in REST_SHAPES {
+            out.push_str(&rest_case(operation, *run, shape, *answer));
+        }
+        for (_, shape, status, body) in REST_SPECIAL.iter().filter(|(op, ..)| op == operation) {
+            out.push_str(&rest_case(operation, *run, shape, Some((*status, body))));
+        }
+        out.push('\n');
+    }
     out
 }
 
@@ -822,6 +868,12 @@ fn every_wrangler_operation_of_the_resource_kinds_keeps_its_messages() {
     for (operation, _, _) in SPECIAL {
         assert!(
             OPERATIONS.iter().any(|(op, _)| op == operation),
+            "a special case names an operation the fixture does not run: {operation}"
+        );
+    }
+    for (operation, ..) in REST_SPECIAL {
+        assert!(
+            REST_OPERATIONS.iter().any(|(op, _)| op == operation),
             "a special case names an operation the fixture does not run: {operation}"
         );
     }
@@ -1086,6 +1138,17 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
             .err()
             .map(|e| e.to_string())
             .unwrap_or_default(),
+    );
+    // 1D.4 (#4056 Decision E): the deploy's pre-flight for a REST-managed kind, and the plan's
+    // note when KV's drift read is skipped.
+    let kv = crate::cloudflare::rest::for_kind(crate::cloudflare::rest::Purpose::Kv)
+        .err()
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    said("KV namespaces (pre-flight)", kv.clone());
+    said(
+        "KV drift read (plan note)",
+        super::plan::kv_unchecked_note(&kv),
     );
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src/deploy/fixtures/cloudflare_credentials.txt");

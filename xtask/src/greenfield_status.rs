@@ -14,11 +14,11 @@
 //! crate-hygiene track's M-3 ratchet, `model_readers_beyond_emit` (B1, #2939), and its H-3 gate,
 //! `unused_deps` (A4, #2976).
 //!
-//! **Thirty-four are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
+//! **Thirty-five are gated**, committed and diffed: `workspace_lints`, `fs_below_driver`,
 //! `options_sources`, `hoist_sinks`, `span_keyed_maps`, `emit_diagnostics`,
 //! `ide_emit_edge`, `ast_importers`, `emit_abi_shapes`, `ts_writes`, `ts_any`,
 //! `verbatim_origins`, `verbatim_sites`, `incremental_query_types`,
-//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`. Ten of these are
+//! `unconsumed_ir_items`, `diagnostic_coverage`, `model_readers_beyond_emit`, `unused_deps`, `explained_codes`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`, `wrangler_resource_ops`. Ten of these are
 //! zero/closure-shaped — a boolean, or a count pinned at a small, argued floor
 //! (`ast_importers` = 5, `emit_abi_shapes` = 1). Phase 7's own four are the same shape:
 //! each converged toward an argued floor over dozens of slices, the same trajectory
@@ -42,7 +42,7 @@
 //! **Two kinds of gate** (#3679, amending ADR 0389/0390). Every gated probe is
 //! *exact-match*: a live reading that differs from its committed row fails unless a
 //! pending file names it in `probes:`. The [`GROWTH_PROBES`] (`ts_writes`, `ts_any`,
-//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`) are also *directional*:
+//! `emit_abi_shapes`, `verbatim_sites`, `ts_raw_sites_emit`, `ts_raw_sites_testgen`, `ts_text_idents`, `span_keyed_maps`, `emit_thread_locals`, `emit_silent_fallbacks`, `emit_print_calls`, `testgen_print_calls`, `import_prediction_fns`, `node_builder_defs`, `deploy_kind_accessors`, `env_protocol_literals`, `tool_spawn_sites`, `deploy_ledger_writes`, `binding_kind_homes`, `wrangler_key_literals`, `cloudflare_client_sites`, `wrangler_resource_ops`) are also *directional*:
 //! `growth_probes_never_rise` (`xtask/tests/greenfield_status.rs`) fails when the
 //! live leading count exceeds the committed one unless a pending file *raises* the
 //! probe with a reason (`raises:`), which the stamp then records in
@@ -84,6 +84,9 @@ use std::process::Command;
 
 use crate::module_lines::{BACK_HALF_CRATES, gated_stems, is_test_only_file};
 
+mod wrangler_resource_ops;
+use wrangler_resource_ops::wrangler_resource_ops;
+
 /// One probe's result. `gated` probes are diffed against the committed table by
 /// [`crate::greenfield_status::gated_disagreements`]; the rest are reported only.
 pub struct Probe {
@@ -119,7 +122,7 @@ pub fn run(root: &Path) -> Report {
 /// The gated probes' names, in [`run_gated`]'s order — what a pending file's
 /// `probes` key may cite. `greenfield_status_table_is_current` asserts this
 /// matches the probes [`run_gated`] actually returns, so the two cannot drift.
-pub const GATED_PROBES: [&str; 34] = [
+pub const GATED_PROBES: [&str; 35] = [
     "workspace_lints",
     "fs_below_driver",
     "options_sources",
@@ -148,6 +151,7 @@ pub const GATED_PROBES: [&str; 34] = [
     "binding_kind_homes",
     "wrangler_key_literals",
     "cloudflare_client_sites",
+    "wrangler_resource_ops",
     "incremental_query_types",
     "unconsumed_ir_items",
     "diagnostic_coverage",
@@ -158,12 +162,12 @@ pub const GATED_PROBES: [&str; 34] = [
 
 /// The gated probes that only a reasoned, recorded `raises:` may increase
 /// (#3679, ADR 0389/0390 amended): `ts_writes`, `ts_any`, `emit_abi_shapes`,
-/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b), `wrangler_key_literals` (1C.2), `cloudflare_client_sites` (1D.3a). Probes already at a zero or closure
+/// `verbatim_sites`, `ts_raw_sites_emit` and `ts_raw_sites_testgen` (the split of `ts_raw_sites`, #3681), `ts_text_idents` (#3681), `span_keyed_maps`, `emit_thread_locals` (1A.19), `emit_silent_fallbacks` (1A.34), `emit_print_calls` (1A.35b), `testgen_print_calls` (1B.2a), `import_prediction_fns` (1A.36a), `node_builder_defs` (1B.4a), `deploy_kind_accessors` (1D.1a), `env_protocol_literals` (1D.5a), `tool_spawn_sites` (1D.5b), `deploy_ledger_writes` (1D.2a), `binding_kind_homes` (1C.1b), `wrangler_key_literals` (1C.2), `cloudflare_client_sites` (1D.3a), `wrangler_resource_ops` (1D.4a). Probes already at a zero or closure
 /// floor are excluded (their exact-match row pins them), as are
 /// `verbatim_origins` (an argued floor of 2) and `model_readers_beyond_emit`
 /// (which has the opposite direction). A subset of [`GATED_PROBES`], pinned by
 /// a unit test.
-pub const GROWTH_PROBES: [&str; 20] = [
+pub const GROWTH_PROBES: [&str; 21] = [
     "ts_writes",
     "ts_any",
     "emit_abi_shapes",
@@ -184,9 +188,10 @@ pub const GROWTH_PROBES: [&str; 20] = [
     "binding_kind_homes",
     "wrangler_key_literals",
     "cloudflare_client_sites",
+    "wrangler_resource_ops",
 ];
 
-/// The thirty-four gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
+/// The thirty-five gated (zero/closure/ratchet) probes only — what [`gated_disagreements`] diffs.
 pub fn run_gated(root: &Path) -> Vec<Probe> {
     vec![
         workspace_lints(root),
@@ -217,6 +222,7 @@ pub fn run_gated(root: &Path) -> Vec<Probe> {
         binding_kind_homes(root),
         wrangler_key_literals(root),
         cloudflare_client_sites(root),
+        wrangler_resource_ops(root),
         incremental_query_types(root),
         unconsumed_ir_items(root),
         diagnostic_coverage(root),
@@ -5160,7 +5166,7 @@ pub fn render_table(report: &Report) -> String {
          `import_prediction_fns` added by 1A.36a; `deploy_kind_accessors` added by 1D.1a; \
          `env_protocol_literals` added by 1D.5a; `tool_spawn_sites` added by 1D.5b; \
          `deploy_ledger_writes` added by 1D.2a; `testgen_print_calls` added by 1B.2a; `node_builder_defs` added by 1B.4a; \
-         `binding_kind_homes` added by 1C.1b; `wrangler_key_literals` added by 1C.2; `cloudflare_client_sites` added by 1D.3a. Thirty-five \
+         `binding_kind_homes` added by 1C.1b; `wrangler_key_literals` added by 1C.2; `cloudflare_client_sites` added by 1D.3a; `wrangler_resource_ops` added by 1D.4a. Thirty-six \
          probes are gated — a disagreement between this file and a fresh run fails \
          `greenfield_status_table_is_current` (`xtask/tests/greenfield_status.rs`). \
          Five are trend probes, reported only.\n\n",
@@ -5554,7 +5560,8 @@ mod tests {
         | `deploy_ledger_writes` | yes | 25 |\n\
         | `binding_kind_homes` | yes | 2 |\n\
         | `wrangler_key_literals` | yes | 0 |\n\
-        | `cloudflare_client_sites` | yes | 34 |\n";
+        | `cloudflare_client_sites` | yes | 34 |\n\
+        | `wrangler_resource_ops` | yes | 15 (a) |\n";
 
     fn growth_live(ts_writes: &str, abi: &str) -> Vec<Probe> {
         vec![
@@ -5579,6 +5586,7 @@ mod tests {
             gated("binding_kind_homes", "2"),
             gated("wrangler_key_literals", "0"),
             gated("cloudflare_client_sites", "34"),
+            gated("wrangler_resource_ops", "15 (a)"),
         ]
     }
 

@@ -173,6 +173,12 @@ pub trait Toolbox {
     fn docker_daemon_running(&self, _path: &Path) -> bool {
         true
     }
+    /// #4056: is the environment variable `name` set to something other than blanks? Only
+    /// whether it is set: a value is never read out. The default says no, so a fake does not
+    /// depend on the machine's environment.
+    fn env_set(&self, _name: &str) -> bool {
+        false
+    }
 }
 
 /// Detect a single tool: project-local first (it wins over a global install),
@@ -274,6 +280,10 @@ impl Toolbox for SystemToolbox {
 
     fn npx_available(&self) -> bool {
         which::which(OsStr::new("npx")).is_ok()
+    }
+
+    fn env_set(&self, name: &str) -> bool {
+        std::env::var(name).is_ok_and(|value| !value.trim().is_empty())
     }
 
     fn docker_daemon_running(&self, path: &Path) -> bool {
