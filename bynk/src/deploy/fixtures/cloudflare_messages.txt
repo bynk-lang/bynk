@@ -87,95 +87,6 @@
    call: queues delete jobs
    -> ok ()
 
-== kv namespace create · wrangler missing
-   -> error wrangler not found
-== kv namespace create · wrangler does not start
-   -> error No such file or directory (os error 2)
-== kv namespace create · exits 1, stderr only
-   call: kv namespace create shop-api
-   -> error it went wrong on stderr
-== kv namespace create · exits 1, stdout only
-   call: kv namespace create shop-api
-   -> error it went wrong on stdout
-== kv namespace create · exits 1, both streams
-   call: kv namespace create shop-api
-   -> error wrong on stderr
-      and on stdout
-== kv namespace create · exits 3, silent
-   call: kv namespace create shop-api
-   -> error wrangler exited 3
-== kv namespace create · killed by SIGTERM, silent
-   call: kv namespace create shop-api
-   -> error wrangler exited 143
-== kv namespace create · exits 0, unreadable output
-   call: kv namespace create shop-api
-   -> error wrangler did not return a namespace id
-== kv namespace create · TOML snippet
-   call: kv namespace create shop-api
-   -> ok "0123abcd"
-== kv namespace create · JSON snippet
-   call: kv namespace create shop-api
-   -> ok "4567ef"
-
-== kv namespace list · wrangler missing
-   -> None
-== kv namespace list · wrangler does not start
-   -> None
-== kv namespace list · exits 1, stderr only
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 1, stdout only
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 1, both streams
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 3, silent
-   call: kv namespace list
-   -> None
-== kv namespace list · killed by SIGTERM, silent
-   call: kv namespace list
-   -> None
-== kv namespace list · exits 0, unreadable output
-   call: kv namespace list
-   -> None
-== kv namespace list · two namespaces
-   call: kv namespace list
-   -> Some({"a1", "b2"})
-
-== kv namespace delete · wrangler missing
-   -> error wrangler not found
-== kv namespace delete · wrangler does not start
-   -> error No such file or directory (os error 2)
-== kv namespace delete · exits 1, stderr only
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error it went wrong on stderr
-== kv namespace delete · exits 1, stdout only
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error it went wrong on stdout
-== kv namespace delete · exits 1, both streams
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrong on stderr
-      and on stdout
-== kv namespace delete · exits 3, silent
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrangler exited 3
-== kv namespace delete · killed by SIGTERM, silent
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> error wrangler exited 143
-== kv namespace delete · exits 0, unreadable output
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · deleted
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · not found, code 10013
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-== kv namespace delete · not found, prose
-   call: kv namespace delete --namespace-id 0123abcd --skip-confirmation
-   -> ok ()
-
 == d1 migrations apply (default) · wrangler missing
    -> error wrangler not found
 == d1 migrations apply (default) · wrangler does not start
@@ -846,5 +757,83 @@
 == secret delete (by name, for the sweep) · deleted, nothing on stdin
    call: secret delete MIGRATE_KEY --name shop-api
    call: stdin: 
+   -> ok ()
+
+== KV create (REST) · unreachable
+   -> error POST /storage/kv/namespaces: io: Connection refused (os error N)
+== KV create (REST) · 200, success
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> ok "x"
+== KV create (REST) · 200, success false
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== KV create (REST) · 404 with errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== KV create (REST) · 403 with errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== KV create (REST) · 500 without errors
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 500 
+== KV create (REST) · 200, unreadable
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: unreadable answer (expected value at line 1 column 1)
+== KV create (REST) · created
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> ok "0123abcd"
+== KV create (REST) · title taken, code 10014
+   request: POST /accounts/acct/storage/kv/namespaces {"title":"shop-api"}
+   -> error POST /storage/kv/namespaces: Cloudflare answered 400 [{"code":10014,"message":"a namespace with this account ID and title already exists"}]
+
+== KV list (REST) · unreachable
+   -> None
+== KV list (REST) · 200, success
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 200, success false
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 404 with errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 403 with errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 500 without errors
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · 200, unreadable
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> None
+== KV list (REST) · two namespaces, one page
+   request: GET /accounts/acct/storage/kv/namespaces?per_page=100&page=1
+   -> Some({"a1", "b2"})
+
+== KV delete (REST) · unreachable
+   -> error DELETE /storage/kv/namespaces/0123abcd: io: Connection refused (os error N)
+== KV delete (REST) · 200, success
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> ok ()
+== KV delete (REST) · 200, success false
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 200 [{"code":7003,"message":"No route"}]
+== KV delete (REST) · 404 with errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 404 [{"code":10007,"message":"not found"}]
+== KV delete (REST) · 403 with errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 403 [{"code":10000,"message":"Authentication error"}]
+== KV delete (REST) · 500 without errors
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: Cloudflare answered 500 
+== KV delete (REST) · 200, unreadable
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> error DELETE /storage/kv/namespaces/0123abcd: unreadable answer (expected value at line 1 column 1)
+== KV delete (REST) · deleted
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
+   -> ok ()
+== KV delete (REST) · not found, code 10013
+   request: DELETE /accounts/acct/storage/kv/namespaces/0123abcd
    -> ok ()
 

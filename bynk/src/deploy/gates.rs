@@ -505,6 +505,43 @@ pub(crate) struct AccountCx<'a> {
     pub(crate) hyperdrive_wants: &'a hyperdrive::Wants,
 }
 
+/// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
+/// (KV since 1D.4a) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// the plan and before the confirmation, so a missing one is refused before anything is created.
+/// The first kind in list order that needs them reports, in its own words. A run that needs
+/// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
+fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
+    let project = ProjectCx {
+        ledger: LedgerView::of(cx.lock, &cx.opts.environment),
+        resources: cx.resources,
+        order: cx.order,
+    };
+    let checked = resource_credentials(&project, &cx.plan.orphans.kv, cx.opts.prune, |purpose| {
+        crate::cloudflare::rest::for_kind(purpose).map(drop)
+    });
+    checked.map_err(|refusal| {
+        emsg!("bynk: error: {refusal}");
+        ExitCode::FAILURE
+    })
+}
+
+/// [`account_resource_credentials`]'s decision over `credentials`, the run's client check for a
+/// kind (a test's stand-in): the refusal, in the first needing kind's words, or `Ok` when no
+/// step needs the account or the credentials are there.
+pub(crate) fn resource_credentials(
+    project: &ProjectCx<'_>,
+    kv_orphans: &[OrphanKv],
+    prune: bool,
+    credentials: impl Fn(
+        crate::cloudflare::rest::Purpose,
+    ) -> Result<(), crate::cloudflare::CloudflareError>,
+) -> Result<(), String> {
+    if !kv_calls_the_account(project, kv_orphans, prune) {
+        return Ok(());
+    }
+    credentials(crate::cloudflare::rest::Purpose::Kv).map_err(|e| e.to_string())
+}
+
 /// What the account checks found, for the apply: the wrangler to run, the ids each stored secret
 /// and certificate is linked to, and the Hyperdrive API.
 pub(crate) struct AccountChecked {
@@ -538,7 +575,7 @@ pub(crate) fn account_checks(
         colour::eprintln(&refusal);
         return Err(ExitCode::FAILURE);
     }
-    let api = Wrangler::new(&probe.provenance, project_root);
+    let api = Account::new(Wrangler::new(&probe.provenance, project_root));
     if !whoami(&api) {
         emsg!(
             "bynk: error: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
@@ -575,6 +612,7 @@ pub(crate) fn account_checks(
     ) else {
         return Err(ExitCode::FAILURE);
     };
+    account_resource_credentials(cx)?;
     Ok(AccountChecked {
         probe,
         linked_stores,
