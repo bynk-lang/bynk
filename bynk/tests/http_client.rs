@@ -691,3 +691,57 @@ fn problem_details_replies_are_typed_as_problem() {
         "a plain route keeps `error: string`"
     );
 }
+
+/// #4434: a `@rateLimit` route can answer `429` (`RateLimited`) before its body is read, whichever key
+/// it counts by, so the client types that outcome for it: a caller that matches on the outcome
+/// exhaustively must handle it. A route with no `@rateLimit` cannot answer one and keeps its union.
+#[test]
+fn a_rate_limited_route_has_a_rate_limited_outcome() {
+    let dir = scratch("rate-limited");
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/api.bynk"),
+        "context api\n\n\
+         consumes bynk.cloudflare { RateLimit }\n\n\
+         type UserId = String where NonEmpty\n\n\
+         actor Reader { auth = Bearer(secret = \"API_TOKEN_SECRET\"), identity = UserId }\n\n\
+         capability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\
+         capability NoteLimit = RateLimit @limit(2) @period(60.seconds)\n\n\
+         service api from http {\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(NoteLimit, key: identity)\n  \
+           on POST(\"/notes\") (body: String) -> Effect[HttpResult[String]] by r: Reader {\n    Ok(\"noted\")\n  }\n\n  \
+           on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"up\")\n  }\n}\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n}\n",
+    )
+    .unwrap();
+    let text = module(&dir, &[]);
+    golden("http-client-rate-limited.ts", &text);
+    // The outcome is typed on each limited route: the router's `{ kind, details }` body on a plain
+    // service, problem details on a problem one. `/health` has none.
+    let member = "readonly status: 429; readonly kind: \"RateLimited\"";
+    assert_eq!(text.matches(member).count(), 3, "{text}");
+    assert!(
+        text.contains(&format!(
+            "{member}; readonly error: {{ readonly kind: \"RateLimited\"; readonly details: string }}"
+        )),
+        "a plain route types the refusal's body"
+    );
+    assert!(
+        text.contains(&format!("{member}; readonly problem: Problem")),
+        "a problem route types it as problem details"
+    );
+    assert!(
+        text.contains("429: [{ kind: \"RateLimited\", body: \"boundary\" }]")
+            && text.contains("429: [{ kind: \"RateLimited\", body: \"problem-rejection\" }]"),
+        "and decodes it by the body the route writes"
+    );
+}

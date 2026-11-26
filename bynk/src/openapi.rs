@@ -938,10 +938,24 @@ fn responses_of(
         };
         if let ResponseOrigin::BoundaryImplicit { why } = &resp.origin {
             describe(format!("{} — {why}", resp.variant));
+            // #4434: a rate-limited refusal says when to try again, whichever way it is written.
+            if resp.variant == "RateLimited" {
+                e.headers.insert(
+                    "Retry-After".into(),
+                    json!({
+                        "description": "Seconds until the limiter's window lets the caller try again.",
+                        "required": true,
+                        "schema": { "type": "integer", "minimum": 1 },
+                    }),
+                );
+            }
             if r.problem
                 && matches!(
                     resp.variant.as_str(),
-                    "StructuralMismatch" | "PayloadTooLarge" | "UnsupportedMediaType"
+                    "StructuralMismatch"
+                        | "PayloadTooLarge"
+                        | "UnsupportedMediaType"
+                        | "RateLimited"
                 )
             {
                 components.problem_details();
@@ -957,7 +971,7 @@ fn responses_of(
                         e,
                     );
                 }
-                "PayloadTooLarge" | "UnsupportedMediaType" => body(
+                "PayloadTooLarge" | "UnsupportedMediaType" | "RateLimited" => body(
                     "application/json",
                     json!({
                         "type": "object",
