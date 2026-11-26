@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.upload_order_cycle",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "The Workers a run deploys cannot be ordered, because the Service Bindings between them form a cycle (often through event delivery: a publishing context binds to each subscriber, and a subscriber on the cycle calls back into it). Cloudflare rejects a Worker uploaded before its binding target, so there is no valid upload order; move the services a subscriber calls out of the publishing context. With `--format json` the plan's `refusals` carries it with the `cycle`."
+}
