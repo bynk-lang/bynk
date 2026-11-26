@@ -13,9 +13,18 @@ function __bynkB64UrlToBytes(s: string): Uint8Array {
   return out;
 }
 
+// #3821: what a `Bearer` actor expects of a token beyond its signature, when it declares `issuer` or
+// `audience`. Undeclared means unchecked, so a token carrying an `iss` or `aud` the actor does not name is
+// accepted as before. `null` is a `trustFrom` that could not be read, and refuses every token.
+export interface BearerExpect {
+  readonly issuer?: string;
+  readonly audience?: string;
+}
+
 export async function verifyBearerJwtHs256(
   token: string,
   secret: string,
+  expect?: BearerExpect | null,
 ): Promise<Result<{ readonly sub: string; readonly claims: Record<string, unknown> }, string>> {
   const parts = token.split(".");
   if (parts.length !== 3) return Err("malformed token");
@@ -48,7 +57,8 @@ export async function verifyBearerJwtHs256(
     return Err("verify failed");
   }
   if (!ok) return Err("bad signature");
-  let payload: { sub?: unknown; exp?: unknown; nbf?: unknown };
+  if (expect === null) return Err("trust unavailable");
+  let payload: { sub?: unknown; exp?: unknown; nbf?: unknown; iss?: unknown; aud?: unknown };
   try {
     payload = JSON.parse(new TextDecoder().decode(__bynkB64UrlToBytes(payloadB64)));
   } catch {
@@ -65,6 +75,24 @@ export async function verifyBearerJwtHs256(
   if (payload.nbf !== undefined && typeof payload.nbf !== "number") return Err("malformed nbf");
   if (payload.nbf !== undefined && (payload.nbf as number) > now) return Err("token not yet valid");
   if (typeof payload.sub !== "string" || payload.sub.length === 0) return Err("missing sub");
+  // #3821: a declared `issuer` must be the token's `iss`, and a declared `audience` its `aud` (or, for an
+  // array `aud`, one of its members), so tokens that share a secret are not interchangeable (RFC 8725
+  // section 3.8 and 3.9). A claim that is absent or of the wrong type is a refusal, never a pass.
+  if (expect?.issuer !== undefined) {
+    if (payload.iss === undefined) return Err("missing iss");
+    if (payload.iss !== expect.issuer) return Err("issuer mismatch");
+  }
+  if (expect?.audience !== undefined) {
+    const aud = payload.aud;
+    if (aud === undefined) return Err("missing aud");
+    if (typeof aud === "string") {
+      if (aud !== expect.audience) return Err("audience mismatch");
+    } else if (Array.isArray(aud) && aud.every((a) => typeof a === "string")) {
+      if (!aud.includes(expect.audience)) return Err("audience mismatch");
+    } else {
+      return Err("malformed aud");
+    }
+  }
   // v0.53: surface the full verified claims for refinement-actor authorisation
   // (`actor Admin = User where hasClaim(...)`). The identity stays `sub`-minted
   // and sealed; claims are an authorisation-time input, checked at the boundary.
@@ -388,5 +416,49 @@ export function oidcTrust(
   return { issuer: parsed.issuer, jwks: parsed.jwks, audience: parsed.audience ?? audience };
 }
 
+// #3821: a `Bearer` actor's `trustFrom`, read as `Oidc`'s is: the JSON of an environment variable,
+// `{"issuer"?, "audience"?}`, replaces the declared `issuer` and `audience`, so staging and production can
+// differ without a rebuild. Unset leaves the declared values. Set but malformed is `null`, and the seam then
+// refuses every request (fail closed) rather than fall back to the declaration.
+//
+// An actor that declares `trustFrom` wants a claim enforced. When neither a literal `issuer` or `audience` nor
+// the variable supplies one, nothing would be checked, so that is `null` too (fail closed, with one line
+// naming the variable) rather than a silent accept, for example a production variable that was never set.
+export function bearerTrust(raw: unknown, issuer?: string, audience?: string, variable?: string): BearerExpect | null {
+  const named = variable === undefined ? "a Bearer actor's trustFrom variable" : `the trustFrom variable ${variable}`;
+  const enforcing = (expect: BearerExpect): BearerExpect | null => {
+    if (expect.issuer !== undefined || expect.audience !== undefined) return expect;
+    console.error(`bynk: ${named} supplies no issuer or audience and none is declared, so nothing would be checked; every request is refused`);
+    return null;
+  };
+  if (raw === undefined || raw === null || raw === "") return enforcing({ issuer, audience });
+  if (typeof raw !== "string") {
+    console.error("bynk: a Bearer actor's trustFrom variable isn't a string; every request is refused");
+    return null;
+  }
+  let parsed: { issuer?: unknown; audience?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.error("bynk: a Bearer actor's trustFrom variable isn't JSON; every request is refused");
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    console.error("bynk: a Bearer actor's trustFrom variable isn't a JSON object; every request is refused");
+    return null;
+  }
+  for (const key of ["issuer", "audience"] as const) {
+    const value = parsed[key];
+    if (value !== undefined && (typeof value !== "string" || value === "")) {
+      console.error(`bynk: a Bearer actor's trustFrom \`${key}\` must be a non-empty string; every request is refused`);
+      return null;
+    }
+  }
+  return enforcing({
+    issuer: (parsed.issuer as string | undefined) ?? issuer,
+    audience: (parsed.audience as string | undefined) ?? audience,
+  });
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { verifyBearerJwtHs256 as __verifyBearerJwtHs256, verifyOidcJwt as __verifyOidcJwt, oidcTrust as __oidcTrust, tokenClaims as __tokenClaims, verifySignatureHmacSha256 as __verifySignatureHmacSha256 };
+export { verifyBearerJwtHs256 as __verifyBearerJwtHs256, verifyOidcJwt as __verifyOidcJwt, bearerTrust as __bearerTrust, oidcTrust as __oidcTrust, tokenClaims as __tokenClaims, verifySignatureHmacSha256 as __verifySignatureHmacSha256 };

@@ -36,6 +36,7 @@ pub mod actors;
 pub mod agent_busy;
 pub mod agent_jurisdiction;
 pub mod agent_state;
+pub mod ai_schema;
 pub mod analysis;
 pub mod analytics_lock;
 pub mod annotation_consts;

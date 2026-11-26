@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyBearerJwtHs256, verifySignatureHmacSha256, verifyOidcJwt } from "../src/auth.ts";
+import { bearerTrust, verifyBearerJwtHs256, verifySignatureHmacSha256, verifyOidcJwt } from "../src/auth.ts";
 
 const enc = new TextEncoder();
 
@@ -353,4 +353,103 @@ test("OIDC: a token within the clock-skew leeway of expiry is still accepted", a
   // Expired 5s ago — inside the 60s leeway, so accepted (small-clock-skew).
   const token = await signRs256({ sub: "u", iss: ISS, aud: AUD, exp: now - 5 }, priv, "k1");
   assert.equal((await verifyOidcJwt(token, ISS, AUD, jwks)).tag, "Ok");
+});
+
+// -- #3821: a Bearer actor's `issuer` and `audience` ---------------------------------------------------
+
+const WEB = { issuer: "agilearn-web", audience: "agilearn-api" };
+
+test("Bearer: a token whose iss and aud match the declared ones is accepted", async () => {
+  const token = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web", aud: "agilearn-api" }, SECRET);
+  const r = await verifyBearerJwtHs256(token, SECRET, WEB);
+  assert.equal(r.tag, "Ok");
+});
+
+test("Bearer: a wrong or missing iss is refused when an issuer is declared", async () => {
+  const wrong = await signJwt({ sub: "u", exp: future(), iss: "somebody-else", aud: "agilearn-api" }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(wrong, SECRET, WEB), { tag: "Err", error: "issuer mismatch" });
+  const missing = await signJwt({ sub: "u", exp: future(), aud: "agilearn-api" }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(missing, SECRET, WEB), { tag: "Err", error: "missing iss" });
+  const notString = await signJwt({ sub: "u", exp: future(), iss: 7, aud: "agilearn-api" }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(notString, SECRET, WEB)).tag, "Err");
+});
+
+test("Bearer: a wrong or missing aud is refused when an audience is declared", async () => {
+  const wrong = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web", aud: "agilearn-internal" }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(wrong, SECRET, WEB), { tag: "Err", error: "audience mismatch" });
+  const missing = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web" }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(missing, SECRET, WEB), { tag: "Err", error: "missing aud" });
+  const notStringOrList = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web", aud: 7 }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(notStringOrList, SECRET, WEB), { tag: "Err", error: "malformed aud" });
+});
+
+test("Bearer: an array aud is accepted only when it contains the declared audience", async () => {
+  const has = await signJwt({ sub: "u", exp: future(), aud: ["x", "agilearn-api"] }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(has, SECRET, { audience: "agilearn-api" })).tag, "Ok");
+  const lacks = await signJwt({ sub: "u", exp: future(), aud: ["x", "y"] }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(lacks, SECRET, { audience: "agilearn-api" }), {
+    tag: "Err",
+    error: "audience mismatch",
+  });
+  const empty = await signJwt({ sub: "u", exp: future(), aud: [] }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(empty, SECRET, { audience: "agilearn-api" })).tag, "Err");
+  // An array with a member that is not a string is malformed, even beside the expected value.
+  const mixed = await signJwt({ sub: "u", exp: future(), aud: ["agilearn-api", 3] }, SECRET);
+  assert.deepEqual(await verifyBearerJwtHs256(mixed, SECRET, { audience: "agilearn-api" }), {
+    tag: "Err",
+    error: "malformed aud",
+  });
+});
+
+test("Bearer: a token for one audience is refused by an actor of another on the same secret", async () => {
+  const bridge = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web", aud: "agilearn-api" }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(bridge, SECRET, { audience: "agilearn-api" })).tag, "Ok");
+  assert.deepEqual(await verifyBearerJwtHs256(bridge, SECRET, { audience: "agilearn-internal" }), {
+    tag: "Err",
+    error: "audience mismatch",
+  });
+});
+
+test("Bearer: an actor that declares neither still accepts a token carrying iss and aud", async () => {
+  // Undeclared means unchecked, as before (#3821): the behaviour of an existing actor does not move.
+  const token = await signJwt({ sub: "u", exp: future(), iss: "anyone", aud: ["a", "b"] }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(token, SECRET)).tag, "Ok");
+  assert.equal((await verifyBearerJwtHs256(token, SECRET, {})).tag, "Ok");
+  assert.equal((await verifyBearerJwtHs256(token, SECRET, { issuer: undefined, audience: undefined })).tag, "Ok");
+  // Declaring only an audience leaves the issuer unchecked, and the reverse.
+  const noIss = await signJwt({ sub: "u", exp: future(), aud: "agilearn-api" }, SECRET);
+  assert.equal((await verifyBearerJwtHs256(noIss, SECRET, { audience: "agilearn-api" })).tag, "Ok");
+});
+
+test("Bearer: iss and aud are checked after the signature, so a forged token says nothing about them", async () => {
+  const forged = await signJwt({ sub: "u", exp: future(), iss: "agilearn-web", aud: "agilearn-api" }, "other-secret");
+  assert.deepEqual(await verifyBearerJwtHs256(forged, SECRET, WEB), { tag: "Err", error: "bad signature" });
+});
+
+test("Bearer trustFrom: unset leaves the declaration, a JSON object replaces it, anything else fails closed", () => {
+  assert.deepEqual(bearerTrust(undefined, "i", "a"), { issuer: "i", audience: "a" });
+  assert.deepEqual(bearerTrust("", "i", "a"), { issuer: "i", audience: "a" });
+  assert.deepEqual(bearerTrust('{"issuer":"stg","audience":"stg-api"}', "i", "a"), { issuer: "stg", audience: "stg-api" });
+  assert.deepEqual(bearerTrust('{"audience":"stg-api"}', "i", "a"), { issuer: "i", audience: "stg-api" });
+  assert.deepEqual(bearerTrust('{"audience":"stg-api"}'), { issuer: undefined, audience: "stg-api" });
+  const log = console.error;
+  const lines: string[] = [];
+  console.error = (m: string) => lines.push(m);
+  try {
+    // No literal and nothing from the variable: nothing would be checked, so refuse (fail closed) and name it.
+    assert.equal(bearerTrust(undefined, undefined, undefined, "TRUST"), null);
+    assert.equal(bearerTrust("", undefined, undefined, "TRUST"), null);
+    assert.equal(bearerTrust("{}"), null);
+    assert.equal(lines.length, 3);
+    assert.match(lines[0], /TRUST/);
+    // A literal on either claim keeps the fallback.
+    assert.deepEqual(bearerTrust(undefined, "i"), { issuer: "i", audience: undefined });
+    assert.deepEqual(bearerTrust("", undefined, "a", "TRUST"), { issuer: undefined, audience: "a" });
+    assert.deepEqual(bearerTrust("{}", "i"), { issuer: "i", audience: undefined });
+    for (const bad of ["not json", "[]", "7", '{"issuer":3}', '{"audience":""}', 42]) {
+      assert.equal(bearerTrust(bad, "i", "a"), null, String(bad));
+    }
+  } finally {
+    console.error = log;
+  }
 });

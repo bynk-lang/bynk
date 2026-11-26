@@ -2541,7 +2541,11 @@ An `actor` MUST be declared inside a context (`bynk.actor.outside_context`). Its
 `auth` scheme MUST be compiler-known (`bynk.actor.unknown_scheme`) — `None`,
 `Internal`, `Bearer` (v0.47), and `Signature` (v0.51) are supported. A `Bearer`
 actor MUST name its signing secret (`auth = Bearer(secret = "<ENV>")`,
-`bynk.actor.bearer_missing_secret`) and MUST declare a string-constructible
+`bynk.actor.bearer_missing_secret`), MAY declare `issuer`, `audience` (non-empty strings) and `trustFrom`
+(`bynk.actor.bearer_bad_arg`), takes no other config key (`bynk.actor.bearer_unknown_key`), and MUST NOT share its
+secret with another `Bearer` actor unless each declares an `audience` and they differ
+(`bynk.actor.bearer_secret_shared`); a token whose `iss` or `aud` (equal, or containing it for an array `aud`) does
+not match a declared `issuer` or `audience` is `401`. A `Bearer` actor MUST declare a string-constructible
 `identity` — a refined or opaque `String`, minted from the JWT `sub` claim
 (`bynk.actor.bearer_identity_not_string_constructible`); `Bearer` is admissible
 only on `from http` handlers. A `Signature` actor (HMAC over the request body)
