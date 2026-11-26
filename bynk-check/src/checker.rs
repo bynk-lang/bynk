@@ -2198,6 +2198,7 @@ pub fn check_handler_body(
             ..Default::default()
         },
         in_test_body: false,
+        lambda_depth: 0,
         claims_binder,
         claims_sum_arms,
         test_services: HashMap::new(),
@@ -2375,6 +2376,7 @@ pub fn check_body(
         fold_init_expected: None,
         caps,
         in_test_body: true,
+        lambda_depth: 0,
         claims_binder: None,
         claims_sum_arms: Vec::new(),
         test_services,
@@ -2390,7 +2392,12 @@ pub fn check_body(
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-        if let Some(actual) = type_of(w, Some(bool_ty), &mut ctx)
+        // #3982: the filter is a plain predicate, lowered as one, not the body that fails the
+        // case on a `?`: counting it as a lambda keeps `?` there under its ordinary rules.
+        ctx.lambda_depth += 1;
+        let filter_ty = type_of(w, Some(bool_ty), &mut ctx);
+        ctx.lambda_depth -= 1;
+        if let Some(actual) = filter_ty
             && actual.base(tys) != Some(BaseType::Bool)
         {
             ctx.errors.push(CompileError::new(
@@ -2750,6 +2757,7 @@ pub fn check_invariants(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
@@ -2909,6 +2917,7 @@ pub(crate) fn check_contracts(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
@@ -3153,6 +3162,7 @@ pub fn check_transitions(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
@@ -3349,6 +3359,7 @@ pub fn check_migrations(
                 ..Default::default()
             },
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
@@ -3803,6 +3814,10 @@ pub(crate) struct Ctx<'a> {
     /// True when the body being checked is a test case body. Permits
     /// `expect` statements (v0.7; renamed from `assert` in v0.112).
     pub in_test_body: bool,
+    /// #3982: how many lambdas deep the expression being typed is, inside the body of the
+    /// function or test case being checked. A `?` in a test body fails the case only at depth
+    /// 0: inside a lambda it returns from the lambda, by the lambda's own return type.
+    pub lambda_depth: u32,
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
     pub claims_binder: Option<String>,

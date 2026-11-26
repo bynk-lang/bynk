@@ -507,7 +507,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
-| **`AnalyticsSql`** *(experimental)* | `query(sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. See [Reading events](#reading-events-analyticssql). |
+| **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
@@ -954,13 +954,9 @@ The platform keeps data for three months, readable with any account
 analytics token, so keep secrets and personal data out of it.
 
 `dataset()` is the dataset's name as a table in a query: `events.analyticsEngine.shop_cart_signups`,
-and `events.analyticsEngine.shop_cart_signups_staging` under `--env staging`. A query built from
-it reads the environment it runs in without writing either name:
-
-```bynk,fragment
-let table <- Signups.dataset()
-let sql = "SELECT count() AS n FROM \(table) WHERE timestamp > NOW() - INTERVAL '1' DAY"
-```
+and `events.analyticsEngine.shop_cart_signups_staging` under `--env staging`. A query reads the
+environment it runs in without writing either name: [`AnalyticsSql.query`](#reading-events-analyticssql)
+takes the instance (`Signups`) and fills `{dataset}` in its SQL with this name.
 
 The name comes from one `[vars]` entry per dataset in the generated configuration,
 `BYNK_DATASET_ANALYTICS_SIGNUPS` for `Signups`, which `bynk deploy` qualifies for each environment
@@ -993,9 +989,9 @@ type Row = { n: Int }
 
 service report from http {
 	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
-		let table <- Signups.dataset()
-		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
-		let res <- AnalyticsSql.query(sql, [Text(country)])
+		let res <- AnalyticsSql.query(Signups,
+			"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
+			[Text(country)])
 		match res {
 			Ok(r) => {
 				let rows = Json.decode[List[Row]](r.data)
@@ -1010,6 +1006,16 @@ service report from http {
 	}
 }
 ```
+
+`query(dataset, sql, params)` takes, first, the `Analytics` instance whose dataset it reads, which
+must be in the handler's `given` like any capability it uses. The SQL is **a string literal, a
+`"""` block or a `String` constant bound to one**, as for [`D1`](#sql-databases-d1), so no request
+data can reach the text, and a value that did could read another dataset on the account or drop the
+time bound. A `{dataset}` in the SQL is replaced, in the Worker, with the instance's table for the
+environment it runs in: `events.analyticsEngine.shop_cart_signups`, or the `_staging` one under
+`--env staging`. It may appear any number of times, or not at all. A query over several datasets is
+a later extension. SQL built at run time is `bynk.types.sql_not_literal`, which names the
+replacement; values go in `params`.
 
 The binding is `CF_ANALYTICS_SQL`, an `[analytics]` stanza that names no resource, so
 `bynk deploy` has nothing to create. A result is:
@@ -1034,8 +1040,8 @@ type AnalyticsSqlError      = | SqlRetryable(message: String) | SqlRejected(mess
 The rules of the SQL API apply as the platform states them, and the query is checked
 only by the platform:
 
-- A dataset is read as `events.analyticsEngine.<DATASET>`; `Analytics.dataset()` gives the
-  name for one of yours, for the environment the Worker runs in.
+- A dataset is read as `events.analyticsEngine.<DATASET>`; `{dataset}` stands for the name of
+  one of yours, for the environment the Worker runs in. Any other dataset on the account is named directly in the SQL text.
 - Bound the query's time range from below (a lower `timestamp` bound), so it reads a
   window rather than the whole retention period.
 - Do not filter on `accountTag` or `zoneTag`, and do not add a `FORMAT` clause: the
@@ -1047,7 +1053,7 @@ configuration marks the binding `remote = true`, and `bynk dev` warns once, on t
 query, unless `analytics-sql = "allow"` is under `[dev]` in `bynk.toml`.
 
 A test never reads Analytics Engine: `query` **faults** until
-`stub AnalyticsSql.query(_, _) returns …` gives it a reply, so a test never reaches
+`stub AnalyticsSql.query(_, _, _) returns …` gives it a reply, so a test never reaches
 the account. `AnalyticsSql` is experimental: list `"bynk.cloudflare.AnalyticsSql"`
 under `[unstable] allow`.
 

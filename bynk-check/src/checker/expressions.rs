@@ -1886,6 +1886,7 @@ pub(crate) fn check_lambda(
     let saved_return_ty_span = ctx.return_ty_span;
     let saved_agent_state_ty = ctx.agent_state_ty.take();
     let saved_commit_seen = ctx.commit_seen;
+    ctx.lambda_depth += 1;
     ctx.effectful = body_effectful;
     ctx.return_ty = match &expected_fn {
         Some((_, er)) if ret_constrained => *er,
@@ -1908,6 +1909,7 @@ pub(crate) fn check_lambda(
     ctx.return_ty_span = saved_return_ty_span;
     ctx.agent_state_ty = saved_agent_state_ty;
     ctx.commit_seen = saved_commit_seen;
+    ctx.lambda_depth -= 1;
     ctx.pop_scope();
 
     match expected_fn {
@@ -3404,6 +3406,15 @@ fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx)
 pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let inner_ty = type_of(inner, None, ctx)?;
+    // #3982: in a test case or property body, outside any lambda, `?` fails the case (or the
+    // property for that input) on any `Err` and on `None`, so any `Result` or `Option` is
+    // accepted: a case returns no type an author sees for the error to convert to.
+    if ctx.in_test_body
+        && ctx.lambda_depth == 0
+        && let Ty::Option(t) | Ty::Result(t, _) = &*tys.get(inner_ty)
+    {
+        return Some(*t);
+    }
     // v0.153 (ADR 0177): `Option[T]?` lifts into an HttpResult-returning
     // handler — `Some(v)` yields `v`, `None` early-returns `NotFound` (404).
     // Allowed where the enclosing return peels to `HttpResult[_]` (a bare

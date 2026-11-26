@@ -416,7 +416,9 @@ export class WorkersAnalyticsSql implements AnalyticsSql {
     });
   }
 
-  async query(sql: string, params: readonly SqlValue[]): Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>> {
+  // #4104: `dataset` is the table of the `Analytics` instance the call named, which the SQL (a literal
+  // or constant, so never request data) writes as `{dataset}`.
+  async query(dataset: string, sql: string, params: readonly SqlValue[]): Promise<Result<AnalyticsSqlResult, AnalyticsSqlError>> {
     const binding = this.sql();
     devRemoteNoticeText(
       this.env,
@@ -427,7 +429,7 @@ export class WorkersAnalyticsSql implements AnalyticsSql {
     const bound = WorkersAnalyticsSql.params(params);
     if (bound.tag === "Err") return bound;
     try {
-      return WorkersAnalyticsSql.result(await binding.query({ query: sql, params: bound.value }));
+      return WorkersAnalyticsSql.result(await binding.query({ query: sql.split("{dataset}").join(dataset), params: bound.value }));
     } catch (e) {
       rethrowNotStubbed(e);
       const retryable = (e as { retryable?: unknown } | null)?.retryable === true;
