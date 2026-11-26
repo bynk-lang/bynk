@@ -253,8 +253,8 @@ export function makeWorkersAgent<C>(
   keyCodec?: WireCodec,
   jurisdiction?: string,
 ): C {
-  const namespace = agentNamespace(binding, jurisdiction);
-  const stub = namespace.get(namespace.idFromName(serialiseAgentKey(key)));
+  const scoped = agentNamespace(binding, jurisdiction);
+  const stub = scoped.get(scoped.idFromName(serialiseAgentKey(key)));
   // Encoded per call, not here, so a key that cannot encode fails at the call,
   // as an argument that cannot encode does.
   const sentKey = (): JsonValue | undefined =>
