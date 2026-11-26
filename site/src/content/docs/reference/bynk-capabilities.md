@@ -2670,10 +2670,7 @@ consumes bynk { Fetch, Request }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Network) => Effect.pure("network"),
@@ -2694,10 +2691,7 @@ consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
 	on call(url: String) -> Effect[String] by Caller given Fetch {
-		let res <- Fetch.send(Request {
-			method: Get,
-			url: url,
-		})
+		let res <- Fetch.send(Request { method: Get, url: url })
 		match res {
 			Ok(r) => Effect.pure("ok"),
 			Err(Timeout) => Effect.pure("retry later"),
