@@ -474,6 +474,7 @@ fn agent_snapshot(
                     path: p.path,
                     ty: p.structure,
                     default: p.default,
+                    renamed_from: p.renamed_from,
                 })
                 .collect();
             StoreShape {
@@ -568,7 +569,11 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
             retyped.push(format!("{name} ({})", paths.problems.join(", ")));
             continue;
         }
-        if n.ty != o.ty && paths.added.is_empty() && paths.variants.is_empty() {
+        if n.ty != o.ty
+            && paths.added.is_empty()
+            && paths.variants.is_empty()
+            && paths.renamed.is_empty()
+        {
             // The strings differ but no path explains it: never guess.
             retyped.push(name.to_string());
             continue;
@@ -581,6 +586,7 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
         );
         nested.extend(paths.gained.iter().map(|p| format!("{p} gained a default")));
         nested.extend(paths.variants.iter().map(|p| format!("{p} variant added")));
+        nested.extend(paths.renamed.iter().map(|r| format!("{r} renamed")));
         // The whole-value strings differ whenever a field is added, so a
         // refinement change is read position by position.
         if paths.refined {
@@ -720,6 +726,9 @@ struct PathChange {
     variants: Vec<String>,
     /// Whether a position both shapes have changed its predicates only.
     refined: bool,
+    /// #4483: each recorded record field a `replaces` renamed, as `old → new`. The stored value
+    /// is read under the new name, so it is additive, as a top-level rename is.
+    renamed: Vec<String>,
 }
 
 /// #2676 (Decisions A and E). Every recorded path must still exist with the
@@ -732,9 +741,13 @@ struct PathChange {
 /// value stored before it cannot name it, and a newer record is stopped on
 /// rollback by the `__v` marker.
 fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
+    let (stored, renamed) = apply_field_renames(stored, live);
     let old: BTreeMap<&str, &PathShape> = stored.iter().map(|p| (p.path.as_str(), p)).collect();
     let new: BTreeMap<&str, &PathShape> = live.iter().map(|p| (p.path.as_str(), p)).collect();
-    let mut change = PathChange::default();
+    let mut change = PathChange {
+        renamed,
+        ..PathChange::default()
+    };
     for (path, o) in &old {
         match new.get(path) {
             None => change.problems.push(format!("{path} removed")),
@@ -775,6 +788,40 @@ fn compare_paths(stored: &[PathShape], live: &[PathShape]) -> PathChange {
         }
     }
     change
+}
+
+/// #4483: the recorded paths with each live record field's `replaces` applied, so a rename inside
+/// a stored record is compared like a top-level one. A live field that declares `replaces old`
+/// takes the recorded position `old` beside it, and everything beneath, when the recorded paths
+/// hold `old` and not the new name, and the live ones no longer hold `old` (a field kept beside
+/// the one that replaces it is two fields, and is judged as such). Shallower renames apply
+/// first, so a field renamed inside a renamed record is found under its new parent. Returns the
+/// renames made, as `old → new`.
+fn apply_field_renames(stored: &[PathShape], live: &[PathShape]) -> (Vec<PathShape>, Vec<String>) {
+    let mut paths = stored.to_vec();
+    let mut made = Vec::new();
+    let mut renames: Vec<(&str, &str)> = live
+        .iter()
+        .filter_map(|p| Some((p.path.as_str(), p.renamed_from.as_deref()?)))
+        .collect();
+    renames.sort_by_key(|(path, _)| path.len());
+    for (new, old_name) in renames {
+        let Some((parent, _)) = new.rsplit_once('.') else {
+            continue;
+        };
+        let old = format!("{parent}.{old_name}");
+        let holds = |paths: &[PathShape], p: &str| paths.iter().any(|s| s.path == p);
+        if !holds(&paths, &old) || holds(&paths, new) || holds(live, &old) {
+            continue;
+        }
+        for p in &mut paths {
+            if p.path == old || is_under(&p.path, &old) {
+                p.path = format!("{new}{}", &p.path[old.len()..]);
+            }
+        }
+        made.push(format!("{old} → {new}"));
+    }
+    (paths, made)
 }
 
 /// A path's rendering with predicates kept (recorded only where it differs from
@@ -1842,7 +1889,68 @@ mod path_tests {
             ty: ty.to_string(),
             default,
             refinement: String::new(),
+            renamed_from: None,
         }
+    }
+
+    fn renamed(path: &str, ty: &str, from: &str) -> PathShape {
+        PathShape {
+            renamed_from: Some(from.to_string()),
+            ..at(path, ty, false)
+        }
+    }
+
+    #[test]
+    fn a_rename_inside_a_stored_record_needs_no_migration() {
+        // #4483: `store prefs: Cell[Prefs]`, `Prefs.width` renamed to `size`.
+        let stored = [at("prefs", "{}", false), at("prefs.width", "Int", false)];
+        let live = [
+            at("prefs", "{}", false),
+            renamed("prefs.size", "Int", "width"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.problems.is_empty(), "{:?}", change.problems);
+        assert_eq!(change.renamed, ["prefs.width → prefs.size"]);
+        // The same field under a `Map` value, and under a renamed parent.
+        let stored = [at("m#1", "{}", false), at("m#1.width", "Int", false)];
+        let live = [at("m#1", "{}", false), renamed("m#1.size", "Int", "width")];
+        assert!(compare_paths(&stored, &live).problems.is_empty());
+        let stored = [
+            at("a", "{}", false),
+            at("a.old", "{}", false),
+            at("a.old.x", "Int", false),
+        ];
+        let live = [
+            at("a", "{}", false),
+            renamed("a.new", "{}", "old"),
+            renamed("a.new.y", "Int", "x"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.problems.is_empty(), "{:?}", change.problems);
+        assert_eq!(change.renamed.len(), 2);
+    }
+
+    #[test]
+    fn a_rename_that_is_not_one_is_still_a_removal() {
+        let stored = [at("prefs", "{}", false), at("prefs.width", "Int", false)];
+        // No clause: removed and added without a default.
+        let live = [at("prefs", "{}", false), at("prefs.size", "Int", false)];
+        assert!(!compare_paths(&stored, &live).problems.is_empty());
+        // The old field is still there beside the one that claims to replace it.
+        let live = [
+            at("prefs", "{}", false),
+            at("prefs.width", "Int", false),
+            renamed("prefs.size", "Int", "width"),
+        ];
+        let change = compare_paths(&stored, &live);
+        assert!(change.renamed.is_empty());
+        assert!(!change.problems.is_empty());
+        // A rename that also retypes the field is a retype.
+        let live = [
+            at("prefs", "{}", false),
+            renamed("prefs.size", "Text", "width"),
+        ];
+        assert!(!compare_paths(&stored, &live).problems.is_empty());
     }
 
     #[test]

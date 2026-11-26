@@ -59,6 +59,26 @@ records the rename and the change is additive, so no `migrate from` step is need
 field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry its name and is not renamed
 this way (`bynk.store.replaces_collection`).
 
+## Rename a field inside a stored record
+
+A record that a `store` field holds is renamed the same way, in a `Cell` or in the value of a `Map`:
+
+```bynk,fragment
+type Prefs = { size: Int replaces width }
+
+agent Cart {
+	key id: String
+	store prefs: Cell[Prefs]
+	store named: Map[String, Prefs]
+}
+```
+
+The lock reads the recorded `width` as `size`, so the change is additive and needs no `migrate from` step,
+and a `Prefs` stored under `width` reads back as `size`. A rename that also changes the field's type is
+still refused. The lock keeps no history for these renames, so deleting the clause is not refused while a
+stored value still holds the old name: keep `replaces` until every value written before the rename has been
+rewritten.
+
 ## When the clause can go
 
 Keep `replaces` until nothing reads the old name:

@@ -304,3 +304,49 @@ fn the_non_additive_refusal_names_replaces_for_a_cell() {
     let err = p.err(&cart("  store ownerName: Cell[String]"));
     assert!(err.contains("replaces owner"), "{err}");
 }
+
+// ---- a record field inside a stored value (#4483) ---------------------------
+
+/// A `Prefs` record with `width_field`, stored in a `Cell` and in a `Map` value.
+fn prefs_cart(width_field: &str) -> String {
+    format!(
+        "context shop\n\ntype Prefs = {{ {width_field} }}\n\nagent Cart {{\n  key id: String\n\n  store prefs: Cell[Prefs]\n  store by_name: Map[String, Prefs]\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+    )
+}
+
+#[test]
+fn a_record_field_renamed_inside_a_stored_value_needs_no_migration() {
+    let p = agent_project("nested-rename");
+    p.ok(&prefs_cart("width: Int"));
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    // No `migrate from`: the stored `{ width }` decodes through the clause.
+    p.ok(&prefs_cart("size: Int replaces width"));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "a rename is a step: {lock}");
+    assert!(lock.contains("renamed_from = \"width\""), "{lock}");
+
+    // The clause stays in source: nothing changes.
+    p.ok(&prefs_cart("size: Int replaces width"));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+#[test]
+fn a_nested_rename_beside_a_retype_or_without_a_clause_is_still_refused() {
+    let p = agent_project("nested-refused");
+    p.ok(&prefs_cart("width: Int"));
+    let before = p.lock();
+    // A rename that also retypes is a retype.
+    let err = p.err(&prefs_cart("size: String replaces width"));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    // No clause: still a removal and an addition.
+    let err = p.err(&prefs_cart("size: Int"));
+    assert!(
+        err.contains("bynk.agent.non_additive_state_change"),
+        "{err}"
+    );
+    assert_eq!(p.lock(), before, "a refused build must not touch the lock");
+}
