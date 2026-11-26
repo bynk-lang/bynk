@@ -30,7 +30,7 @@ whole point. `bynk new` is the first step of the driver arc *is my machine ready
 ```text
 hello/
 ├── bynk.toml            # [project] name/version + optional [paths] include/exclude
-├── .gitignore           # /.bynk — the build dir `bynk dev` writes
+├── .gitignore           # /out, /.bynk, .wrangler/, node_modules/ — generated output and local state
 ├── src/
 │   └── hello.bynk       # context hello — a GET "/" HTTP service
 └── tests/

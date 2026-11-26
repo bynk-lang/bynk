@@ -70,6 +70,33 @@ A request that offers no token, or a bad one, is `401`. The old form, `new WebSo
 it only worked for clients that do not enforce the standard, and a `401` would hide the cause.
 An upgrade to a `None` actor offers no subprotocol and is answered with none.
 
+### A credential that expires on a live connection
+
+The identity is minted once, at the upgrade, and kept in the socket's attachment for every later
+`on message` and `on close`, and a connection can live for days: it survives hibernation. So the
+credential's expiry is re-checked at every frame, not just trusted at the upgrade. The upgrade records the Bearer token's `exp`, and a
+frame that arrives after it closes the connection with **`1008`** and the reason `authentication
+expired` **before `on message` runs**; the client reconnects with a fresh token. The close is sent first, then `on close` runs
+once, with `CloseInfo { code: 1008, reason: "authentication expired", clean: false }`, so the agent
+releases the connection.
+
+- Only the **expiry** is re-checked. A revoked token, or one signed with a secret that has since been
+  rotated, keeps acting until its own `exp`, so use short-lived tokens.
+- The bound is the HTTP Bearer check's: the connection is expired once `exp` is before now (in whole
+  seconds, as the Bearer check reads the clock), with no extra allowance, so it is not closed sooner than an HTTP request with the same token would be
+  refused.
+- It is checked **per frame, not by a timer**. An idle connection that sends nothing can do
+  nothing, and Cloudflare answers pings without waking the Durable Object, so a timer would wake
+  hibernating objects only to close sockets that are doing nothing. `on close` still runs when the
+  platform delivers the close.
+- The runtime closes the connection; the handler does not decide. Running `on message` for a frame
+  sent after the credential expired would act on an identity that is no longer verified.
+- A `None` connection, and one resolved to a `None` member of an actor sum, has no expiry and is
+  unaffected. A connection accepted before this check was added has no `exp` in its attachment and
+  never expires, until it reconnects.
+- Use short-lived tokens for WebSocket connections, minutes to hours: a client reconnects with a
+  fresh one when it is closed with `1008`.
+
 ## Sending and broadcasting
 
 The agent that owns the connection sends with `connection.send(frame)`

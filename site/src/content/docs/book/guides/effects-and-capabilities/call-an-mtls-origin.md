@@ -48,10 +48,6 @@ service api from http {
 		let req = Request {
 			method: Get,
 			url: "https://orders.acme.example/v1/orders",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Backend.send(req)
 		match res {

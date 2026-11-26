@@ -1542,6 +1542,169 @@ fn a_departing_client_runs_on_close_with_its_code_and_the_handshake_completes_on
     );
 }
 
+/// #3903: a connection is closed when its credential expires. The upgrade records the Bearer token's
+/// `exp`, and a frame arriving after it closes the socket with `1008 authentication expired` and runs
+/// `on close` (once), without running `on message` for that frame. `heard` counts the frames
+/// `on message` ran for, and `lastCode` is the code `on close` was given.
+const WS_EXPIRY_SOURCE: &str = r#"context smoke
+
+consumes bynk { CloseInfo }
+
+type UserId = String where NonEmpty
+type Frame = { text: String }
+
+actor Member { auth = Bearer(secret = "WS_SECRET"), identity = UserId }
+
+service live from websocket(in: Frame, out: Frame) {
+  on open (room: String) -> Effect[()] by user: Member {
+    let _ <- Room(room).join(connection)
+    ()
+  }
+
+  on message (room: String, frame: Frame) -> Effect[()] by user: Member {
+    let _ <- Room(room).heard()
+    ()
+  }
+
+  on close (room: String, close: CloseInfo) -> Effect[()] by user: Member {
+    let _ <- Room(room).left(close.code)
+    ()
+  }
+}
+
+agent Room {
+  key id: String
+  store conns: Map[String, Connection[Frame]]
+  store count: Cell[Int]
+  store lastCode: Cell[Int]
+
+  on call join(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put("c", conn)
+    ()
+  }
+
+  on call heard() -> Effect[()] {
+    let _ <- count.update((c) => c + 1)
+    ()
+  }
+
+  on call left(code: Int) -> Effect[()] {
+    let _ <- conns.remove("c")
+    lastCode := code
+    ()
+  }
+
+  on call snapshot() -> Effect[String] {
+    "\(count):\(lastCode)"
+  }
+}
+
+service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }
+}
+"#;
+
+/// A real client: it signs a token that expires a few seconds from now, opens the upgrade with
+/// `["bynk.bearer", token]`, sends one frame before the expiry (handled), waits past it, and sends
+/// another, which closes the connection. Prints the observations as JSON.
+const WS_EXPIRY_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const [port, secret, ttl] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const exp = Math.floor(Date.now() / 1000) + Number(ttl);
+const head = b64({ alg: "HS256", typ: "JWT" });
+const body = b64({ sub: "ada", exp });
+const sig = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+const token = `${head}.${body}.${sig}`;
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+(async () => {
+  const ws = await within(new Promise((resolve, reject) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}/?room=r1`, ["bynk.bearer", token]);
+    w.addEventListener("open", () => resolve(w));
+    w.addEventListener("error", () => reject(new Error("upgrade failed")));
+  }), 15000, "the upgrade");
+  const closed = new Promise((done) => ws.addEventListener("close", (e) => done({ code: e.code, reason: e.reason })));
+  ws.send(JSON.stringify({ text: "early" }));
+  await sleep(1000);
+  const before = await state();
+  // Past the credential's expiry (`exp < now`), plus a margin for clock rounding.
+  await sleep((exp + 2) * 1000 - Date.now());
+  ws.send(JSON.stringify({ text: "late" }));
+  const close = await within(closed, 15000, "the close after expiry");
+  const after = await state();
+  console.log(JSON.stringify({ before, close, after }));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+#[test]
+fn a_frame_after_the_credential_expires_closes_the_connection_on_workerd() {
+    let secret = "expiry-smoke-secret";
+    let Some(served) = serve_smoke_with_args(
+        &[("smoke.bynk", WS_EXPIRY_SOURCE)],
+        "ws-expiry",
+        None,
+        None,
+        &["--var".to_string(), format!("WS_SECRET:{secret}")],
+    ) else {
+        return;
+    };
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-expiry-client.js");
+    fs::write(&script, WS_EXPIRY_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(secret)
+        .arg("5")
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the expiry client must run green:\n{report}"
+    );
+    let seen: serde_json::Value = serde_json::from_slice(&out.stdout)
+        .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}"));
+    assert_eq!(
+        seen["before"],
+        serde_json::json!("\"1:0\""),
+        "a frame before the expiry is handled as usual, and nothing has closed\n{report}"
+    );
+    assert_eq!(
+        seen["close"],
+        serde_json::json!({ "code": 1008, "reason": "authentication expired" }),
+        "a frame after the expiry closes the socket with 1008\n{report}"
+    );
+    assert_eq!(
+        seen["after"],
+        serde_json::json!("\"1:1008\""),
+        "`on message` did not run for the late frame, and `on close` ran with 1008\n{report}"
+    );
+}
+
 /// #3202: an agent instance runs the handlers that reach it one at a time. `bump`
 /// loads its state, awaits a call to another agent (a Durable Object subrequest,
 /// which does not close the input gate), then commits `n + 1`. Before the fix, five

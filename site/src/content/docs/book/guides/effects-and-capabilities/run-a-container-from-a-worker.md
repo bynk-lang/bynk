@@ -53,10 +53,6 @@ service render from http {
 		let req = Request {
 			method: Get,
 			url: "http://renderer/render",
-			contentType: None,
-			authorization: None,
-			headers: Map.empty(),
-			body: None,
 		}
 		let res <- Renderer.send("tenant-\(tenant)", req)
 		match res {
