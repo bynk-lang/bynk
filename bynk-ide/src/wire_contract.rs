@@ -159,11 +159,19 @@ pub struct WireContractModel {
     /// so a consumer that wants only what the handler *can* answer — the
     /// OpenAPI export (#856) — uses this to drop it when it provably cannot.
     pub ok_reachable: bool,
-    /// #3609: the `T` of the handler's `HttpResult[T]`, resolved against
-    /// [`Self::boundary`] as the envelope's refs are. `None` for a non-HTTP
-    /// handler, a return that is not an `HttpResult`, and a `()` payload —
-    /// which is what a raw-response handler (`Raw(..)`) declares, so a client
-    /// knows there is no typed body to check paths against.
+    /// The value a successful call returns, resolved against [`Self::boundary`] as the
+    /// envelope's refs are. Two meanings, told apart by [`Self::kind`]:
+    ///
+    /// - HTTP (#3609): the `T` of the handler's `HttpResult[T]`. `None` for a return that is
+    ///   not an `HttpResult` and for a `()` payload, which is what a raw-response handler
+    ///   (`Raw(..)`) declares, so a client knows there is no typed body to check paths against.
+    /// - `on call` with a cross-context form (#3687): the whole declared return type with
+    ///   `Effect` stripped. A `Result[T, E]` is kept whole, since the caller decodes both arms
+    ///   (unlike HTTP, where `success` is the `T` *inside* `HttpResult[T]`). `None` for a `()`
+    ///   return.
+    ///
+    /// `None` for every other handler, and for an `on call` one with no cross-context form
+    /// ([`Self::no_cross_context`] is set).
     pub success: Option<WireRef>,
     pub no_cross_context: Option<NoCrossContextReason>,
 }
@@ -311,13 +319,9 @@ pub fn wire_contract_for_service(
         None
     };
 
-    let success = if matches!(kind, BoundaryKind::Http { .. }) {
-        http_result_inner(&handler.return_type)
-            .filter(|t| !matches!(t, TypeRef::Unit(_)))
-            .map(|t| wire::wire_ref(t, &info.types))
-    } else {
-        None
-    };
+    let success = success_type(&kind, handler, contract.is_some())
+        .filter(|t| !matches!(t, TypeRef::Unit(_)))
+        .map(|t| wire::wire_ref(t, &info.types));
     let (responses, ok_reachable) = if matches!(kind, BoundaryKind::Http { .. }) {
         (
             http_responses(handler, real.span.file, expr_types, tys),
@@ -342,6 +346,22 @@ pub fn wire_contract_for_service(
         success,
         no_cross_context,
     })
+}
+
+/// #3687: the type [`WireContractModel::success`] resolves. An HTTP handler's is the `T` inside
+/// its `HttpResult[T]`; a cross-context `on call` handler's is its whole declared return type
+/// with `Effect` stripped, so a `Result[T, E]` stays whole (the caller decodes both arms). Any
+/// other handler, and an `on call` one with no cross-context form, has none.
+fn success_type<'a>(
+    kind: &BoundaryKind,
+    handler: &'a Handler,
+    has_contract: bool,
+) -> Option<&'a TypeRef> {
+    match kind {
+        BoundaryKind::Http { .. } => http_result_inner(&handler.return_type),
+        BoundaryKind::Call if has_contract => Some(strip_effect(&handler.return_type)),
+        _ => None,
+    }
 }
 
 /// 1-indexed line number of `offset` in `text`.
