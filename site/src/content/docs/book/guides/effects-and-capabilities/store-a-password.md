@@ -94,14 +94,16 @@ for a failed login, that there is nothing to store.
 ## What it costs, and what Workers allows
 
 A password hash is slow on purpose. It spends significant CPU, and that counts
-against a request's CPU limit. How much on a Workers plan has not been measured,
-so do not assume the Free plan's 10 ms is enough: it may need the Paid plan. If
-your plan's limit is too low for it, use an identity provider rather than a
-cheaper hash. There is no lower setting, and that is deliberate.
+against a request's CPU limit. **On Workers it needs the Paid plan.** Measured on
+deployed Workers ([sandbox check](https://github.com/bynk-lang/bynk/issues/4118#issuecomment-7199935890)), a hash at the Workers count of 100,000
+iterations costs about 30 ms of CPU per call (23 to 42 ms over five requests),
+two to four times the Free plan's 10 ms per request. If you cannot use the Paid
+plan, use an identity provider rather than a cheaper hash. There is no lower
+setting, and that is deliberate.
 
 The count differs by platform. Node and the browser use 600,000, OWASP's
 guidance for this algorithm. Deployed Cloudflare Workers refuse more than
-100,000, so there it is 100,000: about six times fewer rounds, and **below** that
+100,000 ([confirmed on a deployed Worker](https://github.com/bynk-lang/bynk/issues/4118#issuecomment-7198549618)), so there it is 100,000: about six times fewer rounds, and **below** that
 guidance. If that is too weak for what you protect, hash elsewhere or use an
 identity provider. A hash made off Workers at more than 100,000 cannot be
 verified on Workers: `verifyPassword` returns `false` there and logs a warning

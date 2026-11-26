@@ -122,8 +122,10 @@ export const VerifyKey = {
  * and is below OWASP's guidance of 600,000 for this algorithm; a hash made off
  * Workers above 100,000 cannot be verified on Workers (`verifyPassword` is
  * `false`, with a logged warning). Cost: one `hashPassword` or `verifyPassword`
- * spends significant CPU, counted against a Worker's CPU limit, and there is no
- * cheaper setting. On a plan where that is too much, use an identity provider.
+ * spends significant CPU, counted against a Worker's CPU limit: about 30 ms per
+ * call at Workers' 100,000 iterations, so it needs the Workers Paid plan (the Free
+ * plan allows 10 ms). There is no cheaper setting. Where that is not an option,
+ * use an identity provider.
  */
 export interface Crypto {
   digest(algorithm: Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;

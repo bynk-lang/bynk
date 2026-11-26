@@ -2716,8 +2716,9 @@ a successful `verifyPassword`.
 **The Workers count is below that guidance.** 100,000 is about six times fewer
 rounds than OWASP's 600,000, and it does not meet it. It is the most deployed
 Workers will run: Web Crypto there refuses more with `NotSupportedError: Pbkdf2
-failed: iteration counts above 100000 are not supported (requested N).` (a local
-`wrangler dev` accepts more, so the limit does not show up in a local run).
+failed: iteration counts above 100000 are not supported (requested N).`
+([confirmed on a deployed Worker](https://github.com/bynk-lang/bynk/issues/4118#issuecomment-7198549618); a local `wrangler dev` accepts more, so
+the limit does not show up in a local run).
 Nothing in Bynk can raise it. If the Workers count is too low for what you
 protect, hash somewhere that can run the stronger count, or use an identity
 provider.
@@ -2732,14 +2733,18 @@ it reports `false` for any count of 100,000 or more, and a stronger hash is
 adopted only where it can be made; it is asked after a successful
 `verifyPassword`, which a count Workers cannot run never is.
 
-`hashPassword` and `verifyPassword` spend significant CPU, and it counts against
-a request's CPU limit. How much on a Workers plan has not been measured (a
-Worker's clock does not advance while it computes), so do not assume the Free
-plan's 10 ms is enough: this may need the Paid plan. An identity provider, or
-`Oidc`, is the better answer where it does not fit. There is no lower-cost
-option, because a cheap password hash is not a password hash. Argon2 and scrypt
-are not available, since Web Crypto offers neither; the format names its
-algorithm, so one can be added without breaking a stored hash.
+**Workers needs the Paid plan for this.** `hashPassword` and `verifyPassword`
+spend significant CPU, and it counts against a request's CPU limit. Measured on
+deployed Workers ([sandbox check](https://github.com/bynk-lang/bynk/issues/4118#issuecomment-7199935890)), PBKDF2-HMAC-SHA-256 at 100,000
+iterations costs about 30 ms of CPU per call (23 to 42 ms over five requests,
+median 33 ms), and 10,000 iterations costs 2 to 5 ms. The Workers Free plan's
+limit is 10 ms per request, so at the Workers count these operations need the
+**Paid** plan. Bynk does not offer a lower count: a cheaper password hash is
+not a password hash, and a Free-plan mode is not part of this unit. Where the
+Paid plan is not an option, an identity provider, or `Oidc`, is the better
+answer. Argon2 and scrypt are not available, since Web Crypto offers neither;
+the format names its algorithm, so one can be added without breaking a stored
+hash.
 
 **Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
 differing byte, so they are the way to compare a secret, a MAC, a signature or a
