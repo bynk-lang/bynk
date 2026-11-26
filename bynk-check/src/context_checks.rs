@@ -2253,6 +2253,12 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        errors.extend(crate::api_key::by_member_refusal(
+            protocol,
+            by,
+            contract.scheme,
+            actor_ref.span,
+        ));
         // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
         // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
         if matches!(protocol, ServiceProtocol::WebSocket { .. })
@@ -3662,6 +3668,10 @@ fn check_actor_contracts(
             // #3386: a signed session cookie.
             Some(Scheme::SignedCookie) => {
                 check_signed_cookie_actor(actor, auth, table, &resolved.types, errors);
+            }
+            // #3939: an API key actor.
+            Some(Scheme::ApiKey) => {
+                crate::api_key::check_api_key_actor(actor, auth, table, &resolved.types, errors);
             }
             Some(_) => {}
         }
@@ -8599,7 +8609,7 @@ fn validate_queue_handler(
 
 /// True when `r` resolves to `String`, a refined-base `String`, or an
 /// opaque-base `String`. v0.9 path parameter requirement.
-fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Base(BaseType::String, _) => true,
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {

@@ -60,6 +60,10 @@ pub enum Scheme {
     /// verifies (HMAC-SHA-256 over a compact JWS). A browser credential, so
     /// HTTP only; single-actor only in the first slice (like `Oidc`).
     SignedCookie,
+    /// #3939 (the API keys track): an opaque key the service mints, stores only as a peppered HMAC
+    /// in generated agents, and verifies at the seam (D1–D3). HTTP only, a single actor until
+    /// slice 4.
+    ApiKey,
 }
 
 impl Scheme {
@@ -74,6 +78,7 @@ impl Scheme {
             "Oidc" => Scheme::Oidc,
             "Foreign" => Scheme::Foreign,
             "SignedCookie" => Scheme::SignedCookie,
+            "ApiKey" => Scheme::ApiKey,
             _ => return None,
         })
     }
@@ -92,6 +97,7 @@ impl Scheme {
                 | Scheme::Oidc
                 | Scheme::Foreign
                 | Scheme::SignedCookie
+                | Scheme::ApiKey
         )
     }
 
@@ -104,6 +110,7 @@ impl Scheme {
             Scheme::Oidc => "Oidc",
             Scheme::Foreign => "Foreign",
             Scheme::SignedCookie => "SignedCookie",
+            Scheme::ApiKey => "ApiKey",
         }
     }
 }
@@ -1001,6 +1008,7 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
         return by_clause_is_bearer(by, actors)
             || by_clause_is_oidc(by, actors)
             || by_clause_is_signed_cookie(by, actors)
+            || crate::api_key::by_clause_is_api_key(by, actors)
             || signature_seam_for_by(by, actors).is_some();
     }
     if sum_has_open_member(by, actors) {
@@ -1041,7 +1049,11 @@ pub fn route_is_credentialed(by: &ByClause, actors: &HashMap<String, ActorDecl>)
             .is_some_and(|s| {
                 matches!(
                     s,
-                    Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie | Scheme::Signature
+                    Scheme::Bearer
+                        | Scheme::Oidc
+                        | Scheme::SignedCookie
+                        | Scheme::Signature
+                        | Scheme::ApiKey
                 )
             })
     })
@@ -1171,8 +1183,9 @@ pub fn sum_members_for(
                 Scheme::SignedCookie => {
                     SumMemberSeam::SignedCookie(signed_cookie_seam_of(decl, None)?)
                 }
-                // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
-                Scheme::Internal | Scheme::Foreign => return None,
+                // I3: a `Foreign` sum is a `call` sum (`call_admission_for`). #3939: an `ApiKey`
+                // member is slice 4's; the checker refuses it (`scheme_not_admissible`).
+                Scheme::Internal | Scheme::Foreign | Scheme::ApiKey => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.
@@ -1228,6 +1241,10 @@ pub fn consumed_credential_headers(
     if let Some(s) = signature_seam_for(handler, actors) {
         hide(&s.header, &primary);
     }
+    // #3939 (D3 E): an `ApiKey` actor's header, the named one or `authorization` (ADR 0899).
+    if let Some(s) = crate::api_key::api_key_seam_for(handler, actors) {
+        hide(&s.consumed_header(), &primary);
+    }
     out
 }
 
@@ -1245,6 +1262,7 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
                     | Scheme::Signature
                     | Scheme::Oidc
                     | Scheme::SignedCookie
+                    | Scheme::ApiKey
             )
         }
         // v0.103 (D-B): a WebSocket upgrade authenticates via `None` (anonymous)
