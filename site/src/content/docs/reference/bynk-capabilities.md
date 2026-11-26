@@ -1131,6 +1131,14 @@ service report from http {
 }
 ```
 
+**Editor support.** In the first argument of `query` and `select` the editor offers the project's
+`Analytics` instances; hovering `{dataset}` in the SQL literal shows the table it stands for, and
+the placeholder has its own semantic token. Hovering a field of a record an instance is written
+with shows the column it goes to (`blob3`, `double1`, `index1`), a field-name position in a record
+read by `select[R]` offers the fields the instance is written with, `@index` is highlighted as an
+annotation, signature help shows the type argument of `writeValue[T]` and `select[T]`, and the
+lock's `bynk.analytics.mapping_changed` appears in the editor as it does on `bynk check`.
+
 `query(dataset, sql, params)` takes, first, the `Analytics` instance whose dataset it reads, which
 must be in the handler's `given` like any capability it uses. The SQL is **a string literal, a
 `"""` block or a `String` constant bound to one**, as for [`D1`](#sql-databases-d1), so no request

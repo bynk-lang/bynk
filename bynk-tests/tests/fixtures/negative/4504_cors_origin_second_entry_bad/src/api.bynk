@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+  cors { origins: ["https://app.example.com", "http://localhost:8787/"] }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

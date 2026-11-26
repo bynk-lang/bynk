@@ -5512,12 +5512,14 @@ fn validate_cors_policy(
         Some(expr) => match &expr.kind {
             ExprKind::ListLit(items, ..) if !items.is_empty() => {
                 for item in items {
-                    if !matches!(item.kind, ExprKind::StrLit(_)) {
-                        errors.push(CompileError::new(
+                    match &item.kind {
+                        // #4504: a literal a browser can never send matches nothing.
+                        ExprKind::StrLit(origin) => validate_cors_origin_shape(origin, item.span, errors),
+                        _ => errors.push(CompileError::new(
                             "bynk.http.cors_invalid_origins",
                             item.span,
                             "each `cors` origin must be a string literal or a `String` constant (e.g. \"https://app.example.com\" or \"*\")",
-                        ));
+                        )),
                     }
                 }
             }
@@ -5602,6 +5604,69 @@ fn validate_cors_policy(
             ),
         );
     }
+    refuse_null_origin_with_credentials(policy, errors);
+}
+
+/// #4504: `"null"` is the `Origin` a browser sends from a sandboxed frame or a `data:` page, which
+/// any other site can create, so naming it is as open as the wildcard. Beside `credentials: true`
+/// it would let any page act with the visitor's cookies and `Authorization`, so it is refused as
+/// the wildcard is. Without credentials it is compared like any other entry.
+fn refuse_null_origin_with_credentials(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    if !policy.credentials() {
+        return;
+    }
+    let Some(ExprKind::ListLit(items, ..)) = policy.field("origins").map(|e| &e.kind) else {
+        return;
+    };
+    for item in items {
+        if matches!(&item.kind, ExprKind::StrLit(origin) if origin == "null") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_wildcard_credentials",
+                    item.span,
+                    "`cors` cannot combine `credentials: true` with the origin `\"null\"`",
+                )
+                .with_note(
+                    "a browser sends `Origin: null` from a sandboxed frame or a `data:` page, \
+                     which any other site can create, so allowing it with credentials lets any \
+                     page act with the visitor's cookies; list the exact origins instead, or \
+                     set `credentials: false`",
+                ),
+            );
+        }
+    }
+}
+
+/// #4504: one literal `origins` entry. The router compares a request's `Origin` with it
+/// exactly, so an entry that is not in the form a browser sends (`scheme://host[:port]`, lower
+/// case, no path or trailing slash) matches nothing and every cross-origin request from that
+/// site is refused. An entry that named a constant was rewritten to its value before this runs,
+/// an `env(…)` constant to the value `bynk.toml` gives the environment being built.
+fn validate_cors_origin_shape(origin: &str, span: Span, errors: &mut Vec<CompileError>) {
+    let Some(problem) = crate::cors_origin::check(origin) else {
+        return;
+    };
+    let mut error = CompileError::new(
+        "bynk.http.cors_invalid_origins",
+        span,
+        format!("`cors` origin `{origin}` {}", problem.reason),
+    )
+    .with_note(
+        "the router compares the request's `Origin` with each entry exactly, and a browser sends \
+         `scheme://host[:port]` with the scheme and host in lower case, no path, query, \
+         fragment or trailing slash, and no default port; any other entry matches nothing, so \
+         every request from that site is refused",
+    );
+    if let Some(fixed) = problem.suggestion {
+        error = error.with_note(format!("write `{fixed}`"));
+        if problem.scheme_assumed {
+            error = error.with_note(
+                "the entry has no scheme, so `https` is assumed; use the scheme the site is \
+                 served on (a browser sends `http://…` from a page served over `http`)",
+            );
+        }
+    }
+    errors.push(error);
 }
 
 /// #3925: the `expose` list: header names that are RFC 9110 tokens, or `["*"]`

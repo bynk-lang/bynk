@@ -67,6 +67,8 @@ mod integration {
     mod contract_hash;
     #[path = "contracts_lock.rs"]
     mod contracts_lock;
+    #[path = "cors_origin_shapes.rs"]
+    mod cors_origin_shapes;
     #[path = "cross_context_nodes.rs"]
     mod cross_context_nodes;
     #[path = "debug_metadata.rs"]
