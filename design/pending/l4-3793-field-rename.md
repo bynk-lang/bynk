@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, ts_writes, diagnostic_coverage
+probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
 raises: ts_writes — the stored-record rename statement names its `typeof <src>` cast type with `format!`, as the neighbouring emitted names are; no TypeScript text is written
 changelog: A field renamed from an earlier name says so with `replaces old` (`name: T replaces old`, `store name: Cell[T] replaces old`), so a stored `Cell` keeps its state, a locked event field stays additive and a wire field still decodes the old key
 ---
