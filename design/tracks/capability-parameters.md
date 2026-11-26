@@ -1,15 +1,18 @@
 # Capability parameters — a commons function uses a capability its caller binds
 
-- **Status:** Settling in the draft PR that adds this doc. Spine issue: #3959,
-  which carries the live slice status.
+- **Status:** Settling in the PR that adds this doc. Every maintainer ruling
+  was given on 26 November 2026, and Q2's fork was closed by
+  [ADR 0990](../decisions/0990-commons-consumes-types.md) Decision E (§14).
+  Spine issue: #3959, which carries the live slice status.
 - **Realises:** the step [ADR 0726](../decisions/0726-given-on-context-functions.md)
   deferred (#2868 Decision A: "A later step could add capability parameters to
   commons functions"), and the capability review's carried-over item,
   capability-polymorphic functions in a commons.
 - **Posture:** Feature track per
-  [ADR 0076](../decisions/0076-feature-track-posture.md). It qualifies on two
-  axes (§1.2). It is not a security boundary, but a binding error is a
-  data-integrity hazard (§11).
+  [ADR 0076](../decisions/0076-feature-track-posture.md), run per
+  [ADR 0167](../decisions/0167-feature-tracks-run-github-native.md). It
+  qualifies on two axes (§1.2). It is not a security boundary, but a binding
+  error is a data-integrity hazard (§11).
 - **Governing records:** [ADR 0726](../decisions/0726-given-on-context-functions.md)
   (`given` on context functions: the inclusion rule and the hidden `deps`
   parameter), [ADR 0469](../decisions/0469-derived-capabilities.md) (derived
@@ -17,8 +20,17 @@
   [ADR 0693](../decisions/0693-exec-context-in-functions.md) (the hidden
   execution-context parameter), [ADR 0011](../decisions/0011-consumes-capability-selection.md)
   (capability selection with `consumes U { Cap }`),
+  [ADR 0990](../decisions/0990-commons-consumes-types.md) (a commons' braced,
+  type-only `consumes`; Decision E reserves it for capability contracts),
+  [ADR 0983](../decisions/0983-commons-names-prelude-types.md) (a commons
+  reaches `bynk`'s transparent types without the clause, and no capability),
+  [ADR 0977](../decisions/0977-effectful-suite-helpers.md) (a suite helper may
+  declare `given`), [ADR 0974](../decisions/0974-test-only-commons.md) (a
+  test-only commons),
   [ADR 0152](../decisions/0152-observation-is-auto-recorded-at-the-capability-seam.md)
   (observation at the capability seam). Two ADRs land up front (§13).
+- **Code on `main`:** cited by symbol, never by line, as of `2f315d8c`. The
+  book's reference pages are cited from `site/src/content/docs/reference/`.
 
 ## 1. The theme
 
@@ -73,7 +85,7 @@ fn session(id: String) -> Effect[Session] given Sessions, Logger {
 The track settles four things:
 
 1. **The binding rule and its syntax.** Every call binds every capability
-   parameter explicitly. That much is decided on the spine. This doc proposes
+   parameter explicitly. That much is decided on the spine. This doc settles
    where the binding is written (§5).
 2. **What a parameter's kind may be,** and which capabilities a commons may
    name bare as shared capabilities (§4, §6).
@@ -98,75 +110,84 @@ The track settles four things:
 ### 2.1 The language
 
 - A free function in a context may declare `given` after its return type. A
-  function in a commons or a suite may not
-  (`site/src/content/docs/book/reference/capabilities.md:62-89`; spec,
-  `site/src/content/docs/book/spec/static-semantics.md:1441-1446`).
+  function in a commons may not (`bynk.given.fn_outside_context`;
+  `reference/capabilities.md` §Capabilities in functions; spec,
+  `reference/spec/static-semantics.md` §5.5). That holds for a test-only
+  commons too (`commons x.y for tests`, ADR 0974, whose Consequences name the
+  limit). A suite helper may now declare `given`, naming capabilities of the
+  suite's target, and takes the case's `deps` (ADR 0977; spec §5.9).
 - The caller's `given` must include the callee's, checked at each call and at
   each reference to the function as a value, so the rule holds transitively
-  (`capabilities.md:78-82`; ADR 0726 B).
+  (`bynk.given.missing_for_call`; ADR 0726 B).
 - A capability may be declared only in a context or an adapter
-  (`bynk.capability.outside_context`; `static-semantics.md:1431-1432`). A
-  commons cannot declare a derived instance either
-  (`bynk.capability.derived_outside_context`; ADR 0469 D4).
-- A commons cannot write `consumes` at all (`static-semantics.md:2425-2426`;
-  `site/src/content/docs/book/reference/grammar.md:374`). ADR 0011 made
-  `consumes` the effectful edge and `uses` the pure one. **So a commons today
-  has no way to name `Kv` or `Logger`**, not even as a bound. This is the
-  first thing the track has to open (Q2).
+  (`bynk.capability.outside_context`; spec §5.5). A commons cannot declare a
+  derived instance either (`bynk.capability.derived_outside_context`; ADR 0469
+  D4).
+- A commons may now write `consumes`, but only the braced list of **types** an
+  adapter exports (ADR 0990; spec §5.8; `reference/grammar.md`
+  §commons_body_item). A capability name in that list is refused with
+  `bynk.commons.consumes_not_types`. Separately, a commons reaches `bynk`'s
+  transparent types with no clause at all (ADR 0983), and writing an explicit
+  `consumes bynk { … }` turns that implicit reach off for the file. **So a
+  commons today can name `TimedOut` or `KvEntry`, but still not `Kv` or
+  `Logger`**, not even as a bound. ADR 0990 Decision E reserves this same
+  braced list for capability contracts, which is how this track opens it (Q2).
 - A derived instance is an ordinary capability with its base's operations and
-  its own resource (`capabilities.md:363-369`). Each instance has its own
-  in-memory double under `bynk test` (`capabilities.md:418-419`).
+  its own resource. Each instance has its own fresh in-memory double under
+  `bynk test` (`reference/capabilities.md` §Derived capabilities).
 - Of `bynk.cloudflare`'s instantiable kinds, only `Kv` is also usable bare;
   `Service`, `R2`, `Queue`, `D1` and the rest are instance-only
-  (`bynk.capability.instance_only`; `capabilities.md:409-410`). The registry
-  records this as `Instantiable::bare` (`bynk-std/src/lib.rs:541-559`), and
-  kinds bound once per Worker (`Version`, `Ai`, `Images`, …) as
-  `Unit::singletons` (`bynk-std/src/lib.rs:518-524`, `1169-1181`).
+  (`bynk.capability.instance_only`; spec §5.5). The registry records this as
+  `Instantiable::bare` (`bynk-std`, the `bynk.cloudflare` unit's
+  `instantiable` list), and kinds bound once per Worker (`Version`, `Ai`,
+  `Images`, `AnalyticsSql`) as that unit's `singletons`; `bynk_std::instantiable`
+  looks a kind up.
 - A capability operation may be generic (`dedup[T]`), with an explicit type
-  argument at the call (`capabilities.md:246-282`). No capability kind itself
-  takes a type argument; `Queue[Order]` was considered and rejected for now in
-  #3879 (Decision A).
+  argument at the call (`reference/capabilities.md` §Generic operations). No
+  capability kind itself takes a type argument; `Queue[Order]` was considered
+  and rejected for now in #3879 (Decision A).
 - `stub` and `expect … called` apply to a capability, not to a call site, so
-  they observe calls made inside a context function
-  (`capabilities.md:83-84`; ADR 0726, Tests). Recording is ambient at the seam
-  (ADR 0152).
-- A suite may target a commons (`grammar.md:361`). A commons has no
-  capabilities, so a commons suite has no seams to stub today.
+  they observe calls made inside a context function or a `given` suite helper
+  (ADR 0726, Tests; ADR 0977 C). Recording is ambient at the seam (ADR 0152).
+- A suite may target a commons (`reference/grammar.md` §suite_decl). A commons
+  has no capabilities, so a commons suite has no seams to stub today.
 
 ### 2.2 The compiler
 
-- **Refusal.** `given_fn_refusal` refuses `given` outside a context with
-  `bynk.given.fn_outside_context`, and on a method, a non-`Effect` return or
-  `Events` with `bynk.given.fn_unsupported`
-  (`bynk-check/src/checker.rs:1620-1688`).
-- **Inclusion.** `require_callee_given` checks the callee's `given` against
-  the caller's `given_remaining`, marks each as used, and reports
-  `bynk.given.missing_for_call` with a machine-applicable fix
-  (`bynk-check/src/checker/calls.rs:802-870`). It returns early for an imported
-  function, because a `given` on a commons function is always refused today
-  (`calls.rs:803-813`). That early return is where slice 1 starts.
-- **Syntax.** A `given` clause is a list of `CapRef`s, each a name or a
-  qualified `B.Cap` (`bynk-syntax/src/ast.rs:654-661`;
-  `bynk-syntax/src/parser/declarations.rs:2400-2427`, `4476-4486`). On a
-  function it follows the return type, before `where` and the contract clauses
-  (`bynk-syntax/src/parser/statements.rs:64-68`). `given` is a reserved token
-  and appears nowhere in the expression grammar. The only call-site clause
-  today is the test-only `by <Actor>(…)` on an effect-let, attached to the
-  statement rather than the expression (`statements.rs:869-880`;
-  `ast.rs:3329`).
+- **Refusal.** `given_fn_refusal` (`bynk-check/src/checker.rs`) refuses
+  `given` outside a context with `bynk.given.fn_outside_context`, and on a
+  method, a non-`Effect` return or `Events` with `bynk.given.fn_unsupported`.
+  Its first branch is the one slice 1 narrows for a commons.
+- **Inclusion.** `require_callee_given` (`bynk-check/src/checker/calls.rs`)
+  checks the callee's `given` against the caller's `given_remaining`, marks
+  each as used, and reports `bynk.given.missing_for_call` with a
+  machine-applicable fix. It returns early for a function in
+  `imported_fn_names`, because a `given` on a commons function is always
+  refused today. That early return is where slice 1 starts.
+- **Syntax.** A `given` clause is a list of `CapRef`s (`bynk-syntax/src/ast.rs`),
+  each a name or a qualified `B.Cap`, read by `parse_given_clause` and
+  `parse_cap_ref` (`bynk-syntax/src/parser/declarations.rs`). On a function it
+  follows the return type, before `where` and the contract clauses
+  (`parse_fn_decl`, `bynk-syntax/src/parser/statements.rs`). `given` is a
+  reserved token (`TokenKind::Given`) and appears nowhere in the expression
+  grammar. The only call-site clause today is the test-only `by <Actor>(…)` on
+  an effect-let, attached to the statement rather than the expression
+  (`parse_call_site_actor`, `CallSiteActor`).
 - **Emission.** A `given` function takes a hidden `deps` parameter typed as
   exactly the capabilities it names, after the comparator witnesses and before
-  `__exec` (`bynk-emit/src/emitter/emit.rs:1115-1137`). Every call passes the
-  caller's own `deps` through (`bynk-emit/src/emitter/lower.rs:3375-3379`),
-  and a reference as a value closes over it (`lower.rs:2990-2994`). In a
-  composed provider body `deps` is `this.deps`
-  (`bynk-emit/src/emitter/lower_ctx.rs:473-485`). The execution context is a
-  separate parameter: `__exec` in a function, `deps.__exec` in a handler
-  (`lower_ctx.rs:459-470`).
+  `__exec` (`emit_free_fn_in`, `bynk-emit/src/emitter/emit/functions.rs`, the
+  one path for a context's, a commons' and a suite's free functions).
+  Every call passes the caller's own `deps` through (`lower_call`,
+  `bynk-emit/src/emitter/lower/calls.rs`), and a reference as a value closes
+  over it (`lower_ident`, `lower/ident.rs`). In a composed provider body
+  `deps` is `this.deps` (`LowerCtx::cap_deps_node`,
+  `bynk-emit/src/emitter/lower_ctx.rs`). The execution context is a separate
+  parameter: `__exec` in a function, `deps.__exec` in a handler
+  (`LowerCtx::exec_node`).
 - **Types.** A derived instance is emitted as a type alias of its base's
   interface (`export type Sessions = bynk_cloudflare.Kv;`,
-  `emit.rs:2544-2549`), so `deps.Sessions` already satisfies a parameter typed
-  `Kv`.
+  `emit_derived_capability`, `emit/capability.rs`), so `deps.Sessions` already
+  satisfies a parameter typed `Kv`.
 
 ## 3. Goals and non-goals
 
@@ -192,7 +213,11 @@ The track settles four things:
   first-party unit exports; it may not declare its own capability contract
   (§14 Q2).
 - **Capability parameters on context functions,** methods, or suite helpers
-  (§14 Q6).
+  (§14 Q6). A suite helper keeps ADR 0977's plain `given`; in a commons suite
+  it names the doubles a case holds (§9).
+- **A capability selection from a project adapter.** A commons selects only
+  first-party capabilities; ADR 0990 B's project adapters stay types-only
+  here.
 - **A partially bound function as a value** (§14 Q8).
 - **Inference or defaulting of a binding,** in the compiler or in tooling.
 
@@ -223,6 +248,12 @@ fn copyAll(prefix: Option[String]) -> Effect[Int] given From: Kv, To: Kv, Logger
 
 The existing refusals still apply: only a free function returning
 `Effect[T]`, and never `Events` (ADR 0726 A).
+
+A test-only commons (`commons x.y for tests`, ADR 0974) is a commons, so the
+same declarations are open there. That gives suites of several targets one
+home for effectful setup, `fn seed() -> Effect[()] given Store: D1`, which
+ADR 0974 had to leave out because a commons has no one capability set; a
+case binds it to its target's instance (`seed(given Store = Orders)`).
 
 **Naming.** A parameter is capitalised, because it sits where a capability
 does and is never a value (#918's case rule: capitalised names a closed
@@ -320,19 +351,32 @@ A bound names an **instantiable kind** that the commons selects from a
 first-party unit. Today that is `bynk.cloudflare`'s `Kv`, `Service`, `R2`,
 `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`, `StoredSecret`, `Email`,
 `Postgres`, `MySql`, `Vectorize`, `Container`, `AiSearch` and
-`MtlsCertificate` (`bynk-std/src/lib.rs:995-1168`).
+`MtlsCertificate` (the `instantiable` list of `bynk.cloudflare` in
+`bynk-std`).
 
-To name a kind, a commons may write a **capability selection**,
-`consumes bynk.cloudflare { Kv }`, limited to first-party units and to the
-braced form. In a commons the selection imports the contract only:
+To name a kind, a commons lists it in the braced `consumes` that ADR 0990
+already gives a commons: `consumes bynk.cloudflare { Kv }`. This is ADR 0990
+Decision E carried out. The list stays braced and may still hold types beside
+capabilities (`consumes bynk.cloudflare { Kv, KvEntry }`), but a capability
+name is admitted only from a **first-party** unit; from a project adapter it
+is still `bynk.commons.consumes_not_types`, whose note gains the first-party
+rule. In a commons the selection imports the contract only:
 
 - no provider is instantiated and no binding is emitted, because a commons
   is not a deployment unit;
 - the platform lock still falls where it does today. A context can bind a
   `Kv` parameter only to a `Kv` it holds, and it holds one only by consuming
   `bynk.cloudflare` itself;
+- a unit that `uses` the commons gets no capability through it, as ADR 0990
+  D already says for types;
 - a commons that selects capabilities but uses none of them gets the
   existing unused-import treatment.
+
+Naming a `bynk` capability (`consumes bynk { Logger }`) is an explicit
+`consumes bynk`, so it turns off ADR 0983's implicit reach for that file, as
+any explicit `consumes bynk { … }` does today: the file then lists every
+`bynk` type it names beside its capabilities, and one it leaves out is
+`bynk.consumes.type_not_selected`, with the existing fix.
 
 A valid argument for a parameter bounded by `K` is a capability the caller
 holds in its `given` that is one of:
@@ -345,9 +389,11 @@ holds in its `given` that is one of:
 - in a commons suite, the double of `K`, written `K`, or a suite-local
   instance of `K` (§9).
 
-A commons suite case has no `given` of its own. For this rule, what a suite
-case holds is the double of every kind its commons selects, instantiable and
-shared alike, plus every suite-local instance the suite declares.
+A suite case has no `given` of its own. For this rule, what a case holds
+follows ADR 0977 B: in a context's suite, its target's capabilities; in a
+commons suite, the double of every kind its commons selects, instantiable and
+shared alike, plus every suite-local instance the suite declares. A `given`
+suite helper holds what its `given` names, as a function does.
 
 The kind must match exactly. A `Kv` instance cannot bind a `D1` parameter,
 whatever their operations.
@@ -404,7 +450,7 @@ The inclusion rule extends ADR 0726 B without changing its shape:
   context instance, because it can't see one. This is checked at the call, so
   it holds along every chain, and recursion needs no special case.
 
-As with an `Ord` bound (`site/src/content/docs/book/reference/generics.md:65-66`),
+As with an `Ord` bound (`reference/generics.md`, *Ord at run time*),
 the capability appears at every link of a chain. A lambda in the body closes
 over the parameters (ADR 0033), so `Store.get` inside a lambda needs no extra
 syntax.
@@ -438,13 +484,13 @@ await cached(id, () => loadSession(id, deps), { Store: deps.Sessions, Logger: de
   built. A callee with shared capabilities only keeps today's pass-through
   of the caller's `deps`.
 - **Types.** A derived instance's type is its base's interface
-  (`emit.rs:2544-2549`), so `deps.Sessions` checks against `Kv`.
+  (`emit_derived_capability`), so `deps.Sessions` checks against `Kv`.
 - **The execution context.** `__exec` is its own parameter, after `deps`
-  (`emit.rs:1134-1137`), filled by `exec_node` (`lower_ctx.rs:459-470`), not
+  (`emit_free_fn_in`), filled by `LowerCtx::exec_node`, not
   read from the callee's `deps`. Building a fresh `deps` object therefore
   drops nothing that `within`, `race` or `detach` need.
 - **Providers.** A Bynk-bodied provider's `deps` is `this.deps`
-  (`lower_ctx.rs:473-485`); the built object reads from it the same way.
+  (`LowerCtx::cap_deps_node`); the built object reads from it the same way.
 - **Observation.** In the test build `deps.Sessions` is already the recording
   proxy (ADR 0152), so calls made through `Store` are recorded against
   `Sessions` with no extra work.
@@ -468,24 +514,35 @@ may each call theirs `Store`.
   `cached[Session](id, load, given Store = Kv)`. In a suite, a kind's name
   on the right of a binding, or as the subject of `stub` or `expect …
   called`, denotes that kind's double; in a bound, `Store: Kv`, it is still
-  the kind. The suite stubs and observes `Kv.get`. Each kind's double is fresh per case, as an instance's double is
-  (`capabilities.md:418-419`). A shared capability the commons selects gets
-  its double the same way, so `expect Logger.info called` works.
+  the kind. The suite stubs and observes `Kv.get`. Each kind's double is
+  fresh per case, as an instance's double is (`reference/capabilities.md`
+  §Derived capabilities). A shared capability the commons selects gets its
+  double the same way, so `expect Logger.info called` works.
 - **Two doubles of one kind.** A function with `From: Kv, To: Kv` needs two
   distinct doubles to be tested honestly. A commons suite may declare a
   suite-local instance, `capability Archive = Kv`, which is a fresh double
   with no binding and no deploy effect. This lifts
   `bynk.capability.derived_outside_context` for commons suites only; a commons
   itself still cannot declare one.
-- **Effectful suite helpers.** #3983 proposes suite helpers with `given`. A
-  helper in a commons suite could then take capability parameters too. This
-  track does not depend on it.
+- **Effectful suite helpers.** ADR 0977 shipped suite helpers with `given`,
+  which take the case's `deps`. In a commons suite, such a helper's `given`
+  names the doubles a case holds (`fn seed() -> Effect[()] given Kv`), which
+  the bare-`Kv` refusal of §6.2 does not touch, because there `Kv` is a
+  double, not a kind. A helper takes no capability parameters (Q6); setup
+  over a parameter lives in a test-only commons (§4), which a case calls with
+  a binding.
+- **A stub on a parameter** (`stub Store.get(_) returns None`) is
+  `bynk.stub.not_a_seam`, with a note naming the bound instance (context
+  suite) or the kind's double (commons suite). A parameter is never in scope
+  in a case, so the note is reached only when the name matches a parameter of
+  a function the case calls.
 
 ## 10. Risks
 
-- **Reopening `consumes` in a commons.** ADR 0011 made `consumes` the
-  effectful edge. Mitigated by allowing only the braced selection of
-  first-party capabilities, contract only (§6.1).
+- **Widening a commons' `consumes`.** ADR 0011 made `consumes` the effectful
+  edge, and ADR 0990 opened a commons to types only. Mitigated by admitting
+  only first-party capability names in the same braced list, contract only,
+  as ADR 0990 E intended (§6.1).
 - **Wrong-instance binding.** See §11.
 - **Ceremony.** Explicit binding at every call is more to write than
   inference. It is the decided trade: libraries are called far less often
@@ -526,17 +583,22 @@ keep that intact (slice 4):
 
 Shared capabilities are broader than they look. `Secrets.get(name)` in a
 commons can read any secret the caller can. The grant is still visible in
-every signature on the path, as for context functions. If commons are later
-distributed from a registry, this is the line to revisit.
+every signature on the path, as for context functions, so a caller sees it
+before calling. Commons are already shareable as packages
+([`packaging.md`](packaging.md) D1), so the library may be a dependency's.
+**Ruled (26 November 2026):** `Secrets` stays shared in this track. If
+dependency commons reaching secrets becomes a real concern, a narrower grant
+(naming the secrets a function may read) is the line to revisit, in its own
+increment.
 
 ## 12. Slices
 
 | # | Slice | Depends on |
 |---|---|---|
 | 0 | Settle this doc; land D1 and D2 | — |
-| 1 | Declare, bind, call: braced first-party `consumes` in a commons; `given Name: Kind` and shared capabilities on a commons free function; in-body use; binding at a call from a context body or a provider; the inclusion rule; emission through `deps` | 0 |
+| 1 | Declare, bind, call: first-party capability names in a commons' braced `consumes` (ADR 0990 E); `given Name: Kind` and shared capabilities on a commons free function; in-body use; binding at a call from a context body or a provider; the inclusion rule; emission through `deps` | 0 |
 | 2 | Forwarding and generics: binding from one commons function to another, type parameters alongside, recursion, the refusal of an unbound function value | 1 |
-| 3 | Tests: kind doubles in a commons suite, suite-local instances (lifting `bynk.capability.derived_outside_context` in a commons suite only), `stub` and `expect … called` through a bound instance, fixtures in both kinds of suite | 1 |
+| 3 | Tests: kind doubles in a commons suite, suite-local instances (lifting `bynk.capability.derived_outside_context` in a commons suite only), `stub` and `expect … called` through a bound instance, the `bynk.stub.not_a_seam` note for a parameter, fixtures in both kinds of suite and for a test-only commons | 1 |
 | 4 | Tooling and the book: hover, completion of instances at a binding, the add-binding fix (§11), signature help, architecture model, the reference and spec, and a guide ("Write a library that uses a capability") | 1; 2 and 3 for the complete pages |
 
 ## 13. Decisions (ADRs to land up front)
@@ -547,8 +609,9 @@ distributed from a registry, this is the line to revisit.
   caller's `given`. Never inferred or defaulted, by the compiler or by a
   machine-applicable fix with more than one candidate. Supersedes the
   `bynk.given.fn_outside_context` refusal for commons free functions.
-- **D2. Kinds and shared capabilities.** A commons may select first-party
-  capabilities with a braced `consumes`, contract only. An instantiable kind
+- **D2. Kinds and shared capabilities.** A commons may list first-party
+  capabilities in ADR 0990's braced `consumes`, contract only (ADR 0990 E
+  carried out). An instantiable kind
   is always a parameter; a non-instantiable one is always shared and named
   bare; `Events` is refused (§6). A commons still declares no capability or
   instance; the suite-local instances of slice 3 are the only exception, and
@@ -559,22 +622,51 @@ Recorded in their slices: emission through `deps` (slice 1); forwarding
 instances, which lift `bynk.capability.derived_outside_context` in a commons
 suite only (slice 3).
 
-## 14. Open questions — proposed answers
+### 13.1 Diagnostic codes
 
-Each answer is **proposed for review, not settled.** Marking the PR ready
-asserts these have been tested in review. Three points need the
-maintainer's input before then:
+The codes are named here so that D1 and D2 can cite them; the slice that
+first raises a code registers it with its explainer. Where an existing code
+already says the right thing, it is reused.
 
-- **Q2's commons `consumes`.** Opening even a contract-only selection in a
-  commons changes ADR 0011's split between `consumes` and `uses`. The
-  alternative is qualified bounds with no import (`given Store:
-  bynk.cloudflare.Kv`, `given bynk.Logger`), which is noisier.
-- **Q1 and Q7 depart from the spine's sketch** (in-argument binding; stubs
-  name the instance, not the parameter).
-- **Q6** closes context functions to parameters for this track.
+| Code | Raised when | Slice |
+|---|---|---|
+| `bynk.given.binding_missing` | a call leaves a callee's capability parameter unbound; the fix is machine-applicable only with one candidate (§11) | 1 |
+| `bynk.given.binding_unknown` | a binding names no parameter of the callee, or the callee has none | 1 |
+| `bynk.given.binding_duplicate` | a call binds one parameter twice | 1 |
+| `bynk.given.binding_shared` | a call binds a shared capability (`given Logger = Logger`) | 1 |
+| `bynk.given.binding_kind_mismatch` | the right-hand side is not of the bound's kind (a `Kv` instance for a `D1` parameter) | 1 |
+| `bynk.given.missing_for_call` (reused) | the right-hand side is not a capability the caller holds | 1 |
+| `bynk.given.kind_needs_parameter` | a commons names an instantiable kind bare (`given Kv`); the fix makes it `given Store: Kv` | 1 |
+| `bynk.given.shared_as_parameter` | a non-instantiable kind is used as a bound (`given L: Logger`) | 1 |
+| `bynk.given.parameter_name_conflict` | a parameter shadows a visible capability or kind, a type parameter, or another parameter | 1 |
+| `bynk.given.parameter_outside_commons` | `given Name: Kind` on a context function, a method, a handler, a provider or a suite helper (Q6) | 1 |
+| `bynk.given.parameterised_fn_value` | a function with capability parameters is named as a value (Q8) | 2 |
+| `bynk.commons.consumes_not_types` (reused, note widened) | a commons lists a capability from a unit that is not first-party | 1 |
+| `bynk.stub.not_a_seam` (reused, note added) | a `stub` or `expect … called` names a capability parameter (§9) | 3 |
+
+A parameter used as a value (`let s = Store`) gets the error a capability
+used as a value gets today; slice 1 adds a note naming it a parameter.
+`bynk.given.fn_outside_context` loses its last trigger in slice 1 and moves
+to the retired codes (`Retired` in `bynk-syntax/src/diagnostics.rs`).
+
+## 14. Open questions — settled answers
+
+Every question was reviewed on the settling PR, and the points that needed
+the maintainer were ruled on 26 November 2026, each on the proposed option:
+
+- **Q2's commons `consumes`** was closed by ADR 0990 (#4044), whose Decision
+  E names the braced, type-only list as the home for capability contracts.
+  The qualified-bound alternative (`given Store: bynk.cloudflare.Kv`) is
+  rejected.
+- **Q1 and Q7 depart from the spine's sketch:** binding inside the argument
+  list, and stubs that name the instance, not the parameter. Both accepted.
+- **Q6** closes context functions to parameters for this track. Accepted.
+- **`Secrets`** stays a shared capability (§11). Accepted.
+- **Diagnostic codes** are named in §13.1; a slice may rename one when it
+  registers it, and says so in its ADR.
 
 1. **The binding syntax.**
-   *Proposed:* inside the argument list, after the ordinary arguments:
+   *Settled:* inside the argument list, after the ordinary arguments:
    `f(x, given Store = Sessions)`. The binding itself is explicit at every
    call (decided).
    *Why:* the closing `)` bounds the clause, so it works unchanged in a `<-`, a
@@ -585,18 +677,23 @@ maintainer's input before then:
    ambiguous (§5.3).
 
 2. **What may bound a parameter.**
-   *Proposed:* an instantiable first-party kind the commons selects with a
+   *Settled:* an instantiable first-party kind the commons selects with a
    braced `consumes` (§6.1). No commons-declared capabilities, no generic
    kinds, no structural bounds. Arguments: an instance of that kind, the bare
    kind where it allows one (`Kv`), or a forwarded parameter.
-   *Why:* a commons can name nothing today, and first-party kinds are the
-   case that motivates the track. A commons-declared contract would need a
-   new provision story; `Queue[Order]` does not exist (#3879).
+   *Why:* a commons can name types only today (ADR 0990), and first-party
+   kinds are the case that motivates the track. ADR 0990 E already names the
+   braced list as the home for capability contracts. A commons-declared
+   contract would need a new provision story; `Queue[Order]` does not exist
+   (#3879).
    *Rejected:* a structural "any capability with these operations" bound. It
-   turns kinds into duck types and makes a wrong binding easier.
+   turns kinds into duck types and makes a wrong binding easier. Qualified
+   bounds with no import (`given Store: bynk.cloudflare.Kv`, `given
+   bynk.Logger`): noisier, and a second way to name a unit's export beside
+   `consumes`.
 
 3. **Shared capabilities.**
-   *Proposed:* instantiable means parameter, non-instantiable means shared.
+   *Settled:* instantiable means parameter, non-instantiable means shared.
    `Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`
    and the Cloudflare singletons are named bare; `Events` is refused. A bare
    `Kv` in a commons is refused with a fix to a parameter, and a caller may
@@ -608,7 +705,7 @@ maintainer's input before then:
    like a shared capability but isn't one in a context with instances.
 
 4. **Naming and case.**
-   *Proposed:* capitalised, under #918's case rule. Shadowing a visible
+   *Settled:* capitalised, under #918's case rule. Shadowing a visible
    capability or kind, a type parameter or another capability parameter is
    refused. A parameter is never a value.
    *Why:* inside the body `Store.get` must mean one thing. A shadowed `Kv`
@@ -619,7 +716,7 @@ maintainer's input before then:
    *Rejected:* allowing shadowing with a warning.
 
 5. **Forwarding.**
-   *Proposed:* a commons function binds the callee's parameters to its own,
+   *Settled:* a commons function binds the callee's parameters to its own,
    `given Inner = Store`, and may bind only to names it can see. Shared
    capabilities follow the existing inclusion rule.
    *Why:* checked per call, like ADR 0726 B and the `Ord` bound, so it holds
@@ -628,7 +725,7 @@ maintainer's input before then:
    another name.
 
 6. **Context functions.**
-   *Proposed:* no. A context function keeps #2868's form. A helper over two
+   *Settled:* no. A context function keeps #2868's form. A helper over two
    instances lives in a commons, which the context `uses`.
    *Why:* a context function reads with concrete instances only, and one place
    holds capability-polymorphic code. Moving the helper is cheap.
@@ -636,7 +733,7 @@ maintainer's input before then:
    can be added later without breaking anything if real code asks for it.
 
 7. **Tests.**
-   *Proposed:* `stub` and `expect … called` name capabilities, never
+   *Settled:* `stub` and `expect … called` name capabilities, never
    parameters: the bound instance in a context's suite, the kind's double in a
    commons suite (`given Store = Kv`). A commons suite may declare a
    suite-local instance (`capability Archive = Kv`) for a second double. A
@@ -648,7 +745,7 @@ maintainer's input before then:
    sketched.
 
 8. **Function values.**
-   *Proposed:* a function with capability parameters cannot be named as a
+   *Settled:* a function with capability parameters cannot be named as a
    value. `cached given Store = Sessions` is not a value in this track; write
    a lambda that binds.
    *Why:* ADR 0726 lets a `given` function close over the caller's `deps`
@@ -658,20 +755,35 @@ maintainer's input before then:
    a small saving.
 
 9. **Emission.**
-   *Proposed:* confirmed. The call builds `{ Store: deps.Sessions, Logger:
+   *Settled:* confirmed. The call builds `{ Store: deps.Sessions, Logger:
    deps.Logger }`, one object per call, with no runtime or binding change.
    `__exec` stays a separate parameter, so `within`, `race` and `detach`
    still thread (§8).
-   *Why:* verified against `emit.rs:1115-1137` and `lower_ctx.rs:459-485`.
+   *Why:* verified against `emit_free_fn_in`, `LowerCtx::exec_node` and
+   `LowerCtx::cap_deps_node` as of `2f315d8c`.
    *Rejected:* passing the caller's whole `deps` and renaming inside the
    callee. It needs a name map at run time.
 
 10. **Exports and providers.**
-    *Proposed:* commons only. Contexts export types and capabilities, not
-    functions (`grammar.md:473-482`), so a context-exported function does not
+    *Settled:* commons only. Contexts export types and capabilities, not
+    functions (`reference/grammar.md` §exports_decl), so a context-exported function does not
     arise. A Bynk-bodied provider may call a commons function and bind
     to its own `given` capabilities, emitted from `this.deps`.
     *Why:* a provider body is a `given` body already. Refusing it would push
     libraries back to function values inside providers.
     *Rejected:* refusing provider callers in the first slice.
 
+### 14.1 Decisions index
+
+| | Question | Outcome |
+|---|---|---|
+| Q1 | Binding inside the argument list, after `given` | Ruled: as recommended |
+| Q2 | First-party kinds, selected in ADR 0990's braced `consumes` | Closed by ADR 0990 E |
+| Q3 | Instantiable means parameter, otherwise shared; `Events` refused | Accepted in review: as recommended; `Secrets` ruled shared |
+| Q4 | Capitalised, no shadowing, never a value | Accepted in review: as recommended |
+| Q5 | Forwarding binds only to the caller's own names | Accepted in review: as recommended |
+| Q6 | No capability parameters on context functions | Ruled: as recommended |
+| Q7 | Stubs and `expect … called` name capabilities, never parameters | Ruled: as recommended |
+| Q8 | A parameterised function is not a value | Accepted in review: as recommended |
+| Q9 | One `deps` object per call; `__exec` separate | Accepted in review: as recommended |
+| Q10 | Commons only; a Bynk-bodied provider may call one | Accepted in review: as recommended |
