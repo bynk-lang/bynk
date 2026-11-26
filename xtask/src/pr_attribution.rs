@@ -447,6 +447,87 @@ mod tests {
         assert!(!e.contains("rose"), "{e}");
     }
 
+    /// Codes in a family no real registry has, built rather than spelled, so the docs-consistency
+    /// scan of this crate's source does not read them as codes emitted without a registry entry.
+    fn sample_codes(names: &[&str]) -> Vec<String> {
+        names
+            .iter()
+            .map(|n| format!("{}.sample.{n}", "bynk"))
+            .collect()
+    }
+
+    /// A tree whose `bynk-syntax/src/diagnostics.rs` holds the given registry and explanations,
+    /// as a temporary directory.
+    fn diagnostics_tree(name: &str, explained: &[String], registry: &[String]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("xtask-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("bynk-syntax/src")).unwrap();
+        let mut src = String::from("pub const EXPLANATIONS: &[Explain] = &[\n");
+        for code in explained {
+            src.push_str(&format!(
+                "    Explain {{\n        code: \"{code}\",\n        blurb: \"x\",\n    }},\n"
+            ));
+        }
+        src.push_str("];\n\npub const REGISTRY: &[DiagnosticInfo] = &[\n");
+        // The three entry shapes the real registry uses, and a lookalike call that is no entry.
+        for (i, code) in registry.iter().enumerate() {
+            src.push_str(&match i % 3 {
+                0 => format!("    d(\n        \"{code}\",\n        \"s\",\n    ),\n"),
+                1 => format!("    warn(d(\n        \"{code}\",\n        \"s\",\n    )),\n"),
+                _ => format!("    dg(\n        \"{code}\",\n        \"s\",\n    ),\n"),
+            });
+        }
+        let (lookalike, prose) = (
+            format!("{}.sample.lookalike", "bynk"),
+            format!("{}.sample.prose", "bynk"),
+        );
+        src.push_str(&format!(
+            "    odd(\"{lookalike}\", \"s\"),\n    // d(\"{prose}\", \"s\"),\n];\n"
+        ));
+        std::fs::write(root.join("bynk-syntax/src/diagnostics.rs"), src).unwrap();
+        root
+    }
+
+    /// #4476: the readings come from the tree they are taken of. A PR that adds an explained code
+    /// moved `explained_codes` and the registry total; read through the binary's own compiled-in
+    /// registry, both trees read alike and the move was invisible to the attribution.
+    #[test]
+    fn a_tree_that_adds_an_explained_code_is_reported_as_moved() {
+        let one = sample_codes(&["one", "two", "three"]);
+        let two = sample_codes(&["one", "two", "three", "four"]);
+        let base_root = diagnostics_tree("explained-base", &one, &one);
+        let pr_root = diagnostics_tree("explained-pr", &two, &two);
+        let base = crate::greenfield_status::diagnostics_probes(&base_root);
+        let pr = crate::greenfield_status::diagnostics_probes(&pr_root);
+        let moves = moved(&base, &pr);
+        let named = |probe: &str| moves.iter().find(|m| m.probe == probe);
+        let explained = named("explained_codes").expect("explained_codes moved");
+        assert_eq!(explained.from, "explained=3 (of 3)");
+        assert_eq!(explained.to, "explained=4 (of 4)");
+        assert!(named("diagnostic_coverage").is_some(), "{moves:?}");
+
+        // Refused when the PR's own pending files do not name it, accepted when they do.
+        let e = check(&base, &pr, &[file("l2-x.md", "")], &[], ("", "")).unwrap_err();
+        assert!(e.contains("explained_codes moved"), "{e}");
+        let own = file("l2-x.md", "probes: explained_codes, diagnostic_coverage\n");
+        assert!(check(&base, &pr, &[own], &[], ("", "")).is_ok());
+
+        let _ = std::fs::remove_dir_all(&base_root);
+        let _ = std::fs::remove_dir_all(&pr_root);
+    }
+
+    /// The scan counts an entry by the code literal a `d(` / `dg(` call opens with, through
+    /// `warn(d(…))`, and nothing else: not a longer call name, not prose.
+    #[test]
+    fn the_registry_scan_counts_entries_not_lookalikes() {
+        let codes = sample_codes(&["one", "two", "three"]);
+        let root = diagnostics_tree("registry-scan", &[], &codes);
+        let read = crate::greenfield_status::registry_codes(&root);
+        let want: BTreeSet<String> = codes.iter().cloned().collect();
+        assert_eq!(read, want);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     fn git(dir: &Path, args: &[&str]) {
         // Hermetic: a developer's own git config (a signing key, a hook, a template) must not decide
         // whether this test passes.
