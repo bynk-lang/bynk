@@ -5,6 +5,7 @@ type Order = { id: String }
 actor FromOrders = Producer where IsContext(shop.orders)
 
 service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
   on message(order: Order) -> Effect[QueueResult] by FromOrders {
     Ack
   }
