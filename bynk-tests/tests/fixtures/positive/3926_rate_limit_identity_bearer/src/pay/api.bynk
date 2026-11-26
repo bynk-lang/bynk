@@ -1,0 +1,34 @@
+context pay.api
+
+// #3926: a limit counted per verified caller. The router verifies the Bearer token first, asks the
+// limiter about the caller (`sub`), and only then reads the body; a caller whose token fails the
+// seam gets the `401` it always got and never touches the limiter.
+
+consumes bynk.cloudflare { RateLimit }
+
+type UserId = String where NonEmpty
+type NoteId = String where NonEmpty && MaxLength(8)
+
+actor Reader { auth = Bearer(secret = "API_TOKEN_SECRET"), identity = UserId }
+
+capability NoteLimit = RateLimit @limit(2) @period(60.seconds)
+
+service api from http {
+  @rateLimit(NoteLimit, key: identity)
+  @limit(maxBody: 16)
+  on POST("/notes") (body: String) -> Effect[HttpResult[String]] by r: Reader {
+    Ok("noted \(r.identity)")
+  }
+
+  // A `GET` with a typed path parameter, counted by caller: the refusal is rendered by the `GET`
+  // form of the route's response, and a bad segment is refused after the caller was verified and
+  // counted, not before.
+  @rateLimit(NoteLimit, key: identity)
+  on GET("/notes/:id") (id: NoteId) -> Effect[HttpResult[String]] by r: Reader {
+    Ok("note \(id) for \(r.identity)")
+  }
+
+  on GET("/activity") () -> Effect[HttpResult[String]] by r: Reader {
+    Ok("activity for \(r.identity)")
+  }
+}
