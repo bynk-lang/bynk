@@ -108,8 +108,9 @@ mod validation_rule;
 
 use calls::*;
 use expressions::*;
-use kernels::*;
+#[cfg(test)]
 pub(crate) use kernels::std_type_decls;
+use kernels::*;
 use refinements::*;
 
 pub(crate) use calls::extra_headers_authorization_errors;

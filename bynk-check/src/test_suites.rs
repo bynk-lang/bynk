@@ -4203,6 +4203,17 @@ pub fn register_call_record_types(
             let fields: Vec<RecordField> = op
                 .params
                 .iter()
+                // #4111: a `Secret` an operation takes is not recorded: a case that traces the
+                // call sees every other argument, and never the secret.
+                .filter(|p| match &p.type_ref {
+                    TypeRef::Named(id) => match resolved.types.get(&id.name) {
+                        Some(d) => !crate::context_checks::is_secret_carrier(d),
+                        // A caller that consumes no `bynk` type by name does not have it in its
+                        // table, and `bynk`'s own spelling of the two is all that is left to go by.
+                        None => !matches!(id.name.as_str(), "Secret" | "Authorization"),
+                    },
+                    _ => true,
+                })
                 .map(|p| RecordField {
                     annotations: Vec::new(),
                     documentation: None,

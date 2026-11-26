@@ -305,7 +305,7 @@ emitting handler itself commits, so an aborted handler emits nothing. See
 model, the subscriber side (`from Events(E)`, `on event`), and how delivery
 differs between Cloudflare and Bundle targets.
 
-The `bynk` unit also exports the transparent types these operations use:
+The `bynk` unit also exports the types these operations use (`Authorization` is opaque):
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -323,6 +323,8 @@ type FetchOptions = {
 type ParOptions = {
   limit: Int,
 }
+
+type Authorization = opaque String  // made from a Secret: see "The Secret type"
 
 type Request = {
   method: Method,
