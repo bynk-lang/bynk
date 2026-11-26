@@ -1,7 +1,8 @@
 use super::keys::combine_presence;
 use super::messages::wrangler_floor_refusal;
 use super::model::{
-    analytics_dataset_problem, confirm_address_removals, confirm_deletions, recreate_refusal,
+    analytics_dataset_problem, confirm_address_removals, confirm_deletions,
+    confirm_jurisdiction_changes, recreate_refusal,
 };
 use super::run::secrets_file_passthrough_refusal;
 use super::skew::CONTRACT_SKEW;
@@ -1832,6 +1833,264 @@ fn a_deletion_already_pushed_is_not_confirmed_again() {
     let after = plan_of(&order, &gone, &lock);
     assert!(confirm_deletions(&after, &names(&["shop.Wishlist"]), &lock));
     assert!(!confirm_deletions(&after, &names(&["shop.Other"]), &lock));
+}
+
+/// #3819: an agent `Learner` pinned to `eu`, on the Worker `shop`.
+fn pinned(jurisdiction: Option<&str>) -> Resources {
+    let mut declared = Resources::default().exports(&["Learner"]);
+    declared.durable_objects[0].jurisdiction = jurisdiction.map(str::to_string);
+    declared
+}
+
+/// #3819: adding `@jurisdiction` to an agent already deployed unrestricted mints different ids, so
+/// every instance is orphaned: the plan reports it as a change, and it must be confirmed by name.
+/// A ledger from before `@jurisdiction` records no class, which reads as unrestricted.
+#[test]
+fn adding_a_jurisdiction_to_a_deployed_agent_is_a_destructive_change() {
+    let order = names(&["shop"]);
+    let resources = project(vec![("shop", pinned(Some("eu")))]);
+    let lock = lock_with_deployed(&["shop"]);
+    let plan = plan_of(&order, &resources, &lock);
+    let changes = &plan.contexts[0].jurisdiction_changes;
+    assert_eq!(changes.len(), 1);
+    assert_eq!(
+        (
+            changes[0].class.as_str(),
+            changes[0].from.as_str(),
+            changes[0].to.as_str()
+        ),
+        ("shop.Learner", "none", "eu")
+    );
+    let text = plan_report(&plan, DeployFormat::Short);
+    assert!(
+        text.contains("change jurisdiction of durable object shop.Learner (none → eu;"),
+        "{text}"
+    );
+    assert!(
+        text.contains("--confirm-jurisdiction shop.Learner"),
+        "{text}"
+    );
+    assert!(
+        text.contains("durable object Learner (sqlite, jurisdiction eu;"),
+        "a pinned agent's line names its jurisdiction: {text}"
+    );
+    // Confirmed by name.
+    assert!(confirm_jurisdiction_changes(
+        &plan,
+        &names(&["shop.Learner"]),
+        &lock
+    ));
+}
+
+/// #3819: nothing is orphaned when the jurisdiction is unchanged, or the class is new.
+#[test]
+fn an_unchanged_or_new_jurisdiction_asks_nothing() {
+    let order = names(&["shop"]);
+    // Pushed under `eu`, still `eu`.
+    let mut lock = lock_with_deployed(&["shop"]);
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Learner".to_string(), "eu".to_string())].into(),
+    );
+    let eu = project(vec![("shop", pinned(Some("eu")))]);
+    let same = plan_of(&order, &eu, &lock);
+    assert!(same.contexts[0].jurisdiction_changes.is_empty());
+    assert!(confirm_jurisdiction_changes(&same, &[], &lock));
+    // Never pushed: a first deploy has no ids to orphan.
+    let fresh = plan_of(&order, &eu, &DeployLock::default());
+    assert!(fresh.contexts[0].jurisdiction_changes.is_empty());
+    // An unrestricted agent still deployed unrestricted.
+    let none = project(vec![("shop", pinned(None))]);
+    let unrestricted = plan_of(&order, &none, &lock_with_deployed(&["shop"]));
+    assert!(unrestricted.contexts[0].jurisdiction_changes.is_empty());
+}
+
+/// #3819: changing `eu` to `fedramp`, or dropping the annotation, is a change too.
+#[test]
+fn changing_or_dropping_a_jurisdiction_is_a_destructive_change() {
+    let order = names(&["shop"]);
+    let mut lock = lock_with_deployed(&["shop"]);
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Learner".to_string(), "eu".to_string())].into(),
+    );
+    for (now, expected) in [(Some("fedramp"), "fedramp"), (None, "none")] {
+        let resources = project(vec![("shop", pinned(now))]);
+        let plan = plan_of(&order, &resources, &lock);
+        let change = &plan.contexts[0].jurisdiction_changes[0];
+        assert_eq!((change.from.as_str(), change.to.as_str()), ("eu", expected));
+    }
+}
+
+/// #3819: a confirmation names a change this plan makes, or is refused, so a stale CI flag cannot
+/// approve a different change. Without one, a non-interactive run is refused.
+#[test]
+fn a_jurisdiction_change_is_confirmed_by_name() {
+    let order = names(&["shop"]);
+    let resources = project(vec![("shop", pinned(Some("eu")))]);
+    let lock = lock_with_deployed(&["shop"]);
+    let plan = plan_of(&order, &resources, &lock);
+    assert!(confirm_jurisdiction_changes(
+        &plan,
+        &names(&["shop.Learner"]),
+        &lock
+    ));
+    assert!(
+        !confirm_jurisdiction_changes(&plan, &names(&["shop.Other"]), &lock),
+        "a confirmation for a class that does not change is refused"
+    );
+    assert!(
+        !confirm_jurisdiction_changes(&plan, &[], &lock),
+        "unconfirmed, a run with no terminal is refused"
+    );
+}
+
+/// #3819: once the change is pushed, the ledger records the class under its new jurisdiction, so the
+/// same flag in a CI script, or on a re-run after another Worker failed, is harmless, as an applied
+/// `--confirm-delete` is. A flag naming a class the ledger does not record is still refused.
+#[test]
+fn a_confirmation_for_a_change_already_applied_is_not_refused() {
+    let order = names(&["shop"]);
+    let resources = project(vec![("shop", pinned(Some("eu")))]);
+    let mut lock = lock_with_deployed(&["shop"]);
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Learner".to_string(), "eu".to_string())].into(),
+    );
+    let plan = plan_of(&order, &resources, &lock);
+    assert!(plan.contexts[0].jurisdiction_changes.is_empty());
+    assert!(confirm_jurisdiction_changes(
+        &plan,
+        &names(&["shop.Learner"]),
+        &lock
+    ));
+    assert!(!confirm_jurisdiction_changes(
+        &plan,
+        &names(&["shop.Typo"]),
+        &lock
+    ));
+}
+
+/// #3819: a pinned class added to a Worker whose classes the ledger already records is new, and has
+/// no instances to orphan, so it asks for no confirmation. A Worker from before the record lists no
+/// class, and reads as unrestricted.
+#[test]
+fn a_new_pinned_class_on_a_recorded_worker_is_not_a_change() {
+    let order = names(&["shop"]);
+    let mut lock = lock_with_deployed(&["shop"]);
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Plain".to_string(), "none".to_string())].into(),
+    );
+    let mut declared = Resources::default().exports(&["Plain", "Audit"]);
+    declared.durable_objects[1].jurisdiction = Some("eu".to_string());
+    let resources = project(vec![("shop", declared)]);
+    let plan = plan_of(&order, &resources, &lock);
+    assert!(
+        plan.contexts[0].jurisdiction_changes.is_empty(),
+        "Audit is new: nothing to orphan"
+    );
+    // The same Worker with no record of its classes: `Audit` might have been deployed unrestricted.
+    let old = lock_with_deployed(&["shop"]);
+    let plan = plan_of(&order, &resources, &old);
+    assert_eq!(plan.contexts[0].jurisdiction_changes.len(), 1);
+}
+
+/// #3819: a rename keeps the namespace and its instances, so a renamed class is compared with the
+/// old class's record: keeping the jurisdiction is no change, and dropping it is one.
+#[test]
+fn a_renamed_class_is_compared_with_the_old_classs_jurisdiction() {
+    let order = names(&["shop"]);
+    let mut lock = lock_with_deployed(&["shop"]);
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Learner".to_string(), "eu".to_string())].into(),
+    );
+    let renamed = |now: Option<&str>| {
+        let mut declared = pinned(now);
+        declared.durable_objects[0].class = "Student".to_string();
+        declared.renamed_durable_objects = vec![("Learner".to_string(), "Student".to_string())];
+        project(vec![("shop", declared)])
+    };
+    let kept = renamed(Some("eu"));
+    let plan = plan_of(&order, &kept, &lock);
+    assert!(
+        plan.contexts[0].jurisdiction_changes.is_empty(),
+        "a rename that keeps `eu` is no change"
+    );
+    let dropped = renamed(None);
+    let plan = plan_of(&order, &dropped, &lock);
+    let changes = &plan.contexts[0].jurisdiction_changes;
+    assert_eq!(
+        changes.len(),
+        1,
+        "a rename that drops `eu` orphans the instances"
+    );
+    assert_eq!(
+        (
+            changes[0].class.as_str(),
+            changes[0].from.as_str(),
+            changes[0].to.as_str()
+        ),
+        ("shop.Student", "eu", "none")
+    );
+    // After the renamed push the record holds `Student`, which the next plan compares with itself.
+    let mut after = lock_with_deployed(&["shop"]);
+    after.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [("Student".to_string(), "eu".to_string())].into(),
+    );
+    let plan = plan_of(&order, &kept, &after);
+    assert!(plan.contexts[0].jurisdiction_changes.is_empty());
+}
+
+/// #3819: the ledger records each hosted class's jurisdiction, replaced on every push, and writes
+/// nothing for a Worker with no classes.
+#[test]
+fn the_ledger_records_each_classs_jurisdiction() {
+    let mut lock = DeployLock::default();
+    assert_eq!(
+        lock.recorded_agent_jurisdiction("default", "shop", "Learner"),
+        None
+    );
+    lock.record_agent_jurisdictions(
+        "default",
+        "shop",
+        [
+            ("Learner".to_string(), "eu".to_string()),
+            ("Plain".to_string(), "none".to_string()),
+        ]
+        .into(),
+    );
+    assert_eq!(
+        lock.recorded_agent_jurisdiction("default", "shop", "Learner"),
+        Some("eu")
+    );
+    assert_eq!(
+        lock.recorded_agent_jurisdiction("default", "shop", "Plain"),
+        Some("none")
+    );
+    assert!(
+        toml::to_string(&lock)
+            .unwrap()
+            .contains("agent_jurisdictions")
+    );
+    lock.record_agent_jurisdictions("default", "shop", BTreeMap::new());
+    assert_eq!(
+        lock.recorded_agent_jurisdiction("default", "shop", "Learner"),
+        None
+    );
+    assert!(
+        !toml::to_string(&lock)
+            .unwrap()
+            .contains("agent_jurisdictions")
+    );
 }
 
 #[test]

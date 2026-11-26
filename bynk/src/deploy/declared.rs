@@ -32,6 +32,10 @@ pub(crate) struct DeclaredBindings {
     pub(crate) ai_search: Vec<AiSearchDecl>,
     pub(crate) mtls_certificates: Vec<MtlsCertificateDecl>,
     pub(crate) email_senders: Vec<EmailSendersDecl>,
+    /// #3819: each agent class this Worker hosts, with its `@jurisdiction` (`None` when it has
+    /// none). Declares no binding resource: a class is in the config's `exports`, and a
+    /// jurisdiction is a property of the id, not of the config.
+    pub(crate) agent_jurisdictions: BTreeMap<String, Option<String>>,
 }
 
 /// What the Worker in directory `dir` declares, from its `bindings`
@@ -164,12 +168,18 @@ pub(crate) fn declared_bindings(
                     certificate: certificate.clone(),
                 });
             }
-            // A Durable Object is declared by the config's `exports`, which the
-            // deploy reads as a setting, and a singleton is a plain table with
-            // nothing to create or link.
-            BindingSource::Singleton { .. }
-            | BindingSource::Agent { .. }
-            | BindingSource::EventsFanout { .. } => {}
+            // #3819: an agent's class is in the config's `exports`, but its `@jurisdiction` is not
+            // in the config at all, so the build's model hands it over here.
+            BindingSource::Agent {
+                class_name,
+                jurisdiction,
+            } => {
+                out.agent_jurisdictions
+                    .insert(class_name.clone(), jurisdiction.clone());
+            }
+            // The events fan-out is a Durable Object the config's `exports` declares, and a
+            // singleton is a plain table with nothing to create or link.
+            BindingSource::Singleton { .. } | BindingSource::EventsFanout { .. } => {}
         }
     }
     // A Worker calling itself is no edge (ADR 0874 D7).
@@ -609,6 +619,7 @@ mod tests {
                     "AGENT_COUNTER",
                     BindingSource::Agent {
                         class_name: "Counter".into(),
+                        jurisdiction: None,
                     },
                 ),
                 binding(
@@ -625,6 +636,32 @@ mod tests {
                 ),
             ],
         );
-        assert_eq!(got, DeclaredBindings::default());
+        // The agent's class is all a Worker records of it; nothing else is declared.
+        assert_eq!(
+            got,
+            DeclaredBindings {
+                agent_jurisdictions: BTreeMap::from([("Counter".to_string(), None)]),
+                ..DeclaredBindings::default()
+            }
+        );
+    }
+
+    /// #3819: an agent's `@jurisdiction` is handed to the deploy by class.
+    #[test]
+    fn an_agents_jurisdiction_is_declared_by_class() {
+        let got = declared(
+            "demo",
+            &[binding(
+                "AGENT_LEARNER",
+                BindingSource::Agent {
+                    class_name: "Learner".into(),
+                    jurisdiction: Some("eu".into()),
+                },
+            )],
+        );
+        assert_eq!(
+            got.agent_jurisdictions,
+            BTreeMap::from([("Learner".to_string(), Some("eu".to_string()))])
+        );
     }
 }

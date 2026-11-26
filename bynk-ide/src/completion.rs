@@ -1998,7 +1998,12 @@ pub fn instance_option_values(
     let Some(open) = innermost_open_paren(text, offset) else {
         return &[];
     };
-    if !on_capability_declaration(text, open) {
+    // #3819: an agent's `@jurisdiction(` sits on its own line above `agent`, not on a
+    // `capability` line.
+    let on_agent_jurisdiction = text[text[..open].rfind('\n').map_or(0, |i| i + 1)..open]
+        .trim_start()
+        .starts_with("@jurisdiction");
+    if !on_capability_declaration(text, open) && !on_agent_jurisdiction {
         return &[];
     }
     let Some(seg) = text.get(open + 1..offset.min(text.len())) else {
@@ -2013,10 +2018,22 @@ pub fn instance_option_values(
         return &[];
     }
     match word_before_brace(text, open) {
-        "period" => RATELIMIT_PERIODS,
+        "period" if !on_agent_jurisdiction => RATELIMIT_PERIODS,
+        "jurisdiction" => JURISDICTIONS,
         _ => &[],
     }
 }
+
+/// #3819: the jurisdictions `@jurisdiction(` takes on an `R2`, a `D1` and an agent, as a value
+/// completion offers them.
+pub const JURISDICTIONS: &[(&str, &str)] = &[
+    ("\"eu\"", "keeps the data in the European Union"),
+    (
+        "\"fedramp\"",
+        "keeps the data in FedRAMP-compliant data centres",
+    ),
+    ("\"us\"", "keeps the data in the United States"),
+];
 
 /// P3 (#2342): the instance completions on a `capability X = …` line, as
 /// `(label, detail, insert text)`: after the `=`, each instantiable platform
@@ -3182,6 +3199,10 @@ pub const SNIPPETS: &[(&str, &str)] = &[
     (
         "agent",
         "agent ${1:Name} {\n\tkey ${2:id}: ${3:String}\n\n\tstore ${4:status}: Cell[${5:Int}] = ${6:0}\n\n\tinvariant ${7:non_negative}: ${8:status >= 0}\n\n\ttransition ${9:monotonic}: ${10:new.status >= old.status}\n\n\ton call ${11:op}(${12}) -> Effect[Result[${13:()}, String]] {\n\t\tOk(${14:()})\n\t}\n}",
+    ),
+    (
+        "agent jurisdiction",
+        "@jurisdiction(\"${1:eu}\")\nagent ${2:Name} {\n\tkey ${3:id}: ${4:String}\n\n\tstore ${5:status}: Cell[${6:Int}] = ${7:0}\n\n\ton call ${8:op}(${9}) -> Effect[${10:()}] {\n\t\t$0\n\t}\n}",
     ),
     (
         "agent busyAfter",
@@ -6208,6 +6229,17 @@ fn Box.size(self) -> Int { 1 }
             .collect();
         assert_eq!(offered, ["10.seconds", "60.seconds"]);
         assert!(instance_option_values("let x = period(", 15).is_empty());
+        // #3819: `@jurisdiction(` offers the two jurisdictions, on an agent and on an `R2`.
+        for doc in [
+            "context a\n@jurisdiction(",
+            "context a\ncapability Files = R2 @jurisdiction(",
+        ] {
+            let offered: Vec<&str> = instance_option_values(doc, doc.len())
+                .iter()
+                .map(|(v, _)| *v)
+                .collect();
+            assert_eq!(offered, ["\"eu\"", "\"fedramp\"", "\"us\""], "{doc}");
+        }
         let doc = "service api from http {\n  @period(";
         assert!(instance_option_values(doc, doc.len()).is_empty());
     }

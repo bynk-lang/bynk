@@ -222,6 +222,7 @@ const WORKER_ORDER: &[&str] = &[
     "__pgExecute",
     "__serialiseAgentClass",
     "__agentBusyAfter",
+    "__agentNamespace",
     "__agentBusyResponse",
     "__callAgentOutcome",
     "__stubAgents",

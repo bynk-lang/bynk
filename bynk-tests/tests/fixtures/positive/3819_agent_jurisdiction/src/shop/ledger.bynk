@@ -1,0 +1,49 @@
+context shop.ledger
+
+// #3819: `@jurisdiction("eu")` keeps every instance's state in the EU. The generated Worker reaches
+// the agent's Durable Object through `namespace.jurisdiction("eu")`, so every caller mints the
+// same restricted id; the value is "eu", "fedramp" or "us".
+@jurisdiction("eu")
+agent Learner {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+// Both annotations may sit on one agent, in either order.
+@busyAfter(5.seconds)
+@jurisdiction("fedramp")
+agent Audit {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+// An agent with no annotation keeps the unrestricted namespace.
+agent Plain {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+service api from http {
+	on POST("/learner/:id") (id: String) -> Effect[HttpResult[Int]] by v: Visitor {
+		let t <- Learner(id).add(1)
+		Ok(t)
+	}
+}

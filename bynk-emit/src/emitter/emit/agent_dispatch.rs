@@ -797,8 +797,17 @@ pub(super) fn emit_agent_factory(
     // decodes the result through this agent's wire table.
     if workers {
         make_agent_args.push(bynk_ts::TsExpr::Ident(agent_wire_name(&a.name.name)));
+        let jurisdiction = bynk_check::agent_jurisdiction::jurisdiction_of(a);
         if reads_key {
             make_agent_args.push(bynk_ts::TsExpr::Ident(agent_key_codec_name(&a.name.name)));
+        } else if jurisdiction.is_some() {
+            // #3819: the jurisdiction follows the key codec, so an agent that never reads its
+            // key still passes the slot.
+            make_agent_args.push(bynk_ts::TsExpr::Ident("undefined".to_string()));
+        }
+        // #3819: `@jurisdiction("eu")` makes the stub's id come from the restricted namespace.
+        if let Some(j) = jurisdiction {
+            make_agent_args.push(crate::ts_build::str_lit(j));
         }
     }
     // #3581: the factory hands the agent back through `__noteAgentInstance`, which

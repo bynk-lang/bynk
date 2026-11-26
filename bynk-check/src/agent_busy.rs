@@ -33,11 +33,17 @@ fn duration_ms(ann: &Annotation) -> Option<i64> {
     }
 }
 
-/// Validate `agent`'s annotations: `@busyAfter` is the only one, written at most once, taking one
-/// `Duration` literal from 1 second to 30 seconds.
+/// Validate `agent`'s annotations: `@busyAfter` (one `Duration` literal from 1 second to 30
+/// seconds) and `@jurisdiction` (#3819), each written at most once.
 pub fn validate_agent_annotations(agent: &AgentDecl, errors: &mut Vec<CompileError>) {
     let mut seen = false;
+    let mut seen_jurisdiction = false;
     for ann in &agent.annotations {
+        if ann.name.name == crate::agent_jurisdiction::JURISDICTION {
+            crate::agent_jurisdiction::validate(ann, seen_jurisdiction, errors);
+            seen_jurisdiction = true;
+            continue;
+        }
         if ann.name.name != "busyAfter" {
             errors.push(
                 CompileError::new(
@@ -45,7 +51,9 @@ pub fn validate_agent_annotations(agent: &AgentDecl, errors: &mut Vec<CompileErr
                     ann.span,
                     format!("`@{}` is not an agent annotation", ann.name.name),
                 )
-                .with_note("the one agent annotation is `@busyAfter(<Duration>)`"),
+                .with_note(
+                    "the agent annotations are `@busyAfter(<Duration>)` and `@jurisdiction(\"eu\")`",
+                ),
             );
             continue;
         }

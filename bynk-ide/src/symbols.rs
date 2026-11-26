@@ -4185,6 +4185,12 @@ pub(crate) fn describe_agent(a: &AgentDecl) -> String {
         ));
     }
     out.push_str("}\n```\n");
+    // #3819: where the agent's state is kept, when it is pinned.
+    if let Some(j) = bynk_check::agent_jurisdiction::jurisdiction_of(a) {
+        out.push_str(&format!(
+            "\nPinned to the **{j}** jurisdiction: every instance's state is kept there (`@jurisdiction(\"{j}\")`).\n"
+        ));
+    }
     if let Some(doc) = &a.documentation {
         out.push('\n');
         out.push_str(doc);

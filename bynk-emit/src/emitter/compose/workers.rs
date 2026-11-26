@@ -478,6 +478,14 @@ pub fn emit_worker_compose(
                         .filter(|(_, a)| crate::emitter::emit::agent_reads_key(a))
                         .map(|(n, _)| n.clone())
                         .collect();
+                    let jurisdictions: HashMap<String, String> = table
+                        .agents
+                        .iter()
+                        .filter_map(|(n, a)| {
+                            bynk_check::agent_jurisdiction::jurisdiction_of(a)
+                                .map(|j| (n.clone(), j.to_string()))
+                        })
+                        .collect();
                     return_entries.push(emit_websocket_upgrade(
                         sname,
                         h,
@@ -485,6 +493,7 @@ pub fn emit_worker_compose(
                         sum.as_deref(),
                         &local_agents,
                         &key_readers,
+                        &jurisdictions,
                         &visible_consts,
                         &mut const_imports,
                     ));

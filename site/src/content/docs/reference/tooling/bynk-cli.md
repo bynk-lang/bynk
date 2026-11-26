@@ -208,7 +208,7 @@ bynk new <PATH> [--name NAME]
 ```text
 <PATH>/
 ├── bynk.toml            # [project] name/version + optional [paths] include/exclude
-├── .gitignore           # /.bynk
+├── .gitignore           # /out, /.bynk, .wrangler/, node_modules/
 ├── .gitattributes       # *.bynk text eol=lf
 ├── src/
 │   └── <name>.bynk      # context <name> — a GET "/" HTTP service

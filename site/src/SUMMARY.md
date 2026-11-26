@@ -156,6 +156,7 @@
     - [Run your project locally](guides/projects-build-and-deployment/run-locally.md)
     - [Deploy to Cloudflare](guides/projects-build-and-deployment/deploy-to-cloudflare.md)
     - [Deploy from CI](guides/projects-build-and-deployment/deploy-from-ci.md)
+    - [Keep a project's data in one jurisdiction](guides/projects-build-and-deployment/keep-data-in-a-jurisdiction.md)
     - [Roll back a deployment](guides/projects-build-and-deployment/roll-back-a-deployment.md)
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
     - [Follow a request across contexts](guides/projects-build-and-deployment/follow-a-request-across-contexts.md)

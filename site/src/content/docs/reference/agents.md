@@ -607,6 +607,64 @@ storage.
 - **Tests** observe the reset by calling a read handler, as a user of the agent would
   ([guide](/book/guides/agents-and-state/delete-a-users-data/)).
 
+## Data residency: `@jurisdiction` {#jurisdiction}
+
+`@jurisdiction("eu")` (or `"fedramp"` or `"us"`) before `agent` (#3819) keeps every instance's state in that
+Cloudflare jurisdiction:
+
+```bynk,fragment
+@jurisdiction("eu")
+agent Learner {
+	key id: String
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+```
+
+The values are the ones an `R2` bucket and a `D1` database take. The annotation is on the agent, and
+there is no context-wide default. It is written once and takes one string literal; a second
+`@jurisdiction`, a value that is not `"eu"`, `"fedramp"` or `"us"`, or an argument that is not a literal is
+`bynk.agent.bad_annotation`. It combines with `@busyAfter` in either order.
+
+An agent's calls, `bynk test` and the generated client are unchanged. The generated Worker reaches the
+agent's Durable Object through `namespace.jurisdiction("eu")`, so every caller (a handler, a service,
+a WebSocket route) mints the same restricted id. The Worker's configuration is unchanged: a
+jurisdiction belongs to the id, not to the binding or the class.
+
+**It cannot change after deploy.** An id minted through a jurisdiction-restricted namespace is a
+different id from the unrestricted one for the same name, so adding, changing or dropping the
+annotation on a deployed agent would orphan every existing instance, and nothing moves the data.
+`bynk deploy` records the jurisdiction each class was pushed under in `bynk.deploy.lock`
+(`agent_jurisdictions`), and a plan that differs prints
+
+```text
+change jurisdiction of durable object shop.Learner (none → eu; its existing instances are orphaned, irreversibly; needs --confirm-jurisdiction shop.Learner)
+```
+
+(`bynk deploy --dry-run` shows it and changes nothing). The deploy refuses until you confirm it by
+name, at the prompt or with `--confirm-jurisdiction shop.Learner` (repeatable); `--yes` never stands
+in, and a flag for a class whose jurisdiction does not change is refused, unless the ledger already
+records the class (an earlier deploy applied the change, so a flag left in a CI script is harmless). A
+deployed Worker whose ledger predates this record reads as unrestricted, which is what every agent
+was, so adding `@jurisdiction` to an agent you already deployed asks for the confirmation. Once the
+ledger records a Worker's classes, a class added later is new and asks for nothing, and a renamed
+class (`agent New replaces Old`) is compared with the old class's jurisdiction, since a rename keeps
+the instances.
+
+**Locally.** `bynk dev` and `wrangler dev` run workerd, which does not implement jurisdictions: it
+throws `Jurisdiction restrictions are not implemented in workerd`. Only on that exact message, the
+generated Worker uses the unrestricted namespace and warns once per isolate. Any other failure
+throws, so a deployed Worker can never silently lose the restriction. A jurisdiction is not visible
+from Bynk, in a query or in `bynk test`. Cloudflare reports it inside the object, as `ctx.id.jurisdiction`
+in a Durable Object (the value survives a round trip through the id's string form), which is where a live
+check can read it.
+
+See also [keep a project's data in one jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/).
+
 ## Renaming and removing an agent
 
 Once `bynk.schema.lock` records an agent class, it can't simply disappear from

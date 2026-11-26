@@ -42,6 +42,7 @@ use crate::deploy::kind::Lives;
 use crate::deploy::kind::ProjectCx;
 use crate::deploy::kind::Tools;
 use crate::deploy::ledger::DeployLock;
+use crate::deploy::ledger::UNRESTRICTED_AGENT;
 use crate::deploy::ledger::read_lock;
 use crate::deploy::provisioning::secrets_file_supported;
 use crate::deploy::provisioning::sweep_stale_upload_dirs;
@@ -134,6 +135,10 @@ pub struct DeployOptions {
     /// each Durable Object class whose data a `removed agent` deletes, named
     /// back. `--yes` never stands in for it (Decision E).
     pub confirm_delete: Vec<String>,
+    /// #3819: `--confirm-jurisdiction <context>.<Class>` — each agent class whose
+    /// `@jurisdiction` changes since its last push, named back. A change mints different
+    /// Durable Object ids and orphans every instance, so `--yes` never stands in for it.
+    pub confirm_jurisdiction: Vec<String>,
     /// #2554: `--accept-compatible-skew` — with `--context`, deploy a callee
     /// ahead of live callers still on an older contract when each such change
     /// is compatible for them. Records the older contracts in
@@ -200,6 +205,25 @@ pub(crate) fn record_pushed_tombstones(
         environment,
         worker,
         pushed.renamed_durable_objects.iter().cloned().collect(),
+    );
+    // #3819: and the jurisdiction each hosted class's ids were minted under, which the next
+    // plan compares against.
+    lock.record_agent_jurisdictions(
+        environment,
+        worker,
+        pushed
+            .durable_objects
+            .iter()
+            .map(|object| {
+                (
+                    object.class.clone(),
+                    object
+                        .jurisdiction
+                        .clone()
+                        .unwrap_or_else(|| UNRESTRICTED_AGENT.to_string()),
+                )
+            })
+            .collect(),
     );
     // #3328: and the Email Routing addresses it carried. #3883: an environment that claims
     // none omits `addresses`, which changes no rule, so what was recorded is still live and
