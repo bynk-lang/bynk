@@ -359,3 +359,25 @@ export async function freshApiKey(peppers: readonly ApiKeyPepper[]): Promise<Fre
 export function newApiKeyHandle(): string {
   return hex(crypto.getRandomValues(new Uint8Array(API_KEY_HANDLE_BYTES)));
 }
+
+// ---------------------------------------------------------------------------------------------
+// The seam's arguments to `<Actor>Keys.verify`
+// ---------------------------------------------------------------------------------------------
+
+/** The presented digests by `kid`, as `verify` takes them: the store compares the one its record's
+ *  `kid` names. */
+export function apiKeyPresented(digests: readonly ApiKeyDigest[]): ReadonlyMap<string, Uint8Array> {
+  return new Map(digests.map((d) => [d.kid, d.digest] as const));
+}
+
+/** The digest under the current pepper: what `verify` compares the dummy digest against when the
+ *  store holds no record the presented key can match, so the work is the same (D3 B). */
+export function apiKeyFirstDigest(digests: readonly ApiKeyDigest[]): Uint8Array {
+  return digests[0].digest;
+}
+
+/** The fixed dummy digest (32 zero bytes). An HMAC-SHA-256 output equals it with probability
+ *  2^-256, and `verify` also refuses whenever it compared the dummy, so it never admits. */
+export function apiKeyDummyDigest(): Uint8Array {
+  return API_KEY_DUMMY_DIGEST;
+}

@@ -517,6 +517,9 @@ pub enum ActorSeamIr {
     /// #3386: a single `SignedCookie` actor: the session cookie is read, verified
     /// and its `sub` minted into the identity at the edge.
     SignedCookie(bynk_check::actors::SignedCookieSeam),
+    /// #3939: a single `ApiKey` actor: the key is read, parsed, digested under the pepper and
+    /// looked up in the generated key store at the edge, which answers the identity.
+    ApiKey(bynk_check::api_key::ApiKeySeam),
     /// A cross-context `on call … by c: Caller` handler's own binder name —
     /// `caller_binder_for`'s return type is already the bare `Option<String>`
     /// the other four resolvers reduce a whole struct down to one field for.
@@ -534,12 +537,14 @@ impl ActorSeamIr {
         match self {
             ActorSeamIr::Bearer(s) if s.binder.is_some() => Some(&s.identity_type),
             ActorSeamIr::SignedCookie(s) if s.binder.is_some() => Some(&s.identity_type),
+            ActorSeamIr::ApiKey(s) if s.binder.is_some() => Some(&s.identity_type),
             ActorSeamIr::None
             | ActorSeamIr::Sum(_)
             | ActorSeamIr::CallSum(_)
             | ActorSeamIr::Bearer(_)
             | ActorSeamIr::Oidc(_)
             | ActorSeamIr::SignedCookie(_)
+            | ActorSeamIr::ApiKey(_)
             | ActorSeamIr::Caller(_)
             | ActorSeamIr::Sender(_) => None,
         }

@@ -8,7 +8,7 @@ import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { bearerTrust, oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
-import { apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
+import { apiKeyDummyDigest, apiKeyFirstDigest, apiKeyPresented, apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
@@ -199,6 +199,9 @@ export {
   containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
+  apiKeyDummyDigest as __apiKeyDummyDigest,
+  apiKeyFirstDigest as __apiKeyFirstDigest,
+  apiKeyPresented as __apiKeyPresented,
   apiKeyCredentialOf as __apiKeyCredentialOf,
   apiKeyDigests as __apiKeyDigests,
   apiKeyIdOf as __apiKeyIdOf,

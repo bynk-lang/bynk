@@ -154,6 +154,13 @@ fn http_route_wrappers(
         bynk_model::ActorSeamIr::SignedCookie(seam) => {
             return_entries.push(signed_cookie_entry(service, sname, h, method, path, &seam))
         }
+        // #3939: `key: identity` admits `ApiKey` from slice 2 (track §12); the checker refuses it
+        // until then, so an `ApiKey` route is always the one wrapper.
+        bynk_model::ActorSeamIr::ApiKey(seam) => {
+            return_entries.push(crate::emitter::workers_api_key::emit_http_api_key_wrapper(
+                sname, h, method, path, &seam,
+            ));
+        }
         bynk_model::ActorSeamIr::Sum(members) => {
             return_entries.push(emit_http_sum_wrapper(
                 sname,

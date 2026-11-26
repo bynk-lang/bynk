@@ -234,6 +234,7 @@ pub(crate) fn emit_service(
             ActorSeamIr::Bearer(s) => s.binder.clone(),
             ActorSeamIr::Oidc(s) => s.binder.clone(),
             ActorSeamIr::SignedCookie(s) => s.binder.clone(),
+            ActorSeamIr::ApiKey(s) => s.binder.clone(),
             ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_) | ActorSeamIr::None => None,
         };
         let actor_sum_binder = if matches!(seam, ActorSeamIr::Sum(_) | ActorSeamIr::CallSum(_)) {
@@ -353,7 +354,7 @@ pub(crate) fn emit_service(
         // rather than the type system).
         match &seam {
             // #3386: a `SignedCookie` seam mints its identity from `sub` just the same.
-            ActorSeamIr::Bearer(_) | ActorSeamIr::SignedCookie(_) => {
+            ActorSeamIr::Bearer(_) | ActorSeamIr::SignedCookie(_) | ActorSeamIr::ApiKey(_) => {
                 if let Some(id) = seam.captured_identity_type() {
                     append_deps_field(&mut deps_members, "identity", bynk_ts::TsType::named(id));
                     // #3937: an HTTP `Bearer` binder reads the verified token's claims too.
