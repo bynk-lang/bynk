@@ -18,7 +18,7 @@ class __Stub_Basket {
   }
 
   async add(n: number): globalThis.Promise<number> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -38,6 +38,7 @@ class __Stub_Basket {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -72,7 +73,7 @@ async function test_a_stubbed_operation_is_Unreachable__whatever_the_key() {
     __ns_shop_basket.__resetAgents();
     const deps = __makeTestDeps();
     const { Basket, __makeBasket, place, placePlain, total } = __ns_shop_basket;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -92,6 +93,7 @@ async function test_a_stubbed_operation_is_Unreachable__whatever_the_key() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -115,7 +117,7 @@ async function test_a_case_s_own_stub_wins_over_the_suite_s() {
     __ns_shop_basket.__resetAgents();
     const deps = __makeTestDeps("a case's own stub wins over the suite's");
     const { Basket, __makeBasket, place, placePlain, total } = __ns_shop_basket;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -135,6 +137,7 @@ async function test_a_case_s_own_stub_wins_over_the_suite_s() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -156,7 +159,7 @@ async function test_an_argument_pattern_stubs_only_the_calls_it_matches() {
     __ns_shop_basket.__resetAgents();
     const deps = __makeTestDeps("an argument pattern stubs only the calls it matches");
     const { Basket, __makeBasket, place, placePlain, total } = __ns_shop_basket;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -176,6 +179,7 @@ async function test_an_argument_pattern_stubs_only_the_calls_it_matches() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -199,7 +203,7 @@ async function test_an_operation_that_is_not_stubbed_is_the_real_one() {
     __ns_shop_basket.__resetAgents();
     const deps = __makeTestDeps();
     const { Basket, __makeBasket, place, placePlain, total } = __ns_shop_basket;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -219,6 +223,7 @@ async function test_an_operation_that_is_not_stubbed_is_the_real_one() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -240,7 +245,7 @@ async function test_a_plain_call_to_a_stubbed_operation_faults() {
     __ns_shop_basket.__resetAgents();
     const deps = __makeTestDeps();
     const { Basket, __makeBasket, place, placePlain, total } = __ns_shop_basket;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -260,6 +265,7 @@ async function test_a_plain_call_to_a_stubbed_operation_faults() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;

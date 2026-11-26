@@ -6657,6 +6657,30 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let mode = RoundingMode.HalfUp         // ✗ a mode is not a value\n\nprice.round(2, RoundingMode.HalfUp)    // ✓ written where it rounds",
     },
     Explain {
+        code: "bynk.types.secret_at_boundary",
+        blurb: "A `bynk` `Secret` is a value read from the platform's secret store, and it has no \
+                stored, sent or encoded form: putting one in a record, event or `store` field, \
+                or passing one into or out of a handler, would write the secret into data that \
+                is persisted, logged or shown to a caller. Keep a `Secret` in a local binding \
+                or a function parameter and use it where it is read, with `matches(candidate)` \
+                to compare or `reveal()` to hand its text to the one call that needs it. A \
+                capability operation may take or return one: that is how `Secrets.get` and \
+                `StoredSecret.get` produce it.",
+        example: "type Credentials = {\n    owner: String,\n    token: Secret,     // ✗ a secret cannot be held in a type\n}\n\n\
+                  type Credentials = {\n    owner: String,     // ✓ read the secret where it is used\n}",
+    },
+    Explain {
+        code: "bynk.types.secret_not_comparable",
+        blurb: "`==` on text stops at the first character that differs, so how long it takes \
+                tells a caller how much of a guess was right. A `bynk` `Secret` is therefore \
+                never compared with `==` or `!=`, nor held in a type that is (a record or sum \
+                that derives equality). Compare with `secret.matches(candidate)`, which takes \
+                the same time however the two differ, or call `reveal()` where the text itself \
+                is needed.",
+        example: "fn same(a: Secret, b: Secret) -> Bool {\n    a == b                       // ✗ variable-time\n}\n\n\
+                  fn same(a: Secret, b: Secret) -> Bool {\n    a.matches(b.reveal())        // ✓ constant-time\n}",
+    },
+    Explain {
         code: "bynk.types.select_tail_has_select",
         blurb: "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
         example: "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
@@ -11426,6 +11450,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.rounding_mode_position",
         "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622).",
+    ),
+    d(
+        "bynk.types.secret_at_boundary",
+        "A `bynk` `Secret` appears in a storable or boundary-crossing position (a record, event or `store` field, a handler parameter or result): a secret is never persisted, sent or encoded (#4111).",
+    ),
+    d(
+        "bynk.types.secret_not_comparable",
+        "`==` or `!=` on a `bynk` `Secret`, or on a type that holds one: comparing text is variable-time, so a secret is compared with `matches` (#4111).",
     ),
     dg(
         "bynk.types.select_tail_has_select",

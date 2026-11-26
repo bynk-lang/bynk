@@ -58,6 +58,8 @@ fn token_type_index(kind: SymbolKind) -> u32 {
         SymbolKind::Embed => 14,
         // #2617: constant names append `constant` at 16.
         SymbolKind::Const => 16,
+        // #4183: a unit's name is a namespace, as the qualifier of a `uses` name is.
+        SymbolKind::Unit => TOK_NAMESPACE,
     }
 }
 
@@ -126,6 +128,30 @@ fn push_site(raw: &mut Vec<(Span, u32, u32)>, text: &str, span: Span, ty: u32, m
     }
 }
 
+/// #4183: a unit name as tokens, one `namespace` per segment, so `shop.pay` is
+/// `shop` and `pay` with the `.` left to the grammar. `mods` rides on every
+/// segment. A name that is not segments of word characters joined by `.` stays
+/// one token over `span`.
+fn push_unit_site(raw: &mut Vec<(Span, u32, u32)>, text: &str, span: Span, mods: u32) {
+    let written = text.get(span.range()).unwrap_or_default();
+    if written.is_empty()
+        || !written
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    {
+        raw.push((span, TOK_NAMESPACE, mods));
+        return;
+    }
+    let mut at = span.start;
+    for segment in written.split('.') {
+        let end = at + segment.len();
+        if !segment.is_empty() {
+            raw.push((Span::new_in(span.file, at, end), TOK_NAMESPACE, mods));
+        }
+        at = end + 1;
+    }
+}
+
 /// Semantic tokens for `path`, delta-encoded over the frozen legend —
 /// a pure read of the cached index's two sources: `symbols` (user
 /// defs+refs; a def site carries `declaration`) and `foreign_refs`
@@ -152,15 +178,24 @@ pub fn semantic_tokens(
         }
         let ty = token_type_index(key.kind);
         let mods = modifier_bits(entry.modifiers);
+        let is_unit = key.kind == SymbolKind::Unit;
         if let Some(def) = &entry.def
             && def.path == path
             && in_scope(def.span)
         {
-            raw.push((def.span, ty, mods | MOD_DECLARATION));
+            if is_unit {
+                push_unit_site(&mut raw, text, def.span, mods | MOD_DECLARATION);
+            } else {
+                raw.push((def.span, ty, mods | MOD_DECLARATION));
+            }
         }
         for site in &entry.refs {
             if site.path == path && in_scope(site.span) {
-                push_site(&mut raw, text, site.span, ty, mods);
+                if is_unit {
+                    push_unit_site(&mut raw, text, site.span, mods);
+                } else {
+                    push_site(&mut raw, text, site.span, ty, mods);
+                }
             }
         }
     }

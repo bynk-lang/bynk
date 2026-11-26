@@ -9,7 +9,7 @@ service probe {
       method: Get,
       url: url,
       contentType: None,
-      authorization: auth,
+      authorization: auth.map((t) => t.reveal()),
       headers: Map.empty(),
       body: None,
     }
