@@ -1,0 +1,46 @@
+suite shop.triage
+
+consumes bynk.cloudflare { AiError, Generation, Ai }
+
+// #4099: a test never reaches Workers AI. `generateValue` reads the text of a stubbed `generate`,
+// so each case runs the decode a model's reply goes through.
+
+case "an unstubbed generateValue faults" {
+	expect triage.POST("/triage", "x") by Visitor faults
+}
+
+case "a reply that matches the schema is decoded" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"severity\":\"High\",\"summary\":\"disk full\",\"tags\":[\"ops\"],\"owner\":null}", usage: None })
+	let r <- triage.POST("/triage", "the disk is full") by Visitor
+	expect r is Ok("disk full")
+}
+
+case "an enum given as an object and a missing optional field are read" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"severity\":{\"kind\":\"Low\"},\"summary\":\"fine\",\"tags\":[]}", usage: None })
+	let r <- triage.POST("/triage", "all good") by Visitor
+	expect r is Ok("fine")
+}
+
+case "a reply that is not JSON is a BadReply that names the kind and the path" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "Sure! Here is the triage: high", usage: None })
+	let r <- triage.POST("/triage", "secret ticket text") by Visitor
+	expect r is ServerError("the reply is not a Triage (Malformed at $)")
+}
+
+case "a reply of the wrong shape is a BadReply that names the field" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"severity\":\"Urgent\",\"summary\":\"x\",\"tags\":[]}", usage: None })
+	let r <- triage.POST("/triage", "t") by Visitor
+	expect r is ServerError("the reply is not a Triage (StructuralMismatch at $.severity)")
+}
+
+case "a reply that breaks a refinement is a BadReply that never carries the value" {
+	stub Ai.generate(_, _) returns Ok(Generation { text: "{\"severity\":\"Low\",\"summary\":\"this summary is much longer than twenty characters\",\"tags\":[]}", usage: None })
+	let r <- triage.POST("/triage", "t") by Visitor
+	expect r is ServerError("the reply is not a Triage (RefinementViolation at $.summary)")
+}
+
+case "a platform refusal comes through as it is" {
+	stub Ai.generate(_, _) returns Err(InvalidInput("5006: the model does not take response_format"))
+	let r <- triage.POST("/triage", "t") by Visitor
+	expect r is ServerError("model unavailable")
+}

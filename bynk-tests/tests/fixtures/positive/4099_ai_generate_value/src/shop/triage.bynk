@@ -1,0 +1,36 @@
+context shop.triage
+
+// #4099: `Ai.generateValue[T]` asks the model for JSON matching `T`'s schema and decodes the reply
+// as `T`, refinements included, so a reply that is not that shape is a `BadReply` value.
+
+consumes bynk
+consumes bynk.cloudflare { Ai, AiError, ChatMessage, ChatRole, GenerateRequest }
+
+type Severity = enum { Low, Medium, High }
+
+type Summary = String where MaxLength(20)
+
+type Triage = {
+	severity: Severity,
+	summary: Summary,
+	tags: List[String],
+	owner: Option[String],
+}
+
+service triage from http {
+	@limit(maxBody: 4096)
+	on POST("/triage") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let ask = GenerateRequest {
+			messages: [
+				ChatMessage { role: ChatRole.System, content: "Classify the ticket." },
+				ChatMessage { role: ChatRole.User, content: body },
+			],
+		}
+		let reply <- Ai.generateValue[Triage]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+		match reply {
+			Ok(t) => Ok(t.summary),
+			Err(BadReply(why)) => ServerError(why),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}

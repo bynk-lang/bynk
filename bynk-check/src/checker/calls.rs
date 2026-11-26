@@ -1958,6 +1958,16 @@ pub(crate) fn check_static_call(
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
         // #4105: the typed Analytics operations, lowered over `query` and `write`.
+        // #4099: `Ai.generateValue[T]`, lowered over the binding's JSON-mode generation.
+        if let Some(typed) = super::ai::check_typed(
+            &type_name.name,
+            method,
+            (type_args, args),
+            (span, expr_id),
+            ctx,
+        ) {
+            return typed;
+        }
         if let Some(typed) = super::analytics::check_typed(
             &type_name.name,
             cap.derived_from.as_ref(),
