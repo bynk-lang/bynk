@@ -571,7 +571,7 @@ export function makeIntegrationAnalyticsSql(): AnalyticsSqlBinding {
   return {
     async query(): Promise<unknown> {
       throw markNotStubbed(
-        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _) returns …`",
+        "bynk: the `AnalyticsSql` binding is not stubbed, and a test never reaches Analytics SQL — add `stub AnalyticsSql.query(_, _, _) returns …`",
       );
     },
   };

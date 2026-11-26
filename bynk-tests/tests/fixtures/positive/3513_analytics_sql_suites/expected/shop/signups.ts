@@ -7,15 +7,29 @@ import { SqlValue } from "../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../bynk/cloudflare.js";
 
+var __const_WEEKLY: { v: string } | undefined;
+export function WEEKLY(): string { return (__const_WEEKLY ??= { v: "SELECT count() AS n, (SELECT count() FROM {dataset}) AS total FROM {dataset} WHERE timestamp > NOW() - INTERVAL '7' DAY" }).v; }
+
 export type Signups = bynk_cloudflare.Analytics;
 
 export const __SignupsToken: symbol = globalThis.Symbol("Signups");
 
 export const report = {
+  async http_GET_weekly(deps: { AnalyticsSql: bynk_cloudflare.AnalyticsSql; Signups: Signups }): globalThis.Promise<HttpResult<number>> {
+    const res = await deps.AnalyticsSql.query(await deps.Signups.dataset(), WEEKLY(), []);
+    switch (res.tag) {
+      case "Ok": {
+        const r = res.value;
+        return HttpResult.Ok(r.rows);
+      }
+      case "Err": {
+        return HttpResult.ServerError("the query failed");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
   async http_GET_signups_Param_country(country: string, deps: { AnalyticsSql: bynk_cloudflare.AnalyticsSql; Signups: Signups }): globalThis.Promise<HttpResult<number>> {
-    const table = await deps.Signups.dataset();
-    const sql = `SELECT count() AS n FROM ${String(table)} WHERE blob1 = \$1 AND timestamp > NOW() - INTERVAL '1' DAY`;
-    const res = await deps.AnalyticsSql.query(sql, [SqlValue.Text(country)]);
+    const res = await deps.AnalyticsSql.query(await deps.Signups.dataset(), "SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY", [SqlValue.Text(country)]);
     if (res.tag === "Ok") {
       const r = res.value;
       return HttpResult.Ok(r.rows);

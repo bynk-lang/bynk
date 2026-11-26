@@ -1,0 +1,15 @@
+context demo
+
+consumes bynk.cloudflare { Analytics, AnalyticsSql }
+
+capability Signups = Analytics
+
+service s from http {
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql {
+		let r <- AnalyticsSql.query(Signups, "SELECT count() FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' HOUR", [])
+		match r {
+			Ok(res) => Ok(res.rows),
+			Err(_) => ServerError("no"),
+		}
+	}
+}
