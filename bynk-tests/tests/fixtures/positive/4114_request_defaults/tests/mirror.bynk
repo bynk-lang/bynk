@@ -10,7 +10,7 @@ case "a bare request sends no content type, authorisation, header or body" {
 	expect n == 204
 	expect Fetch.send called once with req.method == Get
 	expect Fetch.send called once with req.contentType == None
-	expect Fetch.send called once with req.authorization == None
+	expect Fetch.send called once with req.authorization.isNone()
 	expect Fetch.send called once with req.body == None
 	expect Fetch.send called once with req.headers.isEmpty()
 }

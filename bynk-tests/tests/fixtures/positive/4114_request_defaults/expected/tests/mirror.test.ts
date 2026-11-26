@@ -29,7 +29,8 @@ class __Stub_Fetch {
   }
 
   async send(req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk.FetchError>> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -100,7 +101,8 @@ async function test_a_bare_request_sends_no_content_type__authorisation__header_
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a bare request sends no content type, authorisation, header or body"), { Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"] }, __obs);
     const { poster, probe } = __ns_mirror;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -138,16 +140,16 @@ async function test_a_bare_request_sends_no_content_type__authorisation__header_
     }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:12:9", 433, 484, "expect Fetch.send called once with req.contentType == None"); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
-      return (__bynkEq(req.authorization, None));
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:13:9", 493, 546, "expect Fetch.send called once with req.authorization == None"); }
+      return ((req.authorization.tag === "None"));
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:13:9", 493, 547, "expect Fetch.send called once with req.authorization.isNone()"); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
       return (__bynkEq(req.body, None));
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:14:9", 555, 599, "expect Fetch.send called once with req.body == None"); }
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:14:9", 556, 600, "expect Fetch.send called once with req.body == None"); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
       return ((req.headers).size === 0);
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:15:9", 608, 657, "expect Fetch.send called once with req.headers.isEmpty()"); }
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:15:9", 609, 658, "expect Fetch.send called once with req.headers.isEmpty()"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -163,7 +165,8 @@ async function test_a_field_written_explicitly_overrides_its_default() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a field written explicitly overrides its default"), { Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"] }, __obs);
     const { poster, probe } = __ns_mirror;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -190,19 +193,19 @@ async function test_a_field_written_explicitly_overrides_its_default() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const n = await poster.call("https://upstream.test/", "hi", deps);
-    if (!(n === 201)) { throw __bynkExpectFailure("tests/mirror.bynk:21:9", 870, 878, "expect n == 201\n  expected: n == 201\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((201))); }
+    if (!(n === 201)) { throw __bynkExpectFailure("tests/mirror.bynk:21:9", 871, 879, "expect n == 201\n  expected: n == 201\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((201))); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
       return (__bynkEq(req.body, Some("hi")));
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:22:9", 887, 937, "expect Fetch.send called once with req.body == Some(\"hi\")"); }
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:22:9", 888, 938, "expect Fetch.send called once with req.body == Some(\"hi\")"); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
       return (__bynkEq(req.contentType, None));
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:23:9", 946, 997, "expect Fetch.send called once with req.contentType == None"); }
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:23:9", 947, 998, "expect Fetch.send called once with req.contentType == None"); }
     if (!((((__obs.log["Fetch.send"] ?? []).filter((__c: { args: unknown[] }) => {
       const { req } = { req: __c.args[0] } as __Fetch_send_Call;
       return (__bynkEq(((__m: ReadonlyMap<string, string>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(req.headers, "accept"), Some("text/plain")));
-    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:24:9", 1006, 1081, "expect Fetch.send called once with req.headers.get(\"accept\") == Some(\"text/plain\")"); }
+    }).length) === (1)))) { throw __bynkExpectFailure("tests/mirror.bynk:24:9", 1007, 1082, "expect Fetch.send called once with req.headers.get(\"accept\") == Some(\"text/plain\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
