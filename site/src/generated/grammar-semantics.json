@@ -1920,10 +1920,6 @@
     {
       "code": "bynk.field.replaces_unknown",
       "summary": "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename."
-    },
-    {
-      "code": "bynk.store.replaces_collection",
-      "summary": "`replaces` renames a `Cell`, `Set` or un-indexed `Map` store field; a `Cache`, a `Log` and an `@indexed` or `@unique` `Map` keep their entries under keys that carry the field's name, so they cannot be renamed this way yet."
     }
   ],
   "string_literal": [
