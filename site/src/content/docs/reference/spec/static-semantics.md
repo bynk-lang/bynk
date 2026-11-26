@@ -2084,14 +2084,19 @@ checker enforces the closed field set — an unknown field is
 
 - **`origins`** — REQUIRED; a non-empty list of string literals
   (`bynk.http.cors_invalid_origins`). The allowlist of origins, or the single
-  wildcard `["*"]`.
+  wildcard `["*"]`. A request's `Origin` is compared with each entry exactly, so a
+  literal entry must be in the serialised form a browser sends, `scheme://host[:port]`
+  (lower-case scheme and host, no path, query, fragment or trailing slash, no default
+  port); any other shape matches nothing and is the same error. `"null"` is such an
+  origin but is refused beside `credentials: true`.
 - **`headers`** — OPTIONAL; a list of string literals
   (`bynk.http.cors_invalid_field`). Overrides the default `Access-Control-Allow-Headers`.
 - **`credentials`** — OPTIONAL; a boolean literal (`bynk.http.cors_invalid_field`).
 - **`maxAge`** — OPTIONAL; a `Duration` literal (`bynk.http.cors_invalid_field`).
 
-`credentials: true` combined with a wildcard origin (`["*"]`) is rejected
-(`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids that pair.
+`credentials: true` combined with a wildcard origin (`["*"]`), or with the origin `"null"`,
+is rejected (`bynk.http.cors_wildcard_credentials`) — the Fetch standard forbids the first
+pair and any other site can claim `null`.
 `Access-Control-Allow-Methods` is **not** a field: it is derived from the service's
 declared route methods (plus `HEAD` where `GET` is declared, plus `OPTIONS`) — the
 same derivation that drives the always-on `Allow` header. A service with no

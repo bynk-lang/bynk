@@ -1841,7 +1841,7 @@ From this the compiler synthesises, for that service:
 
 | Field | Meaning | Default |
 |---|---|---|
-| `origins` | The allowed origins, as string literals or [`String` constants](#origins-from-constants) — an exact allowlist (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`; or one `List[String]` constant. **Required.** | — |
+| `origins` | The allowed origins, as string literals or [`String` constants](#origins-from-constants) — an exact allowlist in [serialised form](#origin-form) (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`; or one `List[String]` constant. **Required.** | — |
 | `headers` | The `Access-Control-Allow-Headers` a preflight advertises. | `content-type` (plus `authorization` when the service has a [Bearer](/reference/actors/) route) |
 | `expose` | The response headers a browser script may read, beside the ones Bynk writes for a client ([below](#exposed-headers)). | the automatic set |
 | `credentials` | Whether credentialed requests (cookies / `Authorization`) are allowed — sends `Access-Control-Allow-Credentials: true`. | `false` |
@@ -1859,6 +1859,39 @@ An exact allowlist compares the request's `Origin` and **reflects** the matched 
 not serve one origin's grant to another. A request from an origin not on the list gets
 **no** `Access-Control-Allow-Origin` — the browser blocks the read (fail closed). The
 wildcard `["*"]` answers every origin with a literal `*` (and needs no `Vary`).
+
+### Origin form
+
+The comparison is **exact**, and a browser sends an origin only in its serialised form:
+`scheme://host[:port]`, with the scheme and host in lower case, no path, query, fragment or
+trailing slash, and no port that is the scheme's default. An entry in any other shape can
+never equal a header a browser sends, so every request from that site would be refused and
+nothing would say why. Bynk refuses such an entry at compile time with
+`bynk.http.cors_invalid_origins`, at the entry, and writes the form to use instead:
+
+| Written | Why a browser never sends it | Write |
+|---|---|---|
+| `"https://app.example.com/"` | a trailing slash | `"https://app.example.com"` |
+| `"https://app.example.com/app"` | a path: an origin has none | `"https://app.example.com"` |
+| `"https://App.example.com"` | the host is lower case | `"https://app.example.com"` |
+| `"HTTPS://app.example.com"` | the scheme is lower case | `"https://app.example.com"` |
+| `"app.example.com"` | no scheme | `"https://app.example.com"` (the scheme your site is served on) |
+| `"https://app.example.com:443"` | a default port is left out (`:443` for `https`, `:80` for `http`) | `"https://app.example.com"` |
+| `"https://*.example.com"` | there is no subdomain wildcard, and a browser never sends a `*` | list each origin |
+
+A port that is not the default is part of the origin, so `"http://localhost:8787"` is
+correct as written, as are the schemes a browser sends for a shell around a page
+(`"capacitor://localhost"`). `"*"` stays what it was.
+
+`"null"` is the `Origin` a browser sends from a sandboxed frame or a `data:` page. It is
+compared like any other entry, but any other site can produce it, so it is refused beside
+`credentials: true` (`bynk.http.cors_wildcard_credentials`), as the wildcard is.
+
+A constant is checked as the value it stands for. An `env(…)` constant is checked as the
+value `bynk.toml` gives it in the environment being built, so a bad value for `staging` is
+refused when `staging` is built (`bynk build --env staging`, `bynk deploy --env staging`), at
+the constant's use in the `cors` block, while the default environment, with a good value,
+still builds.
 
 ### Origins from constants
 
