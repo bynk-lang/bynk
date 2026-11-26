@@ -823,9 +823,15 @@ below. (Recommended.)**
     and a redelivery look identical at the entry.
   - **One open risk,** checked live (§9 L11): on Free, queue retention is fixed at 24 hours
     (§3), so a message delayed to midnight may meet its retention first if it already waited
-    hours. If L11 shows retention counts from the original send, the delay is capped at what
-    the message has left, minus a margin, and the plan warns a Free-plan project with events
-    that a day over the cap can lose events.
+    hours. Until L11 settles it, the **Free-plan loss warning** applies: *a day over the cap
+    may lose events whose 24-hour retention runs out first*. The events guide, `bynk doctor`
+    and the deploy plan all state it for a Free-plan project with subscribers. L11's result
+    then decides what stays:
+    - **if retention counts from the original send,** the delay is capped at what the message
+      has left, minus a margin, and the warning stays on all three surfaces, because the risk
+      is real;
+    - **if it does not** (a delayed message keeps its full retention), the warning is removed
+      from all three.
   - `bynk doctor` and the deploy plan state the Free-plan figure (about 3,300 deliveries a
     day, D1 permitting) for a project with subscribers, so the cap is known before it bites.
 - **Throughput:** 5,000 messages per second per queue (§3) bounds one *subscriber*, not one
@@ -855,8 +861,10 @@ Worker's `queue` entry. (Recommended.)**
   `EventTooLarge` (D3).
 - **`bynk dev`:** local delivery across two `wrangler dev` processes is an open risk (§12 R1),
   settled in slice 3 before the cut-over.
-- **The ordering harness** (`bynk-tests/tests/system/events_ordering_workerd.rs`, ADR 0290) is retired with
-  D4, or kept as a measurement that asserts nothing about order.
+- **The ordering harness** (`bynk-tests/tests/system/events_ordering_workerd.rs`, ADR 0290) is
+  **retired in slice 4**, per D4's ruling. Its assertions are the guarantees D4 withdraws, and
+  the cut-over removes the fan-out it measures, so it is deleted rather than kept as a
+  measurement that asserts nothing.
 
 ### D11 (#3545 part 2). Subscribers ignore repeats of the same `eventId`
 
@@ -921,7 +929,10 @@ about 3,300 deliveries a day, with D1's daily rows behind it. The options were:
     for a project with subscribers;
   - the events guide says that production event workloads need Workers Paid;
   - past the cap, the behaviour is D9's: a service faults, an agent's outbox defers to
-    00:00 UTC, and deduplication fails closed.
+    00:00 UTC, and deduplication fails closed. The Free-plan loss warning applies too (D9):
+    until L11 settles retention on Free, a day over the cap may lose events whose 24-hour
+    retention runs out first. The events guide, `bynk doctor` and the deploy plan say so, and
+    L11's result decides whether the warning stays.
 - **B. A Free-plan fallback** to a lighter path, for example in-request delivery without a
   queue. Rejected: it would keep a second delivery mechanism with a weaker guarantee, and with
   different semantics to test and document, which is the shape this track removes.
@@ -1108,12 +1119,13 @@ cites this doc. Each slice that touches signing, verification or deduplication r
 
 **Slice 0: Front-loaded ADRs.** Depends on: this doc merging.
 - (a) The substrate: one compiler-owned queue and dead-letter queue per subscribing service;
-  supersedes ADR 0284, and supersedes ADR 0475 D2–D3 for events.
+  supersedes ADR 0284, and supersedes ADR 0475 D2–D3 for events. One delivery mechanism on
+  every Cloudflare plan, with no Free-plan fallback substrate; the Free plan's cap is accepted
+  and documented (D13).
 - (b) The guarantee as worded in §4.1, and release-at-commit by outbox for agents and by
   send-or-fault for services (D1).
 - (c) Ordering is best effort, and each event is one message; amends ADR 0290 (D4, ruled
-  option (ii)). The Free plan's cap is accepted and documented (D13), with no fallback
-  substrate.
+  option (ii)).
 - (d) Internal queues: reserved names, the #3899 v1 format for events, owner-only
   verification, and built-in deduplication (D2, D11).
 - (e) The outbox row format is versioned and part of the 1.0 stored-data promise, beside
@@ -1153,8 +1165,9 @@ changes for users yet: nothing sends to the new queues.
   skew**: an undecodable message is dead-lettered with its claim released, and the same
   message, delivered again once the subscriber decodes it, runs the handler once.
 - The compiler's `bynk.event.queue_name_collision` check (D2).
-- `bynk doctor` and the deploy plan state the Free-plan planning figure, about 3,300
-  deliveries a day, for a project with subscribers (D13).
+- `bynk doctor` and the deploy plan state, for a Free-plan project with subscribers, the
+  planning figure (about 3,300 deliveries a day) and the Free-plan loss warning, until L11
+  settles it (D9, D13).
 - The D1 daily-limit deferral: a claim that fails on the limit retries with a delay to 00:00 UTC, failing closed (D9, the Free plan).
 - The size measurement in `Events.emit`, warning only (`EventNearLimit`), and the
   `bynk.event.unbounded_payload` warning (§8.1), so projects find their large events a release
@@ -1171,6 +1184,7 @@ two-context project in `default` and in a named environment; L5, L6 and L10 have
 - *Agents send after commit* in this slice, still at most once (a failed send is logged). The
   outbox is slice 5, so this slice stays reviewable.
 - `EventTooLarge` before commit on every target (D3).
+- `bynk-tests/tests/system/events_ordering_workerd.rs` is retired (D4's ruling, D10).
 - `__EventsFanout` is tombstoned; `events_fanout.rs`, `dispatchToEventsFanout`,
   `BindingSource::EventsFanout`, the fan-out bindings, `cycle_publishers` and the cycle
   refusal's event paragraph are deleted (D8). The structural guard in
@@ -1343,8 +1357,8 @@ None of these pages is edited by this settling PR. Each is updated by the slice 
   - `book/guides/events/index.md` and `book/concepts/events/understand-events.md`
     (slices 3, 4 and 7): a "Delivery settings" section for `delivery { }` on a subscriber; the
     size budget, with what to do about a large payload; the dead-letter queue and how long a
-    dead letter can be redriven (D5); the Free-plan figure (D9), and the statement that
-    production event workloads need Workers Paid (D13).
+    dead letter can be redriven (D5); the Free-plan figure and the Free-plan loss warning (D9),
+    and the statement that production event workloads need Workers Paid (D13).
   - `reference/queue.md`, "Delivery policy" (slice 7): a note that event subscribers take the
     same section, without `deadLetter`.
   - The generated diagnostic index (`/reference/diagnostics/`, built from the compiler's
