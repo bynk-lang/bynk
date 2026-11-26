@@ -1266,7 +1266,7 @@ pub(crate) fn instance_example(kind: &firstparty::Instantiable) -> String {
 /// A sample value of option `option`, as a note writes it.
 fn option_sample(option: &str) -> &'static str {
     match option {
-        firstparty::R2_JURISDICTION_OPTION => "\"eu\"",
+        firstparty::JURISDICTION_OPTION => "\"eu\"",
         firstparty::RATELIMIT_LIMIT_OPTION => "100",
         firstparty::RATELIMIT_PERIOD_OPTION => "60.seconds",
         firstparty::QUEUE_NAME_OPTION => "\"order-events\"",
@@ -1611,8 +1611,8 @@ fn instance_option_value(
         );
         return None;
     }
-    if option == crate::firstparty::R2_JURISDICTION_OPTION
-        && !r2_jurisdiction_ok(text, base, ann, path, errors)
+    if option == crate::firstparty::JURISDICTION_OPTION
+        && !jurisdiction_ok(text, base, ann, path, errors)
     {
         return None;
     }
@@ -1743,9 +1743,9 @@ fn email_list_ok(
     false
 }
 
-/// Whether `text` is a jurisdiction an `R2` bucket can be pinned to. Pushes the
-/// error and returns `false` otherwise.
-fn r2_jurisdiction_ok(
+/// Whether `text` is a jurisdiction an `R2` bucket or a `D1` database can be
+/// pinned to. Pushes the error and returns `false` otherwise.
+fn jurisdiction_ok(
     text: &str,
     base: &str,
     ann: &bynk_syntax::ast::Annotation,
@@ -1760,7 +1760,10 @@ fn r2_jurisdiction_ok(
         CompileError::new(
             "bynk.capability.invalid_option",
             ann.span,
-            format!("`{text}` is not a jurisdiction a `{base}` bucket can be pinned to"),
+            format!(
+                "`{text}` is not a jurisdiction a `{base}` {} can be pinned to",
+                if base == "D1" { "database" } else { "bucket" }
+            ),
         )
         .with_note(crate::firstparty::jurisdictions_note()),
     );

@@ -223,6 +223,7 @@ mod tests {
                 binding: "D1_ORDERS".into(),
                 name: "shop-orders".into(),
                 migrations: vec!["0001_init.sql".into()],
+                jurisdiction: None,
             }],
             durable_objects: vec![DurableObject {
                 class: "Cart".into(),

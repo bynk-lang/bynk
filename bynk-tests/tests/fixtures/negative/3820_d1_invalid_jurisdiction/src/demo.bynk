@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { D1 }
+
+// #3820: only `"eu"`, `"fedramp"` and `"us"` are D1 jurisdictions.
+capability Orders = D1 @jurisdiction("asia")
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    Effect.pure(0)
+  }
+}

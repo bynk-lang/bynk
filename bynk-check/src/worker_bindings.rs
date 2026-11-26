@@ -120,7 +120,11 @@ pub enum BindingSource {
     /// instance (`capability Orders = D1`), one database per instance under a
     /// derived name, its id minted by `bynk deploy`. Never seen by handlers:
     /// they reach it through the instance's `WorkersD1`.
-    D1Database { capability: String },
+    D1Database {
+        capability: String,
+        /// #3820: the jurisdiction the database is pinned to at creation, if any.
+        jurisdiction: Option<String>,
+    },
     /// #3301: the `[[secrets_store_secrets]]` binding of a `StoredSecret`
     /// instance (`capability StripeKey = StoredSecret @store("payments")
     /// @secret("stripe-live")`), reading `secret` of the Secrets Store named
@@ -244,6 +248,7 @@ pub fn idempotency_binding() -> WorkerBinding {
         name: crate::d1_migrations::IDEMPOTENCY_BINDING.to_string(),
         source: BindingSource::D1Database {
             capability: IMPLICIT_IDEMPOTENCY_CAPABILITY.to_string(),
+            jurisdiction: None,
         },
     }
 }
@@ -280,11 +285,13 @@ impl BindingSource {
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
             }
-            Self::D1Database { capability } if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY => {
+            Self::D1Database { capability, .. }
+                if capability == IMPLICIT_IDEMPOTENCY_CAPABILITY =>
+            {
                 "the implicit idempotency database of a Worker that calls `Idempotency.claim`"
                     .to_string()
             }
-            Self::D1Database { capability } => {
+            Self::D1Database { capability, .. } => {
                 format!("the D1 database binding of derived capability `{capability}`")
             }
             Self::StoredSecret {
@@ -819,7 +826,7 @@ fn declared_at(
             | BindingSource::ContainerInstance { capability, .. }
             | BindingSource::AiSearchInstance { capability, .. }
             | BindingSource::MtlsCertificate { capability, .. }
-            | BindingSource::D1Database { capability } => c.items.iter().find_map(|item| {
+            | BindingSource::D1Database { capability, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Capability(d) = item else {
                     return None;
                 };

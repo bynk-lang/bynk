@@ -1629,7 +1629,7 @@ mod tests {
             "default",
             "shop",
             "D1_ORDERS",
-            D1Record::of("shop-orders", "db-1"),
+            D1Record::of("shop-orders", "db-1", None),
         );
         let r = f.run();
         let d1 = refusals(&r)

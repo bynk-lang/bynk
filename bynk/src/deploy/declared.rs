@@ -88,7 +88,7 @@ pub(crate) fn declared_bindings(
                 name: names::analytics_dataset_name(dir, &name),
                 binding: name,
             }),
-            BindingSource::D1Database { .. } => {
+            BindingSource::D1Database { jurisdiction, .. } => {
                 let database = bynk_check::d1_migrations::d1_database_name(dir, &name);
                 let staged = workers_dir
                     .join(dir)
@@ -102,6 +102,7 @@ pub(crate) fn declared_bindings(
                     },
                     name: database,
                     binding: name,
+                    jurisdiction: jurisdiction.clone(),
                 });
             }
             BindingSource::StoredSecret { store, secret, .. } => {
@@ -395,6 +396,7 @@ mod tests {
                 name,
                 BindingSource::D1Database {
                     capability: "Cap".into(),
+                    jurisdiction: None,
                 },
             )
         };

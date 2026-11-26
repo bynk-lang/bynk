@@ -228,7 +228,9 @@ const OPERATIONS: &[(&str, Run)] = &[
     ("d1 migrations apply (--env staging)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "staging"))
     }),
-    ("d1 create", |p, _| shown(create_d1(p, "shop-db"))),
+    ("d1 create", |p, _| {
+        shown(create_d1(p, "shop-db", None).map(|(id, _)| id))
+    }),
     ("r2 bucket create", |p, _| {
         shown(create_r2_bucket(p, "shop-files", None))
     }),

@@ -213,7 +213,10 @@ fn instance_binding(cap: &str, d: &DerivedInstance, signs_to: Option<&String>) -
         (firstparty::CLOUDFLARE_UNIT, "Analytics") => {
             BindingSource::AnalyticsDataset { capability }
         }
-        (firstparty::CLOUDFLARE_UNIT, "D1") => BindingSource::D1Database { capability },
+        (firstparty::CLOUDFLARE_UNIT, "D1") => BindingSource::D1Database {
+            capability,
+            jurisdiction: d.jurisdiction().map(str::to_string),
+        },
         (firstparty::CLOUDFLARE_UNIT, "Queue") => BindingSource::QueueProducer {
             capability,
             queue: d.queue().unwrap_or_default().to_string(),
@@ -627,6 +630,7 @@ mod tests {
                 "D1_H",
                 BindingSource::D1Database {
                     capability: cap("H"),
+                    jurisdiction: None,
                 },
             ),
             bynk_check::worker_bindings::idempotency_binding(),

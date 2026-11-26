@@ -1608,7 +1608,7 @@ and `expect` apply to it unchanged. The rules:
   literal of the option's kind (`bynk.capability.invalid_option`): a string for
   `@worker`, `@jurisdiction` and `@name`, a positive `Int` for `@limit`, a
   `Duration` for `@period`. Every option `K` requires MUST be present
-  (`bynk.capability.missing_option`). `Kv` takes none. `R2` takes an optional
+  (`bynk.capability.missing_option`). `Kv` takes none. `R2` and `D1` take an optional
   `@jurisdiction("eu" | "fedramp" | "us")`. `RateLimit` requires `@limit(n)` and
   `@period(d)`, where `d` is exactly 10 or 60 seconds (standard-library P3).
   `Service` requires `@worker("name")`, where `name` is 1 to 63 lowercase

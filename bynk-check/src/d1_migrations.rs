@@ -72,7 +72,7 @@ pub fn implicit_migrations(
 pub fn is_implicit_idempotency(binding: &crate::worker_bindings::WorkerBinding) -> bool {
     matches!(
         &binding.source,
-        crate::worker_bindings::BindingSource::D1Database { capability }
+        crate::worker_bindings::BindingSource::D1Database { capability, .. }
             if capability == crate::worker_bindings::IMPLICIT_IDEMPOTENCY_CAPABILITY
     )
 }
@@ -416,6 +416,7 @@ mod tests {
             name: IDEMPOTENCY_BINDING.to_string(),
             source: crate::worker_bindings::BindingSource::D1Database {
                 capability: "Idempotency".to_string(),
+                jurisdiction: None,
             },
         };
         assert!(implicit_migrations(&own).is_none());
@@ -437,6 +438,7 @@ mod tests {
             name: name.to_string(),
             source: crate::worker_bindings::BindingSource::D1Database {
                 capability: capability.to_string(),
+                jurisdiction: None,
             },
         };
         assert_eq!(

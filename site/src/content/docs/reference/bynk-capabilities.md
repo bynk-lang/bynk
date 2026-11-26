@@ -2312,7 +2312,7 @@ class: deploy with `wrangler deploy`, with Docker running.
 ### SQL databases: `D1`
 
 `D1` queries a D1 database, Cloudflare's SQLite. Each database is a named
-instance that takes no options, and a bare `given D1` is refused
+instance that takes one optional option, `@jurisdiction`, and a bare `given D1` is refused
 (`bynk.capability.instance_only`):
 
 ```bynk,fragment
@@ -2325,7 +2325,11 @@ capability Orders = D1
 `Orders` binds as `env.D1_ORDERS`, a `[[d1_databases]]` entry. The database's
 name is derived, never written: the context's Worker and the capability in
 kebab case, so `shop.cart`'s `Orders` is `shop-cart-orders`, and
-`shop-cart-orders-staging` under `--env staging`. An option is
+`shop-cart-orders-staging` under `--env staging`. `@jurisdiction("eu")` (or
+`"fedramp"` or `"us"`, the values `R2` and agents take) pins the database to
+that [Cloudflare jurisdiction](/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/)
+when `bynk deploy` creates it; any other value is
+`bynk.capability.invalid_option`. Any other option is
 `bynk.capability.unknown_option`.
 
 Statements are SQL text with positional parameters, `?1`, `?2` and so on. Each
