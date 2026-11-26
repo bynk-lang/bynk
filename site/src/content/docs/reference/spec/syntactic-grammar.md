@@ -1443,6 +1443,10 @@ whichever alternative matched; the formatter keeps those parentheses. After
 `is`, the pattern in front of `as` follows the `is` restrictions: a record
 pattern MUST be parenthesised, `x is (T { f, .. } as t)`.
 
+After `is`, `as` follows a base pattern, and a record pattern keeps its parentheses:
+
+{{#grammar _is_as_pattern}}
+
 `as` is contextual: only a pattern followed by `as` takes this reading, and `as`
 keeps every other meaning (`consumes … as Alias`, `embeds E as V`). Well-formedness:
 §5.6.
@@ -1508,6 +1512,10 @@ An or-pattern after `let` opens the same way, its later alternatives being any
 pattern:
 
 {{#grammar _let_or_pattern}}
+
+An as-pattern after `let` takes the same opening (#3971):
+
+{{#grammar _let_as_pattern}}
 
 The `else`-less form of a record `let` (below) takes its record pattern bare or
 in parentheses; the parenthesised one is:

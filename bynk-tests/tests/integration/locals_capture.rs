@@ -104,3 +104,38 @@ fn shadowing_resolves_to_the_latest_binding() {
     let second_let = text.rfind("let x").expect("second let x") + "let ".len();
     assert_eq!(xs[0].def_span.start, second_let, "the latest `x` wins");
 }
+
+/// #3971: the name `pattern as name` binds is a local of its position's type, so hover shows
+/// the type and semantic tokens colour the name as a variable. Over every position it appears
+/// in: a variant payload, a list element, the whole pattern after `is` and a lambda parameter.
+#[test]
+fn an_as_name_is_a_local_at_its_positions_type() {
+    let root = fixture_root("positive/3971_pattern_as");
+    let result = bynk_ide::diagnose_project(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    let (locals, _) = locals_for(&result, "shop/orders.bynk");
+    let ty_of = |name: &str| -> Vec<String> {
+        locals
+            .iter()
+            .filter(|b| b.name == name)
+            .map(|b| b.ty.clone())
+            .collect()
+    };
+    for (name, want) in [
+        ("paid", "Order"),
+        ("head", "Order"),
+        ("placed", "Event"),
+        ("ev", "Event"),
+        ("s", "Event"),
+        ("p", "Order"),
+        ("item", "Order"),
+    ] {
+        let got = ty_of(name);
+        assert!(
+            got.iter().any(|t| t == want),
+            "`{name}` is a local of type `{want}`: {got:?}"
+        );
+    }
+}

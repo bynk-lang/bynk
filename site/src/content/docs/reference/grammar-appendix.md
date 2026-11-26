@@ -133,8 +133,9 @@ block ::= "{" statement* expression? "}"
 statement ::= let_stmt | effect_let_stmt | let_else_stmt | do_stmt | assign_stmt | advance_stmt | par_stmt | expect_expr
 let_stmt ::= "let" binding_name (":" type_ref)? "=" expression
 effect_let_stmt ::= "let" binding_name (":" type_ref)? "<-" expression call_site_actor?
-let_else_stmt ::= "let" (let_pattern | let_or_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
+let_else_stmt ::= "let" (let_pattern | let_or_pattern | let_as_pattern) ("=" | "<-") expression call_site_actor? "else" (block | let_else_match) | "let" (record_pattern | let_paren_record_pattern) ("=" | "<-") expression call_site_actor? ("else" (block | let_else_match))?
 let_paren_record_pattern ::= "(" record_pattern ")"
+let_as_pattern ::= let_pattern "as" identifier
 let_pattern ::= int_range | literal_pattern | paren_pattern | list_pattern | let_variant_pattern
 let_or_pattern ::= (let_pattern | record_pattern) "|" pattern
 let_variant_pattern ::= identifier "." identifier ("(" (pattern_binding ("," pattern_binding)*)? ","? ")")? | identifier "(" (pattern_binding ("," pattern_binding)*)? ","? ")"
@@ -157,12 +158,14 @@ if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"
 match_arm ::= (pattern | refined_pattern) ("if" expression)? "=>" expression ","?
 refined_pattern ::= wildcard_pattern "where" refinement
-pattern ::= wildcard_pattern | int_range | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | paren_pattern
+pattern ::= wildcard_pattern | int_range | literal_pattern | variant_pattern | record_pattern | list_pattern | or_pattern | as_pattern | paren_pattern
+as_pattern ::= pattern "as" identifier
 record_pattern ::= identifier "{" (record_pattern_field ",")* ".." "}"
 list_pattern ::= "[" (pattern ",")* (pattern | list_rest ","?)? "]"
 list_rest ::= ".." identifier?
 record_pattern_field ::= identifier ":" pattern | identifier
-is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern
+is_base_pattern ::= wildcard_pattern | literal_pattern | variant_pattern | list_pattern | paren_pattern | is_as_pattern
+is_as_pattern ::= is_base_pattern "as" identifier
 is_pattern ::= is_base_pattern | is_or_pattern
 is_or_pattern ::= is_pattern "|" is_base_pattern
 or_pattern ::= pattern "|" pattern

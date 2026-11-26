@@ -2303,6 +2303,13 @@ binding name: qualified (`Status.Done`, `Status.Shipped(at)`) or with a payload
 An [`or_pattern`](#rule-or_pattern) after `let`, whose first alternative opens as
 a [`let_pattern`](#rule-_let_pattern): `let Ok(x) | Err(x) = r else { … }`.
 
+### let_as_pattern {#rule-_let_as_pattern}
+
+{{#grammar _let_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `let`, whose pattern opens as a
+[`let_pattern`](#rule-_let_pattern): `let [first, ..] as all = xs else { … }`.
+
 ### is_pattern {#rule-_is_pattern}
 
 {{#grammar _is_pattern}}
@@ -2318,6 +2325,14 @@ payload.
 {{#grammar _is_base_pattern}}
 
 The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
+
+### is_as_pattern {#rule-_is_as_pattern}
+
+{{#grammar _is_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `is`, over an
+[`is_base_pattern`](#rule-_is_base_pattern): `x is Shipped(at) as s`. A record
+pattern keeps its parentheses, `x is (T { f, .. } as t)`.
 
 ### is_or_pattern {#rule-_is_or_pattern}
 

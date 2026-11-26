@@ -712,12 +712,19 @@ pub fn pattern_to_string(p: &Pattern) -> String {
 /// the parser dropped as transparent grouping.
 pub fn is_pattern_src(p: &Pattern) -> String {
     let src = pattern_to_string(p);
-    let has_record = match p {
-        Pattern::Record { .. } => true,
-        Pattern::Or(alts, _) => alts.iter().any(|a| matches!(a, Pattern::Record { .. })),
-        _ => false,
-    };
-    if has_record { format!("({src})") } else { src }
+    // #3971: a record under `as` still ends the pattern at its `}`, so it needs them too.
+    fn opens_record(p: &Pattern) -> bool {
+        match p.peel_as() {
+            Pattern::Record { .. } => true,
+            Pattern::Or(alts, _) => alts.iter().any(opens_record),
+            _ => false,
+        }
+    }
+    if opens_record(p) {
+        format!("({src})")
+    } else {
+        src
+    }
 }
 
 /// #981: whether a block's `()` tail should be omitted rather than printed.
