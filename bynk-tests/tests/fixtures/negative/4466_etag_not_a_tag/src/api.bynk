@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/same") () -> Effect[HttpResult[()]] by v: Visitor {
+        NotModified.etag("v2")
+    }
+}

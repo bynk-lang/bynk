@@ -1,0 +1,29 @@
+context events
+
+consumes bynk { SseEvent }
+
+// #4394: a route names what it streams, `HttpResult[T, E]`, so a test reads the stream as that type.
+service Events from http {
+	// `SseEvent` elements: a test reads their fields directly.
+	on GET("/events") () -> Effect[HttpResult[(), SseEvent]] by v: Visitor {
+		Streaming(Stream.of([
+			SseEvent { data: "hello", event: Some("greeting"), id: Some("1") },
+			SseEvent { data: "bye" },
+		]))
+	}
+
+	// `String` elements, named.
+	on GET("/words") () -> Effect[HttpResult[(), String]] by v: Visitor {
+		Streaming(Stream.of(["a", "b"]))
+	}
+
+	// Naming nothing keeps every route written before this: a `String` stream here.
+	on GET("/plain") () -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["x", "y", "z"]))
+	}
+
+	// Naming an element on a route that never streams is allowed: it is only what `Streaming` would carry.
+	on GET("/quiet") () -> Effect[HttpResult[String, SseEvent]] by v: Visitor {
+		Ok("nothing to stream")
+	}
+}

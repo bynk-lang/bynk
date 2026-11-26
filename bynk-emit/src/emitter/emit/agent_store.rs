@@ -367,7 +367,7 @@ fn held_frame_ty(ty: TyId, tys: &Types) -> Option<TyId> {
         | Ty::Base(_)
         | Ty::Named { .. }
         | Ty::Result(..)
-        | Ty::HttpResult(_)
+        | Ty::HttpResult(_, _)
         | Ty::QueueResult
         | Ty::HttpOutcome(_)
         | Ty::BoundaryRejection

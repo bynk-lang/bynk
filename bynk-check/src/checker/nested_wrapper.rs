@@ -45,7 +45,7 @@ fn applied_names<'a>(t: &'a TypeRef, out: &mut Vec<&'a str>) {
         }
         TypeRef::Effect(a, _)
         | TypeRef::Option(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Query(a, _)
@@ -148,7 +148,7 @@ fn scan(
             scan(b, names, table, out);
         }
         TypeRef::Option(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Query(a, _)
@@ -202,7 +202,7 @@ fn children(t: TyId, tys: &Types) -> Vec<TyId> {
         Ty::Result(a, b) | Ty::Map(a, b) => vec![*a, *b],
         Ty::Effect(a)
         | Ty::Option(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)

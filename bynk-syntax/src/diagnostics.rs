@@ -6757,6 +6757,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "fn same(a: Stream[Int], b: Stream[Int]) -> Bool {\n    a == b                            // ✗ a stream has no value to compare\n}\n\nfn same(a: Stream[Int], b: Stream[Int]) -> Effect[Bool] {\n    let xs <- a.collect()             // ✓ read them first\n    let ys <- b.collect()\n    Effect.pure(xs == ys)\n}",
     },
     Explain {
+        code: "bynk.types.streaming_element",
+        blurb: "`HttpResult[T, E]` names what a `Streaming` body carries in its second argument, so a test that matches `Streaming(s)` reads `s` as a `Stream[E]` and a body of any other element is a type error. The router frames each element as a server-sent event, so `E` is a `String` or the `SseEvent` record that `bynk` exports; any other type has no framing. Name `String`, or `SseEvent` for events with an `event`, `id` or `retry`. Naming nothing, `HttpResult[T]`, keeps a `Streaming` body either of the two, and a route that never streams may still name one.",
+        example: "on GET(\"/ticks\") () -> Effect[HttpResult[(), Int]] by v: Visitor {    // ✗ the router cannot frame an `Int`\n    Streaming(Stream.of([1, 2]))\n}\n\non GET(\"/ticks\") () -> Effect[HttpResult[(), String]] by v: Visitor {   // ✓\n    Streaming(Stream.of([\"1\", \"2\"]))\n}",
+    },
+    Explain {
         code: "bynk.types.type_mismatch",
         blurb: "An operator or a built-in method was given an operand of a type it does not \
                 accept: `==` between an `Int` and a `String`, `!` on a number, `&&` on \
@@ -11562,6 +11567,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.types.stream_not_comparable",
         "A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0).",
+    ),
+    d(
+        "bynk.types.streaming_element",
+        "The second argument of `HttpResult[T, E]`, the element a `Streaming` body carries, is not `String` or `SseEvent` (#4394).",
     ),
     d(
         "bynk.types.type_mismatch",

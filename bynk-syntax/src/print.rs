@@ -130,7 +130,12 @@ pub fn type_ref_to_string(t: &TypeRef) -> String {
         ),
         TypeRef::Option(t, _) => format!("Option[{}]", type_ref_to_string(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", type_ref_to_string(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", type_ref_to_string(t)),
+        TypeRef::HttpResult(t, None, _) => format!("HttpResult[{}]", type_ref_to_string(t)),
+        TypeRef::HttpResult(t, Some(e), _) => format!(
+            "HttpResult[{}, {}]",
+            type_ref_to_string(t),
+            type_ref_to_string(e)
+        ),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),

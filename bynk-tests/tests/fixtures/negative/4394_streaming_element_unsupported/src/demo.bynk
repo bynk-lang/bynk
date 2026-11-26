@@ -1,0 +1,8 @@
+context demo
+
+service api from http {
+  // The router can frame a `String` or an `SseEvent`, not an `Int`.
+  on GET("/ticks") () -> Effect[HttpResult[(), Int]] by v: Visitor {
+    Streaming(Stream.of([1, 2]))
+  }
+}

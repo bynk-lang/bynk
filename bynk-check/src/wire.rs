@@ -509,7 +509,12 @@ fn collect_type_names(
         }
         TypeRef::Option(a, _) => collect_type_names(a, stack, types, recursive),
         TypeRef::Effect(a, _) => collect_type_names(a, stack, types, recursive),
-        TypeRef::HttpResult(a, _) => collect_type_names(a, stack, types, recursive),
+        TypeRef::HttpResult(a, e, _) => {
+            collect_type_names(a, stack, types, recursive);
+            if let Some(e) = e {
+                collect_type_names(e, stack, types, recursive);
+            }
+        }
         // v0.20b: collections serialise element-/entry-wise; their inner
         // named types need helpers.
         TypeRef::List(a, _) | TypeRef::Set(a, _) => collect_type_names(a, stack, types, recursive),
@@ -553,7 +558,11 @@ pub fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef 
         ),
         TypeRef::Option(a, s) => TypeRef::Option(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(subst_type_ref(a, subst)), *s),
-        TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(subst_type_ref(a, subst)), *s),
+        TypeRef::HttpResult(a, e, s) => TypeRef::HttpResult(
+            Box::new(subst_type_ref(a, subst)),
+            e.as_ref().map(|e| Box::new(subst_type_ref(e, subst))),
+            *s,
+        ),
         TypeRef::List(a, s) => TypeRef::List(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Set(a, s) => TypeRef::Set(Box::new(subst_type_ref(a, subst)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
@@ -615,7 +624,11 @@ pub fn rename_type_ref(t: &TypeRef, renames: &HashMap<String, String>) -> TypeRe
         ),
         TypeRef::Option(a, s) => TypeRef::Option(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Effect(a, s) => TypeRef::Effect(Box::new(rename_type_ref(a, renames)), *s),
-        TypeRef::HttpResult(a, s) => TypeRef::HttpResult(Box::new(rename_type_ref(a, renames)), *s),
+        TypeRef::HttpResult(a, e, s) => TypeRef::HttpResult(
+            Box::new(rename_type_ref(a, renames)),
+            e.as_ref().map(|e| Box::new(rename_type_ref(e, renames))),
+            *s,
+        ),
         TypeRef::List(a, s) => TypeRef::List(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Set(a, s) => TypeRef::Set(Box::new(rename_type_ref(a, renames)), *s),
         TypeRef::Map(k, v, s) => TypeRef::Map(
@@ -754,7 +767,7 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         TypeRef::Result(a, b, _) => format!("Result_{}_{}", codec_suffix(a), codec_suffix(b)),
         TypeRef::Option(a, _) => format!("Option_{}", codec_suffix(a)),
         TypeRef::Effect(a, _) => format!("Effect_{}", codec_suffix(a)),
-        TypeRef::HttpResult(a, _) => format!("HttpResult_{}", codec_suffix(a)),
+        TypeRef::HttpResult(a, _, _) => format!("HttpResult_{}", codec_suffix(a)),
         TypeRef::List(a, _) => format!("List_{}", codec_suffix(a)),
         TypeRef::Set(a, _) => format!("Set_{}", codec_suffix(a)),
         TypeRef::Map(k, v, _) => format!("Map_{}_{}", codec_suffix(k), codec_suffix(v)),
@@ -910,7 +923,7 @@ fn has_codec(t: &TypeRef) -> bool {
             | TypeRef::List(a, _)
             | TypeRef::Set(a, _)
             | TypeRef::Effect(a, _)
-            | TypeRef::HttpResult(a, _) => encodable(a),
+            | TypeRef::HttpResult(a, _, _) => encodable(a),
             TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => encodable(a) && encodable(b),
             TypeRef::App { args, .. } => args.iter().all(encodable),
             _ => true,
@@ -1322,7 +1335,12 @@ fn walk_generic_inst(
             walk_generic_inst(a, out, seen, types, recursive);
         }
         TypeRef::Effect(a, _) => walk_generic_inst(a, out, seen, types, recursive),
-        TypeRef::HttpResult(a, _) => walk_generic_inst(a, out, seen, types, recursive),
+        TypeRef::HttpResult(a, e, _) => {
+            walk_generic_inst(a, out, seen, types, recursive);
+            if let Some(e) = e {
+                walk_generic_inst(e, out, seen, types, recursive);
+            }
+        }
         TypeRef::List(a, _) => {
             let inst = WireInst::ListInst {
                 elem: (**a).clone(),
@@ -2051,7 +2069,7 @@ service Api {
         ));
         assert!(matches!(
             wire_ref(
-                &TypeRef::HttpResult(Box::new(base(BaseType::Int)), sp()),
+                &TypeRef::HttpResult(Box::new(base(BaseType::Int)), None, sp()),
                 &types
             ),
             WireRef::Unchecked {

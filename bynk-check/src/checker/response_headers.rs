@@ -59,6 +59,7 @@ fn variants_of(op: HttpResultOp) -> &'static [&'static str] {
         HttpResultOp::At => &["Created", "RawCreated", "Accepted"],
         HttpResultOp::Download => &["Raw", "RawTagged", "RawStreamed", "PartialContent"],
         HttpResultOp::Heartbeat => &["Streaming"],
+        HttpResultOp::Etag | HttpResultOp::LastModified => &["PartialContent", "NotModified"],
         _ => &[],
     }
 }
@@ -94,6 +95,18 @@ fn is_token(name: &str) -> bool {
         })
 }
 
+/// Whether `tag` is an RFC 9110 entity tag: `"` etagc* `"`, optionally `W/`-prefixed. The runtime's
+/// `isEntityTag` is the same test for a tag computed at run time.
+fn is_entity_tag(tag: &str) -> bool {
+    let body = tag.strip_prefix("W/").unwrap_or(tag);
+    body.len() >= 2
+        && body.starts_with('"')
+        && body.ends_with('"')
+        && body[1..body.len() - 1]
+            .chars()
+            .all(|c| c == '\x21' || ('\x23'..='\x7e').contains(&c))
+}
+
 /// Whether `value` holds a character a header value must not carry (CR, LF or another control).
 fn has_control(value: &str) -> bool {
     value.chars().any(|c| c.is_ascii_control())
@@ -124,6 +137,8 @@ pub(crate) fn is_response_header_op(op: HttpResultOp) -> bool {
             | HttpResultOp::At
             | HttpResultOp::Download
             | HttpResultOp::Heartbeat
+            | HttpResultOp::Etag
+            | HttpResultOp::LastModified
             | HttpResultOp::Headers
     )
 }
@@ -145,12 +160,15 @@ pub(crate) fn check_response_header_method(
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
     let duration = tys.intern(Ty::Base(BaseType::Duration));
+    let instant = tys.intern(Ty::Base(BaseType::Instant));
     let params: Vec<(TyId, &str)> = match op {
         HttpResultOp::WithHeader => vec![(string, "name"), (string, "value")],
         HttpResultOp::RetryAfter => vec![(duration, "delay")],
         HttpResultOp::At => vec![(string, "url")],
         HttpResultOp::Download => vec![(string, "filename")],
         HttpResultOp::Heartbeat => vec![(duration, "every")],
+        HttpResultOp::Etag => vec![(string, "tag")],
+        HttpResultOp::LastModified => vec![(instant, "at")],
         _ => vec![],
     };
     if args.len() != params.len() {
@@ -280,6 +298,19 @@ fn lint_literals(op: HttpResultOp, args: &[Expr], ctx: &mut Ctx) {
                 );
             }
         }
+        HttpResultOp::Etag => {
+            if let Some(ExprKind::StrLit(tag)) = args.first().map(|a| &a.kind)
+                && !is_entity_tag(tag)
+            {
+                ctx.errors.push(
+                    invalid(
+                        args[0].span,
+                        format!("`{tag}` is not an entity tag"),
+                    )
+                    .with_note("an entity tag is a quoted string, optionally prefixed `W/` (RFC 9110 §8.8.3), such as \"v1\" or W/\"v1\""),
+                );
+            }
+        }
         HttpResultOp::Download => {
             if let Some(ExprKind::StrLit(name)) = args.first().map(|a| &a.kind)
                 && name.is_empty()
@@ -302,13 +333,15 @@ fn reserved_hint(name: &str) -> &'static str {
         "retry-after" => "use `.retryAfter(delay)` on a `TooManyRequests` or `ServiceUnavailable`",
         "content-disposition" => "use `.download(filename)` on a `Raw` result",
         "expires"
-        | "last-modified"
         | "age"
         | "pragma"
         | "cdn-cache-control"
         | "cloudflare-cdn-cache-control"
         | "surrogate-control" => "caching headers come from `@cache` and the router",
-        "cache-control" | "etag" | "vary" => "caching headers come from `@cache` and the router",
+        "etag" | "last-modified" => {
+            "a `PartialContent` or `NotModified` takes its own with `.etag(tag)` and `.lastModified(at)`; the router sets it elsewhere"
+        }
+        "cache-control" | "vary" => "caching headers come from `@cache` and the router",
         "content-type" | "content-length" => "the body and its media type decide these",
         "x-content-type-options"
         | "strict-transport-security"
