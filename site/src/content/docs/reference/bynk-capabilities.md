@@ -2672,7 +2672,7 @@ No third-party crypto runs and nothing is polyfilled.
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
 | `importCipherKey(key: Bytes)` | `Effect[Result[CipherKey, CryptoError]]` — exactly 32 bytes, for AES-256-GCM; any other length is `InvalidKey`. |
 | `importCipherKeyFromSecret(secret: Secret)` | `Effect[Result[CipherKey, CryptoError]]`. The key is the base64 of 32 bytes a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. |
-| `seal(key: CipherKey, plaintext: Bytes, scope: Bytes)` | `Effect[Bytes]` — AES-256-GCM with a fresh random nonce each call. See [Encryption](#encryption). |
+| `seal(key: CipherKey, plaintext: Bytes, scope: Bytes)` | `Effect[Bytes]` — AES-256-GCM with a fresh random nonce each call. The format and failure rule are described below. |
 | `open(key: CipherKey, sealed: Bytes, scope: Bytes)` | `Effect[Result[Bytes, CryptoError]]`; `Err(OpenFailed)` for any failure. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
 | `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
