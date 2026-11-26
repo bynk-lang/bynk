@@ -76,6 +76,7 @@ const ORDER: &[&str] = &[
     "__reportUnknownStoredKeys",
     "__renameStoredFields",
     "__checkStoredLayout",
+    "__moveRenamedEntries",
     "__readStored",
     "__commitStored",
     "__eraseStored",
