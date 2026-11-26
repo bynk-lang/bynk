@@ -16,6 +16,9 @@ pub(crate) struct DeclaredBindings {
     pub(crate) binds_to: Vec<String>,
     pub(crate) foreign_services: Vec<ForeignService>,
     pub(crate) producer_queues: Vec<String>,
+    /// #3899: the Workers of the signed consumers this Worker's queue producers send to: an edge
+    /// whose key signs the messages, though no Service Binding joins the two.
+    pub(crate) signs_queue_to: Vec<String>,
     pub(crate) needs_kv: bool,
     pub(crate) kv_instances: Vec<String>,
     pub(crate) r2_buckets: Vec<R2Decl>,
@@ -69,8 +72,14 @@ pub(crate) fn declared_bindings(
                 jurisdiction: jurisdiction.clone(),
             }),
             BindingSource::RateLimitInstance { .. } => out.ratelimits.push(name),
-            BindingSource::QueueProducer { queue, .. }
-            | BindingSource::QueueDeadLetter { queue } => out.producer_queues.push(queue.clone()),
+            BindingSource::QueueProducer {
+                queue, signs_to, ..
+            } => {
+                out.producer_queues.push(queue.clone());
+                out.signs_queue_to
+                    .extend(signs_to.iter().map(|context| layout.dir(context)));
+            }
+            BindingSource::QueueDeadLetter { queue } => out.producer_queues.push(queue.clone()),
             BindingSource::AnalyticsDataset { .. } => out.analytics_datasets.push(AnalyticsDecl {
                 name: names::analytics_dataset_name(dir, &name),
                 binding: name,
@@ -169,6 +178,8 @@ pub(crate) fn declared_bindings(
         .sort_by(|a, b| a.binding.cmp(&b.binding));
     out.producer_queues.sort();
     out.producer_queues.dedup();
+    out.signs_queue_to.sort();
+    out.signs_queue_to.dedup();
     out.kv_instances.sort();
     out.r2_buckets.sort_by(|a, b| a.binding.cmp(&b.binding));
     out.vectorize_indexes
@@ -437,6 +448,7 @@ mod tests {
                     BindingSource::QueueProducer {
                         capability: cap(),
                         queue: "orders".into(),
+                        signs_to: None,
                     },
                 ),
                 binding(
@@ -444,6 +456,7 @@ mod tests {
                     BindingSource::QueueProducer {
                         capability: cap(),
                         queue: "orders".into(),
+                        signs_to: None,
                     },
                 ),
                 binding(

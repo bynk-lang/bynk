@@ -277,8 +277,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor beside an unsigned one in a sum, or alone with a binder, because the message of an unsigned actor carries no signature to tell it from a signed one and a lone actor identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors, a lone one with no binder.",
-        example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
+        blurb: "A queue consumer can narrow who may send to it with `Foreign` actors, which admit only messages signed under the actor's secret, and with refinements of `Producer`, which admit only messages a Bynk producer in the named contexts signed. Two forms are not enforced, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: one of those beside the unsigned `Producer` in a sum, because an unsigned message carries no signature to tell it from a signed one, and a lone one with a binder, because it identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors and `Producer` refinements, a lone one with no binder.",
+        example: "context shop\n\ntype Order = { id: String }\nactor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by who: Legacy | Producer {   // ✗ an unsigned message cannot be told from a signed one\n    match who {\n      Legacy => Ack\n      Producer => Ack\n    }\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Legacy {   // ✓ only messages signed under its secret\n    Ack\n  }\n}",
     },
     Explain {
         code: "bynk.actor.refinement_base_unsupported",
@@ -7330,7 +7330,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, which nothing enforces yet.",
+        "A queue consumer names a signed actor beside an unsigned one, or a lone one with a binder, which nothing enforces.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",

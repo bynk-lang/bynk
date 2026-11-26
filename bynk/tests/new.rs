@@ -77,6 +77,7 @@ fn golden_scaffold_tree() {
             new::render(include_str!("../src/templates/gitattributes"), "hello"),
         ),
         ("src/hello.bynk", new::starter_source("hello")),
+        ("tests/hello.test.bynk", new::starter_test_source("hello")),
     ] {
         out.push_str(&format!("--- {label} ---\n{body}"));
         if !body.ends_with('\n') {
@@ -285,4 +286,55 @@ fn scaffold_writes_the_template_gitignore_when_absent() {
     );
 
     fs::remove_dir_all(&dir).ok();
+}
+
+/// #4125: the starter test renders with the project's name, is `bynk-fmt`-clean,
+/// and the scaffold writes it where `bynk test` looks (`tests/<name>.test.bynk`).
+#[test]
+fn starter_test_renders_is_fmt_clean_and_is_written() {
+    let rendered = new::starter_test_source("demo");
+    assert!(!rendered.contains(new::PLACEHOLDER), "{rendered}");
+    assert!(rendered.contains("suite demo"), "{rendered}");
+    assert!(rendered.contains("Hello from demo!"), "{rendered}");
+    let formatted = bynk_fmt::format_source(&rendered, &bynk_fmt::FormatOptions::default())
+        .expect("rendered starter test must format");
+    assert_eq!(
+        formatted, rendered,
+        "the starter test is not bynk-fmt-clean; re-format bynk/src/templates/starter.test.bynk"
+    );
+
+    let dir = std::env::temp_dir().join(format!("bynk-new-starter-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let opts = new::NewOptions {
+        path: dir.join("demo"),
+        name: None,
+    };
+    let _ = new::run(&opts);
+    assert!(
+        dir.join("demo/src/demo.bynk").is_file(),
+        "the scaffold did not run: no `src/demo.bynk`"
+    );
+    let written = fs::read_to_string(dir.join("demo/tests/demo.test.bynk")).expect("written");
+    assert_eq!(written, rendered);
+    fs::remove_dir_all(&dir).ok();
+
+    // Rot guard without Node: the starter test type-checks against the starter
+    // (route, service, capabilities), compiled together in-process with suites on.
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("new-starter-test-compile");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("demo.bynk"), new::starter_source("demo")).unwrap();
+    fs::write(root.join("demo.test.bynk"), &rendered).unwrap();
+    let options = bynk_testkit::compile_options_single(root.clone()).tests(true);
+    let result = bynk_driver::project::compile_project(&options)
+        .map(|_| ())
+        .map_err(|f| {
+            bynk_driver::project::ProjectFailure::flatten(f)
+                .iter()
+                .map(|e| format!("{}: {}", e.category, e.message))
+                .collect::<Vec<_>>()
+                .join("; ")
+        });
+    let _ = fs::remove_dir_all(&root);
+    result.expect("the starter test must type-check against the starter");
 }

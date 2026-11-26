@@ -98,7 +98,14 @@ pub enum BindingSource {
     /// sending to `queue` as written (`bynk deploy` environment-qualifies it).
     /// Never seen by handlers: they reach it through the instance's
     /// `WorkersQueue`.
-    QueueProducer { capability: String, queue: String },
+    QueueProducer {
+        capability: String,
+        queue: String,
+        /// #3899: the context of the signed consumer this producer's messages go to, when the
+        /// consumer admits Bynk producers: the producer signs under the edge key to that context,
+        /// which `bynk deploy` sets, so the Worker pair holds a key.
+        signs_to: Option<String>,
+    },
     /// #3878: the `[[queues.producers]]` binding through which a queue consumer sends a message
     /// it cannot decode to its dead-letter queue `queue`, as written (`bynk deploy`
     /// environment-qualifies it). The consumer's own, named after its queue, and never seen by
@@ -257,7 +264,9 @@ impl BindingSource {
             Self::RateLimitInstance { capability, .. } => {
                 format!("the rate limiting binding of derived capability `{capability}`")
             }
-            Self::QueueProducer { capability, queue } => format!(
+            Self::QueueProducer {
+                capability, queue, ..
+            } => format!(
                 "the queue producer binding of derived capability `{capability}` (to queue `{queue}`)"
             ),
             Self::QueueDeadLetter { queue } => {

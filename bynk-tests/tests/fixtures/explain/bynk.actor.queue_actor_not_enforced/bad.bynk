@@ -1,12 +1,14 @@
 context shop
 
 type Order = { id: String }
-
-actor Shop = Producer where IsContext(shop)
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
 
 service fulfil from queue("orders") {
   delivery { deadLetter: None }
-  on message(order: Order) -> Effect[QueueResult] by Shop {
-    Ack
+  on message(order: Order) -> Effect[QueueResult] by who: Legacy | Producer {   // ✗ an unsigned message cannot be told from a signed one
+    match who {
+      Legacy => Ack
+      Producer => Ack
+    }
   }
 }

@@ -1,0 +1,5 @@
+context shop.audit
+
+service ping {
+  on call() -> Effect[String] by Caller { "pong" }
+}
