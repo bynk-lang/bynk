@@ -5,7 +5,7 @@
 //! handler runs. Hover rendered only the declaration line, so the verdicts it admits, and that the
 //! rest is refused, were readable only from the predicate and the language reference. This adds the
 //! note after the declaration, on the declaration itself and wherever hover resolves to it (a
-//! handler's `by s: Authenticated`), because both reach [`describe_actor_in`].
+//! handler's `by s: Authenticated`), because both reach `describe_actor_in`.
 //!
 //! Every claim is worded against what the emitter and the runtime do, not the issue text:
 //! - `Sender`: `bynk-emit` routes the verdicts `SenderPredicate::admitted` returns to the email
