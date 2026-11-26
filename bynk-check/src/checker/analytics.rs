@@ -265,6 +265,9 @@ pub(crate) fn check_write_value(
         expr_id,
         Callee::AnalyticsWrite {
             cap: cap.to_string(),
+            // The schema lock reports a changed mapping at the record's declaration, where the
+            // fields were moved, not at a call that did not change.
+            span: ctx.input.types.get(&record_name).map_or(span, |d| d.span),
             record: record_name,
             mapping,
         },

@@ -37,6 +37,7 @@ pub mod agent_busy;
 pub mod agent_jurisdiction;
 pub mod agent_state;
 pub mod analysis;
+pub mod analytics_lock;
 pub mod annotation_consts;
 pub(crate) mod app_boundary;
 pub mod architecture_facts;

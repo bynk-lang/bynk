@@ -837,6 +837,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
     },
     Explain {
+        code: "bynk.analytics.mapping_changed",
+        blurb: "`Signups.writeValue(point)` writes a record's fields to `blob1…`, `double1…` and `index1` by position, and a point already written keeps its positions. Moving a field, changing its kind (text to number, a `Bool` to a `String`), removing it, or changing the `@index` field changes what every reader of the old points sees in a column, and nothing else would notice, so bynk.schema.lock records the mapping of each instance under `[analytics]` and a build that finds a different one fails until the change is accepted. Appending a field, and renaming one in place, are not changes and the lock follows them. If the new mapping is intended, run `bynk lock accept-analytics <Instance>` (or `--all`) and commit the lock with the change; otherwise put the record back and add new fields at the end.",
+        example: "// cart.bynk, with `Signups` recorded as blob1 = country, blob2 = channel\ntype Signup = { @index plan: String, channel: String, country: String }    // ✗ the columns swapped\n\ntype Signup = { @index plan: String, country: String, channel: String }    // ✓ the recorded order",
+    },
+    Explain {
         code: "bynk.asset.duplicate",
         blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
                 name once: a second `asset style` would leave `style` meaning two files. Give each \
@@ -7760,6 +7765,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
     ),
     d(
+        "bynk.analytics.mapping_changed",
+        "The columns an `Analytics` instance's `writeValue` writes (a field moved, retyped or removed, or a different `@index`) differ from the mapping `bynk.schema.lock` records under `[analytics]`, so points already written would be read from the wrong column; accept it with `bynk lock accept-analytics`.",
+    ),
+    d(
         "bynk.asset.duplicate",
         "An `asset` name is declared more than once in the same unit.",
     ),
@@ -11903,6 +11912,7 @@ fn category_title(cat: &str) -> &'static str {
     match cat {
         "actor" => "Actors",
         "adapter" => "Adapters",
+        "analytics" => "Analytics",
         "agent" | "agents" => "Agents",
         "asset" => "Static assets",
         "boundary" => "Boundaries",

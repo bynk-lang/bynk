@@ -59,6 +59,37 @@ records the rename and the change is additive, so no `migrate from` step is need
 field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry its name and is not renamed
 this way (`bynk.store.replaces_collection`).
 
+## Rename a field inside a stored record
+
+A record that a `store` field holds is renamed the same way, in a `Cell` or in the value of a `Map`:
+
+```bynk,fragment
+context shop
+
+type Prefs = {
+	size: Int replaces width,
+}
+
+agent Cart {
+	key id: String
+
+	store prefs: Cell[Prefs]
+	store named: Map[String, Prefs]
+
+	on call prefs() -> Effect[Prefs] {
+		prefs
+	}
+}
+```
+
+The lock reads the recorded `width` as `size`, so the change is additive and needs no `migrate from` step,
+and a `Prefs` stored under `width` reads back as `size`. A rename that also changes the field's type is
+still refused. As for a stored field, deleting the clause is refused while a stored version the lock holds
+keeps the value under the old name (`bynk.field.replaces_needed`). The build never says that such a clause can
+go, because the same clause lets the record's decoders accept the old key from an HTTP client or an event. A
+rename beneath a key (a `Set` element, a `Map` key or an `@indexed(by:)` composite) is refused, as adding a
+field there is: the key's encoding names the field, so every stored key would change.
+
 ## When the clause can go
 
 Keep `replaces` until nothing reads the old name:
