@@ -39,6 +39,9 @@ pub(super) struct HttpRoute {
     /// cookie (this name) the wrapper verifies and the handler's `cookies` view omits.
     /// Its wrapper takes the request first, like Bearer.
     pub(super) signed_cookie: Option<String>,
+    /// #3939: the handler's `by` clause names a single `ApiKey` actor, whose wrapper runs the
+    /// key seam and takes the request first, like Bearer.
+    pub(super) api_key: Option<bynk_check::api_key::ApiKeySeam>,
     /// #3994: the credential headers the route's seam consumes (`authorization`, a signature
     /// header); the handler's `RequestHeaders` omits them.
     pub(super) hidden_headers: Vec<String>,
@@ -354,6 +357,16 @@ fn push_cookies_param(
 }
 
 impl HttpRoute {
+    /// Whether the route's surface wrapper runs a verification seam and so takes the request
+    /// first: a Bearer, Oidc, `SignedCookie`, `ApiKey` (#3939) or actor-sum route.
+    pub(super) fn takes_request(&self) -> bool {
+        self.bearer
+            || self.sum
+            || self.oidc
+            || self.signed_cookie.is_some()
+            || self.api_key.is_some()
+    }
+
     /// How this route's router rejections are rendered (#3916).
     fn rejection(&self) -> Rejection<'_> {
         Rejection {
@@ -1167,7 +1180,7 @@ pub(super) fn emit_http_route_dispatch(
         let mut a = call_args;
         a.push(member(member(ident("__v"), "value"), "principal"));
         a
-    } else if route.bearer || route.sum || route.oidc || route.signed_cookie.is_some() {
+    } else if route.takes_request() {
         // The Bearer, Oidc, and sum wrappers take the request first (they run the
         // verification seam); a sum wrapper also reads/parses the body itself,
         // so `call_args` here carries only the path params.
@@ -1527,6 +1540,16 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
     if signed_cookie_name(h, &table.actors).is_some() {
         return vec![cookie()];
     }
+    // #3939 (D3 B): `Bearer` for the default `Authorization: Bearer` form, else the header it reads.
+    if let Some(s) = bynk_check::api_key::api_key_seam_for(h, &table.actors) {
+        return vec![match &s.header {
+            None => bearer(),
+            Some(header) => format!(
+                "Bynk-ApiKey realm=\"{realm}\", header=\"{}\"",
+                crate::emitter::escape_ts_string(header)
+            ),
+        }];
+    }
     vec![format!("Bynk realm=\"{realm}\"")]
 }
 
@@ -1802,6 +1825,7 @@ pub(super) fn collect_http_routes(
                     // v0.151: an `Oidc` wrapper runs its verification seam, taking the request first.
                     oidc: bynk_check::actors::oidc_seam_for(h, &table.actors).is_some(),
                     signed_cookie: signed_cookie_name(h, &table.actors),
+                    api_key: bynk_check::api_key::api_key_seam_for(h, &table.actors),
                     hidden_headers: consumed_credential_headers(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     path_kinds,

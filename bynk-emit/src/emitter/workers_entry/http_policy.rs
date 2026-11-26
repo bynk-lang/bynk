@@ -219,6 +219,14 @@ pub(super) fn build_cors_services(
             if routes.iter().any(|r| r.bearer || r.oidc) {
                 hs.push("authorization".to_string());
             }
+            // #3939: an `ApiKey` route's header, `authorization` for the default form.
+            for r in &routes {
+                let Some(seam) = &r.api_key else { continue };
+                let header = seam.consumed_header();
+                if !hs.contains(&header) {
+                    hs.push(header);
+                }
+            }
             hs
         });
 

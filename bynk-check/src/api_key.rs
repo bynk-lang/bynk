@@ -425,6 +425,34 @@ pub fn is_generated_agent(agent: &bynk_syntax::ast::AgentDecl) -> bool {
         .is_some_and(|d| d.as_str().trim_start().starts_with(GENERATED_MARKER))
 }
 
+/// #3939 (D3 F, track §12): `bynk.actor.api_key_unlimited`, a warning on an HTTP route an `ApiKey`
+/// actor guards that applies no rate limit before authentication. A well-formed fabricated key
+/// is cheap to make (its checksum is public) and each one reaches the key store, so the defence,
+/// `@rateLimit(Limiter, key: clientIp)`, must not be opt-in. `key: identity` does not count: a
+/// fabricated key never verifies, so it never reaches that limiter.
+pub(crate) fn unlimited_warning(handler: &Handler, table: &UnitTable) -> Option<CompileError> {
+    let seam = api_key_seam_for(handler, &table.actors)?;
+    let by = handler.by_clause.as_ref()?;
+    let limited = crate::http_rate_limit::route_rate_limit(handler, table)
+        .is_some_and(|r| r.key == crate::http_rate_limit::RateLimitKey::ClientIp);
+    if limited {
+        return None;
+    }
+    Some(
+        CompileError::new(
+            "bynk.actor.api_key_unlimited",
+            by.span,
+            format!(
+                "this route is guarded by the `ApiKey` actor `{}` but applies no rate limit before authentication",
+                seam.actor
+            ),
+        )
+        .with_note(
+            "anyone can make a well-formed key (its checksum is public), and each one the seam parses costs a key-store request; limit by client address before the key is checked: declare `capability PerIp = RateLimit @limit(100) @period(60.seconds)` and write `@rateLimit(PerIp, key: clientIp)` on the route. A service rate-limited at its edge can leave this warning",
+        ),
+    )
+}
+
 /// #3939 (D2 D): whether the named type is, or holds at any depth, an `ApiKeyValue`.
 pub fn carries_api_key_value(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     fn walk(
