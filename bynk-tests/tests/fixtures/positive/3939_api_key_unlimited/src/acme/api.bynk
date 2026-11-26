@@ -1,0 +1,15 @@
+context acme.api
+
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+service api from http {
+	// #3939 (D3 F): no rate limit before authentication, so anyone can make the seam ask the key
+	// store with fabricated keys: `bynk.actor.api_key_unlimited`, a warning.
+	on GET("/me") () -> Effect[HttpResult[String]] by c: Client {
+		Ok(c.identity)
+	}
+}

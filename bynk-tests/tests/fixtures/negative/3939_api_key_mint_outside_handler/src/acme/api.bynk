@@ -1,0 +1,20 @@
+context acme.api
+
+consumes bynk { Clock, ApiKeyLabel }
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+// #3939 (D2 B): `mint` hashes the key under the pepper, which reaches a service handler and not an
+// agent, so an agent cannot mint.
+agent Accounts {
+	key id: AccountId
+
+	store opened: Cell[Int] = 0
+
+	on call open(label: ApiKeyLabel) -> Effect[()] given Clock {
+		let _ <- Client.mint(self.id, label)
+	}
+}

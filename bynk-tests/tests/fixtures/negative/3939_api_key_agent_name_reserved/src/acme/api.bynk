@@ -1,0 +1,17 @@
+context acme.api
+
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+// #3939 (D1 D): `ClientKeys` is the name of the agent the compiler generates for `Client`'s keys.
+agent ClientKeys {
+	key id: String
+	store count: Cell[Int] = 0
+
+	on call read() -> Effect[Int] {
+		count
+	}
+}

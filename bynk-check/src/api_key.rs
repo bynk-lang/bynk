@@ -354,9 +354,8 @@ fn check_header(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
     }
 }
 
-/// #3939: an `ApiKey` actor on a handler: admitted on HTTP alone, never as an actor-sum member yet
-/// (slice 4), and never on a WebSocket upgrade, which has no liveness check (track §3, ADR 1061
-/// A). `None` when `scheme` is not `ApiKey` or the handler admits it.
+/// #3939: an `ApiKey` actor as an HTTP actor-sum member, not admissible yet (track §14, slice 4).
+/// `None` when `scheme` is not `ApiKey` or the handler admits it.
 pub(crate) fn by_member_refusal(
     protocol: &ServiceProtocol,
     by: &ByClause,
@@ -366,11 +365,8 @@ pub(crate) fn by_member_refusal(
     if scheme != Scheme::ApiKey {
         return None;
     }
+    // A WebSocket refuses the scheme itself (`scheme_admissible`), with [`WEBSOCKET_NOTE`].
     let (message, note) = match protocol {
-        ServiceProtocol::WebSocket { .. } => (
-            "an `ApiKey` actor is not admissible on a WebSocket `on open`",
-            "a WebSocket upgrade does not ask the key store, so a revoked key would keep its socket; authenticate the upgrade with a `Bearer`, `Oidc` or `SignedCookie` actor",
-        ),
         ServiceProtocol::Http if by.is_sum() => (
             "an `ApiKey` actor is not admissible as a member of an actor sum yet",
             "guard the route with the `ApiKey` actor alone (`by c: Client`); `ApiKey` members of an actor sum arrive in a later release",
@@ -379,6 +375,9 @@ pub(crate) fn by_member_refusal(
     };
     Some(CompileError::new("bynk.actor.scheme_not_admissible", member, message).with_note(note))
 }
+
+/// #3939 (track §3): why an `ApiKey` actor is not admissible on a WebSocket.
+pub(crate) const WEBSOCKET_NOTE: &str = "a WebSocket upgrade does not ask the key store, so a revoked key would keep its socket; authenticate the upgrade with a `Bearer`, `Oidc` or `SignedCookie` actor";
 
 /// #3939 (D1 D): the generated agents' names are reserved in a context that declares an `ApiKey`
 /// actor. An author's item that takes one is `bynk.actor.api_key_agent_name_reserved`; the
@@ -431,6 +430,9 @@ pub fn is_generated_agent(agent: &bynk_syntax::ast::AgentDecl) -> bool {
 /// `@rateLimit(Limiter, key: clientIp)`, must not be opt-in. `key: identity` does not count: a
 /// fabricated key never verifies, so it never reaches that limiter.
 pub(crate) fn unlimited_warning(handler: &Handler, table: &UnitTable) -> Option<CompileError> {
+    if !matches!(handler.kind, bynk_syntax::ast::HandlerKind::Http { .. }) {
+        return None;
+    }
     let seam = api_key_seam_for(handler, &table.actors)?;
     let by = handler.by_clause.as_ref()?;
     let limited = crate::http_rate_limit::route_rate_limit(handler, table)
@@ -523,6 +525,20 @@ pub fn remote_unsupported_api_key(
         .with_note(
             "run it in process (`bynk test` without `--against`), or pass `--skip-unsupported` to skip it with this reason",
         ),
+    )
+}
+
+/// #3939 (D2 D): `bynk.types.secret_at_boundary` for a minted key, or a type that holds one.
+pub(crate) fn key_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError {
+    CompileError::new(
+        "bynk.types.secret_at_boundary",
+        span,
+        format!(
+            "a `{name}` cannot appear in {what}: it carries a minted API key, which is never stored, sent, encoded or returned across a boundary"
+        ),
+    )
+    .with_note(
+        "a key is shown once, by an HTTP handler returning the `ApiKeySecret` that `mint` answered (`Effect[HttpResult[ApiKeySecret]]`); keep its public `id` (an `ApiKeyId`) where the key must be named later",
     )
 }
 

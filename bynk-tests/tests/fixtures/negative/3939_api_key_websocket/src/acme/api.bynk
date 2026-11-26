@@ -1,0 +1,22 @@
+context acme.api
+
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
+
+// #3939 (track §3): a WebSocket upgrade does not ask the key store, so a revoked key would keep its
+// socket; an `ApiKey` actor is not admissible on `on open`.
+type Frame = { text: String }
+
+service live from websocket(in: Frame, out: Frame) {
+	on open () -> Effect[()] by c: Client {
+		let _ <- connection.close()
+		()
+	}
+
+	on close () -> Effect[()] by c: Client {
+		()
+	}
+}

@@ -28,7 +28,7 @@ pub const GENERATED_MARKER: &str = "Generated for the `ApiKey` actor";
 pub const KEY_CAP: i64 = 100;
 
 /// `source` with each `ApiKey` actor's agents added to the context that declares it, or `None`
-/// when the file declares none. An agent whose name the file already takes is left out, so the
+/// when the file declares none. When the file already takes either name, neither is added, so the
 /// checker reports the author's declaration (`bynk.actor.api_key_agent_name_reserved`).
 pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String> {
     let mut inserts: Vec<(usize, String)> = Vec::new();
@@ -44,12 +44,13 @@ pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String>
             let owner = &actor.name.name;
             let keys = format!("{owner}Keys");
             let key_owner = format!("{owner}KeyOwner");
-            if !is_taken(&ctx.items, &keys) {
-                text.push_str(&keys_agent_text(owner, &keys, &identity));
+            // The two are one store: when the author takes either name, neither is generated, so
+            // the checker reports the declaration once rather than a cascade through the other.
+            if is_taken(&ctx.items, &keys) || is_taken(&ctx.items, &key_owner) {
+                continue;
             }
-            if !is_taken(&ctx.items, &key_owner) {
-                text.push_str(&key_owner_agent_text(owner, &key_owner, &keys, &identity));
-            }
+            text.push_str(&keys_agent_text(owner, &keys, &identity));
+            text.push_str(&key_owner_agent_text(owner, &key_owner, &keys, &identity));
         }
         if text.is_empty() {
             continue;
@@ -253,9 +254,7 @@ mod tests {
     #[test]
     fn a_name_the_author_takes_is_left_to_the_checker() {
         let src = "context shop\n\ntype AccountId = String where NonEmpty\n\nactor Client { auth = ApiKey(secret = \"P\"), identity = AccountId }\n\ntype ClientKeys = String\n";
-        let out = with_api_key_agents(src, &parse(src)).expect("generated");
-        assert!(!out.contains("agent ClientKeys {"));
-        assert!(out.contains("agent ClientKeyOwner {"));
+        assert!(with_api_key_agents(src, &parse(src)).is_none());
     }
 
     #[test]
