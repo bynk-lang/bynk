@@ -1002,3 +1002,28 @@ test("postings are swept even when the rename drops the index", async () => {
   await move({}, storage, [{ kind: "map", from: "orders", to: "plain" }]);
   assert.equal((await storage.list({ prefix: "i/" })).size, 0);
 });
+
+test("a merge that crashes between batches counts the entries that already moved", async () => {
+  const storage = new InMemoryStorage();
+  const entries: Record<string, unknown> = {
+    [mapKey("visited", "x")]: { i: 0, v: 0 },
+    [metaKey("visited")]: { size: 1, seq: 1 },
+    [metaKey("seen")]: { size: 25, seq: 25 },
+  };
+  for (let i = 0; i < 25; i++) entries[mapKey("seen", `k${String(i).padStart(2, "0")}`)] = { i, v: i };
+  await storage.put(entries);
+  let commits = 0;
+  const real = storage.transaction.bind(storage);
+  storage.transaction = (async (closure: Parameters<typeof real>[0]) => {
+    commits += 1;
+    if (commits === 3) throw new Error("crash");
+    return real(closure);
+  }) as typeof storage.transaction;
+  const rename = { kind: "map", from: "seen", to: "visited" } as const;
+  await assert.rejects(move({}, storage, [rename], { batch: 10 }), /crash/);
+  storage.transaction = real;
+  await move({}, storage, [rename], { batch: 10 });
+  assert.equal((await storage.list({ prefix: "m/seen/" })).size, 0);
+  assert.equal((await storage.list({ prefix: "m/visited/" })).size, 26);
+  assert.deepEqual(await storage.get(metaKey("visited")), { size: 26, seq: 26 });
+});

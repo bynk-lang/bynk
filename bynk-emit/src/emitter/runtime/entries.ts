@@ -638,7 +638,9 @@ async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename,
   const tag = r.kind === "set" ? "s" : r.kind === "log" ? "l" : "m";
   const oldPrefix = `${tag}/${encodeKeyPart(r.from)}/`;
   const newPrefix = `${tag}/${encodeKeyPart(r.to)}/`;
-  let movedEntries = 0;
+  // The entries moved so far, kept in the old metadata as each batch commits (when both names hold
+  // metadata), so a crash and a resume count the batches that already went.
+  let movedEntries = typeof oldMeta?.["renameMoved"] === "number" ? oldMeta["renameMoved"] : 0;
   for (;;) {
     const page = await storage.list<unknown>({ prefix: oldPrefix, limit: batch });
     if (page.size === 0) break;
@@ -662,6 +664,9 @@ async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename,
     await storage.transaction(async (txn) => {
       if (Object.keys(moved).length > 0) await txn.put(moved);
       await txn.delete(oldKeys);
+      if (oldMeta !== undefined && newMeta !== undefined) {
+        await txn.put(metaKey(r.from), { ...oldMeta, renameMoved: movedEntries });
+      }
     });
   }
   // What the old name leaves behind is deleted, never moved: an expiry is derived from its entry
@@ -678,7 +683,7 @@ async function moveOneRename(storage: DurableObjectStorage, r: CollectionRename,
   // new name has its own, it counts the entries that moved in, and the next sequence clears both. A
   // `Log`'s skew (how far a key's time is above its entry's) is the larger of the two, or unknown
   // when either is, so a window or a prune cannot miss the older entries.
-  const { ix: _oldIx, ...rest } = oldMeta;
+  const { ix: _oldIx, renameMoved: _moved, ...rest } = oldMeta;
   await storage.transaction(async (txn) => {
     if (newMeta === undefined) {
       await txn.put(metaKey(r.to), rest);
