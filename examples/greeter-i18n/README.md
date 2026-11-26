@@ -36,7 +36,7 @@ greeter-i18n/
 ## Check and test
 
 ```sh
-bynk check src
+bynk check
 bynk test .
 ```
 

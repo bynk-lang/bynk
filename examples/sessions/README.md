@@ -59,7 +59,7 @@ sessions/
 ## Check and test
 
 ```sh
-bynk check src      # type-check, no output
+bynk check      # type-check, no output
 bynk test .
 ```
 
