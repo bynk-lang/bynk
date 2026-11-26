@@ -15,6 +15,7 @@ use super::on_account;
 mod keys;
 mod messages;
 mod model;
+pub(crate) mod refusals;
 mod report;
 mod run;
 mod shared;
@@ -49,9 +50,9 @@ pub(crate) use run::{
     conflicting_env_passthrough, rebuild, record_pushed_contracts, record_pushed_tombstones,
 };
 pub(crate) use skew::{
-    accepted_skew_notice, contract_skew_refusal, partition_accepted, record_accepted,
-    report_callee_skews, shapes_to_accept, unrecorded_caller_warning, unused_accepted,
-    unused_accepted_notice,
+    accepted_skew_notice, contract_skew_entry, contract_skew_refusal, partition_accepted,
+    record_accepted, report_callee_skews, shapes_to_accept, unrecorded_caller_warning,
+    unused_accepted, unused_accepted_notice,
 };
 #[cfg(test)]
 pub(crate) use skew::{callee_contract_skew_refusal, orphaned_caller_skew_refusal};

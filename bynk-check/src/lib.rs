@@ -76,6 +76,8 @@ pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
 pub mod http_rate_limit;
+#[cfg(test)]
+mod http_result_extensible_tests;
 pub mod icu;
 mod implicit_uses;
 pub use implicit_uses::inline_prelude_units;

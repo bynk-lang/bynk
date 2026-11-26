@@ -99,7 +99,9 @@ registry, and the promise depends on its layer:
   `bynk.cloudflare`) are **additive-only** through 1.x, which is what "evolve
   additively" above means for them. They may gain items and operations. An enum
   may gain a variant only if it is marked *extensible*, because a `match` covering
-  an extensible enum must already carry a wildcard. An existing stable item may be
+  an extensible enum must already carry a wildcard. The built-in `HttpResult` is
+  extensible too (#4536), so its RFC 9110 status vocabulary grows additively
+  through 1.x. An existing stable item may be
   deprecated in a minor release (a non-failing warning, ADR 0117) but removed or
   reshaped only in a major one.
 - **Experimental items** carry **no promise**. They may change or disappear in any

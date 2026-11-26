@@ -36,12 +36,12 @@ resolver = "3"
 edition = "2024"
 version = "0.794.0"
 # Minimum supported Rust version. Edition 2024 floors it at 1.85, but `oxc`
-# (the TS→JS stripper behind `bynk-strip`, in-browser track slice 1) requires
-# rustc 1.94, so the effective floor rose to match it — set to 1.95 (the pinned
-# `rust-toolchain.toml`), the toolchain the full suite is verified on. The CI
-# `msrv` leg builds the workspace on exactly this toolchain, so the claim is
+# (the TS→JS stripper behind `bynk-strip`, in-browser track slice 1) sets the
+# effective floor: 1.94 when it came in, and 1.98 from `oxc` 0.159 (#3636). It is set
+# to 1.98 (the pinned `rust-toolchain.toml`), the toolchain the full suite is verified
+# on. The CI `msrv` leg builds the workspace on exactly this toolchain, so the claim is
 # verified rather than asserted — if it fails, raise this (don't lower the leg).
-rust-version = "1.95"
+rust-version = "1.98"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/bynk-lang/bynk"
 homepage = "https://github.com/bynk-lang/bynk"

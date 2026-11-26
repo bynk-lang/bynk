@@ -525,7 +525,7 @@ impl<'a> Parser<'a> {
             // #2654: an irrefutable record pattern has no values to fall back
             // on, so its `let` may omit the `else`. Parentheses around the
             // pattern are transparent, so they are already gone here.
-            if matches!(pattern, Pattern::Record { .. }) && pattern.is_irrefutable() {
+            if matches!(pattern.peel_as(), Pattern::Record { .. }) && pattern.is_irrefutable() {
                 let end = principal.as_ref().map_or(value.span, |p| p.span);
                 return Ok(LetElseParts {
                     kw: kw.span,
@@ -613,7 +613,7 @@ impl<'a> Parser<'a> {
         after_value: Span,
         end: Span,
     ) -> Vec<Span> {
-        if !matches!(pattern, Pattern::Record { .. }) {
+        if !matches!(pattern.peel_as(), Pattern::Record { .. }) {
             return Vec::new();
         }
         let kind = |i: usize| self.tokens.get(i).map(|t| t.kind);
@@ -1226,7 +1226,7 @@ impl<'a> Parser<'a> {
             });
         }
         let pattern = self.parse_pattern()?;
-        if !matches!(pattern, Pattern::Record { .. }) {
+        if !matches!(pattern.peel_as(), Pattern::Record { .. }) {
             return Err(CompileError::new(
                 "bynk.parse.lambda_pattern_not_record",
                 pattern.span(),
@@ -1369,7 +1369,7 @@ struct LetElseParts {
 /// #2654: the span of the first field of a record pattern that can fail to
 /// match, descending into nested record patterns to the field that does.
 fn first_refutable_field(p: &Pattern) -> Option<Span> {
-    let Pattern::Record { fields, .. } = p else {
+    let Pattern::Record { fields, .. } = p.peel_as() else {
         return None;
     };
     for (name, sub) in fields {

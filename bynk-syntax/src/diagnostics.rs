@@ -3211,6 +3211,11 @@ agent Cart {
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.match.as_on_wildcard",
+        blurb: "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
+        example: "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
+    },
+    Explain {
         code: "bynk.match.refined_pattern_is_range",
         blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
@@ -6184,13 +6189,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.extensible_match_needs_wildcard",
         blurb: "Some standard-library enums, among them `FetchError` and `Method`, are \
-                extensible: a minor release may add a variant. A `match` that names every \
+                extensible: a minor release may add a variant. So is the built-in \
+                `HttpResult`, whose RFC 9110 status vocabulary grows in 1.x minor releases. \
+                A `match` that names every \
                 variant they have today would then stop covering them, so the compiler asks \
                 for a wildcard arm now, and the `match` keeps compiling when a variant \
                 arrives. Listing every current variant is not enough. Add `_`, or `Err(_)` \
                 where the enum is wrapped, and put there whatever should happen for a \
                 variant you did not name. An enum of your own with the same name is not \
-                extensible; the rule follows the first-party enum. For an ordinary enum, a \
+                extensible; the rule follows the first-party enum (`HttpResult` is a reserved \
+                name). A `match` in a suite case is not checked. For an ordinary enum, a \
                 missing arm is `bynk.types.non_exhaustive_match`.",
         example: "fn verb(m: Method) -> String {\n    match m {           // ✗ every variant, but no wildcard\n        Get => \"read\"\n        Post => \"write\"\n        Put => \"write\"\n        Delete => \"write\"\n        Patch => \"write\"\n        Head => \"read\"\n        Options => \"read\"\n    }\n}\n\n\
                   fn verb(m: Method) -> String {\n    match m {\n        Get => \"read\"\n        _ => \"write\"       // ✓ also covers variants added later\n    }\n}",
@@ -8264,6 +8272,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
+        "bynk.deploy.account_name_conflict",
+        "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
@@ -8328,6 +8340,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.hyperdrive_settings_unreadable",
+        "`[deploy.hyperdrive]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
+    d(
+        "bynk.deploy.hyperdrive_unresolved",
+        "A Hyperdrive binding's connection string or settings did not resolve, so `bynk deploy` stopped before planning. The message names the binding and the variable or setting it needs.",
+    ),
+    d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
@@ -8344,6 +8364,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.pins_unreadable",
+        "`bynk deploy` could not read `bynk.foreign.toml`, the contract hashes each declared foreign caller is pinned at, so it stopped before planning. The message names the problem; fix the file (it is plain TOML) and run again.",
+    ),
+    d(
         "bynk.deploy.preflight_failed",
         "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
     ),
@@ -8356,8 +8380,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
     d(
+        "bynk.deploy.recreate_needs_yes",
+        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` prints the plan but will not apply it without `--yes` (a `--dry-run` only shows it); move the data first, then re-run with `--yes`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_file_passthrough",
+        "A `--secrets-file` was passed through to Wrangler after `--` while the run includes a Worker's first deploy, which uploads its secrets with `bynk deploy`'s own secrets file, so Wrangler would get two. `bynk deploy` stopped before planning; pass the file to bynk instead, before `--`: `bynk deploy --secrets-file <file>`.",
     ),
     d(
         "bynk.deploy.secrets_source_unreadable",
@@ -8366,6 +8398,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.service_name_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_shared",
+        "`--strict-environments` found that the environment shares values with `default`, which the flag forbids. The refusal names the environment; give it values of its own.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_unchecked",
+        "`--strict-environments` could not compare the environment with `default`, because `default` could not be built, so nothing was checked. The refusal names the environment; fix the build and run again.",
     ),
     d(
         "bynk.deploy.unknown_context",
@@ -9606,6 +9646,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
+    warn(dg(
+        "bynk.match.as_on_wildcard",
+        "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable).",
+        &["as_pattern"],
     )),
     warn(dg(
         "bynk.match.refined_pattern_is_range",
@@ -11406,7 +11451,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.types.extensible_match_needs_wildcard",
-        "A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release.",
+        "A `match` covers an extensible standard-library enum (`FetchError`, `Method`) or the built-in `HttpResult` without a wildcard; it may gain variants in a minor release.",
     ),
     dg(
         "bynk.types.field_access_on_non_record",

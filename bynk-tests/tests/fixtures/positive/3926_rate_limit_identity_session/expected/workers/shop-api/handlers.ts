@@ -36,7 +36,7 @@ export const api = {
   async http_POST_rename(body: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<void>> {
     return HttpResult.NoContent;
   },
-  async http_POST_rename_from(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<void>> {
+  async http_POST_rename_from(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<void>> {
     return HttpResult.NoContent;
   },
   async http_POST_logout(deps: { env: { MEMBER_SESSIONS: __DurableObjectNamespace }; identity: UserId }): globalThis.Promise<HttpResult<void>> {

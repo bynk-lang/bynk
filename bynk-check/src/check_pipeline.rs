@@ -991,12 +991,15 @@ pub fn check_file_core(
     })
 }
 
-/// S3 (#1963): which of the names in scope are a first-party extensible enum.
+/// S3 (#1963): which of the names in scope are a first-party extensible enum,
+/// and (#4536) the built-in `HttpResult`, always in scope and a reserved name,
+/// when [`bynk_syntax::ast::HTTP_RESULT_EXTENSIBLE`] marks it extensible.
 fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> {
     imported_from
         .iter()
         .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
         .map(|(n, _)| n.clone())
+        .chain(bynk_syntax::ast::HTTP_RESULT_EXTENSIBLE.then(|| "HttpResult".to_string()))
         .collect()
 }
 

@@ -253,6 +253,8 @@ suite reg.api {
 ```
 
 A line with no colon is ignored, and names are case-insensitive, as on the wire.
+A name given twice is one header, its values joined with `", "`, except `Cookie`,
+whose lines are joined with `"; "` into one cookie-string, as a browser sends it.
 At the `unit` and `integration` tiers the value reaches the handler directly; at
 `system` the driver sends the lines as the request's headers, beside the ones it
 sets itself (`content-type`, and the credential of an actor's `by`), which win.
