@@ -1,13 +1,6 @@
----
-level: minor
-probes: ts_writes
-raises: ts_writes — the generated client gains an EventSource function per streaming GET route (#3918)
-changelog: bynk client emits, for each Streaming GET route, a function returning the browser's own EventSource, and a Chromium test proves named events, Last-Event-ID resumption, multi-line data, an in-band fault and an unchanged Stream[String]
----
+# 1020 — The generated client gives a streaming GET route an EventSource form
 
-## ADR: sse-client-event-source
-title: The generated client gives a streaming GET route an EventSource form
-summary: A thin function over the browser's EventSource, since event names are runtime values and the browser already reconnects with Last-Event-ID
+- **Status:** Accepted (v0.755)
 
 **Context.** A client that reads a `Streaming` route with `fetch` can send headers but must reconnect by hand, and it yields only each event's `data`. A browser's `EventSource` reconnects by itself and replays `Last-Event-ID`, which is what the structured `SseEvent` is for, but it cannot send a header.
 

@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `Bearer` or `Oidc` arm of an actor sum reads its verified claims through a second pattern binder, `User(u, c)` with `c: TokenClaims`; the one-name `User(u)` is unchanged, and a test supplies the claims as `by User("ada", TokenClaims.of([…]))`
----
+# 1029 — A Bearer or Oidc arm of an actor sum reads its verified claims through a second pattern binder
 
-## ADR: sum-arm-claims
-title: A Bearer or Oidc arm of an actor sum reads its verified claims through a second pattern binder
-summary: `User(u, c)` binds a Bearer or Oidc arm's identity and its verified claims; `who.claims` on the sum binder is rejected
+- **Status:** Accepted (v0.766)
 
 **Context.** #3937 gave the binder of a lone `Bearer` or `Oidc` actor its verified claims as `u.claims`. A `Bearer` or `Oidc` arm of an actor sum (`by who: User | Visitor`) could not read them: the sum's binder is the resolved arm, and the arm `User(u)` binds `u` to the identity value itself, so `u.claims` had no receiver (#4344). An `Oidc` actor may be a member of a sum since #3936, so both scheme's arms are affected.
 

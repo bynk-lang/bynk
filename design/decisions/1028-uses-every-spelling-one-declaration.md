@@ -1,12 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics, explained_codes
-changelog: Every spelling of a `uses`-imported name (`Status`, `Y.Status`, `lib.y.Status`) resolves to the one declaration: one type, function or constant, so a value of one spelling is a value of the others and a match reads its variants; `bynk.uses.second_spelling` is retired (#4352)
----
+# 1028 — Every spelling of a used declaration is that declaration
 
-## ADR: uses-every-spelling-one-declaration
-title: Every spelling of a used declaration is that declaration
-summary: How a unit's view of a used commons files one declaration under every spelling it is read by
+- **Status:** Accepted (v0.765)
 
 **Context.** #4045 let a unit read a used commons' names bare, through an alias or by the commons' full name, but reached each declaration by one spelling: a second spelling of the same declaration was `bynk.uses.second_spelling`, because type identity is the declared name and two spellings would have been two types.
 

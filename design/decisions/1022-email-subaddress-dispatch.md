@@ -1,12 +1,6 @@
----
-level: minor
-changelog: Plus-addressed mail is dispatched to its base address's service when no service claims the exact address, and the handler reads the tag as `mail.subaddress`
-breaking: Mail to `user+tag@domain` now reaches the service that claims `user@domain` instead of the domain's catch-all; a catch-all that relied on receiving tagged mail should claim the tagged address explicitly (`from email("user+tag@domain")`) or read `mail.subaddress` in the service that now receives it
----
+# 1022 — A plus-addressed recipient is dispatched exact, then base address, then catch-all, and the tag is readable
 
-## ADR: email-subaddress-dispatch
-title: A plus-addressed recipient is dispatched exact, then base address, then catch-all, and the tag is readable
-summary: How `user+tag@domain` finds its service, what `InboundEmail.subaddress` holds, and why a tagged claim stays legal
+- **Status:** Accepted (v0.758)
 
 **Context.** Email Routing supports subaddressing (RFC 5233): once it is enabled for a domain, mail to `user+detail@example.com` is matched by the rule for `user@example.com`, and the `+detail` part stays in `message.to`. Bynk's dispatch compared the whole recipient exactly, so `support+1234@shop.example`, which Cloudflare had already routed to the `support@` Worker, matched no service and was rejected `recipient not accepted`, unless a catch-all happened to take it. Dispatch is generated runtime code that an author cannot change, so this was a bug whenever subaddressing was on (#3884).
 
