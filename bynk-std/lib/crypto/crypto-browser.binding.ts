@@ -135,7 +135,11 @@ export class CryptoProvider implements Crypto {
 
   // The nonce source is a constructor argument only so a test can fix it, to pin the format with a known
   // answer; the compiled program constructs the provider with none, and no operation takes a nonce.
-  constructor(private readonly nextNonce: () => Bytes = randomNonce) {}
+  private readonly nextNonce: () => Bytes;
+
+  constructor(nextNonce: () => Bytes = randomNonce) {
+    this.nextNonce = nextNonce;
+  }
 
   async importCipherKey(key: Bytes): Promise<Result<CipherKey, CryptoError>> {
     if (key.length !== CIPHER_KEY_BYTES) {
