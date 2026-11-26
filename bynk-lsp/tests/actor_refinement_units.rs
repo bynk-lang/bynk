@@ -95,6 +95,7 @@ fn hover_on_the_refinement(r: &ProjectDiagnostics, root: &Path) -> String {
                 &r.boundary_info,
                 &r.unit_sources,
             ),
+            analytics: &r.analytics,
         }),
         doc: Some((text, offset)),
         path: uri.to_file_path().ok().as_deref(),
