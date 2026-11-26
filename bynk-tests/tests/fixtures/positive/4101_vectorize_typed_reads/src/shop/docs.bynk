@@ -1,0 +1,72 @@
+context shop.docs
+
+// #4101: `queryValue[M]` and `getByIdsValue[M]` read each match's metadata as `M` on its own, so a
+// vector stored by an older shape of `M` is one `Err` among the `Ok`s, and the text operations stay.
+
+consumes bynk
+consumes bynk.cloudflare { Vectorize, Vector, VectorOf, VectorError, QueryOptions, MetadataScope, Mutation }
+
+capability Docs = Vectorize @dimensions(32) @metric("euclidean") @indexed(["category:string"])
+
+type Meta = { category: String, year: Int }
+
+// A 32-dimensional vector along the first axis.
+fn at(x: Float) -> List[Float] {
+	[x, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+}
+
+service store {
+	on call(vectors: List[VectorOf[Meta]]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
+		Docs.upsertValue(vectors)
+	}
+}
+
+service raw {
+	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
+		Docs.upsert(vectors)
+	}
+}
+
+// The category of each match, nearest first: `-` for a match with no metadata, `?` for one that does
+// not read as `Meta`.
+service categories {
+	on call(vector: List[Float]) -> Effect[Result[List[String], VectorError]] by Caller given Docs {
+		let found <- Docs.queryValue[Meta](vector, QueryOptions { topK: 5, returnMetadata: MetadataScope.All })
+		match found {
+			Ok(matches) => Ok(matches.map((m) => match m.metadata {
+				Some(Ok(meta)) => meta.category,
+				Some(Err(_)) => "?",
+				None => "-",
+			})),
+			Err(e) => Err(e),
+		}
+	}
+
+}
+
+service omitted {
+	on call(vector: List[Float]) -> Effect[Result[List[String], VectorError]] by Caller given Docs {
+		let found <- Docs.queryValue[Meta](vector, QueryOptions { topK: 5 })
+		match found {
+			Ok(matches) => Ok(matches.map((m) => match m.metadata {
+				Some(_) => "metadata",
+				None => "-",
+			})),
+			Err(e) => Err(e),
+		}
+	}
+}
+
+service fetch {
+	on call(ids: List[String]) -> Effect[Result[List[String], VectorError]] by Caller given Docs {
+		let found <- Docs.getByIdsValue[Meta](ids)
+		match found {
+			Ok(vectors) => Ok(vectors.map((v) => match v.metadata {
+				Some(Ok(meta)) => meta.category,
+				Some(Err(_)) => "?",
+				None => "-",
+			})),
+			Err(e) => Err(e),
+		}
+	}
+}
