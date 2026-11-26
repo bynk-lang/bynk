@@ -1,0 +1,14 @@
+commons demo.rule
+
+// #4475: a single-file program reads `e.rule` (a `ValidationRule`) and its `Bound`, with no `uses`.
+type Age = Int where AtLeast(0)
+
+fn why(n: Int) -> String {
+  match Age.of(n) {
+    Ok(_) => "ok",
+    Err(e) => match e.rule {
+      AtLeast(IntBound(lo)) => "at least \(lo)",
+      _ => "other",
+    },
+  }
+}
