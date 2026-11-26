@@ -10,7 +10,9 @@ use bynk_syntax::error::CompileError;
 
 fn name_problem(name: &str) -> Option<&'static str> {
     match name.strip_prefix("X-") {
-        None => Some("a tag name starts with `X-`: Cloudflare removes every other header from a forward"),
+        None => Some(
+            "a tag name starts with `X-`: Cloudflare removes every other header from a forward",
+        ),
         Some(rest) if rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => None,
         Some(_) => Some("a tag name holds only letters, digits and `-` after `X-`"),
     }

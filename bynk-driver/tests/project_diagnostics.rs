@@ -341,7 +341,15 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
     );
     let opts = bynk_driver::project_options(&root.0).expect("readable");
     let check = project::check_project(&opts);
-    assert!(!check.has_errors(), "{:?}", check.errors.iter().map(|e| &e.error.category).collect::<Vec<_>>());
+    assert!(
+        !check.has_errors(),
+        "{:?}",
+        check
+            .errors
+            .iter()
+            .map(|e| &e.error.category)
+            .collect::<Vec<_>>()
+    );
     let got: Vec<(&str, Option<&str>)> = check
         .email_forwards
         .iter()
