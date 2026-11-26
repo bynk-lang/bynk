@@ -7,3 +7,11 @@ service api from http {
         Ok("x")
     }
 }
+
+service admin from http {
+    cors { origins: ["https://app.example.com"] }
+
+    on GET("/admin/items") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}
