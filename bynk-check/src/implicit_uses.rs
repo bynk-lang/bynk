@@ -12,7 +12,7 @@
 //!
 //! Two rules keep a prelude type from disturbing a program: its variants resolve
 //! only from context when another sum in scope shares the name, and it is not
-//! rebranded per context ([`crate::resolver::is_prelude_type`]).
+//! rebranded per context (`resolver::is_prelude_type`).
 //!
 //! This is the one place that decides it. A new compiler-known sum is a row in
 //! the table and its unit.
@@ -69,7 +69,7 @@ pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
     }
 }
 
-/// #4475: the single-file counterpart of [`add_implicit_uses`]. A single-file program has no other
+/// #4475: the single-file counterpart of `add_implicit_uses`. A single-file program has no other
 /// unit to `uses`, so the prelude units it needs are merged into it instead: for each prelude type
 /// ([`bynk_std::PRELUDE_TYPES`]) the program names (or writes a spelling that yields), the items of its
 /// first-party commons are appended to the program's own, parsed with that unit's reserved file id so the
