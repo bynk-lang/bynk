@@ -38,11 +38,22 @@ pub fn run(
         );
         return ExitCode::FAILURE;
     }
-    let checked = bynk_driver::run_check("bynk", &input, output, fix.as_deref(), each, environment);
+    // #3826: a directory inside a project is checked as the project, resolved once for the check and
+    // `--emit`; `--fix` stays on the directory named.
+    let target = bynk_driver::check_target(&input, each);
+    let checked = bynk_driver::run_check(
+        "bynk",
+        &input,
+        &target,
+        output,
+        fix.as_deref(),
+        each,
+        environment,
+    );
     // #3068: `--emit` type-checks the generated TypeScript, but only for a
     // program that passed the check; a failed check has nothing to emit.
     if emit && checked == ExitCode::SUCCESS {
-        return if bynk_driver::tsc_report::check_emit_all("bynk", &input, short, each, environment)
+        return if bynk_driver::tsc_report::check_emit_all("bynk", &target, short, each, environment)
         {
             ExitCode::SUCCESS
         } else {

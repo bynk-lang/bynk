@@ -1028,6 +1028,62 @@ impl ManifestCache {
     }
 }
 
+/// #3826: the project a `bynk check` directory belongs to. A directory with no `bynk.toml` of its
+/// own, inside a project's source trees, is checked as that project, as `cargo` and `tsc` do, so a
+/// `bynk check src` reads the manifest (its `[unstable] allow`, its `[paths]`) rather than checking
+/// `src` as a bare tree. Returns the project root, as a path that reads from where the command
+/// ran (`.`, `..`, or a path under the working directory), and `None` (the directory is checked as
+/// itself) when `input` is a file, has its own manifest or its own `src/` (which already select
+/// project mode), sits in no project, sits in a workspace root (not a project), or is not under
+/// one of the project's `[paths] include` trees, or is under an `exclude`d one: the project would
+/// not read it, so checking the project would check something else.
+pub fn enclosing_check_project(input: &Path) -> Option<PathBuf> {
+    if !input.is_dir() || input.join("bynk.toml").is_file() || input.join("src").is_dir() {
+        return None;
+    }
+    let abs = std::fs::canonicalize(input).ok()?;
+    let root = bynk_fmt::find_manifest(&abs)?.parent()?.to_path_buf();
+    if project::is_workspace_root(&root) {
+        return None;
+    }
+    // An unreadable manifest redirects too: the project check is what reports it.
+    if let Ok(paths) = try_read_project_paths_with(&root, &manifest_overlay(&root)) {
+        let under = |trees: &[PathBuf]| {
+            trees.iter().any(|t| {
+                std::fs::canonicalize(root.join(t)).is_ok_and(|tree| abs.starts_with(tree))
+            })
+        };
+        if !under(&paths.include) || under(&paths.exclude) {
+            return None;
+        }
+    }
+    let cwd = std::env::current_dir()
+        .ok()
+        .and_then(|c| std::fs::canonicalize(c).ok());
+    Some(match cwd {
+        Some(cwd) if cwd.starts_with(&root) => {
+            let depth = cwd.strip_prefix(&root).ok()?.components().count();
+            if depth == 0 {
+                PathBuf::from(".")
+            } else {
+                (0..depth).map(|_| "..").collect()
+            }
+        }
+        Some(cwd) if root.starts_with(&cwd) => root.strip_prefix(&cwd).ok()?.to_path_buf(),
+        _ => root,
+    })
+}
+
+/// #3826: what `bynk check <input>` checks: the enclosing project of [`enclosing_check_project`],
+/// else `input` itself. `each` asks for a directory of projects, which is refused inside one, so
+/// it is never redirected. Resolved once per run, so the check and `--emit` agree on the target.
+pub fn check_target(input: &Path, each: bool) -> PathBuf {
+    if each {
+        return input.to_path_buf();
+    }
+    enclosing_check_project(input).unwrap_or_else(|| input.to_path_buf())
+}
+
 /// #4124: the nearest ancestor of the working directory holding a `bynk.toml`,
 /// as a path relative to it (`.`, `..`, `../..`), so the files `fmt` names and
 /// reports read the way a typed `bynk fmt <dir>` would. The search is
@@ -1333,12 +1389,22 @@ fn atomic_write(path: &Path, contents: &str) -> std::io::Result<()> {
 pub fn run_check(
     prog: &str,
     input: &Path,
+    target: &Path,
     output: CheckOutput,
     fix: Option<&[String]>,
     each: bool,
     environment: &str,
 ) -> ExitCode {
     let short = output == CheckOutput::Short;
+    // #3826: `target` is what is checked (the enclosing project, for a directory inside one); `--fix`
+    // edits only what `input` names, so it never reaches past the directory it was given.
+    if target != input && output == CheckOutput::Rich {
+        crate::emsg!(
+            "{prog}: note: `{}` is inside the project at `{}`; checking the project",
+            shown(input),
+            shown(target)
+        );
+    }
     // #4123: a machine format collects every member's diagnostics and writes one
     // document at the end, rather than printing as it goes.
     let mut collected = output.is_machine().then(check_json::Collector::default);
@@ -1407,7 +1473,7 @@ pub fn run_check(
     let fixed = scope
         .as_ref()
         .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
-    let passed = check_one(prog, input, short, None, environment, collected.as_mut());
+    let passed = check_one(prog, target, short, None, environment, collected.as_mut());
     emit_collected(output, collected);
     if passed && fixed {
         ExitCode::SUCCESS
