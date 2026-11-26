@@ -21,9 +21,8 @@ pub(crate) fn decode_error_kind_ty(ctx: &Ctx) -> Option<TyId> {
     Some(named_ty(decl, ctx.tys))
 }
 
-/// The type of `e.kind`, or an error when `bynk.decode` is not reachable (a single-file
-/// program has no other unit to reach, and a type of the unit's own named
-/// `DecodeErrorKind` hides it).
+/// The type of `e.kind`, or an error when `bynk.decode` is not reachable (a type of the unit's
+/// own named `DecodeErrorKind` hides it).
 fn kind_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
     if let Some(ty) = decode_error_kind_ty(ctx) {
         return Some(ty);
@@ -35,7 +34,7 @@ fn kind_field_ty(field: &Ident, ctx: &mut Ctx) -> Option<TyId> {
             "`e.kind` is a `DecodeErrorKind` from `bynk.decode`, which is not in scope here",
         )
         .with_note(
-            "a single-file program cannot reach `bynk.decode`; put the code in a project. A type of your own named `DecodeErrorKind` also hides it",
+            "a type of your own named `DecodeErrorKind` hides it; rename yours to use the `DecodeErrorKind` of `bynk.decode`",
         ),
     );
     None
