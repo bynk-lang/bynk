@@ -14,9 +14,9 @@ use super::workers_entry::wire_ident;
 use crate::emitter::bindings::agent_binding;
 use crate::emitter::http_handler_method_name_ir;
 use crate::ts_build::{
-    as_expr, await_expr, binary, block, call, const_, expr_stmt, ident, if_, member, method_call,
-    new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq, strict_neq,
-    typeof_expr,
+    as_expr, await_expr, binary, block, call, cond_expr, const_, expr_stmt, ident, if_, member,
+    method_call, new, not_expr, null_lit, num_lit, or_expr, return_, str_lit, strict_eq,
+    strict_neq, typeof_expr,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ActorDecl, ExprKind, Handler, ServiceDecl, ServiceProtocol, TypeRef};
@@ -1197,7 +1197,15 @@ fn sum_bearer_member_stmts(tag: &str, secret: &str, identity_type: &str) -> Vec<
                                         ]),
                                         None,
                                     ),
-                                    TsStmt::assign(ident("__exp"), claims_exp(), None),
+                                    TsStmt::assign(
+                                        ident("__exp"),
+                                        cond_expr(
+                                            strict_eq(typeof_expr(claims_exp()), str_lit("number")),
+                                            claims_exp(),
+                                            ident("undefined"),
+                                        ),
+                                        None,
+                                    ),
                                 ]),
                             ),
                         ]),

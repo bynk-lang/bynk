@@ -33,7 +33,7 @@ export function compose(env: Env) {
               const __id = handlers.UserId.of(__claims.value.sub);
               if (__id.tag === "Ok") {
                 __who = { tag: "User", identity: __id.value };
-                __exp = __claims.value.claims.exp;
+                __exp = typeof __claims.value.claims.exp === "number" ? __claims.value.claims.exp : undefined;
               }
             }
           }
