@@ -2013,7 +2013,12 @@ pub fn ts_type_ref_display(r: &TypeRef) -> String {
         ),
         TypeRef::Option(t, _) => format!("Option[{}]", ts_type_ref_display(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", ts_type_ref_display(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
+        TypeRef::HttpResult(t, None, _) => format!("HttpResult[{}]", ts_type_ref_display(t)),
+        TypeRef::HttpResult(t, Some(e), _) => format!(
+            "HttpResult[{}, {}]",
+            ts_type_ref_display(t),
+            ts_type_ref_display(e)
+        ),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
@@ -3723,7 +3728,7 @@ fn check_service_decls(
             let TypeRef::Effect(inner, _) = &handler.return_type else {
                 continue;
             };
-            let TypeRef::HttpResult(body, _) = inner.as_ref() else {
+            let TypeRef::HttpResult(body, _, _) = inner.as_ref() else {
                 continue;
             };
             if let Some(payload) = null_payload_option(body, &resolved.types, &mut HashSet::new()) {
@@ -6092,7 +6097,7 @@ pub(crate) fn null_payload_option(
         TypeRef::List(a, _)
         | TypeRef::Set(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _) => null_payload_option(a, types, seen),
+        | TypeRef::HttpResult(a, _, _) => null_payload_option(a, types, seen),
         TypeRef::Map(k, v, _) | TypeRef::Result(k, v, _) => {
             null_payload_option(k, types, seen).or_else(|| null_payload_option(v, types, seen))
         }
@@ -6202,7 +6207,7 @@ fn check_rejected_handlers(table: &UnitTable, errors: &mut Vec<CompileError>) {
                 TypeRef::Effect(inner, _) => inner.as_ref(),
                 other => other,
             };
-            let unit_result = matches!(inner, TypeRef::HttpResult(t, _) if matches!(t.as_ref(), TypeRef::Unit(_)));
+            let unit_result = matches!(inner, TypeRef::HttpResult(t, _, _) if matches!(t.as_ref(), TypeRef::Unit(_)));
             if !unit_result {
                 errors.push(signature(
                     handler.return_type.span(),
@@ -6471,7 +6476,7 @@ fn validate_http_handler(
     }
     // Validate return type shape.
     let return_ok = match &handler.return_type {
-        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _)),
+        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
         _ => false,
     };
     if !return_ok {
@@ -8479,7 +8484,7 @@ pub fn reject_fn_types(
         }
         TypeRef::Option(a, _)
         | TypeRef::Effect(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _) => reject_fn_types(a, what, types, errors),
         // v0.119: a `History[Agent]` reaching a declared position is already

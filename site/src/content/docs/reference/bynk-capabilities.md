@@ -2710,7 +2710,8 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 fix to it; `bynk.set` has `union`,
 `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
 `bynk.string` (deprecated: its one function, `join`, is now `xs.join(sep)` on a `List[String]`, and a call warns with a fix to it)
-`bynk.url` (URLs and query strings, below) and `bynk.html` (HTML escaping, below).
+`bynk.url` (URLs and query strings, below), `bynk.html` (HTML escaping, below) and `bynk.range`
+(`If-Range`, below).
 These are ordinary functions with no effects; see the
 [type system reference](/reference/types/).
 
@@ -2812,6 +2813,14 @@ shell.replace("{{title}}", escapeText(title))
 Neither is safe in an unquoted attribute, in a URL attribute such as `href` or `src` (where
 `javascript:` passes), or inside `<script>` or `<style>`; escaping cannot make an untrusted
 value a safe URL or script. Typed HTML is the track that builds on these two.
+
+### `If-Range`: `bynk.range`
+
+`uses bynk.range` brings in `ifRangeHolds(ifRange: Option[String], etag: String) -> Bool` (#4466), pure
+and available on every target. It says whether a `Range` request may be answered with the part: `true`
+with no `If-Range`, and when the `If-Range` entity tag is exactly `etag` and neither is weak. A date
+`If-Range` never holds, so the handler answers the whole body. See
+[the handler's validator, and `If-Range`](/reference/http/#the-handlers-validator-and-if-range).
 
 Two more serve the `Locale` capability above.
 **`bynk.locale.types`** is a dependency-free leaf declaring `LocaleTag`,

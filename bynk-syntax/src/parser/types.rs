@@ -1016,6 +1016,36 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// `HttpResult[T]` or `HttpResult[T, E]` (v0.9; #4394): the optional second argument is the element a
+    /// `Streaming` body carries. `head` is the span of the `HttpResult` word, already consumed.
+    fn parse_http_result_type(&mut self, head: Span) -> Result<TypeRef, CompileError> {
+        if self.peek_kind() != Some(TokenKind::LBracket) {
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                head,
+                "the built-in `HttpResult` type requires one type argument: `HttpResult[T]`",
+            ));
+        }
+        self.bump();
+        let arg = self.parse_type_ref("as the `HttpResult` type argument")?;
+        let element = if self.eat(TokenKind::Comma).is_some() {
+            Some(Box::new(self.parse_type_ref(
+                "as the `HttpResult` streaming element type",
+            )?))
+        } else {
+            None
+        };
+        let close = self.expect(
+            TokenKind::RBracket,
+            "to close the `HttpResult` type arguments",
+        )?;
+        Ok(TypeRef::HttpResult(
+            Box::new(arg),
+            element,
+            head.merge(close.span),
+        ))
+    }
+
     /// v0.20a: a type reference — an atom, a parenthesised group, or a
     /// function type. `->` is **right-associative** (`A -> B -> C` is
     /// `A -> (B -> C)`). A parenthesised list is a function-type parameter
@@ -1223,20 +1253,7 @@ impl<'a> Parser<'a> {
                     //
                     // v0.9: `HttpResult` is a predeclared built-in generic.
                     if name == "HttpResult" {
-                        if self.peek_kind() != Some(TokenKind::LBracket) {
-                            return Err(CompileError::new(
-                                "bynk.parse.expected_token",
-                                t.span,
-                                "the built-in `HttpResult` type requires one type argument: `HttpResult[T]`",
-                            ));
-                        }
-                        self.bump();
-                        let arg = self.parse_type_ref("as the `HttpResult` type argument")?;
-                        let close = self.expect(
-                            TokenKind::RBracket,
-                            "to close the `HttpResult` type argument",
-                        )?;
-                        return Ok(TypeRef::HttpResult(Box::new(arg), t.span.merge(close.span)));
+                        return self.parse_http_result_type(t.span);
                     }
                     // v0.44: `QueueResult` is a predeclared non-generic built-in.
                     if name == "QueueResult" {

@@ -3817,7 +3817,7 @@ pub(crate) fn first_recursive_generic(
         | Ty::List(a)
         | Ty::Set(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::Query(a)
         | Ty::Stream(a)

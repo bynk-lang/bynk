@@ -98,7 +98,7 @@ pub(super) fn check_partial_content(
         }
     }
     let t_ty = expected_t.unwrap_or(tys.intern(Ty::Unit));
-    Some(tys.intern(Ty::HttpResult(t_ty)))
+    Some(tys.intern(Ty::HttpResult(t_ty, None)))
 }
 
 /// `ContentRange` as a bound `PartialContent`'s `range` field is typed: the embedded declaration.

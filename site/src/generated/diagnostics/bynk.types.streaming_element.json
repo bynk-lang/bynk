@@ -1,0 +1,10 @@
+{
+  "blurb": "`HttpResult[T, E]` names what a `Streaming` body carries in its second argument, so a test that matches `Streaming(s)` reads `s` as a `Stream[E]` and a body of any other element is a type error. The router frames each element as a server-sent event, so `E` is a `String` or the `SseEvent` record that `bynk` exports; any other type has no framing. Name `String`, or `SseEvent` for events with an `event`, `id` or `retry`. Naming nothing, `HttpResult[T]`, keeps a `Streaming` body either of the two, and a route that never streams may still name one.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.streaming_element",
+  "constructs": [],
+  "example": "on GET(\"/ticks\") () -> Effect[HttpResult[(), Int]] by v: Visitor {    // ✗ the router cannot frame an `Int`\n    Streaming(Stream.of([1, 2]))\n}\n\non GET(\"/ticks\") () -> Effect[HttpResult[(), String]] by v: Visitor {   // ✓\n    Streaming(Stream.of([\"1\", \"2\"]))\n}",
+  "severity": "error",
+  "summary": "The second argument of `HttpResult[T, E]`, the element a `Streaming` body carries, is not `String` or `SseEvent` (#4394)."
+}

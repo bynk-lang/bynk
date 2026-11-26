@@ -3339,6 +3339,41 @@ mod tests {
         assert!(errors.is_empty(), "{errors:?}");
     }
 
+    /// #4394: `HttpResult[T]` or `HttpResult[T, E]`: the second argument names what a `Streaming` body
+    /// carries. It parses into the type, prints back as written, and a third argument is refused.
+    #[test]
+    fn an_http_result_takes_an_optional_streaming_element() {
+        let return_of = |ty: &str| {
+            let c =
+                parse_str(&format!("commons x {{ fn f() -> {ty} {{ todo(\"x\") }} }}")).unwrap();
+            let CommonsItem::Fn(f) = &c.items[0] else {
+                panic!()
+            };
+            f.return_type.clone()
+        };
+        for (ty, has_element) in [
+            ("HttpResult[String]", false),
+            ("HttpResult[(), SseEvent]", true),
+            ("HttpResult[String, String]", true),
+        ] {
+            let t = return_of(ty);
+            let TypeRef::HttpResult(_, element, _) = &t else {
+                panic!("{ty}: {t:?}")
+            };
+            assert_eq!(element.is_some(), has_element, "{ty}");
+            assert_eq!(crate::print::type_ref_to_string(&t), ty);
+        }
+        // The element is a type the type walkers see, so `SseEvent` is a name this type mentions.
+        let mut names = Vec::new();
+        crate::ast::collect_type_heads(&return_of("HttpResult[(), SseEvent]"), &mut names);
+        assert_eq!(names, vec!["SseEvent".to_string()]);
+        // More than two arguments close nothing.
+        assert!(
+            parse_str("commons x { fn f() -> HttpResult[String, String, Int] { todo(\"x\") } }")
+                .is_err()
+        );
+    }
+
     #[test]
     fn another_keyword_is_still_refused_as_a_field_shorthand() {
         // `by` left the keyword shorthand diagnostic; the hard keywords did not.

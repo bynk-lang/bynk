@@ -576,7 +576,7 @@ pub(crate) fn collect_vars(ty: TyId, tys: &Types, out: &mut HashSet<String>) {
         }
         Ty::Option(a)
         | Ty::Effect(a)
-        | Ty::HttpResult(a)
+        | Ty::HttpResult(a, _)
         | Ty::HttpOutcome(a)
         | Ty::List(a)
         | Ty::Set(a)
@@ -769,7 +769,7 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         Ty::Fn { .. } | Ty::Effect(_) | Ty::Query(_) => {
             Some(NotComparable::Computation(tys.display(ty)))
         }
-        Ty::Option(t) | Ty::List(t) | Ty::Set(t) | Ty::HttpResult(t) | Ty::HttpOutcome(t) => {
+        Ty::Option(t) | Ty::List(t) | Ty::Set(t) | Ty::HttpResult(t, _) | Ty::HttpOutcome(t) => {
             walk_ty(*t, ctx, visited)
         }
         Ty::Result(a, b) | Ty::Map(a, b) => {
@@ -858,7 +858,7 @@ pub(crate) fn walk_ref(
         TypeRef::Option(a, _)
         | TypeRef::List(a, _)
         | TypeRef::Set(a, _)
-        | TypeRef::HttpResult(a, _)
+        | TypeRef::HttpResult(a, _, _)
         | TypeRef::History(a, _) => walk_ref(a, params, types, visited),
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
             walk_ref(a, params, types, visited).or_else(|| walk_ref(b, params, types, visited))
@@ -900,7 +900,7 @@ pub(crate) fn render(t: &TypeRef) -> String {
         TypeRef::Map(a, b, _) => format!("Map[{}, {}]", render(a), render(b)),
         TypeRef::Option(a, _) => one("Option", a),
         TypeRef::Effect(a, _) => one("Effect", a),
-        TypeRef::HttpResult(a, _) => one("HttpResult", a),
+        TypeRef::HttpResult(a, _, _) => one("HttpResult", a),
         TypeRef::List(a, _) => one("List", a),
         TypeRef::Set(a, _) => one("Set", a),
         TypeRef::Query(a, _) => one("Query", a),

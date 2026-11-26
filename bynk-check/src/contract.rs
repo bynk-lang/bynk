@@ -150,7 +150,7 @@ fn canon_type_in(
                 None => canon_named_in(&id.name, types, seen, subst, mode),
             }
         }
-        TypeRef::HttpResult(a, _) => {
+        TypeRef::HttpResult(a, _, _) => {
             format!("HttpResult[{}]", canon_type_in(a, types, seen, subst, mode))
         }
         TypeRef::ValidationError(_) => "ValidationError".to_string(),

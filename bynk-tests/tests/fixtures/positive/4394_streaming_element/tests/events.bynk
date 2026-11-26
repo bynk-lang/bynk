@@ -1,0 +1,48 @@
+suite events
+
+consumes bynk { SseEvent }
+
+case "a route that names SseEvent is read as SseEvent" {
+	let r <- Events.GET("/events") by Visitor
+	match r {
+		Streaming(s) => {
+			let events <- s.collect()
+			expect events.map((e) => e.data) == ["hello", "bye"]
+			match events.first() {
+				Some(first) => {
+					expect first.event == Some("greeting")
+					expect first.id == Some("1")
+				}
+				None => expect false
+			}
+		}
+		_ => expect false
+	}
+}
+
+case "a route that names String is read as String" {
+	let r <- Events.GET("/words") by Visitor
+	match r {
+		Streaming(s) => {
+			let words <- s.collect()
+			expect words == ["a", "b"]
+		}
+		_ => expect false
+	}
+}
+
+case "a route that names nothing is read as a String stream, as before" {
+	let r <- Events.GET("/plain") by Visitor
+	match r {
+		Streaming(s) => {
+			let parts <- s.collect()
+			expect parts.length() == 3
+		}
+		_ => expect false
+	}
+}
+
+case "a route that names an element but never streams still answers" {
+	let r <- Events.GET("/quiet") by Visitor
+	expect r is Ok("nothing to stream")
+}

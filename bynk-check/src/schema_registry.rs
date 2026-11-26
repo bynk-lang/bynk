@@ -98,7 +98,7 @@ fn canon_type(t: &TypeRef) -> String {
         TypeRef::Result(a, b, _) => format!("Result[{}, {}]", canon_type(a), canon_type(b)),
         TypeRef::Option(t, _) => format!("Option[{}]", canon_type(t)),
         TypeRef::Effect(t, _) => format!("Effect[{}]", canon_type(t)),
-        TypeRef::HttpResult(t, _) => format!("HttpResult[{}]", canon_type(t)),
+        TypeRef::HttpResult(t, _, _) => format!("HttpResult[{}]", canon_type(t)),
         TypeRef::QueueResult(_) => "QueueResult".to_string(),
         TypeRef::Asset(_) => "Asset".to_string(),
         TypeRef::RequestHeaders(_) => "RequestHeaders".to_string(),
