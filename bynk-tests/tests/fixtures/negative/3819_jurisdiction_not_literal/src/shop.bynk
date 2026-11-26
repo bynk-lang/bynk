@@ -1,0 +1,12 @@
+context shop
+
+@jurisdiction(eu)
+agent Learner {
+    key id: String
+    store n: Cell[Int]
+
+    on call add(k: Int) -> Effect[Int] {
+        let _ <- n.update((t) => t + k)
+        n
+    }
+}

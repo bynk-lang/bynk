@@ -1720,7 +1720,7 @@ export const __ServiceToken: symbol = globalThis.Symbol("Service");
  * metadata, conditional writes and multipart uploads. Used only through a named instance,
  * `capability Archives = R2`, which binds as `R2_ARCHIVES`; a bare
  * `given R2` names no bucket and is refused. `@jurisdiction("eu")` (or
- * `"fedramp"`) pins the bucket's jurisdiction at creation.
+ * `"fedramp"` or `"us"`) pins the bucket's jurisdiction at creation.
  *
  * `get`, `put` and `putWith` buffer the object in the Worker's memory, so
  * each should stay well under its 128 MB limit. `get` and `head` give `None`

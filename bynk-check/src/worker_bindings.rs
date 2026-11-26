@@ -218,7 +218,12 @@ pub enum BindingSource {
     Singleton { capability: String },
     /// A `[[durable_objects.bindings]]` entry for one of the context's agents.
     /// A handler that constructs an agent sees every local agent's binding.
-    Agent { class_name: String },
+    /// `jurisdiction` is the agent's `@jurisdiction` (#3819): not in the wrangler config, since
+    /// it is a property of the id, but what `deploy` records per class and compares.
+    Agent {
+        class_name: String,
+        jurisdiction: Option<String>,
+    },
     /// The `[[durable_objects.bindings]]` entry for the events fan-out class
     /// of a context whose handlers emit. Never seen by handlers: they reach it
     /// through `deps.__eventsDispatch`.
@@ -317,7 +322,7 @@ impl BindingSource {
                 "the `{capability}` binding of `{}`",
                 firstparty::CLOUDFLARE_UNIT
             ),
-            Self::Agent { class_name } => {
+            Self::Agent { class_name, .. } => {
                 format!("the Durable Object binding of agent `{class_name}`")
             }
             Self::EventsFanout { .. } => {
@@ -790,7 +795,7 @@ fn declared_at(
                 .map(|d| d.span)
         };
         let span = match &binding.source {
-            BindingSource::Agent { class_name } => c.items.iter().find_map(|item| {
+            BindingSource::Agent { class_name, .. } => c.items.iter().find_map(|item| {
                 let CommonsItem::Agent(a) = item else {
                     return None;
                 };
@@ -985,6 +990,7 @@ mod tests {
             name: format!("AGENT_{}", name.to_uppercase()),
             source: BindingSource::Agent {
                 class_name: name.to_string(),
+                jurisdiction: None,
             },
         }
     }

@@ -148,14 +148,29 @@ fn context_bindings(
         .iter()
         .map(|c| singleton_binding(c))
         .collect();
-    ordered(
+    let mut bindings = ordered(
         &agents,
         &targets,
         unit.bare_kv,
         instances,
         singletons,
         unit.publishes,
-    )
+    );
+    // #3819: an agent's `@jurisdiction` rides its binding to `deploy`, which records it per class.
+    for binding in &mut bindings {
+        if let BindingSource::Agent {
+            class_name,
+            jurisdiction,
+        } = &mut binding.source
+        {
+            *jurisdiction = table
+                .agents
+                .get(class_name)
+                .and_then(|a| bynk_check::agent_jurisdiction::jurisdiction_of(a))
+                .map(str::to_string);
+        }
+    }
+    bindings
 }
 
 /// #3878: the producer binding of each queue consumer's dead-letter queue, in queue order, by the
@@ -393,6 +408,7 @@ pub(crate) fn agent_binding(class_name: &str) -> WorkerBinding {
         name: agent_binding_name(class_name),
         source: BindingSource::Agent {
             class_name: class_name.to_string(),
+            jurisdiction: None,
         },
     }
 }

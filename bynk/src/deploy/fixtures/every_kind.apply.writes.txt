@@ -70,7 +70,10 @@
 +148 
 +149 [environments.default.workers.shop.expects]
 +150 
-+165 shop = ["orders@example.com"]
++164 [environments.default.agent_jurisdictions.shop]
++165 Cart = "none"
++166 
++168 shop = ["orders@example.com"]
 -164 shop = [
 -165     "orders@example.com",
 -166     "returns@example.com",
@@ -224,7 +227,10 @@
 +229 [environments.staging.renamed_classes.shop]
 +230 Basket = "Cart"
 +231 
-+232 [environments.staging.email_addresses]
-+233 shop = ["orders@example.com"]
++232 [environments.staging.agent_jurisdictions.shop]
++233 Cart = "none"
++234 
++235 [environments.staging.email_addresses]
++236 shop = ["orders@example.com"]
 -- write 24 (after call 27: queues delete old-jobs-staging)
 -129     "old-jobs",
