@@ -1497,6 +1497,7 @@
 /reference/diagnostics/bynk.cloudflare.edge_cache_in_schedule/
 /reference/diagnostics/bynk.cloudflare.edge_cache_public_authenticated/
 /reference/diagnostics/bynk.codegen.tsc_failed/
+/reference/diagnostics/bynk.commons.capability_unused/
 /reference/diagnostics/bynk.commons.consumes_not_types/
 /reference/diagnostics/bynk.consumes.alias_conflict/
 /reference/diagnostics/bynk.consumes.capability_name_clash/
@@ -1697,10 +1698,19 @@
 /reference/diagnostics/bynk.generics.uninferable_type_arg/
 /reference/diagnostics/bynk.generics.unknown_constraint/
 /reference/diagnostics/bynk.generics.unknown_where_param/
+/reference/diagnostics/bynk.given.binding_duplicate/
+/reference/diagnostics/bynk.given.binding_kind_mismatch/
+/reference/diagnostics/bynk.given.binding_missing/
+/reference/diagnostics/bynk.given.binding_shared/
+/reference/diagnostics/bynk.given.binding_unknown/
 /reference/diagnostics/bynk.given.cross_context_unknown_capability/
 /reference/diagnostics/bynk.given.fn_outside_context/
 /reference/diagnostics/bynk.given.fn_unsupported/
+/reference/diagnostics/bynk.given.kind_needs_parameter/
 /reference/diagnostics/bynk.given.missing_for_call/
+/reference/diagnostics/bynk.given.parameter_name_conflict/
+/reference/diagnostics/bynk.given.parameter_outside_commons/
+/reference/diagnostics/bynk.given.shared_as_parameter/
 /reference/diagnostics/bynk.given.undeclared_capability/
 /reference/diagnostics/bynk.given.unknown_capability/
 /reference/diagnostics/bynk.given.unused_capability/
