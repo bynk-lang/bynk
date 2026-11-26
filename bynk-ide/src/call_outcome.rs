@@ -224,6 +224,7 @@ pub fn describe_member_at(
         .or_else(|| crate::agent_busy::describe_busy_after_at(text, offset))
         .or_else(|| crate::token_claims::describe_claims_at(text, offset, expr_types, tys))
         .or_else(|| crate::agent_erase::describe_erase_at(text, offset, expr_types, tys))
+        .or_else(|| crate::ws_handshake::describe_ws_open_at(text, offset))
         .or_else(|| crate::actor_sum::describe_sum_at(text, offset))
 }
 

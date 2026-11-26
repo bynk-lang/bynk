@@ -9,7 +9,7 @@ import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } fr
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __webSocketBearerProtocol } from "../../__bynk_runtime/connection.js";
 
 import * as bynk__binding from "../../bynk-cloudflare.js";
 import * as bynk from "../../bynk.js";
@@ -140,7 +140,7 @@ export class Room {
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       const __givenDeps = { Clock: new bynk__binding.ClockProvider() };
       await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__givenDeps, ...{ env: env as never } });
-      return __webSocketUpgradeResponse(__pair.client);
+      return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
       const methodName = url.pathname.slice("/_bynk/agent/".length);
