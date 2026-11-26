@@ -241,6 +241,23 @@ and never anything in the body. A lone refinement takes no binder, and a refinem
 `Producer` is `bynk.actor.queue_actor_not_enforced`. A dead-letter queue's consumer must name the same
 actors as its source (`bynk.queue.dead_letter_signing_mismatch`).
 
+**A refinement names contexts that send.** A context produces to a queue through a
+`Queue @name("…")` instance it declares, and that instance is what signs its messages. A context the
+refinement admits that declares no instance of the queue never signs a message for it, so the name is
+dead configuration (or stands for a context that does send, spelt differently), and the intended
+producer's messages would be refused only at run time. Each such name is
+`bynk.queue.producer_never_sends`, written at the name inside `IsContext(…)`:
+
+```bynk,ignore
+actor FromOrders = Producer where IsContext(shop.orders)   // ✗ if shop.orders has no Queue @name("order-events")
+```
+
+A refinement whose predicate names no such context but still admits no context that produces is
+reported once, at the predicate. A name under `!` is not a context the refinement promises to hear
+from, so it is not asked to produce. A dead-letter queue's consumer is checked against the producers
+of the queues that dead-letter into it, because a dead letter keeps the signed envelope its source
+received. A name that is no context of the project is `bynk.actor.unknown_context`.
+
 A `system` case sends as a foreign producer with `by`, signing the message as the producer would (as a
 Bynk context it names, `by FromOrders("shop.orders")`), and sending the same message twice replays it:
 

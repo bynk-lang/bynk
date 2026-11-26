@@ -570,6 +570,7 @@ bynk.queue.delivery_not_queue
 bynk.queue.duplicate_consumer
 bynk.queue.invalid_name
 bynk.queue.no_dead_letter
+bynk.queue.producer_never_sends
 bynk.queue.return_not_queue_result
 bynk.race.in_agent_handler
 bynk.race.in_pure_context

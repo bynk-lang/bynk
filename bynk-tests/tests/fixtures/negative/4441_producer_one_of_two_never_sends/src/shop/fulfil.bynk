@@ -1,0 +1,11 @@
+context shop.fulfil
+
+type Order = { id: String }
+
+actor FromEither = Producer where IsContext(shop.orders) || IsContext(shop.audit)
+
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] by FromEither {
+    Ack
+  }
+}
