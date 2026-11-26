@@ -1,0 +1,6 @@
+context svc
+
+service jobs from queue("jobs") {
+  delivery { deadLetter: "jobs-dead" }
+  on message(job: String) -> Effect[QueueResult] by Producer { Ack }
+}

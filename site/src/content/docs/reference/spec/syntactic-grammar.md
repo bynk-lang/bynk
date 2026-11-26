@@ -653,6 +653,18 @@ The queue consumer's delivery policy (#3877).
 
 One `name: value` field of a `delivery` policy.
 
+#### fallback_policy {#441b3-fallback_policy}
+
+{{#grammar fallback_policy}}
+
+The email service's fallback address (#3885).
+
+#### fallback_field {#441b4-fallback_field}
+
+{{#grammar fallback_field}}
+
+One `name: value` field of a `fallback` policy.
+
 #### errors_policy {#441b1-errors_policy}
 
 {{#grammar errors_policy}}
