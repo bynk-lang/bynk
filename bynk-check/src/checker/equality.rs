@@ -747,6 +747,9 @@ pub(crate) enum NotComparable {
     /// A function, `Effect` or `Query` (`bynk.types.not_comparable`). The string
     /// names the offending part for the diagnostic.
     Computation(String),
+    /// A `bynk` `Secret` (`bynk.types.secret_not_comparable`, #4111): `==` on text would
+    /// compare in variable time, so a secret is compared with `matches`.
+    Secret,
 }
 
 /// The first part of `ty` that has no value equality, or `None` when `ty` is
@@ -775,6 +778,9 @@ fn walk_ty(ty: TyId, ctx: &Ctx, visited: &mut HashSet<String>) -> Option<NotComp
         Ty::Named { name, args, .. } => {
             let args = args.clone();
             let name = name.clone();
+            if crate::context_checks::is_secret_type(&name, types) {
+                return Some(NotComparable::Secret);
+            }
             for a in &args {
                 if let Some(found) = walk_ty(*a, ctx, visited) {
                     return Some(found);
@@ -860,6 +866,9 @@ pub(crate) fn walk_ref(
         // A type parameter is checked through the applied argument at the use
         // site (`walk_ty`'s `Named` arm), not here.
         TypeRef::Named(id) if params.contains(&id.name.as_str()) => None,
+        TypeRef::Named(id) if crate::context_checks::is_secret_type(&id.name, types) => {
+            Some(NotComparable::Secret)
+        }
         TypeRef::Named(id) => walk_decl(&id.name, types, visited),
         TypeRef::App { name, args, .. } => args
             .iter()
@@ -931,6 +940,13 @@ pub(crate) fn explain(blocker: NotComparable, top: bool) -> (&'static str, Strin
         NotComparable::Held(held) => (
             "bynk.types.held_not_comparable",
             format!("{it} a held `{held}`, which has identity, not value-equality"),
+        ),
+        NotComparable::Secret => (
+            "bynk.types.secret_not_comparable",
+            format!(
+                "{} a `Secret`, which is compared with `matches`, never `==`: comparing text is variable-time",
+                if top { "it is" } else { "it contains" }
+            ),
         ),
         NotComparable::Computation(part) if top => (
             "bynk.types.not_comparable",

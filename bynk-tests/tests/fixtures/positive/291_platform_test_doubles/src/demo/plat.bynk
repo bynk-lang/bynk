@@ -29,7 +29,11 @@ service ids {
 
 service secret {
   on call(name: String) -> Effect[Option[String]] by Caller given Secrets {
-    Secrets.get(name)
+    let found <- Secrets.get(name)
+    match found {
+      Some(s) => Some(s.reveal()),
+      None => None,
+    }
   }
 }
 

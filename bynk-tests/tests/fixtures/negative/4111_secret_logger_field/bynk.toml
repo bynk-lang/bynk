@@ -1,0 +1,6 @@
+[project]
+name = "vault"
+version = "0.1.0"
+
+[unstable]
+allow = ["bynk.Logger.log"]

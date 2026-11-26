@@ -2621,6 +2621,58 @@ pub(crate) fn check_token_claims_method(
     Some(tys.intern(ret))
 }
 
+/// #4111: type a method on a `Secret`. `reveal()` hands the text back as a `String`, which
+/// is the one deliberate exit; `matches(candidate)` compares in constant time and answers a
+/// `Bool`. A `Secret` has nothing else, so any other spelling is a missing method.
+pub(crate) fn check_secret_method(
+    method: &Ident,
+    op: Option<SecretOp>,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    let string = tys.intern(Ty::Base(BaseType::String));
+    let Some(op) = op else {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_not_found",
+            method.span,
+            format!(
+                "`Secret` has no method `{}` — it has `reveal()` and `matches(candidate)`",
+                method.name
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let expected_args = usize::from(op == SecretOp::Matches);
+    if args.len() != expected_args {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!(
+                "`Secret.{}` takes {expected_args} argument{}, got {}",
+                method.name,
+                if expected_args == 1 { "" } else { "s" },
+                args.len()
+            ),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if let Some(a) = args.first() {
+        check_arg(a, string, "the `Secret.matches` candidate", ctx);
+    }
+    Some(match op {
+        SecretOp::Reveal => string,
+        SecretOp::Matches => tys.intern(Ty::Base(BaseType::Bool)),
+    })
+}
+
 /// v0.22a: type a built-in `String` kernel method (ADR 0046). `String` is
 /// opaque (no char access), so its operations are compiler built-ins
 /// lowering to TS string methods — the 0034/0037 hybrid posture. Semantics

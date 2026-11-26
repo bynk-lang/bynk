@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn same(a: Secret, b: Secret) -> Bool {
+    a.matches(b.reveal())
+}

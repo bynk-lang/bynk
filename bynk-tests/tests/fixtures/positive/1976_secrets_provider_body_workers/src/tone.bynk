@@ -11,7 +11,7 @@ provides Tone = PlainTone given Secrets {
 	fn current() -> Effect[String] {
 		let t <- Secrets.get("TONE")
 		match t {
-			Some(v) => v,
+			Some(v) => v.reveal(),
 			None => "plain",
 		}
 	}

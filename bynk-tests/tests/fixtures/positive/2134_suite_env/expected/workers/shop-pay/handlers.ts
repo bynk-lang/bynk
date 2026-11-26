@@ -25,7 +25,7 @@ export const api = {
     switch (p.tag) {
       case "Some": {
         const v = p.value;
-        return HttpResult.Ok(v);
+        return HttpResult.Ok(v.reveal());
       }
       case "None": {
         return HttpResult.Ok("none");

@@ -2379,6 +2379,12 @@
   "bynk.types.rounding_mode_position": [
     "/reference/types/#decimal"
   ],
+  "bynk.types.secret_at_boundary": [
+    "/reference/bynk-capabilities/#the-secret-type"
+  ],
+  "bynk.types.secret_not_comparable": [
+    "/reference/bynk-capabilities/#the-secret-type"
+  ],
   "bynk.types.select_tail_has_select": [
     "/reference/bynk-capabilities/#d1-typed-reads"
   ],
