@@ -54,27 +54,72 @@ constructors at the edge (`400` on failure), exactly as HTTP route params are.
 ## Authentication at the edge
 
 The upgrade is authenticated **before** the connection is accepted — fail-closed,
-exactly like an HTTP route. The WebSocket boundary admits `None` and `Bearer`
-actors and **rejects `Signature`**: a browser `WebSocket` cannot set an
-`Authorization` header, so a Bearer token is read from the **`Sec-WebSocket-Protocol`**
-subprotocols the client offers: the marker `bynk.bearer`, then the token (a browser sets it
-with `new WebSocket(url, ["bynk.bearer", token])`). The `101` response selects `bynk.bearer`
+exactly like an HTTP route. The WebSocket boundary admits `None`, `Bearer`, `Oidc` and
+`SignedCookie` actors and **rejects `Signature`**: a browser `WebSocket` cannot set an
+`Authorization` header, so a token is read from the **`Sec-WebSocket-Protocol`**
+subprotocols the client offers: a marker, then the token (a browser sets it
+with `new WebSocket(url, ["bynk.bearer", token])`). The `101` response selects the marker
 and never the token, so the credential is not echoed in a response header, where proxies and
 logs may record it, and a browser, which fails a connection whose response selects none of the
-subprotocols it offered, keeps the connection. On Workers the Worker verifies the token with the same
-audited JWT verifier HTTP uses, runs any refinement-actor authorization predicate
-(`403`), and only on success forwards the upgrade to the Durable Object.
+subprotocols it offered, keeps the connection. On Workers the Worker verifies the credential before the Durable Object sees the
+upgrade, and only on success forwards it.
+
+| Actor | Where the credential is | Checked |
+|---|---|---|
+| `Bearer` | `["bynk.bearer", token]` | HS256 with the actor's secret, the same audited verifier HTTP uses; a refinement actor's predicate is `403` |
+| `Oidc` | `["bynk.oidc", token]` | issuer, audience, expiry and signature against the provider's JWKS, as HTTP does |
+| `SignedCookie` | the session cookie | the cookie as HTTP checks it, behind the `Origin` rule below |
+| `None` | none | nothing; the upgrade offers no subprotocol and is answered with none |
+
+An actor sum (`by who: User | Visitor`) takes `None` and `Bearer` members. A `SignedCookie` or `Oidc` actor
+is a single actor on `on open`, not a sum member (`bynk.actor.scheme_not_admissible`).
 
 A request that offers no token, or a bad one, is `401`. The old form, `new WebSocket(url,
-[token])`, offering the token alone, is refused with `400` and a fixed message naming the pair:
+[token])`, offering the token alone, is refused with `400` and a fixed message naming the pair
+(`["bynk.bearer", <token>]`, or `["bynk.oidc", <token>]` for an `Oidc` actor):
 it only worked for clients that do not enforce the standard, and a `401` would hide the cause.
-An upgrade to a `None` actor offers no subprotocol and is answered with none.
+
+### Authenticate with a session cookie
+
+A browser sends the session cookie on a WebSocket upgrade from **any** site, and a WebSocket is not
+covered by CORS, so a page on another site could open the socket as the signed-in user
+(cross-site WebSocket hijacking). A `from websocket` service whose `on open` is `by` a `SignedCookie`
+actor must therefore declare which pages may open it, in a `cors` block, and the upgrade checks the
+`Origin` header against it **before the cookie is read**:
+
+```bynk
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service chat from websocket(in: ClientFrame, out: ServerFrame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+  on open (room: RoomId) -> Effect[()] by user: Member { … }
+}
+```
+
+- **Accepted origins.** The `Origin` must equal one of the listed `origins` **exactly**: scheme, host
+  and port, compared as written. `https://app.example.com` does not accept `http://app.example.com`,
+  `https://app.example.com:8443`, `https://APP.example.com`, `https://app.example.com/` or
+  `https://app.example.com.evil.example`. There are no wildcards, and `null` and `*` never match.
+- **A missing `Origin` is `403`.** A browser always sends one on a WebSocket upgrade, so a request
+  without it is not a browser page and is refused, however good its cookie. An unlisted `Origin` is `403` too.
+- **`Sec-Fetch-Site` is not an origin check.** It is not consulted: `same-origin` with no `Origin`
+  is refused. (HTTP's cross-site check accepts it; an upgrade is held to the stricter rule because it
+  opens a long-lived, bidirectional channel.)
+- **The order is `Origin`, then cookie.** A refused `Origin` is `403` even with no cookie, so the
+  response does not say whether a session exists. A listed `Origin` with no cookie, a forged,
+  expired, foreign-key or wrong-actor cookie, or one the HTTP check would refuse, is `401`.
+- `cors` must list at least one origin, with `credentials: true` and no wildcard, or the service is
+  `bynk.ws.cookie_needs_origins`. The other `cors` fields (`headers`, `expose`, `maxAge`) have no
+  effect on a WebSocket.
+- A `SignedCookie` actor with `sessions = true` is not admissible on `on open`: the upgrade does not
+  check that the session is still live, so a revoked session could open a socket.
+- The cookie's expiry is re-checked at every frame, as a Bearer token's is (below).
 
 ### A credential that expires on a live connection
 
 The identity is minted once, at the upgrade, and kept in the socket's attachment for every later
 `on message` and `on close`, and a connection can live for days: it survives hibernation. So the
-credential's expiry is re-checked at every frame, not just trusted at the upgrade. The upgrade records the Bearer token's `exp`, and a
+credential's expiry is re-checked at every frame, not just trusted at the upgrade. The upgrade records the credential's `exp` (a Bearer or `Oidc` token's, or the session cookie's), and a
 frame that arrives after it closes the connection with **`1008`** and the reason `authentication
 expired` **before `on message` runs**; the client reconnects with a fresh token. The close is sent first, then `on close` runs
 once, with `CloseInfo { code: 1008, reason: "authentication expired", clean: false }`, so the agent
@@ -212,6 +257,7 @@ does not run it again.
 | `bynk.ws.missing_close` | a `from websocket` service has no `on close` |
 | `bynk.ws.bad_close_code` | a literal `connection.close` code outside `1000` and `3000`-`4999` |
 | `bynk.ws.bad_close_reason` | a literal `connection.close` reason over 123 bytes of UTF-8 |
+| `bynk.ws.cookie_needs_origins` | a `SignedCookie` `on open` with no `cors` list of exact origins to check the upgrade's `Origin` against |
 | `bynk.ws.open_transfer_shape` | the `on open` does not transfer the connection to exactly one routable agent |
 | `bynk.ws.open_transfer_key` | on Workers, the transfer's key is not an `on open` parameter, a context `const` or a literal |
 | `bynk.target.websocket_workers_unsupported` | (historical) retired once the Workers wire path landed |

@@ -21,10 +21,10 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | Scheme | Config | Identity | Protocols | Verification |
 |---|---|---|---|---|
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
-| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http`, `websocket` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
-| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
-| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
+| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http`, `websocket` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
+| `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http`, `websocket` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
 
@@ -38,7 +38,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 - The seam **consumes** a `Bearer`, `Oidc` or `Signature` credential, as it does a `SignedCookie`'s: the
   handler's `headers: RequestHeaders` omits the `Authorization` header (so `bearer()` is `None`), or the
   signature header, and the handler sees only the identity ([Request headers](/reference/http/#request-headers)).
-- On a **WebSocket**, a `Bearer` token's `exp` is checked once at the upgrade and again at every frame: a
+- On a **WebSocket**, a `Bearer` or `Oidc` token's `exp`, or a session cookie's, is checked once at the upgrade and again at every frame: a
   frame that arrives after it closes the connection with `1008 authentication expired` before
   `on message` runs ([WebSocket](/reference/websocket/#a-credential-that-expires-on-a-live-connection)).
 - A `Signature` actor takes **no** `identity` and a handler using it **must** take

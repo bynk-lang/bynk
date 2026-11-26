@@ -2243,6 +2243,26 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
+        // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
+        if matches!(protocol, ServiceProtocol::WebSocket { .. })
+            && by.is_sum()
+            && matches!(contract.scheme, Scheme::Oidc | Scheme::SignedCookie)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_not_admissible",
+                    actor_ref.span,
+                    format!(
+                        "a `{}` actor is not admissible as a member of a WebSocket actor sum",
+                        contract.scheme.as_str(),
+                    ),
+                )
+                .with_note(
+                    "a `from websocket` `on open` takes a `SignedCookie` or `Oidc` actor on its own (`by user: User`); an actor sum there takes `None` and `Bearer` members",
+                ),
+            );
+        }
         // v0.54: the `Caller` prelude actor yields a `CallerId` (the calling
         // context's name), a cross-context `on call` concept — it is admissible
         // only on the `Call` protocol, even though its `Internal` scheme is
@@ -3700,7 +3720,7 @@ fn check_service_decls(
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
     for service in table.services.values() {
-        validate_service_cors(service, errors);
+        validate_service_cors(service, table, errors);
     }
 
     // v0.141 (ADR 0164): validate each service's `security { }` policy. (Absence
@@ -5252,11 +5272,66 @@ fn check_agent_decls(
 
 /// A service's CORS checks: its `cors { }` policy (ADR 0159) and, #3329, the
 /// cross-site cookie warning that depends on it.
-fn validate_service_cors(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
+fn validate_service_cors(service: &ServiceDecl, table: &UnitTable, errors: &mut Vec<CompileError>) {
     if let Some(policy) = &service.cors {
         validate_cors_policy(service, policy, errors);
     }
+    check_ws_cookie_origins(service, table, errors);
     warn_cross_site_cookie_without_credentials(service, errors);
+}
+
+/// #3904 (`bynk.ws.cookie_needs_origins`): a `from websocket` service whose `on open` authenticates a
+/// `SignedCookie` actor must declare `cors { origins: [...], credentials: true }`. A browser sends the
+/// cookie on a cross-site upgrade by itself and WebSockets are not covered by CORS, so the upgrade
+/// checks `Origin` against exactly these origins (cross-site WebSocket hijacking); without a list
+/// there is nothing to check it against, and a wildcard would admit every site.
+fn check_ws_cookie_origins(
+    service: &ServiceDecl,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        return;
+    }
+    let Some(open) = service.handlers.iter().find(|h| {
+        matches!(h.kind, HandlerKind::Open)
+            && crate::actors::signed_cookie_seam_for(h, &table.actors).is_some()
+    }) else {
+        return;
+    };
+    // The session-live check of a `sessions = true` actor is not made on an upgrade yet, so a revoked
+    // session could still open a socket: refuse the combination rather than accept it quietly.
+    if crate::actors::signed_cookie_seam_for(open, &table.actors).is_some_and(|s| s.sessions) {
+        errors.push(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                open.span,
+                "a `SignedCookie` actor with `sessions = true` is not admissible on a WebSocket `on open`",
+            )
+            .with_note(
+                "the upgrade does not check the session is still live, so a revoked session could open a socket; use a `SignedCookie` actor without `sessions`, or a `Bearer` actor",
+            ),
+        );
+    }
+    let ok = service
+        .cors
+        .as_ref()
+        .is_some_and(|c| c.credentials() && !c.is_wildcard() && !c.origins().is_empty());
+    if !ok {
+        errors.push(
+            CompileError::new(
+                "bynk.ws.cookie_needs_origins",
+                service.cors.as_ref().map_or(open.span, |c| c.span),
+                format!(
+                    "the `from websocket` service `{}` authenticates a `SignedCookie`, so it must declare `cors {{ origins: [...], credentials: true }}` with the exact origins that may open it",
+                    service.name.name
+                ),
+            )
+            .with_note(
+                "a browser sends the cookie on a cross-site upgrade by itself and a WebSocket is not covered by CORS, so the upgrade is refused with `403` unless its `Origin` is exactly one of these origins; a wildcard would admit every site",
+            ),
+        );
+    }
 }
 
 /// #3329 (`bynk.http.cookie_cross_site_without_credentials`, a warning): a
@@ -5349,14 +5424,18 @@ fn validate_cors_policy(
 ) {
     // CORS is a browser-facing HTTP concern; it is meaningless on any other
     // protocol.
-    if !matches!(service.protocol, ServiceProtocol::Http) {
+    // #3904: a `from websocket` service takes one too, for its upgrade's `Origin` check.
+    if !matches!(
+        service.protocol,
+        ServiceProtocol::Http | ServiceProtocol::WebSocket { .. }
+    ) {
         errors.push(
             CompileError::new(
                 "bynk.http.cors_not_http",
                 policy.span,
-                "a `cors { }` policy is only valid on a `from http` service",
+                "a `cors { }` policy is only valid on a `from http` or `from websocket` service",
             )
-            .with_note("CORS governs cross-origin browser access, which only the HTTP surface has"),
+            .with_note("CORS governs cross-origin browser access, which only the HTTP and WebSocket surfaces have"),
         );
         return;
     }

@@ -43,9 +43,33 @@ The upgrade **authenticates at the edge** through the `by` clause — exactly li
 HTTP route, and fail-closed: there is no anonymous upgrade, so `on open` *must*
 name its actor. (A browser `WebSocket` cannot set an `Authorization` header, so a
 `Bearer` token rides the `Sec-WebSocket-Protocol` subprotocols, as the pair
-`new WebSocket(url, ["bynk.bearer", token])`; the boundary admits
-`None`/`Bearer` and rejects `Signature`.) Only on success is the handler run with a
+`new WebSocket(url, ["bynk.bearer", token])`; an `Oidc` token the same with `"bynk.oidc"`, and a
+`SignedCookie` actor reads the session cookie behind an `Origin` check, see below. The boundary admits
+`None`, `Bearer`, `Oidc` and `SignedCookie` and rejects `Signature`.) Only on success is the handler run with a
 fresh, **owned** `connection: Connection[ServerFrame]`.
+
+### Authenticate a browser with a session cookie
+
+A page that already has a [`SignedCookie`](/reference/actors/#signed-cookies) session can open the socket
+without handling a token: the browser sends the cookie on the upgrade. Because a cookie is sent from
+any site, and a WebSocket is not covered by CORS, the service says which pages may open it:
+
+```bynk
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	on open (roomId: RoomId) -> Effect[()] by user: Member {
+		let _ <- Room(roomId).join(user.identity, connection)
+	}
+}
+```
+
+The upgrade is refused with `403` unless its `Origin` header is exactly one of those origins, and a missing
+`Origin` is refused too, before the cookie is read. Without the `cors` block the service does not compile
+(`bynk.ws.cookie_needs_origins`). The rules are in the
+[reference](/reference/websocket/#authenticate-with-a-session-cookie).
 
 That connection is a [held resource](/reference/types/#connection): it has
 exactly one owner and must be disposed before the handler returns. Here it is
