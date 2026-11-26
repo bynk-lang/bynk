@@ -10,7 +10,7 @@ import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } fr
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection, __webSocketAdmit, __webSocketAuthExpired, __webSocketBearerProtocol, __webSocketClosing, __webSocketErrored } from "../../__bynk_runtime/connection.js";
 
 export type UserId = string & { readonly __brand: "room.UserId" };
 
@@ -162,7 +162,7 @@ export class Room {
     if (url.pathname === "/_bynk/ws/open/chat") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, exp: __payload.exp });
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
       await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__eventsDeps, ...{ env: env as never } });
@@ -180,6 +180,7 @@ export class Room {
   }
 
   async webSocketMessage(ws: { deserializeAttachment(): unknown; serializeAttachment(value: unknown): void; send(data: string): void; close(code?: number, reason?: string): void }, message: string | globalThis.ArrayBuffer): globalThis.Promise<void> {
+    if (!__webSocketAdmit(ws, message, 1048576, false)) return;
     const __att = ws.deserializeAttachment() as { connId: string; identity: string; args: unknown[] } | null;
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<Frame>(ws, __att.connId);

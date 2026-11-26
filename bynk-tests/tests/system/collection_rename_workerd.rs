@@ -1,7 +1,7 @@
-//! #4482: a `Map` and a `Set` renamed with `replaces`, on a real `workerd`.
+//! #4482: a `Map`, a `Set`, an indexed `Map` and a `Log` renamed with `replaces`, on a real `workerd`.
 //!
-//! Version 1 stores more entries than one batch of the key move under `seen` and `tags`; version 2
-//! renames them (`visited replaces seen`, `labels replaces tags`) and builds with no `migrate from`.
+//! Version 1 stores more entries than one batch of the key move in a `Map`, a `Set`, an indexed `Map` and
+//! a `Log`; version 2 renames them (`visited replaces seen`, and so on) and builds with no `migrate from`.
 //! After a restart on the same persisted state the entries read back under the new names, every one
 //! of them, and a write after the rename lands beside them. The move itself, its batching and its
 //! resume after a failure are pinned against in-memory storage in `bynk-emit/runtime/test`.
@@ -27,10 +27,13 @@ const REQUIRE_ENV: &str = "BYNK_REQUIRE_WORKERD";
 /// More entries than the move's batch (128), so it takes several.
 const ENTRIES: usize = 300;
 
-/// A `Map` and a `Set` named `map` and `set`, behind a plain HTTP service.
-fn source(map: &str, set: &str, map_clause: &str, set_clause: &str) -> String {
+/// The agent: a `Map`, a `Set`, an indexed `Map` and a `Log`, named `names` and carrying `clauses`
+/// (each empty, or ` replaces old`), behind a plain HTTP service.
+fn source(names: [&str; 4], clauses: [&str; 4]) -> String {
+    let [map, set, orders, trail] = names;
+    let [map_clause, set_clause, orders_clause, trail_clause] = clauses;
     format!(
-        "context shop\n\nagent Cart {{\n\tkey id: String\n\n\tstore {map}: Map[String, Int]{map_clause}\n\tstore {set}: Set[String]{set_clause}\n\n\ton call put(k: String, n: Int) -> Effect[()] {{\n\t\tlet _ <- {map}.put(k, n)\n\t\tlet _ <- {set}.add(k)\n\t\tEffect.pure(())\n\t}}\n\n\ton call at(k: String) -> Effect[Option[Int]] {{\n\t\tlet v <- {map}.get(k)\n\t\tEffect.pure(v)\n\t}}\n\n\ton call has(k: String) -> Effect[Bool] {{\n\t\tlet h <- {set}.contains(k)\n\t\tEffect.pure(h)\n\t}}\n\n\ton call sizes() -> Effect[Int] {{\n\t\tlet a <- {map}.size()\n\t\tlet b <- {set}.size()\n\t\tEffect.pure(a + b)\n\t}}\n}}\n\nservice api from http {{\n\ton GET(\"/put/:id/:k/:n\") (id: String, k: String, n: Int) -> Effect[HttpResult[String]] by Visitor {{\n\t\tlet _ <- Cart(id).put(k, n)\n\t\tOk(\"ok\")\n\t}}\n\n\ton GET(\"/at/:id/:k\") (id: String, k: String) -> Effect[HttpResult[Option[Int]]] by Visitor {{\n\t\tlet v <- Cart(id).at(k)\n\t\tOk(v)\n\t}}\n\n\ton GET(\"/has/:id/:k\") (id: String, k: String) -> Effect[HttpResult[Bool]] by Visitor {{\n\t\tlet h <- Cart(id).has(k)\n\t\tOk(h)\n\t}}\n\n\ton GET(\"/sizes/:id\") (id: String) -> Effect[HttpResult[Int]] by Visitor {{\n\t\tlet n <- Cart(id).sizes()\n\t\tOk(n)\n\t}}\n}}\n"
+        "context shop\n\nconsumes bynk {{ Clock }}\n\ntype Order = {{ customer: String, total: Int }}\n\nagent Cart {{\n\tkey id: String\n\n\tstore {map}: Map[String, Int]{map_clause}\n\tstore {set}: Set[String]{set_clause}\n\tstore {orders}: Map[String, Order] @indexed(by: customer){orders_clause}\n\tstore {trail}: Log[Int]{trail_clause}\n\n\ton call put(k: String, n: Int, who: String) -> Effect[()] given Clock {{\n\t\tlet _ <- {map}.put(k, n)\n\t\tlet _ <- {set}.add(k)\n\t\tlet _ <- {orders}.put(k, Order {{ customer: who, total: n }})\n\t\tlet _ <- {trail}.append(n)\n\t\tEffect.pure(())\n\t}}\n\n\ton call at(k: String) -> Effect[Option[Int]] {{\n\t\tlet v <- {map}.get(k)\n\t\tEffect.pure(v)\n\t}}\n\n\ton call has(k: String) -> Effect[Bool] {{\n\t\tlet h <- {set}.contains(k)\n\t\tEffect.pure(h)\n\t}}\n\n\ton call sizes() -> Effect[Int] {{\n\t\tlet a <- {map}.size()\n\t\tlet b <- {set}.size()\n\t\tEffect.pure(a + b)\n\t}}\n\n\ton call ordersOf(who: String) -> Effect[Int] {{\n\t\t{orders}.filter((o) => o.customer == who).count()\n\t}}\n\n\ton call logged() -> Effect[Int] {{\n\t\t{trail}.since(Instant.fromEpochMillis(0)).count()\n\t}}\n}}\n\nservice api from http {{\n\ton GET(\"/put/:id/:k/:n/:who\") (id: String, k: String, n: Int, who: String) -> Effect[HttpResult[String]] by Visitor given Clock {{\n\t\tlet _ <- Cart(id).put(k, n, who)\n\t\tOk(\"ok\")\n\t}}\n\n\ton GET(\"/at/:id/:k\") (id: String, k: String) -> Effect[HttpResult[Option[Int]]] by Visitor {{\n\t\tlet v <- Cart(id).at(k)\n\t\tOk(v)\n\t}}\n\n\ton GET(\"/has/:id/:k\") (id: String, k: String) -> Effect[HttpResult[Bool]] by Visitor {{\n\t\tlet h <- Cart(id).has(k)\n\t\tOk(h)\n\t}}\n\n\ton GET(\"/sizes/:id\") (id: String) -> Effect[HttpResult[Int]] by Visitor {{\n\t\tlet n <- Cart(id).sizes()\n\t\tOk(n)\n\t}}\n\n\ton GET(\"/orders/:id/:who\") (id: String, who: String) -> Effect[HttpResult[Int]] by Visitor {{\n\t\tlet n <- Cart(id).ordersOf(who)\n\t\tOk(n)\n\t}}\n\n\ton GET(\"/logged/:id\") (id: String) -> Effect[HttpResult[Int]] by Visitor {{\n\t\tlet n <- Cart(id).logged()\n\t\tOk(n)\n\t}}\n}}\n"
     )
 }
 
@@ -160,7 +163,7 @@ fn a_renamed_map_and_set_keep_every_entry_on_workerd() {
     // Version 1, as deployed: the entries live under `seen` and `tags`.
     fs::write(
         proj.join("src/shop/cart.bynk"),
-        source("seen", "tags", "", ""),
+        source(["seen", "tags", "orders", "trail"], ["", "", "", ""]),
     )
     .unwrap();
     if let Err(said) = compile(&proj, &tmp.join("out1")) {
@@ -173,7 +176,13 @@ fn a_renamed_map_and_set_keep_every_entry_on_workerd() {
             return;
         };
         for i in 0..ENTRIES {
-            match get(port, &format!("/put/ada/k{i:03}/{i}")) {
+            match get(
+                port,
+                &format!(
+                    "/put/ada/k{i:03}/{i}/{}",
+                    if i % 2 == 0 { "ada" } else { "bob" }
+                ),
+            ) {
                 Ok((200, _)) => {}
                 other => {
                     failures.push(format!("seeding entry {i}: {other:?}"));
@@ -187,7 +196,15 @@ fn a_renamed_map_and_set_keep_every_entry_on_workerd() {
     // Version 2: renamed with the clauses, and built with no `migrate from`.
     fs::write(
         proj.join("src/shop/cart.bynk"),
-        source("visited", "labels", " replaces seen", " replaces tags"),
+        source(
+            ["visited", "labels", "purchases", "journal"],
+            [
+                " replaces seen",
+                " replaces tags",
+                " replaces orders",
+                " replaces trail",
+            ],
+        ),
     )
     .unwrap();
     if let Err(said) = compile(&proj, &tmp.join("out2")) {
@@ -217,8 +234,22 @@ fn a_renamed_map_and_set_keep_every_entry_on_workerd() {
                 other => failures.push(format!("Set member {i} under its new name: {other:?}")),
             }
         }
+        // The index postings moved with the entries (an equality filter on the index reads them),
+        // and so did the `Log`.
+        for (who, expected) in [("ada", ENTRIES / 2), ("bob", ENTRIES / 2)] {
+            match get(port, &format!("/orders/ada/{who}")) {
+                Ok((200, body)) if body == expected.to_string() => {}
+                other => failures.push(format!(
+                    "orders of {who} through the moved index: {other:?}, expected {expected}"
+                )),
+            }
+        }
+        match get(port, "/logged/ada") {
+            Ok((200, body)) if body == ENTRIES.to_string() => {}
+            other => failures.push(format!("the moved log holds {other:?}, expected {ENTRIES}")),
+        }
         // A write after the rename lands beside what moved.
-        match get(port, "/put/ada/fresh/9") {
+        match get(port, "/put/ada/fresh/9/ada") {
             Ok((200, _)) => {}
             other => failures.push(format!("writing after the rename: {other:?}")),
         }

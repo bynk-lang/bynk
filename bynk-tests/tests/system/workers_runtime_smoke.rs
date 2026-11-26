@@ -1880,6 +1880,226 @@ fn a_cookie_upgrade_needs_a_listed_origin_through_the_worker_on_workerd() {
     );
 }
 
+/// #3905: frame limits and binary frames through the deployed Worker. `heard` counts the frames
+/// `on message` ran for, so a frame refused before decoding shows as not heard. One service per
+/// source (the Worker routes an upgrade to the first), in a `Bytes` and a JSON form.
+fn ws_frame_source(in_ty: &str, handler_frame: &str, echo: &str) -> String {
+    format!(
+        r#"context smoke
+
+type UserId = String where NonEmpty
+type Frame = {{ text: String }}
+
+actor Member {{ auth = Bearer(secret = "WS_SECRET"), identity = UserId }}
+
+service live from websocket(in: {in_ty}, out: {in_ty}) {{
+  limits {{ maxFrame: 64 }}
+
+  on open (room: String) -> Effect[()] by user: Member {{
+    let _ <- Room(room).join(connection)
+    ()
+  }}
+
+  on message (room: String, frame: {handler_frame}) -> Effect[()] by user: Member {{
+    let _ <- Room(room).heard()
+    let _ <- connection.send({echo})
+    ()
+  }}
+
+  on close (room: String) -> Effect[()] by user: Member {{
+    let _ <- Room(room).left()
+    ()
+  }}
+}}
+
+agent Room {{
+  key id: String
+  store conns: Map[String, Connection[{in_ty}]]
+  store count: Cell[Int]
+
+  on call join(conn: Connection[{in_ty}]) -> Effect[()] {{
+    let _ <- conns.put("c", conn)
+    ()
+  }}
+
+  on call heard() -> Effect[()] {{
+    let _ <- count.update((c) => c + 1)
+    ()
+  }}
+
+  on call left() -> Effect[()] {{
+    let _ <- conns.remove("c")
+    ()
+  }}
+
+  on call snapshot() -> Effect[String] {{
+    "\(count)"
+  }}
+}}
+
+service api from http {{
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {{
+    Ok("up")
+  }}
+
+  on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {{
+    let s <- Room("r1").snapshot()
+    Ok(s)
+  }}
+}}
+"#
+    )
+}
+
+/// A real client: it opens a socket with a Bearer pair, sends the frames its mode names and reports
+/// what came back (an echoed frame's kind and size, or the close code), then the service's `heard`.
+const WS_FRAMES_CLIENT_JS: &str = r#"
+const crypto = require("node:crypto");
+const [port, secret, mode] = process.argv.slice(2);
+const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+const exp = Math.floor(Date.now() / 1000) + 3600;
+const head = b64({ alg: "HS256", typ: "JWT" });
+const body = b64({ sub: "ada", exp });
+const sig = crypto.createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
+const token = `${head}.${body}.${sig}`;
+const within = (p, ms, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), ms)),
+]);
+const state = () => fetch(`http://127.0.0.1:${port}/state`).then((r) => r.text());
+// Open a socket, send `frame`, and report the first thing that happens: a frame back or the close.
+async function trial(frame) {
+  const ws = await within(new Promise((resolve, reject) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}/?room=r1`, ["bynk.bearer", token]);
+    w.binaryType = "arraybuffer";
+    w.addEventListener("open", () => resolve(w));
+    w.addEventListener("error", () => reject(new Error("upgrade failed")));
+  }), 15000, "the upgrade");
+  const outcome = within(new Promise((done) => {
+    ws.addEventListener("message", (e) => done(typeof e.data === "string"
+      ? { text: e.data.length }
+      : { binary: e.data.byteLength }));
+    ws.addEventListener("close", (e) => done({ close: e.code, reason: e.reason }));
+  }), 15000, "a reply");
+  ws.send(frame);
+  const result = await outcome;
+  try { ws.close(); } catch {}
+  await new Promise((r) => setTimeout(r, 300));
+  return result;
+}
+(async () => {
+  const out = {};
+  if (mode === "bytes") {
+    out.small = await trial(new Uint8Array(10).fill(7));
+    out.tooBig = await trial(new Uint8Array(65).fill(7));
+    out.text = await trial(JSON.stringify({ text: "hi" }));
+  } else {
+    out.small = await trial(JSON.stringify({ text: "hi" }));
+    out.tooBig = await trial(JSON.stringify({ text: "x".repeat(100) }));
+    out.binary = await trial(new Uint8Array(10).fill(7));
+  }
+  out.heard = await state();
+  console.log(JSON.stringify(out));
+  process.exit(0);
+})().catch((e) => { console.error(String(e)); process.exit(1); });
+"#;
+
+fn run_ws_frames(source: &str, tag: &str, mode: &str) -> Option<serde_json::Value> {
+    let secret = "frames-smoke-secret";
+    let served = serve_smoke_with_args(
+        &[("smoke.bynk", source)],
+        tag,
+        None,
+        None,
+        &["--var".to_string(), format!("WS_SECRET:{secret}")],
+    )?;
+    let port = served
+        .url
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.trim_end_matches('/').parse::<u16>().ok())
+        .expect("the served url carries a port");
+    let script = served.tmp.join("ws-frames-client.js");
+    fs::write(&script, WS_FRAMES_CLIENT_JS).expect("write the client script");
+    let out = Command::new("node")
+        .arg(&script)
+        .arg(port.to_string())
+        .arg(secret)
+        .arg(mode)
+        .output()
+        .expect("node runs");
+    let report = format!(
+        "status: {}\nstdout: {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "the frames client must run green:\n{report}"
+    );
+    Some(
+        serde_json::from_slice(&out.stdout)
+            .unwrap_or_else(|e| panic!("report is JSON ({e}):\n{report}")),
+    )
+}
+
+#[test]
+fn a_bytes_service_echoes_binary_frames_and_refuses_text_and_oversize_on_workerd() {
+    let source = ws_frame_source("Bytes", "Bytes", "frame");
+    let Some(seen) = run_ws_frames(&source, "ws-bytes", "bytes") else {
+        return;
+    };
+    assert_eq!(
+        seen["small"],
+        serde_json::json!({ "binary": 10 }),
+        "a binary frame is echoed as binary\n{seen}"
+    );
+    assert_eq!(
+        seen["tooBig"],
+        serde_json::json!({ "close": 1009, "reason": "message too large" }),
+        "a frame over maxFrame is closed with 1009\n{seen}"
+    );
+    assert_eq!(
+        seen["text"],
+        serde_json::json!({ "close": 1003, "reason": "text frame not accepted" }),
+        "a text frame to a Bytes service is closed with 1003\n{seen}"
+    );
+    assert_eq!(
+        seen["heard"],
+        serde_json::json!("\"1\""),
+        "only the one admitted frame reached `on message`\n{seen}"
+    );
+}
+
+#[test]
+fn a_json_service_refuses_binary_and_oversize_frames_before_parsing_on_workerd() {
+    let source = ws_frame_source("Frame", "Frame", "frame");
+    let Some(seen) = run_ws_frames(&source, "ws-json-frames", "json") else {
+        return;
+    };
+    assert_eq!(
+        seen["small"],
+        serde_json::json!({ "text": 13 }),
+        "a JSON frame is echoed as text\n{seen}"
+    );
+    assert_eq!(
+        seen["tooBig"],
+        serde_json::json!({ "close": 1009, "reason": "message too large" }),
+        "a frame over maxFrame is closed with 1009\n{seen}"
+    );
+    assert_eq!(
+        seen["binary"],
+        serde_json::json!({ "close": 1003, "reason": "binary frame not accepted" }),
+        "a binary frame to a JSON service is closed with 1003\n{seen}"
+    );
+    assert_eq!(
+        seen["heard"],
+        serde_json::json!("\"1\""),
+        "only the one admitted frame reached `on message`\n{seen}"
+    );
+}
+
 /// #3202: an agent instance runs the handlers that reach it one at a time. `bump`
 /// loads its state, awaits a call to another agent (a Durable Object subrequest,
 /// which does not close the input gate), then commits `n + 1`. Before the fix, five

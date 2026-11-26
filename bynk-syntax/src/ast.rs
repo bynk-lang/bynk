@@ -1574,6 +1574,18 @@ impl LimitsPolicy {
         }
     }
 
+    /// #3905: a `from websocket` service's `maxFrame`, the largest frame in bytes the Durable Object
+    /// reads or sends; [`DEFAULT_MAX_FRAME`] when the author gave none. A malformed value has been
+    /// reported by the checker and falls back to the default.
+    pub fn max_frame(&self) -> i64 {
+        match self.field("maxFrame").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if (1..=MAX_FRAME_CEILING).contains(value) => {
+                *value
+            }
+            _ => DEFAULT_MAX_FRAME,
+        }
+    }
+
     /// #3276: the service-wide per-file ceiling of a `@multipart` route, in bytes
     /// (`maxFile:`); `None` leaves a file part bounded by the body cap alone.
     pub fn max_file(&self) -> Option<i64> {
@@ -1592,6 +1604,14 @@ impl LimitsPolicy {
         }
     }
 }
+
+/// #3905: the frame size, in bytes (1 MiB), a `from websocket` service reads and sends when no
+/// `limits { maxFrame }` says otherwise.
+pub const DEFAULT_MAX_FRAME: i64 = 1_048_576;
+
+/// #3905: the largest `maxFrame` a service may declare, in bytes (32 MiB): Cloudflare's own limit on
+/// an inbound message, which it closes with `1009` above it.
+pub const MAX_FRAME_CEILING: i64 = 33_554_432;
 
 /// #3276: the parts a `@multipart` request may carry when no `maxParts` says
 /// otherwise.

@@ -1,0 +1,44 @@
+context audio
+
+type RoomId = opaque String
+type UserId = opaque String
+
+actor Participant { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+
+// #3905: a `Bytes` frame type exchanges binary frames as they are, and `limits { maxFrame }` bounds
+// the frames the service reads and sends: a frame over it is closed with `1009` before it is parsed,
+// and one the server sends over it faults the send.
+service Audio from websocket(in: Bytes, out: Bytes) {
+  limits { maxFrame: 8 }
+
+  on open (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- connection.send(Bytes.fromUtf8("hello"))
+    let _ <- Room(room).join(user.identity, connection)
+    ()
+  }
+
+  on message (room: RoomId, frame: Bytes) -> Effect[()] by user: Participant {
+    let _ <- connection.send(frame)
+    ()
+  }
+
+  on close (room: RoomId) -> Effect[()] by user: Participant {
+    let _ <- Room(room).leave(user.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Bytes]]
+
+  on call join(u: UserId, conn: Connection[Bytes]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}
