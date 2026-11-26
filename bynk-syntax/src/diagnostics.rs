@@ -10977,6 +10977,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.helper_given_at_system",
         "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
+    d(
+        "bynk.test.key_principal_needs_api_key_route",
+        "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939).",
+    ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
         "A case drives `by NoSubject` at an address that is not an http route with an `Oidc` actor; it sends correctly signed tokens whose `sub` is empty and whose `sub` is missing, so only an `Oidc` seam can refuse them.",
@@ -11013,10 +11017,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     d(
-        "bynk.test.key_principal_needs_api_key_route",
-        "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939).",
-    ),
-    d(
         "bynk.test.principal_claims_not_oidc",
         "A call-site principal passes token claims for an actor that isn't `Oidc`.",
     ),
@@ -11049,6 +11049,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.remote_unsupported_advance",
         "A `system` case moves the harness clock with `advance Clock`, which a run against a real runtime (`bynk test --against`) can't honour: the deployed Workers read wall-clock time.",
         &["case"],
+    ),
+    d(
+        "bynk.test.remote_unsupported_api_key",
+        "A case acting as an `ApiKey` actor, or driving `by Malformed` or `by Unknown`, under `bynk test --against` (#3939).",
     ),
     dg(
         "bynk.test.remote_unsupported_asset",
@@ -11199,10 +11203,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.tier.mixed_system_suite",
         "A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own.",
         &["case"],
-    ),
-    d(
-        "bynk.test.remote_unsupported_api_key",
-        "A case acting as an `ApiKey` actor, or driving `by Malformed` or `by Unknown`, under `bynk test --against` (#3939).",
     ),
     d(
         "bynk.tier.system_needs_wire",

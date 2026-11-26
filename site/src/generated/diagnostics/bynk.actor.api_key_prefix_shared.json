@@ -1,0 +1,10 @@
+{
+  "blurb": "Every key an `ApiKey` actor mints starts with its `prefix`, which makes a leaked key recognisable and, in an actor sum, tells the seam which actor a key is for without a lookup. Two `ApiKey` actors in one context with the same prefix (the default is `bk`) make their keys indistinguishable, so give each its own.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_prefix_shared",
+  "constructs": [],
+  "example": "actor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\"), identity = RobotId }   // ✗ both `bk`\n\nactor Robot { auth = ApiKey(secret = \"ROBOT_KEY_PEPPER\", prefix = \"rbt\"), identity = RobotId }   // ✓",
+  "severity": "error",
+  "summary": "Two `ApiKey` actors in one context share a key prefix (#3939)."
+}

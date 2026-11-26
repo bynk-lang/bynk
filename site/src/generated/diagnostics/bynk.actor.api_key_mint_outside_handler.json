@@ -1,0 +1,10 @@
+{
+  "blurb": "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.api_key_mint_outside_handler",
+  "constructs": [],
+  "example": "agent Accounts { key id: String\n    on call open(a: AccountId, l: ApiKeyLabel) -> Effect[()] given Clock { let _ <- Client.mint(a, l) }   // ✗ in an agent\n}\n\non POST(\"/keys\") (body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by u: User given Clock { … Client.mint(u.identity, body.label) … }   // ✓",
+  "severity": "error",
+  "summary": "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939)."
+}
