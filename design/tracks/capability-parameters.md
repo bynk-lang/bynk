@@ -99,9 +99,9 @@ The track settles four things:
 - **It spans several increments.** Declaration and in-body use; binding at the
   call and the inclusion rule; emission; forwarding through chains of commons
   functions beside type parameters; tests and doubles; tooling and the book.
-- **Its surface is not settled.** The binding syntax, the set of admissible
-  kinds, how a commons names a kind at all, and how parameters meet `stub` and
-  `expect … called` are open (§14).
+- **Its surface was not settled when the track opened.** The binding syntax,
+  the set of admissible kinds, how a commons names a kind at all, and how
+  parameters meet `stub` and `expect … called` were open (§14, now settled).
 - **It is not a security boundary** (§11). The integrity hazard of binding the
   wrong instance is real, which is why the binding is explicit.
 
@@ -254,6 +254,11 @@ same declarations are open there. That gives suites of several targets one
 home for effectful setup, `fn seed() -> Effect[()] given Store: D1`, which
 ADR 0974 had to leave out because a commons has no one capability set; a
 case binds it to its target's instance (`seed(given Store = Orders)`).
+Although ADR 0974 D checks a test-only commons' items as a suite helper is,
+its `given` follows the **commons** rule, not the suite-helper one: a bare
+instantiable kind (`given Kv`) is `bynk.given.kind_needs_parameter`, as in
+any commons, and the parameter form is the only way in. A bare kind means a
+double only in a suite helper, whose suite has a target (§9).
 
 **Naming.** A parameter is capitalised, because it sits where a capability
 does and is never a value (#918's case rule: capitalised names a closed
@@ -284,7 +289,7 @@ warmUp(given Store = Sessions)
   arguments have ended. Everything after it up to `)` is `Name = Capability`
   pairs separated by commas.
 - The argument list becomes
-  `( [args] [ (args ",")? "given" binding ("," binding)* ] )`, with
+  `"(" ( args | (args ",")? "given" binding ("," binding)* )? ")"`, with
   `binding = Name "=" CapRef`. The ordinary arguments may be empty, as in
   `warmUp(given Store = Sessions)`; when there are some, a comma separates the
   last from `given`. No trailing comma follows the last pair, matching
@@ -402,8 +407,12 @@ whatever their operations.
 
 A commons may name a **non-instantiable** first-party capability bare, as a
 shared capability: `bynk`'s `Clock`, `Random`, `Logger`, `Fetch`, `Secrets`,
-`Locale` and `Idempotency`, and `bynk.cloudflare`'s singletons (`Version`,
-`Ai`, `Images`, `AnalyticsSql`). The callee's `given Logger` requires the
+`Locale` and `Idempotency`, `bynk.cloudflare`'s singletons (`Version`, `Ai`,
+`Images`, `AnalyticsSql`), and `bynk.crypto`'s `Crypto`. The rule covers every
+first-party unit, so a kind a unit adds later is classified with no new
+list. `bynk.testing`'s `TypedReads` is classified the same way, but its unit
+is experimental, so a commons that names it needs the usual `[unstable]
+allow`. The callee's `given Logger` requires the
 caller's `given Logger`, exactly as between context functions today.
 
 The rule is mechanical: **instantiable means parameter, not instantiable
@@ -582,14 +591,15 @@ keep that intact (slice 4):
   the instance bound, so a review can trace which data a library touches.
 
 Shared capabilities are broader than they look. `Secrets.get(name)` in a
-commons can read any secret the caller can. The grant is still visible in
-every signature on the path, as for context functions, so a caller sees it
-before calling. Commons are already shareable as packages
-([`packaging.md`](packaging.md) D1), so the library may be a dependency's.
-**Ruled (26 November 2026):** `Secrets` stays shared in this track. If
-dependency commons reaching secrets becomes a real concern, a narrower grant
-(naming the secrets a function may read) is the line to revisit, in its own
-increment.
+commons can read any secret the caller can, and with `given Secrets, Fetch`
+it can send one anywhere. The grant is still visible in every signature on
+the path, as for context functions, so a caller sees it before calling.
+Commons are already shareable as packages ([`packaging.md`](packaging.md)
+D1), so the library may be a dependency's. **Ruled (26 November 2026):**
+`Secrets` stays shared in this track. If dependency commons reaching secrets
+becomes a real concern, with `Secrets` plus `Fetch` as the concrete case to
+watch, a narrower grant (naming the secrets a function may read) is the line
+to revisit, in its own increment.
 
 ## 12. Slices
 
@@ -636,7 +646,7 @@ already says the right thing, it is reused.
 | `bynk.given.binding_shared` | a call binds a shared capability (`given Logger = Logger`) | 1 |
 | `bynk.given.binding_kind_mismatch` | the right-hand side is not of the bound's kind (a `Kv` instance for a `D1` parameter) | 1 |
 | `bynk.given.missing_for_call` (reused) | the right-hand side is not a capability the caller holds | 1 |
-| `bynk.given.kind_needs_parameter` | a commons names an instantiable kind bare (`given Kv`); the fix makes it `given Store: Kv` | 1 |
+| `bynk.given.kind_needs_parameter` | a commons, a test-only one included, names an instantiable kind bare (`given Kv`); the fix makes it `given Store: Kv` | 1 |
 | `bynk.given.shared_as_parameter` | a non-instantiable kind is used as a bound (`given L: Logger`) | 1 |
 | `bynk.given.parameter_name_conflict` | a parameter shadows a visible capability or kind, a type parameter, or another parameter | 1 |
 | `bynk.given.parameter_outside_commons` | `given Name: Kind` on a context function, a method, a handler, a provider or a suite helper (Q6) | 1 |
@@ -679,8 +689,9 @@ the maintainer were ruled on 26 November 2026, each on the proposed option:
 2. **What may bound a parameter.**
    *Settled:* an instantiable first-party kind the commons selects with a
    braced `consumes` (§6.1). No commons-declared capabilities, no generic
-   kinds, no structural bounds. Arguments: an instance of that kind, the bare
-   kind where it allows one (`Kv`), or a forwarded parameter.
+   kinds, no structural bounds. Arguments: as listed in §6.1 (an instance of
+   that kind, the bare kind where it allows one, a forwarded parameter, or a
+   double in a commons suite).
    *Why:* a commons can name types only today (ADR 0990), and first-party
    kinds are the case that motivates the track. ADR 0990 E already names the
    braced list as the home for capability contracts. A commons-declared
@@ -694,8 +705,8 @@ the maintainer were ruled on 26 November 2026, each on the proposed option:
 
 3. **Shared capabilities.**
    *Settled:* instantiable means parameter, non-instantiable means shared.
-   `Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`
-   and the Cloudflare singletons are named bare; `Events` is refused. A bare
+   `Clock`, `Random`, `Logger`, `Fetch`, `Secrets`, `Locale`, `Idempotency`,
+   the Cloudflare singletons and `Crypto` are named bare; `Events` is refused. A bare
    `Kv` in a commons is refused with a fix to a parameter, and a caller may
    bind its bare `Kv`.
    *Why:* the registry already records which kinds have instances, so the rule
