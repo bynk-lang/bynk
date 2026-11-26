@@ -321,6 +321,20 @@ pub(crate) fn queue_name_problem(
     None
 }
 
+/// #4056 Decision E: whether the run's queue steps call the account's REST API. Every queue a
+/// Worker declares is looked up on each deploy, recorded or not, so any declared queue does; so
+/// does a `--prune` with a queue orphan to delete.
+pub(crate) fn queues_calls_the_account(
+    cx: &ProjectCx<'_>,
+    orphans: &[String],
+    prune: bool,
+) -> bool {
+    cx.order
+        .iter()
+        .any(|worker| !cx.resources[worker].all_queues().is_empty())
+        || (prune && !orphans.is_empty())
+}
+
 /// A Worker's queues' step (1D.2b): every queue it consumes or sends to, read from its
 /// declarations, since whether each is made is the account's to say when the step is applied.
 #[derive(Debug, Clone, Copy)]

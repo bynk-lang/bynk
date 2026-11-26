@@ -21,8 +21,8 @@ Authenticate first. There are two halves:
   Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
   token needs the permission of each kind it touches; the sections below name
-  them. Today that is KV, R2, D1 and Vectorize, along with Hyperdrive and the
-  linked kinds.
+  them. Today that is KV, R2, D1, Vectorize and queues, along with Hyperdrive
+  and the linked kinds.
 
   A deploy that needs them and lacks one stops before the confirmation, with
   nothing created, and names the missing variable and the permission. A
@@ -139,6 +139,12 @@ Queues are created **by name** — the name you wrote in `from queue("n")`. Befo
 each deploy, `bynk deploy` asks Cloudflare whether the queue is there and creates
 it only if it isn't. So a queue you deleted outside Bynk comes back on the next
 deploy, and a `reuse` line never means "and if it's gone, too bad".
+
+Since that check runs on every deploy, a project with a queue needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` on every deploy, the token with
+"Queues: Edit", even when nothing is created; without them it stops before the
+confirmation. If a create is refused because another deploy made the queue in
+between, the deploy finds it in the account's queue list and carries on.
 
 Queues are created *before* the Worker is pushed, and this step is doing real
 work: `wrangler deploy` does **not** create a queue for you — it checks, and

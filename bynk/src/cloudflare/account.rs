@@ -110,16 +110,44 @@ fn unreadable(request: &Request, missing: &str) -> CloudflareError {
 }
 
 impl CloudflareApi for Account<'_> {
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_create(name)
+    fn queue_create(&self, name: &str) -> Result<(), CloudflareError> {
+        self.send(Purpose::Queues, &rest::queues::create(name))
+            .map(drop)
     }
 
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_info(name)
+    /// Every page until the exact name turns up, to `total_pages` (or while full).
+    fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let mut found = None;
+        let rule = Numbered {
+            cap: None,
+            missing_total: MissingTotal::WhileFull,
+            stop_on_empty: false,
+        };
+        rule.follow(|page| -> Result<Page, CloudflareError> {
+            let request = rest::queues::list_page(page);
+            let body = self.send(Purpose::Queues, &request)?;
+            let (id, entries) = rest::queues::found(&body, name)
+                .ok_or_else(|| unreadable(&request, "`result` list"))?;
+            let done = id.is_some();
+            if found.is_none() {
+                found = id;
+            }
+            Ok(Page::of(&body, entries).done_if(done))
+        })?;
+        Ok(found)
     }
 
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
-        self.wrangler.queue_delete(name)
+    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
+        let Some(id) = self.queue_find(name)? else {
+            return Ok(false);
+        };
+        if !rest::queues::is_queue_id(&id) {
+            return Err(CloudflareError::Other(format!(
+                "the queue `{name}` has the id `{id}`, which is not a queue id, so nothing was deleted"
+            )));
+        }
+        self.send(Purpose::Queues, &rest::queues::delete(&id))
+            .map(|_| true)
     }
 
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError> {

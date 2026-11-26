@@ -482,7 +482,7 @@ pub(crate) struct AccountCx<'a> {
 }
 
 /// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
-/// (KV since 1D.4a, R2 and D1 since 1D.4b, Vectorize since 1D.4c) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// (KV since 1D.4a, R2 and D1 since 1D.4b, Vectorize since 1D.4c, queues since 1D.4d) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
 /// the plan and before the confirmation, so a missing one is refused before anything is created.
 /// The first kind in list order that needs them reports, in its own words. A run that needs
 /// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
@@ -497,6 +497,7 @@ fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
         &project,
         &orphans.kv,
         &orphans.vectorize,
+        &orphans.queues,
         cx.opts.prune,
         |purpose| crate::cloudflare::rest::for_kind(purpose).map(drop),
     );
@@ -513,6 +514,7 @@ pub(crate) fn resource_credentials(
     project: &ProjectCx<'_>,
     kv_orphans: &[OrphanKv],
     vectorize_orphans: &[OrphanVectorize],
+    queue_orphans: &[String],
     prune: bool,
     credentials: impl Fn(
         crate::cloudflare::rest::Purpose,
@@ -529,6 +531,10 @@ pub(crate) fn resource_credentials(
         (
             Purpose::Vectorize,
             vectorize_calls_the_account(project, vectorize_orphans, prune),
+        ),
+        (
+            Purpose::Queues,
+            queues_calls_the_account(project, queue_orphans, prune),
         ),
     ];
     for (purpose, _) in needed.into_iter().filter(|(_, needed)| *needed) {

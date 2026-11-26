@@ -11,18 +11,19 @@ use super::rest::vectorize::IndexConfig;
 /// moved kind's to Cloudflare's REST API, the rest to wrangler ([`super::Wrangler`]). 1D.4
 /// moves them one kind at a time, behind these same methods (KV first, 1D.4a).
 ///
-/// Each method returns what its caller reads: an id, `()`, typed ids, or the JSON wrangler
-/// printed, which the caller parses as before. The policy stays with the caller: "already exists
-/// means adopt" and "already gone means success" are decisions a kind makes over the typed error
-/// ([`WranglerError::already_exists`], [`WranglerError::already_gone`], or a REST error's code),
-/// not the transport's.
+/// Each method returns what its caller reads: an id, `()`, or a typed value. The policy stays
+/// with the caller: "already exists means adopt" and "already gone means success" are decisions
+/// a kind makes over the typed error (a REST error's code, or a refusal it settles by reading
+/// the account), not the transport's.
 pub(crate) trait CloudflareApi {
-    /// `queues create <name>`.
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError>;
-    /// `queues info <name>`: `Ok` when the account has it. Answered by the exit code alone.
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError>;
-    /// `queues delete <name>`.
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError>;
+    /// Create the queue `name` (REST, `POST /queues`).
+    fn queue_create(&self, name: &str) -> Result<(), CloudflareError>;
+    /// The id of the account's queue named exactly `name`, if it has one (REST, `GET /queues`,
+    /// every page read: the reference has no lookup by name).
+    fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError>;
+    /// Delete the queue `name`, found by name and deleted by id (REST, `DELETE /queues/{id}`):
+    /// `false` when the account has no queue of that name, so nothing was deleted.
+    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError>;
     /// Create a KV namespace titled `title` (REST, `POST /storage/kv/namespaces`): its id.
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError>;
     /// Every KV namespace id on the account, every page read (REST).
@@ -188,12 +189,16 @@ pub(crate) enum VectorizeOp<'a> {
 /// REST (KV, 1D.4a) keeps its line for the log, which logs operations, not transports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Op<'a> {
+    // Over REST since 1D.4d: logged by the fake, never run.
+    #[cfg(test)]
     QueueCreate {
         name: &'a str,
     },
+    #[cfg(test)]
     QueueInfo {
         name: &'a str,
     },
+    #[cfg(test)]
     QueueDelete {
         name: &'a str,
     },
@@ -284,8 +289,13 @@ impl Op<'_> {
     pub(crate) fn argv(&self) -> Vec<String> {
         let words = |w: &[&str]| w.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         match *self {
+            // The queues' lines are the wrangler calls they made before 1D.4d, kept for the
+            // fake's log; `queues info` stands for the lookup by name.
+            #[cfg(test)]
             Op::QueueCreate { name } => words(&["queues", "create", name]),
+            #[cfg(test)]
             Op::QueueInfo { name } => words(&["queues", "info", name]),
+            #[cfg(test)]
             Op::QueueDelete { name } => words(&["queues", "delete", name]),
             // KV's lines are the wrangler calls it made before 1D.4a, kept for the fake's log.
             #[cfg(test)]
@@ -433,9 +443,11 @@ impl Op<'_> {
     /// Which wrangler operation this is; `None` for a call that runs over REST.
     pub(crate) fn kind(&self) -> Option<OpKind> {
         Some(match self {
-            Op::QueueCreate { .. } => OpKind::QueueCreate,
-            Op::QueueInfo { .. } => OpKind::QueueInfo,
-            Op::QueueDelete { .. } => OpKind::QueueDelete,
+            // Over REST (1D.4d).
+            #[cfg(test)]
+            Op::QueueCreate { .. } | Op::QueueInfo { .. } | Op::QueueDelete { .. } => {
+                return None;
+            }
             // Over REST (1D.4a): never a wrangler call, so never a wrangler error.
             #[cfg(test)]
             Op::KvCreate { .. } | Op::KvList | Op::KvDelete { .. } => return None,

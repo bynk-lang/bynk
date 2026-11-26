@@ -212,11 +212,6 @@ fn decl() -> VectorizeDecl {
 
 /// Every operation the resource kinds run through wrangler, by the name the fixture gives it.
 const OPERATIONS: &[(&str, Run)] = &[
-    ("queues create", |p, _| shown(create_queue(p, "jobs"))),
-    ("queues info", |p, _| {
-        format!("{:?}", queue_exists(p, "jobs"))
-    }),
-    ("queues delete", |p, _| shown(delete_queue(p, "jobs"))),
     ("d1 migrations apply (default)", |p, root| {
         shown(apply_d1_migrations(p, root, "DB", "default"))
     }),
@@ -227,57 +222,11 @@ const OPERATIONS: &[(&str, Run)] = &[
 
 /// The replies each operation treats specially: its success, and the failures it reads as a
 /// success or answers with a message of its own.
-const SPECIAL: &[(&str, &str, Script)] = &[
-    (
-        "queues create",
-        "created",
-        Script::Answers(&[("*", answer(0, "Created queue jobs.\n", ""))]),
-    ),
-    (
-        "queues create",
-        "already exists, on stderr",
-        Script::Answers(&[(
-            "*",
-            answer(
-                1,
-                "",
-                "A queue with this name Already Exists [code: 11009]\n",
-            ),
-        )]),
-    ),
-    (
-        "queues create",
-        "already exists, on stdout",
-        Script::Answers(&[("*", answer(1, "Queue already exists\n", ""))]),
-    ),
-    (
-        "queues info",
-        "found",
-        Script::Answers(&[("*", answer(0, "Queue jobs\n", ""))]),
-    ),
-    (
-        "queues delete",
-        "deleted",
-        Script::Answers(&[("*", answer(0, "Deleted queue jobs.\n", ""))]),
-    ),
-    (
-        "queues delete",
-        "does not exist",
-        Script::Answers(&[(
-            "*",
-            answer(
-                1,
-                "",
-                "Queue \"jobs\" does not exist. To create it, run: wrangler queues create jobs\n",
-            ),
-        )]),
-    ),
-    (
-        "d1 migrations apply (default)",
-        "applied",
-        Script::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
-    ),
-];
+const SPECIAL: &[(&str, &str, Script)] = &[(
+    "d1 migrations apply (default)",
+    "applied",
+    Script::Answers(&[("*", answer(0, "Migrations applied.\n", ""))]),
+)];
 
 /// What an operation runs with: the account operations and the scratch project root.
 struct Cx<'a> {
@@ -531,7 +480,8 @@ fn messages() -> String {
 
 // ---- 1D.4 (#4056 Decision G): the moved kinds' operations, over REST ----
 
-/// The operations that moved to REST, by the name the fixture gives them: KV (1D.4a).
+/// The operations that moved to REST, by the name the fixture gives them: KV (1D.4a), D1 and R2
+/// (1D.4b), Vectorize (1D.4c) and queues (1D.4d).
 const REST_OPERATIONS: &[(&str, Run)] = &[
     ("KV create (REST)", |p, _| shown(create_kv(p, "shop-api"))),
     ("KV list (REST)", |p, _| {
@@ -569,6 +519,15 @@ const REST_OPERATIONS: &[(&str, Run)] = &[
     }),
     ("Vectorize delete (REST)", |p, _| {
         shown(delete_vectorize_index(p, "docs"))
+    }),
+    ("Queues create (REST)", |p, _| {
+        shown(create_queue(p, "jobs"))
+    }),
+    ("Queues find (REST)", |p, _| {
+        format!("{:?}", queue_exists(p, "jobs"))
+    }),
+    ("Queues delete (REST)", |p, _| {
+        shown(delete_queue(p, "jobs"))
     }),
 ];
 
@@ -760,6 +719,91 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
             (
                 403,
                 r#"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues create (REST)",
+        "created",
+        &[(
+            200,
+            r#"{"success":true,"result":{"queue_id":"4e5f6a7b","queue_name":"jobs"}}"#,
+        )],
+    ),
+    (
+        "Queues create (REST)",
+        "refused, the queue is listed: a race lost",
+        &[
+            (
+                409,
+                r#"{"success":false,"errors":[{"code":11009,"message":"A queue with this name already exists"}]}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues create (REST)",
+        "refused, no queue of exactly that name",
+        &[
+            (
+                400,
+                r#"{"success":false,"errors":[{"code":11009,"message":"A queue with this name already exists"}]}"#,
+            ),
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues find (REST)",
+        "listed",
+        &[(
+            200,
+            r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+        )],
+    ),
+    (
+        "Queues find (REST)",
+        "not listed",
+        &[(
+            200,
+            r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+        )],
+    ),
+    (
+        "Queues delete (REST)",
+        "deleted",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (200, r#"{"success":true,"errors":[],"result":null}"#),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
+        "already gone",
+        &[(
+            200,
+            r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+        )],
+    ),
+    (
+        "Queues delete (REST)",
+        "not found, code 10104",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":10104,"message":"Queue does not exist"}]}"#,
             ),
         ],
     ),
@@ -1140,6 +1184,10 @@ fn each_rest_consumer_names_its_purpose_when_credentials_are_missing() {
         (
             "Vectorize indexes (pre-flight)",
             crate::cloudflare::rest::Purpose::Vectorize,
+        ),
+        (
+            "Queues (pre-flight)",
+            crate::cloudflare::rest::Purpose::Queues,
         ),
     ] {
         said(
