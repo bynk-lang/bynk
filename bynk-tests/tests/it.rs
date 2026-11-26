@@ -373,6 +373,8 @@ mod system {
     mod cross_file_label_behaviour;
     #[path = "debug_inspect.rs"]
     mod debug_inspect;
+    #[path = "deploy_email_environment.rs"]
+    mod deploy_email_environment;
     #[path = "deploy_worker_groups.rs"]
     mod deploy_worker_groups;
     #[path = "detach_workerd.rs"]
@@ -545,6 +547,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "trace_propagation_workerd.rs"]
+    mod trace_propagation_workerd;
     #[path = "trace_requests_workerd.rs"]
     mod trace_requests_workerd;
     #[path = "tsc_failure_diagnostic.rs"]

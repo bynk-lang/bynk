@@ -481,13 +481,29 @@ fn scenario<'a>(results: &'a [Value], label: &str) -> &'a Value {
 }
 
 /// The log lines written under `owner` (`client` for the caller's own).
+/// `text` without the ` trace=<32 hex digits>` a line written inside a request ends with or
+/// carries (#3895): the trace is a fresh id on every run, and what these scenarios compare is
+/// the line's own words.
+fn without_trace(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(" trace=") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + " trace=".len()..];
+        let id = after.chars().take_while(|c| c.is_ascii_hexdigit()).count();
+        rest = &after[id..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn logs_of(result: &Value, owner: &str) -> Vec<String> {
     result["logs"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|l| l["owner"] == owner)
-        .map(|l| l["text"].as_str().unwrap().to_string())
+        .map(|l| without_trace(l["text"].as_str().unwrap()))
         .collect()
 }
 
@@ -700,7 +716,13 @@ fn assert_topologies_agree(all: &[(&str, Vec<Value>)]) {
                 let mut r = r.clone();
                 r.as_object_mut().unwrap().remove("wire");
                 for line in r["logs"].as_array_mut().unwrap() {
-                    line.as_object_mut().unwrap().remove("raw");
+                    let line = line.as_object_mut().unwrap();
+                    line.remove("raw");
+                    // Each run has its own trace ids (#3895).
+                    if let Some(text) = line.get("text").and_then(|t| t.as_str()) {
+                        let plain = without_trace(text);
+                        line.insert("text".to_string(), Value::String(plain));
+                    }
                 }
                 r
             };

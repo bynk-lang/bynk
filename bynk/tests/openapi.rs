@@ -616,6 +616,115 @@ fn problem_details_routes_document_problem_json() {
     );
 }
 
+/// #4434: a `@rateLimit` route can answer `429` before its body is read, whichever key it
+/// counts by, so the document lists it with the `Retry-After` header; a route without the
+/// annotation lists none, and on a `format: problem` service the refusal is problem details.
+#[test]
+fn a_rate_limited_route_lists_its_429_and_retry_after() {
+    let dir = scratch("rate-limited");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"limits\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         consumes bynk.cloudflare { RateLimit }\n\n\
+         type UserId = String where NonEmpty\n\n\
+         actor Reader { auth = Bearer(secret = \"API_TOKEN_SECRET\"), identity = UserId }\n\n\
+         capability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\
+         capability NoteLimit = RateLimit @limit(2) @period(60.seconds)\n\n\
+         service api from http {\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(NoteLimit, key: identity)\n  \
+           on POST(\"/notes\") (body: String) -> Effect[HttpResult[String]] by r: Reader {\n    Ok(\"noted\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n\n  \
+           on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"up\")\n  }\n}\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"ok\")\n  }\n\n  \
+           @rateLimit(SignupLimit, key: clientIp)\n  \
+           on POST(\"/enrol-mixed\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    TooManyRequests(\"slow down\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let refusal = |path: &str| d["paths"][path]["post"]["responses"]["429"].clone();
+    for path in ["/signup", "/notes"] {
+        let r = refusal(path);
+        assert!(r.is_object(), "{path} lists a 429: {r}");
+        assert_eq!(r["headers"]["Retry-After"]["required"], true, "{path}");
+        assert_eq!(
+            r["headers"]["Retry-After"]["schema"]["type"], "integer",
+            "{path}"
+        );
+        assert_eq!(
+            r["content"]["application/json"]["schema"]["properties"]["kind"]["const"],
+            "RateLimited",
+            "{path}"
+        );
+    }
+    // A route with no `@rateLimit` cannot answer one.
+    assert!(
+        d["paths"]["/health"]["get"]["responses"]
+            .get("429")
+            .is_none()
+    );
+    // On a problem-details service the refusal is `application/problem+json`, still with the header.
+    let p = refusal("/enrol");
+    assert_eq!(
+        p["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/BynkProblemDetails"
+    );
+    assert!(p["content"].get("application/json").is_none());
+    assert_eq!(p["headers"]["Retry-After"]["required"], true);
+    // Where a handler also answers `429`, one response holds both: two bodies under one media type
+    // (`oneOf`) on a plain service, one problem schema on a problem service, and `Retry-After` is
+    // no longer required because the handler's own `429` need not carry it.
+    let m = refusal("/mixed");
+    let one_of = m["content"]["application/json"]["schema"]["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a oneOf of the two bodies: {m}"));
+    assert_eq!(one_of.len(), 2, "{m}");
+    let kinds: Vec<_> = one_of
+        .iter()
+        .map(|s| {
+            s["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert!(kinds.contains(&vec!["error".to_string()]), "{kinds:?}");
+    assert!(
+        kinds.contains(&vec!["details".to_string(), "kind".to_string()]),
+        "{kinds:?}"
+    );
+    assert_eq!(m["headers"]["Retry-After"]["required"], false);
+    assert!(
+        m["description"]
+            .as_str()
+            .unwrap()
+            .contains("TooManyRequests")
+            && m["description"].as_str().unwrap().contains("RateLimited")
+    );
+    let pm = refusal("/enrol-mixed");
+    assert_eq!(
+        pm["content"]["application/problem+json"]["schema"]["$ref"],
+        "#/components/schemas/BynkProblemDetails"
+    );
+    assert_eq!(pm["headers"]["Retry-After"]["required"], false);
+    // A route the router alone refuses keeps the header required.
+    assert_eq!(
+        refusal("/signup")["headers"]["Retry-After"]["required"],
+        true
+    );
+    golden("openapi-rate-limited.json", &pretty(&d));
+}
+
 /// #2858: a type shared by a plain route's request body and response renders the
 /// request tagged (`Row`) and the response nullable (`Row.plain`), whichever
 /// renders first.

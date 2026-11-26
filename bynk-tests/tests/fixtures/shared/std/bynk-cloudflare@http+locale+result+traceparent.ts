@@ -12,6 +12,7 @@ import type {
 import { Claim, FetchError, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { Err, None, Ok, Some, type Option, type Result } from "./__bynk_runtime/result.js";
+import { withTraceField } from "./__bynk_runtime/traceparent.js";
 import { byteStreamBody, claimStream } from "./__bynk_runtime/http.js";
 import { negotiateLocale } from "./__bynk_runtime/locale.js";
 
@@ -57,7 +58,7 @@ export class LoggerProvider implements Logger {
   }
   // K5a (#2586): one object, whose keys Workers Logs indexes.
   async log(level: LogLevel, msg: string, fields: ReadonlyMap<string, string>): Promise<void> {
-    const record = { message: msg, level: level.tag.toLowerCase(), fields: Object.fromEntries(fields) };
+    const record = { message: msg, level: level.tag.toLowerCase(), fields: withTraceField(Object.fromEntries(fields)) };
     LOG_WRITERS[level.tag](record);
   }
 }

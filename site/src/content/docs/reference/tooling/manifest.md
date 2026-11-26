@@ -83,6 +83,9 @@ connection_env = "MAIN_DATABASE_URL"   # the variable `bynk deploy` reads the co
 [deploy.vectorize.Docs]     # no default: a `Vectorize` instance's existing index
 index = { production = "docs-prod" }   # adopted for that environment, never created or deleted
 
+[deploy.email."support@shop.example"]   # no default: a named environment's inbound-email address
+address = { staging = "support@staging.shop.example" }   # claimed for that environment instead
+
 [deploy.containers.Renderer]   # no default: a `Container` instance's prebuilt image
 image = { production = "registry.cloudflare.com/<ACCOUNT_ID>/renderer@sha256:<DIGEST>" }   # run for that environment, never built
 
@@ -606,6 +609,12 @@ checked, and the duplicate warning below still appears.
 | `cpu_ms` | integer, 1 to 300000 | unset | The CPU time each Worker may use per request, written as `[limits] cpu_ms`. Raise it for CPU-heavy work, such as password hashing. Unset leaves Cloudflare's default. A limit above what the account's plan allows is Cloudflare's error at deploy; Bynk checks only the platform's absolute maximum. |
 | `placement` | `"smart"` or `"off"` | `"off"` | `"smart"` turns on [Smart Placement](https://developers.cloudflare.com/workers/configuration/placement/), written as `[placement] mode = "smart"`: a Worker that mostly talks to one `D1` database or one Hyperdrive-fronted Postgres runs near it rather than near the user. It changes latency characteristics, so it is opt-in. |
 
+Every Worker gets `nodejs_als` as well, whatever this list says, unless the list
+holds `nodejs_compat`, which provides the same thing. It gives the Worker
+`AsyncLocalStorage`, where a request's
+[trace](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/)
+is held; without it a request is served and its logs carry no trace.
+
 Every Worker gets `global_fetch_strictly_public` whatever this list says. In
 Bynk, a `Fetch` to a URL goes over the public internet, and the flag makes
 that true even when the URL is another Worker on the same Cloudflare account.
@@ -624,6 +633,7 @@ compatibility_flags = ["nodejs_compat"]
 ```toml
 # workers/<context>/wrangler.toml (generated)
 compatibility_flags = ["global_fetch_strictly_public", "nodejs_compat"]
+# (no "nodejs_als": nodejs_compat provides it)
 ```
 
 Flag names aren't checked, so a flag newer than the compiler works, and a
@@ -742,6 +752,27 @@ since the deploy would otherwise create a new, empty index beside the one you me
 an environment the entry does not name still creates its own, and the deploy says so.
 See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#vectorize-indexes).
+
+### Mapping inbound-email addresses per environment
+
+Wrangler's `addresses` is top-level only, so a named environment cannot reuse the
+addresses a `from email` service names: they are production's. A named environment
+therefore claims none unless it is mapped one:
+
+```toml
+[deploy.email."support@shop.example"]
+address = { staging = "support@staging.shop.example" }
+```
+
+| Key | Table | Type | Notes |
+|---|---|---|---|
+| `address` | `[deploy.email."<address>"]` | table of strings | The address each deployment environment (an `--env` name; `default` cannot be mapped) claims in place of `<address>`. The Worker accepts mail to it and delivers it to the service that names `<address>`. An environment not listed claims no address and leaves `addresses` out of its configuration. |
+
+The table's key must be an address a `from email` service in the project names (an
+unknown key is an error, with a suggestion), each mapped address must be one Email
+Routing can match (`bynk.email.invalid_address`'s rule), and no address may be claimed
+by two environments or by both the source and an environment. See
+[Receiving mail](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#receiving-mail-email-routing).
 
 ### Containers
 
