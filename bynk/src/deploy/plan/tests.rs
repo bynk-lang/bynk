@@ -746,6 +746,13 @@ fn a_changed_jurisdiction_on_a_provisioned_database_is_refused_not_recreated() {
     assert!(message.contains("no jurisdiction"), "{message}");
     assert!(message.contains("jurisdiction `eu`"), "{message}");
     assert!(message.contains("will not recreate"), "{message}");
+    // A record written before `@jurisdiction` existed has no such field and reads as none, so
+    // adding `eu` to that database is refused too.
+    let old: D1Record = toml::from_str("name = \"shop-orders\"\nid = \"id-1\"\n").unwrap();
+    assert_eq!(old.jurisdiction, None);
+    let mut older = DeployLock::default();
+    older.record::<D1>("default", "shop", "D1_ORDERS", old);
+    assert!(d1_database_problem(&project, LedgerView::of(&older, "default")).is_some());
     // The same jurisdiction, and a database not yet provisioned, are fine.
     lock.record::<D1>(
         "default",
