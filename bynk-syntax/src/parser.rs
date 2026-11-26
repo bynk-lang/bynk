@@ -4188,6 +4188,58 @@ mod tests {
         }
     }
 
+    /// #3971: `as` binds tighter than `|`; parentheses make it name an or-pattern.
+    #[test]
+    fn an_as_suffix_binds_tighter_than_or() {
+        let arm_pattern = |pat: &str| {
+            let b = body_block(&format!("match e {{\n  {pat} => 1\n  _ => 2\n}}"));
+            let ExprKind::Match { arms, .. } = &b.tail.kind else {
+                panic!("{pat:?}: expected a match tail");
+            };
+            arms[0].pattern.clone()
+        };
+        let Pattern::Or(alts, _) = arm_pattern("A | B as x") else {
+            panic!("`A | B as x` is an or-pattern");
+        };
+        assert!(matches!(alts[0], Pattern::Variant { .. }));
+        assert!(matches!(&alts[1], Pattern::As { name, .. } if name.name == "x"));
+        let Pattern::As { inner, name, .. } = arm_pattern("(A | B) as x") else {
+            panic!("`(A | B) as x` is an as-pattern");
+        };
+        assert_eq!(name.name, "x");
+        assert!(matches!(*inner, Pattern::Or(..)));
+        // A wildcard, a payload and a record each take the suffix.
+        for pat in ["_ as x", "Some(y) as x", "Order { id, .. } as o"] {
+            assert!(
+                matches!(arm_pattern(pat), Pattern::As { .. }),
+                "{pat:?} is an as-pattern"
+            );
+        }
+    }
+
+    /// #3971: `as` names are bound alongside the pattern's own, and `peel_as` reads through them.
+    #[test]
+    fn an_as_pattern_binds_its_name_and_peels_to_its_inner_pattern() {
+        let b = body_block("match e {\n  Some(Order { id, .. } as o) => 1\n  _ => 2\n}");
+        let ExprKind::Match { arms, .. } = &b.tail.kind else {
+            panic!("expected a match tail");
+        };
+        let names: Vec<&str> = arms[0]
+            .pattern
+            .bound_names()
+            .into_iter()
+            .map(|n| n.name.as_str())
+            .collect();
+        assert_eq!(names, ["id", "o"]);
+        let Pattern::Variant { bindings, .. } = &arms[0].pattern else {
+            panic!("expected a variant pattern");
+        };
+        let sub = bindings[0].pattern();
+        assert!(matches!(sub, Pattern::As { .. }));
+        assert!(matches!(sub.peel_as(), Pattern::Record { .. }));
+        assert_eq!(sub.flat_binder().map(|n| n.name.as_str()), Some("o"));
+    }
+
     #[test]
     fn a_refutable_record_let_without_else_names_the_refutable_field() {
         for (body, field) in [

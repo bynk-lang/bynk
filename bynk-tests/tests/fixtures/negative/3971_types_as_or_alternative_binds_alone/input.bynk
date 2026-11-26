@@ -1,0 +1,13 @@
+commons demo
+
+type Event =
+  | Placed(room: Int)
+  | Refunded(room: Int)
+  | Dropped
+
+fn f(e: Event) -> Int {
+  match e {
+    Placed(_) | Refunded(_) as ev => 1
+    Dropped => 0
+  }
+}

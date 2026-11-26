@@ -392,6 +392,8 @@ impl Lowering<'_, '_> {
     fn lower(&self, pat: &Pattern, ty: TyId, prior: bool) -> Option<Pat> {
         match pat {
             Pattern::Wildcard(_) | Pattern::Binding(_) => Some(Pat::Wild),
+            // #3971: `as` binds; it never narrows what its pattern matches.
+            Pattern::As { inner, .. } => self.lower(inner, ty, prior),
             Pattern::Refined { inner, .. } => {
                 if prior {
                     Some(Pat::Never)
