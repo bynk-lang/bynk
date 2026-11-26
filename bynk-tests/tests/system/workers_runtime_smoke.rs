@@ -1594,14 +1594,18 @@ agent Room {
     ()
   }
 
-  on call state() -> Effect[String] {
+  on call snapshot() -> Effect[String] {
     "\(count):\(lastCode)"
   }
 }
 
 service api from http {
+  on GET("/") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+
   on GET("/state") () -> Effect[HttpResult[String]] by v: Visitor {
-    let s <- Room("r1").state()
+    let s <- Room("r1").snapshot()
     Ok(s)
   }
 }

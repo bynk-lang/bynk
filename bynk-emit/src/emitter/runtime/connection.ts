@@ -308,7 +308,7 @@ function echoable(code: number): boolean {
   return Number.isInteger(code) && code >= 1000 && code <= 4999 && !UNSENDABLE_CLOSE_CODES.has(code);
 }
 
-function completeClose(ws: WsClosingSocket, info: WsCloseInfo, reply: "echo" | "error"): void {
+function completeClose(ws: WsClosingSocket, info: WsCloseInfo, reply: "echo" | "error" | "first"): void {
   try {
     if (reply === "error") {
       ws.close(1011, "error");
@@ -330,16 +330,20 @@ export async function webSocketClosing(
   attachment: unknown,
   info: WsCloseInfo,
   run: (info: WsCloseInfo) => Promise<void>,
-  reply: "echo" | "error" = "echo",
+  reply: "echo" | "error" | "first" = "echo",
 ): Promise<void> {
   const state = (attachment ?? {}) as { closed?: boolean };
+  // `first`: the server ends the connection with `info`'s code before `on close` runs. The release `on
+  // close` performs (a held connection's `remove`) closes the socket with no code, which would otherwise
+  // reach the client in place of this one (#3903: `1008 authentication expired`).
+  if (reply === "first") completeClose(ws, info, "echo");
   try {
     if (state.closed !== true) {
       ws.serializeAttachment({ ...state, closed: true });
       await run(info);
     }
   } finally {
-    completeClose(ws, info, reply);
+    if (reply !== "first") completeClose(ws, info, reply);
   }
 }
 

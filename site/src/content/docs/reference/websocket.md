@@ -76,7 +76,7 @@ The identity is minted once, at the upgrade, and kept in the socket's attachment
 `on message` and `on close`, and a connection can live for days: it survives hibernation. So the
 credential's expiry is re-checked at every frame, not just trusted at the upgrade. The upgrade records the Bearer token's `exp`, and a
 frame that arrives after it closes the connection with **`1008`** and the reason `authentication
-expired` **before `on message` runs**; the client reconnects with a fresh token. `on close` then runs
+expired` **before `on message` runs**; the client reconnects with a fresh token. The close is sent first, then `on close` runs
 once, with `CloseInfo { code: 1008, reason: "authentication expired", clean: false }`, so the agent
 releases the connection.
 

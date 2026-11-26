@@ -253,3 +253,22 @@ test("the default clock reads whole seconds, as the HTTP Bearer check does", () 
     Date.now = real;
   }
 });
+
+test("a close-first reply ends the connection with its code before on close runs", async () => {
+  const s = socket();
+  const order: string[] = [];
+  const close = s.ws.close;
+  s.ws.close = (...a: unknown[]) => {
+    order.push("close");
+    close(...a);
+  };
+  await webSocketClosing(
+    s.ws,
+    { connId: "c" },
+    { code: 1008, reason: "authentication expired", clean: false },
+    async () => void order.push("on close"),
+    "first",
+  );
+  assert.deepEqual(order, ["close", "on close"]);
+  assert.deepEqual(s.closes, [[1008, "authentication expired"]], "and it is not replied to again afterwards");
+});

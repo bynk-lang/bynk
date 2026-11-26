@@ -113,7 +113,9 @@ fn run_close_arrow(
 /// #3903: `if (__webSocketAuthExpired(__att)) { await __webSocketClosing(ws, __att, { code: 1008,
 /// reason: "authentication expired", clean: false }, <on close>); return; }`: a frame that arrives after
 /// the connection's credential expired closes it with `1008` and runs `on close` (once), without running
-/// `on message`. Checked per frame, not by a timer, so an idle connection costs nothing.
+/// `on message`. The close goes out first: the release `on close` performs closes a held connection with
+/// no code, which would otherwise reach the client in place of `1008`. Checked per frame, not by a timer,
+/// so an idle connection costs nothing.
 pub(super) fn expiry_check(
     host: &WsOpenHost<'_>,
     close: &Handler,
@@ -131,6 +133,7 @@ pub(super) fn expiry_check(
                 ("clean".to_string(), bool_lit(false)),
             ]),
             run_close_arrow(host, close, types, deps_arg),
+            str_lit("first"),
         ],
     )));
     if_(
