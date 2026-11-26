@@ -5055,6 +5055,7 @@ impl LanguageServer for Backend {
         };
         let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
+        crate::index_queries::narrow_qualified_edits(&mut plan, &analysis.snapshots);
         // #2456: doc links that resolved to the symbol are rewritten with it.
         crate::index_queries::add_doc_link_edits(
             &mut plan,

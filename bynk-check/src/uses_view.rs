@@ -16,9 +16,9 @@
 //! bare (`bynk.uses.ambiguous_name`, [`UnitTable::ambiguous_uses`]); a name a
 //! `uses` clause renames or qualifies cannot clash.
 //!
-//! One declaration is reached by one spelling in a unit, because a type's identity
-//! is its name. Reading it by a second spelling (`Y.Status` beside a selected
-//! `Status`) is `bynk.uses.second_spelling`, never a second type.
+//! A declaration read by several spellings (`Status`, `Y.Status`, `lib.y.Status`) is
+//! filed in the view under each, every one naming the declaration by one key, so the
+//! spellings are one type, one function, one constant (Decision C of #4045).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
@@ -350,8 +350,10 @@ fn build_view(
     ambiguous: &BTreeMap<String, Vec<AmbiguousProvider>>,
 ) -> (UnitTable, Vec<(usize, CompileError)>) {
     let mut errors: Vec<(usize, CompileError)> = Vec::new();
-    // Qualified names read: declared name -> its qualified spelling, checked.
-    let mut qualified: BTreeMap<String, String> = BTreeMap::new();
+    // Qualified names read: declared name -> each qualified spelling written, in
+    // source order. Every spelling of a declaration resolves to the one declaration
+    // (Decision C of #4045): filed under each, all of them naming it by one key.
+    let mut qualified: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let bare_key_of = |name: &str| bare.iter().find(|(_, o)| o == name).map(|(k, _)| k.clone());
     for e in entries {
         for r in &e.qualified {
@@ -359,23 +361,20 @@ fn build_view(
                 errors.push((e.file, unknown_name_at(target, r)));
                 continue;
             }
-            let canonical = qualified_key(target, entries, &r.name);
-            let other_bare = bare_key_of(&r.name).filter(|k| !ambiguous.contains_key(k));
-            if let Some(bare_key) = other_bare {
-                errors.push((e.file, second_spelling(r, &bare_key)));
-            } else if r.text != canonical {
-                errors.push((e.file, second_spelling(r, &canonical)));
-            } else {
-                qualified.insert(r.name.clone(), canonical);
+            let spellings = qualified.entry(r.name.clone()).or_default();
+            if !spellings.contains(&r.text) {
+                spellings.push(r.text.clone());
             }
         }
     }
-    // The key each declared name is filed under: its bare one, else its
-    // qualified one. A type's references to the commons' other types are
-    // renamed to these.
+    // The key each declared name is named by: its bare one, else the first
+    // qualified spelling written, else the unit's canonical qualified one. A type's
+    // references to the commons' other types are renamed to these.
     let key_of = |name: &str| -> String {
         bare_key_of(name)
-            .or_else(|| qualified.get(name).cloned())
+            .filter(|k| !ambiguous.contains_key(k))
+            .or_else(|| qualified.get(name).and_then(|v| v.first().cloned()))
+            .or_else(|| bare_key_of(name))
             .unwrap_or_else(|| qualified_key(target, entries, name))
     };
     let mut wanted: HashSet<String> = bare.iter().map(|(_, o)| o.clone()).collect();
@@ -415,46 +414,52 @@ fn build_view(
         kind: used.kind,
         ..UnitTable::default()
     };
-    let file = |name: &str, key: String, view: &mut UnitTable| {
+    // `file(name, spelling, view)` files declaration `name` under `spelling`, the
+    // declaration itself named by its one key (`key_of`), so two spellings are one
+    // type, one function, one constant.
+    let file = |name: &str, spelling: String, view: &mut UnitTable| {
+        let key = key_of(name);
         if let Some(d) = used.types.get(name) {
             let decl = rename_consumed_decl(d, &key, &renames);
-            view.types.insert(key.clone(), decl);
+            view.types.insert(spelling.clone(), decl);
             if let Some(mt) = used.methods.get(name) {
                 view.methods
-                    .insert(key.clone(), rename_methods(mt, &key, &renames));
+                    .insert(spelling.clone(), rename_methods(mt, &key, &renames));
             }
         }
         if let Some(f) = used.fns.get(name) {
             view.fns.insert(
-                key.clone(),
+                spelling.clone(),
                 rename_fn(f, FnName::Free(rekey(name, &key, f)), &renames),
             );
         }
         if let Some(a) = used.assets.get(name) {
             let mut a = a.clone();
             a.name.name = key.clone();
-            view.assets.insert(key.clone(), a);
+            view.assets.insert(spelling.clone(), a);
         }
         if let Some(e) = used.embeds.get(name) {
             let mut e = e.clone();
             e.name.name = key.clone();
-            view.embeds.insert(key.clone(), e);
+            view.embeds.insert(spelling.clone(), e);
         }
         if let Some(c) = used.consts.get(name) {
             let mut c = c.clone();
             c.name.name = key.clone();
             rename_type_ref(&mut c.ty, &renames);
-            view.consts.insert(key.clone(), c);
+            view.consts.insert(spelling.clone(), c);
         }
-        if key != name {
-            view.use_origin.insert(key, name.to_string());
+        if spelling != name {
+            view.use_origin.insert(spelling, name.to_string());
         }
     };
     for (key, orig) in bare {
         file(orig, key.clone(), &mut view);
     }
-    for (orig, key) in &qualified {
-        file(orig, key.clone(), &mut view);
+    for (orig, spellings) in &qualified {
+        for spelling in spellings {
+            file(orig, spelling.clone(), &mut view);
+        }
     }
     for n in &seen {
         let key = key_of(n);
@@ -479,20 +484,6 @@ fn unknown_name_at(target: &str, r: &QualifiedRef) -> CompileError {
         r.span,
         format!("commons `{target}` declares no public `{}`", r.name),
     )
-}
-
-/// `bynk.uses.second_spelling`: `r` reaches a declaration the unit already
-/// reaches as `keep`.
-fn second_spelling(r: &QualifiedRef, keep: &str) -> CompileError {
-    CompileError::new(
-        "bynk.uses.second_spelling",
-        r.span,
-        format!(
-            "`{}` is the same declaration this unit reaches as `{keep}`",
-            r.text
-        ),
-    )
-    .with_note("a unit reads each declaration by one spelling; use `{keep}`, or change the `uses` clauses so only one reaches it".replace("{keep}", keep))
 }
 
 fn rename_methods(mt: &MethodTable, key: &str, renames: &HashMap<String, String>) -> MethodTable {
@@ -599,7 +590,7 @@ pub fn attach_use_views(
 }
 
 /// Phase 6: attach every unit's `uses` views, reporting what building them found
-/// (`bynk.uses.unknown_name`, `bynk.uses.second_spelling`).
+/// (`bynk.uses.unknown_name`).
 pub fn phase_use_views(
     unit_uses: &HashMap<String, Vec<String>>,
     parsed: &[bynk_project::ParsedFile],
@@ -722,13 +713,30 @@ mod tests {
             .assert_reports("bynk.uses.unknown_name");
     }
 
-    /// A second spelling of one declaration is refused, never a second type.
+    /// Every spelling of one declaration is that declaration (Decision C of #4045):
+    /// one type, so a value of one spelling is a value of the other.
     #[test]
-    fn a_second_spelling_of_one_declaration_is_refused() {
-        app("uses lib.y { Status }\n\nfn f(a: Status, b: lib.y.Status) -> Int {\n  1\n}\n")
-            .assert_reports("bynk.uses.second_spelling");
-        app("uses lib.y as Y\n\nfn f(a: Y.Status, b: lib.y.Status) -> Int {\n  1\n}\n")
-            .assert_reports("bynk.uses.second_spelling");
+    fn every_spelling_of_one_declaration_is_one_type() {
+        app("uses lib.y { Status }\n\nfn f(a: Status, b: lib.y.Status) -> Status {\n  b\n}\n\nfn g(a: lib.y.Status) -> Status {\n  a\n}\n")
+            .assert_clean();
+        app("uses lib.y as Y\n\nfn f(a: Y.Status) -> lib.y.Status {\n  a\n}\n\nfn g(a: lib.y.Status) -> Y.Status {\n  a\n}\n")
+            .assert_clean();
+        app("uses lib.y { Status }\nuses lib.y as Y\n\nfn f(a: Status, b: Y.Status, c: lib.y.Status) -> Bool {\n  a == b && b == c\n}\n")
+            .assert_clean();
+    }
+
+    /// A match over a value reads its variants whichever spelling typed it.
+    #[test]
+    fn a_match_works_across_spellings() {
+        app("uses lib.y { Status }\n\nfn f(s: lib.y.Status) -> Int {\n  match s {\n    On => 1,\n    Off => 0,\n  }\n}\n")
+            .assert_clean();
+    }
+
+    /// A function and a constant reached by two spellings are one declaration.
+    #[test]
+    fn a_function_and_a_constant_read_by_two_spellings_are_each_one() {
+        app("uses lib.y\n\nfn f(s: Status) -> String {\n  lib.y.describe(s)\n}\n\nfn k() -> Int {\n  Limit + lib.y.Limit\n}\n")
+            .assert_clean();
     }
 
     /// A one-segment commons name is no qualifier: `keys.map(…)` is a method call.

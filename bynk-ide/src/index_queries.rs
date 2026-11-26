@@ -1234,6 +1234,33 @@ pub fn validate_new_name(name: &str) -> Result<(), String> {
     }
 }
 
+/// #4352: a site written through a `uses` qualifier (`Y.Status`, `lib.y.Status`) is one span over
+/// the whole qualified name, but the rename replaces the name alone: the edit narrows to the
+/// segment after the last dot, so the qualifier stays.
+pub fn narrow_qualified_edits(
+    plan: &mut RenamePlan,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+) {
+    let old = key_segment(&plan.key.name).to_string();
+    for (path, spans) in plan.edits.iter_mut() {
+        let Some(text) = snapshots.get(path) else {
+            continue;
+        };
+        for s in spans.iter_mut() {
+            let Some(written) = text.get(s.start..s.end) else {
+                continue;
+            };
+            if let Some(dot) = written.rfind('.')
+                && &written[dot + 1..] == old.as_str()
+            {
+                *s = Span::new_in(s.file, s.start + dot + 1, s.end);
+            }
+        }
+        spans.sort();
+        spans.dedup();
+    }
+}
+
 /// Apply one file's edits (spans ascending) to its snapshot text.
 pub fn apply_edits(text: &str, spans: &[Span], new_name: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -1258,10 +1285,12 @@ pub fn remap_site(site: &SiteRef, plan: &RenamePlan) -> SiteRef {
     let delta = plan.new_name.len() as isize - key_segment(&plan.key.name).len() as isize;
     let shift: isize = spans.iter().filter(|s| s.end <= site.span.start).count() as isize * delta;
     let start = (site.span.start as isize + shift) as usize;
+    // An edited span inside the site (the name after a qualifier, #4352) moves its end too.
+    let end_shift: isize = spans.iter().filter(|s| s.end <= site.span.end).count() as isize * delta;
     let end = if spans.binary_search(&site.span).is_ok() {
         start + plan.new_name.len()
     } else {
-        (site.span.end as isize + shift) as usize
+        (site.span.end as isize + end_shift) as usize
     };
     SiteRef {
         path: site.path.clone(),
