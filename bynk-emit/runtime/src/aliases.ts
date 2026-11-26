@@ -8,6 +8,7 @@ import { BynkSecret } from "./secret.ts";
 import { containerClass } from "./container.ts";
 import { AGENT_WIRE_PASS, agentNamespace, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { bearerTrust, oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
+import { apiKeyCredentialOf, apiKeyDigests, apiKeyIdOf, formatApiKey, freshApiKey, loadApiKeyPeppers, newApiKeyHandle, newApiKeyPepper, parseApiKey, parseApiKeyId } from "./apikey.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, renameStoredFields, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
 import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketAuthExpired, webSocketBearerRefusal, webSocketClosing, webSocketAdmit, webSocketErrored, webSocketOriginAllowed, webSocketUpgradeResponse } from "./connection.ts";
@@ -198,6 +199,16 @@ export {
   containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,
   varyAcceptLanguage as __varyAcceptLanguage,
+  apiKeyCredentialOf as __apiKeyCredentialOf,
+  apiKeyDigests as __apiKeyDigests,
+  apiKeyIdOf as __apiKeyIdOf,
+  formatApiKey as __formatApiKey,
+  freshApiKey as __freshApiKey,
+  loadApiKeyPeppers as __loadApiKeyPeppers,
+  newApiKeyHandle as __newApiKeyHandle,
+  newApiKeyPepper as __newApiKeyPepper,
+  parseApiKey as __parseApiKey,
+  parseApiKeyId as __parseApiKeyId,
   currentSession as __currentSession,
   expireSessionCookie as __expireSessionCookie,
   issueSessionCookie as __issueSessionCookie,
