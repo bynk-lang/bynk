@@ -3,6 +3,7 @@
 #[rustfmt::skip]
 pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[
     ("result", include_str!("runtime/result.ts")),
+    ("traceparent", include_str!("runtime/traceparent.ts")),
     ("bytes", include_str!("runtime/bytes.ts")),
     ("decimal", include_str!("runtime/decimal.ts")),
     ("time", include_str!("runtime/time.ts")),
@@ -490,6 +491,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__dmarcVerdictOf", "email"),
     ("__edgeCacheGuard", "http"),
     ("__encodeAgentResult", "agent"),
+    ("__enterTrace", "traceparent"),
     ("__eraseStored", "entries"),
     ("__eventEnvelopeOf", "boundary"),
     ("__expireSessionCookie", "session"),
@@ -628,6 +630,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__withPlainJson", "http"),
     ("__withResponseHeader", "http"),
     ("__withRetryAfter", "http"),
+    ("__withTrace", "traceparent"),
     ("acceptHibernatableConnection", "connection"),
     ("admitQueueBody", "queue_admit"),
     ("admitTrace", "traceparent"),
@@ -693,6 +696,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("encodeHeaderText", "email"),
     ("encodeKeyPart", "entries"),
     ("ensureContainerRunning", "container"),
+    ("enterTrace", "traceparent"),
     ("entriesOf", "store"),
     ("entryKeyOf", "entries"),
     ("eraseStored", "entries"),
@@ -911,6 +915,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("withPlainJson", "http"),
     ("withResponseHeader", "http"),
     ("withRetryAfter", "http"),
+    ("withTrace", "traceparent"),
+    ("withTraceField", "traceparent"),
 ];
 
 /// The exported names that name only a type: an import of one is `import type`.
