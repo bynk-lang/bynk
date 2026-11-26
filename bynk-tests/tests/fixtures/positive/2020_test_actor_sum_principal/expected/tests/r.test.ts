@@ -34,7 +34,7 @@ async function test_a_user_is_answered() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });
+    const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any), claims: __tokenClaims([]) } });
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/r.bynk:13:9", 399, 413, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
     return { pass: true };
   } catch (e) {
@@ -53,7 +53,7 @@ async function test_a_sum_whose_binder_is_not_who() {
     type UserId = __ns_r.UserId;
     const v = await api.http_GET_greet({ ...deps, who: { tag: "Visitor" } });
     if (!(__bynkEq(v, HttpResult.Ok("hello")))) { throw __bynkExpectFailure("tests/r.bynk:18:9", 503, 519, "expect v == Ok(\"hello\")\n  expected: v == Ok(\"hello\")\n  actual:   " + __bynkShow((v)) + " == " + __bynkShow((HttpResult.Ok("hello")))); }
-    const u = await api.http_GET_greet({ ...deps, who: { tag: "User", identity: ("ada" as any) } });
+    const u = await api.http_GET_greet({ ...deps, who: { tag: "User", identity: ("ada" as any), claims: __tokenClaims([]) } });
     if (!(__bynkEq(u, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/r.bynk:20:9", 571, 585, "expect u == Ok(\"ada\")\n  expected: u == Ok(\"ada\")\n  actual:   " + __bynkShow((u)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
     return { pass: true };
   } catch (e) {
@@ -87,7 +87,7 @@ async function test_a_user_is_answered_at_the_integration_tier() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });
+    const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any), claims: __tokenClaims([]) } });
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/r.bynk:30:9", 812, 826, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
     return { pass: true };
   } catch (e) {

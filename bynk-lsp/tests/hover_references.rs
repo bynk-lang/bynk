@@ -1316,6 +1316,30 @@ fn a_renamed_or_qualified_used_name_hovers_as_the_declaration_it_names() {
     );
 }
 
+/// #4352: every spelling of one declaration hovers as that declaration, and a spelling that
+/// is not the declared name says which declaration it is.
+#[test]
+fn every_spelling_of_a_used_declaration_hovers_as_the_one_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4352_uses_every_spelling/src",
+        "app/z.bynk",
+    );
+    // `Status` (selected), `Y.Status` (alias) and `lib.y.Status` (full name).
+    for (anchor, needle, offset_in) in [
+        ("fn viaAlias(", "Status) ->", 0),
+        ("fn viaAlias(", "Y.Status", 2),
+        ("fn viaFullName(", "lib.y.Status", 6),
+    ] {
+        let offset = at(&text, anchor, needle) + offset_in;
+        let h =
+            hover_at(&r, &rel, &text, &root, offset).unwrap_or_else(|| panic!("`{needle}` hovers"));
+        assert!(h.contains("type Status"), "`{needle}` is the one type: {h}");
+    }
+    let offset = at(&text, "fn viaFullName(", "lib.y.Status") + 6;
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("the full-name spelling hovers");
+    assert!(h.contains("`lib.y.Status` is `Status` of `lib.y`"), "{h}");
+}
+
 /// #4181 — a commons names the `bynk` adapter's transparent types with no
 /// `consumes`, and hovers them like any type: the reference resolves to the
 /// adapter's declaration.

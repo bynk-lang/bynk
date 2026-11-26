@@ -66,7 +66,8 @@ fn try_rename(
     at: (&str, usize),
     new_name: &str,
 ) -> Result<HashMap<PathBuf, String>, String> {
-    let plan = index_queries::plan_rename(&pre.index, Path::new(at.0), at.1, new_name)?;
+    let mut plan = index_queries::plan_rename(&pre.index, Path::new(at.0), at.1, new_name)?;
+    index_queries::narrow_qualified_edits(&mut plan, &pre.snapshots);
     let mut overlay = HashMap::new();
     let mut edited_texts = HashMap::new();
     for (rel, text) in &pre.snapshots {
@@ -212,5 +213,33 @@ fn prepare_rename_refuses_locals_and_invalid_names_refuse() {
                 .is_err(),
             "{bad:?} must refuse"
         );
+    }
+}
+
+/// #4352: renaming a declaration a unit reads by several spellings rewrites every one of them,
+/// and the renamed project still analyses clean.
+#[test]
+fn rename_reaches_every_spelling_of_a_used_declaration() {
+    let lib = "commons lib.y\n\ntype Status = | On | Off\n";
+    let app = "commons app.z\n\nuses lib.y\nuses lib.y as Y\n\n\
+               fn a(s: Status) -> Y.Status { s }\n\nfn b(s: Y.Status) -> lib.y.Status { s }\n\n\
+               fn c(s: lib.y.Status) -> Status { s }\n";
+    let root = setup_project(
+        "every-spelling",
+        &[("lib/y.bynk", lib), ("app/z.bynk", app)],
+    );
+    let pre = analyse(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+
+    let at = offset_of(&pre.snapshots, "lib/y.bynk", "Status", 0);
+    let edited = try_rename(&root, &pre, ("lib/y.bynk", at), "State")
+        .expect("renaming through every spelling is clean");
+    let z = &edited[Path::new("app/z.bynk")];
+    assert!(!z.contains("Status"), "every spelling renamed: {z}");
+    for spelling in ["s: State", "Y.State", "lib.y.State"] {
+        assert!(z.contains(spelling), "`{spelling}` in {z}");
     }
 }

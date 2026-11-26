@@ -1,0 +1,6 @@
+{
+  "code": "bynk.uses.second_spelling",
+  "lastRelease": "0.661.1",
+  "replacement": "any spelling of the declaration, which are all one type, function or constant",
+  "why": "Every spelling of a used declaration (`Status`, `Y.Status`, `lib.y.Status`) now resolves to the one declaration (#4352), so reading it by a second spelling is no longer an error."
+}

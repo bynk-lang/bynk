@@ -52,6 +52,34 @@ pub fn is_send_op(op: &str) -> bool {
     TYPED_SENDS.contains(&op) || UNTYPED_SENDS.contains(&op)
 }
 
+/// #3899: the context whose signed consumer of `queue` admits the Bynk context `sender`, so a
+/// producer in `sender` signs what it sends to the queue for that context. `None` when no consumer
+/// of the queue names a `Producer` refinement admitting `sender`: a consumer that takes unsigned
+/// messages, or only declared foreign senders, is sent to as before. The first such consumer by
+/// context name, as [`consumers_of`] picks for the type comparison.
+pub fn signed_consumer_of(
+    queue: &str,
+    sender: &str,
+    tables: &HashMap<String, UnitTable>,
+) -> Option<String> {
+    let mut contexts: Vec<&String> = tables.keys().collect();
+    contexts.sort();
+    contexts.into_iter().find_map(|ctx| {
+        let table = &tables[ctx];
+        let mut services: Vec<_> = table.services.values().collect();
+        services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+        services
+            .iter()
+            .filter(|s| matches!(&s.protocol, ServiceProtocol::Queue { name } if name == queue))
+            .flat_map(|s| s.handlers.iter().map(move |h| (*s, h)))
+            .any(|(s, h)| {
+                crate::actors::queue_admission_for(h, &s.protocol, &table.actors)
+                    .is_some_and(|a| a.admits_context(sender))
+            })
+            .then(|| ctx.clone())
+    })
+}
+
 /// A queue's consumer: where it is and the message type it takes.
 pub struct Consumer<'a> {
     pub context: &'a str,

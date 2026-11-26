@@ -1,0 +1,17 @@
+context shop
+
+type Order = { id: String }
+
+actor Shop = Producer where IsContext(shop)
+
+// A refinement beside the unsigned `Producer`: an unsigned message carries nothing to tell it from
+// one the refinement admitted, so the consumer cannot say which it admitted.
+service fulfil from queue("orders") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by who: Shop | Producer {
+    match who {
+      Shop => Ack
+      Producer => Ack
+    }
+  }
+}

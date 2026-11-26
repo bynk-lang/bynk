@@ -795,6 +795,17 @@ pub(super) fn extra_import_stmts(ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
     for import in &ctx.extra_imports {
         if let ExtraImport::Qualifier { qualifier, from } = import {
             stmts.extend(qualifier_stmts(qualifier, from));
+            // #4352: a Worker's composition root writes a handler's parameter types through
+            // `handlers.`, so a name a qualifier reads is spelled `handlers.__use_lib_y.Status`:
+            // the handlers module exports the qualifier's binding.
+            if ctx.target == BuildTarget::Workers && ctx.unit_kind == UnitKind::Context {
+                stmts.push(bynk_ts::TsStmt::decl(
+                    bynk_ts::TsDecl::ExportNames {
+                        names: vec![qualifier_binding(qualifier)],
+                    },
+                    None,
+                ));
+            }
             continue;
         }
         let decl = match import {
@@ -823,12 +834,16 @@ pub(super) fn extra_import_stmts(ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
 /// module's namespace import, under the alias (`Y`) or, for a commons' full name
 /// (`lib.y`), under the private binding names read through it are printed with
 /// (#4397), so `lib.y.describe(x)` is `__use_lib_y.describe(x)`.
-fn qualifier_stmts(qualifier: &str, from: &str) -> Vec<bynk_ts::TsStmt> {
-    let alias = if qualifier.contains('.') {
+fn qualifier_binding(qualifier: &str) -> String {
+    if qualifier.contains('.') {
         bynk_check::emitted_names::use_qualifier_binding(qualifier)
     } else {
         qualifier.to_string()
-    };
+    }
+}
+
+fn qualifier_stmts(qualifier: &str, from: &str) -> Vec<bynk_ts::TsStmt> {
+    let alias = qualifier_binding(qualifier);
     vec![bynk_ts::TsStmt::decl(
         bynk_ts::TsDecl::ImportNamespace {
             type_only: false,

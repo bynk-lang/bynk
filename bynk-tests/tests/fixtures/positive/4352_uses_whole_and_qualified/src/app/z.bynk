@@ -1,0 +1,35 @@
+commons app.z
+
+// #4352: `uses lib.y` brings every name in bare, and the unit also writes them through the full
+// name and an alias. Before, the second spelling was refused because a bare one existed; now the
+// spellings are one declaration, built (a variant, a record literal, a refined type's `of`) and
+// read through any of them.
+uses lib.y
+uses lib.y as Y
+
+fn on() -> lib.y.Status { On }
+
+fn off() -> Y.Status { Off }
+
+fn which(s: Status) -> Int {
+  match s {
+    On => 1,
+    Off => 0,
+  }
+}
+
+fn origin() -> lib.y.Point { lib.y.Point { a: 1 } }
+
+fn origin2() -> Y.Point { Y.Point { a: 2 } }
+
+fn origin3() -> Point { Point { a: 3 } }
+
+fn level(n: Int) -> Result[lib.y.Level, ValidationError] { lib.y.Level.of(n) }
+
+fn level2(n: Int) -> Result[Y.Level, ValidationError] { Y.Level.of(n) }
+
+fn square(side: Int) -> lib.y.Shape { Square(side) }
+
+fn describeAll(s: Y.Status, t: lib.y.Status, u: Status) -> String {
+  "\(Y.describe(s))\(lib.y.describe(t))\(describe(u))"
+}

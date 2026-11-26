@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "place": "c3df44adc9024a54"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"o\",Rec(\"Order\",F(\"id\",B(\"String\")))),Ret(U()))"
+  }
+}

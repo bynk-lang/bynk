@@ -1,0 +1,16 @@
+context shop.orders
+
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+
+type Order = { id: String }
+
+// #3899: a Bynk producer. The compiler sees that `shop.fulfil` admits this context by a `Producer`
+// refinement, so the send is signed under the edge key between the two contexts (`bynk deploy` sets
+// it, as it does for a call) and the consumer can tell which context sent it.
+service place {
+  on call(o: Order) -> Effect[()] by Caller given OrderEvents {
+    OrderEvents.sendValue(o)
+  }
+}

@@ -1,0 +1,6 @@
+[project]
+name = "4344-claims-binder-on-cookie-arm"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
