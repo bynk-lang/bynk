@@ -154,6 +154,16 @@ export function __serialise_Mode(value: Mode): __JsonValue {
 }
 
 export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Result<Mode, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Fast":
+        return Ok({ tag: "Fast" } as Mode);
+      case "Careful":
+        return Ok({ tag: "Careful" } as Mode);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -481,6 +491,9 @@ export function __serialise_Map_String_String(value: ReadonlyMap<string, string>
 }
 
 export function __deserialise_Map_String_String(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, string>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_String(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

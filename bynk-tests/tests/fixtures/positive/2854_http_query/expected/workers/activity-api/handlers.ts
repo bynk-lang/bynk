@@ -196,6 +196,16 @@ export function __serialise_Kind(value: Kind): __JsonValue {
 }
 
 export function __deserialise_Kind(json: __JsonValue, path: string = "$"): Result<Kind, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Push":
+        return Ok({ tag: "Push" } as Kind);
+      case "Issue":
+        return Ok({ tag: "Issue" } as Kind);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

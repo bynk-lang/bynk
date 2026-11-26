@@ -18,6 +18,7 @@ use crate::ts_build::{
 };
 
 use super::field::{emit_field_deserialise_wire, serialise_field_expr_wire};
+use super::generics::plain_json_test;
 use super::refined::emit_field_refinement_checks;
 use super::support::{
     DepthCodecs, boundary_result, case_, default_case, depth_for, depth_guard_decode,
@@ -377,6 +378,8 @@ pub(super) fn emit_sum_codec(
     // #2656: a sum on a type cycle threads the nesting depth.
     let depth = depth_for(codecs, fn_suffix, true);
     let tag = sum.memory_discriminant;
+    // #3974: a sum with no payload variant also reads as a bare string.
+    let enum_like = !sum.variants.is_empty() && sum.variants.iter().all(|v| v.payload.is_empty());
 
     let serialise_cases: Vec<TsSwitchCase> = sum
         .variants
@@ -384,14 +387,18 @@ pub(super) fn emit_sum_codec(
         .map(|variant| {
             let vname = &variant.name;
             if variant.payload.is_empty() {
-                case_(
-                    str_lit(vname.clone()),
-                    vec![ret(TsExpr::object(vec![(
-                        kind.to_string(),
-                        str_lit(vname.clone()),
-                    )]))],
-                    false,
-                )
+                let tagged = TsExpr::object(vec![(kind.to_string(), str_lit(vname.clone()))]);
+                // #3974: in plain mode a payload-less sum is its variant's name.
+                let written = if enum_like && ru.plain_json() {
+                    TsExpr::Conditional {
+                        test: Box::new(plain_json_test()),
+                        consequent: Box::new(str_lit(vname.clone())),
+                        alternate: Box::new(tagged),
+                    }
+                } else {
+                    tagged
+                };
+                case_(str_lit(vname.clone()), vec![ret(written)], false)
             } else {
                 let mut entries = vec![(kind.to_string(), str_lit(vname.clone()))];
                 for field in &variant.payload {
@@ -442,6 +449,9 @@ pub(super) fn emit_sum_codec(
     // as a second, file-local copy rather than shared (this file's own
     // "own builder set" convention, `index_signature_record_ty`'s own doc).
     let mut deserialise_body: Vec<TsStmt> = depth.iter().map(|_| depth_guard_decode()).collect();
+    if enum_like {
+        deserialise_body.push(bare_string_variant(sum, ts_type, tag));
+    }
     deserialise_body.extend([
         if_(
             or_expr(
@@ -533,6 +543,37 @@ pub(super) fn emit_sum_codec(
     }));
 
     vec![serialise, deserialise]
+}
+
+/// #3974: `if (typeof json === "string") { switch (json) { case "A": return Ok({ tag: "A" }); … } }`,
+/// the bare-string form of a payload-less sum, tried before the object form. A string that
+/// names no variant is the same refusal the object form gives an unknown `kind`.
+fn bare_string_variant(sum: &WireSum, ts_type: &TsType, tag: &str) -> TsStmt {
+    let mut cases: Vec<TsSwitchCase> = sum
+        .variants
+        .iter()
+        .map(|variant| {
+            case_(
+                str_lit(variant.name.clone()),
+                vec![ret(call(
+                    ident("Ok"),
+                    vec![as_expr(
+                        TsExpr::object(vec![(tag.to_string(), str_lit(variant.name.clone()))]),
+                        ts_type.clone(),
+                    )],
+                ))],
+                false,
+            )
+        })
+        .collect();
+    cases.push(default_case(vec![ret(err_structural_mismatch_top(
+        "sum variant kind",
+        ident("json"),
+    ))]));
+    if_(
+        strict_eq(typeof_expr(ident("json")), str_lit("string")),
+        block(vec![switch_stmt(ident("json"), cases)]),
+    )
 }
 
 #[cfg(test)]

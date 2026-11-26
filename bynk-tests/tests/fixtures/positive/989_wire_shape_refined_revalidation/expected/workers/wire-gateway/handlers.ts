@@ -52,6 +52,14 @@ export function __serialise_GatewayError(value: GatewayError): __JsonValue {
 }
 
 export function __deserialise_GatewayError(json: __JsonValue, path: string = "$"): Result<GatewayError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Rejected":
+        return Ok({ tag: "Rejected" } as GatewayError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
@@ -124,6 +132,14 @@ export function __serialise_LoginError(value: wire_auth.LoginError): __JsonValue
 }
 
 export function __deserialise_LoginError(json: __JsonValue, path: string = "$"): Result<wire_auth.LoginError, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Invalid":
+        return Ok({ tag: "Invalid" } as wire_auth.LoginError);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

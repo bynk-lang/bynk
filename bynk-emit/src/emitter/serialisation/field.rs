@@ -150,17 +150,37 @@ pub(super) fn emit_field_deserialise_wire(
             ]
         }
         WireRef::Base {
-            json: kind, guards, ..
+            json: kind,
+            guards,
+            base,
+            ..
         } => {
             let typeof_str = json_kind_ts(*kind);
-            let mut stmts = vec![if_(
+            // #3974: an `Instant` also reads as an RFC 3339 string, tried after the
+            // tagged epoch-millisecond form: the helper passes a number (or anything it
+            // cannot read) through, so the guards below see exactly what they did.
+            let mut stmts = Vec::new();
+            let instant_json;
+            let json = if *base == BaseType::Instant {
+                ru.note_time("__bynkInstantFromWire");
+                let tmp = format!("__{name}$ms");
+                stmts.push(const_(
+                    tmp.clone(),
+                    call(ident("__bynkInstantFromWire"), vec![json.clone()]),
+                ));
+                instant_json = ident(tmp);
+                &instant_json
+            } else {
+                json
+            };
+            stmts.push(if_(
                 strict_neq(typeof_expr(json.clone()), str_lit(typeof_str)),
                 block(vec![ret(err_structural_mismatch(
                     path,
                     typeof_str,
                     typeof_expr(json.clone()),
                 ))]),
-            )];
+            ));
             // v0.22b: bare `Int` fields validate integrality (ADR 0049) —
             // with `Float` in the language there is no excuse for a
             // fractional `Int` from the wire. v0.90 (ADR 0114 D7): an `Instant`
@@ -422,11 +442,25 @@ pub(super) fn serialise_field_expr_wire(
         WireRef::Base {
             base: b @ (BaseType::Duration | BaseType::Instant),
             ..
-        } => guarded_number(
-            value,
-            "isSafeInteger",
-            &format!("{} outside the safe-integer range at boundary", b.name()),
-        ),
+        } => {
+            let ms = guarded_number(
+                value,
+                "isSafeInteger",
+                &format!("{} outside the safe-integer range at boundary", b.name()),
+            );
+            // #3974: in plain mode an `Instant` is an RFC 3339 string in UTC with
+            // exactly three fraction digits; `Duration` stays milliseconds.
+            if *b == BaseType::Instant && ru.plain_json() {
+                ru.note_time("__bynkInstantToIso");
+                TsExpr::Conditional {
+                    test: Box::new(super::generics::plain_json_test()),
+                    consequent: Box::new(call(ident("__bynkInstantToIso"), vec![value.clone()])),
+                    alternate: Box::new(ms),
+                }
+            } else {
+                ms
+            }
+        }
         // v0.110 (ADR 0142 D5): a `Bytes` is base64-encoded on the wire — the
         // one base type whose serialise is an encode, not a bare cast.
         WireRef::Bytes => {
