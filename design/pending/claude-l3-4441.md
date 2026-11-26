@@ -2,6 +2,7 @@
 level: minor
 probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: A `Producer` refinement that admits a context declaring no `Queue` for the queue is the compile error `bynk.queue.producer_never_sends`
+breaking: a `Producer` refinement that names a context declaring no `Queue @name(...)` for the queue is now the error `bynk.queue.producer_never_sends`; declare the `Queue` in that context or remove the name from the refinement.
 ---
 
 ## ADR: producer-refinement-names-producing-contexts
