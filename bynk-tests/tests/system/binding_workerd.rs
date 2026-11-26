@@ -843,9 +843,29 @@ fn workers_ratelimit_counts_on_workerd() {
 
 const CRYPTO_SOURCE: &str = "context cr.smoke
 
-consumes bynk.crypto { Crypto }
+consumes bynk.crypto { Crypto, CryptoError }
+
+fn show(r: Result[Bytes, CryptoError]) -> String {
+\tmatch r {
+\t\tOk(b) => b.decodeUtf8().getOrElse(\"not text\")
+\t\tErr(_) => \"open failed\"
+\t}
+}
 
 service api from http {
+\ton GET(\"/seal/:text\") (text: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet imported <- Crypto.importCipherKey(Bytes.fromHex(\"0000000000000000000000000000000000000000000000000000000000000001\").getOrElse(Bytes.empty()))
+\t\tmatch imported {
+\t\t\tOk(key) => {
+\t\t\t\tlet sealed <- Crypto.seal(key, Bytes.fromUtf8(text), Bytes.fromUtf8(\"ctx\"))
+\t\t\t\tlet back <- Crypto.open(key, sealed, Bytes.fromUtf8(\"ctx\"))
+\t\t\t\tlet wrong <- Crypto.open(key, sealed, Bytes.fromUtf8(\"other\"))
+\t\t\t\tOk(\"\\(show(back)) | \\(show(wrong)) | \\(sealed.length())\")
+\t\t\t}
+\t\t\tErr(_) => Ok(\"bad key\")
+\t\t}
+\t}
+
 \ton GET(\"/roundtrip/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
 \t\tlet stored <- Crypto.hashPassword(pw)
 \t\tlet ok <- Crypto.verifyPassword(pw, stored)
@@ -869,8 +889,8 @@ service api from http {
 ";
 
 #[test]
-fn crypto_password_hashing_and_hkdf_run_on_workerd() {
-    // #4118: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
+fn crypto_password_hashing_hkdf_and_seal_run_on_workerd() {
+    // #4118, #4117: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
     // Workers count (100,000), a stored hash above it (refused by the binding's own cap, `false`), and the
     // HKDF answer `node:crypto` gives for the same input. What this cannot see is the limit itself:
     // `wrangler dev` runs the open-source workerd, which accepts 600,000, while deployed Workers refuse
@@ -886,6 +906,8 @@ fn crypto_password_hashing_and_hkdf_run_on_workerd() {
             "\"c1a70c6be6f6e6bf655da130593cef039aa373a2c7b62622c0bbc3c62fe6f146\"",
         ),
         ("/high/passwordPASSWORDpassword", 200, "\"false false\""),
+        // seal then open with the same scope, then with another; 1 + 12 + len + 16 bytes sealed.
+        ("/seal/hello", 200, "\"hello | open failed | 34\""),
     ];
     let Some((failures, log)) = run_smoke("cr-smoke", "cr", CRYPTO_SOURCE, "/derive", &|port| {
         check_steps(port, steps)

@@ -699,6 +699,20 @@ refusal or warning, never as a pass.
 | `bynk.deploy.agent_move_refused` | `refusals` | `reason` (`not_accepted`, `renamed_in_place` or `old_script_stays`), `context`, `agents`, `from` and `to` (the scripts). `override` is `--accept-fresh-agent <context>` for `not_accepted`; the other two cannot be accepted. |
 | `bynk.deploy.accept_fresh_agent_unused` | `refusals` | `name`: an `--accept-fresh-agent` name that matches no move of this run. |
 | `bynk.deploy.agent_starts_fresh` | `warnings` | `context`, `agents`, `from`, `to`: an accepted move, whose old script keeps the data. |
+| `bynk.deploy.env_passthrough_conflict` | `refusals` | `environment`, `flag`: a second `--env` or `--environment` after `--`. |
+| `bynk.deploy.project_undeployable` | `refusals` | none: the `[deploy.workers]` table does not read, or the build profile checks contracts. |
+| `bynk.deploy.preflight_failed` | `refusals` | none: the environment is not ready for a deploy; the message is the doctor's report. |
+| `bynk.deploy.context_not_found` | `refusals` | `requested`: the `--context` or `--worker` name no build produced. |
+| `bynk.deploy.no_workers_built` | `refusals` | none: the build produced no Workers (the project defines no contexts). |
+| `bynk.deploy.workers_unreadable` | `refusals` | none: a built Worker's declarations could not be read. |
+| `bynk.deploy.email_claim_refused` | `refusals` | `environment`: `[deploy.email]` could not be applied. |
+| `bynk.deploy.secrets_source_unreadable` | `refusals` | none: `--secrets-file` did not read. |
+| `bynk.deploy.ledger_unreadable` | `refusals` | `path`: `bynk.deploy.lock` did not read. |
+| `bynk.deploy.dependency_not_deployed` | `refusals` | `worker`, `dependencies`: a `--context` Worker binds to Workers never deployed. |
+| `bynk.deploy.contracts_manifest_unreadable` | `refusals` | `worker`: its contracts manifest did not read. |
+| `bynk.deploy.contracts_lock_unwritable` | `refusals` | `path`: the older contracts `--accept-compatible-skew` records could not be written. |
+| `bynk.deploy.rebuild_failed` | `refusals` | `path`: the rebuild after recording them failed. |
+| `bynk.deploy.upload_order_cycle` | `refusals` | `cycle`: the Workers that bind to each other in a cycle. |
 
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:
 
@@ -750,6 +764,17 @@ A KV namespace of the same title is a warning: Cloudflare refuses a second
 namespace of one title, so the deploy cannot create it. The token needs read
 access to the kinds listed. Without the variables, the plan stays the ledger's
 and a note says so. A listing that fails is a warning, never a failure.
+
+**Credentials for account resources.** The push runs through wrangler, so
+`wrangler login` is enough for it. Creating or deleting a KV namespace goes
+through Cloudflare's API, as Hyperdrive and the linked kinds already do. That
+needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers
+KV Storage: Edit". When a step needs them, `deploy` checks for both after the plan
+and before the confirmation, and refuses, with nothing created, naming the
+missing variable and the permission. A run that needs nothing asks nothing:
+a redeploy whose namespaces are all recorded works with `wrangler login` alone.
+In that case the check that a recorded namespace still exists on the account is
+skipped, and the plan notes it.
 
 Each context's Cloudflare ids and its deployed state are recorded in the
 committed, secret-free `bynk.deploy.lock` at the project root, written as each
@@ -2401,3 +2426,9 @@ bynk doctor [PATH] [--only CAPABILITY] [--strict] [--format human|short|json]
 **Exit code** — Bare `bynk doctor` is informational: it exits `0` unless the
 compiler itself is unusable. `--only <capability>` gates on that capability; `--strict`
 fails on any warning.
+
+In a project that declares account resources (KV, R2, D1, queues, Vectorize,
+Hyperdrive or a linked kind), the `deploy` block carries a `cloudflare api` row:
+whether `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set. It never reads
+their values. It is a warning at most, never a failure, so neither `bynk dev` nor
+`--only deploy` stops on it.

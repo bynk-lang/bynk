@@ -1,0 +1,13 @@
+commons demo.outer
+
+uses demo.holder
+
+---
+#3842: a record whose own default is another unit's record, which holds a `Tok` default. A unit that
+uses this one reaches `Tok` only through that default, never by name.
+---
+type Outer = { inner: Inner = Inner { } }
+
+fn innerIsN(o: Outer) -> Bool {
+  isN(o.inner.tok)
+}

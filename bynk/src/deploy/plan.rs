@@ -34,12 +34,14 @@ pub(super) use model::print_plan;
 pub(crate) use model::{
     ContextPlan, GroupNames, Plan, requires_interactive_confirmation, unrecordable_in_ci,
 };
-pub(crate) use report::{Entry, refused_report};
+pub(crate) use report::{Entry, Stop, code, refused_report};
 // What `deploy`'s own tests and the sibling test modules reach through `use plan::*`.
 #[cfg(test)]
 pub(crate) use keys::unknown_edge_key_notice;
 #[cfg(test)]
 pub(crate) use messages::foreign_binding_refusal;
+#[cfg(test)]
+pub(crate) use model::kv_unchecked_note;
 #[cfg(test)]
 pub(crate) use model::{derive_plan, plan_report};
 pub use run::{DeployFormat, DeployOptions, run};

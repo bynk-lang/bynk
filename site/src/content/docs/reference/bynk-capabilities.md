@@ -599,7 +599,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[Secret]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
@@ -1404,6 +1404,55 @@ caller can reach. In a test every `Ai` operation faults until it is stubbed
 (`stub Ai.run(_, _) returns …`), so a test never reaches Workers AI, and a
 `system` test's Workers behave the same. `Ai` is experimental: list
 `"bynk.cloudflare.Ai"` under `[unstable] allow`.
+
+#### Typed output: `Ai.generateValue[T]`
+
+`Ai.generateValue[T](model, request)` asks the model for structured data and gives it back as a
+`T`: it returns `Effect[Result[T, AiError]]`. The compiler writes `T`'s JSON Schema into the call,
+the binding asks Workers AI for schema-constrained JSON (`response_format`), and the reply is
+decoded and checked as `T` by the ordinary decoder, refinements included.
+
+```bynk,fragment
+type Severity = enum { Low, Medium, High }
+type Triage = { severity: Severity, summary: String where MaxLength(200), tags: List[String] }
+```
+
+```bynk,fragment
+let t <- Ai.generateValue[Triage]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", GenerateRequest {
+	messages: [ChatMessage { role: ChatRole.System, content: "Classify the ticket." },
+	           ChatMessage { role: ChatRole.User, content: body }],
+})
+match t {
+	Ok(triage) => Ok(triage.summary),
+	Err(BadReply(why)) => ServerError(why),   // did not decode as Triage; `why` is the path, never the text
+	Err(_) => ServerError("the model is unavailable"),
+}
+```
+
+The schema is the shape a plain-JSON route writes: an `enum` is a string, an `Option` is the value
+or `null`, a `String`-keyed `Map` is an object, an `Instant` is RFC 3339 text and a sum with
+payloads is an object with `"kind"` beside the payload fields. `T` may be a record, an enum, a sum,
+a `List`, an `Option` or a refined base type. A model's JSON mode answers with an object, so a `T`
+that is not a record is asked for as the one field of one, `{"value": …}`, and the call unwraps it:
+the model is shown `{"value": "High"}` for a `Severity`, and the handler gets `High`. A type with no
+schema (one that contains itself, a generic type, a `Map` with a key that is not a `String`) is
+`bynk.types.ai_value_shape`, naming the field, and so is one whose schema, with every named type
+written out in place, is larger than 32 KiB (the schema is sent on every call).
+
+A reply that is not JSON, or that does not decode as `T`, is `Err(BadReply(message))`, never a
+fault: models do not always follow a schema. The message names the kind of failure and the path
+(`the reply is not a Triage (StructuralMismatch at $.severity)`) and never the model's text, which
+may echo what the user wrote. A model that does not take `response_format` is refused by the
+platform and that refusal is the `Err` as it comes, usually `InvalidInput` with the platform's
+message: Bynk does not fall back to asking in prose. Which models take a schema is Cloudflare's to
+say, and changes; see its [JSON mode](https://developers.cloudflare.com/workers-ai/features/json-mode/)
+page. The reply is still untrusted input: it is checked as `T`, not trusted because it matched.
+
+In a test, `generateValue` reads the text of a stubbed `generate`: `stub Ai.generate(_, _) returns
+Ok(Generation { text: "{…}", usage: None })` is the JSON the model answered, and the case runs the
+same decode production does. Unstubbed, it faults, like every `Ai` operation. `generateValue` is
+experimental, like `Ai`: `"bynk.cloudflare.Ai"` under `[unstable] allow` covers it. In the editor,
+hovering the call shows the schema it sends.
 
 ### Images: `Images`
 
@@ -2694,6 +2743,10 @@ No third-party crypto runs and nothing is polyfilled.
 | `importSigningKeyFromSecret(algorithm: Signature, secret: Secret)` | `Effect[Result[SigningKey, CryptoError]]`. The key is the base64 PKCS#8 a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. A secret that is not base64, or not a key for the algorithm, is `InvalidKey`, and the failure names none of its text. |
 | `importVerifyKey(algorithm: Signature, key: Bytes)` | `Effect[Result[VerifyKey, CryptoError]]` — SPKI, or the 32 raw bytes of an Ed25519 key. |
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
+| `importCipherKey(key: Bytes)` | `Effect[Result[CipherKey, CryptoError]]` — exactly 32 bytes, for AES-256-GCM; any other length is `InvalidKey`. |
+| `importCipherKeyFromSecret(secret: Secret)` | `Effect[Result[CipherKey, CryptoError]]`. The key is the base64 of 32 bytes a [`Secret`](#the-secret-type) holds, so the text is never a `String` in the program. |
+| `seal(key: CipherKey, plaintext: Bytes, scope: Bytes)` | `Effect[Bytes]` — AES-256-GCM with a fresh random nonce each call. The format and failure rule are described below. |
+| `open(key: CipherKey, sealed: Bytes, scope: Bytes)` | `Effect[Result[Bytes, CryptoError]]`; `Err(OpenFailed)` for any failure. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
 | `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
 | `deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int)` | `Effect[Bytes]` — HKDF-SHA-256 ([RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)). `length` is from 1 to 8160 bytes and `secret` must not be empty; either outside that is a fault. |
@@ -2704,8 +2757,8 @@ No third-party crypto runs and nothing is polyfilled.
 `Digest` is `Sha256 | Sha384 | Sha512`. `Signature` is `Ed25519 |
 EcdsaP256Sha256 | RsaPkcs1Sha256`: ECDSA over P-256 with SHA-256, signing the raw
 `r || s` form, and RSASSA-PKCS1-v1_5 with SHA-256. The set is what all three
-platforms support. `CryptoError` is `InvalidKey(reason)` or
-`UnsupportedAlgorithm(name)`, and carries no key material. All three are
+platforms support. `CryptoError` is `InvalidKey(reason)`,
+`UnsupportedAlgorithm(name)` or `OpenFailed`, and carries no key material. All three are
 [extensible](#extensible-enums), so a `match` over them needs a wildcard.
 
 **Effects, not pure functions.** `crypto.subtle` is asynchronous on every
@@ -2713,13 +2766,41 @@ platform, so every operation is an `Effect` and there is no hashing in pure
 functions, refinements or invariants. Encodings (`toHex`, `toBase64`,
 `toBase64Url` and their decoders) stay pure on `Bytes`.
 
-**Keys are handles.** `SigningKey` and `VerifyKey` are opaque: the platform holds
+**Keys are handles.** `SigningKey`, `VerifyKey` and `CipherKey` are opaque: the platform holds
 the key non-extractable, so its bytes can't be read back. Like a `Stream`, a key
 lives for the call that imported it. It can't be stored, serialised, logged or
 sent, so using one in a `store`, a record or event field, a handler parameter or
 result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
 [`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify
-(`importSigningKeyFromSecret` takes the secret itself).
+(`importSigningKeyFromSecret` and `importCipherKeyFromSecret` take the secret itself).
+
+**Encryption.** `seal` and `open` are AES-256-GCM, shaped so the usual mistakes
+cannot be written. There is no way to give a nonce: every `seal` draws a fresh
+random 96-bit one. `scope` is GCM's associated data and is required, so a value
+is bound to where it belongs (the record id, the field name) and cannot be moved
+to another row and still open; an empty `Bytes` is allowed but must be written.
+What `seal` returns is `version (1 byte) ‖ nonce (12) ‖ ciphertext ‖ tag (16)`,
+with version `1`, so a later algorithm can be added and every value already
+stored still opens; `open` refuses a version it does not know. `open` has one
+failure, `Err(OpenFailed)`, for a wrong key, a wrong `scope`, a changed or
+truncated value and an unknown version alike, so which one it was is not
+revealed.
+
+```bynk,fragment
+let imported <- Crypto.importCipherKey(rawKey)
+match imported {
+	Ok(key) => {
+		let sealed <- Crypto.seal(key, Bytes.fromUtf8(email), Bytes.fromUtf8(customerId))
+		Crypto.open(key, sealed, Bytes.fromUtf8(customerId))
+	},
+	Err(e) => Effect.pure(Err(e)),
+}
+```
+
+A random 96-bit nonce is safe for about 2^32 messages under one key. Rotate keys
+well before that, and give each purpose its own key with `deriveKey`. Key
+management is still yours: keep the key in [`Secrets`](#the-secret-type) and
+import it where it is used.
 
 **Key derivation.** One secret should not be reused for HMAC, for encryption and
 for each tenant's key. `deriveKey` takes the secret, a `salt` (which may be

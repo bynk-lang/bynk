@@ -1,17 +1,20 @@
 //! The account operations, one method each (#4043, Decision A), and [`Op`], which names a call
 //! and renders the arguments wrangler is run with (Decision C).
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::error::{Exit, OpKind, WranglerError};
+use super::error::{CloudflareError, Exit, OpKind, WranglerError};
 
-/// Every account operation the resource kinds drive. Today each is a wrangler call
-/// ([`super::Wrangler`]); 1D.4 moves them to REST one kind at a time, behind these same methods.
+/// Every account operation the resource kinds drive. [`super::Account`] routes each one: a
+/// moved kind's to Cloudflare's REST API, the rest to wrangler ([`super::Wrangler`]). 1D.4
+/// moves them one kind at a time, behind these same methods (KV first, 1D.4a).
 ///
-/// Each method returns what its caller reads: an id, `()`, or the JSON wrangler printed, which
-/// the caller parses as before. The policy stays with the caller: "already exists means adopt"
-/// and "already gone means success" are decisions a kind makes over the typed error
-/// ([`WranglerError::already_exists`], [`WranglerError::already_gone`]), not the transport's.
+/// Each method returns what its caller reads: an id, `()`, typed ids, or the JSON wrangler
+/// printed, which the caller parses as before. The policy stays with the caller: "already exists
+/// means adopt" and "already gone means success" are decisions a kind makes over the typed error
+/// ([`WranglerError::already_exists`], [`WranglerError::already_gone`], or a REST error's code),
+/// not the transport's.
 pub(crate) trait CloudflareApi {
     /// `queues create <name>`.
     fn queue_create(&self, name: &str) -> Result<(), WranglerError>;
@@ -19,12 +22,12 @@ pub(crate) trait CloudflareApi {
     fn queue_info(&self, name: &str) -> Result<(), WranglerError>;
     /// `queues delete <name>`.
     fn queue_delete(&self, name: &str) -> Result<(), WranglerError>;
-    /// `kv namespace create <title>`: the new namespace's id.
-    fn kv_create(&self, title: &str) -> Result<String, WranglerError>;
-    /// `kv namespace list`: its JSON array.
-    fn kv_list(&self) -> Result<String, WranglerError>;
-    /// `kv namespace delete --namespace-id <id> --skip-confirmation`.
-    fn kv_delete(&self, id: &str) -> Result<(), WranglerError>;
+    /// Create a KV namespace titled `title` (REST, `POST /storage/kv/namespaces`): its id.
+    fn kv_create(&self, title: &str) -> Result<String, CloudflareError>;
+    /// Every KV namespace id on the account, every page read (REST).
+    fn kv_list(&self) -> Result<BTreeSet<String>, CloudflareError>;
+    /// Delete the KV namespace `id` (REST, `DELETE /storage/kv/namespaces/{id}`).
+    fn kv_delete(&self, id: &str) -> Result<(), CloudflareError>;
     /// `d1 migrations apply <binding> --remote [--env <environment>]`, from `worker_dir`, with
     /// stdin closed so wrangler takes its "yes" fallback.
     fn d1_migrations_apply(
@@ -152,7 +155,8 @@ pub(crate) enum VectorizeOp<'a> {
 }
 
 /// One account call, as its wrangler arguments: what the adapter runs and what the recording fake
-/// logs, so a test's call log reads as the stand-ins' `$*` always did.
+/// logs, so a test's call log reads as the stand-ins' `$*` always did. A call that has moved to
+/// REST (KV, 1D.4a) keeps its line for the log, which logs operations, not transports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Op<'a> {
     QueueCreate {
@@ -164,10 +168,14 @@ pub(crate) enum Op<'a> {
     QueueDelete {
         name: &'a str,
     },
+    // Over REST since 1D.4a: logged by the fake, never run.
+    #[cfg(test)]
     KvCreate {
         title: &'a str,
     },
+    #[cfg(test)]
     KvList,
+    #[cfg(test)]
     KvDelete {
         id: &'a str,
     },
@@ -240,12 +248,12 @@ impl Op<'_> {
             Op::QueueCreate { name } => words(&["queues", "create", name]),
             Op::QueueInfo { name } => words(&["queues", "info", name]),
             Op::QueueDelete { name } => words(&["queues", "delete", name]),
-            // No `--json`: `kv namespace create` has no such flag (`Unknown argument: json`,
-            // #2428). The id is read from the binding snippet it prints instead.
+            // KV's lines are the wrangler calls it made before 1D.4a, kept for the fake's log.
+            #[cfg(test)]
             Op::KvCreate { title } => words(&["kv", "namespace", "create", title]),
-            // No `--format json` either: the default output is already a JSON array.
+            #[cfg(test)]
             Op::KvList => words(&["kv", "namespace", "list"]),
-            // `--skip-confirmation`: `--prune` already confirmed the whole batch once.
+            #[cfg(test)]
             Op::KvDelete { id } => words(&[
                 "kv",
                 "namespace",
@@ -369,14 +377,15 @@ impl Op<'_> {
         }
     }
 
-    pub(crate) fn kind(&self) -> OpKind {
-        match self {
+    /// Which wrangler operation this is; `None` for a call that runs over REST.
+    pub(crate) fn kind(&self) -> Option<OpKind> {
+        Some(match self {
             Op::QueueCreate { .. } => OpKind::QueueCreate,
             Op::QueueInfo { .. } => OpKind::QueueInfo,
             Op::QueueDelete { .. } => OpKind::QueueDelete,
-            Op::KvCreate { .. } => OpKind::KvCreate,
-            Op::KvList => OpKind::KvList,
-            Op::KvDelete { .. } => OpKind::KvDelete,
+            // Over REST (1D.4a): never a wrangler call, so never a wrangler error.
+            #[cfg(test)]
+            Op::KvCreate { .. } | Op::KvList | Op::KvDelete { .. } => return None,
             Op::D1MigrationsApply { .. } => OpKind::D1MigrationsApply,
             Op::D1Create { .. } => OpKind::D1Create,
             Op::D1List => OpKind::D1List,
@@ -401,7 +410,7 @@ impl Op<'_> {
             Op::NamedSecret { .. } => OpKind::NamedSecret,
             Op::D1MigrationsApplyLocal { .. } => OpKind::D1MigrationsApplyLocal,
             Op::SecretsStoreListLocal { .. } => OpKind::SecretsStoreListLocal,
-        }
+        })
     }
 
     /// The call as one log line: what a stand-in's `echo "$*"` printed.

@@ -1,0 +1,10 @@
+suite demo.top {
+  // #3842: a record built in a test body whose opaque default is reached through another record's
+  // default, in a suite whose target does not use the opaque type's unit.
+
+  case "a nested opaque default is still a Tok" {
+    let o = Outer { }
+    expect innerIsN(o)
+    expect innerIsN(built())
+  }
+}

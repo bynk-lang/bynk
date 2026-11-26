@@ -1,0 +1,8 @@
+suite api as system {
+	env { AUTH_SECRET = "s" }
+
+	case "a token for another issuer where none is declared" {
+		let r <- api.GET("/internal") by WrongIssuer
+		expect r is Rejected(Unauthorized)
+	}
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Bearer` actor's `issuer`, `audience` and `trustFrom` are non-empty strings: the `iss` and `aud` its tokens must carry, and the name of the environment variable whose JSON `{ \"issuer\", \"audience\" }` replaces them at run time. An empty string or another kind of value is refused. Write the claim as a string, as `issuer = \"web\"`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.bearer_bad_arg",
+  "constructs": [],
+  "example": "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"\"), identity = UserId }      // ✗ an empty issuer\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `Bearer` actor's `issuer`, `audience` or `trustFrom` is not a non-empty string (#3821)."
+}

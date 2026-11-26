@@ -20,19 +20,24 @@ pub(crate) fn preflight(
     project_root: &Path,
     node_floor: (u32, u32),
     opts: &DeployOptions,
-) -> Result<(), ExitCode> {
+) -> Result<(), Stop> {
     if let Some(conflict) = conflicting_env_passthrough(&opts.wrangler_args) {
-        emsg!(
-            "bynk: error: `--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
-            opts.environment
-        );
-        return Err(ExitCode::FAILURE);
+        return Err(Stop::error(
+            Entry::new(
+                code::ENV_PASSTHROUGH_CONFLICT,
+                format!(
+                    "`--env {}` conflicts with `{conflict}` after `--` — pass one or the other, not both",
+                    opts.environment
+                ),
+            )
+            .with("environment", opts.environment.as_str())
+            .with("flag", conflict),
+        ));
     }
 
     // #3107: no contract checks in a deployment; #3562: no Worker groups yet.
     if let Err(e) = bynk_driver::refuse_undeployable_project(project_root) {
-        emsg!("bynk: error: {e}");
-        return Err(ExitCode::FAILURE);
+        return Err(Stop::error(Entry::new(code::PROJECT_UNDEPLOYABLE, e)));
     }
 
     let preflight_opts = DoctorOptions {
@@ -49,8 +54,11 @@ pub(crate) fn preflight(
         &preflight_opts,
     );
     if report.exit_nonzero(&preflight_opts) {
-        colour::eprint(&preflight_failure_message(&report));
-        return Err(ExitCode::FAILURE);
+        return Err(Stop::printed(
+            code::PREFLIGHT_FAILED,
+            &preflight_failure_message(&report),
+            &[],
+        ));
     }
     Ok(())
 }
@@ -71,7 +79,7 @@ pub(crate) struct ContextGate<'a> {
 /// Worker that has never been pushed fails at upload, so say which one
 /// rather than letting Cloudflare's own error carry it. Then the contract
 /// skews, either way round, of the one context selected.
-pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Result<(), ExitCode> {
+pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Result<(), Stop> {
     let ContextGate {
         opts,
         project_root,
@@ -88,8 +96,21 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
     {
         let absent = absent_dependencies(worker, graph, lock, &opts.environment);
         if !absent.is_empty() {
-            colour::eprint(&absent_dependencies_refusal(env, worker, &absent));
-            return Err(ExitCode::FAILURE);
+            return Err(Stop::printed(
+                code::DEPENDENCY_NOT_DEPLOYED,
+                &absent_dependencies_refusal(env, worker, &absent),
+                &[
+                    ("worker", deployed_worker_name(env, worker).into()),
+                    (
+                        "dependencies",
+                        absent
+                            .iter()
+                            .map(|a| deployed_worker_name(env, a))
+                            .collect::<Vec<_>>()
+                            .into(),
+                    ),
+                ],
+            ));
         }
 
         // v0.177 (#643): the other half of D4. The dependency exists — but does
@@ -98,13 +119,7 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
         // 409ing. `--context` is precisely the flag that makes this reachable.
         let mut manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
             Ok(m) => m,
-            Err(e) => {
-                emsg!(
-                    "bynk: error: could not read `{worker}`'s {}: {e}",
-                    bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                );
-                return Err(ExitCode::FAILURE);
-            }
+            Err(e) => return Err(manifest_unreadable(worker, &e)),
         };
         let mut skews = contract_skews(
             &manifest.expects,
@@ -121,7 +136,7 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
         );
         if !skews.is_empty() {
             colour::eprint(&contract_skew_refusal(&opts.environment, worker, &skews));
-            return Err(ExitCode::FAILURE);
+            return Err(ExitCode::FAILURE.into());
         }
 
         // #2077: and the callee half. Does this build still provide what every
@@ -162,31 +177,37 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
                 match record_accepted(project_root, &wanted) {
                     Ok(()) => recorded = true,
                     Err(e) => {
-                        emsg!(
-                            "bynk: error: could not record the older contracts in {}: {e}",
-                            bynk_driver::contracts_lock::lock_path(project_root).display()
-                        );
-                        return Err(ExitCode::FAILURE);
+                        let path = bynk_driver::contracts_lock::lock_path(project_root);
+                        return Err(Stop::error(
+                            Entry::new(
+                                code::CONTRACTS_LOCK_UNWRITABLE,
+                                format!(
+                                    "could not record the older contracts in {}: {e}",
+                                    path.display()
+                                ),
+                            )
+                            .with("path", path.display().to_string()),
+                        ));
                     }
                 }
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
                 if !rebuild(project_root, build_dir, opts) {
-                    emsg!(
-                        "bynk: error: the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
-                        bynk_driver::contracts_lock::lock_path(project_root).display()
-                    );
-                    return Err(ExitCode::FAILURE);
+                    let path = bynk_driver::contracts_lock::lock_path(project_root);
+                    return Err(Stop::error(
+                        Entry::new(
+                            code::REBUILD_FAILED,
+                            format!(
+                                "the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
+                                path.display()
+                            ),
+                        )
+                        .with("path", path.display().to_string()),
+                    ));
                 }
                 manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
                     Ok(m) => m,
-                    Err(e) => {
-                        emsg!(
-                            "bynk: error: could not read `{worker}`'s {}: {e}",
-                            bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                        );
-                        return Err(ExitCode::FAILURE);
-                    }
+                    Err(e) => return Err(manifest_unreadable(worker, &e)),
                 };
                 callee_skews = callee_contract_skews(
                     worker,
@@ -228,7 +249,7 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
                 (&opts.environment, worker),
                 (runner, lock),
             );
-            return Err(ExitCode::FAILURE);
+            return Err(ExitCode::FAILURE.into());
         }
         // #2554: older contracts the lock still accepts that no live caller
         // was compiled against any more are noise; say so.
@@ -254,7 +275,7 @@ pub(crate) fn ordered(
     selected: &[String],
     graph: &BTreeMap<String, Vec<String>>,
     resources: &BTreeMap<String, Resources>,
-) -> Result<Vec<String>, ExitCode> {
+) -> Result<Vec<String>, Stop> {
     match deploy_order(selected, graph) {
         Ok(order) => Ok(order
             .into_iter()
@@ -266,6 +287,8 @@ pub(crate) fn ordered(
         Err(e) => {
             emsg!("bynk: error: {e}");
             let OrderError::Cycle(path) = &e;
+            let entry =
+                Entry::new(code::UPLOAD_ORDER_CYCLE, e.to_string()).with("cycle", path.clone());
             let publishers = cycle_publishers(path, resources);
             if !publishers.is_empty() {
                 eprintln!(
@@ -295,9 +318,23 @@ pub(crate) fn ordered(
                     "  A subscriber that calls its publisher cannot be deployed yet; move the services it calls out of the publishing context."
                 );
             }
-            Err(ExitCode::FAILURE)
+            Err(Stop::refused(entry))
         }
     }
+}
+
+/// A Worker's contracts manifest that cannot be read: the run stops, naming the Worker.
+fn manifest_unreadable(worker: &str, cause: &dyn std::fmt::Display) -> Stop {
+    Stop::error(
+        Entry::new(
+            code::CONTRACTS_MANIFEST_UNREADABLE,
+            format!(
+                "could not read `{worker}`'s {}: {cause}",
+                bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
+            ),
+        )
+        .with("worker", worker),
+    )
 }
 
 /// I4 (#1970, track §11 Q6): a declared foreign caller's pin. Refused
@@ -468,6 +505,43 @@ pub(crate) struct AccountCx<'a> {
     pub(crate) hyperdrive_wants: &'a hyperdrive::Wants,
 }
 
+/// #4056 Decision E: a run whose steps will call the account's REST API for a resource kind
+/// (KV since 1D.4a) needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, checked here, after
+/// the plan and before the confirmation, so a missing one is refused before anything is created.
+/// The first kind in list order that needs them reports, in its own words. A run that needs
+/// nothing asks nothing: a redeploy with everything recorded still works with `wrangler login`.
+fn account_resource_credentials(cx: &AccountCx<'_>) -> Result<(), ExitCode> {
+    let project = ProjectCx {
+        ledger: LedgerView::of(cx.lock, &cx.opts.environment),
+        resources: cx.resources,
+        order: cx.order,
+    };
+    let checked = resource_credentials(&project, &cx.plan.orphans.kv, cx.opts.prune, |purpose| {
+        crate::cloudflare::rest::for_kind(purpose).map(drop)
+    });
+    checked.map_err(|refusal| {
+        emsg!("bynk: error: {refusal}");
+        ExitCode::FAILURE
+    })
+}
+
+/// [`account_resource_credentials`]'s decision over `credentials`, the run's client check for a
+/// kind (a test's stand-in): the refusal, in the first needing kind's words, or `Ok` when no
+/// step needs the account or the credentials are there.
+pub(crate) fn resource_credentials(
+    project: &ProjectCx<'_>,
+    kv_orphans: &[OrphanKv],
+    prune: bool,
+    credentials: impl Fn(
+        crate::cloudflare::rest::Purpose,
+    ) -> Result<(), crate::cloudflare::CloudflareError>,
+) -> Result<(), String> {
+    if !kv_calls_the_account(project, kv_orphans, prune) {
+        return Ok(());
+    }
+    credentials(crate::cloudflare::rest::Purpose::Kv).map_err(|e| e.to_string())
+}
+
 /// What the account checks found, for the apply: the wrangler to run, the ids each stored secret
 /// and certificate is linked to, and the Hyperdrive API.
 pub(crate) struct AccountChecked {
@@ -501,7 +575,7 @@ pub(crate) fn account_checks(
         colour::eprintln(&refusal);
         return Err(ExitCode::FAILURE);
     }
-    let api = Wrangler::new(&probe.provenance, project_root);
+    let api = Account::new(Wrangler::new(&probe.provenance, project_root));
     if !whoami(&api) {
         emsg!(
             "bynk: error: Cloudflare authentication is unavailable; run `wrangler login` or set CLOUDFLARE_API_TOKEN"
@@ -538,9 +612,56 @@ pub(crate) fn account_checks(
     ) else {
         return Err(ExitCode::FAILURE);
     };
+    account_resource_credentials(cx)?;
     Ok(AccountChecked {
         probe,
         linked_stores,
         hyperdrive_api,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #3797: a cycle in the Service Bindings is a refusal entry naming the cycle, with the
+    /// stderr line unchanged.
+    #[test]
+    fn a_cycle_in_the_upload_order_is_a_refusal_entry_naming_it() {
+        let graph = BTreeMap::from([
+            ("a".to_string(), vec!["b".to_string()]),
+            ("b".to_string(), vec!["a".to_string()]),
+        ]);
+        let stop = ordered(
+            &["a".to_string(), "b".to_string()],
+            &graph,
+            &BTreeMap::new(),
+        )
+        .expect_err("a cycle has no upload order");
+        assert_eq!(stop.refusals.len(), 1);
+        let entry = &stop.refusals[0];
+        assert_eq!(entry.code, code::UPLOAD_ORDER_CYCLE);
+        let cycle = entry.subject["cycle"]
+            .as_array()
+            .expect("the cycle is listed");
+        assert!(
+            cycle.iter().any(|w| w == "a") && cycle.iter().any(|w| w == "b"),
+            "{entry:?}"
+        );
+        assert!(entry.override_flag.is_none());
+    }
+
+    #[test]
+    fn an_unreadable_manifest_names_its_worker() {
+        let stop = manifest_unreadable("shop-orders", &"no such file");
+        assert_eq!(stop.refusals.len(), 1);
+        let entry = &stop.refusals[0];
+        assert_eq!(entry.code, code::CONTRACTS_MANIFEST_UNREADABLE);
+        assert_eq!(entry.subject["worker"], "shop-orders");
+        assert!(
+            entry.message.starts_with("could not read `shop-orders`'s "),
+            "{}",
+            entry.message
+        );
+    }
 }
