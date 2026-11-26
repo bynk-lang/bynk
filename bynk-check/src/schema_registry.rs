@@ -531,6 +531,15 @@ fn backfill_paths(stored: &mut [StoreShape], current: &[StoreShape]) {
     }
 }
 
+/// `agent New replaces Old`, applied by this build, is remembered on the entry.
+fn remember_class_rename(entry: &mut AgentEntry, old: Option<String>) {
+    if let Some(old) = old
+        && !entry.renamed_from.contains(&old)
+    {
+        entry.renamed_from.push(old);
+    }
+}
+
 fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> AgentChange {
     if current == stored {
         return AgentChange::Unchanged;
@@ -1322,8 +1331,7 @@ pub fn reconcile_agents(
             }
             // #3793: `replaces` clauses the lock records no name for (`None`: a baseline).
             let mut unrecorded: Option<Vec<String>> = None;
-            // #4483: the class's recorded fields before this build, for the clauses inside them.
-            let mut previous: Vec<StoreShape> = Vec::new();
+            let mut previous: Vec<StoreShape> = Vec::new(); // #4483: recorded before this build
             let entry = match history {
                 None => AgentEntry {
                     version: 1,
@@ -1440,21 +1448,13 @@ pub fn reconcile_agents(
             let renames = crate::rename_plan::store_renames(
                 agent,
                 &entry,
-                &current,
+                (&previous, &current),
                 unrecorded.as_deref(),
                 errors,
             );
-            // #4483: a class with a recorded history judges the clauses inside its stored values.
-            if unrecorded.is_some() {
-                crate::rename_plan::nested_renames(agent, &entry, &previous, &current, errors);
-            }
             // A rename applied by this build is remembered on the entry.
             let mut entry = entry;
-            if let Some(old) = renamed_now
-                && !entry.renamed_from.contains(&old)
-            {
-                entry.renamed_from.push(old);
-            }
+            remember_class_rename(&mut entry, renamed_now);
             // Every other step is checked against the reconciled entry and
             // the current shape; each valid one covers a range of versions.
             let mut steps = Vec::new();

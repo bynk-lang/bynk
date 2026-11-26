@@ -267,7 +267,7 @@ pub(crate) fn store_rename(
 pub(crate) fn store_renames(
     agent: &AgentDecl,
     entry: &AgentEntry,
-    current: &[StoreShape],
+    (previous, current): (&[StoreShape], &[StoreShape]),
     unrecorded: Option<&[String]>,
     errors: &mut Vec<CompileError>,
 ) -> Vec<(String, String)> {
@@ -327,6 +327,8 @@ pub(crate) fn store_renames(
     // judged against.
     if unrecorded.is_some() {
         errors.extend(verdicts);
+        // #4483: and the clauses on record fields inside its stored values.
+        nested_renames(agent, entry, previous, current, errors);
     }
     reads
 }
