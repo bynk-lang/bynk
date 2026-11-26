@@ -6,8 +6,6 @@ type Frame = { text: String }
 actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 service gateway from websocket(in: Frame, out: Frame) {
-  cors { origins: ["https://app.example.com"], credentials: true }
-
   on open (room: UserId) -> Effect[()] by who: Member | Visitor {
     let _ <- Room(room).join(room, connection)
     ()

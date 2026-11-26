@@ -111,8 +111,10 @@ service chat from websocket(in: ClientFrame, out: ServerFrame) {
   response does not say whether a session exists. A listed `Origin` with no cookie, a forged,
   expired, foreign-key or wrong-actor cookie, or one the HTTP check would refuse, is `401`.
 - `cors` must list at least one origin, with `credentials: true` and no wildcard, or the service is
-  `bynk.ws.cookie_needs_origins`. The other `cors` fields (`headers`, `expose`, `maxAge`) have no
-  effect on a WebSocket.
+  `bynk.ws.cookie_needs_origins`. Only `origins` and `credentials` apply to a WebSocket: `headers`, `expose` and
+  `maxAge` are `bynk.http.cors_unknown_field`, and a `cors` block on a service whose `on open` is not `by` a
+  `SignedCookie` actor is `bynk.http.cors_not_http`, since it would read as an allow-list and restrict nothing.
+- An `Oidc` binder has no `.claims` on a WebSocket: the upgrade forwards the identity and the expiry only.
 - A `SignedCookie` actor with `sessions = true` is not admissible on `on open`: the upgrade does not
   check that the session is still live, so a revoked session could open a socket.
 - The cookie's expiry is re-checked at every frame, as a Bearer token's is (below).

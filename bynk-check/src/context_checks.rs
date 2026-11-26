@@ -5297,8 +5297,38 @@ fn check_ws_cookie_origins(
         matches!(h.kind, HandlerKind::Open)
             && crate::actors::signed_cookie_seam_for(h, &table.actors).is_some()
     }) else {
+        // Only a cookie upgrade checks `Origin`, so a `cors` policy on any other WebSocket service
+        // would read as an allow-list and restrict nothing: refuse it.
+        if let Some(policy) = &service.cors {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_not_http",
+                    policy.span,
+                    "a `cors { }` policy on a `from websocket` service takes effect only when its `on open` is `by` a `SignedCookie` actor",
+                )
+                .with_note(
+                    "the upgrade checks `Origin` against `origins` only for a cookie, which a browser sends from any site; a `Bearer` or `Oidc` token is offered by the page itself, so there is no origin list to apply",
+                ),
+            );
+        }
         return;
     };
+    // Of the policy's fields only `origins` and `credentials` apply to an upgrade.
+    for field in service.cors.iter().flat_map(|c| &c.fields) {
+        if matches!(field.name.name.as_str(), "headers" | "expose" | "maxAge") {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.cors_unknown_field",
+                    field.name.span,
+                    format!(
+                        "the `cors` field `{}` has no effect on a `from websocket` service",
+                        field.name.name
+                    ),
+                )
+                .with_note("only `origins` and `credentials` apply to a WebSocket upgrade"),
+            );
+        }
+    }
     // The session-live check of a `sessions = true` actor is not made on an upgrade yet, so a revoked
     // session could still open a socket: refuse the combination rather than accept it quietly.
     if crate::actors::signed_cookie_seam_for(open, &table.actors).is_some_and(|s| s.sessions) {

@@ -502,10 +502,15 @@ pub fn oidc_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<OidcSea
 /// refinement of one. `None` for a sum (the binder there is the resolved arm), a handler of any
 /// other protocol, and a `by` with no binder.
 pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    // The verified claims reach a handler only on the HTTP path (a WebSocket upgrade forwards the
+    // identity and expiry alone), so a `from websocket` binder has no `.claims` (#3904).
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        return None;
+    }
     if let Some(seam) = oidc_seam_for(handler, actors) {
         return seam.binder;
     }
-    if !matches!(handler.kind, HandlerKind::Http { .. }) || handler.by_clause.as_ref()?.is_sum() {
+    if handler.by_clause.as_ref()?.is_sum() {
         return None;
     }
     bearer_seam_for(handler, actors)?.binder
