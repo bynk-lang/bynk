@@ -29,6 +29,14 @@ pub struct TraceStep {
     /// What was called: `Db.query`, `shop.payment.authorise`, `Ledger.tally`.
     pub target: String,
     pub span: Option<TraceSpan>,
+    /// When the step began, in milliseconds after its request began, on the clock of the request's
+    /// `duration_ms`: `[start_ms, start_ms + ms)` places the step on the request's timeline, so steps
+    /// that overlap ran concurrently and the gap between steps is the handler's own time (#3787).
+    /// Absent from a trace an older runtime printed, which still reads: the field is optional on the
+    /// wire. A callee's own trace is measured from the callee's start, not the caller's: the client
+    /// places it at its caller's `call` step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_ms: Option<f64>,
     pub ms: f64,
     /// `ok`, `fault`, or `pending` (not settled when the response was ready).
     pub outcome: String,
@@ -87,7 +95,9 @@ pub fn fault(stack: &str, rewrite: impl Fn(&str) -> String) -> TraceFault {
 mod tests {
     use super::*;
 
-    const LINE: &str = r#"__bynk_trace:{"context":"shop.orders","id":"r1","parent":"p0","route":"POST /orders","status":500,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"fault","request":"c1"},{"kind":"agent","target":"Ledger.tally","span":null,"ms":0,"outcome":"pending"}],"truncated":false,"fault":"Error: boom\n    at f (index.js:1:2)"}"#;
+    const LINE: &str = r#"__bynk_trace:{"context":"shop.orders","id":"r1","parent":"p0","route":"POST /orders","status":500,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"start_ms":1,"ms":3.1,"outcome":"fault","request":"c1"},{"kind":"agent","target":"Ledger.tally","span":null,"start_ms":1.2,"ms":0,"outcome":"pending"}],"truncated":false,"fault":"Error: boom\n    at f (index.js:1:2)"}"#;
+    /// What a runtime from before #3787 printed: no `start_ms` on a step.
+    const OLD_LINE: &str = r#"__bynk_trace:{"context":"shop.orders","id":"r1","parent":null,"route":"GET /","status":200,"duration_ms":4,"steps":[{"kind":"capability","target":"Db.query","span":null,"ms":2.5,"outcome":"ok"}],"truncated":false,"fault":null}"#;
 
     #[test]
     fn a_trace_line_parses() {
@@ -100,6 +110,30 @@ mod tests {
         assert_eq!(t.steps.len(), 2);
         assert_eq!(t.steps[0].span.as_ref().unwrap().line, 23);
         assert_eq!(t.steps[1].span, None);
+    }
+
+    #[test]
+    fn a_step_carries_its_start_offset() {
+        let t = parse(LINE).expect("parses");
+        assert_eq!(t.steps[0].start_ms, Some(1.0));
+        assert_eq!(t.steps[1].start_ms, Some(1.2));
+        // The two overlap: the agent step began inside the call step.
+        let (a, b) = (&t.steps[0], &t.steps[1]);
+        assert!(b.start_ms.unwrap() < a.start_ms.unwrap() + a.ms);
+    }
+
+    /// A trace an older runtime printed has no `start_ms`; it still parses, and says nothing
+    /// about start times rather than inventing one.
+    #[test]
+    fn a_trace_without_start_offsets_still_reads() {
+        let t = parse(OLD_LINE).expect("an older trace parses");
+        assert_eq!(t.steps[0].start_ms, None);
+        assert_eq!(t.steps[0].ms, 2.5);
+        let json = serde_json::to_string(&t.steps[0]).unwrap();
+        assert!(
+            !json.contains("start_ms"),
+            "an absent offset is not written as null: {json}"
+        );
     }
 
     #[test]

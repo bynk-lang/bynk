@@ -402,7 +402,7 @@ event for each request a worker serves, so an editor can show what a request
 did. Draw it over the handler's sequence diagram with the `span` of each step.
 
 ```json
-{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.1,"outcome":"ok","request":"9a41…"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
+{"event":"request","context":"shop-orders","id":"5d5e…","parent":null,"route":"POST /orders","status":201,"duration_ms":12.4,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"start_ms":1.0,"ms":3.1,"outcome":"ok","request":"9a41…"},{"kind":"agent","target":"Ledger.tally","span":{"file":"src/shop/orders.bynk","line":27,"col":22},"start_ms":1.2,"ms":1.2,"outcome":"ok"}],"truncated":false,"fault":null}
 ```
 
 | Field | Meaning |
@@ -413,11 +413,11 @@ did. Draw it over the handler's sequence diagram with the `span` of each step.
 | `route` | `<METHOD> <path>`, the path as requested. |
 | `status` | The response status. A fault answers `500`. |
 | `duration_ms` | From the request arriving to the response being ready. |
-| `steps` | What the request did, in call order (below). |
+| `steps` | What the request did, in the order the calls began (below). |
 | `truncated` | `true` when more steps happened than are listed. At most 200 steps are kept. |
 | `fault` | `null`, or `{ "message", "frames" }`: the error's first line, and its stack frames, with frames into generated code at their `.bynk` location. |
 
-A step is `{ "kind", "target", "span", "ms", "outcome" }`:
+A step is `{ "kind", "target", "span", "start_ms", "ms", "outcome" }`:
 
 - `kind` is `capability` (an op on a capability in `given`), `call` (a call to
   another context) or `agent` (a method call on an agent).
@@ -425,11 +425,28 @@ A step is `{ "kind", "target", "span", "ms", "outcome" }`:
   `Ledger.tally`.
 - `span` is the `.bynk` call site, `{ "file", "line", "col" }` (project-relative
   path, 1-based line and column), or `null`.
+- `start_ms` is when the call began, in milliseconds after the request began: the
+  same clock as `duration_ms`, so `[start_ms, start_ms + ms)` is the step's place on
+  the request's timeline. Two steps whose intervals overlap ran concurrently (a
+  `foldEff`, calls made in parallel); the gap between one step's end and the next's
+  start is the handler's own time. A client can draw a true timing diagram from it,
+  with the critical path. The steps are listed in the order they began, so
+  `start_ms` never decreases down the list, and a step that settles last still lists
+  where it began. A trace from a runtime built before this field has no `start_ms`;
+  draw those steps by duration alone.
 - `ms` is how long the call took.
 - `request` (on a `call` step only) is the `id` of the callee's own `request`
   event.
 - `outcome` is `ok`, `fault` (it threw or was rejected), or `pending` (it had not
   settled when the response was ready).
+
+Timings are what the runtime measured. Where the platform coarsens its timers (the
+Workers runtime advances its clock at I/O, not while code runs), steps can share a
+`start_ms` and a step can report `ms` of `0`; the trace does not invent precision, so
+read equal offsets as "no measurable difference" and keep the list order. A callee's
+steps are measured from the callee's own start, not the caller's: the clocks of two
+Workers cannot be compared, so a client places the callee's timeline at the
+`start_ms` of the caller's `call` step that names it.
 
 A step carries **no argument values**: only kinds, targets, spans, timings and
 outcomes. The record closes when the response is ready, so work that continues

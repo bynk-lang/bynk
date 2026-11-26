@@ -349,6 +349,7 @@ mod tests {
                     line: 23,
                     col: 14,
                 }),
+                start_ms: Some(1.5),
                 ms: 3.5,
                 outcome: "ok".into(),
                 request: Some("c1".into()),
@@ -358,7 +359,7 @@ mod tests {
         };
         assert_eq!(
             event_line(&event),
-            r#"{"event":"request","context":"shop-orders","id":"r1","parent":"p0","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"ms":3.5,"outcome":"ok","request":"c1"}],"truncated":false,"fault":null}"#
+            r#"{"event":"request","context":"shop-orders","id":"r1","parent":"p0","route":"POST /orders","status":201,"duration_ms":12.5,"steps":[{"kind":"call","target":"shop.payment.authorise","span":{"file":"src/shop/orders.bynk","line":23,"col":14},"start_ms":1.5,"ms":3.5,"outcome":"ok","request":"c1"}],"truncated":false,"fault":null}"#
         );
     }
 
