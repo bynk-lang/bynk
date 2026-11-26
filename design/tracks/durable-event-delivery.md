@@ -229,8 +229,14 @@ returning, retry briefly, and then fault. (Recommended.)**
 **Agents.** `commitStored` gains the handler's pending emissions. In the same
 `storage.transaction` as the state record (`entries.ts:commitStored`), it writes one outbox
 row per emission under a new reserved key prefix, `o/<seq>`. The prefix is outside every prefix
-`entries.ts` already uses: `m/`, `s/`, `l/`, `i/`, `x/`, `c/` and `"state"`. When the outbox is
-non-empty, it also sets the DO alarm about 30 seconds ahead.
+`entries.ts` already uses: `m/`, `s/`, `l/`, `i/`, `x/`, `c/` and `"state"`. When it writes
+rows and no alarm is set, it also sets the DO alarm about 30 seconds ahead, in the same
+transaction. That alarm is what covers a crash between the commit and the flush. A flush that
+empties the outbox **deletes the alarm**, so in the common case the alarm never fires and costs
+no invocation. It only fires when a flush failed or never ran. Setting it on every emitting
+commit, rather than only on failure, is deliberate: a crash leaves no code running to set it
+later. The cost is two DO rows written per emitting commit (`setAlarm` and `deleteAlarm`),
+counted in D9.
 
 - A row is `{ "v": 1, "type", "payload", "envelope", "sent": [] }`: the emission, plus the
   subscriber queues it has already reached.
@@ -718,8 +724,10 @@ below. (Recommended.)**
     $0.40 per million operations beyond the 1,000,000 a month included (same page).
   - D1: about 3 rows written per delivery for the claim, its confirm and the sweep of
     expired claims, in the subscriber's `D1_IDEMPOTENCY` database (broken down below).
-  - Agents: one outbox `put` inside the commit, one delete after the flush, and an alarm only
-    when a flush fails.
+  - Agents, per emitting commit: one outbox `put` per emission inside the commit, one delete
+    per emission after the flush, plus a `setAlarm` in the commit and a `deleteAlarm` after a
+    flush that empties the outbox. The alarm *fires*, costing a DO invocation, only when a
+    flush failed or never ran.
 - **The claim's D1 cost, per delivery** (D11, through `queue_admit.ts:claimQueueMessage`,
   `confirmQueueMessage`):
   - the claim is one `batch` of an upsert of the claim row and a `DELETE` of up to 20 expired
@@ -742,7 +750,7 @@ below. (Recommended.)**
   |---|---|---|---|
   | Queue operations (3 per delivery) | 6,000,000 | 5,000,000 beyond the included 1,000,000 | $2.00 |
   | D1 rows written by claims (3–5 per delivery) | 6,000,000–10,000,000 | 0: within the included 50,000,000 | $0.00 |
-  | Agent outbox, if the publisher is an agent (about 3 DO rows written per emitting commit: the row, its delete, and `setAlarm`) | up to 3,000,000 | 0: within Durable Objects' own included 50,000,000 | $0.00 |
+  | Agent outbox, if the publisher is an agent (about 4 DO rows written per single-emission commit: the row, its delete, `setAlarm` and `deleteAlarm`) | up to 4,000,000 | 0: within Durable Objects' own included 50,000,000 | $0.00 |
   | **Total beyond the plan** | | | **about $2.00 a month** |
 
   The claims spend 6–10 million of D1's 50 million included rows a month. Durable Object
@@ -758,14 +766,34 @@ below. (Recommended.)**
   (P6), and all of it is in the publisher's request. The new model moves cost from the
   publisher's latency to background Queue operations, and filtering (D6) removes non-matching
   invocations. Accounting against real traffic is live check §9 L9.
-- **The Free plan.** Always-on deduplication (D11) costs about 3–5 D1 rows written per
-  delivery. Workers Free allows 100,000 rows written a day, and from 1 September 2026 D1
-  queries *"will fail when an account exceeds the daily row read or row write limits"* until
-  the limit resets at midnight UTC
-  ([changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/)).
-  So a Free-plan project can deliver about 20,000–33,000 events a day, shared with any other
-  `Idempotency` use in the account.
-  - **When the cap is hit,** the claim query fails, so `claimQueueMessage` throws. The entry
+- **The Free plan.** Two daily caps apply, and **the Queues cap binds first**:
+  - **Queues:** Workers Free includes *10,000 operations a day*
+    ([pricing](https://developers.cloudflare.com/queues/platform/pricing/)). At 3 operations
+    per delivery, a Free-plan project delivers **about 3,300 events a day** across all its
+    subscribers, fewer with retries (one more read each) and dead letters (one more write).
+  - **D1:** always-on deduplication (D11) costs about 3–5 D1 rows written per delivery.
+    Workers Free allows 100,000 rows written a day, and from 1 September 2026 D1 queries
+    *"will fail when an account exceeds the daily row read or row write limits"* until the
+    limit resets at midnight UTC
+    ([changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/)).
+    That alone would allow about 20,000–33,000 deliveries a day, so it binds only when
+    other `Idempotency` use in the account consumes most of the allowance.
+
+  The planning figure for a Free-plan project with events is therefore **about 3,300
+  deliveries a day**. `bynk doctor` and the deploy plan state it.
+
+  **When the Queues cap is hit,** the publisher's `send` fails. Whether it throws, and with
+  what error, is live check §9 L11. This hits publishers, not subscribers:
+  - a **service** faults with `EventSendFailed` (D1), so its caller sees the fault for the rest
+    of the day;
+  - an **agent's** outbox keeps the rows (nothing is lost). The flush recognises the limit
+    error and moves the alarm to the next 00:00 UTC instead of its normal backoff, so the
+    outbox drains after the reset. Rows accumulate in the agent's storage meanwhile;
+  - a subscriber's consumer reads are operations too, so a backlog drains only as the next
+    day's allowance allows.
+
+  **When the D1 cap is hit:**
+  - the claim query fails, so `claimQueueMessage` throws. The entry
     treats a thrown claim as it treats a fault (`queue_admit.ts:claimDatabase` *"fails the
     message loudly rather than admitting it unchecked"*). Left at that, the message would be
     retried after `retryDelay × attempts` and dead-lettered after `retries` + 1 attempts,
@@ -789,8 +817,8 @@ below. (Recommended.)**
     hours. If L11 shows retention counts from the original send, the delay is capped at what
     the message has left, minus a margin, and the plan warns a Free-plan project with events
     that a day over the cap can lose events.
-  - `bynk doctor` and the deploy plan state the Free-plan figure for a project with
-    subscribers, so the cap is known before it bites.
+  - `bynk doctor` and the deploy plan state the Free-plan figure (about 3,300 deliveries a
+    day, D1 permitting) for a project with subscribers, so the cap is known before it bites.
 - **Throughput:** 5,000 messages per second per queue (§3) bounds one *subscriber*, not one
   publisher, since every subscriber has its own queue. Above that, `send` throws *Too Many
   Requests* ([limits](https://developers.cloudflare.com/queues/platform/limits/)):
@@ -1034,7 +1062,7 @@ them. Each check names the slice that needs its result before it lands.
 | L8 | The outbox's backstop: with the queue producer made to fail (a queue deleted out of band), the alarm retries past Cloudflare's 6 attempts by rescheduling, and delivers once the queue is back. | slice 5 |
 | L9 | Cost accounting over a day of synthetic traffic: queue operations, D1 rows written and DO requests, against D9's model. | slice 8 |
 | L10 | Trace continuity: a subscriber's logs carry the emission's trace id (#3895) through the queue. | slice 3 |
-| L11 | On the Free plan: a delivery whose claim fails on D1's daily row-write limit is retried with a delay to 00:00 UTC, and is delivered after the reset; whether a 24-hour-retention queue drops a message delayed past its original send plus 24 hours. | slice 3 |
+| L11 | On the Free plan: what `send`/`sendBatch` does past the 10,000 daily Queues operations (the error, and whether consumer reads also stop), and that an agent's outbox defers to 00:00 UTC and drains after it; a delivery whose claim fails on D1's daily row-write limit is retried with a delay to 00:00 UTC, and is delivered after the reset; whether a 24-hour-retention queue drops a message delayed past its original send plus 24 hours. | slice 3 |
 
 ---
 
@@ -1067,15 +1095,17 @@ verifies. Depends on: none. It can land before slice 0, since it fixes shipped #
 **Slice 2: Reserved queue names.** Depends on: none.
 - `bynk.queue.reserved_name` for `bynk-ev-`/`bynk-dl-` in `Queue @name`, `from queue` and
   `deadLetter`, with its explain entry.
-- The naming functions in `bynk-project`, with unit tests for injectivity and the 63-character
-  budget under the longest environment name the plan admits.
+- The naming functions in `bynk-project`, with unit tests for determinism, the collision check
+  (`bynk.event.queue_name_collision`) and the 63-character budget under the longest environment
+  name the plan admits.
 
 *Done when:* negative fixtures for the three positions pass; `reference/queue.md` lists the
 reservation.
 
 **Slice 3: The subscriber's queue entry, and provisioning.** Depends on: 0, 1, 2. No behaviour
 changes for users yet: nothing sends to the new queues.
-- A `from Events` service's Worker consumes its event queue: verify (`admitQueueBody`), check
+- A `from Events` service's Worker consumes its event queue: verify (`queueAdmit` called
+  directly with the service's qualified name as `consumer`, D2 step 1), check
   `publisherId`/`type`, claim, decode, guard, run, and acknowledge or retry with
   `retryDelay × attempts`, logging the last attempt.
 - Undecodable messages go to the dead-letter queue; refusals are acknowledged and reported.
@@ -1110,7 +1140,12 @@ two-context project in `default` and in a named environment; L5, L6 and L10 have
 - The plan's refusal of a `--context` publisher deploy that would leave pre-cut-over
   subscribers without a consumer (D8, step 3), with the ledger's event-delivery generation
   per Worker.
-- The changelog marks it breaking; `upgrading.md` gets §8's table.
+- The changelog marks it breaking; `upgrading.md` gets §8's table, **with its first row
+  stated as this release delivers it**: at least once for services (from completion); for
+  agents, still at most once (a failed send after commit is logged) until slice 5's outbox
+  lands. The concepts page says the same in this release. Slice 5's release note then
+  upgrades the agent row to "at least once from a committed emission". No release documents
+  a guarantee it does not give.
 
 *Done when:* the events run fixtures pass on Workers; a fixture with a subscriber that calls
 its publisher deploys in the plan tests; no reference to `__EventsFanout` remains outside the
@@ -1226,9 +1261,10 @@ delivery hints would go on the subscription, as above.
 
 None of these pages is edited by this settling PR. Each is updated by the slice named.
 
-- `book/concepts/events/understand-events.md` (slices 4 and 8):
-  - the "Delivery, concretely, per platform" table: no fan-out DO, at least once, no publisher
-    wait, and ordering per D4;
+- `book/concepts/events/understand-events.md` (slices 4, 5 and 8):
+  - the "Delivery, concretely, per platform" table: no fan-out DO, no publisher wait, and
+    ordering per D4. The guarantee is stated per release: in slice 4, at least once for
+    services and still at most once for agents; in slice 5, at least once for agents too;
   - the paragraph on deploy cycles and "move the services the subscriber calls out of the
     publishing context": removed;
   - "The idempotency idiom": built in (D11);
@@ -1253,7 +1289,31 @@ None of these pages is edited by this settling PR. Each is updated by the slice 
   `__EventsFanout` mentions, the event queues in the plan, and the cycle refusal.
 - `book/guides/effects-and-capabilities/deduplicate-at-least-once-deliveries.md` (slice 8):
   events need no claim of `eventId`.
-- `reference/upgrading.md` and the changelog (slice 4): §8's table.
+- `reference/upgrading.md` and the changelog (slices 4 and 5): §8's table, its agent row
+  as each release delivers it (slice 4 note above).
+- **The new language surface and diagnostics:**
+  - `reference/spec/static-semantics.md`, the `delivery { }` paragraph of the queue rules
+    (where `bynk.queue.delivery_bad_option` and `bynk.queue.delivery_not_queue` are defined
+    today) (slice 7):
+    - `delivery { }` is also admitted on a `from Events` service, with the keys of D5;
+    - `deadLetter` there is `bynk.event.delivery_dead_letter`;
+    - `bynk.queue.delivery_not_queue` no longer applies to such a service.
+  - §5.7b Events, same page (slices 2, 3 and 4): `bynk.queue.reserved_name` (slice 2);
+    `bynk.event.queue_name_collision` and `bynk.event.unbounded_payload` (slice 3); and the
+    runtime faults `EventTooLarge` and `EventSendFailed`, and the `EventNearLimit` warning
+    (slices 3 and 4).
+  - `book/guides/events/index.md` and `book/concepts/events/understand-events.md`
+    (slices 3, 4 and 7): a "Delivery settings" section for `delivery { }` on a subscriber; the
+    size budget, with what to do about a large payload; the dead-letter queue and how long a
+    dead letter can be redriven (D5); the Free-plan figure (D9).
+  - `reference/queue.md`, "Delivery policy" (slice 7): a note that event subscribers take the
+    same section, without `deadLetter`.
+  - The generated diagnostic index (`/reference/diagnostics/`, built from the compiler's
+    registry and drift-tested, `reference/spec/diagnostics.md`) picks each new code up from
+    the registry. Each slice adds its codes' explain entries: `reserved_name` (2);
+    `queue_name_collision` and `unbounded_payload` (3); `delivery_dead_letter` (7).
+  - Tooling surfaces per ADR 0156, in slice 7: hover and completion for `delivery { }` on an
+    events service; a quick fix that removes a refused `deadLetter`.
 - `design/bynk-design-notes.md` §7 (slice 0 ADRs): the emit-lowering note's "Queues with
   topic-as-queue routing, or a custom event-fanout DO" fork, now resolved as a queue per
   subscriber; and, as D4 is ruled, "**Ordering: per-publisher.**" (line 231) and the
