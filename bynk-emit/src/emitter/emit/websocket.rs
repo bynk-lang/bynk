@@ -291,6 +291,7 @@ fn ws_frame_bytes_expr() -> bynk_ts::TsExpr {
 /// The statements that read a text frame into its decoded value `__dec`: the text, the JSON, and the
 /// codec, each failure closing the socket (`1003` for an unreadable or malformed frame, `1008` for
 /// one the codec refuses).
+#[allow(clippy::vec_init_then_push)]
 fn ws_text_decode_stmts(decode: bynk_ts::TsExpr) -> Vec<bynk_ts::TsStmt> {
     let mut out = Vec::new();
     out.push(bynk_ts::TsStmt::let_stmt(
