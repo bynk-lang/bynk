@@ -318,8 +318,10 @@ fn reconcile_one(current: &[FieldShape], stored: Option<&EventEntry>, renamed: b
 /// non-additive change are pushed onto `errors`.
 pub fn reconcile(
     existing: &SchemaRegistry,
-    unit_tables: &std::collections::HashMap<String, UnitTable>,
-    unit_uses: &std::collections::HashMap<String, Vec<String>>,
+    (unit_tables, unit_uses): (
+        &std::collections::HashMap<String, UnitTable>,
+        &std::collections::HashMap<String, Vec<String>>,
+    ),
     errors: &mut Vec<CompileError>,
 ) -> (SchemaRegistry, std::collections::HashMap<String, i64>) {
     let mut updated = SchemaRegistry::new();
@@ -2526,7 +2528,7 @@ mod tests {
         );
         let existing = SchemaRegistry::new();
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &Default::default(), &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty(), "a first-ever compile must not error");
         assert_eq!(effective.get("commerce.order.PaymentConfirmed"), Some(&3));
         assert_eq!(
@@ -2559,7 +2561,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (_, effective) = reconcile(&existing, &units, &Default::default(), &mut errors);
+        let (_, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].category, "bynk.event.schema_version_mismatch");
         // The registry's computed version wins as the effective one, not the
@@ -2591,7 +2593,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &Default::default(), &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty());
         assert_eq!(effective.get("commerce.order.OrderCancelled"), Some(&2));
         assert_eq!(
@@ -2624,7 +2626,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, effective) = reconcile(&existing, &units, &Default::default(), &mut errors);
+        let (updated, effective) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].category, "bynk.event.non_additive_schema_change");
         assert_eq!(effective.get("commerce.order.OrderCancelled"), Some(&4));
@@ -2659,7 +2661,7 @@ mod tests {
             },
         );
         let mut errors = Vec::new();
-        let (updated, _) = reconcile(&existing, &units, &Default::default(), &mut errors);
+        let (updated, _) = reconcile(&existing, (&units, &Default::default()), &mut errors);
         assert!(errors.is_empty());
         assert!(updated.get("commerce.order.PaymentConfirmed").is_none());
         assert!(updated.get("commerce.order.PaymentConfirmedV2").is_some());
