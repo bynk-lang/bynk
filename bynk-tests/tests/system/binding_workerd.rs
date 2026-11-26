@@ -236,7 +236,7 @@ fn run_smoke_with(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
         ),
     )
     .unwrap();
@@ -837,6 +837,64 @@ fn workers_ratelimit_counts_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersRateLimit on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+const CRYPTO_SOURCE: &str = "context cr.smoke
+
+consumes bynk.crypto { Crypto }
+
+service api from http {
+\ton GET(\"/roundtrip/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet stored <- Crypto.hashPassword(pw)
+\t\tlet ok <- Crypto.verifyPassword(pw, stored)
+\t\tlet wrong <- Crypto.verifyPassword(pw.concat(\"x\"), stored)
+\t\tlet stale <- Crypto.needsRehash(stored)
+\t\tOk(\"\\(ok) \\(wrong) \\(stale)\")
+\t}
+
+\ton GET(\"/derive\") () -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet okm <- Crypto.deriveKey(Bytes.fromUtf8(\"master\"), Bytes.fromUtf8(\"salt\"), Bytes.fromUtf8(\"webhook-mac/v1\"), 32)
+\t\tOk(okm.toHex())
+\t}
+
+\ton GET(\"/high/:pw\") (pw: String) -> Effect[HttpResult[String]] by Visitor given Crypto {
+\t\tlet stored = \"pbkdf2-sha256$150000$c2FsdFNBTFRzYWx0U0FMVHNhbHRTQUxUc2FsdFNBTFRzYWx0$fFHzxfX1vycWjsrju6y+e7OVY5XXMfCEDWrzb9AnxCZlmKkH6ZlWgA\"
+\t\tlet ok <- Crypto.verifyPassword(pw, stored)
+\t\tlet wrong <- Crypto.verifyPassword(pw.concat(\"x\"), stored)
+\t\tOk(\"\\(ok) \\(wrong)\")
+\t}
+}
+";
+
+#[test]
+fn crypto_password_hashing_and_hkdf_run_on_workerd() {
+    // #4118: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
+    // Workers count (100,000), a stored hash above it (refused by the binding's own cap, `false`), and the
+    // HKDF answer `node:crypto` gives for the same input. What this cannot see is the limit itself:
+    // `wrangler dev` runs the open-source workerd, which accepts 600,000, while deployed Workers refuse
+    // more than 100,000 (`NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+    // supported`), so a local run would pass at either count. The cap is pinned by the binding's own tests
+    // (`bynk-std/test/crypto.mjs`), which simulate the platform's refusal, and by the count the binding
+    // chooses for the cloudflare platform.
+    let steps: &[(&str, u16, &str)] = &[
+        ("/roundtrip/horse", 200, "\"true false false\""),
+        (
+            "/derive",
+            200,
+            "\"c1a70c6be6f6e6bf655da130593cef039aa373a2c7b62622c0bbc3c62fe6f146\"",
+        ),
+        ("/high/passwordPASSWORDpassword", 200, "\"false false\""),
+    ];
+    let Some((failures, log)) = run_smoke("cr-smoke", "cr", CRYPTO_SOURCE, "/derive", &|port| {
+        check_steps(port, steps)
+    }) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "bynk.crypto on workerd disagrees with the contract the Node suite checks:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

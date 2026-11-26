@@ -253,13 +253,17 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
     if (typeof v === "object" && !globalThis.Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      // A payload-less sum's one value is its variant's wire name, under whatever key its
+      // `@discriminator` gave it.
+      const first = globalThis.Object.values(v)[0];
+      return typeof first === "string" ? first : undefined;
     }
     return globalThis.String(v);
   };
   if (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire)) {
     for (const f of fields) {
-      const value = wire[f.name];
+      // The wire form is keyed by wire name.
+      const value = wire[f.wire ?? f.name];
       if (value === undefined) continue;
       for (const item of globalThis.Array.isArray(value) ? value : [value]) {
         const text = leaf(item);
@@ -323,7 +327,7 @@ export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[])
   // A field is a list when its wire value is an array.
   const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
   const lists = new globalThis.Set(
-    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+    fields.filter((f) => globalThis.Array.isArray(record[f.wire ?? f.name])).map((f) => f.wire ?? f.name),
   );
   new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
     const bad = (expected: string): never => {

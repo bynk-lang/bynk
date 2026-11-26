@@ -73,6 +73,38 @@ pub(super) struct MultipartSpec {
     pub(super) has_files: bool,
 }
 
+/// #3975: for an enum leaf, the variant-to-wire-name map the runtime writes it with
+/// (`{ Dark: "dark" }`), `None` when `r` is not an enum or no variant has a `@name`, so an enum
+/// without wire names is written exactly as before.
+pub(crate) fn enum_wire_names(
+    r: &TypeRef,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<bynk_ts::TsExpr> {
+    use bynk_syntax::ast::TypeBody;
+    let TypeRef::Named(id) = r else {
+        return None;
+    };
+    let Some(TypeBody::Sum(sum)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    if sum.variants.iter().all(|v| v.wire_name().is_none()) {
+        return None;
+    }
+    Some(bynk_ts::TsExpr::object(
+        sum.variants
+            .iter()
+            .map(|v| {
+                (
+                    v.name.name.clone(),
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(
+                        v.wire_name().unwrap_or_else(|| v.name.name.clone()),
+                    )),
+                )
+            })
+            .collect(),
+    ))
+}
+
 /// #2854: the wire kind of one query-string value of type `r`, as the runtime's
 /// `QueryField.kind` names it.
 pub(crate) fn query_leaf_kind(

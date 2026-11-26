@@ -1,0 +1,13 @@
+{
+  "blurb": "A sum value is one JSON object: the discriminator key holds the variant's name, and the payload fields are the other keys of the same object. A payload field whose wire name is the discriminator would be written twice. A field's wire name is its `@name`, or its own name when it has none, and the discriminator is `kind` unless the sum has a `@discriminator`. Rename the field with `@name`, or choose another discriminator.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.discriminator_collides",
+  "constructs": [
+    "variant_payload_field",
+    "type_decl"
+  ],
+  "example": "@discriminator(\"type\")\ntype Event =\n    | Created(@name(\"type\") category: String)    // ✗ `type` is the discriminator\n\n@discriminator(\"type\")\ntype Event =\n    | Created(category: String)                    // ✓",
+  "severity": "error",
+  "summary": "A payload field's wire name is its sum's discriminator."
+}

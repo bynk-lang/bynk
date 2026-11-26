@@ -5869,6 +5869,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
     },
     Explain {
+        code: "bynk.types.annotation_unknown",
+        blurb: "A `type` takes `@discriminator(\"…\")` (on a sum), and a sum's variant takes `@name(\"…\")`. Any other annotation in those places would do nothing, so it is refused rather than ignored. Remove it, or use one of the two.",
+        example: "type Shape =\n    | @label(\"round\") Circle(r: Int)    // ✗ not a variant annotation\n    | Square(side: Int)\n\ntype Shape =\n    | @name(\"round\") Circle(r: Int)    // ✓\n    | Square(side: Int)",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -5997,6 +6002,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.derives_field_not_orderable",
         blurb: "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
         example: "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_bad_arg",
+        blurb: "`@discriminator` names the JSON key that carries a sum's variant, and the compiler reads that key at compile time, so it takes exactly one non-empty string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A sum may carry one `@discriminator`. Write the key as a literal, as in `@discriminator(\"type\")`.",
+        example: "@discriminator(1)    // ✗ not a string literal\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)\n\n@discriminator(\"type\")    // ✓\ntype Event =\n    | Created(id: String)\n    | Deleted(id: String)",
+    },
+    Explain {
+        code: "bynk.types.discriminator_collides",
+        blurb: "A sum value is one JSON object: the discriminator key holds the variant's name, and the payload fields are the other keys of the same object. A payload field whose wire name is the discriminator would be written twice. A field's wire name is its `@name`, or its own name when it has none, and the discriminator is `kind` unless the sum has a `@discriminator`. Rename the field with `@name`, or choose another discriminator.",
+        example: "@discriminator(\"type\")\ntype Event =\n    | Created(@name(\"type\") category: String)    // ✗ `type` is the discriminator\n\n@discriminator(\"type\")\ntype Event =\n    | Created(category: String)                    // ✓",
+    },
+    Explain {
+        code: "bynk.types.discriminator_not_sum",
+        blurb: "`@discriminator` names the key that tells a sum's variants apart on the wire. A record, a refined type or an opaque type has no variants, so the annotation would do nothing. Remove it, or put it on the sum.",
+        example: "@discriminator(\"type\")    // ✗ a record has no variants\ntype Event = { id: String }\n\ntype Event = { id: String }    // ✓",
     },
     Explain {
         code: "bynk.types.duplicate_example",
@@ -6136,7 +6156,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_bad_arg",
-        blurb: "`@name` renames a field's key on an HTTP request, and the compiler reads that key at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
+        blurb: "`@name` names the key a field, a sum variant or a variant's payload field has on the wire, and the compiler reads that name at compile time, so it takes exactly one string literal, or a `String` constant bound to one: not a number, a computed value, a second argument or none. A constant must be declared exactly `String` (not a refined type) and bound to a string literal or to another such constant. Write the key as a literal, as in `@name(\"__Host-sid\")`, or name it once with a constant.",
         example: "type Filter = {\n    @name(1) pageSize: Option[Int],             // ✗ not a string literal\n}\n\nconst PageKey: String = \"page-size\"\n\ntype Filter = {\n    @name(PageKey) pageSize: Option[Int],       // ✓ a `String` constant bound to a literal\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],   // ✓\n}",
     },
     Explain {
@@ -6146,23 +6166,13 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.field_name_duplicate",
-        blurb: "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+        blurb: "A wire name is the key a reader looks a field up by (or, for a sum variant, the value the discriminator takes), so two fields of one record, two payload fields of one variant, or two variants of one sum cannot share one: both would read the same value. A wire name is the `@name`, or the Bynk name when there is none. A field or variant may also carry only one `@name`. Give each its own name. Names differing only in case are `bynk.types.field_name_case_conflict`.",
         example: "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
     },
     Explain {
         code: "bynk.types.field_name_invalid",
         blurb: "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
         example: "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_not_request_record",
-        blurb: "`@name` renames the key a request reader looks for. Only a record that is the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an `on http` handler is read that way, so on any other record the annotation would do nothing. Remove it, or make the record that parameter. A record used as a JSON body or result may not carry `@name` either: `bynk.types.field_name_record_not_boundary`.",
-        example: "type Plain = {\n    @name(\"x-y\") a: String,    // ✗ `Plain` is not read from a request\n}\n\ntype Plain = {\n    a: String,                // ✓\n}",
-    },
-    Explain {
-        code: "bynk.types.field_name_record_not_boundary",
-        blurb: "A record with `@name` fields is read off a request by those names, but its JSON form uses the field names, so using it as a JSON body, a result, a store field, an event or a call argument would make the two forms disagree. It may only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter. Use a second record, without `@name`, for the other position.",
-        example: "type Filter = {\n    @name(\"page-size\") pageSize: Option[Int],\n}\n\ntype FilterView = {\n    pageSize: Option[Int],\n}\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[Filter]] by v: Visitor { … }        // ✗\n\non GET(\"/f\") (query: Filter) -> Effect[HttpResult[FilterView]] by v: Visitor { … }    // ✓",
     },
     Explain {
         code: "bynk.types.field_refinement_not_base",
@@ -7289,6 +7299,18 @@ pub const RETIRED: &[Retired] = &[
         replacement: Some(
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
         ),
+    },
+    Retired {
+        code: "bynk.types.field_name_not_request_record",
+        last_release: "0.661.1",
+        why: "A wire name (`@name`) is now part of a type's one encoding and legal on a field of any record (#3975), so it is no longer limited to a request record.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
+    },
+    Retired {
+        code: "bynk.types.field_name_record_not_boundary",
+        last_release: "0.661.1",
+        why: "A record's `@name` fields now name its keys at every boundary (#3975), so the record may be a body, a result, a store field, an event or a call argument.",
+        replacement: Some("`@name(\"…\")` on any record field, which applies at every boundary"),
     },
     Retired {
         code: "bynk.uses.second_spelling",
@@ -11058,6 +11080,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["method_call"],
     ),
     dg(
+        "bynk.types.annotation_unknown",
+        "A type or a sum variant carries an annotation other than `@discriminator(\"…\")` on a type or `@name(\"…\")` on a variant.",
+        &["type_decl", "sum_variant"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11126,6 +11153,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.types.derives_field_not_orderable",
         "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1).",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_bad_arg",
+        "A sum's `@discriminator` does not take exactly one non-empty string literal, or a `String` constant bound to one, or there is more than one.",
+        &["type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_collides",
+        "A payload field's wire name is its sum's discriminator.",
+        &["variant_payload_field", "type_decl"],
+    ),
+    dg(
+        "bynk.types.discriminator_not_sum",
+        "`@discriminator` is on a type that is not a sum.",
         &["type_decl"],
     ),
     dg(
@@ -11225,22 +11267,12 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.field_name_duplicate",
-        "A field has more than one `@name`, or two fields of a request record read the same wire name.",
+        "A field, variant or payload field has more than one `@name`, or two fields of a record, two variants of a sum or two payload fields of a variant have the same wire name.",
         &["record_field"],
     ),
     dg(
         "bynk.types.field_name_invalid",
-        "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name).",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_not_request_record",
-        "`@name` is on a field of a record that is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler.",
-        &["record_field"],
-    ),
-    dg(
-        "bynk.types.field_name_record_not_boundary",
-        "A record with `@name` fields is used as a JSON body, a result, a store field, an event or a call argument.",
+        "A `@name` is not a valid name for where it stands (a cookie or header name that is not a token, or an empty name).",
         &["record_field"],
     ),
     dg(

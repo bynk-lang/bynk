@@ -843,8 +843,16 @@ keeps the author's grouping verbatim.
 
 ### §5.2c Record field annotations {#field-annotations}
 
-A record field MAY be annotated. `@name("…")` gives the field its external name on an HTTP request
-(§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
+A record field MAY be annotated. `@name("…")` gives the field its name on the wire, at every
+boundary the record is encoded at (#3975): it takes one string literal, or a `String` constant bound
+to one (`bynk.types.field_name_bad_arg`), may not be empty (`bynk.types.field_name_invalid`), and
+two fields may not share a wire name (`bynk.types.field_name_duplicate`). A sum variant and a variant's
+payload field take `@name` the same way, and `@discriminator("…")` before a sum's `type` replaces
+the discriminator key `kind` (`bynk.types.discriminator_bad_arg`, `bynk.types.discriminator_not_sum`);
+no payload field's wire name may be the discriminator (`bynk.types.discriminator_collides`), and any
+other annotation on a type or a variant is `bynk.types.annotation_unknown`. The Bynk names do not
+change: only the codecs, the OpenAPI document, the typed drivers and a decode error's path use the wire
+name. A request record adds the rules of its surface (§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
 key of an Analytics Engine data point; it is accepted on a field of any record and has meaning only
 where the record is written with `writeValue` (#4105), which requires at most one `@index` field, a
 `String` (or a refined or opaque `String`), and refuses a second or a non-`String` one

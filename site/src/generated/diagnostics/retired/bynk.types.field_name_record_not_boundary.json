@@ -1,0 +1,6 @@
+{
+  "code": "bynk.types.field_name_record_not_boundary",
+  "lastRelease": "0.661.1",
+  "replacement": "`@name(\"…\")` on any record field, which applies at every boundary",
+  "why": "A record's `@name` fields now name its keys at every boundary (#3975), so the record may be a body, a result, a store field, an event or a call argument."
+}

@@ -1,0 +1,6 @@
+commons shapes
+
+@discriminator(1)
+type Event =
+    | Created(id: String)
+    | Deleted(id: String)

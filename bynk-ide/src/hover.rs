@@ -218,6 +218,14 @@ fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
     crate::violates::describe_at(text, a.offset, Some(a.snapshots))
 }
 
+/// A bare keyword's one-line doc, or the string of a `@name("…")` / `@discriminator("…")`
+/// annotation (#3975), where the cursor is on no identifier.
+fn describe_keyword_or_wire_annotation(text: &str, offset: usize) -> Option<String> {
+    crate::symbols::describe_keyword_at(text, offset)
+        .map(str::to_string)
+        .or_else(|| crate::wire_names::describe_wire_annotation_at(text, offset))
+}
+
 /// The hover Markdown for the cursor, or `None` when no rung resolves it.
 ///
 /// The rung order is the contract; see the module doc. Each rung is tried in
@@ -363,7 +371,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         // falls here — its one-line `keywords` registry doc, the same text
         // completion shows. Richer per-declaration hover is `describe_symbol`'s
         // job, not this fallback's.
-        return crate::symbols::describe_keyword_at(text, offset).map(str::to_string);
+        return describe_keyword_or_wire_annotation(text, offset);
     };
     // 5. #1885: a unit name — the file's own header name, or a `uses` /
     //    `consumes` / suite target path — shows the unit's module doc. Guarded

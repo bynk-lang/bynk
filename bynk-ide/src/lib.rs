@@ -88,6 +88,7 @@ pub mod symbols;
 pub mod token_claims;
 pub mod violates;
 pub mod wire_contract;
+pub mod wire_names;
 pub mod ws_handshake;
 
 /// One diagnostic produced from a recovery-mode compile of a single file.

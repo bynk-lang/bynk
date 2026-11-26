@@ -110,7 +110,7 @@ covers `InRange`, `AtLeast`, `AtMost`, `MinLength`, `MaxLength`, `Length` and
 that does not meet the rule is `bynk.refine.bound_not_literal`, and one declared
 the refined type whose bound it is is `bynk.resolve.const_cycle`. In an
 annotation: `@name(VisitsCookie)`
-([`@name`](/reference/types/#field-name)), `@ttl(SessionTtl)`,
+([`@name`](/reference/types/#field-name)), `@discriminator(EventKey)`, `@ttl(SessionTtl)`,
 `@retain`, `@cache(maxAge: Fresh, immutable: Pinned)`,
 `@limit(maxBody: MaxUpload)`, `@schema`, `@raw(contentType: Png)` and
 `@example`, and in a derived capability instance's options
