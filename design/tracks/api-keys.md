@@ -336,8 +336,10 @@ prefix   key id          secret      checksum
 separator, so the seam splits them by position. Each field is therefore encoded
 as big-endian base62, left-padded with `0` to its width: 33 characters for the
 24-byte id, 43 for the 32-byte secret, 6 for the 4-byte checksum. Plain base62
-drops leading zeros, so without the padding about one key in 62 would be
-shorter than its own format and fail to parse. A field of the right width whose
+drops leading zeros, so without the padding a large share of keys would be
+shorter than their own format and fail to parse: over a third from the id
+alone (62^32/2^192), about a fifth from the checksum, and about one in 62 from
+the secret. A field of the right width whose
 value does not fit its byte count is malformed, so each key has exactly one
 encoding. The harness pins round-trips for an id, a secret and a checksum with
 a leading zero byte, and for the all-zero and all-`0xff` values.
@@ -378,8 +380,10 @@ records and refuses inserts, so a key presented against it gets the ordinary
 `401` after the same work. `mint` also runs through `KeyOwner`, and an agent
 runs one handler at a time (`agents.md:790-798`), so a mint cannot land on a
 handle `revokeAll` is retiring. The order fails safe: if the second commit
-fails, the keys are already gone and the old handle stays, empty, until a retry
-rotates it. Afterwards an attacker holding an old id can still address the
+fails, the keys are already gone and `KeyOwner` still names the old, retired
+handle. Any `KeyOwner` handler that finds its handle retired rotates it before
+it does anything else, so the next `mint` (or a retried `revokeAll`) mints the
+fresh handle and the identity is never left unable to get a key. Afterwards an attacker holding an old id can still address the
 retired instance, but no live key is there, and new ids share nothing with the
 old ones. A single `revoke` does not rotate the handle: the identity's other
 keys still live in that instance (§12).
@@ -401,8 +405,9 @@ read no clock: the seam and the members pass `now`, so the context needs no
 `consumes Clock`. The digest compare uses `bynk.crypto`'s constant-time
 equality (§2.3), including the compare against the dummy digest. That is
 `Crypto.equal`, a capability method, so unlike the clock it cannot be passed
-in: the generated agents consume `Crypto`. Slice 1 settles whether the
-compiler supplies that requirement or the context must declare it. Their names
+in: the generated agents consume `Crypto`. The compiler supplies that
+requirement with the agents it generates, so an author never declares a
+capability for code they did not write. Their names
 are reserved in the context: an author's declaration that takes one is
 `bynk.actor.api_key_agent_name_reserved`.
 
@@ -533,7 +538,7 @@ service console from http {
 | Member | Type | Notes |
 |---|---|---|
 | `mint(identity, label)` | `Effect[Result[ApiKeySecret, TooManyKeys]]` | Needs `given Clock`. Service handlers only: the pepper is there |
-| `list(identity)` | `Effect[List[ApiKeyInfo]]` | Ids, labels, created, expires, last used. Never a secret or a digest. Service and agent handlers |
+| `list(identity)` | `Effect[List[ApiKeyInfo]]` | Needs `given Clock`, since it prunes expired keys and the agents take `now` from their caller. Ids, labels, created, expires, last used. Never a secret or a digest. Service and agent handlers, with `Clock` in either |
 | `revoke(identity, id)` | `Effect[Bool]` | `false` when the key is not that identity's, or is already gone. Service and agent handlers |
 | `revokeAll(identity)` | `Effect[Int]` | The number revoked; one commit empties the keys, then the handle is replaced (§6). Service and agent handlers |
 
@@ -582,8 +587,9 @@ is admitted on a single `ApiKey` actor too: the driver mints a key, revokes it
 with `revoke`, and presents it, and the seam must answer `401`. The code
 `bynk.test.revoked_needs_sessions_route` is kept, since codes are stable, and
 its message is widened to name both routes it is legal on. A sum still cannot
-be driven `by Revoked`. A harness test pins that `Unknown`, `Forged`,
-`Revoked` and `Expired` produce byte-identical responses.
+be driven `by Revoked`. A harness test pins that `Malformed`, `Unknown`,
+`Forged`, `Revoked` and `Expired` produce byte-identical responses; only
+`Malformed`'s timing is meant to differ.
 
 On a sum (slice 4) the principals name the member they test, `by
 Forged(Client)`, `by Malformed(Client)`, as every bad-credential principal
@@ -596,8 +602,11 @@ does since #4385 (`testing.md:729-747`).
   `bearerFormat` naming the prefix. The route lists the `401`. On a sum,
   `sum_security` lists the `ApiKey` member as one more alternative
   (`openapi.rs:651-700`).
-- **CORS.** A named `header` joins the default `Access-Control-Allow-Headers`
-  as `authorization` does for `Bearer` routes (`http_policy.rs:214-223`).
+- **CORS.** An `ApiKey` route adds its header to the default
+  `Access-Control-Allow-Headers`: `authorization` for the default form, as for
+  `Bearer` and `Oidc` routes, or the named `header` (`http_policy.rs:214-223`).
+  `Authorization` is not a CORS-safelisted header, so the default form needs it
+  in the preflight too.
 - **The client.** The generated client already takes per-call `headers`. It
   gains a typed option per `ApiKey` actor that sets the right header. The
   reference says plainly that an API key belongs on a server, never in a
@@ -795,8 +804,9 @@ review as recommended. The table at the end of this section indexes them.
    response and in the work done (§8). The credential header is hidden from
    the handler (ADR 0899).
    - `Authorization` is what HTTP clients, proxies and log scrubbers already
-     treat as a credential, and it needs no extra CORS header. A named header
-     serves APIs that must match an existing contract.
+     treat as a credential, and the CORS default already allows it for
+     `Bearer` routes. A named header serves APIs that must match an existing
+     contract.
    - *Rejected:* `x-api-key` as the default. It is common but not a standard,
      and it is not redacted by default in common logging.
 
@@ -858,14 +868,15 @@ review as recommended. The table at the end of this section indexes them.
    - It reuses `Forged`, `Expired` and `Revoked` with their existing meaning,
      and adds only the refusals this scheme has that others do not. `Revoked`
      keeps the code `bynk.test.revoked_needs_sessions_route`, with its message
-     widened. A harness test pins that the post-lookup refusals are identical.
+     widened. A harness test pins that every refusal from parsing onwards,
+     `Malformed` included, gets a byte-identical response.
    - *Rejected:* minting through the service's own routes at `system`, which
      depends on the author having a mint route and couples every test to it.
 
 10. **Clients and OpenAPI.** *Accepted in review:* an `apiKey` scheme
     `in: header` for a named header, `http`/`bearer` with a `bearerFormat` for
-    the default; a typed client option per actor; the named header added to
-    CORS defaults.
+    the default; a typed client option per actor; the CORS default allows
+    `authorization` for the default form, or the named header.
     - It describes what the seam actually reads, so generated clients and
       third-party tools send the key correctly.
     - *Rejected:* documenting every `ApiKey` route as `apiKey in: header`
