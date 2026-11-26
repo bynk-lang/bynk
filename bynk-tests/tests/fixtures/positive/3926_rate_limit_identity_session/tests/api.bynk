@@ -1,0 +1,98 @@
+suite shop.api as system {
+	// #3926: the signed-in user is counted after the cookie seam has run in full: the cross-site refusal, the
+	// cookie's signature and lifetime, and the session-live check. A caller who fails any of them gets that
+	// refusal and never touches the limiter. (`identity_verify_guard.rs` also pins, structurally, that the
+	// `verify` step holds the session-live check ahead of the limiter.)
+
+	case "a signed-in user over the limit is refused with 429" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let c <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect a is Handled(NoContent)
+		expect b is Handled(NoContent)
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "two users count separately" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let other <- api.POST("/rename", Wire("\"x\"")) by Member("bob")
+		expect other is Handled(NoContent)
+	}
+
+	case "a cross-site request is refused and never consumes the limiter" {
+		let x1 <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), Wire("\"x\"")) by Member("ada")
+		let x2 <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), Wire("\"x\"")) by Member("ada")
+		let x3 <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), Wire("\"x\"")) by Member("ada")
+		expect x1 is Handled(Forbidden)
+		expect x3 is Handled(Forbidden)
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect a is Handled(NoContent)
+		expect b is Handled(NoContent)
+	}
+
+	case "a forged cookie is refused and never consumes the limiter" {
+		let f1 <- api.POST("/rename", Wire("\"x\"")) by Forged
+		let f2 <- api.POST("/rename", Wire("\"x\"")) by Forged
+		let f3 <- api.POST("/rename", Wire("\"x\"")) by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect b is Handled(NoContent)
+	}
+
+	case "an expired cookie is refused and never consumes the limiter" {
+		let e1 <- api.POST("/rename", Wire("\"x\"")) by Expired
+		let e2 <- api.POST("/rename", Wire("\"x\"")) by Expired
+		let e3 <- api.POST("/rename", Wire("\"x\"")) by Expired
+		expect e3 is Rejected(Unauthorized)
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect b is Handled(NoContent)
+	}
+
+	case "the window recovers" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let c <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect c is Rejected(RateLimited(_))
+		advance Clock by 60.seconds
+		let again <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect again is Handled(NoContent)
+	}
+
+	case "two routes naming one limiter count together per caller" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let c <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: same-origin"]), Wire("\"x\"")) by Member("ada")
+		expect c is Rejected(RateLimited(_))
+		let other <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: same-origin"]), Wire("\"x\"")) by Member("bob")
+		expect other is Handled(NoContent)
+	}
+
+	// `by Revoked` signs in as the harness's fixed subject, `bynk-test`, so the two cases below count that
+	// same identity live and revoked: the revoked session is compared against its own identity's allowance.
+	case "a revoked session is refused with 401 even when the limit is exhausted" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let over <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		expect over is Rejected(RateLimited(_))
+		let revoked <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		expect revoked is Rejected(Unauthorized)
+	}
+
+	case "revoked sessions never consume the limiter" {
+		let r1 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		let r2 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		let r3 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		expect r1 is Rejected(Unauthorized)
+		expect r3 is Rejected(Unauthorized)
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		expect a is Handled(NoContent)
+		expect b is Handled(NoContent)
+		let c <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		expect c is Rejected(RateLimited(_))
+	}
+}

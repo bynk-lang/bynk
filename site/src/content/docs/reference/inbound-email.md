@@ -79,8 +79,40 @@ address, one through a constant, are `bynk.email.duplicate_address`.
 Routing is project-wide: Email Routing keeps one rule per address on the
 account, so two *contexts* claiming the same address is also
 `bynk.email.duplicate_address`. Dispatch runs on the envelope recipient
-(`message.to`), the local part compared without regard to case, an exact
-address before a catch-all.
+(`message.to`), the local part compared without regard to case. The order is an
+exact claim on the recipient, then a claim on its base address (see below), then
+the domain's catch-all.
+
+### Plus-addressed mail
+
+Email Routing supports subaddressing (RFC 5233). With it enabled for a domain,
+`support+1234@shop.example` is matched by the rule for `support@shop.example`, and
+the `+1234` part stays in `message.to`. Dispatch does the same: a recipient with a
+`+` in its local part goes to a service claiming exactly that address first
+(`from email("support+vip@shop.example")`, which stays legal and wins), then to
+the service claiming its **base address**, the local part up to the first `+`
+(`support@shop.example`), then to the catch-all. A tagged recipient with no claim
+on its base address and no catch-all is rejected `recipient not accepted`.
+
+The handler reads the tag as `mail.subaddress: Option[String]`: the text after the
+first `+` of the recipient's local part, `None` without one. `to` keeps the full
+recipient, and the case the sender wrote.
+
+```bynk,ignore
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    match mail.subaddress {
+      Some(ticket) => Forward("tickets@shop.example"),
+      None => Accept,
+    }
+  }
+}
+```
+
+Subaddressing must be enabled in the domain's Email Routing settings. If it is off,
+Cloudflare never routes a tagged recipient to the Worker, so the extra step never
+runs. A project that relied on a catch-all to receive tagged mail now has it taken
+by the base address's service, as Cloudflare's own rule order does.
 
 ## The message
 
@@ -103,6 +135,7 @@ consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
 | `html` | `Option[String]` | The HTML body, if there is one. |
 | `attachments` | `List[InboundAttachment]` | The files attached. |
 | `size` | `Int` | The raw message, in bytes. |
+| `subaddress` | `Option[String]` | The tag after the first `+` of the recipient's local part (`support+1234@…` gives `Some("1234")`), `None` without one. See [Plus-addressed mail](#plus-addressed-mail). |
 
 Every field after `to` has a default, so a test builds a message with only what
 it cares about. On a Worker the runtime fills the rest by parsing the raw
