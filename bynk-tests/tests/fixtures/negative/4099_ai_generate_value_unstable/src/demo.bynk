@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { Ai, GenerateRequest, ChatMessage, ChatRole }
+
+type Node = { label: String }
+
+service probe {
+    on call() -> Effect[Bool] by Caller given Ai {
+        let ask = GenerateRequest { messages: [ChatMessage { role: ChatRole.User, content: "x" }] }
+        let _ <- Ai.generateValue[Node]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+        true
+    }
+}

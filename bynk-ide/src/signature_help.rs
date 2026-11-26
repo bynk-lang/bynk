@@ -461,9 +461,12 @@ fn resolve_qualified_from(
             }
         }
     });
-    // #4502: `AnalyticsSql.select[T]` is compiler-lowered over `query`, so declared nowhere.
-    if out.is_none() && recv == "AnalyticsSql" {
-        out = typed_read("AnalyticsSql", member).map(str::to_string);
+    // #4502, #4099: `AnalyticsSql.select[T]` and `Ai.generateValue[T]` are compiler-lowered, so declared nowhere.
+    if out.is_none()
+        && matches!(recv, "AnalyticsSql" | "Ai")
+        && crate::analytics_tooling::consumes_cloudflare(doc_text, recv)
+    {
+        out = typed_read(recv, member).map(str::to_string);
     }
     match (out, derived_base) {
         // #2865: a derived `D1`'s typed reads are lowered by the compiler, so
@@ -505,6 +508,10 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
         ),
         // #4502: `Analytics.writeValue[T]` writes a record's mapped columns; `AnalyticsSql.select[T]`
         // reads them back (the SQL tail may continue the select list).
+        // #4099: `Ai.generateValue[T]` asks the model for JSON that matches `T`'s schema.
+        ("Ai", "generateValue") => Some(
+            "generateValue[T](model: String, request: GenerateRequest) -> Effect[Result[T, AiError]]",
+        ),
         ("Analytics", "writeValue") => Some("writeValue[T](value: T) -> Effect[()]"),
         ("AnalyticsSql", "select") => Some(
             "select[T](dataset: Analytics instance, tail: String, params: List[SqlValue]) -> Effect[Result[List[T], AnalyticsReadError]]",
@@ -514,8 +521,8 @@ pub(crate) fn typed_read(base: &str, member: &str) -> Option<&'static str> {
 }
 
 /// The bases whose derived instances have the compiler-lowered typed reads.
-pub(crate) const TYPED_READ_BASES: [&str; 5] =
-    ["D1", "Postgres", "MySql", "Analytics", "AnalyticsSql"];
+pub(crate) const TYPED_READ_BASES: [&str; 6] =
+    ["D1", "Postgres", "MySql", "Analytics", "AnalyticsSql", "Ai"];
 
 /// Whether `label` is the typed-read signature of the member `callee` names, so a
 /// user's own `select` operation is never taken for one.
@@ -747,6 +754,23 @@ mod tests {
             "{select}"
         );
         assert!(select.contains("AnalyticsReadError"), "{select}");
+    }
+
+    /// #4099: `Ai.generateValue[T]` has a signature for its type argument and its two parameters.
+    #[test]
+    fn ai_generate_value_has_a_signature() {
+        const DOC: &str = "context a\n\nconsumes bynk.cloudflare { Ai }\n";
+        assert_eq!(
+            resolve_label("Ai.generateValue", DOC, None).as_deref(),
+            Some(
+                "generateValue[T](model: String, request: GenerateRequest) -> Effect[Result[T, AiError]]"
+            )
+        );
+        // The declared operations keep theirs.
+        assert!(resolve_label("Ai.generate", DOC, None).is_some());
+        // A project's own `Ai` is not the first-party one, so it has no such operation.
+        let own = "context a\n\ncapability Ai {\n  fn ask(q: String) -> Effect[String]\n}\n";
+        assert!(resolve_label("Ai.generateValue", own, None).is_none());
     }
 
     /// Hyperdrive H3 (#3320): a derived `Postgres` has them too, over `PgValue`
