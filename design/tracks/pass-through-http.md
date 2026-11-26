@@ -1,7 +1,8 @@
 # Pass-through HTTP — rest segments, forwarded requests and pass-through responses
 
 - **Status:** Settling in the PR that adds this doc. Every maintainer ruling
-  was given on 26 November 2026 (§16). Spine issue: #3752, which carries the
+  was given on 26 November 2026, and every other decision was accepted in
+  review as recommended (§16). Spine issue: #3752, which carries the
   live slice status.
 - **Realises:** the service-tier HTTP surface
   (`site/src/content/docs/reference/http.md`) and the outbound streamed bodies
@@ -542,7 +543,7 @@ URL built at run time (§8) and loses repeated headers through its `Map`.
 | `Content-Length` and compression | **Passed through.** Bynk never buffers or re-encodes the body; the platform sets framing. On Workers, a `Content-Encoding` body is decoded on read and re-encoded on send (live check S2). | Bynk owns neither. |
 | `Set-Cookie` | **Stripped by default**; with `@responseCookies(true)`, kept with `Domain` removed and `Path` re-scoped under the mount (§7.3). | An upstream cookie must not land on the proxy's origin unasked (§8). |
 | `Location` | **Rewritten** when it points into the upstream origin (§7.5). | Keeps the browser on the proxy. |
-| `X-Content-Type-Options: nosniff`, HSTS | **Kept**, from the service's `security { }`. | They protect the proxy's origin, whose policy they are. |
+| `X-Content-Type-Options: nosniff`, HSTS | **Kept**, from the service's `security { }`. An upstream's own `Strict-Transport-Security` is **always removed**: replaced by the policy's when the service declares `hsts`, and sent not at all when it doesn't. So an upstream's `includeSubDomains` or `preload` can never reach the proxy's origin. | They protect the proxy's origin, whose policy they are. HSTS is a property of the origin, and `includeSubDomains` would bind every sibling host of the proxy. |
 | HTML headers (`frameAncestors`, `referrerPolicy`, `csp`) | **Filled, not overwritten:** stamped on a `text/html` response only where the upstream sent none. | The proxied site knows its own CSP; a missing one still gets Bynk's safe default. |
 | `Cache-Control`, `Vary`, `Expires`, `Age` | **Passed through**, except: forced `private` (unless `no-store`) when the route's actor carries a credential, when `Authorization` or `Cookie` was forwarded, or when a `Set-Cookie` survives. | Keeps one caller's answer out of shared caches (§8). |
 | `@cache` | **Refused** on an `ANY` route (`bynk.http.cache_on_pass_through`). | The upstream's `Cache-Control` is the freshness. |
@@ -628,7 +629,12 @@ capability Pages = Upstream @origin(BlogOrigin) @timeout(30.seconds)
   checks the built URL's origin equals the declared one before sending. A
   `path` that doesn't start with `/`, holds `?`, `#` or a control character,
   or has a `.` or `..` segment (encoded or not) is `Err(InvalidPath)`, with
-  nothing sent.
+  nothing sent. So is a segment whose percent-decoding contains `/` or `\`
+  and, split on them, has a `.` or `..` component (`..%2F..%2Fadmin`,
+  `..%5Cadmin`, `a%2F..%2Fb`): an upstream that decodes `%2F` or `%5C` and
+  then normalises would otherwise climb out of the mount. A segment with an
+  encoded slash and no dot component (`a%2Fb`, an R2 key) is still sent as
+  received.
 - `UpstreamError` is extensible: `Timeout`, `Unreachable`, `InvalidPath`.
 - Further instance annotations, all optional: `@timeout(d)` (the head; default
   30 seconds; the body streams after), `@forwardHeaders(["authorization",
@@ -669,7 +675,7 @@ Request, from the client to the upstream:
 | `authorization` | **Stripped unless** `@forwardHeaders(["authorization"])`. |
 | `cookie` | **Stripped unless** `@forwardHeaders(["cookie"])`. A `SignedCookie` route's session cookie stays hidden even then. |
 | Every other header (`accept*`, `if-*`, `range`, `content-type`, `user-agent`, `origin`, `referer`, `sec-fetch-*`, client hints, custom headers) | Forwarded as received. |
-| Added: `x-forwarded-for` | The client's address from `CF-Connecting-IP`, unless `@forwardedFor(false)`. |
+| Added: `x-forwarded-for` | The client's address, unless `@forwardedFor(false)`. On Workers, from `CF-Connecting-IP`, which the edge sets. Under `bynk dev` and on Node, the connection's peer address where the runtime exposes it. Where no address is known, the header is left out. It is never taken from a header the client sent. |
 | Added: `x-forwarded-proto`, `x-forwarded-host` | The scheme and `Host` the client used. |
 
 `@forwardHeaders` accepts only `authorization` and `cookie`; any other name
@@ -681,7 +687,7 @@ Response, from the upstream to the client:
 | Header | Policy |
 |---|---|
 | Hop-by-hop, `proxy-authenticate` | Always stripped. |
-| `set-cookie` | **Stripped unless** `@responseCookies(true)`. Then each cookie's `Domain` is removed (it becomes host-only on the proxy) and its `Path` is placed under the mount (`/` → `/blog/`, `/x` → `/blog/x`; unchanged under a root mount). A `__Host-` cookie, which must have `Path=/`, is dropped and logged. |
+| `set-cookie` | **Stripped unless** `@responseCookies(true)`. Then each cookie's `Domain` is removed (it becomes host-only on the proxy) and its `Path` is mapped by the same reversal as `Location` (§7.5): `M` + the path with `B` removed, on a segment boundary. With the blog's mapping (`B` = `""`), `/` → `/blog/` and `/x` → `/blog/x`; with `"/v1" + rest`, `Path=/v1/x` → `/blog/x`. A `Path` outside `B`, or a cookie when the mapping can't be reversed, is dropped and logged: it names a path the proxy doesn't expose. A `__Host-` cookie, which must have `Path=/` and no `Domain`, is kept only when the mapped path is still `/` (a root mount with `B` = `""`), and otherwise dropped and logged. |
 | `location` | Rewritten per §7.5. |
 | Every other header | Passed through, subject to §6.3's `Cache-Control` rule and security-header filling. |
 
@@ -763,8 +769,10 @@ upstream origin is rewritten onto the proxy; any other passes unchanged.**
 - When the mapping can't be reversed (`P` doesn't end with `R`, or the
   `Location` is outside `B`), the resolved absolute `Location` is passed
   through. It still points at the declared upstream, never elsewhere.
-- **The same `M`** places an opted-in `Set-Cookie`'s `Path` (§7.3), so a
-  cookie can't be scoped by a path the requester chose with extra slashes.
+- **The same reversal** (`M`, `B` and the segment-boundary test) maps an
+  opted-in `Set-Cookie`'s `Path` (§7.3), so a cookie can't be scoped by a
+  path the requester chose with extra slashes, and a `"/v1" + rest`
+  mapping's cookies come back for the paths the browser actually uses.
 - A `Location` off the upstream's origin passes through unchanged, as the
   TypeScript proxy does ("leaves a redirect to another site alone"). The
   upstream is trusted to serve content on the proxy's origin, which is
@@ -790,7 +798,7 @@ shared cache.
 | Attack | Mitigation | Where |
 |---|---|---|
 | **SSRF**: a request steers the proxy to another host (protocol-relative, backslash or user-information tricks in the path) | The origin is declared (`@origin`, literal or constant); the URL is built textually and its origin checked before sending; `path` must start with `/`. No request data can reach the host part. | D13 |
-| SSRF into the upstream's own private paths via `..` | The rest can't hold a dot segment (WHATWG parsing, plus the router's check); `forward` refuses a dot segment in `path`. | D4, D13 |
+| SSRF into the upstream's own private paths via `..` | The rest can't hold a dot segment (WHATWG parsing, plus the router's check); `forward` refuses a dot segment in `path`, and a segment whose percent-decoding holds `/` or `\` with a `.` or `..` component (`..%2F..%2Fadmin`, `..%5Cadmin`), so an upstream that decodes and then normalises can't be walked out of the mount. | D4, D13 |
 | SSRF to internal addresses | `global_fetch_strictly_public` already; plus loopback only for an `http` origin. | §2.5, D13 |
 | **Credential leakage to the upstream** | `Authorization` and `Cookie` stripped unless named; the actor's consumed credential never forwarded; `cf-access-*` and `proxy-authorization` always stripped. | D14 |
 | **Credential leakage from the upstream** | `Set-Cookie` stripped unless asked; `proxy-authenticate` stripped. An upstream `401` with `WWW-Authenticate: Basic` reaches the browser, whose answer is then stripped as `Authorization` by default: no loop, no leak. | D14 |
@@ -798,7 +806,7 @@ shared cache.
 | **Cache poisoning**: an upstream answer varying on a header the cache doesn't key on | The edge cache doesn't honour `Vary` beyond `Accept-Encoding`, so it isn't counted as a control: under `EdgeCache`, an answer whose `Vary` names anything else is `no-store`, and only answers the upstream marked cacheable are stored at all. `Vary` still passes through for browsers and other caches downstream. | D9 |
 | One user's answer stored in a shared cache | `Cache-Control` forced `private` when the actor carries a credential, when `Authorization` or `Cookie` was forwarded, or when a `Set-Cookie` survives. | D9 |
 | Poisoning through forwarding headers (`X-Forwarded-Host` used by the upstream to build links, cached) | Client-sent `x-forwarded-*`, `forwarded` and `x-real-ip` are always replaced, so the upstream sees only what the proxy saw. | D14 |
-| **`Set-Cookie` scoping**: an upstream sets `Domain=bynk-lang.org` or `Path=/` and reaches the main site's cookies | Stripped by default; when opted in, `Domain` removed and `Path` placed under the mount; `__Host-` dropped. | D14 |
+| **`Set-Cookie` scoping**: an upstream sets `Domain=bynk-lang.org` or `Path=/` and reaches the main site's cookies | Stripped by default; when opted in, `Domain` removed and `Path` mapped by the `Location` reversal onto the mount, a path outside the base dropped; `__Host-` kept only when its path is still `/`. | D14, D16 |
 | **Open redirect** via the upstream | `Location` into the upstream is rewritten onto the proxy; off-origin redirects pass, documented, with the reasoning in D16 (the upstream can already serve arbitrary content on the origin). A guide note: proxy only an origin you would host. | D16 |
 | Open redirect through the **rewrite itself**: extra slashes in the request (`//blog/…`), or a parameter in the mount, make the rewritten `Location` protocol-relative | The mount is rebuilt from the matched segments, never sliced from the raw path; the base matches on segment boundaries; a rewritten `Location` must start with exactly one `/`. | D16 |
 | An upstream serving script on the proxy's origin | Out of Bynk's reach by design: the upstream *is* content on that origin. `nosniff` and the HTML security headers filled where absent narrow the damage. | D9 |
@@ -924,8 +932,9 @@ Lanes never touch accounts, so anything that needs Cloudflare's real edge is
 a script for the maintainer to run against a sandbox account, kept beside
 the slice that needs it and named in its "Done when":
 
-- **S1.** Whether the edge passes `//`, `/\`, `%2e%2e` and `%2F` paths to a
-  Worker unchanged, under the zone's default URL normalisation. Confirms
+- **S1.** Whether the edge passes `//`, `/\`, `%2e%2e`, `%2F`, `..%2F` and
+  `..%5C` paths to a Worker unchanged, under the zone's default URL
+  normalisation. Confirms
   D4's assumptions.
 - **S2.** A brotli- and gzip-encoded upstream (Pages) through a pass-through
   Worker: no double encoding, a correct `Content-Encoding`, and what
@@ -1056,7 +1065,7 @@ recommendations avoid it:
 **[DECISION D23] Separately from this track, decide before 1.0 whether
 `HttpResult` should be extensible** (a `match` on it needs a wildcard), so
 the RFC 9110 vocabulary (ADR 0126) can grow through 1.x. **Ruled 26 November 2026:** yes,
-before 1.0, as its own increment outside this track. It's a breaking change
+before 1.0, as its own increment outside this track (proposal #4536). It's a breaking change
 now (every exhaustive `match` gains a wildcard), and cheap before 1.0; this
 track doesn't depend on it.
 
@@ -1073,7 +1082,7 @@ its own pending file, ADR and docs. Sizes are estimates.
 | 1 | **Rest segments and the router.** `*name` (D2–D6) in ordinary routes: checker rules and diagnostics, `route_order` with `Seg::Rest`, `matchPath`, `param_count`, `Rest_` naming and the duplicate-name check, `bynk client` and `bynk openapi` leaving rest routes out, the test address, LSP hover. | — | A `GET /files/*key` serves R2 keys with `/` at unit and workerd tiers; every row of §5.2 and §5.4 is a fixture; `unreachable_route` covers rests; `HEAD`, `405` and CORS work on a rest route; `/_bynk/` unaffected under `/*path`; ADR and reference updated. | M |
 | 2 | **Header enumeration.** `RequestHeaders.entries()` (D12), consumed credentials still hidden, `RequestHeaders.of` and the system-tier driver honouring it. | — | A handler lists a request's headers; repeated fields arrive combined; a `Bearer` route's `entries()` has no `authorization`. | S |
 | 3 | **The pass-through route and response.** `ANY` in the grammar, parser, IR, tree-sitter and `vscode-bynk`; `PassThrough`, `Forwarded`, `InboundRequest`; `Upstream` with `@origin` and `@timeout`; `forward` sending method, path, raw query and body, **and no inbound headers**; every row of D9 except `Set-Cookie` re-scoping, `Location` rewriting and the `Cache-Control` and `Vary` rules (slice 4's, since forced `private` is triggered by forwarded credentials); D10; `501` for other methods and `Upgrade`; the unit-tier double (D20). | 1 | The status, headers and streamed body of a local upstream pass through at workerd tier, `200`, `304`, `404`, `308` included; no `ETag`, `HEAD` or `OPTIONS` is synthesised on an `ANY` path; the SSRF cases of §8 are refused at unit and workerd tiers. Safe but not yet useful: an upstream gets no `If-None-Match`. | L |
-| 4 | **Forwarding with the safety defaults.** The header policy (D14) with `@forwardHeaders`, `@forwardedFor`, `@responseCookies`; `Location` rewriting (D16), with fixtures for a request with extra leading slashes, a parameter in the mount, a root mount (`ANY("/*path")`, `M` = `""`), and a base that is a string prefix but not a segment prefix (`/v1` against `/v1beta`); the `Cache-Control` and `Vary` rules (D9); `@propagateTrace` (D18); the body length (D15); the workerd case of §10.2 in full; sandbox scripts S1–S7 written. | 2, 3 | Every row of §7.3 and §8 has a unit or workerd case; the scripts are in the PR, with their results recorded by the maintainer before the slice is marked done. | M |
+| 4 | **Forwarding with the safety defaults.** The header policy (D14) with `@forwardHeaders`, `@forwardedFor`, `@responseCookies`; `Location` rewriting (D16), with fixtures for a request with extra leading slashes, a parameter in the mount, a root mount (`ANY("/*path")`, `M` = `""`), a `Set-Cookie` `Path` under and outside a non-empty base (`/v1/x`, `/other`), a `__Host-` cookie under a root and a non-root mount, and a base that is a string prefix but not a segment prefix (`/v1` against `/v1beta`); the `Cache-Control` and `Vary` rules (D9); `@propagateTrace` (D18); the body length (D15); the workerd case of §10.2 in full; sandbox scripts S1–S7 written. | 2, 3 | Every row of §7.3 and §8 has a unit or workerd case; the scripts are in the PR, with their results recorded by the maintainer before the slice is marked done. | M |
 | 5 | **The blog port.** §11.2 replacing `bynk-lang/blog` `proxy/` (or per D22), its tests restated, the deploy switched; the README's "Why not Bynk?" retired; a guide, *Serve another site under a path*. | 4 | The ten tests of §11.1 pass against the Bynk Worker with only §11.3's differences; deployed and checked at `bynk-lang.org/blog/` and a post; S1's answer recorded. | M |
 
 The track retires after slice 5, with this doc's closing summary in
@@ -1123,25 +1132,25 @@ route form and its suspensions (slice 3, relating to ADR 0162, 0163, 0159,
 | | Decision | Ruling |
 |---|---|---|
 | D1 | Pass-through in the ordinary service tier, as a distinct route form | Ruled: as recommended |
-| D2 | `*name`, last segment only | |
-| D3 | The rest binds a raw `String` | |
-| D4 | Edge cases; zero-or-more matching | |
-| D5 | Rest is the weakest segment; an `ANY` route owns only the paths it matches more specifically than every ordinary route | |
-| D6 | Router and naming changes | |
+| D2 | `*name`, last segment only | Accepted in review: as recommended |
+| D3 | The rest binds a raw `String` | Accepted in review: as recommended |
+| D4 | Edge cases; zero-or-more matching | Accepted in review: as recommended |
+| D5 | Rest is the weakest segment; an `ANY` route owns only the paths it matches more specifically than every ordinary route | Accepted in review: as recommended |
+| D6 | Router and naming changes | Accepted in review: as recommended |
 | D7 | `on ANY(…)` with `Effect[PassThrough]` | Ruled: as recommended |
-| D8 | `PassThrough = Forward(Forwarded) \| Respond(HttpResult[()])` | |
-| D9 | What `Forward` suspends and keeps | |
-| D10 | No `cors` in a service with an `ANY` route | |
-| D11 | `InboundRequest` | |
-| D12 | `RequestHeaders.entries()`; no multi-value form | |
+| D8 | `PassThrough = Forward(Forwarded) \| Respond(HttpResult[()])` | Accepted in review: as recommended |
+| D9 | What `Forward` suspends and keeps | Accepted in review: as recommended |
+| D10 | No `cors` in a service with an `ANY` route | Accepted in review: as recommended |
+| D11 | `InboundRequest` | Accepted in review: as recommended |
+| D12 | `RequestHeaders.entries()`; no multi-value form | Accepted in review: as recommended |
 | D13 | `Upstream` with a declared origin; portable `bynk` | Ruled: portable `bynk` |
 | D14 | Deny-list header policy; credentials opt-in; `X-Forwarded-*` | Ruled: deny list; `X-Forwarded-For` on by default |
-| D15 | Method and streamed body under the cap | |
+| D15 | Method and streamed body under the cap | Accepted in review: as recommended |
 | D16 | Manual redirects; `Location` rewrite; off-origin passes | Ruled: off-origin passes |
-| D17 | `by` allowed | |
-| D18 | `traceparent` opt-in | |
-| D19 | Failures mapped by the handler, `504` and `502` | |
-| D20 | The `Upstream` double: `exchange` beneath the policy, `forward` for the handler | |
+| D17 | `by` allowed | Accepted in review: as recommended |
+| D18 | `traceparent` opt-in | Accepted in review: as recommended |
+| D19 | Failures mapped by the handler, `504` and `502` | Accepted in review: as recommended |
+| D20 | The `Upstream` double: `exchange` beneath the policy, `forward` for the handler | Accepted in review: as recommended |
 | D21 | Equivalence, and its intended differences | Ruled: all seven accepted |
 | D22 | The port lives in `bynk-lang/blog` | Ruled: `bynk-lang/blog` `proxy/` |
 | D23 | `HttpResult` extensible before 1.0 (outside this track) | Ruled: yes, as its own increment |
