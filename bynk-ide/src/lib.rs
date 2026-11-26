@@ -74,6 +74,7 @@ pub mod hover;
 pub mod index_queries;
 pub mod locals_nav;
 pub mod packages;
+mod plain_shape;
 pub mod queue_delivery;
 pub mod rate_limit_completion;
 pub mod sequence;

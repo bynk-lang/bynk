@@ -212,6 +212,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                     Some(model) => format!("{content}{}", wire_contract_appendix(&model)),
                     None => content,
                 }
+            } else if key.kind == SymbolKind::Field
+                && let Some((ty, field)) = key.name.split_once('.')
+                && let Some(section) = crate::plain_shape::field_section(ty, field, a.boundary_info)
+            {
+                // #4453: a field of a type a plain-JSON route writes says which shape it takes there.
+                format!("{content}{section}")
             } else {
                 content
             };
