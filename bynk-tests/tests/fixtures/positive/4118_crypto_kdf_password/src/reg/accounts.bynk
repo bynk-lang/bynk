@@ -1,0 +1,42 @@
+context reg.accounts
+
+consumes bynk.crypto { Crypto }
+
+// #4118: HKDF key derivation and password hashing, the shapes a service uses.
+
+fn raw(hex: String) -> Bytes {
+	match Bytes.fromHex(hex) {
+		Some(b) => b,
+		None => Bytes.empty(),
+	}
+}
+
+service kdf {
+	on call(
+		ikm: String,
+		salt: String,
+		info: String,
+		length: Int
+	) -> Effect[String] by Caller given Crypto {
+		let okm <- Crypto.deriveKey(raw(ikm), raw(salt), raw(info), length)
+		Effect.pure(okm.toHex())
+	}
+}
+
+service hasher {
+	on call(password: String) -> Effect[String] by Caller given Crypto {
+		Crypto.hashPassword(password)
+	}
+}
+
+service checker {
+	on call(password: String, stored: String) -> Effect[Bool] by Caller given Crypto {
+		Crypto.verifyPassword(password, stored)
+	}
+}
+
+service staleness {
+	on call(stored: String) -> Effect[Bool] by Caller given Crypto {
+		Crypto.needsRehash(stored)
+	}
+}

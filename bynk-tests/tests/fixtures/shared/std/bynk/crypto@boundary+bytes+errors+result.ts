@@ -111,6 +111,16 @@ export const VerifyKey = {
  * signature or a token's digest; `Bytes.compare` is not constant-time and must
  * never compare secrets. `digest`, `hmac` and `sign` run in time that does not
  * depend on the data in a way a program can exploit.
+ *
+ * Keys and passwords. `deriveKey` is HKDF-SHA-256 (RFC 5869): `info` names what
+ * the key is for, and `length` is 1 to 8160 bytes. `hashPassword` is salted
+ * PBKDF2-HMAC-SHA-256 at a count Bynk chooses, returned as a self-describing
+ * string; `verifyPassword` reads the parameters from it and compares in constant
+ * time (a string not in the format is `false`); `needsRehash` says whether to
+ * hash again after a successful login. Cost: one `hashPassword` or
+ * `verifyPassword` can take on the order of a second of CPU, which counts against
+ * a Worker's CPU limit, and there is no cheaper setting. On a plan where that is
+ * too much, use an identity provider.
  */
 export interface Crypto {
   digest(algorithm: Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
@@ -121,6 +131,10 @@ export interface Crypto {
   importSigningKeyFromSecret(algorithm: Signature, secret: Secret): globalThis.Promise<Result<SigningKey, CryptoError>>;
   importVerifyKey(algorithm: Signature, key: globalThis.Uint8Array): globalThis.Promise<Result<VerifyKey, CryptoError>>;
   importVerifyJwk(jwk: string): globalThis.Promise<Result<VerifyKey, CryptoError>>;
+  deriveKey(secret: globalThis.Uint8Array, salt: globalThis.Uint8Array, info: globalThis.Uint8Array, length: number): globalThis.Promise<globalThis.Uint8Array>;
+  hashPassword(password: string): globalThis.Promise<string>;
+  verifyPassword(password: string, stored: string): globalThis.Promise<boolean>;
+  needsRehash(stored: string): globalThis.Promise<boolean>;
   sign(key: SigningKey, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;
   verify(key: VerifyKey, data: globalThis.Uint8Array, signature: globalThis.Uint8Array): globalThis.Promise<boolean>;
 }

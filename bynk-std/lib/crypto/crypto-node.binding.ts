@@ -120,6 +120,71 @@ function platformTimingSafeEqual(): ((a: Bytes, b: Bytes) => boolean) | undefine
 }
 // --- end platform ------------------------------------------------------------
 
+// #4118: key derivation and password hashing, over `crypto.subtle` alone.
+//
+// HKDF-SHA-256 (RFC 5869): `deriveBits` with the key imported as raw HKDF key material. The output is
+// at most 255 hash blocks, 8160 bytes for SHA-256.
+const HKDF_MAX_LENGTH = 255 * 32;
+
+// Password hashing is PBKDF2-HMAC-SHA-256 at an iteration count Bynk chooses (OWASP's current guidance
+// for this algorithm), with a fresh 16-byte salt and a 32-byte hash. The count is written into each
+// stored hash, so a later release can raise it and every older hash still verifies.
+const PASSWORD_SCHEME = "pbkdf2-sha256";
+const PASSWORD_ITERATIONS = 600000;
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_HASH_BYTES = 32;
+// What a stored hash may claim: a crafted `stored` cannot make `verifyPassword` spin for minutes.
+const PASSWORD_MAX_ITERATIONS = 10000000;
+const PASSWORD_MIN_SALT_BYTES = 8;
+const PASSWORD_MAX_SALT_BYTES = 64;
+const PASSWORD_MIN_HASH_BYTES = 16;
+const PASSWORD_MAX_HASH_BYTES = 64;
+
+function toBase64(bytes: Bytes): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return globalThis.btoa(binary).split("=").join("");
+}
+
+// Strict, unpadded standard base64; anything else is `undefined`.
+function fromBase64(text: string): Bytes | undefined {
+  if (!/^[A-Za-z0-9+/]+$/.test(text) || text.length % 4 === 1) return undefined;
+  try {
+    const binary = globalThis.atob(text + "=".repeat((4 - (text.length % 4)) % 4));
+    const out = new globalThis.Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+    return out;
+  } catch {
+    return undefined;
+  }
+}
+
+async function pbkdf2(password: string, salt: Bytes, iterations: number, length: number): Promise<Bytes> {
+  const s = subtle();
+  // NFC, so the same typed password always matches however the keyboard composed it.
+  const text = new TextEncoder().encode(password.normalize("NFC"));
+  const key = await s.importKey("raw", text as BufferSource, "PBKDF2", false, ["deriveBits"]);
+  const bits = await s.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: salt as BufferSource, iterations }, key, length * 8);
+  return new Uint8Array(bits);
+}
+
+type StoredPassword = { iterations: number; salt: Bytes; hash: Bytes };
+
+// A stored hash in this format, or `undefined` for anything else: it is never a fault.
+function parseStored(stored: string): StoredPassword | undefined {
+  const parts = stored.split("$");
+  if (parts.length !== 4 || parts[0] !== PASSWORD_SCHEME) return undefined;
+  if (!/^[1-9][0-9]{0,9}$/.test(parts[1]!)) return undefined;
+  const iterations = Number(parts[1]);
+  if (iterations > PASSWORD_MAX_ITERATIONS) return undefined;
+  const salt = fromBase64(parts[2]!);
+  const hash = fromBase64(parts[3]!);
+  if (!salt || !hash) return undefined;
+  if (salt.length < PASSWORD_MIN_SALT_BYTES || salt.length > PASSWORD_MAX_SALT_BYTES) return undefined;
+  if (hash.length < PASSWORD_MIN_HASH_BYTES || hash.length > PASSWORD_MAX_HASH_BYTES) return undefined;
+  return { iterations, salt, hash };
+}
+
 export class CryptoProvider implements Crypto {
   async digest(algorithm: Digest, data: Bytes): Promise<Bytes> {
     return new Uint8Array(await subtle().digest(hashName(algorithm), data as BufferSource));
@@ -237,5 +302,47 @@ export class CryptoProvider implements Crypto {
       // A signature the algorithm cannot even parse does not verify.
       return false;
     }
+  }
+
+  async deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: number): Promise<Bytes> {
+    if (secret.length === 0) {
+      throw new Error("Crypto.deriveKey requires a non-empty secret");
+    }
+    if (!Number.isInteger(length) || length < 1 || length > HKDF_MAX_LENGTH) {
+      throw new Error(`Crypto.deriveKey length must be a whole number from 1 to ${HKDF_MAX_LENGTH}`);
+    }
+    const s = subtle();
+    const k = await s.importKey("raw", secret as BufferSource, "HKDF", false, ["deriveBits"]);
+    const bits = await s.deriveBits(
+      { name: "HKDF", hash: "SHA-256", salt: salt as BufferSource, info: info as BufferSource },
+      k,
+      length * 8,
+    );
+    return new Uint8Array(bits);
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    const salt = globalThis.crypto.getRandomValues(new Uint8Array(PASSWORD_SALT_BYTES));
+    const hash = await pbkdf2(password, salt, PASSWORD_ITERATIONS, PASSWORD_HASH_BYTES);
+    return `${PASSWORD_SCHEME}$${PASSWORD_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
+  }
+
+  async verifyPassword(password: string, stored: string): Promise<boolean> {
+    const parsed = parseStored(stored);
+    if (!parsed) {
+      return false;
+    }
+    const candidate = await pbkdf2(password, parsed.salt, parsed.iterations, parsed.hash.length);
+    return constantTimeEqual(candidate, parsed.hash);
+  }
+
+  async needsRehash(stored: string): Promise<boolean> {
+    const parsed = parseStored(stored);
+    return (
+      !parsed ||
+      parsed.iterations < PASSWORD_ITERATIONS ||
+      parsed.salt.length < PASSWORD_SALT_BYTES ||
+      parsed.hash.length < PASSWORD_HASH_BYTES
+    );
   }
 }

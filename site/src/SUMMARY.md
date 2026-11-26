@@ -104,6 +104,7 @@
     - [Add an authorisation invariant](guides/actors/authorisation.md)
     - [Know which context called you](guides/actors/cross-context-callers.md)
     - [Sign and verify data](guides/effects-and-capabilities/sign-and-verify-data.md)
+    - [Store a password](guides/effects-and-capabilities/store-a-password.md)
   - Storing data
     - [Use more than one KV namespace](guides/effects-and-capabilities/use-several-kv-namespaces.md)
     - [Store files in R2](guides/effects-and-capabilities/store-files-in-r2.md)

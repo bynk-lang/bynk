@@ -66,6 +66,16 @@ adapter bynk.crypto {
 	signature or a token's digest; `Bytes.compare` is not constant-time and must
 	never compare secrets. `digest`, `hmac` and `sign` run in time that does not
 	depend on the data in a way a program can exploit.
+
+	Keys and passwords. `deriveKey` is HKDF-SHA-256 (RFC 5869): `info` names what
+	the key is for, and `length` is 1 to 8160 bytes. `hashPassword` is salted
+	PBKDF2-HMAC-SHA-256 at a count Bynk chooses, returned as a self-describing
+	string; `verifyPassword` reads the parameters from it and compares in constant
+	time (a string not in the format is `false`); `needsRehash` says whether to
+	hash again after a successful login. Cost: one `hashPassword` or
+	`verifyPassword` can take on the order of a second of CPU, which counts against
+	a Worker's CPU limit, and there is no cheaper setting. On a plan where that is
+	too much, use an identity provider.
 	---
 	capability Crypto {
 		fn digest(algorithm: Digest, data: Bytes) -> Effect[Bytes]
@@ -85,6 +95,10 @@ adapter bynk.crypto {
 			key: Bytes
 		) -> Effect[Result[VerifyKey, CryptoError]]
 		fn importVerifyJwk(jwk: String) -> Effect[Result[VerifyKey, CryptoError]]
+		fn deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int) -> Effect[Bytes]
+		fn hashPassword(password: String) -> Effect[String]
+		fn verifyPassword(password: String, stored: String) -> Effect[Bool]
+		fn needsRehash(stored: String) -> Effect[Bool]
 		fn sign(key: SigningKey, data: Bytes) -> Effect[Bytes]
 		fn verify(key: VerifyKey, data: Bytes, signature: Bytes) -> Effect[Bool]
 	}

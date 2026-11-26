@@ -2605,7 +2605,8 @@ experimental: list `"bynk.cloudflare.EdgeCache"` under `[unstable] allow`. See
 ## Cryptography — `bynk.crypto`
 
 `consumes bynk.crypto { Crypto }` brings in digests, HMAC, constant-time
-comparison, and signing and verification with imported keys. The unit is
+comparison, key derivation, password hashing, and signing and verification with
+imported keys. The unit is
 **experimental**: list `bynk.crypto` under [`[unstable] allow`](/reference/tooling/manifest/#unstable)
 to use it. It runs on all three platforms, over `crypto.subtle` and nothing else.
 No third-party crypto runs and nothing is polyfilled.
@@ -2622,6 +2623,10 @@ No third-party crypto runs and nothing is polyfilled.
 | `importVerifyJwk(jwk: String)` | `Effect[Result[VerifyKey, CryptoError]]` — the algorithm comes from the key's `kty` and `crv`. |
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
 | `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
+| `deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int)` | `Effect[Bytes]` — HKDF-SHA-256 ([RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)). `length` is from 1 to 8160 bytes and `secret` must not be empty; either outside that is a fault. |
+| `hashPassword(password: String)` | `Effect[String]` — PBKDF2-HMAC-SHA-256 with a fresh random 16-byte salt, as the self-describing `pbkdf2-sha256$<iterations>$<salt>$<hash>` (the salt and hash in unpadded base64). |
+| `verifyPassword(password: String, stored: String)` | `Effect[Bool]`, read from the parameters in `stored` and compared in constant time. A `stored` that is not in that format is `false`. |
+| `needsRehash(stored: String)` | `Effect[Bool]` — `true` for a `stored` made at a lower iteration count than this release uses, with a shorter salt or hash, or not in the format at all. |
 
 `Digest` is `Sha256 | Sha384 | Sha512`. `Signature` is `Ed25519 |
 EcdsaP256Sha256 | RsaPkcs1Sha256`: ECDSA over P-256 with SHA-256, signing the raw
@@ -2643,6 +2648,35 @@ result, or a wire type is `bynk.types.key_at_boundary`. Keep the key's bytes in
 [`Secrets`](#the-portable-surface--bynk) and import them where you sign or verify
 (`importSigningKeyFromSecret` takes the secret itself).
 
+**Key derivation.** One secret should not be reused for HMAC, for encryption and
+for each tenant's key. `deriveKey` takes the secret, a `salt` (which may be
+empty), an `info` that names what the key is for, and how many bytes to return,
+and gives a key that is unrelated to the keys of every other `info`:
+
+```bynk,fragment
+let macKey <- Crypto.deriveKey(master, appSalt, Bytes.fromUtf8("webhook-mac/v1"), 32)
+```
+
+**Passwords.** `hashPassword` and `verifyPassword` are the only password hashing
+here, and they take no parameters, because the ones people choose are the ones
+that go wrong: a missing salt, a low or fixed count, a comparison that stops at
+the first difference. The salt is random and internal. The password is
+normalised to Unicode NFC before hashing, so the same typed password always
+matches. The iteration count (600,000, [OWASP's guidance for
+PBKDF2-HMAC-SHA-256](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html))
+is Bynk's to set and is written into every stored hash, so a later release can
+raise it and the hashes already stored still verify; `needsRehash` tells a login
+flow to hash again after a successful `verifyPassword`.
+
+`hashPassword` and `verifyPassword` spend real CPU: one hash at this count can
+take on the order of a second, and that counts against a request's CPU limit.
+Measure it on your plan. On a
+Workers plan with a low CPU limit that is too much, and an identity provider, or
+`Oidc`, is the better answer; there is no
+lower-cost option, because a cheap password hash is not a password hash. Argon2
+and scrypt are not available, since Web Crypto offers neither; the format names
+its algorithm, so one can be added without breaking a stored hash.
+
 **Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
 differing byte, so they are the way to compare a secret, a MAC, a signature or a
 token's digest. `equal` uses the platform primitive where there is one
@@ -2663,9 +2697,10 @@ and signatures are deterministic for given inputs; `stub Crypto.digest(_, _)
 returns …` and `expect Crypto.digest called once` work as usual. `Random.bytes`
 is deterministic under test, like `Random.int`.
 
-Not in this unit: encryption and decryption, key generation and export, key
-derivation, JWT and JOSE helpers, and X.509. The runtime's Bearer and OIDC
-verifiers are unchanged. See [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/).
+Not in this unit: encryption and decryption, key generation and export, JWT and
+JOSE helpers, and X.509. The runtime's Bearer and OIDC
+verifiers are unchanged. See [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/) and
+[Store a password](/book/guides/effects-and-capabilities/store-a-password/).
 
 ## Consuming a first-party capability
 
