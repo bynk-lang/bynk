@@ -1,0 +1,31 @@
+suite calc as unit {
+  case "eq then other eq fails" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a == 7
+  }
+  case "eq then ne passes" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a != 7
+  }
+  case "three successive literals" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a != 7
+    expect a != 8
+  }
+  case "strings and bools" {
+    let s = label(1)
+    expect s == "pos"
+    expect s != "non"
+    let b = flag(1)
+    expect b == true
+    expect b != false
+  }
+  case "literal on the left" {
+    let a = total(3, 500)
+    expect 1500 == a
+    expect 7 != a
+  }
+}

@@ -1028,7 +1028,8 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     lv = pre.bind_temp(lv, cx);
                     rv = pre.bind_temp(rv, cx);
                 }
-                let cond = build_value_bin_op(*op, l, vec![lv.clone(), rv.clone()], cx);
+                let (lc, rc) = narrowing_proof(*op, lv.clone(), rv.clone(), cx);
+                let cond = build_value_bin_op(*op, l, vec![lc, rc], cx);
                 // #2622: an operand that holds a `Decimal` prints through the
                 // decimal-aware show, since `JSON.stringify` throws on a `bigint`.
                 let decimal = cx
@@ -1144,6 +1145,67 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             };
             body.push(assign_item(target, value));
         }
+    }
+}
+
+/// The TypeScript base type a literal operand has, when it is a number, string or boolean literal.
+fn literal_base(e: &bynk_ts::TsExpr) -> Option<&'static str> {
+    let bynk_ts::TsExpr::Lit(lit) = e else {
+        return None;
+    };
+    match lit {
+        bynk_ts::TsLit::Num(_) => Some("number"),
+        bynk_ts::TsLit::Str(_) => Some("string"),
+        bynk_ts::TsLit::Bool(_) => Some("boolean"),
+        bynk_ts::TsLit::Null | bynk_ts::TsLit::Raw(_) | bynk_ts::TsLit::BigInt(_) => None,
+    }
+}
+
+/// A name for a plain read (`a`, `r.x`) that TypeScript narrows by control flow.
+fn read_key(e: &bynk_ts::TsExpr) -> Option<String> {
+    if let bynk_ts::TsExpr::Ident(n) = e {
+        return Some(n.clone());
+    }
+    let bynk_ts::TsExpr::Member { object, property } = e else {
+        return None;
+    };
+    read_key(object).map(|o| [o.as_str(), ".", property.as_str()].concat())
+}
+
+/// #3775: `expect a == 1500` throws unless `a === 1500`, so TypeScript narrows `a` to `1500` for
+/// the statements after it, and a later `expect a == 7` is a TS2367 error. After one `==` of a
+/// read against a literal, the read is widened to the literal's base type (`a as number`) in every
+/// later comparison, so the check never relies on narrowing.
+fn narrowing_proof(
+    op: BinOp,
+    lv: bynk_ts::TsExpr,
+    rv: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> (bynk_ts::TsExpr, bynk_ts::TsExpr) {
+    use bynk_ts::TsType;
+    if !matches!(op, BinOp::Eq | BinOp::NotEq) {
+        return (lv, rv);
+    }
+    let (read, base, read_is_left) = match (literal_base(&lv), literal_base(&rv)) {
+        (None, Some(base)) => (&lv, base, true),
+        (Some(base), None) => (&rv, base, false),
+        _ => return (lv, rv),
+    };
+    let Some(key) = read_key(read) else {
+        return (lv, rv);
+    };
+    let seen = cx.expect_narrowed.contains(&key);
+    if op == BinOp::Eq {
+        cx.expect_narrowed.insert(key);
+    }
+    if !seen {
+        return (lv, rv);
+    }
+    let wide = |e| crate::ts_build::as_expr(e, TsType::named(base));
+    if read_is_left {
+        (wide(lv), rv)
+    } else {
+        (lv, wide(rv))
     }
 }
 

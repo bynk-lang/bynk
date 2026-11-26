@@ -413,6 +413,8 @@ mod system {
     mod examples;
     #[path = "expect_is_narrowing_behaviour.rs"]
     mod expect_is_narrowing_behaviour;
+    #[path = "expect_literal_narrowing_behaviour.rs"]
+    mod expect_literal_narrowing_behaviour;
     #[path = "expect_was_behaviour.rs"]
     mod expect_was_behaviour;
     #[path = "failure_explanation_behaviour.rs"]
