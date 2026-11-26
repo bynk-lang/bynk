@@ -25,27 +25,27 @@ function __makeHarness() {
 }
 
 <<bynk-shared: testing/jwt_signer>>
-async function __sysdrive_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
-async function __sysdrive_raw_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_POST_notes(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/notes`, { method: "POST", headers: { "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.REG_API.fetch(__req);

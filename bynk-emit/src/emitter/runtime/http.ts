@@ -1238,11 +1238,14 @@ export function jsonMediaTypeMatches(request: Request): boolean {
 // headers with ", " (both the platform `Headers.get` contract); `bearer` is the
 // token of an `Authorization: Bearer <token>` header and nothing else;
 // `clientIp` is the address Cloudflare reports (`CF-Connecting-IP`, which
-// `wrangler dev` sets too).
+// `wrangler dev` sets too). #3752 (D12): `entries` is every header, by lower-case
+// name, a repeated field combined as `get` combines it; the consumed credential
+// is absent from it as from `get`.
 export interface RequestHeaders {
   get(name: string): Option<string>;
   bearer(): Option<string>;
   clientIp(): Option<string>;
+  entries(): ReadonlyMap<string, string>;
 }
 
 /** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
@@ -1273,7 +1276,14 @@ export function requestHeaders(
     headers = new Headers();
     for (const line of source) {
       const i = line.indexOf(":");
-      if (i > 0) headers.append(line.slice(0, i).trim(), line.slice(i + 1).trim());
+      if (i <= 0) continue;
+      const name = line.slice(0, i).trim();
+      const value = line.slice(i + 1).trim();
+      // #3752 (D12): repeated `Cookie` lines are one cookie-string, joined with "; " as
+      // RFC 6265 sends it, not with the ", " `Headers.append` would use.
+      const cookie = name.toLowerCase() === "cookie" ? headers.get("cookie") : null;
+      if (cookie !== null) headers.set("cookie", `${cookie}; ${value}`);
+      else headers.append(name, value);
     }
   }
   const opt = (v: string | null): Option<string> =>
@@ -1285,6 +1295,12 @@ export function requestHeaders(
       return m === null ? { tag: "None" } : { tag: "Some", value: m[1] };
     },
     clientIp: () => opt(headers.get("cf-connecting-ip")),
+    entries: () => {
+      // `Headers` iterates lower-case names in order, each once, repeats combined.
+      const out = new Map<string, string>();
+      headers.forEach((value, name) => out.set(name, value));
+      return out;
+    },
   };
   // The system-tier driver sends a test's headers on its real request.
   Object.defineProperty(view, REQUEST_HEADER_PAIRS, { value: headers, enumerable: false });

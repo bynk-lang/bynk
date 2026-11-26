@@ -17,7 +17,7 @@ export const api = {
     }
     return HttpResult.Ok("Hi");
   },
-  async http_GET_greet_Param_name(name: string, cf: RequestCf, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, deps: {}): globalThis.Promise<HttpResult<string>> {
+  async http_GET_greet_Param_name(name: string, cf: RequestCf, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, deps: {}): globalThis.Promise<HttpResult<string>> {
     switch (cf.colo.tag) {
       case "Some": {
         const colo = cf.colo.value;

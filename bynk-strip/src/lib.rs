@@ -79,7 +79,9 @@ fn strip_types_with_map(
     let source_type = SourceType::from_path(filename).unwrap_or_else(|_| SourceType::ts());
 
     let parsed = Parser::new(&allocator, source, source_type).parse();
-    if parsed.panicked || !parsed.diagnostics.is_empty() {
+    // A fatal parse error also reports a diagnostic, so this covers it (the `panicked` flag
+    // is gone from `ParserReturn`).
+    if !parsed.diagnostics.is_empty() {
         return Err(StripError {
             filename: filename.to_string(),
             message: format!("parse error: {}", join_diagnostics(&parsed.diagnostics)),
@@ -125,15 +127,9 @@ fn strip_types_with_map(
         ..CodegenOptions::default()
     };
     let ret = Codegen::new().with_options(options).build(&program);
-    // `oxc_codegen` 0.146 still links `oxc_sourcemap` 8, while this crate uses 10:
-    // the two `SourceMap` types are distinct, so cross the boundary as a v3 JSON
-    // document. Drop this round trip once `oxc` is bumped to a release on 10.
-    let map = ret.map.and_then(|m| {
-        oxc_sourcemap::SourceMap::from_json_string(&m.to_json_string())
-            .ok()
-            .map(|m| m.into_owned())
-    });
-    Ok((ret.code, map))
+    // `oxc_codegen` and this crate share `oxc_sourcemap` 10, so the map passes through
+    // as is (no v3 JSON serialise and parse).
+    Ok((ret.code, ret.map.map(|m| m.into_owned())))
 }
 
 /// Compose a Bynk-to-TypeScript source map (the emitter's own, line-anchored
