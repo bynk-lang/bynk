@@ -35,8 +35,8 @@ impl Drop for Fixture {
     }
 }
 
-fn fixture() -> Fixture {
-    let top = std::env::temp_dir().join(format!("bynk_lsp_analytics_{}", std::process::id()));
+fn fixture(tag: &str) -> Fixture {
+    let top = std::env::temp_dir().join(format!("bynk_lsp_analytics_{}_{tag}", std::process::id()));
     let root = top.join("src");
     fs::create_dir_all(root.join("shop")).unwrap();
     fs::write(root.join("shop").join("cart.bynk"), SRC).unwrap();
@@ -97,7 +97,7 @@ fn hover_at(f: &Fixture, offset: usize) -> Option<String> {
 
 #[test]
 fn the_round_records_the_written_mapping() {
-    let f = fixture();
+    let f = fixture("mapping");
     let entry = f
         .result
         .analytics
@@ -119,7 +119,7 @@ fn the_round_records_the_written_mapping() {
 
 #[test]
 fn hover_on_a_written_field_names_its_column() {
-    let f = fixture();
+    let f = fixture("column");
     let at = SRC.find("country: String").unwrap() + 2;
     let md = hover_at(&f, at).expect("a hover");
     assert!(md.contains("Signups"), "{md}");
@@ -131,7 +131,7 @@ fn hover_on_a_written_field_names_its_column() {
 
 #[test]
 fn hover_on_the_dataset_placeholder_names_the_table() {
-    let f = fixture();
+    let f = fixture("dataset");
     let at = SRC.find("{dataset}").unwrap() + 3;
     let md = hover_at(&f, at).expect("a hover");
     assert!(
