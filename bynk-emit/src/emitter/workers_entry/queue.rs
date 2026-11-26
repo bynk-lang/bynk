@@ -16,7 +16,7 @@ use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTy
 /// `Ok` / retries on `Err` (a deserialisation failure also retries); `email`
 /// hands the message to the runtime with one route per `from email` service.
 pub(super) fn push_message_entries(
-    table: &UnitTable,
+    (table, layout): (&UnitTable, &bynk_project::worker_layout::WorkerLayout),
     queue_routes: &[QueueRoute],
     exec_params: &[TsParam],
     compose_args: &[TsExpr],
@@ -31,7 +31,7 @@ pub(super) fn push_message_entries(
             runtime_use,
         ));
     }
-    let email_routes = super::email::collect_routes(table);
+    let email_routes = super::email::collect_routes(table, layout);
     if !email_routes.is_empty() {
         entries.push(super::email::emit_email_handler(
             &email_routes,

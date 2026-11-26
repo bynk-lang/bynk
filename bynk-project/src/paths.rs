@@ -171,6 +171,9 @@ pub enum ProjectPathsError {
         capability: String,
         reason: String,
     },
+    /// #3883: a `[deploy.email."<address>"]` entry that is not well formed. An empty
+    /// `address` names the table itself.
+    BadEmailDeploy { address: String, reason: String },
     /// #3562: a `[deploy.workers.<key>]` group that is not well formed, or
     /// that breaks a rule across groups. The reason may lead with the
     /// `bynk.deploy.*` code it is.
@@ -259,7 +262,7 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ),
     (
         "deploy",
-        &["hyperdrive", "vectorize", "containers", "workers"],
+        &["hyperdrive", "vectorize", "containers", "workers", "email"],
     ),
     (
         "dev",
@@ -458,6 +461,12 @@ impl std::fmt::Display for ProjectPathsError {
                 reason,
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
+            }
+            ProjectPathsError::BadEmailDeploy { address, reason } if address.is_empty() => {
+                write!(f, "`[deploy.email]` {reason}")
+            }
+            ProjectPathsError::BadEmailDeploy { address, reason } => {
+                write!(f, "`[deploy.email.\"{address}\"]` {reason}")
             }
             ProjectPathsError::BadWorkers { reason } => write!(f, "`[workers]` {reason}"),
             ProjectPathsError::BadVars { reason } => write!(f, "{reason}"),
@@ -660,6 +669,7 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             "deploy" => {
                 drop(crate::hyperdrive::deploy_hyperdrive_from(entries)?);
                 drop(crate::vectorize::deploy_vectorize_from(entries)?);
+                drop(crate::email_deploy::deploy_email_from(entries)?);
                 drop(crate::containers::deploy_containers_from(entries)?);
                 drop(crate::worker_groups::deploy_workers_from(entries)?);
             }

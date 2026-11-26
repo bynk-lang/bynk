@@ -34,6 +34,7 @@ pub mod containers;
 pub mod contracts_lock;
 pub mod dev_ack;
 pub mod discovery;
+pub mod email_deploy;
 pub mod env_protocol;
 pub mod environment;
 pub mod graph;
