@@ -42,7 +42,7 @@ async function test_a_record_built_in_a_test_body_takes_the_defaults() {
     type Marked = __ns_demo_holder.Marked;
     type Tok = __ns_demo_holder.Tok;
     const { plain, sameTok } = __ns_demo_shop;
-    const h = { name: "x", tok: Tok.unsafe("k"), toks: [Tok.unsafe("k"), Tok.unsafe("n")], best: { tag: "Some" as const, value: Tok.unsafe("k") }, marked: { tag: "Tagged" as const, tok: Tok.unsafe("n") }, inner: { tok: Tok.unsafe("n") } };
+    const h = { name: "x", tok: ("k" as any), toks: [("k" as any), ("n" as any)], best: { tag: "Some" as const, value: ("k" as any) }, marked: { tag: "Tagged" as const, tok: ("n" as any) }, inner: { tok: ("n" as any) } };
     if (!(isK(h.tok))) { throw __bynkExpectFailure("tests/check.test.bynk:8:12", 226, 236, "expect isK(h.tok)"); }
     if (!(isN(h.inner.tok))) { throw __bynkExpectFailure("tests/check.test.bynk:9:12", 248, 264, "expect isN(h.inner.tok)"); }
     return { pass: true };

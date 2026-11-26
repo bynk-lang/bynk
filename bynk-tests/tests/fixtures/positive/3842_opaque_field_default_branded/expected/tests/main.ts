@@ -6,6 +6,7 @@ declare const process: { exit(code: number): never; env: { [k: string]: string |
 import * as test_0 from "./demo_check.test.js";
 import * as test_1 from "./demo_holder.test.js";
 import * as test_2 from "./demo_shop.test.js";
+import * as test_3 from "./demo_top.test.js";
 
 <<bynk-shared: testing/test_filter>>
 
@@ -14,6 +15,7 @@ async function main() {
     { name: "demo.check", names: test_0.__bynkCases, run: test_0.run },
     { name: "demo.holder", names: test_1.__bynkCases, run: test_1.run },
     { name: "demo.shop", names: test_2.__bynkCases, run: test_2.run },
+    { name: "demo.top", names: test_3.__bynkCases, run: test_3.run },
   ];
 <<bynk-shared: test-runner#base>>
 }
