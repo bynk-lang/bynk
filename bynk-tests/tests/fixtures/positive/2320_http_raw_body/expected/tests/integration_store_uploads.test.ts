@@ -119,7 +119,7 @@ async function __sysdrive_rawstale_uploads_http_POST_signed(body: string, __extr
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __body = body;
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Sender") {
@@ -128,14 +128,14 @@ async function __sysdrive_uploads_http_POST_either(body: globalThis.Uint8Array, 
     __auth["X-Ts"] = __sig.timestamp;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: __body as BufferSource });
   const __res = await __h.env.STORE_UPLOADS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_raw_uploads_http_POST_either(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "Sender") {
     const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? ""), true, 0);
@@ -143,7 +143,7 @@ async function __sysdrive_raw_uploads_http_POST_either(body: string, __extraHead
     __auth["X-Ts"] = __sig.timestamp;
   }
   if (__as === "User") {
-    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
+    __auth["authorization"] = `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/either`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth }, body: body });
@@ -400,8 +400,8 @@ async function test_a_multi_actor_raw_route_verifies_a_signer_over_the_octets__o
       switch (__d.tag) {
         case "Some": {
           const payload = __d.value;
-          const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", "Sender");
-          const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), "User");
+          const a = await __sysdrive_uploads_http_POST_either(payload, undefined, "", {}, "Sender");
+          const b = await __sysdrive_uploads_http_POST_either(payload, undefined, ("bob" as any), {}, "User");
           const forged = await __sysdrive_sumbad_uploads_http_POST_either(payload, undefined, "forged", "", "Sender");
           if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "sender gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:53:12", 1755, 1781, "expect a is Ok(\"sender gP8AAf7/\")", "a", () => __bynkShow(a)); }
           if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "bob gP8AAf7/"))) { throw __bynkExpectFailure("tests/uploads.bynk:54:12", 1793, 1816, "expect b is Ok(\"bob gP8AAf7/\")", "b", () => __bynkShow(b)); }
@@ -430,8 +430,8 @@ async function test_a_multi_actor_raw_route_counts_the_bytes_read() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_raw_uploads_http_POST_either("short", undefined, "", "Sender");
-    const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", undefined, "", "Sender");
+    const ok = await __sysdrive_raw_uploads_http_POST_either("short", undefined, "", {}, "Sender");
+    const big = await __sysdrive_raw_uploads_http_POST_either("this body is a good deal longer than sixty-four bytes, which is the service cap", undefined, "", {}, "Sender");
     if (!(((__c: boolean) => __c)(ok.tag === "Handled" && ok.value.tag === "Ok" && ok.value.value === "sender c2hvcnQ="))) { throw __bynkExpectFailure("tests/uploads.bynk:66:10", 2171, 2207, "expect ok is Handled(Ok(\"sender c2hvcnQ=\"))", "ok", () => __bynkShow(ok)); }
     if (!(((__c: boolean) => __c)(big.tag === "Handled" && big.value.tag === "PayloadTooLarge"))) { throw __bynkExpectFailure("tests/uploads.bynk:67:10", 2217, 2251, "expect big is Handled(PayloadTooLarge(_))", "big", () => __bynkShow(big)); }
     return { pass: true };

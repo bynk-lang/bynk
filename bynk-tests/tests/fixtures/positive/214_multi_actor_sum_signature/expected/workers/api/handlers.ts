@@ -26,7 +26,7 @@ export const Event = {
 };
 
 export const api = {
-  async http_POST_ingest(body: Event, deps: { who: { tag: "User"; identity: UserId } | { tag: "Hook" } }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_ingest(body: Event, deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Hook" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
