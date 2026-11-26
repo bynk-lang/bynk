@@ -104,6 +104,83 @@ fn deps_caps_in_order(mut caps: Vec<String>) -> Vec<String> {
     caps
 }
 
+/// The compose methods of one `on http` handler: its wrapper, which runs the actor's verification
+/// seam (or none) and calls the handler, or, for a route counted by `key: identity` (#3926), a
+/// verify step and a run step.
+fn http_route_wrappers(
+    service: &bynk_syntax::ast::ServiceDecl,
+    sname: &str,
+    h: &bynk_syntax::ast::Handler,
+    (method, path): (bynk_model::IrHttpMethod, &str),
+    table: &UnitTable,
+    runtime_use: &RuntimeUse,
+) -> Vec<TsObjectEntry> {
+    let mut return_entries: Vec<TsObjectEntry> = Vec::new();
+    // v0.151: a single-actor `Oidc` handler gets the JWKS
+    // verification wrapper. v0.52: a multi-actor sum handler gets
+    // the first-wins resolution wrapper; otherwise the
+    // single-actor Bearer/plain path. Review of #1209: this site
+    // used to check `oidc` ahead of `sum`; `lower_actor_seam_ir`
+    // checks `sum` ahead of `oidc` (matching `ActorSeamIr`'s own
+    // canonical order). That swap is licensed by
+    // `oidc_seam_for`'s own `by.is_sum()` early return
+    // (`bynk-check/src/actors.rs`) — Oidc and a sum can never
+    // both resolve for one handler, so which is tried first is a
+    // no-op, unlike the sum-vs-Bearer order `ActorSeamIr`'s own
+    // doc comment is about (Bearer was already checked last at
+    // this site, so that pair's order didn't change here).
+    // `Caller` never arises here — `caller_binder_for` only ever
+    // resolves for `HandlerKind::Call` — so it shares the plain
+    // path with `None`, exactly like the old fallthrough
+    // (`bearer_seam_for` also misses on a `Caller` handler, since
+    // `Caller` is a prelude actor, not a key of `table.actors`).
+    // #3926: a route counted by `identity` is served by a verify step and a
+    // run step, so the entry can ask the limiter between them.
+    let identity_limited = bynk_check::http_rate_limit::route_rate_limit(h, table)
+        .is_some_and(|r| r.key == bynk_check::http_rate_limit::RateLimitKey::Identity);
+    match bynk_model::lower_actor_seam_ir(h, &table.actors) {
+        bynk_model::ActorSeamIr::Oidc(oidc) if identity_limited => {
+            return_entries.extend(oidc_identity_split(sname, h, method, path, &oidc));
+        }
+        bynk_model::ActorSeamIr::Oidc(oidc) => {
+            return_entries.push(emit_http_oidc_wrapper(sname, h, method, path, &oidc));
+        }
+        bynk_model::ActorSeamIr::SignedCookie(seam) if identity_limited => {
+            return_entries.extend(signed_cookie_identity_split(
+                service, sname, h, method, path, &seam,
+            ));
+        }
+        bynk_model::ActorSeamIr::SignedCookie(seam) => {
+            return_entries.push(signed_cookie_entry(service, sname, h, method, path, &seam))
+        }
+        bynk_model::ActorSeamIr::Sum(members) => {
+            return_entries.push(emit_http_sum_wrapper(
+                sname,
+                h,
+                method,
+                path,
+                &members,
+                service.limits.as_ref().and_then(|p| p.max_body()),
+                &csrf_origins(service),
+                runtime_use,
+            ));
+        }
+        bynk_model::ActorSeamIr::Bearer(seam) if identity_limited => {
+            return_entries.extend(bearer_identity_split(sname, h, method, path, &seam));
+        }
+        bynk_model::ActorSeamIr::Bearer(seam) => {
+            return_entries.push(emit_http_wrapper(sname, h, method, path, Some(&seam)));
+        }
+        bynk_model::ActorSeamIr::Caller(_)
+        | bynk_model::ActorSeamIr::Sender(_)
+        | bynk_model::ActorSeamIr::CallSum(_)
+        | bynk_model::ActorSeamIr::None => {
+            return_entries.push(emit_http_wrapper(sname, h, method, path, None));
+        }
+    }
+    return_entries
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn emit_worker_compose(
     context: &str,
@@ -363,59 +440,14 @@ pub fn emit_worker_compose(
                     return_entries.push(emit_call_wrapper(sname, h, &table.actors));
                 }
                 bynk_model::IrHandlerKind::Http { method, path } => {
-                    // v0.151: a single-actor `Oidc` handler gets the JWKS
-                    // verification wrapper. v0.52: a multi-actor sum handler gets
-                    // the first-wins resolution wrapper; otherwise the
-                    // single-actor Bearer/plain path. Review of #1209: this site
-                    // used to check `oidc` ahead of `sum`; `lower_actor_seam_ir`
-                    // checks `sum` ahead of `oidc` (matching `ActorSeamIr`'s own
-                    // canonical order). That swap is licensed by
-                    // `oidc_seam_for`'s own `by.is_sum()` early return
-                    // (`bynk-check/src/actors.rs`) — Oidc and a sum can never
-                    // both resolve for one handler, so which is tried first is a
-                    // no-op, unlike the sum-vs-Bearer order `ActorSeamIr`'s own
-                    // doc comment is about (Bearer was already checked last at
-                    // this site, so that pair's order didn't change here).
-                    // `Caller` never arises here — `caller_binder_for` only ever
-                    // resolves for `HandlerKind::Call` — so it shares the plain
-                    // path with `None`, exactly like the old fallthrough
-                    // (`bearer_seam_for` also misses on a `Caller` handler, since
-                    // `Caller` is a prelude actor, not a key of `table.actors`).
-                    match bynk_model::lower_actor_seam_ir(h, &table.actors) {
-                        bynk_model::ActorSeamIr::Oidc(oidc) => {
-                            return_entries
-                                .push(emit_http_oidc_wrapper(sname, h, method, &path, &oidc));
-                        }
-                        bynk_model::ActorSeamIr::SignedCookie(seam) => return_entries
-                            .push(signed_cookie_entry(service, sname, h, method, &path, &seam)),
-                        bynk_model::ActorSeamIr::Sum(members) => {
-                            return_entries.push(emit_http_sum_wrapper(
-                                sname,
-                                h,
-                                method,
-                                &path,
-                                &members,
-                                service.limits.as_ref().and_then(|p| p.max_body()),
-                                &csrf_origins(service),
-                                &runtime_use,
-                            ));
-                        }
-                        bynk_model::ActorSeamIr::Bearer(seam) => {
-                            return_entries.push(emit_http_wrapper(
-                                sname,
-                                h,
-                                method,
-                                &path,
-                                Some(&seam),
-                            ));
-                        }
-                        bynk_model::ActorSeamIr::Caller(_)
-                        | bynk_model::ActorSeamIr::Sender(_)
-                        | bynk_model::ActorSeamIr::CallSum(_)
-                        | bynk_model::ActorSeamIr::None => {
-                            return_entries.push(emit_http_wrapper(sname, h, method, &path, None));
-                        }
-                    }
+                    return_entries.extend(http_route_wrappers(
+                        service,
+                        sname,
+                        h,
+                        (method, &path),
+                        table,
+                        &runtime_use,
+                    ));
                 }
                 bynk_model::IrHandlerKind::Cron { .. } => {
                     return_entries.push(emit_cron_wrapper(sname, cron_idx, h));

@@ -731,13 +731,14 @@ or stale signature. A member whose seam cannot refuse the credential (`by Stale(
 is refused with the principal's own error, and a name that is not a member is
 `bynk.test.principal_identity_mismatch`.
 
-Without a name, `by Forged`, `by Expired` or `by Stale` still reaches the one member that can
-refuse it when there is exactly one and it is a Bearer or `Signature` member. When more than
-one member could refuse it, the principal must name one
-(`bynk.test.bad_principal_needs_arm`). A sum that admits `Visitor` (`by who: Processor |
-Visitor`) never answers `401`: a request with a missing or bad credential resolves as
-`Visitor`. So none of them is legal there. `by WrongIssuer`, `by WrongAudience`,
-`by WrongAlgorithm` and `by NoSubject` are not offered on a sum.
+Without a name, `by Forged`, `by Expired`, `by Stale` or `by Revoked` still reaches the one
+member that can refuse it, whatever its scheme, when there is exactly one (`by Expired` on
+`Browser | Hook` presents the expired cookie to `Browser`). When more than one member could
+refuse it, the principal must name one (`bynk.test.bad_principal_needs_arm`). A sum that admits
+`Visitor` (`by who: Processor | Visitor`) never answers `401`: a request with a missing or bad
+credential resolves as `Visitor`. So none of them is legal there. `by WrongIssuer`,
+`by WrongAudience`, `by WrongAlgorithm` and `by NoSubject` are not offered on a sum: they take
+no member name and reach the sum's `Oidc` member.
 
 All nine are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).

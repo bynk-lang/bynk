@@ -1929,15 +1929,17 @@ fn render_rate_limit_hover(ann: &Annotation, items: &[CommonsItem]) -> String {
             "**`clientIp`** — the request's `CF-Connecting-IP`, reliable only behind Cloudflare's edge"
         }
         Some("identity") => {
-            "**`identity`** — the verified caller; not available yet (`bynk.http.rate_limit_key_unavailable`)"
+            "**`identity`** — the verified caller's `sub`, asked after the route's actor is verified and before the body is read (a `Bearer`, `Oidc` or `SignedCookie` actor; refused elsewhere, `bynk.http.rate_limit_key_unavailable`)"
         }
         _ => "an unknown key (`bynk.http.rate_limit_bad_args`)",
     };
     format!(
         "```bynk\n{sig}\n```\n\n\
          **`@rateLimit`** — refuse a client over its limit before this route's request body is \
-         read. The router asks the limiter first of all, ahead of the media-type and body-size \
-         checks and of authentication, and answers `429 Too Many Requests` with `Retry-After` \
+         read. With `clientIp` the router asks the limiter first of all, ahead of the media-type and \
+         body-size checks and of authentication; with `identity` it verifies the caller first (an \
+         unverified caller gets the `401`/`403` it always did and never touches the limiter), then \
+         asks. It answers `429 Too Many Requests` with `Retry-After` \
          (the limiter's window in seconds) and the rejection `RateLimited`, which `on rejected` \
          can render.{counts}\n\n- **key** — counts by {by}."
     )

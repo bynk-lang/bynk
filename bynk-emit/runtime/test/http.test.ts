@@ -60,6 +60,7 @@ import {
   queryString,
   problemRejection,
   rateLimitAllows,
+  rateLimitAllowsKey,
   rateLimitedResponse,
   renderRejection,
   responseToHttpResult,
@@ -2047,4 +2048,17 @@ test("a rate-limited 429 stamped with the CORS policy carries the grant and Retr
   assert.equal(res.status, 429);
   assert.equal(res.headers.get("access-control-allow-origin"), "https://app.example.com");
   assert.equal(res.headers.get("retry-after"), "10");
+});
+
+test("rateLimitAllowsKey: counts by the key it is given, the verified caller (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "bob" };
+    },
+  };
+  assert.equal(await rateLimitAllowsKey(limiter, "ada"), true);
+  assert.equal(await rateLimitAllowsKey(limiter, "bob"), false);
+  assert.deepEqual(seen, ["ada", "bob"]);
 });

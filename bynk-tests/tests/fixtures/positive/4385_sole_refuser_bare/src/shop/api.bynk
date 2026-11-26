@@ -1,0 +1,36 @@
+context shop.api
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Event = {
+	id: String,
+}
+
+// A bare bad credential names no member, so it is allowed only where one member could refuse it. On
+// `Browser | Hook` the session cookie is the only seam that refuses an expired or revoked credential,
+// and on `Machine | Hook` the OIDC seam is the only one that refuses an expired token, so those bare
+// calls drive that member without naming it (#4385).
+actor Browser { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sessions = true), identity = UserId }
+actor Machine {
+	auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
+	identity = UserId
+}
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Sig", timestamp = "X-Ts", tolerance = 300) }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	on POST("/session") (body: Event) -> Effect[HttpResult[String]] by who: Browser | Hook {
+		match who {
+			Browser(b) => Ok("browser \(b)")
+			Hook => Ok("hook")
+		}
+	}
+
+	on POST("/token") (body: Event) -> Effect[HttpResult[String]] by who: Machine | Hook {
+		match who {
+			Machine(m) => Ok("machine \(m)")
+			Hook => Ok("hook")
+		}
+	}
+}
