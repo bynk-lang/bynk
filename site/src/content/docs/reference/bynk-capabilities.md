@@ -1038,8 +1038,7 @@ The rules of the SQL API apply as the platform states them, and the query is che
 only by the platform:
 
 - A dataset is read as `events.analyticsEngine.<DATASET>`; `{dataset}` stands for the name of
-  one of yours, for the environment the Worker runs in. Another account dataset is read by
-  naming it in the SQL as a literal, which is a literal in the text like the rest.
+  one of yours, for the environment the Worker runs in. Any other dataset on the account is named directly in the SQL text.
 - Bound the query's time range from below (a lower `timestamp` bound), so it reads a
   window rather than the whole retention period.
 - Do not filter on `accountTag` or `zoneTag`, and do not add a `FORMAT` clause: the
