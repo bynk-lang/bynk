@@ -35,7 +35,10 @@ pub const COMPATIBILITY_DATE: &str = "2026-08-11";
 /// Reviewed with [`COMPATIBILITY_DATE`] (`design/bynk-release-discipline.md`,
 /// Part 3): a date bump can turn a flag on by default, which makes it
 /// redundant here.
-pub const DEFAULT_COMPATIBILITY_FLAGS: &[&str] = &["global_fetch_strictly_public"];
+pub const DEFAULT_COMPATIBILITY_FLAGS: &[&str] = &["global_fetch_strictly_public", ALS_FLAG];
+
+/// #3895: gives a Worker `AsyncLocalStorage` (the request's trace); `nodejs_compat` does too.
+pub const ALS_FLAG: &str = "nodejs_als";
 
 /// #1890: the flags a Worker's `wrangler.toml` carries, and the duplicates
 /// dropped on the way. [`DEFAULT_COMPATIBILITY_FLAGS`] come first, then
@@ -44,8 +47,10 @@ pub const DEFAULT_COMPATIBILITY_FLAGS: &[&str] = &["global_fetch_strictly_public
 /// once per extra occurrence, for the caller to warn about. Names are not
 /// otherwise checked.
 pub fn compatibility_flags(extra: &[String]) -> (Vec<String>, Vec<String>) {
+    let provides_als = extra.iter().any(|f| f == "nodejs_compat");
     let mut flags: Vec<String> = DEFAULT_COMPATIBILITY_FLAGS
         .iter()
+        .filter(|f| !(provides_als && **f == ALS_FLAG))
         .map(|f| f.to_string())
         .collect();
     let mut duplicates = Vec::new();
@@ -2405,14 +2410,26 @@ mod compatibility_flags_tests {
 
     /// #1890: the default set alone, when the manifest adds nothing.
     #[test]
-    fn the_default_is_global_fetch_strictly_public() {
+    fn the_default_is_global_fetch_strictly_public_and_nodejs_als() {
         assert_eq!(
             DEFAULT_COMPATIBILITY_FLAGS,
-            ["global_fetch_strictly_public"]
+            ["global_fetch_strictly_public", "nodejs_als"]
         );
         let (flags, duplicates) = compatibility_flags(&[]);
-        assert_eq!(flags, ["global_fetch_strictly_public"]);
+        assert_eq!(flags, ["global_fetch_strictly_public", "nodejs_als"]);
         assert!(duplicates.is_empty());
+    }
+
+    /// #3895: `nodejs_compat` provides `AsyncLocalStorage`, so a project that sets it does not also
+    /// get `nodejs_als`; a project that lists `nodejs_als` itself gets it once, reported as a repeat.
+    #[test]
+    fn nodejs_als_is_left_out_where_nodejs_compat_provides_it() {
+        let (flags, duplicates) = compatibility_flags(&strings(&["nodejs_compat"]));
+        assert_eq!(flags, ["global_fetch_strictly_public", "nodejs_compat"]);
+        assert!(duplicates.is_empty());
+        let (flags, duplicates) = compatibility_flags(&strings(&["nodejs_als"]));
+        assert_eq!(flags, ["global_fetch_strictly_public", "nodejs_als"]);
+        assert_eq!(duplicates, ["nodejs_als"]);
     }
 
     /// #1890: the manifest's flags follow the default, in manifest order;

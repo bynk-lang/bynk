@@ -2103,7 +2103,16 @@ export async function rateLimitAllows(
   limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
   request: Request,
 ): Promise<boolean> {
-  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  return rateLimitAllowsKey(limiter, request.headers.get("cf-connecting-ip") ?? "unknown");
+}
+
+// #3926: `@rateLimit(Limiter, key: identity)`. The same question for the verified caller's
+// `sub`, asked after the route's actor has been verified and before the body is read, so a
+// forged or expired credential never reaches it.
+export async function rateLimitAllowsKey(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  key: string,
+): Promise<boolean> {
   return (await limiter.limit({ key })).success;
 }
 

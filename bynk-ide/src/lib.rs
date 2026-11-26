@@ -75,6 +75,7 @@ pub mod index_queries;
 pub mod locals_nav;
 pub mod packages;
 pub mod queue_delivery;
+pub mod rate_limit_completion;
 pub mod sequence;
 pub mod signature_help;
 pub mod symbols;

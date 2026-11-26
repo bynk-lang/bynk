@@ -111,6 +111,8 @@ mod integration {
     mod host_globals_qualified;
     #[path = "ident_audit.rs"]
     mod ident_audit;
+    #[path = "identity_verify_guard.rs"]
+    mod identity_verify_guard;
     #[path = "implementation_index.rs"]
     mod implementation_index;
     #[path = "import_closure.rs"]
@@ -543,6 +545,8 @@ mod system {
     mod test_json;
     #[path = "test_runner_resolution.rs"]
     mod test_runner_resolution;
+    #[path = "trace_propagation_workerd.rs"]
+    mod trace_propagation_workerd;
     #[path = "trace_requests_workerd.rs"]
     mod trace_requests_workerd;
     #[path = "tsc_failure_diagnostic.rs"]

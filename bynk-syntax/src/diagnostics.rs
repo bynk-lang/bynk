@@ -2808,8 +2808,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.rate_limit_key_unavailable",
-        blurb: "`key: identity` counts requests by the verified caller, checked after the router has authenticated the request and before it reads the body. The router does not authenticate before it reads the body yet, so `identity` is refused, rather than accepted and counted late. Use `key: clientIp`, which is checked before everything else and so also protects the authentication step, or call the limiter's `allow(key)` in the handler for a limit keyed on the caller. `identity` is planned for routes whose actor has an identity (a `Bearer`, `Oidc` or signed-cookie actor): it will stay refused on a `Visitor` or `Signature` route, which has none.",
-        example: "@rateLimit(SignupLimit, key: identity)   // ✗ not available yet\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓",
+        blurb: "`key: identity` counts requests by the verified caller: the router verifies the credential first, asks the limiter about the caller's identity (`sub`), and only then reads the body. That needs a route whose `by` is a single actor that carries an identity: a `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor` has no caller to count, a `Signature` sender is a service, not a person, and an actor sum has no one identity, so `identity` is refused on them. Use `key: clientIp` for the address, or call the limiter's `allow(key)` in the handler for a limit keyed on something only the handler knows.",
+        example: "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.rate_limit_not_http",
@@ -9023,7 +9023,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.rate_limit_key_unavailable",
-        "A `@rateLimit` uses `key: identity`, which the router cannot yet count by.",
+        "A `@rateLimit` uses `key: identity` on a route whose actor carries no identity.",
     ),
     d(
         "bynk.http.rate_limit_not_http",

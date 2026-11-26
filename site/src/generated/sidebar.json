@@ -638,6 +638,10 @@
             "link": "/book/guides/projects-build-and-deployment/contract-skew/"
           },
           {
+            "label": "Follow a request across contexts",
+            "link": "/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/"
+          },
+          {
             "label": "Target Cloudflare Workers",
             "link": "/book/guides/projects-build-and-deployment/cloudflare-workers/"
           },
