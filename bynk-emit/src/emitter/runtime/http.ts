@@ -544,6 +544,56 @@ export function withLocation<R extends object>(result: R, url: string): R {
   return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
 }
 
+/**
+ * `result.etag(tag)` (#4466): the handler's own validator on a `PartialContent` or `NotModified`, an
+ * entity tag it took from the representation (an R2 object's `etag`). The router owns `ETag` on every
+ * other answer, so only these two variants take one from the handler.
+ */
+export function withETag<R extends object>(result: R, tag: string): R {
+  if (!isEntityTag(tag)) {
+    throw new Error(
+      `etag: ${JSON.stringify(tag)} is not an entity tag (RFC 9110 §8.8.3: quoted, optionally W/-prefixed, e.g. "v1" or W/"v1")`,
+    );
+  }
+  return withHeaderTriple(result, ["etag", tag, true]);
+}
+
+/** `result.lastModified(at)` (#4466): `Last-Modified` for a `PartialContent` or `NotModified`, in IMF-fixdate. */
+export function withLastModified<R extends object>(result: R, epochMillis: number): R {
+  if (!Number.isFinite(epochMillis)) throw new Error("lastModified: the instant is not a finite time");
+  // `toUTCString` is the IMF-fixdate form (`Sun, 06 Nov 1994 08:49:37 GMT`), at whole seconds.
+  return withHeaderTriple(result, ["last-modified", new Date(Math.floor(epochMillis / 1000) * 1000).toUTCString(), true]);
+}
+
+/**
+ * #4466: the router's safety net for `If-Range` (RFC 9110 §13.1.5). A `206` answers a `Range` request,
+ * and a client that sent `If-Range` wants the range only if its validator still names the current
+ * representation, otherwise the whole body. The router cannot build the whole body from a part, so a
+ * handler decides with `ifRangeHolds`; this guard makes a handler that forgot to fail closed instead of
+ * sending bytes of a changed representation. A `206` to an `If-Range` request whose validator the
+ * handler did not attach, or does not match, is a fault (`500`, logged), never sent. The comparison is
+ * the strong one: a weak entity tag never matches, and a date matches `Last-Modified` exactly.
+ */
+export function ifRangeGuard<R extends Response>(response: R, request: Request): R {
+  if (response.status !== 206) return response;
+  const ifRange = request.headers.get("if-range");
+  if (ifRange === null) return response;
+  const held = ifRange.trim();
+  const etag = response.headers.get("etag");
+  const lastModified = response.headers.get("last-modified");
+  const holds = held.startsWith('"')
+    ? etag !== null && !etag.startsWith("W/") && held === etag
+    : !held.startsWith("W/") && lastModified !== null && held === lastModified;
+  if (holds) return response;
+  response.body?.cancel().catch(() => {});
+  throw new Error(
+    "PartialContent for a stale If-Range: check ifRangeHolds before answering 206 " +
+      (etag === null && lastModified === null
+        ? "(the 206 carries no validator: attach one with .etag(...) or .lastModified(...))"
+        : "(the request's If-Range does not match the validator the 206 carries)"),
+  );
+}
+
 /** `result.download(filename)`: `Content-Disposition: attachment` for `filename`. */
 export function withDownload<R extends object>(result: R, filename: string): R {
   return withHeaderTriple(result, ["content-disposition", contentDisposition(filename), true]);
@@ -2477,6 +2527,8 @@ export function notModifiedIfMatch<R extends Response>(
   response: R,
   request: Request,
 ): R | Response {
+  // #4466: a `206` is checked against `If-Range` before anything else, so a stale one is never sent.
+  ifRangeGuard(response, request);
   const etag = response.headers.get("etag");
   if (etag === null) return response;
   const ifNoneMatch = request.headers.get("if-none-match");
@@ -2516,5 +2568,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, withETag as __withETag, withLastModified as __withLastModified, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitAllowsKey as __rateLimitAllowsKey, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

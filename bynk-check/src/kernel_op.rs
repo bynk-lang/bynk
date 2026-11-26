@@ -418,6 +418,8 @@ kernel_ops! {
         At = "at", "at(url: String) -> HttpResult[T]";
         Download = "download", "download(filename: String) -> HttpResult[T]";
         Heartbeat = "heartbeat", "heartbeat(every: Duration) -> HttpResult[T]";
+        Etag = "etag", "etag(tag: String) -> HttpResult[T]";
+        LastModified = "lastModified", "lastModified(at: Instant) -> HttpResult[T]";
         Headers = "headers", "headers() -> Map[String, List[String]]";
     }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
