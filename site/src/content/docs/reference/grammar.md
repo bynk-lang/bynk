@@ -417,8 +417,8 @@ type leaves its variants' names as they are. Two commons that declare one name c
 together: writing the name bare is `bynk.uses.ambiguous_name`, which lists the qualified
 spellings, so alias one (`uses lib.y as Y`) or select the one you mean, which outranks the same
 name from a whole `uses` (two selections of one name are still ambiguous). A commons' full name
-(`lib.y.Status`) qualifies as well as an alias does. A declaration is read by one spelling in a
-unit: a second is `bynk.uses.second_spelling`.
+(`lib.y.Status`) qualifies as well as an alias does. Every spelling of a declaration
+(`Status`, `Y.Status`, `lib.y.Status`) is the one declaration.
 
 **Static semantics.**
 {{#grammar-semantics uses_decl}}

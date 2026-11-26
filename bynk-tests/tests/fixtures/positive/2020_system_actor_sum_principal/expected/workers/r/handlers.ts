@@ -18,7 +18,7 @@ export const UserId = {
 };
 
 export const api = {
-  async http_GET(deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+  async http_GET(deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;
@@ -33,7 +33,7 @@ export const api = {
   async http_GET_plain(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
-  async http_GET_greet(deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_greet(deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "User": {
         const u = deps.who.identity;

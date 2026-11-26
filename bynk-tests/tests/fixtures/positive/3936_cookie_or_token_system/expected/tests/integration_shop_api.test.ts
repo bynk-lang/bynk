@@ -30,13 +30,13 @@ const __bynkOidcRemote: boolean = false;
 <<bynk-shared: testing/oidc_issuer>>
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SESSION_KEY"] = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
-async function __sysdrive_api_http_POST_orders(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_POST_orders(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "User") {
     __auth["cookie"] = `__Host-session=${await __signSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", __sub, 43200, (__bynkNow()) * 1000)}`;
   }
   if (__as === "ApiClient") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/orders`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
@@ -63,10 +63,10 @@ async function __sysdrive_sumbad_api_http_POST_orders(__extraHeaders: { get(name
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_POST_orders_token_first(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_POST_orders_token_first(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "ApiClient") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   if (__as === "User") {
     __auth["cookie"] = `__Host-session=${await __signSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", __sub, 43200, (__bynkNow()) * 1000)}`;
@@ -96,13 +96,13 @@ async function __sysdrive_sumbad_api_http_POST_orders_token_first(__extraHeaders
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_orders(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __as: string) {
+async function __sysdrive_api_http_GET_orders(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>, __as: string) {
   const __auth: globalThis.Record<string, string> = {};
   if (__as === "User") {
     __auth["cookie"] = `__Host-session=${await __signSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", __sub, 43200, (__bynkNow()) * 1000)}`;
   }
   if (__as === "ApiClient") {
-    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: {}, kind: "valid" })}`;
+    __auth["authorization"] = `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://id.example", audience: "api", jwks: "https://id.example/jwks" }, { sub: __sub, claims: __claims, kind: "valid" })}`;
   }
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/orders`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), ...__auth } });
@@ -141,7 +141,7 @@ async function test_a_valid_session_cookie_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(undefined, ("ada" as any), "User");
+    const r = await __sysdrive_api_http_POST_orders(undefined, ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:7:10", 284, 305, "expect r is Ok(\"cookie ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -157,7 +157,7 @@ async function test_a_valid_token_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(undefined, ("ci" as any), "ApiClient");
+    const r = await __sysdrive_api_http_POST_orders(undefined, ("ci" as any), {}, "ApiClient");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 405, 424, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -173,7 +173,7 @@ async function test_a_cross_site_state_changing_request_carrying_only_a_cookie_i
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:17:10", 615, 629, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -189,7 +189,7 @@ async function test_the_same_cross_site_request_carrying_a_token_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ci" as any), "ApiClient");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ci" as any), {}, "ApiClient");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:22:10", 811, 830, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -205,7 +205,7 @@ async function test_a_cross_site_request_from_a_listed_origin_carrying_a_cookie_
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"]), ("ada" as any), "User");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"]), ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:27:10", 1058, 1079, "expect r is Ok(\"cookie ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -221,7 +221,7 @@ async function test_a_cross_site_safe_request_carrying_a_cookie_is_not_checked()
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
+    const r = await __sysdrive_api_http_GET_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1258, 1279, "expect r is Ok(\"cookie ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -253,8 +253,8 @@ async function test_the_token_first_route_admits_either_arm() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const cookie = await __sysdrive_api_http_POST_orders_token_first(undefined, ("ada" as any), "User");
-    const token = await __sysdrive_api_http_POST_orders_token_first(undefined, ("ci" as any), "ApiClient");
+    const cookie = await __sysdrive_api_http_POST_orders_token_first(undefined, ("ada" as any), {}, "User");
+    const token = await __sysdrive_api_http_POST_orders_token_first(undefined, ("ci" as any), {}, "ApiClient");
     if (!(((__c: boolean) => __c)(cookie.tag === "Ok" && cookie.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1674, 1700, "expect cookie is Ok(\"cookie ada\")", "cookie", () => __bynkShow(cookie)); }
     if (!(((__c: boolean) => __c)(token.tag === "Ok" && token.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 1710, 1733, "expect token is Ok(\"token ci\")", "token", () => __bynkShow(token)); }
     return { pass: true };
@@ -271,7 +271,7 @@ async function test_a_bad_cookie_beside_a_valid_token_falls_through_to_the_token
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: __Host-session=garbage"]), ("ci" as any), "ApiClient");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: __Host-session=garbage"]), ("ci" as any), {}, "ApiClient");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:50:10", 2020, 2039, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -287,7 +287,7 @@ async function test_a_cross_site_request_with_a_bad_cookie_and_a_valid_token_is_
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site", "Cookie: __Host-session=garbage"]), ("ci" as any), "ApiClient");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site", "Cookie: __Host-session=garbage"]), ("ci" as any), {}, "ApiClient");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 2280, 2299, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -303,8 +303,8 @@ async function test_a_cross_site_cookie_is_refused_on_either_order__because_no_t
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const first = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
-    const second = await __sysdrive_api_http_POST_orders_token_first(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
+    const first = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), {}, "User");
+    const second = await __sysdrive_api_http_POST_orders_token_first(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(first.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2617, 2635, "expect first is Forbidden", "first", () => __bynkShow(first)); }
     if (!(((__c: boolean) => __c)(second.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:62:10", 2645, 2664, "expect second is Forbidden", "second", () => __bynkShow(second)); }
     return { pass: true };
@@ -321,7 +321,7 @@ async function test_a_valid_cookie_with_a_stray_cookie_of_another_name_is_admitt
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: theme=dark"]), ("ada" as any), "User");
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: theme=dark"]), ("ada" as any), {}, "User");
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:67:10", 2840, 2861, "expect r is Ok(\"cookie ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

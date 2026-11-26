@@ -56,7 +56,7 @@ export const api = {
   async http_GET_bearer_Param_request_Param_result(request: string, result: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok(request.length + result.length);
   },
-  async http_GET_sum_Param_request_Param_result(request: string, result: string, deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
+  async http_GET_sum_Param_request_Param_result(request: string, result: string, deps: { who: { tag: "User"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<number>> {
     return HttpResult.Ok(request.length + result.length);
   },
   async http_POST_echo(body: string, deps: {}): globalThis.Promise<HttpResult<number>> {

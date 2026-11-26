@@ -3883,7 +3883,6 @@ fn check_service_decls(
                     report_unused: true,
                     actor_binding,
                     borrowed_held,
-                    claims_binder: crate::actors::claims_binder_for(handler, &table.actors),
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
@@ -3893,6 +3892,7 @@ fn check_service_decls(
                         &params_for_check,
                         &handler.given,
                     )
+                    .with_claims_of(handler, &table.actors)
                 },
                 checker::CheckSinks {
                     tys,

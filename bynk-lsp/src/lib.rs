@@ -5010,8 +5010,14 @@ impl LanguageServer for Backend {
         let Some(text) = analysis.snapshots.get(&rel) else {
             return Ok(None);
         };
+        // #4352: a name written through a `uses` qualifier highlights the name alone.
+        let span = crate::index_queries::narrow_qualified_span(
+            text,
+            site.span,
+            crate::index_queries::key_segment(&key.name),
+        );
         Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
-            range: crate::position::span_to_range(text, site.span),
+            range: crate::position::span_to_range(text, span),
             placeholder: key.name.clone(),
         }))
     }
@@ -5056,6 +5062,7 @@ impl LanguageServer for Backend {
         };
         let mut plan = crate::index_queries::plan_rename(&analysis.index, &rel, offset, &new_name)
             .map_err(refused)?;
+        crate::index_queries::narrow_qualified_edits(&mut plan, &analysis.snapshots);
         // #2456: doc links that resolved to the symbol are rewritten with it.
         crate::index_queries::add_doc_link_edits(
             &mut plan,
