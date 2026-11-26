@@ -182,6 +182,9 @@ pub(crate) fn check_service_protocols_and_email(
     crate::context_checks::check_service_protocols(table, types, errors, tys);
     crate::context_checks::check_one_call_handler(table, errors);
     check_email_services(table, errors);
+    for service in table.services.values() {
+        crate::email_route::check_route_tags(service, errors);
+    }
     check_sender_only_on_email(table, errors);
 }
 

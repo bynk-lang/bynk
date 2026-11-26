@@ -1,0 +1,16 @@
+context shop.support
+
+consumes bynk.cloudflare {
+    InboundEmail,
+    EmailVerdict,
+    EmailActions,
+}
+
+service support from email("support@shop.example") {
+    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+        Route(EmailActions {
+            forward: ["billing@shop.example"],
+            tag: Map.empty().insert("Subject", "urgent"),   // ✗ not an `X-` header
+        })
+    }
+}

@@ -1762,6 +1762,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
     },
     Explain {
+        code: "bynk.email.bad_tag",
+        blurb: "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map that breaks this is refused when the program compiles; one built at run time has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
+        example: "on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"Subject\", \"urgent\"),   // ✗ not an `X-` header\n    })\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"X-Ticket\", \"urgent\"),   // ✓\n    })\n}",
+    },
+    Explain {
         code: "bynk.email.duplicate_address",
         blurb: "Inbound mail is dispatched to a service by its envelope recipient, so each address belongs to one service. Addresses compare without regard to case. A literal address and the catch-all `*@domain` for the same domain may both be claimed: the literal address wins, and the catch-all takes everything else. Merge the two handlers, or claim different addresses.",
         example: "service support from email(\"support@shop.example\") { … }\nservice helpdesk from email(\"Support@shop.example\") { … }   // ✗ the same address\n\nservice helpdesk from email(\"help@shop.example\") { … }   // ✓ its own address",
@@ -8149,6 +8154,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.email.bad_params",
         "An email `on message` handler does not take exactly one `InboundEmail` parameter.",
+    ),
+    d(
+        "bynk.email.bad_tag",
+        "A literal `tag` header of a `Route` verdict is not an `X-` header name with letters, digits and `-`, or its value has a line break.",
     ),
     d(
         "bynk.email.duplicate_address",

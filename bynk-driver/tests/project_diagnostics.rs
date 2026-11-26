@@ -322,6 +322,43 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
     );
 }
 
+/// #3887: the destinations of a `Route` are checked like a `Forward`: each literal element of its
+/// `forward` list is read, and a list built at run time is reported as computed.
+#[test]
+fn route_destinations_are_read_from_the_checked_tree() {
+    let manifest = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../bynk-tests/tests/fixtures/positive/3328_s2_email_worker/bynk.toml"),
+    )
+    .unwrap();
+    let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailActions }\n\n\
+fn dests() -> List[String] { [\"computed@shop.example\"] }\n\n\
+service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions { forward: [\"finance@shop.example\", \"audit@shop.example\"] })\n  }\n}\n\n\
+service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions { forward: dests() })\n  }\n}\n";
+    let root = scratch_project(
+        "route_forwards",
+        &[("bynk.toml", &manifest), ("src/shop/support.bynk", source)],
+    );
+    let opts = bynk_driver::project_options(&root.0).expect("readable");
+    let check = project::check_project(&opts);
+    assert!(!check.has_errors(), "{:?}", check.errors.iter().map(|e| &e.error.category).collect::<Vec<_>>());
+    let got: Vec<(&str, Option<&str>)> = check
+        .email_forwards
+        .iter()
+        .map(|f| (f.service.as_str(), f.to.as_deref()))
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("billing", Some("audit@shop.example")),
+            ("billing", Some("finance@shop.example")),
+            ("ops", None),
+        ],
+        "{:?}",
+        check.email_forwards
+    );
+}
+
 /// #4233: `bynk check` emits each suite's test module, and a case that delivers
 /// an event (`Svc.event(e, env)`) reads the unit's event-subscriber shapes. The
 /// analysis path used to return before recording them, so the check panicked

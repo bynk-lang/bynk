@@ -376,6 +376,7 @@
 /book/reference/diagnostics/bynk.effect.fn_value_in_pure_context/
 /book/reference/diagnostics/bynk.effect.unbound_effect/
 /book/reference/diagnostics/bynk.email.bad_params/
+/book/reference/diagnostics/bynk.email.bad_tag/
 /book/reference/diagnostics/bynk.email.duplicate_address/
 /book/reference/diagnostics/bynk.email.duplicate_handler/
 /book/reference/diagnostics/bynk.email.invalid_address/
@@ -1537,6 +1538,7 @@
 /reference/diagnostics/bynk.effect.fn_value_in_pure_context/
 /reference/diagnostics/bynk.effect.unbound_effect/
 /reference/diagnostics/bynk.email.bad_params/
+/reference/diagnostics/bynk.email.bad_tag/
 /reference/diagnostics/bynk.email.duplicate_address/
 /reference/diagnostics/bynk.email.duplicate_handler/
 /reference/diagnostics/bynk.email.invalid_address/

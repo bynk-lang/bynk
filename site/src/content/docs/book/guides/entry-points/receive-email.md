@@ -94,6 +94,26 @@ routing and deploy see `support@shop.example` as if you had written it there. A
 change is made in one place, and two services that end up claiming the same address
 are still `bynk.email.duplicate_address`.
 
+## Forward and acknowledge
+
+One verdict can do several things: forward to billing and audit, tell the customer, and tag the
+forwards so the receiving mailbox can file them. Build it with `Route`:
+
+```bynk,ignore
+on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+        tag: Map.empty().insert("X-Ticket", "T-1234"),
+    })
+}
+```
+
+The reply goes first, then each forward. A refused action is logged and the rest still run; the
+message is rejected only when every action was refused, because a forward cannot be taken back.
+Every literal destination is checked at deploy to be a verified destination address, as for a
+plain `Forward`.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The

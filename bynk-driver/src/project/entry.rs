@@ -461,6 +461,26 @@ fn forwards_in(
                 _ => None,
             });
         }
+        // #3887: the `forward` list of a `Route`'s `EmailActions`: each literal element is a
+        // destination to check, and a list built at run time cannot be known.
+        if let ExprKind::RecordConstruction {
+            type_name, fields, ..
+        } = &e.kind
+            && type_name.name == "EmailActions"
+            && let Some(forward) = fields.iter().find(|f| f.name.name == "forward")
+        {
+            match forward.value.as_ref().map(|v| &v.kind) {
+                Some(ExprKind::ListLit(items, ..)) => {
+                    for item in items {
+                        found.push(match &item.kind {
+                            ExprKind::StrLit(s) => Some(s.clone()),
+                            _ => None,
+                        });
+                    }
+                }
+                _ => found.push(None),
+            }
+        }
         stack.extend(bynk_syntax::ast::expr_children(e));
     }
     found

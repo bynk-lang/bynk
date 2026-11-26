@@ -3,7 +3,7 @@
 // deliver (its `headers` verbatim, so a case may carry an `Authentication-Results`
 // header to choose the DMARC verdict); the entry parses it, runs the handler and
 // applies the verdict, which the platform double records and the case reads back.
-type __BynkEmailMessage = { readonly from: string; readonly to: string; readonly raw: ReadableStream<Uint8Array>; readonly rawSize: number; setReject(reason: string): void; forward(to: string): Promise<void>; reply(message: unknown): Promise<void> };
+type __BynkEmailMessage = { readonly from: string; readonly to: string; readonly raw: ReadableStream<Uint8Array>; readonly rawSize: number; setReject(reason: string): void; forward(to: string, headers?: Headers): Promise<void>; reply(message: unknown): Promise<void> };
 function __bynkMimeBody(text: string | undefined, html: string | undefined, attachments: ReadonlyArray<{ filename: string; contentType: string; content: Uint8Array; inline: boolean }>): { type: string; body: string } {
   const b64 = (bytes: Uint8Array): string => (globalThis.btoa(globalThis.String.fromCharCode(...bytes)).match(/.{1,76}/g) ?? []).join("\r\n");
   const enc = new globalThis.TextEncoder();
@@ -60,12 +60,21 @@ function __bynkEmailReplyOf(raw: string): { tag: "Reply"; message: { subject: un
 async function __bynkDeliverEmail<T>(mail: any, run: (message: __BynkEmailMessage, exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const raw = new globalThis.TextEncoder().encode(__bynkEmailRaw(mail));
   let verdict: unknown = { tag: "Accept" };
+  // #3887: what the entry did, in order. One action is the verdict that names it; several, or a tag,
+  // are a `Route`, so a case reads the combination the handler decided.
+  const forwards: string[] = [];
+  let tags: ReadonlyMap<string, string> = new globalThis.Map();
+  let replied: unknown;
+  let rejected: unknown;
   const message: __BynkEmailMessage = {
     from: mail.from, to: mail.to, rawSize: raw.length,
     raw: new globalThis.ReadableStream<Uint8Array>({ start(c): void { c.enqueue(raw); c.close(); } }),
-    setReject(reason: string): void { verdict = { tag: "Reject", reason }; },
-    async forward(to: string): Promise<void> { verdict = { tag: "Forward", to }; },
-    async reply(m: unknown): Promise<void> { verdict = __bynkEmailReplyOf((m as { raw: string }).raw); },
+    setReject(reason: string): void { rejected = { tag: "Reject", reason }; },
+    async forward(to: string, headers?: Headers): Promise<void> {
+      forwards.push(to);
+      if (headers !== undefined && tags.size === 0) tags = new globalThis.Map(headers.entries());
+    },
+    async reply(m: unknown): Promise<void> { replied = __bynkEmailReplyOf((m as { raw: string }).raw); },
   };
   const exec = __bynkJobExec();
   const log = globalThis.console.error;
@@ -76,6 +85,13 @@ async function __bynkDeliverEmail<T>(mail: any, run: (message: __BynkEmailMessag
   platform.__bynkEmailMessage = (from, to, raw) => ({ from, to, raw });
   try {
     await __bynkJobSettle(exec, run(message, exec));
+    if (rejected !== undefined) verdict = rejected;
+    else if (forwards.length === 1 && replied === undefined && tags.size === 0) verdict = { tag: "Forward", to: forwards[0] };
+    else if (forwards.length === 0 && tags.size === 0 && replied !== undefined) verdict = replied;
+    else if (forwards.length > 0 || replied !== undefined) {
+      const some = (value: unknown): unknown => ({ tag: "Some", value });
+      verdict = { tag: "Route", actions: { forward: forwards, reply: replied === undefined ? { tag: "None" } : some((replied as { message: unknown }).message), tag: tags } };
+    }
   } finally {
     globalThis.console.error = log;
     delete platform.__bynkEmailMessage;

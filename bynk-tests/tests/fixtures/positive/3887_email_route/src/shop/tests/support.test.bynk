@@ -1,0 +1,31 @@
+// #3887: a `system` case posts the message to the Worker's real `email()` entry and reads back
+// everything the handler's verdict did: a combination is a `Route`, a single action the shorthand.
+suite shop.support as system {
+  case "a reply and two forwards, with the tag on the forwards" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "billing" })
+    match r {
+      Route(a) => {
+        expect a.forward == ["billing@shop.example", "audit@shop.example"]
+        expect a.reply.isSome()
+        let expected: Map[String, String] = Map.empty().insert("x-ticket", "T-1234")
+        expect a.tag == expected
+      }
+      _ => expect false
+    }
+  }
+
+  case "destinations that differ only in case are forwarded once" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "duplicates" })
+    expect r is Forward("audit@shop.example")
+  }
+
+  case "a route with nothing to do is accepted" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "nothing" })
+    expect r is Accept
+  }
+
+  case "a plain forward is still a forward" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "other" })
+    expect r is Forward("billing@shop.example")
+  }
+}

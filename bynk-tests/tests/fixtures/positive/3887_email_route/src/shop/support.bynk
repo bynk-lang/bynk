@@ -1,0 +1,28 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailActions,
+  EmailReply,
+}
+
+// #3887: one verdict can forward to several destinations, reply and tag the forwards. `Forward` and
+// `Reply` stay as the shorthands for a route with one action.
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "billing" {
+      Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+        tag: Map.empty().insert("X-Ticket", "T-1234"),
+      })
+    } else if mail.subject == "duplicates" {
+      Route(EmailActions { forward: ["audit@shop.example", "AUDIT@shop.example"] })
+    } else if mail.subject == "nothing" {
+      Route(EmailActions {})
+    } else {
+      Forward("billing@shop.example")
+    }
+  }
+}

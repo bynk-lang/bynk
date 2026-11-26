@@ -174,11 +174,41 @@ with `QueueResult` (the agency rule, ADR 0078):
 | `Reject(reason)` | A permanent SMTP rejection carrying `reason`. |
 | `Forward(to)` | Pass the message to one destination, which must be a verified destination address in the Cloudflare account. |
 | `Reply(message)` | Answer the sender, with an `EmailReply` of `subject`, `text` and `html`. The runtime fills in `From`, `To`, `In-Reply-To` and `References`, so a reply can only go to the sender, from the address that received the mail. |
+| `Route(actions)` | Any combination of forwarding and replying, with tags: an `EmailActions` of `forward`, `reply` and `tag`. `Forward(to)` and `Reply(m)` are shorthands for a `Route` with only that action. |
 
-One decision per message. Forwarding to several destinations, or forwarding and
-replying, is not expressible yet.
+### Route
 
-`Accept`, `Reject`, `Forward` and `Reply` are the verdict's own bare names. They
+```bynk,ignore
+Route(EmailActions {
+    forward: ["billing@shop.example", "audit@shop.example"],
+    reply: Some(EmailReply { text: Some("Thanks, billing has your message.") }),
+    tag: Map.empty().insert("X-Ticket", "T-1234"),
+})
+```
+
+All three fields have defaults, so a `Route` with nothing to do is `Accept`.
+
+- **Order.** The reply is sent first, then each destination is forwarded to, with duplicates
+  (compared without regard to case) forwarded once.
+- **Partial failure.** A refusal is logged with its class name, as always, and the other actions
+  still run. If every action is refused the message is rejected, with the reason of the first
+  refusal; if any succeeded it is handled, because a forward cannot be taken back and rejecting
+  afterwards would tell the sender it was not accepted when it was.
+- **At most 20 destinations.** More is a handler fault, settled as any other (a `fallback`
+  forwards it, if declared). Cloudflare allows 200 per account, and a longer list from one message
+  is more likely a bug than a design.
+- **Tags.** Each `tag` entry is a header added to every forward: its name starts with `X-` and
+  holds only letters, digits and `-`, and its value has no line break. A literal map that breaks
+  this is `bynk.email.bad_tag`; one built at run time has the bad entry dropped, with its name
+  logged and never its value. Tags apply to forwards only, because a reply's headers are the
+  runtime's. At the `system` tier a case reads the tags it sees on the forwards, in lower case.
+- **Verified destinations.** `bynk deploy` checks every literal destination of a `Route` as it
+  does a `Forward`.
+
+A `Route` that a `match` on `EmailVerdict` did not expect adds an arm to an exhaustive one. If a
+variant of your own is named `Route`, write `EmailVerdict.Route`.
+
+`Accept`, `Reject`, `Forward`, `Reply` and `Route` are the verdict's own bare names. They
 collide with no other built-in or first-party variant. The sender's DMARC result
 is `DmarcPass`, `DmarcFail` or `DmarcNone` for the opposite reason: a bare
 `None` would be `Option`'s.

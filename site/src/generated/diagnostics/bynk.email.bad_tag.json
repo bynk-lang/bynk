@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Route` verdict's `tag` map becomes headers on each forward, and Cloudflare keeps only headers starting with `X-` on a forward, removing every other. So a tag name starts with `X-` and holds only letters, digits and `-`, and a value is one line, since a line break would end the header and start another. A literal map that breaks this is refused when the program compiles; one built at run time has its bad entries dropped by the runtime, which logs the name and never the value. Tags apply to forwards only: a reply's headers are the runtime's.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.bad_tag",
+  "constructs": [],
+  "example": "on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"Subject\", \"urgent\"),   // ✗ not an `X-` header\n    })\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Route(EmailActions {\n        forward: [\"billing@shop.example\"],\n        tag: Map.empty().insert(\"X-Ticket\", \"urgent\"),   // ✓\n    })\n}",
+  "severity": "error",
+  "summary": "A literal `tag` header of a `Route` verdict is not an `X-` header name with letters, digits and `-`, or its value has a line break."
+}
