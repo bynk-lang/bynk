@@ -984,22 +984,19 @@ impl ManifestCache {
 
 /// #4124: the nearest ancestor of the working directory holding a `bynk.toml`,
 /// as a path relative to it (`.`, `..`, `../..`), so the files `fmt` names and
-/// reports read the way a typed `bynk fmt <dir>` would.
+/// reports read the way a typed `bynk fmt <dir>` would. The search is
+/// [`bynk_fmt::find_manifest`], the one [`ManifestCache::options_for`] uses for
+/// the `[fmt]` style, so a run's file set and its style come from one manifest.
 fn enclosing_project_root() -> Option<PathBuf> {
     let cwd = std::env::current_dir().ok()?;
-    let mut relative = PathBuf::from(".");
-    let mut dir = cwd.as_path();
-    loop {
-        if dir.join("bynk.toml").is_file() {
-            return Some(relative);
-        }
-        dir = dir.parent()?;
-        relative = if relative == Path::new(".") {
-            PathBuf::from("..")
-        } else {
-            relative.join("..")
-        };
-    }
+    let manifest = bynk_fmt::find_manifest(&cwd)?;
+    let root = manifest.parent()?;
+    let depth = cwd.strip_prefix(root).ok()?.components().count();
+    Some(if depth == 0 {
+        PathBuf::from(".")
+    } else {
+        (0..depth).map(|_| "..").collect()
+    })
 }
 
 /// The `fmt` command body run by `bynk fmt`: each input is

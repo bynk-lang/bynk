@@ -147,3 +147,53 @@ fn explicit_paths_still_win_over_the_project_default() {
     assert_eq!(read(&root.join("other/d.bynk")), CANONICAL);
     assert_eq!(read(&root.join("src/a.bynk")), UGLY);
 }
+
+/// A workspace of members `a` and `b` (each a package with one unformatted
+/// file), the shape `bynk check` and `fmt <root>` already expand.
+fn workspace(name: &str) -> PathBuf {
+    let root = scratch(name);
+    write(
+        &root.join("bynk.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    );
+    for member in ["a", "b"] {
+        write(
+            &root.join(member).join("bynk.toml"),
+            &format!("[package]\nname = \"acme/{member}\"\n"),
+        );
+        write(&root.join(member).join(format!("src/{member}.bynk")), UGLY);
+    }
+    root
+}
+
+#[test]
+fn from_a_workspace_root_every_member_is_formatted() {
+    let root = workspace("fmt-default-workspace-root");
+    let (code, _, err) = bynk(&root, &["fmt"], None);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(read(&root.join("a/src/a.bynk")), CANONICAL);
+    assert_eq!(read(&root.join("b/src/b.bynk")), CANONICAL);
+}
+
+#[test]
+fn from_inside_a_member_only_that_member_is_formatted() {
+    // The walk stops at the nearest `bynk.toml`, which is the member's own: a
+    // member is a project, and `fmt` run in it means that project.
+    let root = workspace("fmt-default-workspace-member");
+    let (code, _, err) = bynk(&root.join("a/src"), &["fmt"], None);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(read(&root.join("a/src/a.bynk")), CANONICAL);
+    assert_eq!(read(&root.join("b/src/b.bynk")), UGLY);
+}
+
+#[test]
+fn piped_input_without_dash_is_ignored_and_the_project_is_formatted() {
+    // Unlike gofmt and rustfmt, stdin is read only for `-`. Piped text with no
+    // paths used to be the no-input error; inside a project it now formats the
+    // project, and the pipe is left alone.
+    let root = project("fmt-default-pipe-no-dash");
+    let (code, out, err) = bynk(&root, &["fmt"], Some(UGLY));
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out, "", "nothing is written to stdout");
+    assert_eq!(read(&root.join("src/a.bynk")), CANONICAL);
+}

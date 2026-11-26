@@ -1078,7 +1078,7 @@ bynk fmt [INPUTS]... [--check] [--indent tab|spaces] [--indent-width N] [--max-l
 | `--no-trailing-comma` | off | Omit the trailing comma in multi-line records, sums, list literals and `exports` clauses. `--trailing-comma` is its opposite (and overrides a project's `trailing_comma = false`); the later of the two wins. |
 | `--no-config` | off | Ignore the project's `bynk.toml` `[fmt]` section and format to the canonical style plus whatever flags this run passes. |
 
-**Behaviour** — `bynk fmt` and `bynk fmt --check` with no paths cover exactly what `bynk check` compiles, so a CI gate needs no path list to keep up with `[paths]`. Explicit paths, and `-` for stdin, behave as they always did and never fall back to the project. Each file is formatted and rewritten only when it changes; a file
+**Behaviour** — `bynk fmt` and `bynk fmt --check` with no paths cover exactly what `bynk check` compiles, so a CI gate needs no path list to keep up with `[paths]`. Explicit paths, and `-` for stdin, behave as they always did and never fall back to the project. Standard input is read only with `-`: piped text and no paths formats the project and leaves the pipe unread. The project is the nearest `bynk.toml` above the working directory, so inside a workspace member that means the member alone; run `bynk fmt` at the workspace root to format every member. Each file is formatted and rewritten only when it changes; a file
 already canonical is left untouched. A file that does not parse is reported and
 skipped; the other inputs are still processed. A file named more than once,
 directly or through a directory, is formatted once; a directory holding no
