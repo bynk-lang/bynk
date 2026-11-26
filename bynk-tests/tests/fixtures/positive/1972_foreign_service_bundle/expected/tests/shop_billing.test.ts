@@ -144,7 +144,7 @@ class __Stub_Billing {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "a stubbed instance answers") {
-      return Ok({ status: 201, headers: new globalThis.Map<string, string>(), body: "" });
+      return Ok({ status: 201, headers: new globalThis.Map<string, string>(), body: "", setCookies: [] });
     }
     if (this.__case === "a failing call is the instance's error") {
       return Err(FetchError.Network);
@@ -284,7 +284,7 @@ class __Stub_Ledger {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     if (this.__case === "an instance is stubbed under its own name at integration") {
-      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "e1" });
+      return Ok({ status: 200, headers: new globalThis.Map<string, string>(), body: "e1", setCookies: [] });
     }
     throw new globalThis.Error("bynk: no stub clause matched for Ledger.send");
   }

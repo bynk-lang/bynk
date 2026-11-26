@@ -14,7 +14,10 @@
 //! - `Response.headers` carries the response's headers, keys lowercased, with
 //!   a repeated header joined by ", " — `set-cookie` included, whether the
 //!   runtime has `Headers.getSetCookie()` or not (the `legacySetCookie` case
-//!   hides it, standing in for a runtime without it).
+//!   hides it, standing in for a runtime without it);
+//! - `Response.setCookies` (#4115) holds each `set-cookie` value separately,
+//!   intact (an `Expires` attribute keeps its comma), in the order received,
+//!   whether the runtime has `getSetCookie()` or not.
 //!
 //! The Workers pass also drives a compiled route end to end, so a Bynk `match`
 //! on `Err(InvalidHeader)` and a `r.headers.get("etag")` read are exercised
@@ -61,6 +64,17 @@ service api from http {
 \t\t}
 \t}
 
+\ton GET(\"/cookies\") () -> Effect[HttpResult[String]] by Visitor given Fetch {
+\t\tlet res <- Fetch.send(Request {
+\t\t\tmethod: Get,
+\t\t\turl: \"https://upstream.test/cookies\",
+\t\t})
+\t\tmatch res {
+\t\t\tOk(r) => Ok(r.setCookies.fold(\"\", (acc, c) => acc.concat(\"[\").concat(c).concat(\"]\")))
+\t\t\tErr(_) => Ok(\"other\")
+\t\t}
+\t}
+
 \ton GET(\"/etag\") () -> Effect[HttpResult[String]] by Visitor given Fetch {
 \t\tlet res <- Fetch.send(Request {
 \t\t\tmethod: Get,
@@ -91,7 +105,7 @@ fn driver(binding: &str, runtime: &str, bynk: &str, worker: Option<&str>) -> Str
         .map(|w| format!("import worker from \"{w}\";\n"))
         .unwrap_or_default();
     let routes = if worker.is_some() {
-        "for (const p of [\"/conflict\", \"/etag\"]) {
+        "for (const p of [\"/conflict\", \"/etag\", \"/cookies\"]) {
   const before = calls.length;
   const res = await worker.fetch(new Request(\"http://probe.example\" + p), {});
   console.log(`ROUTE ${p} ${res.status} ${await res.text()} sent=${calls.length - before}`);
@@ -156,7 +170,7 @@ for (const [name, r] of Object.entries(cases)) {{
   const res = await provider.send(r);
   const sent = calls.length > before ? JSON.stringify(calls[calls.length - 1]) : \"unsent\";
   const detail = res.tag === \"Ok\"
-    ? `${{res.value.status}} ${{JSON.stringify(Object.fromEntries(res.value.headers))}}`
+    ? `${{res.value.status}} ${{JSON.stringify(Object.fromEntries(res.value.headers))}} cookies=${{JSON.stringify(res.value.setCookies)}}`
     : res.error.tag;
   console.log(`CASE ${{name}} ${{res.tag}} ${{detail}} ${{sent}}`);
 }}
@@ -233,6 +247,10 @@ const JOINED: [&str; 2] = [
     r#""set-cookie":"a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT, b=2""#,
 ];
 
+/// `setCookies` for the two `Set-Cookie` headers the stub answers with, as the case lines print it:
+/// the `Expires` comma survives, which the joined `headers` value cannot offer.
+const COOKIES: &str = r#"cookies=["a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT","b=2"]"#;
+
 /// The `CASE <name> …` line, or a panic naming the missing case.
 fn case<'a>(stdout: &'a str, name: &str) -> &'a str {
     let prefix = format!("CASE {name} ");
@@ -256,6 +274,10 @@ fn assert_cases(platform: &str, stdout: &str) {
         "[{platform}] the response's headers come back, keys lowercased:\n{stdout}"
     );
     for name in ["extra", "legacySetCookie"] {
+        assert!(
+            case(stdout, name).contains(COOKIES),
+            "[{platform}] `{name}`: each set-cookie value arrives intact in setCookies ({COOKIES}):\n{stdout}"
+        );
         for joined in JOINED {
             assert!(
                 case(stdout, name).contains(joined),
@@ -340,6 +362,12 @@ fn fetch_send_carries_request_headers_and_returns_response_headers() {
     assert!(
         stdout.contains(r#"ROUTE /conflict 200 "invalid" sent=0"#),
         "a Bynk match sees Err(InvalidHeader), and nothing is sent:\n{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            r#"ROUTE /cookies 200 "[a=1; Expires=Wed, 09 Jun 2027 10:18:14 GMT][b=2]" sent=1"#
+        ),
+        "a Bynk handler reads the cookies one by one, intact, and `Request` needs only method and url:\n{stdout}"
     );
     assert!(
         stdout.contains(r#"ROUTE /etag 200 "etag \"v1\"" sent=1"#),
