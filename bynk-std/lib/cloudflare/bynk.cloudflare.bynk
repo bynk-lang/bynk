@@ -1364,7 +1364,10 @@ adapter bynk.cloudflare {
 		fn generate(model: String, request: GenerateRequest) -> Effect[Result[Generation, AiError]]
 		fn embed(model: String, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]
 		fn runStream(model: String, input: String) -> Effect[Result[Stream[String], AiError]]
-		fn generateStream(model: String, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]
+		fn generateStream(
+			model: String,
+			request: GenerateRequest
+		) -> Effect[Result[Stream[String], AiError]]
 	}
 
 	---

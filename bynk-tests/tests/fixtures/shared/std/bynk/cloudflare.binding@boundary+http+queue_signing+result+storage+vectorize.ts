@@ -1706,10 +1706,13 @@ export class WorkersAi implements Ai {
   // The text deltas of a chat model's events, as an iterator that forwards `return()` at once (a
   // generator would queue it behind a read that is waiting for the next event, as `sseEvents`
   // explains). An event that is a fault ends the model's stream too.
-  private static deltas(events: AsyncIterable<string>): AsyncIterable<string> {
+  private static deltas(events: AsyncIterable<string>): AsyncIterableIterator<string> {
     const inner = events[Symbol.asyncIterator]();
     const done = { done: true as const, value: undefined };
-    const iterator: AsyncIterator<string> = {
+    return {
+      [Symbol.asyncIterator]() {
+        return this;
+      },
       async next() {
         for (;;) {
           const r = await inner.next();
@@ -1729,7 +1732,6 @@ export class WorkersAi implements Ai {
         return done;
       },
     };
-    return { [Symbol.asyncIterator]: () => iterator };
   }
 
   // What one event adds: its `response`, or `choices[0].delta.content`; `undefined` for a known
