@@ -267,7 +267,7 @@ pub(crate) fn store_rename(
 pub(crate) fn store_renames(
     agent: &AgentDecl,
     entry: &AgentEntry,
-    current: &[StoreShape],
+    (previous, current): (&[StoreShape], &[StoreShape]),
     unrecorded: Option<&[String]>,
     errors: &mut Vec<CompileError>,
 ) -> Vec<(String, String)> {
@@ -327,8 +327,87 @@ pub(crate) fn store_renames(
     // judged against.
     if unrecorded.is_some() {
         errors.extend(verdicts);
+        // #4483: and the clauses on record fields inside its stored values.
+        nested_renames(agent, entry, previous, current, errors);
     }
     reads
+}
+
+/// #4483: what the `replaces` clauses on record fields *inside* an agent's stored values ask of
+/// the lock, judged as a top-level `store` rename is. `previous` is the class's recorded fields
+/// before this build, `current` the live ones, `entry` the reconciled entry whose retained shapes
+/// say which stored versions may still hold an old name. A clause deleted while a retained
+/// version keeps the value under the old name is `bynk.field.replaces_needed`. There is no
+/// `replaces_settled` for these: a record field's clause also lets its decoders accept the old key
+/// from a wire client, which the lock cannot see, so it is never called unneeded.
+pub(crate) fn nested_renames(
+    agent: &AgentDecl,
+    entry: &AgentEntry,
+    previous: &[StoreShape],
+    current: &[StoreShape],
+    errors: &mut Vec<CompileError>,
+) {
+    let old_path = |path: &str, old: &str| {
+        path.rsplit_once('.')
+            .map(|(parent, _)| format!("{parent}.{old}"))
+    };
+    // Whether a retained shape holds `path` of the store field `live`, under any name `live` has
+    // had: an older shape records a field renamed by a top-level `replaces` under its old name,
+    // and its paths start with that name.
+    let retained = |live: &StoreShape, path: &str| {
+        let rest = path.strip_prefix(live.name.as_str()).unwrap_or(path);
+        std::iter::once(&live.name)
+            .chain(&live.renamed_from)
+            .any(|name| {
+                let at = format!("{name}{rest}");
+                entry.shapes.iter().any(|s| {
+                    s.fields
+                        .iter()
+                        .any(|f| &f.name == name && f.paths.iter().any(|p| p.path == at))
+                })
+            })
+    };
+    let span_of = |field: &str| {
+        agent
+            .store_fields
+            .iter()
+            .find(|f| f.name.name == field)
+            .map(|f| (f.name.span, f.replaces.is_some()))
+    };
+    for prev in previous {
+        let Some(live) = current.iter().find(|c| c.name == prev.name) else {
+            continue;
+        };
+        for p in prev.paths.iter().filter(|p| p.renamed_from.is_some()) {
+            let old = p.renamed_from.as_deref().unwrap_or_default();
+            let clause_gone = live
+                .paths
+                .iter()
+                .any(|l| l.path == p.path && l.renamed_from.is_none());
+            let Some(held) = old_path(&p.path, old).filter(|o| retained(live, o)) else {
+                continue;
+            };
+            if !clause_gone {
+                continue;
+            }
+            let at = span_of(&prev.name).map(|(s, _)| s).unwrap_or_default();
+            errors.push(
+                CompileError::new(
+                    "bynk.field.replaces_needed",
+                    at,
+                    format!(
+                        "`{}.{}` was renamed from `{old}`, and a stored version the lock still \
+                         holds keeps its value under that name",
+                        agent.name.name, p.path
+                    ),
+                )
+                .with_note(format!(
+                    "keep `replaces {old}` on the record field until `bynk migrate` has raised the \
+                     class's floor past those versions ({held} is what they hold)"
+                )),
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -402,18 +481,21 @@ mod tests {
                     ty: "{}".to_string(),
                     default: false,
                     refinement: String::new(),
+                    renamed_from: None,
                 },
                 bynk_project::schema_registry::PathShape {
                     path: "a.x".to_string(),
                     ty: "Int".to_string(),
                     default: false,
                     refinement: String::new(),
+                    renamed_from: None,
                 },
                 bynk_project::schema_registry::PathShape {
                     path: "ab.x".to_string(),
                     ty: "Int".to_string(),
                     default: false,
                     refinement: String::new(),
+                    renamed_from: None,
                 },
             ],
             renamed_from: Vec::new(),

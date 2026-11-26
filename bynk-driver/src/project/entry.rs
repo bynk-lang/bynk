@@ -92,6 +92,69 @@ pub fn parse_own_units(options: &CompileOptions) -> Result<Vec<ParsedFile>, Stri
     Ok(parsed)
 }
 
+/// #4105: the callees of every checked unit, for a command that reads what the units write
+/// (`bynk lock accept-analytics`). The lock is not read, so a mapping the lock refuses is not
+/// itself an error here; any other error refuses the command, because a write the checker could
+/// not type has no mapping to record.
+pub fn checked_callees(
+    options: &CompileOptions,
+) -> Result<bynk_check::project_model::UnitCallees, String> {
+    let tys = &Arc::new(Types::new());
+    let trees = project_trees(options);
+    let excludes = options.roots.excludes();
+    let (overlay, discovered) = match &options.sources {
+        Some(sources) => sources_to_discovered(sources, &trees),
+        None => (HashMap::new(), None),
+    };
+    let run = run_checks(
+        &trees,
+        options.target,
+        options.platform,
+        options.import_ext,
+        Mode::Analyse,
+        &overlay,
+        &excludes,
+        discovered,
+        options.contracts,
+        options.trace_requests,
+        options.inspect_agents,
+        options.typed_capability_calls,
+        options.tests,
+        &bynk_project::SchemaLock::Off,
+        options.remote_tests.as_ref(),
+        (options.roots.project_root(), &options.environment),
+        options.asset_files.as_ref(),
+        options.embed_files.as_ref(),
+        options.fixture_files.as_ref(),
+        options.migration_files.as_ref(),
+        options.snapshot_files.as_ref(),
+        matches!(options.roots, Roots::Split { .. }),
+        tys,
+        None,
+    );
+    match run {
+        RunChecks::Checked {
+            errors,
+            unit_callees,
+            ..
+        } => {
+            let first = errors.into_all().into_iter().find(|e| {
+                bynk_syntax::Severity::for_error(&e.error) == bynk_syntax::Severity::Error
+            });
+            match first {
+                None => Ok(unit_callees),
+                Some(e) => Err(format!(
+                    "the project does not check: {}; fix it first (`bynk check`)",
+                    e.error.message
+                )),
+            }
+        }
+        RunChecks::Bailed { .. } => {
+            Err("the project does not check; fix it first (`bynk check`)".to_string())
+        }
+    }
+}
+
 /// One file list per `trees` entry — the same shape `phase_discovery` and
 /// `run_checks`'s own `discovered` parameter already use.
 type Discovered = Vec<Vec<PathBuf>>;
