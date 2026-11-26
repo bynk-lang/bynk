@@ -87,6 +87,10 @@ struct Export {
 pub(crate) struct DurableObject {
     pub(crate) class: String,
     pub(crate) storage: String,
+    /// #3819: the agent's `@jurisdiction`, from the build's model. Not in the wrangler config
+    /// (a jurisdiction is a property of the id, not of the binding), so `deploy` records it per
+    /// class and compares it on the next run. `None` for an agent with no `@jurisdiction`.
+    pub(crate) jurisdiction: Option<String>,
 }
 
 /// P3b (#2582): one `Analytics` instance's dataset, as the emitted config
@@ -658,7 +662,12 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         let storage = export.storage.ok_or_else(|| {
             format!("`exports.{class}` declares a Durable Object with no `storage`")
         })?;
-        durable_objects.push(DurableObject { class, storage });
+        let jurisdiction = declared.agent_jurisdictions.get(&class).cloned().flatten();
+        durable_objects.push(DurableObject {
+            class,
+            storage,
+            jurisdiction,
+        });
     }
     let mut addresses = parsed.addresses;
     addresses.sort();
@@ -1087,6 +1096,7 @@ pub(crate) mod tests {
                 .map(|class| DurableObject {
                     class: class.to_string(),
                     storage: "sqlite".to_string(),
+                    jurisdiction: None,
                 })
                 .collect();
             self
@@ -1746,6 +1756,7 @@ max_batch_size = 10
                 "AGENT",
                 BindingSource::Agent {
                     class_name: "Counter".into(),
+                    jurisdiction: None,
                 },
             ),
             sample(
@@ -2239,10 +2250,12 @@ type = "worker"
                 DurableObject {
                     class: "Basket".to_string(),
                     storage: "legacy-kv".to_string(),
+                    jurisdiction: None,
                 },
                 DurableObject {
                     class: "Cart".to_string(),
                     storage: "sqlite".to_string(),
+                    jurisdiction: None,
                 },
             ],
         );

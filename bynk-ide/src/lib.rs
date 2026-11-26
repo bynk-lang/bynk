@@ -55,6 +55,7 @@ pub mod actor_sum;
 pub mod agent_busy;
 pub mod agent_effects;
 pub mod agent_erase;
+pub mod agent_jurisdiction;
 /// #2220: the agent state model lives in `bynk-check`, shared with the
 /// checker; re-exported here so existing paths keep working.
 pub use bynk_check::agent_state;

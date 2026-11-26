@@ -345,6 +345,13 @@ pub enum Command {
         /// for this.
         #[arg(long = "confirm-delete", value_name = "CONTEXT.CLASS")]
         confirm_delete: Vec<String>,
+        /// Confirm changing this agent class's `@jurisdiction`, named as the plan
+        /// prints it (`<context>.<Class>`). Repeatable. A Durable Object id minted
+        /// under another jurisdiction is a different id for the same name, so a
+        /// change orphans every existing instance irreversibly, and `--yes` never
+        /// stands in for this.
+        #[arg(long = "confirm-jurisdiction", value_name = "CONTEXT.CLASS")]
+        confirm_jurisdiction: Vec<String>,
         /// Let this context start with fresh agent state on another Worker script
         /// than the one it was last deployed to (into or out of a
         /// `[deploy.workers.<key>]` group, or after a group is renamed or re-keyed).

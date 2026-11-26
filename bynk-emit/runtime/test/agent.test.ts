@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  agentNamespace,
   serialiseAgentKey,
   StateRegistry,
   makeAgent,
@@ -450,4 +451,89 @@ test("#3132 workers proxy: the keyed-agent branch strips env too", async () => {
   assert.equal(body.key, "k", "the key still rides along");
   assert.equal("env" in body.deps, false);
   assert.equal(rawBody.includes(SECRET), false);
+});
+
+// #3819: `@jurisdiction("eu")` mints an agent's ids through `namespace.jurisdiction("eu")`.
+function recordingNamespace(seen: string[]): DurableObjectNamespace {
+  const make = (prefix: string): DurableObjectNamespace => ({
+    idFromName: (n) => `${prefix}${n}`,
+    get: (id) => ({
+      fetch: async () => {
+        seen.push(String(id));
+        return new Response(JSON.stringify(null), { headers: { "content-type": "application/json" } });
+      },
+    }),
+    jurisdiction: (j) => make(`${j}/`),
+  });
+  return make("");
+}
+
+test("makeWorkersAgent: a jurisdiction reaches the Durable Object through the restricted namespace", async () => {
+  const seen: string[] = [];
+  const ns = recordingNamespace(seen);
+  interface A {
+    ping(deps: unknown): Promise<unknown>;
+  }
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "eu").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "fedramp").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }, undefined, undefined, "us").ping({});
+  await makeAgent<A>(reg(), ns, "k", () => { throw new Error("no bundle"); }).ping({});
+  assert.deepEqual(seen, ["eu/k", "fedramp/k", "us/k", "k"]);
+});
+
+test("agentNamespace: no jurisdiction is the namespace itself", () => {
+  const ns = recordingNamespace([]);
+  assert.equal(agentNamespace(ns), ns);
+});
+
+test("agentNamespace: workerd's 'not implemented' falls back to the unscoped namespace and warns once", () => {
+  const ns: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("Jurisdiction restrictions are not implemented in workerd");
+    },
+  };
+  const warnings: string[] = [];
+  const original = globalThis.console.warn;
+  globalThis.console.warn = (...a: unknown[]) => void warnings.push(a.join(" "));
+  try {
+    assert.equal(agentNamespace(ns, "eu"), ns);
+    assert.equal(agentNamespace(ns, "eu"), ns);
+  } finally {
+    globalThis.console.warn = original;
+  }
+  assert.equal(warnings.length, 1, "one warning per isolate");
+  assert.match(warnings[0]!, /does not implement Durable Object jurisdictions/);
+});
+
+test("agentNamespace: any other failure throws, so a deployed Worker never loses the restriction", () => {
+  const broken: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("the namespace is unavailable");
+    },
+  };
+  assert.throws(() => agentNamespace(broken, "eu"), /the namespace is unavailable/);
+  // A message that merely mentions the words is not workerd's: it must throw too.
+  const similar: DurableObjectNamespace = {
+    idFromName: (n) => n,
+    get: () => ({ fetch: async () => new Response("null") }),
+    jurisdiction: () => {
+      throw new Error("the jurisdiction is not implemented for this account");
+    },
+  };
+  assert.throws(() => agentNamespace(similar, "eu"), /not implemented for this account/);
+  const none: DurableObjectNamespace = { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("null") }) };
+  assert.throws(() => agentNamespace(none, "eu"), /has no jurisdiction\(\)/);
+});
+
+test("integration namespace: a jurisdiction view mints its own ids", () => {
+  const ns = makeIntegrationDoNamespace(class {
+    async fetch(): Promise<Response> {
+      return new Response("null");
+    }
+  });
+  assert.notEqual(ns.jurisdiction!("eu").idFromName("k"), ns.idFromName("k"));
 });

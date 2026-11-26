@@ -227,6 +227,7 @@ mod tests {
             durable_objects: vec![DurableObject {
                 class: "Cart".into(),
                 storage: "sqlite".into(),
+                jurisdiction: None,
             }],
             ..Default::default()
         };
