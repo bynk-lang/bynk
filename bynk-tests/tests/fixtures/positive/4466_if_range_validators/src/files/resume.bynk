@@ -1,0 +1,58 @@
+// #4466: a `PartialContent` or `NotModified` carries the handler's own validator (`etag`,
+// `lastModified`), and a resumed download honours `If-Range`: the handler asks `ifRangeHolds`, and
+// the router refuses to send a 206 whose validator does not match the request's `If-Range`.
+context files.resume
+
+consumes bynk { ContentRange }
+uses bynk.range
+
+type ResumeHeaders = {
+  @name("if-range") ifRange: Option[String],
+}
+
+fn part() -> HttpResult[()] {
+  PartialContent(
+    Stream.of([Bytes.fromUtf8("lo, ")]),
+    "text/plain",
+    ContentRange { start: 3, end: 6, total: Some(12) }
+  ).etag("\"v2\"")
+}
+
+service api from http {
+  // Asks first: the part when the client's validator is current, the whole body when it is stale.
+  on GET("/careful") (headers: ResumeHeaders) -> Effect[HttpResult[()]] by v: Visitor {
+    if ifRangeHolds(headers.ifRange, "\"v2\"") {
+      part()
+    } else {
+      RawStreamed(Stream.of([Bytes.fromUtf8("hello, world")]), "text/plain")
+    }
+  }
+
+  // Forgets to ask: a stale `If-Range` makes this a fault, never stale bytes.
+  on GET("/careless") (headers: ResumeHeaders) -> Effect[HttpResult[()]] by v: Visitor {
+    part()
+  }
+
+  // A 206 with no validator cannot answer a request that sent `If-Range`.
+  on GET("/bare") (headers: ResumeHeaders) -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("lo, ")]),
+      "text/plain",
+      ContentRange { start: 3, end: 6, total: Some(12) }
+    )
+  }
+
+  // A date validator: `Last-Modified` in IMF-fixdate.
+  on GET("/dated") (headers: ResumeHeaders) -> Effect[HttpResult[()]] by v: Visitor {
+    PartialContent(
+      Stream.of([Bytes.fromUtf8("lo, ")]),
+      "text/plain",
+      ContentRange { start: 3, end: 6, total: Some(12) }
+    ).lastModified(Instant.fromEpochMillis(784111777000))
+  }
+
+  // A 304 the handler resolved itself says which representation it is for.
+  on GET("/same") () -> Effect[HttpResult[()]] by v: Visitor {
+    NotModified.etag("\"v2\"")
+  }
+}

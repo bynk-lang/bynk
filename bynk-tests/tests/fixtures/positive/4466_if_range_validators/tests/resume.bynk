@@ -1,0 +1,64 @@
+suite files.resume {
+  case "a 206 and a 304 carry the handler's validator" {
+    let r <- api.GET("/careful", ResumeHeaders { ifRange: None }) by Visitor
+    expect r.headers().get("etag") == Some(["\"v2\""])
+    let s <- api.GET("/same") by Visitor
+    expect s.headers().get("etag") == Some(["\"v2\""])
+  }
+
+  case "lastModified writes an IMF-fixdate" {
+    let r <- api.GET("/dated", ResumeHeaders { ifRange: None }) by Visitor
+    expect r.headers().get("last-modified") == Some(["Sun, 06 Nov 1994 08:49:37 GMT"])
+  }
+}
+
+suite files.resume as system {
+  case "no If-Range: the careful handler answers 206 with its validator" {
+    let r <- api.GET("/careful", Wire("Range: bytes=3-6")) by Visitor
+    expect r is Handled(PartialContent(_, _, _))
+  }
+
+  case "a matching If-Range gets the 206" {
+    let r <- api.GET("/careful", Wire("Range: bytes=3-6\nIf-Range: \"v2\"")) by Visitor
+    expect r is Handled(PartialContent(_, _, _))
+  }
+
+  case "a stale If-Range gets the whole body as a 200" {
+    let r <- api.GET("/careful", Wire("Range: bytes=3-6\nIf-Range: \"v1\"")) by Visitor
+    expect r is Handled(Raw(_, _))
+  }
+
+  case "a weak or date If-Range never matches an entity tag" {
+    let w <- api.GET("/careful", Wire("Range: bytes=3-6\nIf-Range: W/\"v2\"")) by Visitor
+    expect w is Handled(Raw(_, _))
+    let d <- api.GET("/careful", Wire("Range: bytes=3-6\nIf-Range: Sun, 06 Nov 1994 08:49:37 GMT")) by Visitor
+    expect d is Handled(Raw(_, _))
+  }
+
+  case "a handler that skips ifRangeHolds faults on a stale If-Range, never sends stale bytes" {
+    let r <- api.GET("/careless", Wire("Range: bytes=3-6\nIf-Range: \"v1\"")) by Visitor
+    expect r is Handled(ServerError(_))
+  }
+
+  case "the same handler answers 206 when If-Range is current" {
+    let r <- api.GET("/careless", Wire("Range: bytes=3-6\nIf-Range: \"v2\"")) by Visitor
+    expect r is Handled(PartialContent(_, _, _))
+  }
+
+  case "a 206 with no validator cannot answer an If-Range request" {
+    let r <- api.GET("/bare", Wire("If-Range: \"v2\"")) by Visitor
+    expect r is Handled(ServerError(_))
+  }
+
+  case "a date validator matches a date If-Range exactly" {
+    let r <- api.GET("/dated", Wire("If-Range: Sun, 06 Nov 1994 08:49:37 GMT")) by Visitor
+    expect r is Handled(PartialContent(_, _, _))
+    let stale <- api.GET("/dated", Wire("If-Range: Sat, 05 Nov 1994 08:49:37 GMT")) by Visitor
+    expect stale is Handled(ServerError(_))
+  }
+
+  case "a handler's 304 reaches the client" {
+    let r <- api.GET("/same") by Visitor
+    expect r is NotModified
+  }
+}
