@@ -3230,12 +3230,7 @@ fn check_method_call_inner(
         if let Some(chain) = flatten_ident_chain(receiver)
             && let Some((consumed, cap)) = ctx.input.cross_context.resolve_cross_capability(&chain)
         {
-            // v0.25: the capability name-segment (`Cap` in `B.Cap` /
-            // `Alias.Cap`) is the outermost field of the receiver chain.
-            if let ExprKind::FieldAccess { field, .. } = &receiver.kind {
-                ctx.refs
-                    .record_in_unit(field.span, SymbolKind::Capability, &cap, &consumed);
-            }
+            record_cross_capability_sites(receiver, &cap, &consumed, ctx);
             return check_cross_context_capability_call(
                 receiver, &consumed, &cap, method, type_args, args, span, expr_id, ctx,
             );
@@ -6299,6 +6294,32 @@ pub(super) fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String>
     info.resolve_prefix(candidate.as_str())
 }
 
+/// The sites of a qualified cross-context capability receiver (`B.Cap` / `Alias.Cap` /
+/// `ops.billing.Cap`): v0.25, the capability name-segment is the outermost field of the
+/// receiver chain; #4183, what precedes it is the consumed context's name.
+fn record_cross_capability_sites(receiver: &Expr, cap: &str, consumed: &str, ctx: &mut Ctx) {
+    if let ExprKind::FieldAccess {
+        receiver: prefix,
+        field,
+    } = &receiver.kind
+    {
+        ctx.refs
+            .record_in_unit(field.span, SymbolKind::Capability, cap, consumed);
+        record_unit_prefix(prefix, consumed, ctx);
+    }
+}
+
+/// #4183: a cross-context call whose prefix is the consumed context's full dotted name
+/// (`ops.billing.refunds(…)`) is a reference to that unit, so renaming the unit rewrites it.
+/// A prefix written as an alias (`consumes ops.billing as B`, `B.refunds(…)`) is the unit's own
+/// spelling for it, not the name, and is left alone.
+fn record_unit_prefix(prefix: &Expr, consumed: &str, ctx: &mut Ctx) {
+    if flatten_ident_chain(prefix).as_deref() == Some(consumed) {
+        ctx.refs
+            .record_in_unit(prefix.span, SymbolKind::Unit, consumed, consumed);
+    }
+}
+
 /// Flatten an `Ident`/`FieldAccess` chain into its dotted name, or None if
 /// any segment isn't a bare identifier.
 fn flatten_ident_chain(expr: &Expr) -> Option<String> {
@@ -7006,6 +7027,7 @@ pub(super) fn check_cross_context_call(
             service: method.name.clone(),
         },
     );
+    record_unit_prefix(receiver, consumed, ctx);
     // The consuming context must be effectful at this call site (services
     // and agent handlers are; pure free fns are not).
     if !ctx.effectful {

@@ -53,20 +53,14 @@ pub fn definition_at<'a>(
 }
 
 /// `prepareRename`: the renameable range under the cursor, or `None` for
-/// out-of-scope symbols (locals, unit names) —
+/// out-of-scope symbols (locals) —
 /// the request is refused rather than falling through to a partial rename.
 pub fn prepare_rename<'a>(
     index: &'a ProjectIndex,
     path: &Path,
     offset: usize,
 ) -> Option<(&'a SymbolKey, &'a SiteRef)> {
-    // #4183: a unit is indexed (hover, definition, references, tokens), but
-    // renaming one is a separate step: it changes a dotted name wherever it is
-    // written, and the file layout that names it, so it is refused here until
-    // it is planned as one.
-    index
-        .symbol_at(path, offset)
-        .filter(|(key, _)| key.kind != SymbolKind::Unit)
+    index.symbol_at(path, offset)
 }
 
 /// v0.26 rider (ADR 0055): `workspace/symbol` — every index definition whose
@@ -1051,18 +1045,31 @@ pub fn plan_rename(
     offset: usize,
     new_name: &str,
 ) -> Result<RenamePlan, String> {
-    validate_new_name(new_name)?;
-    let (key, _) = index
-        .symbol_at(path, offset)
-        .filter(|(key, _)| key.kind != SymbolKind::Unit)
-        .ok_or_else(|| {
-            "no renameable symbol at the cursor — types, fns, methods, record fields, \
-             capability ops, capabilities, services, agents and providers rename; \
-             local bindings and unit names are not yet supported"
-                .to_string()
-        })?;
-    if key_segment(&key.name) == new_name {
-        return Err(format!("`{new_name}` is already the symbol's name"));
+    let (key, _) = index.symbol_at(path, offset).ok_or_else(|| {
+        "no renameable symbol at the cursor — types, fns, methods, record fields, \
+         capability ops, capabilities, services, agents, providers and context or \
+         commons names rename; local bindings are not yet supported"
+            .to_string()
+    })?;
+    if key.kind == SymbolKind::Unit {
+        validate_unit_name(new_name)?;
+        if key.name == new_name {
+            return Err(format!("`{new_name}` is already the unit's name"));
+        }
+        if index
+            .symbols
+            .keys()
+            .any(|k| k.kind == SymbolKind::Unit && k.name == new_name)
+        {
+            return Err(format!(
+                "`{new_name}` is already a unit of this project — renaming onto it would merge the two"
+            ));
+        }
+    } else {
+        validate_new_name(new_name)?;
+        if key_segment(&key.name) == new_name {
+            return Err(format!("`{new_name}` is already the symbol's name"));
+        }
     }
     let mut edits: BTreeMap<PathBuf, Vec<Span>> = BTreeMap::new();
     for site in index.sites(key) {
@@ -1093,6 +1100,11 @@ pub fn add_doc_link_edits(
     snapshots: &HashMap<PathBuf, String>,
     locals: &FileLocals,
 ) {
+    // #4183: no doc link resolves to a unit (`DOC_LINK_BARE_KINDS` has none), so there is
+    // nothing of this rename to rewrite in one.
+    if plan.key.kind == SymbolKind::Unit {
+        return;
+    }
     let Some(entry) = index.symbols.get(&plan.key) else {
         return;
     };
@@ -1160,6 +1172,9 @@ pub fn doc_links_rebound(
     let renamed = renamed_key_name(&plan.key.name, &plan.new_name);
     let owner_prefix = format!("{}.", plan.key.name);
     let expect = |k: &SymbolKey| -> SymbolKey {
+        if plan.key.kind == SymbolKind::Unit {
+            return rekeyed_in_unit(k, plan);
+        }
         let mut k = k.clone();
         if k == plan.key {
             k.name = renamed.clone();
@@ -1231,6 +1246,18 @@ pub fn doc_links_rebound(
     Ok(())
 }
 
+/// #4183 (decision B): a unit's new name is a dotted name, each segment an
+/// identifier. It is the name as written in source (`shop.pay`), not a path: the
+/// files that lay the unit out are renamed by hand, and `rename` says so.
+pub fn validate_unit_name(name: &str) -> Result<(), String> {
+    if name.is_empty() || name.split('.').any(|seg| validate_new_name(seg).is_err()) {
+        return Err(format!(
+            "`{name}` is not a valid unit name — a unit's name is identifiers joined by `.` (such as `shop.pay`)"
+        ));
+    }
+    Ok(())
+}
+
 /// A new name must lex as exactly one identifier (keywords lex as their own
 /// token kinds, so they fail this check).
 pub fn validate_new_name(name: &str) -> Result<(), String> {
@@ -1254,6 +1281,10 @@ pub fn narrow_qualified_edits(
     plan: &mut RenamePlan,
     snapshots: &std::collections::HashMap<PathBuf, String>,
 ) {
+    // #4183: a unit's every site is its whole dotted name, which the rename replaces.
+    if plan.key.kind == SymbolKind::Unit {
+        return;
+    }
     let old = key_segment(&plan.key.name).to_string();
     for (path, spans) in plan.edits.iter_mut() {
         let Some(text) = snapshots.get(path) else {
@@ -1282,6 +1313,9 @@ pub fn alias_rename_refusal(
     offset: usize,
 ) -> Option<String> {
     let (key, site) = index.symbol_at(path, offset)?;
+    if key.kind == SymbolKind::Unit {
+        return None; // #4183: a unit is written as itself, never under an alias.
+    }
     let text = snapshots.get(path)?;
     let name = key_segment(&key.name);
     let span = narrow_qualified_span(text, site.span, name);
@@ -1339,7 +1373,13 @@ pub fn remap_site(site: &SiteRef, plan: &RenamePlan) -> SiteRef {
     };
     // The edit replaces the member segment only (`"m"` of `"Type.m"`), so the
     // length delta is against that segment, not the whole compound key name.
-    let delta = plan.new_name.len() as isize - key_segment(&plan.key.name).len() as isize;
+    // A unit's edit replaces its whole dotted name (#4183).
+    let replaced = if plan.key.kind == SymbolKind::Unit {
+        plan.key.name.len()
+    } else {
+        key_segment(&plan.key.name).len()
+    };
+    let delta = plan.new_name.len() as isize - replaced as isize;
     let shift: isize = spans.iter().filter(|s| s.end <= site.span.start).count() as isize * delta;
     let start = (site.span.start as isize + shift) as usize;
     // An edited span inside the site (the name after a qualifier, #4352) moves its end too.
@@ -1364,6 +1404,18 @@ pub fn index_unchanged_modulo_rename(
     post: &ProjectIndex,
     plan: &RenamePlan,
 ) -> bool {
+    // #4183: renaming a unit re-keys every symbol it declares, since the unit is
+    // part of each key, and the unit's own key.
+    if plan.key.kind == SymbolKind::Unit {
+        let mut rekeyed = pre.clone();
+        rekeyed.symbols = pre
+            .symbols
+            .iter()
+            .map(|(k, e)| (rekeyed_in_unit(k, plan), e.clone()))
+            .collect();
+        // Every key already carries its post-rename name: nothing further is renamed.
+        return rekeyed.equals_modulo_rename(post, &plan.key, "", |s| remap_site(s, plan));
+    }
     // v0.36 (ADR 0069): a member key carries a compound name (`"Type.method"`),
     // but the edit replaces only the member segment — so the post-rename key is
     // the prefix plus the new segment, not the bare new name.
@@ -1389,6 +1441,19 @@ pub fn index_unchanged_modulo_rename(
     rekeyed.equals_modulo_rename(post, &plan.key, &target, |s| remap_site(s, plan))
 }
 
+/// #4183: `key` as it reads once the unit `plan` renames has its new name: a symbol declared in
+/// the unit is declared in the new one, and the unit's own key takes the new name.
+fn rekeyed_in_unit(key: &SymbolKey, plan: &RenamePlan) -> SymbolKey {
+    let mut key = key.clone();
+    if key.unit == plan.key.name {
+        key.unit = plan.new_name.clone();
+    }
+    if key.kind == SymbolKind::Unit && key.name == plan.key.name {
+        key.name = plan.new_name.clone();
+    }
+    key
+}
+
 /// The post-rename value of a (possibly compound) key name: for a member key
 /// `"Type.method"`, replace the segment after the last `.`; for a bare name,
 /// the new name as-is.
@@ -1403,6 +1468,55 @@ fn renamed_key_name(old: &str, new_segment: &str) -> String {
 /// actually edits (every site span covers exactly this).
 pub fn key_segment(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or(name)
+}
+
+/// #4183 (decision B): renaming a unit does not rename its files, so the edited project is
+/// expected to carry `bynk.project.inconsistent_commons_name` where a file's path no longer
+/// matches its unit's new name. That is what the rename warns about
+/// ([`layout_warnings`]), not a reason to refuse it, so validator (1) does not count it.
+pub fn without_expected_diagnostics(
+    plan: &RenamePlan,
+    diagnostics: Vec<(PathBuf, String)>,
+) -> Vec<(PathBuf, String)> {
+    if plan.key.kind != SymbolKind::Unit {
+        return diagnostics;
+    }
+    diagnostics
+        .into_iter()
+        .filter(|(_, category)| category != "bynk.project.inconsistent_commons_name")
+        .collect()
+}
+
+/// #4183 (decision B): what a unit rename leaves for the user to do by hand. Each file that
+/// declares the unit and whose path matched its old name but not its new one is named, with
+/// where it should live. `snapshots` are the files as they were before the edits.
+pub fn layout_warnings(
+    plan: &RenamePlan,
+    snapshots: &std::collections::HashMap<PathBuf, String>,
+) -> Vec<String> {
+    if plan.key.kind != SymbolKind::Unit {
+        return Vec::new();
+    }
+    let layout = plan.new_name.replace('.', "/");
+    let mut out = Vec::new();
+    for path in plan.edits.keys() {
+        let Some((declared, _)) = snapshots
+            .get(path)
+            .and_then(|text| crate::symbols::own_declaration_name(text))
+        else {
+            continue;
+        };
+        if declared != plan.key.name || bynk_project::paths::unit_path_matches(path, &plan.new_name)
+        {
+            continue;
+        }
+        let shown = path.to_string_lossy().replace('\\', "/");
+        out.push(format!(
+            "`{}` is now `{}`, but `{shown}` is still where `{}` was: move it to `{layout}.bynk` (or into `{layout}/`) so the layout matches, or `bynk check` reports `bynk.project.inconsistent_commons_name`",
+            plan.key.name, plan.new_name, plan.key.name
+        ));
+    }
+    out
 }
 
 /// Validator (1): refuse when the edited project carries a diagnostic the

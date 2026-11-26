@@ -85,7 +85,10 @@ fn try_rename(
         edited_texts.insert(rel.clone(), edited);
     }
     let post = analyse(root, &overlay);
-    index_queries::no_new_diagnostics(&pre.diags, &post.diags)?;
+    // #4183: a unit rename leaves its files' paths to the user; the handler does not
+    // count the layout diagnostic that follows.
+    let post_diags = index_queries::without_expected_diagnostics(&plan, post.diags.clone());
+    index_queries::no_new_diagnostics(&pre.diags, &post_diags)?;
     if !index_queries::index_unchanged_modulo_rename(&pre.index, &post.index, &plan) {
         return Err("index changed beyond the rename (capture/escape)".to_string());
     }
@@ -385,4 +388,198 @@ fn a_rename_started_on_an_alias_use_is_refused() {
     // The source name in the list, and the declaration, still rename.
     let item = offset_of(&pre.snapshots, "app/z.bynk", "Status", 0);
     assert!(try_rename(&root, &pre, ("app/z.bynk", item), "State").is_ok());
+}
+
+// ---- #4183 (decision B): renaming a context or commons name ----
+
+const OPS_ADMIN: &str = "\
+context ops.admin
+
+service audit {
+  on call(id: String) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}
+";
+
+const OPS_BILLING: &str = "\
+context ops.billing
+
+actor Admin = Caller where IsContext(ops.admin)
+
+service refunds {
+  on call(id: String) -> Effect[Int] by Admin {
+    Effect.pure(1)
+  }
+}
+";
+
+const SHOP_CART: &str = "\
+context shop
+
+consumes ops.admin
+
+service place {
+  on call(id: String) -> Effect[Int] by Caller {
+    ops.admin.audit(id)
+  }
+}
+";
+
+fn ops_project(test_name: &str) -> (PathBuf, Analysed) {
+    let root = setup_project(
+        test_name,
+        &[
+            ("ops/admin.bynk", OPS_ADMIN),
+            ("ops/billing.bynk", OPS_BILLING),
+            ("shop.bynk", SHOP_CART),
+        ],
+    );
+    let pre = analyse(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+    (root, pre)
+}
+
+#[test]
+fn renaming_a_context_rewrites_every_place_its_name_is_written() {
+    let (root, pre) = ops_project("unit-happy");
+    // From the `consumes`, the `IsContext(…)` and the call's prefix: the same rename.
+    for (file, anchor, n) in [
+        ("shop.bynk", "consumes ops.admin", 0),
+        ("ops/billing.bynk", "IsContext(ops.admin", 0),
+        ("shop.bynk", "ops.admin.audit", 0),
+        ("ops/admin.bynk", "context ops.admin", 0),
+    ] {
+        let start = offset_of(&pre.snapshots, file, anchor, n)
+            + anchor.find("ops.admin").expect("name in anchor");
+        let edited = try_rename(&root, &pre, (file, start), "ops.staff")
+            .unwrap_or_else(|e| panic!("rename from {file} at `{anchor}`: {e}"));
+        // Its header, the `consumes`, the call's prefix and the `IsContext` are all the new name.
+        assert!(edited[Path::new("ops/admin.bynk")].contains("context ops.staff\n"));
+        let shop = &edited[Path::new("shop.bynk")];
+        assert!(shop.contains("consumes ops.staff\n"), "{shop}");
+        assert!(shop.contains("ops.staff.audit(id)"), "{shop}");
+        let billing = &edited[Path::new("ops/billing.bynk")];
+        assert!(billing.contains("IsContext(ops.staff)"), "{billing}");
+        for (path, text) in &edited {
+            assert!(
+                !text.contains("ops.admin"),
+                "`ops.admin` is left in {}: {text}",
+                path.display()
+            );
+        }
+    }
+}
+
+#[test]
+fn an_alias_of_the_context_keeps_its_own_spelling() {
+    let cart = "\
+context shop
+
+consumes ops.admin as Admin
+
+service place {
+  on call(id: String) -> Effect[Int] by Caller {
+    Admin.audit(id)
+  }
+}
+";
+    let root = setup_project(
+        "unit-alias",
+        &[("ops/admin.bynk", OPS_ADMIN), ("shop.bynk", cart)],
+    );
+    let pre = analyse(
+        &root,
+        &bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone())),
+    );
+    assert!(pre.diags.is_empty(), "fixture clean: {:?}", pre.diags);
+    let at = offset_of(&pre.snapshots, "shop.bynk", "ops.admin", 0);
+    let edited = try_rename(&root, &pre, ("shop.bynk", at), "ops.staff").expect("renames");
+    let shop = &edited[Path::new("shop.bynk")];
+    assert!(shop.contains("consumes ops.staff as Admin"), "{shop}");
+    assert!(
+        shop.contains("Admin.audit(id)"),
+        "the alias is the unit's own: {shop}"
+    );
+}
+
+#[test]
+fn a_unit_rename_onto_another_unit_is_refused() {
+    let (root, pre) = ops_project("unit-collide");
+    let at = offset_of(&pre.snapshots, "shop.bynk", "ops.admin", 0);
+    let err = try_rename(&root, &pre, ("shop.bynk", at), "ops.billing")
+        .expect_err("a rename onto an existing unit");
+    assert!(err.contains("already a unit of this project"), "{err}");
+    let err = try_rename(&root, &pre, ("shop.bynk", at), "ops.admin")
+        .expect_err("a rename to its own name");
+    assert!(err.contains("already the unit's name"), "{err}");
+}
+
+#[test]
+fn a_unit_name_must_be_identifiers_joined_by_dots() {
+    let (root, pre) = ops_project("unit-invalid");
+    let at = offset_of(&pre.snapshots, "shop.bynk", "ops.admin", 0);
+    for bad in [
+        "",
+        "ops..staff",
+        ".staff",
+        "ops.",
+        "ops.1staff",
+        "ops staff",
+        "ops/staff",
+        "fn.staff",
+    ] {
+        let err = try_rename(&root, &pre, ("shop.bynk", at), bad)
+            .expect_err(&format!("`{bad}` is not a unit name"));
+        assert!(err.contains("not a valid"), "`{bad}`: {err}");
+    }
+    // A single segment is a unit name too, and so is a long one.
+    assert!(index_queries::validate_unit_name("staff").is_ok());
+    assert!(index_queries::validate_unit_name("a.b.c.d").is_ok());
+}
+
+#[test]
+fn a_unit_rename_warns_where_the_layout_no_longer_matches() {
+    let (_, pre) = ops_project("unit-layout");
+    let at = offset_of(&pre.snapshots, "ops/billing.bynk", "ops.admin", 0);
+    let plan =
+        index_queries::plan_rename(&pre.index, Path::new("ops/billing.bynk"), at, "ops.staff")
+            .expect("plans");
+    let warnings = index_queries::layout_warnings(&plan, &pre.snapshots);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    let w = &warnings[0];
+    assert!(
+        w.contains("`ops/admin.bynk` is still where `ops.admin` was"),
+        "{w}"
+    );
+    assert!(w.contains("ops/staff.bynk"), "{w}");
+    assert!(w.contains("bynk.project.inconsistent_commons_name"), "{w}");
+
+    // A rename to a name the file's path already matches has nothing to warn of: the file is
+    // `ops/admin.bynk`, so a unit `ops.admin` is where it belongs.
+    let mut ok = plan.clone();
+    ok.new_name = "ops.admin".to_string();
+    assert!(index_queries::layout_warnings(&ok, &pre.snapshots).is_empty());
+}
+
+#[test]
+fn only_a_unit_rename_expects_the_layout_diagnostic() {
+    let (_, pre) = ops_project("unit-expected");
+    let at = offset_of(&pre.snapshots, "ops/billing.bynk", "refunds", 0);
+    let plan =
+        index_queries::plan_rename(&pre.index, Path::new("ops/billing.bynk"), at, "reimburse")
+            .expect("plans a service rename");
+    let diags = vec![(
+        PathBuf::from("ops/billing.bynk"),
+        "bynk.project.inconsistent_commons_name".to_string(),
+    )];
+    assert_eq!(
+        index_queries::without_expected_diagnostics(&plan, diags.clone()),
+        diags,
+        "another rename's layout diagnostic is a collision as ever"
+    );
+    assert!(index_queries::layout_warnings(&plan, &pre.snapshots).is_empty());
 }

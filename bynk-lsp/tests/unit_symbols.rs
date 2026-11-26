@@ -486,17 +486,35 @@ fn a_context_that_does_not_exist_resolves_to_nothing() {
 }
 
 #[test]
-fn renaming_a_unit_is_refused_until_it_is_planned_as_one() {
+fn a_unit_is_renameable_as_one_whole_dotted_name() {
     let (r, _) = analysed("rename");
     let (rel, _) = file(&r, "shop/cart.bynk");
     let offset = at(CART, "consumes ops.billing", "ops.billing");
-    assert!(
-        index_queries::prepare_rename(&r.index, rel, offset).is_none(),
-        "prepareRename is refused on a unit name"
+    // `prepareRename` answers, and the range is the whole dotted name.
+    let (key, site) =
+        index_queries::prepare_rename(&r.index, rel, offset).expect("prepareRename answers");
+    assert_eq!(key.name, "ops.billing");
+    assert_eq!(&CART[site.span.range()], "ops.billing");
+    // The plan edits the definition and every reference, whole.
+    let plan =
+        index_queries::plan_rename(&r.index, rel, offset, "ops.invoicing").expect("a unit renames");
+    let edited: Vec<(String, String)> = plan
+        .edits
+        .iter()
+        .flat_map(|(path, spans)| {
+            spans
+                .iter()
+                .map(|span| site_text(&r, path, *span))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(
+        edited,
+        [
+            ("ops/billing.bynk".to_string(), "ops.billing".to_string()),
+            ("shop/cart.bynk".to_string(), "ops.billing".to_string()),
+        ]
     );
-    let err = index_queries::plan_rename(&r.index, rel, offset, "Billing")
-        .expect_err("a rename of a unit is refused");
-    assert!(err.contains("unit names are not yet supported"), "{err}");
 }
 
 #[test]
