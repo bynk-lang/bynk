@@ -522,8 +522,8 @@ pub(crate) fn need_api<'a>(
     })
 }
 
-/// The run's Hyperdrive inputs, or `None` after printing why not (a missing
-/// variable, an unreadable string, a binding with no settings). Reads the
+/// The run's Hyperdrive inputs, or `Err` with one entry per problem after printing them (a
+/// missing variable, an unreadable string, a binding with no settings). Reads the
 /// process environment; `bynk.toml` is read from `project_root`. Asks nothing
 /// of the account.
 pub(crate) fn wants_for_run(
