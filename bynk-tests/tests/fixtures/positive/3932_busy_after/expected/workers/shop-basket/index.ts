@@ -52,7 +52,7 @@ export default {
             const __raw_id = __m.params["id"];
             const id = __raw_id;
             const result = await surface.http_POST_basket_Param_id(id);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: true }), request, ["Bynk realm=\"shop.basket\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { notGet: "POST /basket/:id" }), request, ["Bynk realm=\"shop.basket\""]), __security_api);
           }
         }
         if (__matchPath("/basket/:id", path) !== null) {

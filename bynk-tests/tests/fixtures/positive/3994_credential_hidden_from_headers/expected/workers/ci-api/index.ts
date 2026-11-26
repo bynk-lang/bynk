@@ -90,7 +90,7 @@ export default {
               return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
             }
             const result = await surface.http_POST_either(request, __requestHeaders(request, undefined, ["x-sig"]));
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\"", "Bynk realm=\"ci.api\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /either" }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\"", "Bynk realm=\"ci.api\""])), __security_api);
           }
         }
         {
@@ -129,7 +129,7 @@ export default {
             if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
             const body = __r_body.value;
             const result = await surface.http_POST_hook(__requestHeaders(request, undefined, ["x-sig"]), body);
-            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""])), __security_api);
+            return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /hook" }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""])), __security_api);
           }
         }
         if (__matchPath("/bearer", path) !== null) {
