@@ -2003,6 +2003,17 @@ of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 the consumer's own, and a Bynk consumer of it MUST accept the message type of the consumer it
 receives from (`bynk.queue.dead_letter_type_mismatch`), by the comparison of the next paragraph.
 
+A `from email` service MAY carry one `fallback { forward: "<address>" }` section (#3885): a message
+its handler faulted on (or returned a non-verdict for), or that could not be parsed or exceeded a
+parser limit, is forwarded to that address with an `X-Bynk-Fallback` header (`handler-fault` or
+`unreadable`) instead of being rejected with a permanent SMTP error. `forward` MUST be a string
+literal holding a bare address, not a domain's catch-all (`bynk.email.fallback_bad_option`), and MUST NOT be
+an address a `from email` service of the project claims, directly or through its domain's
+catch-all (`bynk.email.fallback_claimed`); on any other service the section is
+`bynk.email.fallback_not_email`, and a second section is `bynk.parse.duplicate_fallback`. A
+message over the size limit, a refused `Reply` and a refused `Forward` are rejected as without a
+fallback, as is a message whose fallback forward is itself refused.
+
 A `sendValue`, `sendValueWith` or `sendValueBatch` call on a `Queue` instance whose queue some
 context of the project consumes (`from queue("q")`) MUST send a type, or for a batch an element
 type, that the consumer's `on message` parameter admits under the cross-context boundary

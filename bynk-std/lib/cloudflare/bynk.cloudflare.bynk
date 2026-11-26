@@ -1055,13 +1055,20 @@ adapter bynk.cloudflare {
 	declares the binding. It reads the datasets `Analytics.write` fills, and Cloudflare's
 	other analytics datasets, as `events.analyticsEngine.<DATASET>`.
 
-	`query(sql, params)` runs one `SELECT`. Put values in `params`, a `List[SqlValue]`
+	`query(dataset, sql, params)` runs one `SELECT`. `dataset` is the name of an
+	`Analytics` instance in the handler's `given` (`AnalyticsSql.query(Signups, …)`),
+	and `sql` is a string literal, a `"""` block or a `String` constant bound to one, as
+	for `D1`, so no request data can reach the text and read another dataset or drop the
+	time bound. A `{dataset}` in the SQL is replaced with that instance's table,
+	`events.analyticsEngine.shop_cart_signups`, or `..._staging` under `--env staging`,
+	for the environment the Worker runs in; it may appear any number of times, or not at
+	all. Put values in `params`, a `List[SqlValue]`
 	bound to `$1`, `$2`, … by position, and never into the text of `sql`. A `Null`,
 	`Integer`, `Real`, `Text` or `Boolean` is taken (a `Real` that is not finite is
 	`SqlRejected`); a `Blob` has no Analytics SQL counterpart and is `SqlRejected` too,
 	before anything is sent. Named
 	`$name` parameters are not taken yet. A dataset's name is an identifier, which a
-	parameter cannot be, so it is the one value written into `sql`.
+	parameter cannot be, so `{dataset}` is the one value written into `sql`.
 
 	Cloudflare's rules for the SQL apply as they do to its own API: the query must carry a
 	lower time bound (`WHERE timestamp >= NOW() - INTERVAL '1' HOUR`), because the binding
@@ -1075,11 +1082,12 @@ adapter bynk.cloudflare {
 
 	There is no local implementation of the binding: under `bynk dev` a query runs on
 	Cloudflare, against the deployed datasets, once you allow it, and `bynkc test` faults
-	until the call is stubbed (`stub AnalyticsSql.query(_, _) returns …`), so a test never
+	until the call is stubbed (`stub AnalyticsSql.query(_, _, _) returns …`), so a test never
 	reaches Cloudflare.
 	---
 	capability AnalyticsSql {
 		fn query(
+			dataset: String,
 			sql: String,
 			params: List[SqlValue]
 		) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]

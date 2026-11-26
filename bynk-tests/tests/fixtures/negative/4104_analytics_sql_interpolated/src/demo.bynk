@@ -1,0 +1,16 @@
+context demo
+
+consumes bynk.cloudflare { Analytics, AnalyticsSql }
+
+capability Signups = Analytics
+
+service s from http {
+	on GET("/x/:id") (id: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let table <- Signups.dataset()
+		let r <- AnalyticsSql.query(Signups, "SELECT count() FROM \(table) WHERE blob1 = '\(id)'", [])
+		match r {
+			Ok(res) => Ok(res.rows),
+			Err(_) => ServerError("no"),
+		}
+	}
+}

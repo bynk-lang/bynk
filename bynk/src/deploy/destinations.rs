@@ -159,6 +159,9 @@ fn standing(address: &str, known: &[Destination]) -> Standing {
 
 /// `` `service` (context `x`) `` for a handler, as a warning names it.
 fn handler_label(f: &EmailForward) -> String {
+    if f.fallback {
+        return format!("the fallback of `{}` (context `{}`)", f.service, f.context);
+    }
     format!("`{}` (context `{}`)", f.service, f.context)
 }
 
@@ -369,6 +372,7 @@ mod tests {
             service: service.into(),
             address: format!("{service}@shop.example"),
             to: to.map(str::to_string),
+            fallback: false,
         }
     }
 
@@ -407,6 +411,24 @@ mod tests {
         assert!(
             w[0].contains("clicking the link Cloudflare emailed")
                 && w[0].contains("Email Routing → Destination addresses"),
+            "{}",
+            w[0]
+        );
+    }
+
+    #[test]
+    fn an_unverified_fallback_warns_as_a_forward_does_and_says_it_is_the_fallback() {
+        // #3885: a fallback that cannot be forwarded to would bounce the very mail it exists to
+        // keep, so it is checked like a `Forward` destination.
+        let account = Fake::new(vec![vec![("ops@shop.example", false)]]);
+        let fallback = EmailForward {
+            fallback: true,
+            ..forward("support", Some("ops@shop.example"))
+        };
+        let w = run(&[fallback], &account);
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(
+            w[0].contains("the fallback of `support` (context `shop.support`) forwards to `ops@shop.example`, which is not verified yet"),
             "{}",
             w[0]
         );
