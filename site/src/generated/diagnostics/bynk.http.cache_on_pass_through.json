@@ -1,0 +1,12 @@
+{
+  "blurb": "`@cache` sets a response's freshness, `Cache-Control`, for a route whose answer the service makes. A pass-through route's forwarded answer is the upstream's, and the upstream's own `Cache-Control` is its freshness, so `@cache` is refused on an `on ANY` route. Set the header at the upstream. A `Respond(…)` answer is shaped by the router as on any route.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_on_pass_through",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "@cache(maxAge: 5.minutes)\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✗\n\non ANY(\"/blog/*path\") (path: String) -> Effect[PassThrough] by Visitor { … }   // ✓ the upstream sets `Cache-Control`",
+  "severity": "error",
+  "summary": "An `on ANY` pass-through route carries `@cache`; the upstream's `Cache-Control` is its answer's freshness."
+}

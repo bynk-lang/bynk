@@ -199,6 +199,12 @@ a *generated* inhabitant of `T` and the body's `expect`s must hold across many. 
 failure it reports a shrunk counterexample and a seed to reproduce. See
 [Testing](/reference/testing/).
 
+### pass-through route {#term-pass-through-route}
+
+An `on ANY(…)` route returning `Effect[PassThrough]`, which forwards its request to an
+[upstream](#term-upstream) and passes the answer through. Experimental. See
+[Pass-through routes](/reference/http/#pass-through-routes).
+
 ### provider {#term-provider}
 
 A `provides` block implementing a capability, optionally `given` other
@@ -327,6 +333,12 @@ no wire**. **`system`** stands contexts up as the Workers they deploy as and wir
 them across the real serialise → JSON → deserialise edge; a `system` case must span
 ≥ 2 contexts (`bynk.tier.system_needs_wire`). Participants for `integration` /
 `system` are **inferred** from the `consumes` graph — there is no `wires` clause.
+
+### upstream {#term-upstream}
+
+The origin a [pass-through route](#term-pass-through-route) forwards to: an `Upstream`
+instance whose `@origin` is declared, never computed. See
+[`Upstream`](/reference/bynk-capabilities/#upstream).
 
 ### `Val[T]` {#term-val}
 
