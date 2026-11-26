@@ -105,7 +105,12 @@ pub fn deploy_email_from(deploy: &toml::Table) -> Result<EmailDeployConfig, Proj
         if deploy.address.is_empty() {
             return Err(bad(address, "`address` names no environment".to_string()));
         }
-        out.insert(address.to_ascii_lowercase(), deploy);
+        if out.insert(address.to_ascii_lowercase(), deploy).is_some() {
+            return Err(bad(
+                address,
+                "is the same address as an earlier entry, ignoring case; the first would be silently replaced".to_string(),
+            ));
+        }
     }
     Ok(out)
 }
@@ -233,6 +238,10 @@ mod tests {
             (
                 "[deploy.email.\"a@b.example\"]\naddress = { default = \"c@d.example\" }\n",
                 "`address.default` cannot be mapped",
+            ),
+            (
+                "[deploy.email.\"A@b.example\"]\naddress = { staging = \"c@d.example\" }\n[deploy.email.\"a@b.example\"]\naddress = { qa = \"e@f.example\" }\n",
+                "same address as an earlier entry",
             ),
         ];
         for (text, expected) in cases {

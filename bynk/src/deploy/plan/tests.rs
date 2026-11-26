@@ -1202,9 +1202,11 @@ fn a_named_environment_says_what_it_claims() {
 }
 
 /// #3883: an environment that claims nothing leaves `addresses` out, and Wrangler changes no
-/// rule for an omitted key, so a ledger that recorded addresses for it prunes nothing.
+/// rule for an omitted key. So a mapped address the environment gave up is not pruned (nothing
+/// deletes its rule), but the rule is still live and still points at the Worker, which no
+/// longer accepts that address: the plan names it, and the ledger keeps it.
 #[test]
-fn an_environment_that_claims_nothing_prunes_nothing() {
+fn an_environment_that_drops_its_last_mapping_names_the_rule_it_leaves() {
     let order = names(&["shop-support"]);
     let before = claiming(&["support@shop.example"], &["support@staging.shop.example"]);
     let mut lock = DeployLock::default();
@@ -1217,8 +1219,42 @@ fn an_environment_that_claims_nothing_prunes_nothing() {
 
     let unmapped = claiming(&["support@shop.example"], &[]);
     let plan = staging_plan(&order, &unmapped, &lock);
+    // Nothing is deleted, so nothing needs `--prune`.
     assert!(confirm_address_removals(&plan, false, false));
-    assert!(!plan_report(&plan, DeployFormat::Short).contains("removed"));
+    let report = plan_report(&plan, DeployFormat::Short);
+    assert!(!report.contains("removed"), "{report}");
+    assert!(
+        report.contains("email address support@staging.shop.example no longer accepted (its Email Routing rule is left in place and still points at this Worker; remove it in the dashboard)"),
+        "{report}"
+    );
+    let json: serde_json::Value =
+        serde_json::from_str(&plan_report(&plan, DeployFormat::Json)).unwrap();
+    assert_eq!(
+        json["contexts"][0]["email_left_in_place"],
+        serde_json::json!(["support@staging.shop.example"])
+    );
+
+    // The push that omits `addresses` does not clear the record: the rule is still live, so
+    // the next plan still names it.
+    record_pushed_tombstones(
+        &mut lock,
+        "staging",
+        "shop-support",
+        &unmapped["shop-support"],
+    );
+    let again = plan_report(&staging_plan(&order, &unmapped, &lock), DeployFormat::Short);
+    assert!(
+        again.contains("support@staging.shop.example no longer accepted"),
+        "{again}"
+    );
+
+    // Mapping it again claims it, so nothing is left in place.
+    let remapped = staging_plan(&order, &before, &lock);
+    assert!(!plan_report(&remapped, DeployFormat::Short).contains("no longer accepted"));
+
+    // A first deploy of an unmapped environment has nothing recorded, so it says nothing more.
+    let first = staging_plan(&order, &unmapped, &DeployLock::default());
+    assert!(!plan_report(&first, DeployFormat::Short).contains("no longer accepted"));
 }
 
 // ---- interop I5 (#1972): Service Bindings to foreign Workers ----

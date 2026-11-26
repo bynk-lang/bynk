@@ -201,12 +201,16 @@ pub(crate) fn record_pushed_tombstones(
         worker,
         pushed.renamed_durable_objects.iter().cloned().collect(),
     );
-    // #3328: and the Email Routing addresses it carried.
-    lock.record_email_addresses(
-        environment,
-        worker,
-        pushed.email_addresses.iter().cloned().collect(),
-    );
+    // #3328: and the Email Routing addresses it carried. #3883: an environment that claims
+    // none omits `addresses`, which changes no rule, so what was recorded is still live and
+    // stays recorded (the plan names it).
+    if !pushed.email_unclaimed(environment) {
+        lock.record_email_addresses(
+            environment,
+            worker,
+            pushed.email_addresses.iter().cloned().collect(),
+        );
+    }
 }
 
 /// The `--` passthrough argument that conflicts with the driver's own

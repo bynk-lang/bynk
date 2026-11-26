@@ -196,6 +196,11 @@ pub(crate) struct ContextPlan<'a> {
     /// `addresses` out, which Wrangler reads as "change no Email Routing rule".
     #[serde(skip_serializing_if = "Option::is_none")]
     email_unclaimed: Option<&'a str>,
+    /// #3883: the addresses the last push of an environment that now claims none carried.
+    /// Their Email Routing rules are still live (an omitted `addresses` changes no rule) and
+    /// still point at this Worker, which no longer accepts mail to them. Kept in the ledger.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    email_left_in_place: Vec<String>,
     /// 1D.2b (#4001): what the apply executes for this context. Never printed.
     #[serde(skip)]
     pub(crate) steps: WorkerSteps<'a>,
@@ -523,6 +528,11 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
                         if let Some(environment) = context.email_unclaimed {
                             out.push_str(&format!(
                                 "email: none (no mapping for `{environment}` in [deploy.email]; the Worker claims no address, so production's Email Routing rules are left alone)\n"
+                            ));
+                        }
+                        for address in &context.email_left_in_place {
+                            out.push_str(&format!(
+                                "email address {address} no longer accepted (its Email Routing rule is left in place and still points at this Worker; remove it in the dashboard)\n"
                             ));
                         }
                         for address in &context.removed_email_addresses {
@@ -900,6 +910,11 @@ pub(crate) fn derive_plan<'a>(
                         .map(String::as_str)
                         .collect(),
                     email_unclaimed: declared.email_unclaimed(environment).then_some(environment),
+                    email_left_in_place: if declared.email_unclaimed(environment) {
+                        lock.removed_email_addresses(environment, worker, &[])
+                    } else {
+                        Vec::new()
+                    },
                     // #3883: an environment that claims none leaves `addresses` out, and
                     // Wrangler changes no rule for an omitted key, so there is nothing to prune.
                     removed_email_addresses: if declared.email_unclaimed(environment) {

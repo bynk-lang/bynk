@@ -1120,8 +1120,12 @@ and the staging Worker accepts mail to that address, delivering it to the same s
 An environment with no entry has its `addresses` left out, which Wrangler documents as
 changing no Email Routing rule (an empty list would delete the Worker's rules); the plan
 says `email: none (no mapping for `staging` in [deploy.email]; …)` rather than listing
-production's addresses, and nothing is pruned. `default` is unchanged, and cannot be
-mapped.
+production's addresses, and nothing is pruned. If the environment had a mapped
+address and has lost it, that address's rule is still live (an omitted `addresses`
+changes no rule) and still points at the Worker, which no longer accepts mail to it:
+the plan names it (`email address … no longer accepted`) so you can remove the rule
+in the dashboard, and `bynk.deploy.lock` keeps the record until you do. `default` is
+unchanged, and cannot be mapped.
 
 A key that names no `from email` address, an address Email Routing cannot match, or an
 address two environments (or the source) would both claim, fails the deploy before
