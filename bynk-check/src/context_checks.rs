@@ -775,7 +775,11 @@ pub fn check_context_declarations(
                 let vars: HashSet<String> = op.type_params.iter().cloned().collect();
                 let mut conflict: Option<(String, String, bool)> = None;
                 let mut resolve = |tr: &TypeRef, in_param: bool| {
+                    // #4111: a type the unit consumes from an adapter (`bynk.crypto`'s `Secret`)
+                    // is not in its contract view, which reads consumed contexts only, so a name
+                    // the view lacks is read as the consumer's own `bynk` type of that name.
                     let ty = checker::resolve_type_ref_in(tr, unit_types, &vars, tys)
+                        .or_else(|| checker::resolve_type_ref_in(tr, &typed.types, &vars, tys))
                         .unwrap_or_else(|| tys.intern(Ty::Unit));
                     if conflict.is_none()
                         && let Some(name) =

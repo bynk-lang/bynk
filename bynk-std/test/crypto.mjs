@@ -237,6 +237,38 @@ export function cryptoSuite(stem, b, platform) {
     assert.equal((await c.importSigningKey(EcdsaP256Sha256, rsa.pkcs8)).tag, "Err");
   });
 
+  t("CryptoProvider.importSigningKeyFromSecret: imports a base64 PKCS#8 held as a Secret, and refuses anything else without echoing it", async () => {
+    const c = provider();
+    // The binding only ever reads a `Secret` through `reveal()`.
+    const secretOf = (text) => ({ reveal: () => text });
+    const ed = await c.importSigningKeyFromSecret(Ed25519, secretOf(Buffer.from(ED_PKCS8).toString("base64")));
+    assert.equal(ed.tag, "Ok");
+    assert.equal(ed.value.extractable, false);
+    assert.deepEqual([...ed.value.usages], ["sign"]);
+    // The imported key is the RFC 8032 test 1 key: it signs the empty message to the published signature.
+    assert.equal(hex(await c.sign(ed.value, new Uint8Array())), ED_SIGNATURE);
+    const rsa = await generate("rsa");
+    assert.equal(
+      (await c.importSigningKeyFromSecret(RsaPkcs1Sha256, secretOf(Buffer.from(rsa.pkcs8).toString("base64")))).tag,
+      "Ok",
+    );
+
+    // Not base64: refused, and the text is not in the failure.
+    const notBase64 = await c.importSigningKeyFromSecret(Ed25519, secretOf("super-secret !! not base64"));
+    assert.equal(notBase64.tag, "Err");
+    assert.equal(notBase64.error.tag, "InvalidKey");
+    assert.ok(!JSON.stringify(notBase64).includes("super-secret"));
+    // Base64 that is not a key.
+    const notKey = await c.importSigningKeyFromSecret(Ed25519, secretOf(Buffer.from("super-secret-key-bytes").toString("base64")));
+    assert.equal(notKey.tag, "Err");
+    assert.ok(!JSON.stringify(notKey).includes("super-secret"));
+    // A key for another algorithm is not a key for this one.
+    assert.equal(
+      (await c.importSigningKeyFromSecret(RsaPkcs1Sha256, secretOf(Buffer.from(ED_PKCS8).toString("base64")))).tag,
+      "Err",
+    );
+  });
+
   t("CryptoProvider.importVerifyKey: imports SPKI, and raw bytes for Ed25519, non-extractable", async () => {
     const c = provider();
     const spki = await c.importVerifyKey(Ed25519, ED_SPKI);
