@@ -80,6 +80,36 @@ export function __serialise_DecodeErrorKind(value: DecodeErrorKind): __JsonValue
 }
 
 export function __deserialise_DecodeErrorKind(json: __JsonValue, path: string = "$"): Result<DecodeErrorKind, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Malformed":
+        return Ok({ tag: "Malformed" } as DecodeErrorKind);
+      case "StructuralMismatch":
+        return Ok({ tag: "StructuralMismatch" } as DecodeErrorKind);
+      case "RefinementViolation":
+        return Ok({ tag: "RefinementViolation" } as DecodeErrorKind);
+      case "UnsupportedAnchor":
+        return Ok({ tag: "UnsupportedAnchor" } as DecodeErrorKind);
+      case "UnsupportedAlias":
+        return Ok({ tag: "UnsupportedAlias" } as DecodeErrorKind);
+      case "UnsupportedMergeKey":
+        return Ok({ tag: "UnsupportedMergeKey" } as DecodeErrorKind);
+      case "UnsupportedTag":
+        return Ok({ tag: "UnsupportedTag" } as DecodeErrorKind);
+      case "MultipleDocuments":
+        return Ok({ tag: "MultipleDocuments" } as DecodeErrorKind);
+      case "UnsupportedSyntax":
+        return Ok({ tag: "UnsupportedSyntax" } as DecodeErrorKind);
+      case "UnsupportedValue":
+        return Ok({ tag: "UnsupportedValue" } as DecodeErrorKind);
+      case "DuplicateKey":
+        return Ok({ tag: "DuplicateKey" } as DecodeErrorKind);
+      case "LimitExceeded":
+        return Ok({ tag: "LimitExceeded" } as DecodeErrorKind);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
