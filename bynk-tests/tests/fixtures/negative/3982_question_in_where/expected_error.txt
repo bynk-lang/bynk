@@ -1,0 +1,3 @@
+bynk.types.question_option_outside_http
+# exact
+# #3982: a property's `where` filter is a plain predicate, lowered as one: `?` there keeps its ordinary rules, so an `Option` has nowhere to go (it is not the body's fail-the-case `?`).

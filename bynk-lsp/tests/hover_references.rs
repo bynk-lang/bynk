@@ -1203,6 +1203,41 @@ fn question_hover_names_only_the_propagation_that_applies() {
     );
 }
 
+/// #3982 — in a test case, `?` fails the case on any `Err` and on `None`, and the hover says
+/// so for a `Result` as well as an `Option`; a `?` in a helper `fn` is not described that way.
+#[test]
+fn question_in_a_case_hovers_as_failing_the_case() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/behaviour/question_in_case_any",
+        "tests/orders.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "parse(\"x\")?", "?"))
+        .expect("the `?` on a `Result` in a case hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    let h = hover_at(r, rel, text, root, at(text, "first_line([])?", "?"))
+        .expect("the `?` on an `Option` in a case hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    // A property's `?` is the same rule.
+    let h = hover_at(r, rel, text, root, at(text, "expect parse(\"7\")?", "?"))
+        .expect("the `?` in a property hovers");
+    assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    // A suite's own helper `fn` follows its return type: its `?` is not the case's.
+    let helper = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubled", "parse(s)?") + "parse(s)".len(),
+    );
+    assert!(
+        helper
+            .as_deref()
+            .is_none_or(|h| !h.contains("fails the case")),
+        "a helper's `?` must not read as failing the case: {helper:?}"
+    );
+}
+
 /// #4363 — the delimiters of an interpolation hole say how its value is rendered,
 /// by its type; an identifier inside keeps its own hover.
 #[test]

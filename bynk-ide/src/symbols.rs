@@ -2232,6 +2232,9 @@ enum Propagation {
     /// Not decided from the declaration: a `?` inside a lambda, or a return type
     /// the tables do not name. The hover then describes both.
     Either,
+    /// #3982: a test `case` or `property` body, outside any lambda: `?` fails the case
+    /// on any `Err` and on `None`.
+    FailsCase,
 }
 
 /// Whether `e`, or any expression below it, is a lambda holding `offset`: a `?`
@@ -2264,6 +2267,26 @@ fn question_propagation(text: &str, offset: usize) -> Propagation {
     };
     let holds =
         |body: &bynk_syntax::ast::Block| body.span.start <= offset && offset <= body.span.end;
+    // #3982: in a case or property body, outside a lambda, `?` fails the case.
+    if let SourceUnit::Suite(suite) = &unit {
+        let bodies = suite
+            .cases
+            .iter()
+            .map(|c| &c.body)
+            .chain(suite.properties.iter().map(|p| &p.forall.body));
+        if let Some(body) = bodies.into_iter().find(|b| holds(b)) {
+            let in_lambda = body.statements.iter().any(|st| {
+                let mut exprs = Vec::new();
+                statement_exprs(st, &mut exprs);
+                exprs.into_iter().any(|e| lambda_holds(e, offset))
+            }) || lambda_holds(&body.tail, offset);
+            return if in_lambda {
+                Propagation::Either
+            } else {
+                Propagation::FailsCase
+            };
+        }
+    }
     let classify = |ret: &TypeRef, body: &bynk_syntax::ast::Block| {
         let inner = match ret {
             TypeRef::Effect(inner, _) => inner,
@@ -2300,7 +2323,8 @@ fn question_propagation(text: &str, offset: usize) -> Propagation {
 /// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns
 /// early. The hover names the one that applies to the enclosing declaration's return
 /// type (#4363), both where that is not decided (a lambda), and points at
-/// `let … else` for any other status. A `?` on a `Result` is not described.
+/// `let … else` for any other status. A `?` on a `Result` is described only in a test case or
+/// property (#3982), where it fails the case.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -2311,6 +2335,20 @@ pub fn describe_question_at(
     let tok = tokens.iter().find(|t| {
         t.span.start <= offset && offset < t.span.end && &text[t.span.start..t.span.end] == "?"
     })?;
+    let propagation = question_propagation(text, tok.span.start);
+    // #3982: in a case or property, `?` fails it on an `Err` as well as on `None`. The checker
+    // accepts only a `Result` or an `Option` operand there, so no operand type is needed, and a
+    // suite file's expression types are not always retained.
+    if propagation == Propagation::FailsCase {
+        return Some(
+            "```bynk\n? : fails the case on Err or None\n```\n\n\
+             In a test `case` (or `property`) body, outside a lambda, `?` yields the value of an \
+             `Ok` or a `Some` and fails the case on an `Err` or a `None`, reporting the error \
+             value and the `?`'s location. In a `property` it fails the property for that input. \
+             A `?` inside a lambda or a helper `fn` keeps its normal meaning."
+                .to_string(),
+        );
+    }
     let before = text[..tok.span.start].trim_end();
     let operand =
         bynk_check::expr_types::type_at_offset(expr_types, before.len().checked_sub(1)?, tys)?;
@@ -2319,7 +2357,7 @@ pub fn describe_question_at(
     }
     const NOT_FOUND: &str = "In an `HttpResult` handler, `None` answers `404 NotFound`, which is right for \"the thing you asked for is not there\", but a missing or malformed request input is a `400`: write `let Some(x) = e else { BadRequest(\"…\") }` to answer another status.";
     const RETURNS: &str = "In a function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as it is; `Option` and `Result` never convert.";
-    Some(match question_propagation(text, tok.span.start) {
+    Some(match propagation {
         Propagation::NoneReturns => format!(
             "```bynk\n? : None returns early\n```\n\n\
              On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS}"
@@ -2328,7 +2366,8 @@ pub fn describe_question_at(
             "```bynk\n? : None answers 404 NotFound\n```\n\n\
              On an `Option`, `?` yields the value for `Some`. {NOT_FOUND}"
         ),
-        Propagation::Either => format!(
+        // A case or property is answered above, before an `Option`-only check.
+        Propagation::Either | Propagation::FailsCase => format!(
             "```bynk\n? : None returns early\n```\n\n\
              On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS} {NOT_FOUND}"
         ),
