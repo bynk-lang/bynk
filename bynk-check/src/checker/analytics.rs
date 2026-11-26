@@ -635,3 +635,27 @@ pub(crate) fn resolve_selects(
         }
     }
 }
+
+/// The typed Analytics operations of a capability call, or `None` when the call is not one:
+/// `AnalyticsSql.select[T]` and `writeValue[T]` on a derived `Analytics`. The inner `Option` is the
+/// call's type, `None` when it is refused.
+pub(crate) fn check_typed(
+    cap: &str,
+    derived_from: Option<&(String, String)>,
+    method: &Ident,
+    (type_args, args): (&[TypeRef], &[Expr]),
+    (span, expr_id): (Span, ExprId),
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    if is_select(cap, &method.name, ctx) {
+        return Some(check_select(
+            cap, method, type_args, args, span, expr_id, ctx,
+        ));
+    }
+    if is_write_value(derived_from, &method.name) {
+        return Some(check_write_value(
+            cap, method, type_args, args, span, expr_id, ctx,
+        ));
+    }
+    None
+}

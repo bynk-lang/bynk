@@ -1957,29 +1957,16 @@ pub(crate) fn check_static_call(
         );
         // #2865: `select[T]` / `firstAs[T]` on a derived `D1` are lowered by
         // the compiler over `all`/`first`, not declared operations.
-        // #4105: `AnalyticsSql.select[T]`, lowered over `query`.
-        if super::analytics::is_select(&type_name.name, &method.name, ctx) {
-            return super::analytics::check_select(
-                &type_name.name,
-                method,
-                type_args,
-                args,
-                span,
-                expr_id,
-                ctx,
-            );
-        }
-        // #4105: `writeValue[T]` on a derived `Analytics`, lowered over `write`.
-        if super::analytics::is_write_value(cap.derived_from.as_ref(), &method.name) {
-            return super::analytics::check_write_value(
-                &type_name.name,
-                method,
-                type_args,
-                args,
-                span,
-                expr_id,
-                ctx,
-            );
+        // #4105: the typed Analytics operations, lowered over `query` and `write`.
+        if let Some(typed) = super::analytics::check_typed(
+            &type_name.name,
+            cap.derived_from.as_ref(),
+            method,
+            (type_args, args),
+            (span, expr_id),
+            ctx,
+        ) {
+            return typed;
         }
         if d1::is_typed_read(cap.derived_from.as_ref(), &method.name) {
             return d1::check_typed_read(
