@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "hits": "54ecab1b86dd4aea"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "hits": "Svc(\"hits\",P(\"path\",B(\"String\")),Ret(B(\"Int\")))"
+  }
+}

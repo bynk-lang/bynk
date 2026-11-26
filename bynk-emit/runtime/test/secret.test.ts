@@ -63,3 +63,21 @@ test("a prefix of the secret, or the secret as a prefix, does not match", () => 
   assert.equal(s.matches("abcdefgh"), false);
   assert.equal(s.matches("abcdeg"), false);
 });
+
+test("bearer and basic build the Authorization value, itself redacted", () => {
+  const bearer = new BynkSecret("tok-123").bearer();
+  assert.equal(bearer.reveal(), "Bearer tok-123");
+  const basic = new BynkSecret("pässword").basic("alice");
+  assert.equal(basic.reveal(), `Basic ${Buffer.from("alice:pässword", "utf8").toString("base64")}`);
+  const shown = [String(bearer), `${basic}`, JSON.stringify({ bearer, basic }), inspect({ bearer, basic })].join("\n");
+  assert.ok(!shown.includes("tok-123") && !shown.includes("pässword") && !shown.includes("alice"), shown);
+});
+
+test("a Basic user with a colon or a control character faults without naming the secret", () => {
+  for (const user of ["a:b", "a\nb", "a\u0000b"]) {
+    assert.throws(
+      () => new BynkSecret("hunter2").basic(user),
+      (e: Error) => /Basic `Authorization` user/.test(e.message) && !e.message.includes("hunter2"),
+    );
+  }
+});

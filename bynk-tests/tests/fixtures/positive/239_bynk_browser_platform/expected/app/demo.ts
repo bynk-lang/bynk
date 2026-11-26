@@ -3,7 +3,7 @@
 
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
 
-import { Method, Secret } from "../bynk.js";
+import { Authorization, Method, Secret } from "../bynk.js";
 
 import * as bynk from "../bynk.js";
 
@@ -14,7 +14,7 @@ export const demo = {
     const __r2 = await deps.Random.uuid();
     const n = await deps.Random.int(0, 10);
     const tok = await deps.Secrets.get("TOKEN");
-    const req = { method: Method.Get, url: url, contentType: None, authorization: ((__o: Option<Secret>, __f: (x: Secret) => string) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(tok, (t: Secret) => t.reveal()), headers: new globalThis.Map<string, string>(), body: None };
+    const req = { method: Method.Get, url: url, contentType: None, authorization: ((__o: Option<Secret>, __f: (x: Secret) => Authorization) => __o.tag === "Some" ? Some(__f(__o.value)) : None)(tok, (t: Secret) => t.bearer()), headers: new globalThis.Map<string, string>(), body: None };
     const res = await deps.Fetch.send(req);
     switch (res.tag) {
       case "Ok": {

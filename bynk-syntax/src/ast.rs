@@ -4467,6 +4467,13 @@ pub fn type_carries_stream(
     .is_some()
 }
 
+/// Every type name `t` mentions, descending through wrappers and generic arguments.
+pub fn type_ref_heads(t: &TypeRef) -> Vec<String> {
+    let mut out = Vec::new();
+    heads(t, &mut out);
+    out
+}
+
 /// Every type name a type mentions (heads of applications and named types,
 /// descending through wrappers and generic arguments), pushed onto `out`.
 #[cfg(test)]

@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+type P = { @index n: Int }
+
+capability Signups = Analytics
+
+service s from http {
+	on GET("/x") () -> Effect[HttpResult[Int]] by Visitor given Signups {
+		let _ <- Signups.writeValue(P { n: 1 })
+		Ok(1)
+	}
+}

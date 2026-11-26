@@ -1878,6 +1878,24 @@ clause is a record field's, an event field's and a `store` field's; a sum varian
 
 For the stored and locked sides, see [Renaming a store field](/reference/agents/#rename-a-store-field).
 
+### Field annotations: `@index` {#field-index}
+
+A record field may carry `@index`, with no argument, to mark it as the sampling key when the record
+is written as an Analytics Engine data point (`Signups.writeValue(point)`, see
+[`Analytics`](/reference/bynk-capabilities/#writing-events-analytics)). At most one field of a record
+is `@index`, and it is a `String` (or a refined or opaque `String`); anything else is
+`bynk.types.analytics_point_shape` when the record is written. The annotation is accepted on a field
+of any record and means something only to `writeValue`: it changes nothing about the type, its
+codecs or its construction.
+
+```bynk,fragment
+type Signup = {
+  @index plan: String,
+  channel: String,
+  seats: Int,
+}
+```
+
 ### Field defaults {#field-defaults}
 
 A field may declare a default, `field: T = expr`. A literal may leave that field

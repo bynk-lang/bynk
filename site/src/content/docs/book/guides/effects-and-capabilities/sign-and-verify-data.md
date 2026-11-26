@@ -91,8 +91,8 @@ service verify {
 
 ## Sign a payload with a key from `Secrets`
 
-Keep the private key in `Secrets` as base64 PKCS#8, import it where you sign, and
-let it go out of scope. A `SigningKey` is an opaque handle to a non-extractable
+Keep the private key in `Secrets` as base64 PKCS#8, import it where you sign with
+`importSigningKeyFromSecret` (the secret never becomes a `String`), and let it go out of scope. A `SigningKey` is an opaque handle to a non-extractable
 platform key: it cannot be read back, stored, logged or sent. Using one in a
 `store`, a record or event field, a handler parameter or result, or a wire type
 is `bynk.types.key_at_boundary`.
@@ -110,18 +110,15 @@ service signLine {
 		let stored <- Secrets.get("REGISTRY_SIGNING_KEY")
 		match stored {
 			None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't set"))),
-			Some(b64) => match Bytes.fromBase64(b64.reveal()) {
-				None => Effect.pure(Err(InvalidKey("REGISTRY_SIGNING_KEY isn't base64"))),
-				Some(pkcs8) => {
-					let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
-					match imported {
-						Err(e) => Effect.pure(Err(e)),
-						Ok(key) => {
-							let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
-							Effect.pure(Ok(signature.toBase64()))
-						},
-					}
-				},
+			Some(secret) => {
+				let imported <- Crypto.importSigningKeyFromSecret(Ed25519, secret)
+				match imported {
+					Err(e) => Effect.pure(Err(e)),
+					Ok(key) => {
+						let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
+						Effect.pure(Ok(signature.toBase64()))
+					},
+				}
 			},
 		}
 	}

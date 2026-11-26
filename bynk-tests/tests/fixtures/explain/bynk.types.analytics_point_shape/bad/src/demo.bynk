@@ -1,0 +1,14 @@
+context demo
+
+consumes bynk.cloudflare { Analytics }
+
+capability Visits = Analytics
+
+type Visit = { @index path: String, ms: Float, hops: List[Int] }
+
+service probe {
+    on call() -> Effect[Bool] by Caller given Visits {
+        let _ <- Visits.writeValue(Visit { path: "/", ms: 1.5, hops: [] })
+        true
+    }
+}

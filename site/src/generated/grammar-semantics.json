@@ -1374,6 +1374,10 @@
       "summary": "`a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
     },
     {
+      "code": "bynk.types.analytics_point_shape",
+      "summary": "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105)."
+    },
+    {
       "code": "bynk.types.json_uncodable",
       "summary": "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, `bynk.crypto` keys, error builtins)."
     },

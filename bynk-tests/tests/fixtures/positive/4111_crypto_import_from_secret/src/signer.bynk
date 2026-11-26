@@ -1,0 +1,25 @@
+context signer
+
+consumes bynk { Secrets }
+consumes bynk.crypto { Crypto, CryptoError, Signature }
+
+// #4111: the signing key is a base64 PKCS#8 held in `Secrets`; `importSigningKeyFromSecret` takes
+// the `Secret` itself, so the key's text is never a `String` in the program.
+service sign {
+	on call(payload: String) -> Effect[Result[String, CryptoError]] by Caller given Crypto, Secrets {
+		let stored <- Secrets.get("SIGNING_KEY")
+		match stored {
+			None => Effect.pure(Err(InvalidKey("SIGNING_KEY isn't set"))),
+			Some(secret) => {
+				let imported <- Crypto.importSigningKeyFromSecret(Ed25519, secret)
+				match imported {
+					Err(e) => Effect.pure(Err(e)),
+					Ok(key) => {
+						let signature <- Crypto.sign(key, Bytes.fromUtf8(payload))
+						Effect.pure(Ok(signature.toBase64()))
+					},
+				}
+			},
+		}
+	}
+}

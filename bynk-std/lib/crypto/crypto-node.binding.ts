@@ -8,6 +8,7 @@
 // without `crypto.subtle` fails loudly.
 import { CryptoError } from "./crypto.js";
 import type { Crypto, Digest, Signature, SigningKey, VerifyKey } from "./crypto.js";
+import type { Secret } from "../bynk.js";
 import { Err, Ok, type Result } from "../runtime.js";
 
 // The shared body: identical in the three platform bindings (`bynk-std`'s drift
@@ -154,6 +155,20 @@ export class CryptoProvider implements Crypto {
     } catch (e) {
       return Err(importError(e, algorithmName(algorithm), "PKCS#8 private key"));
     }
+  }
+
+  // #4111: the PKCS#8 key arrives as a `Secret` holding its base64, so the text never has to be a
+  // `String` in the program. It is revealed here, decoded and handed on; a failure names no text.
+  async importSigningKeyFromSecret(algorithm: Signature, secret: Secret): Promise<Result<SigningKey, CryptoError>> {
+    let pkcs8: Bytes;
+    try {
+      const binary = globalThis.atob(secret.reveal());
+      pkcs8 = new globalThis.Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) pkcs8[i] = binary.charCodeAt(i);
+    } catch {
+      return Err(CryptoError.InvalidKey("the secret is not base64"));
+    }
+    return this.importSigningKey(algorithm, pkcs8);
   }
 
   async importVerifyKey(algorithm: Signature, key: Bytes): Promise<Result<VerifyKey, CryptoError>> {
