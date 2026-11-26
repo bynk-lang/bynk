@@ -268,7 +268,7 @@ context's closure, so the config always matches what the code actually reaches:
 - **`name`** and **`main = "index.ts"`** — the Worker identity and entry.
 - **`compatibility_flags`** — `global_fetch_strictly_public` on every Worker, so a
   `Fetch` to a URL goes over the public internet even when the URL is another
-  Worker on the same account, followed by any flags the project lists in
+  Worker on the same account, and `nodejs_als` (the request's trace is held in `AsyncLocalStorage`; omitted where the project lists `nodejs_compat`), followed by any flags the project lists in
   [`bynk.toml`'s `[workers]`](/reference/tooling/manifest/#workers) table.
 - **`[[services]]`** — one Service Binding per consumed context. The binding name is
   the consumed context uppercased with dots replaced by underscores

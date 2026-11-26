@@ -1019,9 +1019,15 @@ const ALL_ZERO = /^0+$/;
 /** A trace id, as 32 lowercase hex digits that are not all zero. */
 export type TraceId = string;
 
+// The scope's store is a box, so an entry point can start a trace and the
+// admission of a signed call can then replace it with the caller's.
+interface TraceBox {
+  trace: TraceId;
+}
+
 interface TraceScope {
-  getStore(): TraceId | undefined;
-  run<R>(store: TraceId, fn: () => R): R;
+  getStore(): TraceBox | undefined;
+  run<R>(store: TraceBox, fn: () => R): R;
 }
 
 let scope: TraceScope | undefined | null = null;
@@ -1081,16 +1087,68 @@ export function isTraceId(value: unknown): value is TraceId {
 /** Run `fn` with `trace` as the current request's trace; runs it plainly where there is no scope. */
 export function runInTrace<R>(trace: TraceId, fn: () => R): R {
   const s = traceScope();
-  return s === undefined ? fn() : s.run(trace, fn);
+  return s === undefined ? fn() : s.run({ trace }, fn);
 }
 
 /** The current request's trace id, or `undefined` outside a trace or where there is no scope. */
 export function currentTraceId(): TraceId | undefined {
   try {
-    return traceScope()?.getStore();
+    return traceScope()?.getStore()?.trace;
   } catch {
     return undefined;
   }
+}
+
+// The trace id Cloudflare gives the current invocation, when it gives one
+// (`tracing.getActiveSpan()?.spanContext().traceId`, which matches the one on
+// the invocation's logs). It is read through a dynamic import of a computed
+// specifier, so a Node, browser or test build never resolves
+// `cloudflare:workers`. Only the id is used: Cloudflare's `traceFlags` is not
+// a sampling decision, so it is never copied into a `traceparent`.
+let platformModule: Promise<unknown> | undefined;
+
+async function platformTraceId(): Promise<TraceId | undefined> {
+  try {
+    const specifier = "cloudflare:workers";
+    platformModule ??= import(specifier).catch(() => undefined);
+    const mod = (await platformModule) as
+      | { tracing?: { getActiveSpan?(): { spanContext?(): { traceId?: unknown } } | undefined } }
+      | undefined;
+    const id = mod?.tracing?.getActiveSpan?.()?.spanContext?.().traceId;
+    return isTraceId(id) ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run an entry point's work inside a new trace (decision B of #3895): the
+ * platform's own trace id when it gives one, otherwise a random one. A public
+ * HTTP request, a cron run, a queue batch and an email each start here; a signed
+ * call or event delivery starts here too and `verifyCall` then replaces the
+ * trace with the one its caller carried. Where there is no request scope this
+ * runs `fn` as it is.
+ */
+export async function enterTrace<R>(fn: () => Promise<R>): Promise<R> {
+  const s = traceScope();
+  if (s === undefined) return fn();
+  // A Worker group's dispatcher and the member it hands the request to are both
+  // entries; the member joins the dispatcher's trace, which a signed call may
+  // already have replaced.
+  if (s.getStore() !== undefined) return fn();
+  return s.run({ trace: (await platformTraceId()) ?? mintTraceId() }, fn);
+}
+
+/** `message`, followed by ` trace=<id>` inside a trace: how the runtime's own log lines carry the trace. */
+export function withTrace(message: string): string {
+  const trace = currentTraceId();
+  return trace === undefined ? message : `${message} trace=${trace}`;
+}
+
+/** `fields` with the current trace under `trace`, or as they are outside a trace. The trace wins over a field of the same name. */
+export function withTraceField<F extends Record<string, unknown>>(fields: F): F | (F & { trace: TraceId }) {
+  const trace = currentTraceId();
+  return trace === undefined ? fields : { ...fields, trace };
 }
 
 /** The `traceparent` header a call or event delivery from here sends, or `undefined` outside a trace. */
@@ -1107,7 +1165,15 @@ const admitted = new WeakMap<Request, TraceId>();
 /** Record the trace a request carried; called by `verifyCall` once the request is proved. */
 export function admitTrace(request: Request): void {
   const trace = parseTraceparent(request.headers.get(W3C_TRACEPARENT_HEADER));
-  if (trace !== undefined) admitted.set(request, trace);
+  if (trace === undefined) return;
+  admitted.set(request, trace);
+  // The request is now in its caller's trace.
+  try {
+    const box = traceScope()?.getStore();
+    if (box !== undefined) box.trace = trace;
+  } catch {
+    // A trace never fails a request.
+  }
 }
 
 /** The trace an admitted request carried, or `undefined`. */
@@ -1727,7 +1793,7 @@ async function callServiceCore<R>(
       if (detail && detail.kind === "ContractMismatch") {
         // #1826: logged on the caller's side too, with both hashes, before the
         // fault: the caller's catch reports only `BoundaryError: ContractMismatch`.
-        globalThis.console.error(`ContractMismatch ${callerContext} -> ${servicePath}`, detail);
+        globalThis.console.error(withTrace(`ContractMismatch ${callerContext} -> ${servicePath}`), detail);
         return { kind: "error", error: detail };
       }
     }
@@ -1742,7 +1808,7 @@ async function callServiceCore<R>(
         service: servicePath,
         status: response.status,
       };
-      globalThis.console.error(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`);
+      globalThis.console.error(withTrace(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`));
       return { kind: "error", error: detail };
     }
     return { kind: "error", error: { kind: "Transport", status: response.status, details: raw } };
@@ -1797,13 +1863,13 @@ export async function callServiceOutcome<R>(
   const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
   if (raw.kind === "ok") return { tag: "Handled", result: raw.value };
   if (raw.kind === "thrown") {
-    globalThis.console.error(`CallUnreachable ${callerContext} -> ${servicePath}`);
+    globalThis.console.error(withTrace(`CallUnreachable ${callerContext} -> ${servicePath}`));
     return { tag: "Unreachable", status: None };
   }
   const outcome = outcomeOfCallError<R>(raw.error);
   if (outcome === null) throw boundaryError(raw.error);
   if (raw.error.kind === "Transport") {
-    globalThis.console.error(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`);
+    globalThis.console.error(withTrace(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`));
   }
   return outcome;
 }
@@ -1859,7 +1925,7 @@ export async function callOutcome<R>(call: Promise<R>): Promise<CallOutcome<R>> 
     if (stub?.tag === "Unreachable") {
       return { tag: "Unreachable", status: stub.status === undefined ? None : Some(stub.status) };
     }
-    globalThis.console.error("CalleeFaulted bundle call");
+    globalThis.console.error(withTrace("CalleeFaulted bundle call"));
     return { tag: "Faulted" };
   }
 }
