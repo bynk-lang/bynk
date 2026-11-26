@@ -4,7 +4,7 @@
   "categoryAnchor": "queue",
   "code": "bynk.queue.producer_never_sends",
   "constructs": [],
-  "example": "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n  on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
+  "example": "// shop/fulfil.bynk\ncontext shop.fulfil\n\nactor FromOrders = Producer where IsContext(shop.orders)   // ✗ `shop.orders` declares no `Queue` for `order-events`\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by FromOrders { … }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")   // ✓ a producer of the queue",
   "severity": "error",
   "summary": "A `Producer` refinement admits a context that declares no `Queue` for the queue, so it never sends to it."
 }
