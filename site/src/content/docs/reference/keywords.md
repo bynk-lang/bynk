@@ -23,7 +23,7 @@ Reserved everywhere — these **61** words can never be used as an identifier.
 | `Bool` | The boolean base type. |
 | `Bytes` | The binary base type — an immutable octet sequence, erased to `Uint8Array` (`Bytes.fromUtf8(s)`). |
 | `Decimal` | The exact decimal base type — an arbitrary-precision coefficient with a scale (`1.20d`). |
-| `DecodeError` | The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (a `DecodeErrorKind`: `Malformed`, `StructuralMismatch`, `RefinementViolation`, …), `path` (e.g. `$.qty`) and `message` (both `String`): write `"\(e.kind) at \(e.path): \(e.message)"`. |
+| `DecodeError` | The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `"\(e.kind) at \(e.path): \(e.message)"`. |
 | `Duration` | The time-span base type, in milliseconds (`5.minutes`). |
 | `Effect` | The effectful-computation type, `Effect[T]`. |
 | `Err` | The error variant of `Result`. |
