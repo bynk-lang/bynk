@@ -1,0 +1,38 @@
+suite shop.fulfil {
+  case "a message from the admitted context reaches the handler" {
+    let a <- fulfil.message(Order { id: "o1" }) by FromOrders("shop.orders")
+    expect a is Ack
+  }
+}
+
+suite shop.fulfil as system {
+  case "a message signed by the producing context reaches the handler" {
+    let r <- fulfil.message(Order { id: "o1" }) by FromOrders("shop.orders")
+    expect r is Ack
+  }
+
+  // A refused message is acknowledged and never handled: the next delivery of that order, signed,
+  // is the handler's first (an `Ack`; a handler that had seen the unsigned one would say "handled twice").
+  case "an unsigned message is refused and never handled" {
+    let unsigned <- fulfil.message(Order { id: "o2" })
+    let signed <- fulfil.message(Order { id: "o2" }) by FromOrders("shop.orders")
+    expect unsigned is Ack
+    expect signed is Ack
+  }
+
+  case "a replayed message is refused the second time" {
+    let first <- fulfil.message(Order { id: "o3" }) by FromOrders("shop.orders")
+    let again <- fulfil.message(Order { id: "o3" }) by FromOrders("shop.orders")
+    let other <- fulfil.message(Order { id: "o4" }) by FromOrders("shop.orders")
+    expect first is Ack
+    expect again is Ack
+    expect other is Ack
+  }
+
+  case "a message whose handler asked for a retry is admitted again" {
+    let first <- fulfil.message(Order { id: "flaky" }) by FromOrders("shop.orders")
+    let again <- fulfil.message(Order { id: "flaky" }) by FromOrders("shop.orders")
+    expect first is Retry("try again")
+    expect again is Ack
+  }
+}
