@@ -305,3 +305,12 @@ fn a_project_with_no_contexts_is_not_an_unknown_context() {
     assert_eq!(r["code"], "bynk.deploy.no_workers_built");
     assert!(r.get("requested").is_none(), "{r}");
 }
+
+#[test]
+fn an_unreadable_pin_file_is_a_refusal_entry_with_its_path() {
+    let dir = plain_project("pins_unreadable");
+    write(&dir.join("bynk.foreign.toml"), "this is = = not toml\n");
+    let r = only_refusal(&deploy(&dir, &["--format", "json"]));
+    assert_eq!(r["code"], "bynk.deploy.pins_unreadable");
+    assert_eq!(r["path"], "bynk.foreign.toml");
+}

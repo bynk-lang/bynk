@@ -8146,6 +8146,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `--accept-fresh-agent <context>` name matched no context that would move with agent state in this run (a typo, or a move already done), so `bynk deploy` stopped: the flag is never a blanket. With `--format json` the plan's `refusals` carries it with the `name`.",
     ),
     d(
+        "bynk.deploy.account_name_conflict",
+        "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
+    ),
+    d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
     ),
@@ -8210,6 +8214,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group.",
     ),
     d(
+        "bynk.deploy.hyperdrive_settings_unreadable",
+        "`[deploy.hyperdrive]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
+    d(
+        "bynk.deploy.hyperdrive_unresolved",
+        "A Hyperdrive binding's connection string or settings did not resolve, so `bynk deploy` stopped before planning. The message names the binding and the variable or setting it needs.",
+    ),
+    d(
         "bynk.deploy.ledger_unreadable",
         "`bynk deploy` could not read `bynk.deploy.lock`, the ledger of what is deployed, so it stopped before planning: a plan made without it would call everything new. Fix or restore the file (it is plain TOML). With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
@@ -8226,6 +8238,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers.",
     ),
     d(
+        "bynk.deploy.pins_unreadable",
+        "`bynk deploy` could not read the agent pin file, so it stopped before planning. The message names the file and why; fix or remove it and run again.",
+    ),
+    d(
         "bynk.deploy.preflight_failed",
         "`bynk deploy` found the environment not ready for a deploy (Node or Wrangler missing or too old, or another `bynk doctor` deploy check failing) and stopped before building. The message is the doctor's report; fix what it names, or run `bynk doctor` for the full list.",
     ),
@@ -8238,8 +8254,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`bynk deploy --accept-compatible-skew` recorded older contracts in `bynk.contracts.lock` but the rebuild that should carry them failed, so nothing was deployed. The recorded entries are safe to keep (every build re-checks them), or revert the file. With `--format json` the plan's `refusals` carries it with the `path`.",
     ),
     d(
+        "bynk.deploy.recreate_needs_yes",
+        "A changed `@jurisdiction` would make a new R2 bucket, and the old bucket's data would not move. `bynk deploy` refuses to plan that without `--yes`; move the data first, then re-run with `--yes`.",
+    ),
+    d(
         "bynk.deploy.route_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler.",
+    ),
+    d(
+        "bynk.deploy.secrets_file_passthrough",
+        "A `--secrets-file` that passes values through would be a second source of secrets on a first deploy. `bynk deploy` stopped before planning; the message says which file.",
     ),
     d(
         "bynk.deploy.secrets_source_unreadable",
@@ -8248,6 +8272,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.deploy.service_name_conflict",
         "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_shared",
+        "`--strict-environments` found that the environment shares values with `default`, which the flag forbids. The refusal names the environment; give it values of its own.",
+    ),
+    d(
+        "bynk.deploy.strict_environments_unchecked",
+        "`--strict-environments` could not compare the environment with `default`, because `default` could not be built, so nothing was checked. The refusal names the environment; fix the build and run again.",
     ),
     d(
         "bynk.deploy.unknown_context",

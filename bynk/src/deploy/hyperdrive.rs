@@ -531,25 +531,28 @@ pub(crate) fn wants_for_run(
     order: &[String],
     resources: &BTreeMap<String, Resources>,
     environment: &str,
-) -> Option<Wants> {
+) -> Result<Wants, Vec<plan::Entry>> {
     if !order.iter().any(|w| !resources[w].hyperdrive.is_empty()) {
-        return Some(Wants::new());
+        return Ok(Wants::new());
     }
     let settings = match bynk_project::hyperdrive::try_read_hyperdrive_deploy(project_root) {
         Ok(settings) => settings,
         Err(e) => {
             emsg!("bynk: error: {e}");
-            return None;
+            return Err(vec![plan::refusals::hyperdrive_settings_unreadable(&e)]);
         }
     };
     let lookup = |name: &str| std::env::var(name).ok();
     match resolve_wants(order, resources, &settings, environment, &lookup) {
-        Ok(wants) => Some(wants),
+        Ok(wants) => Ok(wants),
         Err(problems) => {
-            for problem in problems {
+            for problem in &problems {
                 emsg!("bynk: error: {problem}");
             }
-            None
+            Err(problems
+                .into_iter()
+                .map(|p| plan::refusals::hyperdrive_unresolved(&p))
+                .collect())
         }
     }
 }

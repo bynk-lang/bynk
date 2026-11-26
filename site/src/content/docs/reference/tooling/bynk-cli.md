@@ -684,7 +684,7 @@ derived and prints `environment`, `refusals`, `warnings` and the upload `order`;
 gets as far as the plan prints the whole plan (`orphans`, `order`, `contexts`, …) with the
 arrays beside it. The human `bynk: …` line is still written to stderr.
 
-**A refusal that is not in the table yet leaves no entry:** the run exits non-zero and writes
+**A refusal that is not in the table yet leaves no entry** (the account checks and confirmations still fall here): the run exits non-zero and writes
 its reason to stderr alone, and stdout can be empty, or hold a plan whose `refusals` is `[]`
 (a refusal made after the plan is printed). A client treats a non-zero exit with no entry in
 `refusals` as a refusal it cannot explain, and reads stderr.
@@ -701,7 +701,7 @@ refusal or warning, never as a pass.
 | `bynk.deploy.agent_starts_fresh` | `warnings` | `context`, `agents`, `from`, `to`: an accepted move, whose old script keeps the data. |
 | `bynk.deploy.env_passthrough_conflict` | `refusals` | `environment`, `flag`: a second `--env` or `--environment` after `--`. |
 | `bynk.deploy.project_undeployable` | `refusals` | none: the `[deploy.workers]` table does not read, or the build profile checks contracts. |
-| `bynk.deploy.preflight_failed` | `refusals` | none: the environment is not ready for a deploy; the message is the doctor's report. |
+| `bynk.deploy.preflight_failed` | `refusals` | `capabilities`: the doctor's own JSON, each capability with its `rows` (`label`, `level`, `detail`, `remedy`). |
 | `bynk.deploy.context_not_found` | `refusals` | `requested`: the `--context` or `--worker` name no build produced. |
 | `bynk.deploy.no_workers_built` | `refusals` | none: the build produced no Workers (the project defines no contexts). |
 | `bynk.deploy.workers_unreadable` | `refusals` | none: a built Worker's declarations could not be read. |
@@ -713,6 +713,16 @@ refusal or warning, never as a pass.
 | `bynk.deploy.contracts_lock_unwritable` | `refusals` | `path`: the older contracts `--accept-compatible-skew` records could not be written. |
 | `bynk.deploy.rebuild_failed` | `refusals` | `path`: the rebuild after recording them failed. |
 | `bynk.deploy.upload_order_cycle` | `refusals` | `cycle`: the Workers that bind to each other in a cycle. |
+| `bynk.deploy.contract_skew` | `refusals` | `side` (`caller`, `callee` or `orphaned_caller`), `worker`, and `skews`: each a `dependency`, `service`, `expected` and `live` hash for a `caller`, or a `caller`, `dependency`, `service`, `expected` and `provided` hash for the other sides. |
+| `bynk.deploy.foreign_contract_skew` | `refusals` | `pins`: each a `context`, `service`, `actor`, the `pinned` hash and what was `built` (`hash`, `not_callable`, `undeclared` or `no_context`) with its `built_hash`. |
+| `bynk.deploy.pins_unreadable` | `refusals` | `path`: the agent pin file did not read. |
+| `bynk.deploy.account_name_conflict` | `refusals` | none: two instances would take the same name on the account. |
+| `bynk.deploy.secrets_file_passthrough` | `refusals` | none: a passthrough `--secrets-file` on a first deploy. |
+| `bynk.deploy.strict_environments_shared` | `refusals` | `environment`: it shares values with `default`. |
+| `bynk.deploy.strict_environments_unchecked` | `refusals` | `environment`: `default` could not be built, so nothing was compared. |
+| `bynk.deploy.hyperdrive_settings_unreadable` | `refusals` | none: `[deploy.hyperdrive]` did not read. |
+| `bynk.deploy.hyperdrive_unresolved` | `refusals` | none: a Hyperdrive binding did not resolve. |
+| `bynk.deploy.recreate_needs_yes` | `refusals` | none: a changed `@jurisdiction` would make a new R2 bucket, which `--yes` accepts. |
 
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:
 

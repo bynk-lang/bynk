@@ -237,6 +237,34 @@ pub(crate) fn refusal_message(broken: &[BrokenPin]) -> String {
     out
 }
 
+/// #3797: the refusal of a build that breaks a foreign caller's pin, as an entry: each broken
+/// pin names the context, service and actor, what it is pinned at, and what the build records
+/// (`built`: `hash` with the build's hash, `not_callable`, `undeclared` or `no_context`).
+pub(crate) fn broken_pins_entry(broken: &[BrokenPin], printed: &str) -> Entry {
+    Entry::from_printed(FOREIGN_SKEW, printed).with(
+        "pins",
+        broken
+            .iter()
+            .map(|b| {
+                let (built, hash) = match &b.built {
+                    Built::Hash(h) => ("hash", Some(h.as_str())),
+                    Built::NotCallable => ("not_callable", None),
+                    Built::Undeclared => ("undeclared", None),
+                    Built::NoContext => ("no_context", None),
+                };
+                serde_json::json!({
+                    "context": b.context,
+                    "service": b.service,
+                    "actor": b.actor,
+                    "pinned": b.pinned,
+                    "built": built,
+                    "built_hash": hash,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 /// The report for services with no pin: the lines to add, grouped by caller.
 pub(crate) fn unpinned_message(unpinned: &[Unpinned]) -> String {
     let mut groups: BTreeMap<(&str, &str), Vec<&Unpinned>> = BTreeMap::new();

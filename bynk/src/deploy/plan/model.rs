@@ -897,6 +897,13 @@ impl<'a> Plan<'a> {
         self
     }
 
+    /// #3797: one more refusal for the plan's `refusals`, for a refusal made once the plan is
+    /// derived: the plan is still printed, with it in the document.
+    pub(crate) fn with_refusal(mut self, refusal: super::Entry) -> Self {
+        self.refusals.push(refusal);
+        self
+    }
+
     /// #3943: what the environment takes from `default`, listed after the plan.
     pub(crate) fn with_shared(mut self, shared: Vec<super::shared::SharedWithDefault>) -> Self {
         self.shared_with_default = shared;

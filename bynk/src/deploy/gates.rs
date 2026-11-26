@@ -54,11 +54,11 @@ pub(crate) fn preflight(
         &preflight_opts,
     );
     if report.exit_nonzero(&preflight_opts) {
-        return Err(Stop::printed(
-            code::PREFLIGHT_FAILED,
-            &preflight_failure_message(&report),
-            &[],
-        ));
+        let printed = preflight_failure_message(&report);
+        colour::eprint(&printed);
+        return Err(Stop::refused(plan::refusals::preflight_failed(
+            &printed, &report,
+        )));
     }
     Ok(())
 }
@@ -135,8 +135,14 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
             &opts.environment,
         );
         if !skews.is_empty() {
-            colour::eprint(&contract_skew_refusal(&opts.environment, worker, &skews));
-            return Err(ExitCode::FAILURE.into());
+            let printed = contract_skew_refusal(&opts.environment, worker, &skews);
+            colour::eprint(&printed);
+            return Err(Stop::refused(contract_skew_entry(
+                &opts.environment,
+                worker,
+                &skews,
+                &printed,
+            )));
         }
 
         // #2077: and the callee half. Does this build still provide what every
@@ -178,32 +184,14 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
                     Ok(()) => recorded = true,
                     Err(e) => {
                         let path = bynk_driver::contracts_lock::lock_path(project_root);
-                        return Err(Stop::error(
-                            Entry::new(
-                                code::CONTRACTS_LOCK_UNWRITABLE,
-                                format!(
-                                    "could not record the older contracts in {}: {e}",
-                                    path.display()
-                                ),
-                            )
-                            .with("path", path.display().to_string()),
-                        ));
+                        return Err(Stop::error(plan::refusals::lock_unwritable(&path, &e)));
                     }
                 }
                 // The build reads the lock, so the callee carries what was just
                 // recorded.
                 if !rebuild(project_root, build_dir, opts) {
                     let path = bynk_driver::contracts_lock::lock_path(project_root);
-                    return Err(Stop::error(
-                        Entry::new(
-                            code::REBUILD_FAILED,
-                            format!(
-                                "the older contracts were recorded in {}, but the rebuild failed; nothing was deployed. The entries are safe to keep (every build re-checks them), or revert the file.",
-                                path.display()
-                            ),
-                        )
-                        .with("path", path.display().to_string()),
-                    ));
+                    return Err(Stop::error(plan::refusals::rebuild_failed(&path)));
                 }
                 manifest = match read_contracts_manifest(&workers_dir.join(worker)) {
                     Ok(m) => m,
@@ -243,13 +231,16 @@ pub(crate) fn context_gate(gate: &ContextGate<'_>, selected: &[String]) -> Resul
             callee_skews
         };
         if !callee_skews.is_empty() {
-            report_callee_skews(
+            let entries = report_callee_skews(
                 callee_skews,
                 graph,
                 (&opts.environment, worker),
                 (runner, lock),
             );
-            return Err(ExitCode::FAILURE.into());
+            return Err(Stop {
+                refusals: entries,
+                ..Stop::from(ExitCode::FAILURE)
+            });
         }
         // #2554: older contracts the lock still accepts that no live caller
         // was compiled against any more are noise; say so.
@@ -325,16 +316,7 @@ pub(crate) fn ordered(
 
 /// A Worker's contracts manifest that cannot be read: the run stops, naming the Worker.
 fn manifest_unreadable(worker: &str, cause: &dyn std::fmt::Display) -> Stop {
-    Stop::error(
-        Entry::new(
-            code::CONTRACTS_MANIFEST_UNREADABLE,
-            format!(
-                "could not read `{worker}`'s {}: {cause}",
-                bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-            ),
-        )
-        .with("worker", worker),
-    )
+    Stop::error(plan::refusals::manifest_unreadable(worker, cause))
 }
 
 /// I4 (#1970, track §11 Q6): a declared foreign caller's pin. Refused
@@ -345,12 +327,11 @@ pub(crate) fn check_foreign_pins(
     workers_dir: &Path,
     order: &[String],
     opts: &DeployOptions,
-) -> Result<(), ExitCode> {
+) -> Result<(), Stop> {
     let pins = match read_pins(project_root) {
         Ok(pins) => pins,
         Err(e) => {
-            emsg!("bynk: error: {e}");
-            return Err(ExitCode::FAILURE);
+            return Err(Stop::error(plan::refusals::pins_unreadable(PIN_FILE, &e)));
         }
     };
     let mut built_foreign: BTreeMap<String, BTreeMap<String, BTreeMap<String, String>>> =
@@ -361,20 +342,15 @@ pub(crate) fn check_foreign_pins(
                 built_foreign.insert(context_of(worker), m.foreign);
             }
             Ok(_) => {}
-            Err(e) => {
-                emsg!(
-                    "bynk: error: could not read `{worker}`'s {}: {e}",
-                    bynk_emit::emitter::contracts::CONTRACTS_MANIFEST
-                );
-                return Err(ExitCode::FAILURE);
-            }
+            Err(e) => return Err(manifest_unreadable(worker, &e)),
         }
     }
     let in_run: BTreeSet<String> = order.iter().map(|w| context_of(w)).collect();
     let (broken, unpinned) = check_pins(&pins, &built_foreign, &in_run, opts.context.is_none());
     if !broken.is_empty() {
-        colour::eprint(&refusal_message(&broken));
-        return Err(ExitCode::FAILURE);
+        let printed = refusal_message(&broken);
+        colour::eprint(&printed);
+        return Err(Stop::refused(broken_pins_entry(&broken, &printed)));
     }
     if !unpinned.is_empty() {
         colour::eprint(&unpinned_message(&unpinned));
@@ -602,7 +578,7 @@ mod tests {
         .expect_err("a cycle has no upload order");
         assert_eq!(stop.refusals.len(), 1);
         let entry = &stop.refusals[0];
-        assert_eq!(entry.code, code::UPLOAD_ORDER_CYCLE);
+        assert_eq!(entry.code, "bynk.deploy.upload_order_cycle");
         let cycle = entry.subject["cycle"]
             .as_array()
             .expect("the cycle is listed");
@@ -618,7 +594,7 @@ mod tests {
         let stop = manifest_unreadable("shop-orders", &"no such file");
         assert_eq!(stop.refusals.len(), 1);
         let entry = &stop.refusals[0];
-        assert_eq!(entry.code, code::CONTRACTS_MANIFEST_UNREADABLE);
+        assert_eq!(entry.code, "bynk.deploy.contracts_manifest_unreadable");
         assert_eq!(entry.subject["worker"], "shop-orders");
         assert!(
             entry.message.starts_with("could not read `shop-orders`'s "),

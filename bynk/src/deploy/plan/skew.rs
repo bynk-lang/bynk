@@ -1,3 +1,4 @@
+use super::Entry;
 use crate::deploy::LOCK_FILE;
 use crate::deploy::config::deploy_command;
 use crate::deploy::config::deployed_worker_name;
@@ -160,25 +161,94 @@ pub(crate) fn record_accepted(
 /// What a push that would break live callers prints: a caller this build still has
 /// gets the callee's refusal, and one it no longer builds its own remedy, since a
 /// whole-project deploy would not move it (#3562: named by its script).
+///
+/// #3797: each refusal is also an entry (`side` says which), and they come back for the stop.
 pub(crate) fn report_callee_skews(
     skews: Vec<CalleeSkew>,
     graph: &BTreeMap<String, Vec<String>>,
     (environment, worker): (&str, &str),
     (runner, lock): (&str, &DeployLock),
-) {
+) -> Vec<Entry> {
     let (built, orphaned) = split_orphaned_callers(skews, graph);
+    let mut entries = Vec::new();
     if !built.is_empty() {
-        colour::eprint(&callee_contract_skew_refusal(environment, worker, &built));
+        let printed = callee_contract_skew_refusal(environment, worker, &built);
+        colour::eprint(&printed);
+        entries.push(callee_skew_entry(
+            "callee",
+            &printed,
+            (environment, worker),
+            &built,
+        ));
     }
     if !orphaned.is_empty() {
         let script_of = |c: &str| lock.script_of(environment, c);
-        colour::eprint(&orphaned_caller_skew_refusal(
-            environment,
-            worker,
+        let printed =
+            orphaned_caller_skew_refusal(environment, worker, &orphaned, (runner, &script_of));
+        colour::eprint(&printed);
+        entries.push(callee_skew_entry(
+            "orphaned_caller",
+            &printed,
+            (environment, worker),
             &orphaned,
-            (runner, &script_of),
         ));
     }
+    entries
+}
+
+/// #3797: the refusal of a Worker compiled against a contract its live dependencies no longer
+/// provide, as an entry: `side` is `caller`, each skew a dependency, service and both hashes.
+pub(crate) fn contract_skew_entry(
+    environment: &str,
+    worker: &str,
+    skews: &[ContractSkew],
+    printed: &str,
+) -> Entry {
+    Entry::from_printed(CONTRACT_SKEW, printed)
+        .with("side", "caller")
+        .with("worker", deployed_worker_name(environment, worker))
+        .with(
+            "skews",
+            skews
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "dependency": s.dependency,
+                        "service": s.service,
+                        "expected": s.expected,
+                        "live": s.live,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+}
+
+/// #3797: the refusal of a callee whose build breaks live callers, as an entry: `side` is
+/// `callee` for callers this build still has and `orphaned_caller` for ones it no longer builds.
+fn callee_skew_entry(
+    side: &str,
+    printed: &str,
+    (environment, worker): (&str, &str),
+    skews: &[CalleeSkew],
+) -> Entry {
+    Entry::from_printed(CONTRACT_SKEW, printed)
+        .with("side", side)
+        .with("worker", deployed_worker_name(environment, worker))
+        .with(
+            "skews",
+            skews
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "caller": deployed_worker_name(environment, &s.caller),
+                        "dependency": s.dependency,
+                        "service": s.service,
+                        "expected": s.expected,
+                        "provided": s.provided,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
 }
 
 /// #2554: the lock entries for `worker`'s context that no live caller in
