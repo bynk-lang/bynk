@@ -416,6 +416,10 @@
           {
             "label": "Sign and verify data",
             "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
+          },
+          {
+            "label": "Store a password",
+            "link": "/book/guides/effects-and-capabilities/store-a-password/"
           }
         ]
       },

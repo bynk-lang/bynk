@@ -385,4 +385,186 @@ export function cryptoSuite(stem, b, platform) {
       await assert.rejects(() => c.importVerifyJwk("{}"), /secure context/);
     });
   });
+
+  // #4118. HKDF-SHA-256: RFC 5869 appendix A, test cases 1 to 3 (the second is the long-input case).
+  const RFC5869 = [
+    {
+      ikm: "0b".repeat(22),
+      salt: "000102030405060708090a0b0c",
+      info: "f0f1f2f3f4f5f6f7f8f9",
+      length: 42,
+      okm: "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+    },
+    {
+      ikm: Array.from({ length: 80 }, (_, i) => i.toString(16).padStart(2, "0")).join(""),
+      salt: Array.from({ length: 80 }, (_, i) => (0x60 + i).toString(16).padStart(2, "0")).join(""),
+      info: Array.from({ length: 80 }, (_, i) => (0xb0 + i).toString(16).padStart(2, "0")).join(""),
+      length: 82,
+      okm: "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87",
+    },
+    {
+      ikm: "0b".repeat(22),
+      salt: "",
+      info: "",
+      length: 42,
+      okm: "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8",
+    },
+  ];
+
+  t("CryptoProvider.deriveKey: matches the RFC 5869 HKDF-SHA-256 test vectors", async () => {
+    const c = provider();
+    for (const v of RFC5869) {
+      const okm = await c.deriveKey(unhex(v.ikm), unhex(v.salt), unhex(v.info), v.length);
+      assert.equal(hex(okm), v.okm);
+      // An independent implementation agrees.
+      const theirs = Buffer.from(nodeCrypto.hkdfSync("sha256", unhex(v.ikm), unhex(v.salt), unhex(v.info), v.length));
+      assert.equal(hex(okm), theirs.toString("hex"));
+    }
+  });
+
+  t("CryptoProvider.deriveKey: a different info, salt or secret gives a different key, and the length bounds hold", async () => {
+    const c = provider();
+    const secret = utf8("master");
+    const salt = utf8("salt");
+    const base = hex(await c.deriveKey(secret, salt, utf8("a/v1"), 32));
+    assert.equal(base.length, 64);
+    assert.notEqual(hex(await c.deriveKey(secret, salt, utf8("b/v1"), 32)), base);
+    assert.notEqual(hex(await c.deriveKey(secret, utf8("other"), utf8("a/v1"), 32)), base);
+    assert.notEqual(hex(await c.deriveKey(utf8("master2"), salt, utf8("a/v1"), 32)), base);
+    assert.equal((await c.deriveKey(secret, salt, utf8("a/v1"), 1)).length, 1);
+    assert.equal((await c.deriveKey(secret, salt, utf8("a/v1"), 8160)).length, 8160);
+    await assert.rejects(() => c.deriveKey(secret, salt, utf8("a/v1"), 0), /length must be/);
+    await assert.rejects(() => c.deriveKey(secret, salt, utf8("a/v1"), 8161), /length must be/);
+    await assert.rejects(() => c.deriveKey(secret, salt, utf8("a/v1"), 1.5), /length must be/);
+    await assert.rejects(() => c.deriveKey(new Uint8Array(), salt, utf8("a/v1"), 32), /non-empty secret/);
+  });
+
+  // PBKDF2-HMAC-SHA-256 at the RFC 6070 password and salt (4096 rounds, 40 bytes): the output is the widely
+  // published known answer, and `node:crypto` is the independent check.
+  const PW = "passwordPASSWORDpassword";
+  const PW_SALT = utf8("saltSALTsaltSALTsaltSALTsaltSALTsalt");
+  const b64 = (bytes) => Buffer.from(bytes).toString("base64").replace(/=+$/, "");
+  const PW_HASH = nodeCrypto.pbkdf2Sync(PW, Buffer.from(PW_SALT), 4096, 40, "sha256");
+  const stored = (iterations) => `pbkdf2-sha256$${iterations}$${b64(PW_SALT)}$${b64(PW_HASH)}`;
+  // The count `hashPassword` uses on this platform. Deployed Workers refuse more than 100,000 (the
+  // cloudflare binding documents the exact error), so there it is 100,000, about six times below
+  // OWASP's 600,000; everywhere else it is 600,000.
+  const COUNT = platform === "cloudflare" ? 100000 : 600000;
+
+  t("CryptoProvider.verifyPassword: accepts a PBKDF2-SHA-256 hash made elsewhere and rejects a wrong password", async () => {
+    const c = provider();
+    assert.equal(PW_HASH.toString("hex"), "348c89dbcbd32b2f32d814b8116e84cf2b17347ebc1800181c4e2a1fb8dd53e1c635518c7dac47e9");
+    assert.equal(await c.verifyPassword(PW, stored(4096)), true);
+    assert.equal(await c.verifyPassword(PW + "x", stored(4096)), false);
+    assert.equal(await c.verifyPassword("", stored(4096)), false);
+    // The count in the string is the count used: the same hash claimed at another count is wrong.
+    assert.equal(await c.verifyPassword(PW, stored(4097)), false);
+  });
+
+  t("CryptoProvider.verifyPassword: a malformed stored hash is false, never a fault", async () => {
+    const c = provider();
+    const good = stored(4096);
+    const [scheme, count, salt, hash] = good.split("$");
+    const bad = [
+      "",
+      "not a hash",
+      "pbkdf2-sha256$4096$$",
+      `${scheme}$${count}$${salt}`,
+      `${scheme}$${count}$${salt}$${hash}$extra`,
+      `pbkdf2-sha512$${count}$${salt}$${hash}`,
+      `${scheme}$0$${salt}$${hash}`,
+      `${scheme}$-1$${salt}$${hash}`,
+      `${scheme}$4096.5$${salt}$${hash}`,
+      `${scheme}$04096$${salt}$${hash}`,
+      `${scheme}$99999999999$${salt}$${hash}`,
+      `${scheme}$10000001$${salt}$${hash}`,
+      `${scheme}$${count}$!!!$${hash}`,
+      `${scheme}$${count}$${salt}$!!!`,
+      `${scheme}$${count}$${b64(utf8("short"))}$${hash}`,
+      `${scheme}$${count}$${salt}$${b64(utf8("tiny"))}`,
+    ];
+    for (const s of bad) {
+      assert.equal(await c.verifyPassword(PW, s), false, JSON.stringify(s));
+      assert.equal(await c.needsRehash(s), true, JSON.stringify(s));
+    }
+  });
+
+  t("CryptoProvider.hashPassword: a hash is self-describing, salted, and verifies the same password only", async () => {
+    const c = provider();
+    const one = await c.hashPassword("correct horse");
+    const two = await c.hashPassword("correct horse");
+    assert.match(one, new RegExp(`^pbkdf2-sha256\\$${COUNT}\\$[A-Za-z0-9+/]{22}\\$[A-Za-z0-9+/]{43}$`));
+    assert.notEqual(one, two, "a fresh salt each time");
+    assert.equal(await c.verifyPassword("correct horse", one), true);
+    assert.equal(await c.verifyPassword("correct horse", two), true);
+    assert.equal(await c.verifyPassword("correct horsf", one), false);
+    assert.equal(await c.verifyPassword("Correct horse", one), false);
+    // The same thing `node:crypto` computes from the stored parameters.
+    const [, count, salt, hash] = one.split("$");
+    const theirs = nodeCrypto.pbkdf2Sync("correct horse", Buffer.from(salt, "base64"), Number(count), 32, "sha256");
+    assert.equal(b64(theirs), hash);
+  });
+
+  t("CryptoProvider.hashPassword: the password is NFC-normalised, so composed and decomposed forms match", async () => {
+    const c = provider();
+    const composed = "café";
+    const decomposed = "café";
+    const stored1 = await c.hashPassword(composed);
+    assert.equal(await c.verifyPassword(decomposed, stored1), true);
+    assert.equal(await c.verifyPassword("cafe", stored1), false);
+    assert.equal(await c.verifyPassword("", await c.hashPassword("")), true);
+  });
+
+  t("CryptoProvider.needsRehash: a lower count or a smaller salt or hash needs one; the current format does not", async () => {
+    const c = provider();
+    assert.equal(await c.needsRehash(await c.hashPassword("x")), false);
+    assert.equal(await c.needsRehash(stored(4096)), true);
+    assert.equal(await c.needsRehash(stored(COUNT)), false);
+    assert.equal(await c.needsRehash(stored(COUNT - 1)), true);
+    const fresh = (await c.hashPassword("x")).split("$");
+    const shortSalt = `${fresh[0]}$${fresh[1]}$${b64(Buffer.from(fresh[2], "base64").subarray(0, 8))}$${fresh[3]}`;
+    assert.equal(await c.needsRehash(shortSalt), true);
+    const higher = `${fresh[0]}$700000$${fresh[2]}$${fresh[3]}`;
+    assert.equal(await c.needsRehash(higher), false);
+  });
+
+  t("CryptoProvider.verifyPassword: a stored count the platform cannot run is false and says why, never a fault", async () => {
+    const c = provider();
+    const real = globalThis.crypto.subtle.deriveBits.bind(globalThis.crypto.subtle);
+    // The limit deployed Workers have (the cloudflare binding documents it); a local run cannot see it, so
+    // it is simulated here on every platform to pin what each binding does about it.
+    globalThis.crypto.subtle.deriveBits = async (algorithm, key, length) => {
+      if (algorithm.name === "PBKDF2" && algorithm.iterations > 100000) {
+        throw Object.assign(new Error("iteration counts above 100000 are not supported"), { name: "NotSupportedError" });
+      }
+      return real(algorithm, key, length);
+    };
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (line) => warnings.push(String(line));
+    try {
+      assert.equal(await c.verifyPassword(PW, stored(150000)), false);
+      assert.equal(warnings.length, 1);
+      if (platform === "cloudflare") {
+        // Refused before the platform is asked, naming the cap.
+        assert.match(warnings[0], /150000 iterations: this platform's Web Crypto accepts at most 100000/);
+      } else {
+        // No cap is known here, so the platform is asked and its refusal is reported.
+        assert.match(warnings[0], /refused PBKDF2 at 150000 iterations \(NotSupportedError\)/);
+      }
+      assert.ok(!warnings[0].includes(PW));
+      assert.equal(await c.verifyPassword(PW, stored(4096)), true);
+      if (platform === "cloudflare") {
+        // This platform's own count is one the limit allows: it hashes, and verifies what it hashed.
+        const own = await c.hashPassword("x");
+        assert.match(own, /^pbkdf2-sha256\$100000\$/);
+        assert.equal(await c.verifyPassword("x", own), true);
+      } else {
+        await assert.rejects(() => c.hashPassword("x"), /not supported/);
+      }
+    } finally {
+      globalThis.crypto.subtle.deriveBits = real;
+      console.warn = realWarn;
+    }
+  });
 }

@@ -33,6 +33,7 @@ Effects are explicit and capability-gated: a handler declares what it needs via
 - [Call Workers AI through an adapter](/book/guides/effects-and-capabilities/call-workers-ai-through-an-adapter/)
 - [Search by meaning with Vectorize and Workers AI](/book/guides/effects-and-capabilities/search-by-meaning-with-vectorize/)
 - [Sign and verify data](/book/guides/effects-and-capabilities/sign-and-verify-data/)
+- [Store a password](/book/guides/effects-and-capabilities/store-a-password/)
 
 **See also:** [Reference — Capabilities & providers](/reference/capabilities/),
 [Adapters](/reference/adapters/).

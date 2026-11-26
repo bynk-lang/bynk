@@ -75,6 +75,7 @@
 /book/guides/effects-and-capabilities/share-a-handler-step/
 /book/guides/effects-and-capabilities/share-across-contexts/
 /book/guides/effects-and-capabilities/sign-and-verify-data/
+/book/guides/effects-and-capabilities/store-a-password/
 /book/guides/effects-and-capabilities/store-files-in-r2/
 /book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/
 /book/guides/effects-and-capabilities/understand-the-capability-model/
