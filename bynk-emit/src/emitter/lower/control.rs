@@ -183,7 +183,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
         } => {
             let detail = if *none {
                 // #3982: a `None` carries no value to show.
-                str_lit(format!("{src}\n  the operand was None"))
+                str_lit([src.as_str(), "\n  the operand was None"].concat())
             } else {
                 bynk_ts::TsExpr::Binary {
                     op: bynk_ts::TsBinaryOp::Add,
