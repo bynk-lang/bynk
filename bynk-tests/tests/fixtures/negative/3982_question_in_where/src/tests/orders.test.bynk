@@ -1,0 +1,9 @@
+suite orders
+
+// A property's `where` filter is a plain predicate: `?` there is not the fail-the-case `?` of
+// the body, so an `Option` has nowhere to go.
+property "a filter cannot use ?" {
+  for all n: Int where first_line([n])? > 0 {
+    expect n > 0
+  }
+}

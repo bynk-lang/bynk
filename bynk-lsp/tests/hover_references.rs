@@ -1222,6 +1222,20 @@ fn question_in_a_case_hovers_as_failing_the_case() {
     let h = hover_at(r, rel, text, root, at(text, "expect parse(\"7\")?", "?"))
         .expect("the `?` in a property hovers");
     assert!(h.contains("? : fails the case on Err or None"), "{h}");
+    // A suite's own helper `fn` follows its return type: its `?` is not the case's.
+    let helper = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubled", "parse(s)?") + "parse(s)".len(),
+    );
+    assert!(
+        helper
+            .as_deref()
+            .is_none_or(|h| !h.contains("fails the case")),
+        "a helper's `?` must not read as failing the case: {helper:?}"
+    );
 }
 
 /// #4363 — the delimiters of an interpolation hole say how its value is rendered,

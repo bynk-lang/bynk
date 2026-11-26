@@ -139,6 +139,10 @@ fn question_fails_the_case_on_any_err_or_none() {
     // A property that fails through `?` fails for that input and shrinks.
     assert!(all.contains("✗ an Err in a property fails it"), "{all}");
     assert!(all.contains("shrunk counterexample:"), "{all}");
-    assert!(all.contains("4 passed, 4 failed."), "{all}");
+    assert!(
+        all.contains("✓ ? in a suite helper keeps its meaning"),
+        "{all}"
+    );
+    assert!(all.contains("5 passed, 4 failed."), "{all}");
     assert!(!out.status.success(), "{all}");
 }

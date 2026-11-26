@@ -2385,7 +2385,12 @@ pub fn check_body(
     };
     if let Some(w) = where_pred {
         let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-        if let Some(actual) = type_of(w, Some(bool_ty), &mut ctx)
+        // #3982: the filter is a plain predicate, lowered as one, not the body that fails the
+        // case on a `?`: counting it as a lambda keeps `?` there under its ordinary rules.
+        ctx.lambda_depth += 1;
+        let filter_ty = type_of(w, Some(bool_ty), &mut ctx);
+        ctx.lambda_depth -= 1;
+        if let Some(actual) = filter_ty
             && actual.base(tys) != Some(BaseType::Bool)
         {
             ctx.errors.push(CompileError::new(
