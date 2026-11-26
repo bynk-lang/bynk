@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752 (D13, §8 "SSRF to internal addresses"): `http` only for a loopback host.
+capability Pages = Upstream @origin("http://upstream.example")
+
+service proxy from http {
+  on ANY("/blog/*path") (path: String) -> Effect[PassThrough] by Visitor given Pages {
+    Respond(NotFound)
+  }
+}

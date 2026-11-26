@@ -7440,7 +7440,15 @@ fn validate_handler_annotations(
                 // be stored is not only a `GET`'s. Another protocol, or an agent, has no
                 // response to stamp, so it stays `cache_on_non_get`.
                 let is_http = matches!(handler.kind, HandlerKind::Http { .. });
-                if !(is_get || is_http && handler.cache_no_store()) {
+                // #3752: an `ANY` route's `@cache` is `bynk.http.cache_on_pass_through`.
+                let is_any = matches!(
+                    handler.kind,
+                    HandlerKind::Http {
+                        method: HttpMethod::Any,
+                        ..
+                    }
+                );
+                if !(is_get || is_any || is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
@@ -9070,6 +9078,19 @@ pub fn reject_fn_types(
         // is exempt.
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
+        }
+        // #3752 (D11): an `InboundRequest` is the request a pass-through route is
+        // answering, and a `Forwarded` an upstream's answer streaming through it:
+        // each lives for that request, never stored or sent. `Upstream.forward`
+        // takes and returns them, so a capability signature is exempt.
+        // A record or sum may hold one, and is refused where it is used, as for a
+        // stream.
+        TypeRef::Named(id)
+            if !stream_passes(what)
+                && crate::http_pass_through::held_in(&id.name, types).is_some() =>
+        {
+            let held = crate::http_pass_through::held_in(&id.name, types).unwrap_or_default();
+            errors.push(crate::http_pass_through::held_at_boundary(id, held, what));
         }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload

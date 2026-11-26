@@ -1,0 +1,2 @@
+bynk.http.inbound_request_not_pass_through
+the parameter `request` can't be an `InboundRequest`

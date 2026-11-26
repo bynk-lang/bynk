@@ -2820,6 +2820,11 @@ pub fn check_function_type_boundary_items(
                         if streamed_body {
                             continue;
                         }
+                        // #3752: a pass-through route's `request` is where an
+                        // `InboundRequest` arrives (`crate::http_pass_through`).
+                        if crate::http_pass_through::is_inbound_request(&p.type_ref, types) {
+                            continue;
+                        }
                         if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             // Only the `@name` arm is relaxed for a request record;
                             // every other boundary check still runs on it.
@@ -2831,7 +2836,11 @@ pub fn check_function_type_boundary_items(
                             reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
-                    reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    // #3752: a pass-through route returns `PassThrough`, which holds the
+                    // `Forwarded` it passes through.
+                    if !crate::http_pass_through::returns_pass_through(&h.return_type, types) {
+                        reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    }
                 }
             }
             CommonsItem::Agent(a) => {

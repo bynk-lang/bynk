@@ -1616,7 +1616,7 @@ pub fn in_http_param_name_position(text: &str, offset: usize) -> bool {
     };
     if !matches!(
         &before[method_start..],
-        "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+        "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "ANY"
     ) {
         return false;
     }
@@ -2552,8 +2552,8 @@ fn protocol_candidates() -> Vec<Completion> {
 /// The handler kinds offerable after `on`.
 fn handler_kind_candidates() -> Vec<Completion> {
     [
-        "call", "GET", "POST", "PUT", "PATCH", "DELETE", "schedule", "message", "open", "close",
-        "rejected",
+        "call", "GET", "POST", "PUT", "PATCH", "DELETE", "ANY", "schedule", "message", "open",
+        "close", "rejected",
     ]
     .into_iter()
     .map(|k| Completion::item(k, CompletionKind::Keyword, Some("handler kind".into())))

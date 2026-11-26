@@ -58,7 +58,7 @@ pub fn pass_through_type(
 }
 
 /// Whether `r` is `Effect[PassThrough]`, the `bynk` unit's `PassThrough`.
-fn returns_pass_through(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub fn returns_pass_through(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     matches!(r, TypeRef::Effect(inner, _)
         if matches!(inner.as_ref(), TypeRef::Named(id)
             if pass_through_type(&id.name, types) == Some(PassThroughType::PassThrough)))
@@ -344,4 +344,78 @@ mod tests {
         assert!(problem("null").is_some());
         assert!(problem("upstream.example").is_some(), "no scheme");
     }
+}
+
+/// The held type (`InboundRequest` or `Forwarded`) that the named type `name`
+/// is, or holds at any depth in a record field or variant payload, as a
+/// `Stream` is found in a type that carries one. `bynk`'s own `PassThrough`
+/// holds a `Forwarded`, which is what a pass-through route returns.
+pub fn held_in(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> Option<&'static str> {
+    fn walk(
+        name: &str,
+        types: &HashMap<String, Arc<TypeDecl>>,
+        seen: &mut std::collections::HashSet<String>,
+    ) -> Option<&'static str> {
+        let decl = types.get(name)?;
+        match pass_through_type_of(decl) {
+            Some(PassThroughType::InboundRequest) => return Some("InboundRequest"),
+            Some(PassThroughType::Forwarded) => return Some("Forwarded"),
+            _ => {}
+        }
+        if !seen.insert(name.to_string()) {
+            return None;
+        }
+        let vars: std::collections::HashSet<&str> = decl
+            .type_params
+            .iter()
+            .map(|p| p.name.name.as_str())
+            .collect();
+        let mut names = Vec::new();
+        match &decl.body {
+            bynk_syntax::ast::TypeBody::Record(r) => r
+                .fields
+                .iter()
+                .for_each(|f| crate::project_model::type_ref_names(&f.type_ref, &vars, &mut names)),
+            bynk_syntax::ast::TypeBody::Sum(sum) => sum.variants.iter().for_each(|v| {
+                v.payload.iter().for_each(|p| {
+                    crate::project_model::type_ref_names(&p.type_ref, &vars, &mut names)
+                })
+            }),
+            _ => {}
+        }
+        names.iter().find_map(|n| walk(n, types, seen))
+    }
+    walk(name, types, &mut std::collections::HashSet::new())
+}
+
+/// `bynk.types.inbound_request_at_boundary` for `id`, which is or holds the held
+/// type `held`, written in `what`.
+pub(crate) fn held_at_boundary(
+    id: &bynk_syntax::ast::Ident,
+    held: &str,
+    what: &str,
+) -> CompileError {
+    let article = if held == "InboundRequest" { "an" } else { "a" };
+    let subject = if id.name == held {
+        format!("{article} `{held}`")
+    } else {
+        format!("`{}`, which holds {article} `{held}`,", id.name)
+    };
+    let (is, instead) = if held == "Forwarded" {
+        (
+            "an upstream's answer, streaming through the route that forwarded it",
+            "answer it with `Forward(response)`, or read what you need (`response.status()`, `response.header(\"…\")`) and store or send that",
+        )
+    } else {
+        (
+            "the request a pass-through route is answering, which only `Upstream.forward` sends on",
+            "read what you need (`request.method()`, `request.headers().get(\"…\")`, `request.query()`) and store or send that",
+        )
+    };
+    CompileError::new(
+        "bynk.types.inbound_request_at_boundary",
+        id.span,
+        format!("{subject} cannot appear in {what} — {article} `{held}` is {is}, never persisted or sent"),
+    )
+    .with_note(instead)
 }

@@ -615,4 +615,6 @@ adapter bynk {
 	provides Idempotency = IdempotencyProvider given Clock
 
 	provides Events = EventsProvider
+
+	provides Upstream = UpstreamProvider
 }
