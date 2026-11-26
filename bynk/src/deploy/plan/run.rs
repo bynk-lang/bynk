@@ -442,8 +442,10 @@ fn deploy(
     // before the plan, `--dry-run` included, not met as wrangler's own error.
     // #3479: an index `bynk.toml` names for this environment is adopted, not
     // created, so its name is known before the plan.
-    if apply_adoptions(project_root, &mut resources, &opts.environment).is_err() {
-        return Err(ExitCode::FAILURE.into());
+    let mut warnings = warnings;
+    match apply_adoptions(project_root, &mut resources, &opts.environment) {
+        Ok(notes) => warnings.extend(notes),
+        Err(refusal) => return Err(with_order(Stop::refused(refusal))),
     }
     if let Some(message) = account_name_problem(&resources, &lock, &opts.environment) {
         return Err(with_order(Stop::error(refusals::account_name_conflict(
@@ -508,7 +510,7 @@ fn deploy(
     if let Some(refusal) = recreate {
         plan = plan.with_refusal(refusals::recreate_needs_yes(refusal));
     }
-    print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
+    let plan = print_plan_then_forward_warnings(plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return Ok(());
     }

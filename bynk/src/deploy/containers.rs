@@ -27,13 +27,21 @@ use std::path::PathBuf;
 
 /// Name what `bynk.toml` adopts for `environment` on the declarations: the
 /// Vectorize indexes, then the container images.
+///
+/// #3797: `Ok` carries the notes it printed (an entry that adopts nothing for this environment),
+/// `Err` the refusal, each as a plan entry as well.
 pub(crate) fn apply_adoptions(
     project_root: &Path,
     resources: &mut BTreeMap<String, Resources>,
     environment: &str,
-) -> Result<(), ()> {
-    apply_vectorize_adoptions(project_root, resources, environment)?;
-    apply_container_adoptions(project_root, resources, environment)
+) -> Result<Vec<plan::Entry>, plan::Entry> {
+    let mut notes = apply_vectorize_adoptions(project_root, resources, environment)?;
+    notes.extend(apply_container_adoptions(
+        project_root,
+        resources,
+        environment,
+    )?);
+    Ok(notes)
 }
 
 /// Name the images `bynk.toml` adopts for `environment` on the declarations
@@ -44,22 +52,31 @@ pub(crate) fn apply_container_adoptions(
     project_root: &Path,
     resources: &mut BTreeMap<String, Resources>,
     environment: &str,
-) -> Result<(), ()> {
+) -> Result<Vec<plan::Entry>, plan::Entry> {
+    let unreadable = |e: String| {
+        emsg!("bynk: error: {e}");
+        plan::refusals::adoption_unreadable("containers", &e)
+    };
     if resources.values().all(|r| r.containers.is_empty()) {
         // An entry for a container the project no longer declares is not an
         // error when there are none at all: nothing would build either way.
         let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-            .map_err(|e| emsg!("bynk: error: {e}"))?;
+            .map_err(|e| unreadable(e.to_string()))?;
         if let Some(capability) = settings.keys().next() {
-            emsg!(
+            let message = format!(
                 "bynk: error: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project"
             );
-            return Err(());
+            emsg!("{message}");
+            return Err(plan::refusals::adoption_unmatched(
+                "containers",
+                capability,
+                &message,
+            ));
         }
-        return Ok(());
+        return Ok(Vec::new());
     }
     let settings = bynk_project::containers::try_read_containers_deploy(project_root)
-        .map_err(|e| emsg!("bynk: error: {e}"))?;
+        .map_err(|e| unreadable(e.to_string()))?;
     // An entry that names no declared capability would be silently ignored,
     // and the deploy would build an image the team meant to adopt.
     let capabilities: Vec<&str> = resources
@@ -73,18 +90,31 @@ pub(crate) fn apply_container_adoptions(
         let hint = bynk_project::paths::did_you_mean(capability, capabilities.iter().copied())
             .map(|c| format!("; did you mean `{c}`?"))
             .unwrap_or_default();
-        emsg!(
+        let message = format!(
             "bynk: error: `[deploy.containers.{capability}]` in bynk.toml names no `Container` capability in this project{hint}; an entry that matches nothing would have the deploy build an image you meant to adopt"
         );
-        return Err(());
+        emsg!("{message}");
+        return Err(plan::refusals::adoption_unmatched(
+            "containers",
+            capability,
+            &message,
+        ));
     }
+    let mut notes = Vec::new();
     for (capability, entry) in &settings {
         if !entry.image.contains_key(environment) {
             let named: Vec<&str> = entry.image.keys().map(String::as_str).collect();
-            emsg!(
+            let note = format!(
                 "bynk: note: `[deploy.containers.{capability}]` adopts an image only for {}; under `{environment}` the deploy builds one",
                 named.join(", ")
             );
+            emsg!("{note}");
+            notes.push(plan::refusals::adoption_partial(
+                "containers",
+                capability,
+                environment,
+                &note,
+            ));
         }
     }
     for declared in resources.values_mut() {
@@ -95,7 +125,7 @@ pub(crate) fn apply_container_adoptions(
                 .cloned();
         }
     }
-    Ok(())
+    Ok(notes)
 }
 
 /// What a deploy checks for its containers before it authenticates: Docker for

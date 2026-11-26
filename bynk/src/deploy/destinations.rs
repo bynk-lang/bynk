@@ -287,25 +287,43 @@ pub(crate) fn project_forwards(root: &Path) -> Vec<EmailForward> {
 /// Print the plan, then (#3355) the warnings for a literal `Forward`
 /// destination Cloudflare would refuse, never failing on one. Both `--dry-run`
 /// and a real run print them, before the confirmation.
-pub(crate) fn print_plan_then_forward_warnings(
-    plan: &Plan<'_>,
+///
+/// #3797: both are also `warnings` entries of the JSON plan, so the plan takes them before it is
+/// printed and is handed back.
+pub(crate) fn print_plan_then_forward_warnings<'a>(
+    plan: Plan<'a>,
     opts: &DeployOptions,
     order: &[String],
     resources: &BTreeMap<String, Resources>,
     project_root: &Path,
-) {
-    print_plan(plan, opts.format);
+) -> Plan<'a> {
+    let forwards = if any_email_handlers(order, resources) {
+        let groups = super::plan::GroupNames::of(project_root);
+        let dir_of = |context: &str| groups.dir(context);
+        forward_warnings_for_run(&project_forwards(project_root), order, &dir_of)
+    } else {
+        Vec::new()
+    };
     // #3494: what checking the plan against the account found.
+    let mut entries: Vec<super::plan::Entry> = plan
+        .account_notes()
+        .iter()
+        .map(|note| super::plan::refusals::account_note(note))
+        .collect();
+    entries.extend(
+        forwards
+            .iter()
+            .map(|w| super::plan::refusals::email_forward_destination(w)),
+    );
+    let plan = plan.with_warnings(entries);
+    print_plan(&plan, opts.format);
     for note in plan.account_notes() {
         colour::eprintln(note);
     }
-    if any_email_handlers(order, resources) {
-        let groups = super::plan::GroupNames::of(project_root);
-        let dir_of = |context: &str| groups.dir(context);
-        for warning in forward_warnings_for_run(&project_forwards(project_root), order, &dir_of) {
-            colour::eprintln(&warning);
-        }
+    for warning in &forwards {
+        colour::eprintln(warning);
     }
+    plan
 }
 
 /// Whether any Worker of `order` has an inbound email address, so a project

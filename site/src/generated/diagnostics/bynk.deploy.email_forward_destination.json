@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.email_forward_destination",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A handler's `Forward` goes to an address Cloudflare may refuse, or one that cannot be checked at deploy: it is computed at run time, is not a verified destination address, or the lookup did not answer. The plan is still made, and the sender's mail would bounce if Cloudflare refuses the forward (warning)."
+}

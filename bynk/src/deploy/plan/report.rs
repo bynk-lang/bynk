@@ -39,6 +39,8 @@ impl Entry {
     pub(crate) fn from_printed(code: &str, printed: &str) -> Self {
         let message = printed
             .strip_prefix("bynk: error: ")
+            .or_else(|| printed.strip_prefix("bynk: warning: "))
+            .or_else(|| printed.strip_prefix("bynk: note: "))
             .unwrap_or(printed)
             .trim_end();
         Self::new(code, message)
@@ -111,6 +113,11 @@ pub(crate) mod code {
     pub(crate) const UPLOAD_ORDER_CYCLE: &str = "bynk.deploy.upload_order_cycle";
     pub(crate) const RECREATE_NEEDS_YES: &str = "bynk.deploy.recreate_needs_yes";
     pub(crate) const PINS_UNREADABLE: &str = "bynk.deploy.pins_unreadable";
+    pub(crate) const ADOPTION_UNREADABLE: &str = "bynk.deploy.adoption_unreadable";
+    pub(crate) const ADOPTION_UNMATCHED: &str = "bynk.deploy.adoption_unmatched";
+    pub(crate) const ADOPTION_PARTIAL: &str = "bynk.deploy.adoption_partial";
+    pub(crate) const ACCOUNT_NOTE: &str = "bynk.deploy.account_note";
+    pub(crate) const EMAIL_FORWARD_DESTINATION: &str = "bynk.deploy.email_forward_destination";
     pub(crate) const ACCOUNT_NAME_CONFLICT: &str = "bynk.deploy.account_name_conflict";
     pub(crate) const SECRETS_FILE_PASSTHROUGH: &str = "bynk.deploy.secrets_file_passthrough";
     pub(crate) const STRICT_ENVIRONMENTS_SHARED: &str = "bynk.deploy.strict_environments_shared";

@@ -318,3 +318,20 @@ fn an_unreadable_pin_file_is_a_refusal_entry_with_its_path() {
     let order = stdout_json(&out)["order"].as_array().unwrap().clone();
     assert_eq!(order.len(), 1, "{order:?}");
 }
+
+#[test]
+fn an_adoption_entry_that_names_no_capability_is_a_refusal_entry() {
+    let dir = plain_project("adoption_unmatched");
+    let manifest = std::fs::read_to_string(dir.join("bynk.toml")).unwrap();
+    let image = format!("registry.cloudflare.com/acct/web@sha256:{}", "a".repeat(64));
+    write(
+        &dir.join("bynk.toml"),
+        &format!("{manifest}\n[deploy.containers.Web]\nimage = {{ production = \"{image}\" }}\n"),
+    );
+    let out = deploy(&dir, &["--format", "json"]);
+    let r = only_refusal(&out);
+    assert_eq!(r["code"], "bynk.deploy.adoption_unmatched");
+    assert_eq!(r["table"], "containers");
+    assert_eq!(r["capability"], "Web");
+    assert_eq!(stdout_json(&out)["order"].as_array().unwrap().len(), 1);
+}
