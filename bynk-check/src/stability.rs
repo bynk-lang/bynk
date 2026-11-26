@@ -448,10 +448,18 @@ mod tests {
                 "bynk.cloudflare.Kv.listPage",
                 "bynk.cloudflare.Kv.getValue",
                 "bynk.cloudflare.Kv.putValue",
-                "bynk.crypto"
+                "bynk.crypto",
+                "bynk.RequestHeaders.entries"
             ]
         );
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
+        // #3752 (D12): a method of a built-in type, alone; its other methods
+        // are stable, and an allow entry naming it is a first-party item.
+        assert!(p.blocks("bynk.RequestHeaders.entries"));
+        assert!(!p.blocks("bynk.RequestHeaders.get"));
+        assert!(firstparty::names_first_party_item("bynk.RequestHeaders.entries"));
+        assert!(firstparty::names_first_party_item("bynk.RequestHeaders"));
+        assert!(!firstparty::names_first_party_item("bynk.RequestHeaders.nope"));
         // #3300: the capability and its operation; its record is stable.
         assert!(p.blocks("bynk.cloudflare.Version.current"));
         assert!(!p.blocks("bynk.cloudflare.WorkerVersion"));

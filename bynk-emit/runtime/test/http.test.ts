@@ -909,6 +909,33 @@ test("requestHeaders: test lines split at the first colon; others are ignored", 
   assert.deepEqual(requestHeaderPairs(requestHeaders([])), {});
 });
 
+// #3752 (D12): every header, by lower-case name, repeats combined, the consumed credential absent.
+test("requestHeaders: entries() lists lower-case names with repeated fields combined", () => {
+  const raw = new Headers();
+  raw.append("X-Tag", "a");
+  raw.append("x-tag", "b");
+  raw.append("Accept", "text/html");
+  const h = requestHeaders(new Request("https://x/", { headers: raw }));
+  assert.deepEqual([...h.entries()], [["accept", "text/html"], ["x-tag", "a, b"]]);
+  assert.deepEqual([...requestHeaders([]).entries()], []);
+});
+
+test("requestHeaders: entries() omits a consumed credential header and cookie", () => {
+  const req = new Request("https://x/", {
+    headers: { authorization: "Bearer t", cookie: "sid=s1; theme=dark", "x-a": "1" },
+  });
+  const h = requestHeaders(req, "sid", ["authorization"]);
+  assert.deepEqual([...h.entries()], [["cookie", "theme=dark"], ["x-a", "1"]]);
+});
+
+test("requestHeaders: repeated Cookie test lines are one cookie-string", () => {
+  const h = requestHeaders(["Cookie: a=1", "cookie: b=2", "X-Tag: a", "X-Tag: b"]);
+  assert.deepEqual(h.get("cookie"), { tag: "Some", value: "a=1; b=2" });
+  assert.deepEqual(h.entries().get("cookie"), "a=1; b=2");
+  assert.deepEqual(h.entries().get("x-tag"), "a, b");
+  assert.deepEqual(requestHeaderPairs(h), { cookie: "a=1; b=2", "x-tag": "a, b" });
+});
+
 test("httpResultToResponse: RawError answers its own status, body and content type", async () => {
   const body = new TextEncoder().encode('{"error":"conflict"}');
   const res = httpResultToResponse(HttpResult.RawError(409, body, "application/json"), () => null);

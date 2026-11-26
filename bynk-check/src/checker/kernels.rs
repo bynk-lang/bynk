@@ -2453,7 +2453,8 @@ pub(crate) fn check_http_result_method(
 /// (`RequestHeaders`). `get(name)` reads a header case-insensitively, joining
 /// repeated ones with `", "`; `bearer()` is the token of an
 /// `Authorization: Bearer …` header; `clientIp()` is the client's address. Each
-/// is `Option[String]`.
+/// is `Option[String]`. `entries()` (#3752, experimental) is every header, as a
+/// `Map[String, String]` of lower-case names.
 pub(crate) fn check_request_headers_method(
     method: &Ident,
     op: Option<RequestHeadersOp>,
@@ -2465,13 +2466,15 @@ pub(crate) fn check_request_headers_method(
     let string = tys.intern(Ty::Base(BaseType::String));
     let params: Vec<TyId> = match op {
         Some(RequestHeadersOp::Get) => vec![string],
-        Some(RequestHeadersOp::Bearer | RequestHeadersOp::ClientIp) => vec![],
+        Some(
+            RequestHeadersOp::Bearer | RequestHeadersOp::ClientIp | RequestHeadersOp::Entries,
+        ) => vec![],
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "`RequestHeaders` has no method `{}` — it has `get(name)`, `bearer()` and `clientIp()`",
+                    "`RequestHeaders` has no method `{}` — it has `get(name)`, `bearer()`, `clientIp()` and `entries()`",
                     method.name
                 ),
             ));
@@ -2505,6 +2508,10 @@ pub(crate) fn check_request_headers_method(
             &format!("the `RequestHeaders.{}` argument", method.name),
             ctx,
         );
+    }
+    if op == Some(RequestHeadersOp::Entries) {
+        super::calls::refuse_experimental("bynk.RequestHeaders.entries", method.span, ctx);
+        return Some(tys.intern(Ty::Map(string, string)));
     }
     Some(tys.intern(Ty::Option(string)))
 }

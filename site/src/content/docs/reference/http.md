@@ -126,13 +126,14 @@ on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v:
 
 A handler that needs the request's headers declares a `headers: RequestHeaders`
 parameter. It may sit anywhere among the parameters; the router passes the
-request's own headers. `RequestHeaders` is a read-only view with three methods:
+request's own headers. `RequestHeaders` is a read-only view with four methods:
 
 | Method | Returns | Reads |
 |---|---|---|
 | `get(name)` | `Option[String]` | any header, by case-insensitive name |
 | `bearer()` | `Option[String]` | the token of an `Authorization: Bearer <token>` header |
 | `clientIp()` | `Option[String]` | the platform's `CF-Connecting-IP` (see below) |
+| `entries()` | `Map[String, String]` | every header, by lower-case name (experimental; see below) |
 
 ```bynk,fragment
 on GET("/whoami") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
@@ -148,12 +149,25 @@ request, overwriting any value the client sent. It is the client's address
 only behind that edge: under `bynk dev`, in tests, or on any other host, the
 caller sets the header, so don't rate-limit or audit by it there.
 
+`entries()` lists every header the view holds, keyed by its lower-case name. A
+field sent more than once arrives once, its values joined with `", "` as `get`
+joins them (RFC 9110 §5.3), and `Cookie` with `"; "`, so no value is lost and no
+list form is needed. It is experimental: using it needs `bynk.RequestHeaders.entries`
+in `[unstable] allow`.
+
+```bynk,ignore
+on GET("/debug/headers") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+  Ok(headers.entries().keys().join(", "))
+}
+```
+
 This is how a service implements an existing API's authentication scheme, one an
 [actor](/reference/actors/) does not describe. Where an actor fits, prefer
 it: the seam verifies the credential before the handler runs.
 
 A route whose `by` actor's seam consumed a credential does not show it in this view. On a `Bearer` or `Oidc`
-route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`; on a
+route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`, and
+`entries()` has no `authorization` key; on a
 `Signature` route the signature header is omitted (the body stays readable). A `SignedCookie` route omits its
 session cookie, and on an actor sum every member's credential is omitted. A handler that must forward a token
 downstream can't take it from here. A `by v: Visitor` route consumed nothing, so the example above works.

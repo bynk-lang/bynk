@@ -1,0 +1,35 @@
+suite reg.api {
+	case "names are lower case and a repeated field is combined" {
+		let r <- api.GET("/echo", RequestHeaders.of(["X-Tag: a", "x-tag: b"])) by Visitor
+		expect r == Ok("a, b | - | false | false")
+	}
+
+	case "repeated cookie lines are one cookie-string" {
+		let r <- api.GET("/echo", RequestHeaders.of(["Cookie: a=1", "Cookie: b=2"])) by Visitor
+		expect r == Ok("- | a=1; b=2 | false | false")
+	}
+
+	case "no headers is an empty map" {
+		let r <- api.GET("/echo", RequestHeaders.empty()) by Visitor
+		expect r == Ok("- | - | false | false")
+	}
+}
+
+suite reg.api as system {
+	env { AUTH_JWT_SECRET = "test-secret" }
+
+	case "the router's request lists the test's headers, combined" {
+		let r <- api.GET("/echo", RequestHeaders.of(["X-Tag: a", "X-Tag: b", "Cookie: a=1", "Cookie: b=2"])) by Visitor
+		expect r is Ok("a, b | a=1; b=2 | false | false")
+	}
+
+	case "a Visitor route lists an authorization header it was sent" {
+		let r <- api.GET("/echo", RequestHeaders.of(["Authorization: Bearer z"])) by Visitor
+		expect r is Ok("- | - | false | true")
+	}
+
+	case "a Bearer route's entries hold no authorization" {
+		let r <- api.GET("/me", RequestHeaders.of(["X-Tag: t"])) by User("bob")
+		expect r is Ok("false t")
+	}
+}
