@@ -2705,6 +2705,13 @@ pub struct HttpVariant {
     pub status: u16,
 }
 
+/// #4536 (D23 of the pass-through HTTP track): `HttpResult` is extensible. The
+/// RFC 9110 vocabulary below is curated, not complete, and grows in 1.x minor
+/// releases, so a `match` that covers an `HttpResult` needs a wildcard arm, as
+/// for the extensible first-party enums (`FetchError`, `Method`):
+/// `bynk.types.extensible_match_needs_wildcard`.
+pub const HTTP_RESULT_EXTENSIBLE: bool = true;
+
 /// All `HttpResult[T]` variants, in declaration order (ascending status). The
 /// vocabulary tracks the common, modern HTTP status codes (RFC 9110): success
 /// and created/accepted (`Value`), redirects carrying a `Location` URL, and
@@ -5716,6 +5723,16 @@ pub enum Pattern {
     /// (including refinement) in each, and every alternative matches the same
     /// value type.
     Or(Vec<Pattern>, Span),
+    /// `p as name` — binds `name` to the whole value `p` matched, at `p`'s
+    /// static type (#3971). Binds tighter than `|`, so `A | B as x` is
+    /// `A | (B as x)`; `(A | B) as x` binds either alternative. It never
+    /// narrows what `inner` matches, so exhaustiveness and reachability
+    /// treat it as `inner`.
+    As {
+        inner: Box<Pattern>,
+        name: Ident,
+        span: Span,
+    },
 }
 
 /// An inclusive integer range, `lo..hi`, `lo..` or `..hi` (patterns track,
@@ -5806,6 +5823,7 @@ impl Pattern {
             Pattern::List { span, .. } => *span,
             Pattern::Refined { span, .. } => *span,
             Pattern::Or(_, span) => *span,
+            Pattern::As { span, .. } => *span,
         }
     }
 
@@ -5839,6 +5857,30 @@ impl Pattern {
                 .collect(),
             Pattern::Refined { inner, .. } => inner.bound_names(),
             Pattern::Or(alts, _) => alts.first().map(Pattern::bound_names).unwrap_or_default(),
+            Pattern::As { inner, name, .. } => {
+                let mut names = inner.bound_names();
+                names.push(name);
+                names
+            }
+        }
+    }
+
+    /// This pattern with any `as name` suffixes peeled off (#3971): what it
+    /// matches, ignoring what it additionally binds.
+    pub fn peel_as(&self) -> &Pattern {
+        match self {
+            Pattern::As { inner, .. } => inner.peel_as(),
+            p => p,
+        }
+    }
+
+    /// The single name a *flat* position binds — a bare name, or an `as` name
+    /// (#3971). The `is` operator binds only at this depth: what a nested
+    /// pattern would bind deeper is match-only (ADR 0169).
+    pub fn flat_binder(&self) -> Option<&Ident> {
+        match self {
+            Pattern::Binding(n) | Pattern::As { name: n, .. } => Some(n),
+            _ => None,
         }
     }
 
@@ -5857,6 +5899,7 @@ impl Pattern {
         match self {
             Pattern::Wildcard(_) | Pattern::Binding(_) => true,
             Pattern::Or(alts, _) => alts.iter().any(Pattern::is_irrefutable),
+            Pattern::As { inner, .. } => inner.is_irrefutable(),
             Pattern::Record { fields, .. } => fields
                 .iter()
                 .all(|(_, sub)| sub.as_ref().is_none_or(Pattern::is_irrefutable)),

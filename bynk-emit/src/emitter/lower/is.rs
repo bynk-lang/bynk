@@ -185,9 +185,18 @@ fn emit_is_test_bindings(
         *found = true;
         let recv = cx.is_receiver_path(value);
         let disc_ty = cx.commons().expr_types.get(&value.id).map(|te| te.ty);
+        // #3971: each `as name` on the whole pattern names the receiver itself;
+        // what the pattern inside binds follows.
+        let mut pattern_ref: &Pattern = pattern.as_ref();
+        while let Pattern::As { inner, name, .. } = pattern_ref {
+            let local = cx.bind_local_name(&name.name);
+            out.push(const_(&local, recv.node().clone()));
+            pattern_ref = inner;
+        }
+        let pattern = pattern_ref;
         if let Pattern::Variant {
             variant, bindings, ..
-        } = pattern.as_ref()
+        } = pattern
         {
             // #1751/#1752: a test emitted out of line (inside a short-circuit
             // arrow) doesn't narrow its receiver here; read through the
@@ -217,7 +226,7 @@ fn emit_is_test_bindings(
             for (i, b) in bindings.iter().enumerate() {
                 // `is` emits only flat, depth-1 name bindings (ADR 0169 keeps
                 // nesting/guards match-only); `_` and nested patterns bind nothing.
-                let Pattern::Binding(name) = b.pattern() else {
+                let Some(name) = b.pattern().flat_binder() else {
                     continue;
                 };
                 let field = match &b.kind {
@@ -238,12 +247,14 @@ fn emit_is_test_bindings(
         }
         // #2641: a record pattern's depth-1 names — shorthand fields and
         // `f: name` — read straight off the receiver.
-        if let Pattern::Record { fields, .. } = pattern.as_ref() {
+        if let Pattern::Record { fields, .. } = pattern {
             for (fname, sub) in fields {
                 let bound = match sub {
                     None => fname,
-                    Some(Pattern::Binding(n)) => n,
-                    Some(_) => continue,
+                    Some(p) => match p.flat_binder() {
+                        Some(n) => n,
+                        None => continue,
+                    },
                 };
                 let local = cx.bind_local_name(&bound.name);
                 out.push(const_(&local, recv.member(&fname.name).node().clone()));
@@ -251,9 +262,9 @@ fn emit_is_test_bindings(
         }
         // #2680: a list pattern's depth-1 names — bare-name elements and a
         // named rest.
-        if let Pattern::List { elems, rest, .. } = pattern.as_ref() {
+        if let Pattern::List { elems, rest, .. } = pattern {
             for (i, sub) in elems.iter().enumerate() {
-                if let Pattern::Binding(n) = sub {
+                if let Some(n) = sub.flat_binder() {
                     let local = cx.bind_local_name(&n.name);
                     out.push(const_(&local, recv.index(i).node().clone()));
                 }
@@ -271,7 +282,7 @@ fn emit_is_test_bindings(
         // existing `is` limitation as the `Variant` case above): an
         // alternative that isn't itself a flat `Variant` contributes no
         // bindings, only its tag test.
-        if let Pattern::Or(alts, _) = pattern.as_ref() {
+        if let Pattern::Or(alts, _) = pattern {
             let names = pattern.bound_names();
             if names.is_empty() {
                 return;
@@ -284,13 +295,20 @@ fn emit_is_test_bindings(
             let last = alts.len() - 1;
             let mut arms = Vec::with_capacity(alts.len());
             for (i, alt) in alts.iter().enumerate() {
-                let (tag, pairs) = match alt {
+                // #3971: an alternative's own `as` names bind the whole receiver.
+                let mut alt_core: &Pattern = alt;
+                let mut as_names: Vec<&bynk_syntax::ast::Ident> = Vec::new();
+                while let Pattern::As { inner, name, .. } = alt_core {
+                    as_names.push(name);
+                    alt_core = inner;
+                }
+                let (tag, mut pairs) = match alt_core {
                     // #2680: a list alternative is told apart by its length,
                     // so its dispatch condition is its whole structural test.
                     Pattern::List { elems, rest, .. } => {
                         let mut pairs = Vec::new();
                         for (j, sub) in elems.iter().enumerate() {
-                            if let Pattern::Binding(n) = sub {
+                            if let Some(n) = sub.flat_binder() {
                                 let local = cx
                                     .resolved_local_name(&n.name)
                                     .unwrap_or_else(|| ts_ident(&n.name));
@@ -304,7 +322,7 @@ fn emit_is_test_bindings(
                             pairs.push((local, list_rest_value(&recv, elems.len())));
                         }
                         let mut tests = Vec::new();
-                        pattern_tests(&recv, disc_ty, alt, cx, &mut tests);
+                        pattern_tests(&recv, disc_ty, alt_core, cx, &mut tests);
                         let cond = if tests.is_empty() {
                             bool_lit(true)
                         } else {
@@ -317,7 +335,7 @@ fn emit_is_test_bindings(
                     } => {
                         let mut pairs = Vec::new();
                         for (j, b) in bindings.iter().enumerate() {
-                            let Pattern::Binding(name) = b.pattern() else {
+                            let Some(name) = b.pattern().flat_binder() else {
                                 continue;
                             };
                             let field = match &b.kind {
@@ -354,8 +372,10 @@ fn emit_is_test_bindings(
                         for (fname, sub) in fields {
                             let bound = match sub {
                                 None => fname,
-                                Some(Pattern::Binding(n)) => n,
-                                Some(_) => continue,
+                                Some(p) => match p.flat_binder() {
+                                    Some(n) => n,
+                                    None => continue,
+                                },
                             };
                             let local = cx
                                 .resolved_local_name(&bound.name)
@@ -366,11 +386,18 @@ fn emit_is_test_bindings(
                     }
                     Pattern::Wildcard(..)
                     | Pattern::Binding(..)
+                    | Pattern::As { .. }
                     | Pattern::Literal { .. }
                     | Pattern::Range(..)
                     | Pattern::Refined { .. }
                     | Pattern::Or(..) => (None, Vec::new()),
                 };
+                for name in as_names {
+                    let local = cx
+                        .resolved_local_name(&name.name)
+                        .unwrap_or_else(|| ts_ident(&name.name));
+                    pairs.push((local, recv.node().clone()));
+                }
                 let cond = if i == last {
                     None
                 } else {
@@ -425,6 +452,8 @@ pub(in crate::emitter) fn path_for_is(value: &Expr) -> PatPath {
 
 pub(super) fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lowered {
     let mut pre = Pre::new();
+    // #3971: `as` names the value; the test is the pattern inside.
+    let pattern = pattern.peel_as();
     // v0.13: refinement check — `value is RefinedType` lowers to the refined
     // type's predicates as a boolean expression. The receiver is forced to a
     // temp so the narrowing binding (`const n = <temp> as Quantity`) can shadow
@@ -484,6 +513,7 @@ pub(super) fn lower_is(value: &Expr, pattern: &Pattern, cx: &mut LowerCtx) -> Lo
         | Pattern::List { .. }
         | Pattern::Range(_)
         | Pattern::Variant { .. }
+        | Pattern::As { .. }
         | Pattern::Or(..) => {
             let mut tests = Vec::new();
             pattern_tests(&path, scrut_ty, pattern, cx, &mut tests);

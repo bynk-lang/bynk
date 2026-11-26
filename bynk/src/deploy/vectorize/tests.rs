@@ -43,7 +43,10 @@ struct Account {
 }
 
 impl Account {
-    fn answer(&mut self, op: &crate::cloudflare::Op<'_>) -> crate::cloudflare::fake::Reply {
+    fn answer(
+        &mut self,
+        op: &crate::cloudflare::Op<'_>,
+    ) -> Result<String, crate::cloudflare::WranglerError> {
         use crate::cloudflare::Op;
         let Op::Vectorize(call) = op else {
             return Err(crate::cloudflare::WranglerError::exit(

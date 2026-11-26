@@ -323,7 +323,7 @@ mod tests {
     fn triggers_deploy_reports_its_own_failure() {
         use crate::cloudflare::fake::{Recording, failed};
         let dir = std::env::temp_dir();
-        let ok = Recording::new(|_| Ok(String::new()));
+        let ok = Recording::new(|_| Ok::<_, crate::cloudflare::WranglerError>(String::new()));
         assert_eq!(deploy_triggers(&ok, &dir, "staging"), Ok(()));
         assert_eq!(ok.calls(), ["triggers deploy --env staging"]);
         let bad = Recording::new(|op| Err(failed(op, "", "")));

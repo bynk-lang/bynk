@@ -1,0 +1,2 @@
+bynk.actor.bearer_secret_shared `Bearer` actors `Internal` and `Learner` share the secret `AUTH_SECRET` and the `trustFrom` variable `AUTH_TRUST`
+# exact

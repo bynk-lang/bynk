@@ -4783,6 +4783,24 @@ mod tests {
         }
         assert_eq!(out, fmt(&out), "not idempotent: {out}");
     }
+
+    // #3971: `as` binds tighter than `|`, so an or-pattern it names keeps its parentheses, and
+    // an `as` on one alternative needs none.
+    #[test]
+    fn as_patterns_keep_the_parentheses_that_group_an_or_pattern() {
+        let src = "commons c {\nfn f(e: Event, o: Option[Order], xs: List[Order]) -> Int {\nlet [first   as   head, ..] = xs else { 0 }\nlet _ = if   o   is   (Some(Order { status: Paid, .. })   as   whole) { 1 } else { 0 }\nmatch e {\n(Placed(o) | Refunded(o))   as   ev => 1\nA | (B as x) => 2\nSome(Order { status: Paid, .. } as paid) => 3\n_ => 4\n}\n}\n}";
+        let out = fmt(src);
+        for want in [
+            "let [first as head, ..] = xs else",
+            "is Some(Order { status: Paid, .. }) as whole {",
+            "(Placed(o) | Refunded(o)) as ev =>",
+            "A | B as x =>",
+            "Some(Order { status: Paid, .. } as paid) =>",
+        ] {
+            assert!(out.contains(want), "{want}: {out}");
+        }
+        assert_eq!(out, fmt(&out), "not idempotent: {out}");
+    }
 }
 
 #[cfg(test)]

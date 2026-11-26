@@ -36,6 +36,7 @@ pub mod actors;
 pub mod agent_busy;
 pub mod agent_jurisdiction;
 pub mod agent_state;
+pub mod ai_schema;
 pub mod analysis;
 pub mod analytics_lock;
 pub mod annotation_consts;
@@ -74,6 +75,8 @@ pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
 pub mod http_rate_limit;
+#[cfg(test)]
+mod http_result_extensible_tests;
 pub mod icu;
 mod implicit_uses;
 pub use implicit_uses::inline_prelude_units;

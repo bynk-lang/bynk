@@ -1,0 +1,7 @@
+suite demo.shop {
+  // #3842: the omitted opaque defaults are `Tok` values, not bare strings.
+
+  case "the default opaque field is used" {
+    expect sameTok(plain(), plain())
+  }
+}

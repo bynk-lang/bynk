@@ -1,0 +1,54 @@
+// #4536: a suite case is not under the compatibility promise, so a match
+// listing every `HttpResult` variant needs no wildcard there, and `expect r is`
+// is unaffected.
+suite app.web {
+	case "every variant, no wildcard" {
+		let r <- api.GET("/item") by Visitor
+		match r {
+			Ok(m) => expect m == "missing",
+			NotFound => expect false,
+			Streaming(_) => expect false,
+			Raw(_, _) => expect false,
+			RawTagged(_, _, _) => expect false,
+			RawStreamed(_, _) => expect false,
+			RawCreated(_, _) => expect false,
+			Created(_) => expect false,
+			Accepted(_) => expect false,
+			NoContent => expect false,
+			PartialContent(_, _, _) => expect false,
+			MovedPermanently(_) => expect false,
+			Found(_) => expect false,
+			SeeOther(_) => expect false,
+			NotModified => expect false,
+			TemporaryRedirect(_) => expect false,
+			PermanentRedirect(_) => expect false,
+			BadRequest(_) => expect false,
+			Unauthorized => expect false,
+			Forbidden => expect false,
+			MethodNotAllowed => expect false,
+			NotAcceptable => expect false,
+			RequestTimeout => expect false,
+			Conflict(_) => expect false,
+			Gone => expect false,
+			LengthRequired => expect false,
+			PreconditionFailed(_) => expect false,
+			PayloadTooLarge(_) => expect false,
+			UnsupportedMediaType(_) => expect false,
+			UnprocessableEntity(_) => expect false,
+			PreconditionRequired(_) => expect false,
+			TooManyRequests(_) => expect false,
+			UnavailableForLegalReasons(_) => expect false,
+			ServerError(_) => expect false,
+			NotImplemented(_) => expect false,
+			BadGateway(_) => expect false,
+			ServiceUnavailable(_) => expect false,
+			GatewayTimeout(_) => expect false,
+			RawError(_, _, _) => expect false,
+		}
+	}
+
+	case "an is test" {
+		let r <- api.GET("/item") by Visitor
+		expect r is Ok(_)
+	}
+}

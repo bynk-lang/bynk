@@ -1345,12 +1345,13 @@ fn pattern_is_has_bindings(pattern: &Pattern, value: &Expr, cx: &LowerCtx) -> bo
                 // even though the pattern carries none.
                 || (bindings.is_empty() && cx.is_refined_is_check(value, &variant.name))
         }
-        Pattern::Record { fields, .. } => fields.iter().any(|(_, sub)| {
-            sub.as_ref()
-                .is_none_or(|p| matches!(p, Pattern::Binding(_)))
-        }),
+        // #3971: an `as` name is always a binding.
+        Pattern::As { .. } => true,
+        Pattern::Record { fields, .. } => fields
+            .iter()
+            .any(|(_, sub)| sub.as_ref().is_none_or(|p| p.flat_binder().is_some())),
         Pattern::List { elems, rest, .. } => {
-            elems.iter().any(|p| matches!(p, Pattern::Binding(_)))
+            elems.iter().any(|p| p.flat_binder().is_some())
                 || rest.as_ref().is_some_and(|r| r.binder.is_some())
         }
         // #474: Rule 1 guarantees every alternative binds the same names, so
@@ -1589,6 +1590,9 @@ fn match_case(
         Pattern::Range(_) => {
             unreachable!("a Pattern::Range arm always routes through match_if_chain")
         }
+        Pattern::As { .. } => {
+            unreachable!("a Pattern::As arm always routes through match_if_chain")
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
@@ -1649,6 +1653,9 @@ fn match_case(
                     }
                     Pattern::Range(_) => {
                         unreachable!("a range alternative routes through match_if_chain")
+                    }
+                    Pattern::As { .. } => {
+                        unreachable!("an `as` alternative binds, so it routes through match_if_chain")
                     }
                     // #472/#474: the parser only ever wraps a *whole*,
                     // already-folded `|`-chain in `Refined` (never the other

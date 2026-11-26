@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { Ai, GenerateRequest, ChatMessage, ChatRole }
+
+type Page[T] = { items: List[T] }
+
+service probe {
+    on call() -> Effect[Bool] by Caller given Ai {
+        let ask = GenerateRequest { messages: [ChatMessage { role: ChatRole.User, content: "x" }] }
+        let _ <- Ai.generateValue[Page[Int]]("@cf/meta/llama-3.3-70b-instruct-fp8-fast", ask)
+        true
+    }
+}

@@ -1,6 +1,6 @@
 == default ==
 -- call 1 fails: kv namespace create shop-cart-sessions
-stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: ✘ [ERROR] the stand-in failed call 1
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: Cloudflare answered 500 to call 1
   (unchanged)
 -- call 3 fails: deploy --secrets-file <secrets-file>
 stopped: exit 1: wrangler deploy failed for `shop-cart` (exit 1)
@@ -11,7 +11,7 @@ stopped: exit 1: wrangler deploy failed for `shop-cart` (exit 1)
 +107 namespace_id = "958303813"
 +108 
 -- call 4 fails: kv namespace create shop-cart
-stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: ✘ [ERROR] the stand-in failed call 4
+stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: Cloudflare answered 500 to call 4
 + 26 [environments.default.kv_instances.shop-cart.KV_SESSIONS]
 + 27 id = "kv-shop-cart-sessions"
 + 28 
@@ -411,7 +411,7 @@ stopped: exit 1: wrangler deploy failed for `shop` (exit 1)
 +155 [environments.default.workers.shop-cart.expects]
 +156 
 -- call 25 fails: kv namespace delete --namespace-id kv-gone-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace for `gone`: ✘ [ERROR] the stand-in failed call 25
+stopped: exit 1: could not delete the orphaned KV namespace for `gone`: Cloudflare answered 500 to call 25
 +  7     "outbound",
 + 21 [environments.default.kv_instances.shop.KV_CART]
 + 22 id = "kv-shop-cart"
@@ -473,7 +473,7 @@ stopped: exit 1: could not delete the orphaned KV namespace for `gone`: ✘ [ERR
 -123     "returns@example.com",
 -124 ]
 -- call 26 fails: kv namespace delete --namespace-id kv-gone-cache-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone`: ✘ [ERROR] the stand-in failed call 26
+stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone`: Cloudflare answered 500 to call 26
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -538,7 +538,7 @@ stopped: exit 1: could not delete the orphaned KV namespace `KV_CACHE` for `gone
 -123     "returns@example.com",
 -124 ]
 -- call 27 fails: kv namespace delete --namespace-id kv-shop-old-default --skip-confirmation
-stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`: ✘ [ERROR] the stand-in failed call 27
+stopped: exit 1: could not delete the orphaned KV namespace `KV_OLD` for `shop`: Cloudflare answered 500 to call 27
 +  7     "outbound",
 - 11 [environments.default.kv.gone]
 - 12 id = "kv-gone-default"
@@ -1847,7 +1847,7 @@ stopped: exit 1: deleted the orphaned queue `old-jobs` but could not record it i
 -124 ]
 == staging ==
 -- call 1 fails: kv namespace create shop-cart-sessions-staging
-stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: ✘ [ERROR] the stand-in failed call 1
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop-cart`: Cloudflare answered 500 to call 1
   (unchanged)
 -- call 3 fails: deploy --secrets-file <secrets-file> --env staging
 stopped: exit 1: wrangler deploy failed for `shop-cart-staging` (exit 1)
@@ -1864,7 +1864,7 @@ stopped: exit 1: wrangler deploy failed for `shop-cart-staging` (exit 1)
 +150 namespace_id = "338888791"
 +151 
 -- call 4 fails: kv namespace create shop-cart-staging
-stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: ✘ [ERROR] the stand-in failed call 4
+stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: Cloudflare answered 500 to call 4
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",
@@ -1885,7 +1885,7 @@ stopped: exit 1: could not create KV namespace `KV_CART` for `shop`: ✘ [ERROR]
 +159 
 +160 [environments.staging.workers.shop-cart.expects]
 -- call 5 fails: kv namespace create shop-sessions-staging
-stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop`: ✘ [ERROR] the stand-in failed call 5
+stopped: exit 1: could not create KV namespace `KV_SESSIONS` for `shop`: Cloudflare answered 500 to call 5
 +127 queues = [
 +128     "old-jobs",
 +129     "shared-feed",

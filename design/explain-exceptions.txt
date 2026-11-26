@@ -60,6 +60,14 @@ bynk.deploy.workers_unreadable: needs the network, git, a registry, lockfile sta
 bynk.deploy.accept_fresh_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.agent_move_refused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.foreign_contract_skew: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.account_name_conflict: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.hyperdrive_settings_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.hyperdrive_unresolved: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.pins_unreadable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.recreate_needs_yes: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.secrets_file_passthrough: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.strict_environments_shared: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.strict_environments_unchecked: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_advance: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_asset: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_call: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example

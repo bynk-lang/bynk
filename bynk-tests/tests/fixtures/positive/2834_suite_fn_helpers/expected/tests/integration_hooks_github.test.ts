@@ -32,7 +32,7 @@ function __makeHarness() {
 <<bynk-shared: testing/hmac_signer>>
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["GITHUB_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: globalThis.Uint8Array, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["GITHUB_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["GITHUB_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
@@ -40,27 +40,27 @@ async function __sysdrive_github_http_POST_github(headers: { get(name: string): 
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, __sub: string) {
+async function __sysdrive_raw_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["GITHUB_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["GITHUB_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/github`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__requestHeaderPairs(headers), "X-Hub-Signature-256": __sig.signature }, body: body });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_noauth_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_noauth_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: globalThis.Uint8Array, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/github`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json" }, body: __body as BufferSource });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawnoauth_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, __sub: string) {
+async function __sysdrive_rawnoauth_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/github`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json" }, body: body });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_forged_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: globalThis.Uint8Array, __sub: string) {
+async function __sysdrive_forged_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: globalThis.Uint8Array, __sub: string) {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["GITHUB_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["GITHUB_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
@@ -68,21 +68,21 @@ async function __sysdrive_forged_github_http_POST_github(headers: { get(name: st
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_rawforged_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, __sub: string) {
+async function __sysdrive_rawforged_github_http_POST_github(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, body: string, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["GITHUB_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["GITHUB_SECRET"] ?? "") + "!"), false, 0);
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/github`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json", "X-Hub-Signature-256": __sig.signature }, body: body });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_github_http_POST_echo(body: globalThis.Uint8Array, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
+async function __sysdrive_github_http_POST_echo(body: globalThis.Uint8Array, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/echo`, { method: "POST", headers: { "content-type": "application/octet-stream", ...__requestHeaderPairs(headers) }, body: __body as BufferSource });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_github_http_POST_echo(body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
+async function __sysdrive_raw_github_http_POST_echo(body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/echo`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__requestHeaderPairs(headers) }, body: body });
   const __res = await __h.env.HOOKS_GITHUB.fetch(__req);
@@ -101,7 +101,7 @@ async function test_a_helper_built_request_reaches_the_handler_over_the_wire() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } {
+    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } {
       return __requestHeaders([`X-GitHub-Event: ${String(event)}`]);
     }
     function push(): globalThis.Uint8Array {
@@ -129,7 +129,7 @@ async function test_a_forged_request_is_refused() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } {
+    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } {
       return __requestHeaders([`X-GitHub-Event: ${String(event)}`]);
     }
     function push(): globalThis.Uint8Array {
@@ -157,7 +157,7 @@ async function test_a_helper_names_a_participant_type() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } {
+    function gh(event: string): { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> } {
       return __requestHeaders([`X-GitHub-Event: ${String(event)}`]);
     }
     function push(): globalThis.Uint8Array {

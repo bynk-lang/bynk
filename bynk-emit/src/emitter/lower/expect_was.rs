@@ -232,7 +232,7 @@ fn is_tagged_outcome(ty: TyId, cx: &LowerCtx) -> bool {
     )
 }
 
-/// A value of a type the runtime refuses to log: a `SigningKey`, a `VerifyKey` or token claims,
+/// A value of a type the runtime refuses to log: a `SigningKey`, a `VerifyKey`, a `CipherKey` or token claims,
 /// alone or inside a container.
 /// The type walk need not enter record fields or sum payloads: the checker refuses a key or
 /// token claims there (`bynk.types.key_at_boundary`, `bynk.types.claims_at_boundary`; fixtures
@@ -244,7 +244,7 @@ fn is_redacted(ty: TyId, cx: &LowerCtx) -> bool {
         Ty::Named { name, args, .. } => {
             matches!(
                 bynk_check::symbols::display_type_name(name),
-                "SigningKey" | "VerifyKey"
+                "CipherKey" | "SigningKey" | "VerifyKey"
             ) || args.iter().any(|a| is_redacted(*a, cx))
         }
         Ty::Result(a, b) | Ty::Map(a, b) => is_redacted(*a, cx) || is_redacted(*b, cx),

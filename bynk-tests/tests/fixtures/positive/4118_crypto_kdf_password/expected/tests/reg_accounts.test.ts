@@ -19,7 +19,8 @@ async function test_HKDF_SHA_256_matches_RFC_5869_test_case_1() {
   try {
     const deps = __makeTestDeps();
     const { checker, hasher, kdf, raw, staleness } = __ns_reg_accounts;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -41,7 +42,8 @@ async function test_HKDF_SHA_256_matches_RFC_5869_test_case_3__with_no_salt_and_
   try {
     const deps = __makeTestDeps();
     const { checker, hasher, kdf, raw, staleness } = __ns_reg_accounts;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -63,7 +65,8 @@ async function test_a_hashed_password_verifies__a_wrong_one_does_not__and_a_hash
   try {
     const deps = __makeTestDeps();
     const { checker, hasher, kdf, raw, staleness } = __ns_reg_accounts;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -90,7 +93,8 @@ async function test_a_hash_made_at_a_lower_count_verifies_but_needs_a_new_hash()
   try {
     const deps = __makeTestDeps();
     const { checker, hasher, kdf, raw, staleness } = __ns_reg_accounts;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;
@@ -115,7 +119,8 @@ async function test_a_string_that_is_not_a_hash_is_never_a_match_and_always_stal
   try {
     const deps = __makeTestDeps();
     const { checker, hasher, kdf, raw, staleness } = __ns_reg_accounts;
-    const { CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    const { CipherKey, CryptoError, Digest, Signature, SigningKey, VerifyKey } = __ns_bynk_crypto;
+    type CipherKey = __ns_bynk_crypto.CipherKey;
     type CryptoError = __ns_bynk_crypto.CryptoError;
     type Digest = __ns_bynk_crypto.Digest;
     type Signature = __ns_bynk_crypto.Signature;

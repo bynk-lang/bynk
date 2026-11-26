@@ -1,0 +1,26 @@
+suite login
+
+consumes bynk { Fetch, Response }
+
+// #4115: the cookies come through one by one, an `Expires` comma intact; a stub that names no
+// `setCookies` has none.
+
+case "the session cookie is found among several, its Expires comma intact" {
+	stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "", setCookies: ["theme=dark", "session=abc; Expires=Wed, 09 Jun 2027 10:18:14 GMT; HttpOnly"] })
+	let c <- session.call("https://idp.test/login")
+	expect c == "session=abc; Expires=Wed, 09 Jun 2027 10:18:14 GMT; HttpOnly"
+}
+
+case "a response with no cookies has none" {
+	stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty(), body: "" })
+	let c <- session.call("https://idp.test/login")
+	let n <- count.call("https://idp.test/login")
+	expect c == "no session cookie"
+	expect n == 0
+}
+
+case "every set-cookie value is kept, in order" {
+	stub Fetch.send(_) returns Ok(Response { status: 200, headers: Map.empty().insert("set-cookie", "a=1, b=2"), body: "", setCookies: ["a=1", "b=2", "c=3"] })
+	let n <- count.call("https://idp.test/login")
+	expect n == 3
+}

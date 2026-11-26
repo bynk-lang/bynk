@@ -56,6 +56,7 @@ pub fn pattern_summary(pattern: &Pattern) -> String {
                 .join(", ")
         ),
         Pattern::Refined { inner, .. } => pattern_summary(inner),
+        Pattern::As { inner, name, .. } => format!("{} as {}", pattern_summary(inner), name.name),
         Pattern::Or(patterns, _) => patterns
             .iter()
             .map(pattern_summary)

@@ -167,8 +167,8 @@ pub(super) fn is_bare_named(ty: &TsType, target: &str) -> bool {
 /// Each declared asset is emitted as a constant of this shape (`emit_project`).
 /// #2341 (decision A): `RequestHeaders` as TypeScript — structural, so no
 /// module needs a new runtime import for it: `get`, `bearer` and `clientIp`,
-/// each answering an `Option<string>`. The runtime's `requestHeaders(request)`
-/// builds one.
+/// each answering an `Option<string>`, and `entries` (#3752), a map. The
+/// runtime's `requestHeaders(request)` builds one.
 pub(crate) fn request_headers_ts_type() -> TsType {
     // `Option<string>` spelled out: a composition root imports no `Option`,
     // and the bare name there is the DOM's `Option` constructor.
@@ -189,6 +189,11 @@ pub(crate) fn request_headers_ts_type() -> TsType {
         bynk_ts::TsTypeMember::method("get", vec![name], opt()),
         bynk_ts::TsTypeMember::method("bearer", vec![], opt()),
         bynk_ts::TsTypeMember::method("clientIp", vec![], opt()),
+        bynk_ts::TsTypeMember::method(
+            "entries",
+            vec![],
+            TsType::named("globalThis.ReadonlyMap<string, string>"),
+        ),
     ])
 }
 

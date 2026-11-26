@@ -2078,6 +2078,22 @@ value type. `|` is a pattern-position operator only, distinct from boolean
 
 **See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
 
+### as_pattern {#rule-as_pattern}
+
+{{#grammar as_pattern}}
+
+`pattern as name` (#3971) — binds `name` to the whole value the pattern matched,
+at the pattern's type: `Some(Order { status: Paid, .. } as paid)`. It never
+changes what the pattern matches, so exhaustiveness is unchanged. `as` binds
+tighter than `|`: `A | B as x` is `A | (B as x)`, and `(A | B) as x` binds either
+alternative. `_ as x` is [`bynk.match.as_on_wildcard`](/reference/diagnostics/bynk.match.as_on_wildcard/),
+a warning.
+
+**Static semantics.**
+{{#grammar-semantics as_pattern}}
+
+**See also.** [Pattern-match with `match`](/book/guides/type-system/match/).
+
 ### paren_pattern {#rule-paren_pattern}
 
 {{#grammar paren_pattern}}
@@ -2287,6 +2303,20 @@ binding name: qualified (`Status.Done`, `Status.Shipped(at)`) or with a payload
 An [`or_pattern`](#rule-or_pattern) after `let`, whose first alternative opens as
 a [`let_pattern`](#rule-_let_pattern): `let Ok(x) | Err(x) = r else { … }`.
 
+### let_as_pattern {#rule-_let_as_pattern}
+
+{{#grammar _let_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `let`, whose pattern opens as a
+[`let_pattern`](#rule-_let_pattern): `let [first, ..] as all = xs else { … }`.
+
+### lambda_as_pattern {#rule-_lambda_as_pattern}
+
+{{#grammar _lambda_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) as a lambda parameter, over the irrefutable record
+pattern a parameter admits: `(Item { sku, .. } as item) => …`.
+
 ### is_pattern {#rule-_is_pattern}
 
 {{#grammar _is_pattern}}
@@ -2302,6 +2332,14 @@ payload.
 {{#grammar _is_base_pattern}}
 
 The single patterns an [`is_pattern`](#rule-_is_pattern) is built from.
+
+### is_as_pattern {#rule-_is_as_pattern}
+
+{{#grammar _is_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) after `is`, over an
+[`is_base_pattern`](#rule-_is_base_pattern): `x is Shipped(at) as s`. A record
+pattern keeps its parentheses, `x is (T { f, .. } as t)`.
 
 ### is_or_pattern {#rule-_is_or_pattern}
 

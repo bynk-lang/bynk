@@ -1,0 +1,21 @@
+context reg.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+// A handler that lists the request's headers (#3752, D12): every name lower
+// case, a repeated field combined, the route's consumed credential absent.
+service api from http {
+	on GET("/echo") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		let all = headers.entries()
+		Ok("\(all.getOrElse("x-tag", "-")) | \(all.getOrElse("cookie", "-")) | \(all.contains("X-Tag")) | \(all.contains("authorization"))")
+	}
+
+	// The `Bearer` actor consumes `Authorization` at the seam, so `entries()`
+	// never holds it, as `get` never does.
+	on GET("/me") (headers: RequestHeaders) -> Effect[HttpResult[String]] by u: User {
+		let all = headers.entries()
+		Ok("\(all.contains("authorization")) \(all.getOrElse("x-tag", "-"))")
+	}
+}

@@ -732,7 +732,10 @@ mod tests {
                 lock: &lock,
                 live: (),
                 tools: Tools {
-                    api: &Wrangler::new(&provenance, Path::new("/nonexistent")),
+                    api: &crate::cloudflare::Account::new(Wrangler::new(
+                        &provenance,
+                        Path::new("/nonexistent"),
+                    )),
                     project_root: Path::new("/nonexistent"),
                 },
             },
@@ -753,7 +756,9 @@ mod tests {
     fn a_database_is_created_in_its_jurisdiction_and_the_plan_says_so() {
         // #3820: the `--jurisdiction` argument is what pins it; whether Cloudflare honours it
         // needs a live account, so this covers the argument, the record and the plan line.
-        let api = crate::cloudflare::fake::Recording::new(|_| Ok("id-9".to_string()));
+        let api = crate::cloudflare::fake::Recording::new(|_| {
+            Ok::<_, crate::cloudflare::WranglerError>("id-9".to_string())
+        });
         assert_eq!(
             create_d1(&api, "shop-orders", Some("eu")).unwrap(),
             ("id-9".to_string(), false)

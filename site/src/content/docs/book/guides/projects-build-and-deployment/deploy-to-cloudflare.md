@@ -11,8 +11,22 @@ bynk deploy
 
 The first deploy checks Node and Wrangler, compiles the project, shows what it
 will create, checks your Wrangler authentication, asks for confirmation, then
-provisions each context's resources and deploys its Worker. Authenticate first
-with `wrangler login` or `CLOUDFLARE_API_TOKEN`.
+provisions each context's resources and deploys its Worker.
+
+Authenticate first. There are two halves:
+
+- **The push** runs through Wrangler, so `wrangler login` (or
+  `CLOUDFLARE_API_TOKEN`) is enough for it.
+- **The account's resources** are created, checked and deleted through
+  Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
+  token needs the permission of each kind it touches; the sections below name
+  them. Today that is KV, along with Hyperdrive and the linked kinds.
+
+  A deploy that needs them and lacks one stops before the confirmation, with
+  nothing created, and names the missing variable and the permission. A
+  redeploy whose namespaces are all recorded needs neither. `bynk doctor`
+  shows a `cloudflare api` row for a project that declares account resources.
 
 Use `--yes` in an automated, non-interactive invocation:
 
@@ -550,6 +564,13 @@ titled `<worker>-<capability>`. Both get an environment suffix under `--env`
 (`shop-cart-staging`, `shop-cart-sessions-staging`). Each id is
 recorded in `bynk.deploy.lock` under its Worker and its binding, and only ever
 written into the generated `wrangler.toml` immediately before the push.
+
+Creating and deleting a namespace goes through Cloudflare's API, so it needs
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with "Workers KV
+Storage: Edit". Before each redeploy reuses a recorded namespace, the deploy
+lists the account's namespaces and creates again any that were deleted by hand.
+Without the variables that check is skipped, the ledger is trusted, and the
+plan says so in a note.
 
 Titles are account-wide, so two of a project's namespaces must not share one:
 Worker `shop` with `capability CartSessions` and Worker `shop-cart` with

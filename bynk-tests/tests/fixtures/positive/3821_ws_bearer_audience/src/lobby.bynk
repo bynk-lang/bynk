@@ -1,0 +1,29 @@
+context lobby
+
+type UserId = opaque String
+type RoomKey = String where Matches("^[a-z]+$")
+type Frame = { text: String }
+
+// #3821: a `Bearer` actor's `issuer` and `audience` are checked at the WebSocket upgrade too, for a lone
+// `by` and for a member of an actor sum.
+actor Member { auth = Bearer(secret = "LOBBY_SECRET", issuer = "web", audience = "rooms"), identity = UserId }
+
+service either from websocket(in: Frame, out: Frame) {
+  on open(room: RoomKey) -> Effect[()] by who: Member | Visitor {
+    let _ <- Rooms(room).keep(connection)
+  }
+
+  on close(room: RoomKey) -> Effect[()] by who: Member | Visitor {
+    ()
+  }
+}
+
+agent Rooms {
+  key id: RoomKey
+  store held: Map[String, Connection[Frame]]
+
+  on call keep(conn: Connection[Frame]) -> Effect[()] {
+    let _ <- held.put("c", conn)
+    ()
+  }
+}
