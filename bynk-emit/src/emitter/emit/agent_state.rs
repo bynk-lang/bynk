@@ -152,25 +152,7 @@ pub(super) fn emit_agent_load_commit_state(
         // merged or decoded, so a record from a newer build (or with no path
         // forward) faults without being read or written back.
         if let Some(v) = &agent_versions {
-            stmts.push(bynk_ts::TsStmt::expr_stmt(
-                bynk_ts::TsExpr::Call {
-                    callee: Box::new(bynk_ts::TsExpr::Ident(
-                        "__checkStoredSchemaVersion".to_string(),
-                    )),
-                    args: vec![
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(a.name.name.clone())),
-                        bynk_ts::TsExpr::Ident("stored".to_string()),
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
-                        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
-                    ]
-                    .into_iter()
-                    // State-migrations S2 (#2224 Decision C): each step's
-                    // covered range makes those versions readable too.
-                    .chain((!step_plans.is_empty()).then(|| step_ranges_expr(step_plans)))
-                    .collect(),
-                },
-                None,
-            ));
+            stmts.push(check_stored_version_stmt(&a.name.name, v, step_plans));
         }
         // Per-entry storage (#3189): join the entries a per-entry record keeps
         // outside `"state"` back into the wholesale-shaped record (a wholesale one
@@ -223,6 +205,17 @@ pub(super) fn emit_agent_load_commit_state(
                 None,
             ));
             "__src"
+        };
+        // #3793: a `store` field renamed with `replaces` is read from whichever of its names the
+        // record holds, after a `migrate` step and before the merge.
+        let renames = agent_versions
+            .as_ref()
+            .map_or(&[][..], |v| v.renames.as_slice());
+        let src = if renames.is_empty() {
+            src
+        } else {
+            stmts.push(rename_stored_stmt(src, renames));
+            "__renamed"
         };
         stmts.push(bynk_ts::TsStmt::const_stmt(
             bynk_ts::TsBindingName::Ident("__zero".to_string()),
@@ -1380,6 +1373,58 @@ pub(super) fn emit_agent_state_persistence(
         agent_versions,
         lazy_fields,
     }
+}
+
+/// State-migrations S1 (#2211, track §3.2, Decision D): `__checkStoredSchemaVersion(agent, stored,
+/// version, oldest, [steps])`, which checks the raw record's `__v` marker before anything is
+/// merged or decoded, so a record from a newer build (or with no path forward) faults without being
+/// read or written back. State-migrations S2 (#2224 Decision C): each step's covered range makes
+/// those versions readable too.
+fn check_stored_version_stmt(
+    agent: &str,
+    v: &bynk_check::schema_registry::AgentVersions,
+    step_plans: &[bynk_check::schema_registry::MigrationStep],
+) -> bynk_ts::TsStmt {
+    let mut args = vec![
+        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(agent.to_string())),
+        bynk_ts::TsExpr::Ident("stored".to_string()),
+        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.version.to_string())),
+        bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(v.oldest_readable.to_string())),
+    ];
+    if !step_plans.is_empty() {
+        args.push(step_ranges_expr(step_plans));
+    }
+    bynk_ts::TsStmt::expr_stmt(
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident(
+                "__checkStoredSchemaVersion".to_string(),
+            )),
+            args,
+        },
+        None,
+    )
+}
+
+/// #3793: `const __renamed = __renameStoredFields(<src>, [[old, new], …]) as typeof <src>;`. Each pair
+/// moves a value stored under `old` to `new` unless the record already holds `new`, so a `store`
+/// field renamed with `replaces` is read from the record an older build stored.
+fn rename_stored_stmt(src: &str, renames: &[(String, String)]) -> bynk_ts::TsStmt {
+    let pairs = renames
+        .iter()
+        .map(|(old, new)| bynk_ts::TsExpr::array(vec![str_lit(old.clone()), str_lit(new.clone())]))
+        .collect();
+    bynk_ts::TsStmt::const_stmt(
+        bynk_ts::TsBindingName::Ident("__renamed".to_string()),
+        None,
+        bynk_ts::TsExpr::As {
+            expr: Box::new(call(
+                ident("__renameStoredFields"),
+                vec![ident(src), bynk_ts::TsExpr::array(pairs)],
+            )),
+            ty: bynk_ts::TsType::named(format!("typeof {src}")),
+        },
+        None,
+    )
 }
 
 /// #4038: `await __checkUnique(agent, s, [[field, index, location], …]);`, the commit-time check of

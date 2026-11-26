@@ -687,7 +687,7 @@ A plain-JSON route and `Json.encodePlain` write an `Instant` as an RFC 3339 stri
 
 | Type | JSON |
 |---|---|
-| record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. |
+| record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. A field declared `replaces old` (`name: T replaces old`) also reads the key `old` when its own key is absent, and its own key wins when both arrive; it is written under its own name only. |
 | sum (`enum` included) | an object with `"{WIRE_DISCRIMINANT}"`: the variant's name, beside the variant's payload fields: `{{"{WIRE_DISCRIMINANT}":"Circle","radius":0.5}}`, `{{"{WIRE_DISCRIMINANT}":"Dot"}}`. A sum with no payload variant (an `enum`) is also read from a bare string, the variant's name (`"Dot"`; matched exactly, case-sensitively), and a plain-JSON route and `Json.encodePlain` write it that way. The object form is tried first. |
 | `Result[T, E]` | `{{"{WIRE_DISCRIMINANT}":"Ok","value":<T>}}` or `{{"{WIRE_DISCRIMINANT}":"Err","error":<E>}}` |
 | `Option[T]` | `{{"{WIRE_DISCRIMINANT}":"Some","value":<T>}}` or `{{"{WIRE_DISCRIMINANT}":"None"}}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk encodes the tagged form, except in a plain HTTP route and for `Json.encodePlain`, which write `v` / `null` (`Option[Option[T]]` is refused there) |

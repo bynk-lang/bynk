@@ -2090,6 +2090,29 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
     },
     Explain {
+        code: "bynk.field.replaces_conflict",
+        blurb: "`replaces old` says a field was renamed from `old`: its stored value, a locked event's recorded field and an incoming wire key under the old name are all read as this field. That only makes sense when `old` is a name this field alone gives up. It is refused when the clause names the field itself, when `old` is still another field of the same record or agent (two fields cannot read one name), when two fields replace the same name, and when the project's schema lock records both names as separate fields (the rename would merge two histories). Drop the clause if the fields are separate, or delete the old field.",
+        example: "type Account = {\n  name: String,\n  label: String replaces name,   // ✗ `name` is still declared\n}\n\ntype Account = {\n  label: String replaces name,   // ✓ a rename: `name` is gone\n}",
+    },
+    Explain {
+        code: "bynk.field.replaces_needed",
+        blurb: "A `store` field renamed with `replaces old` is read under `old` for as long as any stored version the lock holds keeps its value there. Deleting the clause while one does would read those records as the field's zero. Keep the clause until `bynk migrate` has raised the class's floor past those versions, and the compiler stops reading the old name; `bynk.field.replaces_settled` says when that is.",
+        example: "agent Cart {
+    key id: String
+    store owner: Cell[String]            // ✗ renamed from `customer`, and version 1 still stores `customer`
+}
+
+agent Cart {
+    key id: String
+    store owner: Cell[String] replaces customer   // ✓ kept until the floor passes version 1
+}",
+    },
+    Explain {
+        code: "bynk.field.replaces_unknown",
+        blurb: "`replaces old` carries the data of a field the project's schema lock already records, so `old` has to be one. A name the lock does not record for this event or agent has nothing to rename: it is usually a misspelling, a clause added to a field that was never renamed, or a rename already applied and since dropped from the lock. Check the old name against the lock's entry for the type, and that it was built with this project. If the field was not renamed, drop the clause.",
+        example: "store owner: Cell[String] replaces customer   // ✗ the lock records no field `customer`\n\nstore owner: Cell[String]                     // ✓ no clause: the field was never renamed",
+    },
+    Explain {
         code: "bynk.fixture.binary_content",
         blurb: "A `fixture` becomes a `String` in the test code, so its file must be text. A file holding a NUL byte is binary, and a `String` made from it would be meaningless. Keep a text form of the data in the fixture, such as base64, and decode it in the case with `Bytes.fromBase64`. Text that is not valid UTF-8 is `bynk.fixture.invalid_encoding`.",
         example: "fixture blob = \"fixtures/blob.bin\"    // ✗ the file has a NUL byte\n\nfixture blob = \"fixtures/blob.b64\"    // ✓ its base64 text",
@@ -4909,6 +4932,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.store.log_needs_clock",
         blurb: "`Log.append` stamps each entry with the time it was written, so it reads the clock and the handler has to declare `given Clock`. The window reads (`since`, `before`, `between`) take explicit `Instant`s and need no clock. Add `given Clock` to the handler that appends.",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
+    },
+    Explain {
+        code: "bynk.store.replaces_collection",
+        blurb: "`store name: Cell[T] replaces old` reads a stored value under its old key. A `Map`, `Set`, `Cache` or `Log` keeps every entry, posting and expiry under a storage key of its own that carries the field's name, so renaming one moves keys rather than reading an old one, and `replaces` does not do that. Keep the collection's name, or declare the renamed collection as a new field and carry its entries across with a `migrate from` step.",
+        example: "store visited: Map[String, Int] replaces seen   // ✗ a `Map` cannot be renamed with `replaces`\n\nstore visited: Cell[Int] replaces seen         // ✓ a `Cell` can",
     },
     Explain {
         code: "bynk.store.unique_implies_indexed",
@@ -8489,6 +8517,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `todo(message)` placeholder: the code type-checks but faults when it runs. A non-failing warning, so `check --deny-warnings` refuses unfinished code in CI (warning).",
     )),
     dg(
+        "bynk.field.replaces_conflict",
+        "A field's `replaces old` contradicts its own declaration or the lock: it names the field itself, a field the declaration still has, or a name another field already replaces, or the lock records both names as separate fields.",
+        &["record_field", "store_field"],
+    ),
+    dg(
+        "bynk.field.replaces_needed",
+        "A `store` field was renamed with `replaces`, the clause was deleted, and a stored version the lock still holds keeps the value under the old name.",
+        &["store_field"],
+    ),
+    warn(dg(
+        "bynk.field.replaces_settled",
+        "A `store` field's `replaces old` is no longer read: no stored version the lock holds keeps the value under the old name, so the clause can be deleted (a warning).",
+        &["store_field"],
+    )),
+    dg(
+        "bynk.field.replaces_unknown",
+        "A field's `replaces old` names an `old` that `bynk.schema.lock` does not record for the event or agent, so there is no recorded field to rename.",
+        &["record_field", "store_field"],
+    ),
+    dg(
         "bynk.fixture.binary_content",
         "A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text.",
         &["fixture_decl"],
@@ -10476,6 +10524,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
+    ),
+    dg(
+        "bynk.store.replaces_collection",
+        "`replaces` renames a `Cell` store field; a `Map`, `Set`, `Cache` or `Log` keeps its entries under keys that carry the field's name, so it cannot be renamed this way.",
+        &["store_field"],
     ),
     warn(d(
         "bynk.store.unique_implies_indexed",

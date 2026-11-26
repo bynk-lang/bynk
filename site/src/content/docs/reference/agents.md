@@ -684,6 +684,52 @@ source (`bynk.agent.class_removed`); declare what happens to its stored data.
 - **Remove the declaration once it's stale.** Keep each declaration until a deploy
   reports Cloudflare's `stale_tombstone` notice for it, then delete it.
 
+## Renaming a store field {#rename-a-store-field}
+
+A `Cell` store field is renamed with `replaces` after its type, naming the field's old name:
+
+```bynk,fragment
+agent Cart {
+	key id: String
+	store owner: Cell[String] replaces customer = ""
+
+	on call owner() -> Effect[String] {
+		owner
+	}
+}
+```
+
+Without the clause, renaming `customer` to `owner` is a removal plus an addition: deployed `customer`
+values are not carried over, and the build is refused (`bynk.agent.non_additive_state_change`). With it:
+
+- **The old key is read.** A record stored under `customer` loads as `owner`. When a record holds both
+  (a stale `customer` beside an `owner` the new build wrote), `owner` wins. The first commit writes
+  `owner` alone; `customer` is dropped.
+- **The lock records it and the change is additive.** The class's version goes up by one, the new
+  snapshot lists `owner` with `renamed_from = ["customer"]`, and the earlier snapshots keep
+  `customer`, so a record stored at an earlier version is still read. A rename beside another additive
+  change (a field added, a record field gained with a default) is judged by that change; beside a
+  retype or a removal it is still refused.
+- **It needs a recorded field.** `replaces` must name a field the lock records for this class
+  (`bynk.field.replaces_unknown`), and not one the lock records beside the new name
+  (`bynk.field.replaces_conflict`). It cannot name the field itself, a field the agent still declares, or a
+  name another field replaces (`bynk.field.replaces_conflict`).
+- **A `Cell` only.** A `Map`, `Set`, `Cache` or `Log` keeps each entry under a storage key that carries
+  the field's name, so renaming one moves keys rather than reading an old one
+  (`bynk.store.replaces_collection`). Keep the collection's name, or move its entries with a
+  [`migrate from` step](#migrations).
+- **Keep the clause while a version needs it.** While any stored version the lock still holds keeps the
+  value under the old name, deleting the clause would read those records as the field's zero, so the build is
+  refused (`bynk.field.replaces_needed`). Once `bynk migrate` has raised the class's [floor](#the-floor) past
+  them, the clause is no longer read, and the build warns (`bynk.field.replaces_settled`) that it can be
+  deleted. A field renamed again keeps the whole history, so a record from before either rename is still read.
+
+A rename carried by a `migrate from` step is unchanged: the step names the old shape's fields itself.
+A record type used inside a `store` value is not renamed this way; a `replaces` on one of its fields is
+read from the wire (see [Renaming a field](/reference/types/#field-replaces)) but the lock still judges the
+stored shape by name, so change it with a `migrate` step. For the whole picture, see
+[Rename a field safely](/book/guides/type-system/rename-a-field-safely/).
+
 ## Addressing and calling
 
 Construct an agent with its key, then call a handler, binding the effect:

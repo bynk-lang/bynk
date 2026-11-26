@@ -112,7 +112,18 @@ fn describe_indexed(
     def_text: &str,
 ) -> Option<String> {
     if key.kind != SymbolKind::Unit {
-        return crate::symbols::describe_key(key.kind, def_text, &key.name);
+        // #4393: an actor's description depends on the rest of its unit's files (a shadowing
+        // `Sender`), so it sees every other file; the other kinds do not need them.
+        let others: Vec<&str> = if key.kind == SymbolKind::Actor {
+            a.snapshots
+                .iter()
+                .filter(|(p, _)| p.as_path() != def_path)
+                .map(|(_, t)| t.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        return crate::symbols::describe_key_with(key.kind, def_text, &key.name, &others);
     }
     let mut siblings: Vec<(&PathBuf, &String)> = a
         .snapshots

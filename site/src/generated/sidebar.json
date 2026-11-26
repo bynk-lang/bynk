@@ -286,6 +286,10 @@
           {
             "label": "Recursive generic types",
             "link": "/book/guides/type-system/recursive-generic-types/"
+          },
+          {
+            "label": "Rename a field safely",
+            "link": "/book/guides/type-system/rename-a-field-safely/"
           }
         ]
       },
