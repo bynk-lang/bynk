@@ -212,7 +212,7 @@ fn agent_outcome_signature(
 }
 
 /// Hover on a built-in member: the `within`, `race` or `detach` of an `Effect`, the `outcome` of a
-/// service call, (#3932) the `@busyAfter` of an agent, or (#3931) the `erase` of an agent's `self`.
+/// service call, (#3932) the `@busyAfter` and (#3819) the `@jurisdiction` of an agent, or (#3931) the `erase` of an agent's `self`.
 pub fn describe_member_at(
     text: &str,
     offset: usize,
@@ -222,6 +222,7 @@ pub fn describe_member_at(
     crate::symbols::describe_effect_method_at(text, offset, expr_types, tys)
         .or_else(|| describe_outcome_at(text, offset, expr_types, tys))
         .or_else(|| crate::agent_busy::describe_busy_after_at(text, offset))
+        .or_else(|| crate::agent_jurisdiction::describe_jurisdiction_at(text, offset))
         .or_else(|| crate::token_claims::describe_claims_at(text, offset, expr_types, tys))
         .or_else(|| crate::agent_erase::describe_erase_at(text, offset, expr_types, tys))
         .or_else(|| crate::ws_handshake::describe_ws_open_at(text, offset))

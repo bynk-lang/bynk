@@ -698,9 +698,27 @@ pub const R2_BINDING_PREFIX: &str = "R2";
 /// The one creation option of an `R2` instance: the bucket's jurisdiction.
 pub const R2_JURISDICTION_OPTION: &str = "jurisdiction";
 
-/// The jurisdictions an `R2` bucket may be pinned to, as `@jurisdiction(…)`
-/// takes them and `wrangler r2 bucket create --jurisdiction` accepts them.
-pub const R2_JURISDICTIONS: &[&str] = &["eu", "fedramp"];
+/// The jurisdictions a resource may be pinned to, as `@jurisdiction(…)` takes them: an `R2`
+/// bucket (`wrangler r2 bucket create --jurisdiction`), a `D1` database and an agent's Durable
+/// Object namespace (`namespace.jurisdiction(…)`) all take the same three (#3819, #3820).
+/// Cloudflare lists `eu`, `fedramp` and `us` for each of the three.
+pub const JURISDICTIONS: &[&str] = &["eu", "fedramp", "us"];
+
+/// Whether `text` names a jurisdiction (the shared check of `R2`, `D1` and `agent`).
+pub fn is_jurisdiction(text: &str) -> bool {
+    JURISDICTIONS.contains(&text)
+}
+
+/// The note every invalid `@jurisdiction` carries: `the jurisdictions are "eu", "fedramp" and "us"`.
+pub fn jurisdictions_note() -> String {
+    let quoted: Vec<String> = JURISDICTIONS.iter().map(|j| format!("`\"{j}\"`")).collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => {
+            format!("the jurisdictions are {} and {last}", rest.join(", "))
+        }
+        _ => format!("the jurisdictions are {}", quoted.join(" and ")),
+    }
+}
 
 /// The Worker binding prefix of a `RateLimit` instance (standard-library P3,
 /// #2342): `capability LoginLimit = RateLimit @limit(100) @period(60.seconds)`

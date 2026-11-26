@@ -64,8 +64,11 @@ const STORE_RULES: &[ArgRule] = &[
 /// An event's annotation: `@schema(n)`.
 const EVENT_RULES: &[ArgRule] = &[rule("schema", None, BaseType::Int)];
 
-/// An agent's annotation: `@busyAfter(d)`.
-const AGENT_RULES: &[ArgRule] = &[rule("busyAfter", None, BaseType::Duration)];
+/// An agent's annotations: `@busyAfter(d)` and `@jurisdiction("eu")`.
+const AGENT_RULES: &[ArgRule] = &[
+    rule("busyAfter", None, BaseType::Duration),
+    rule("jurisdiction", None, BaseType::String),
+];
 
 /// A handler's annotations: `@cache(maxAge:, immutable:)`, `@limit(…)` and
 /// `@raw(contentType:)`. The keyword arguments (`@cache(scope: public)`,

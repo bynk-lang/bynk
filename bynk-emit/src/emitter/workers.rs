@@ -507,6 +507,7 @@ pub(super) fn emit_websocket_upgrade(
     sum: Option<&[bynk_check::actors::SumMember]>,
     local_agents: &HashSet<String>,
     key_readers: &HashSet<String>,
+    jurisdictions: &HashMap<String, String>,
     consts: &HashMap<String, bynk_check::consts::VisibleConst<'_>>,
     const_imports: &mut BTreeMap<String, (String, String)>,
 ) -> TsObjectEntry {
@@ -850,13 +851,23 @@ pub(super) fn emit_websocket_upgrade(
                 .unwrap_or_else(|| ident(wire_ident(&p.name.name)))
         })
         .collect();
+    // #3819: an agent pinned with `@jurisdiction` resolves its stub through the restricted
+    // namespace, as `makeAgent` does, so the id is the one every other caller mints.
+    let namespace = member_chain(ident("deps"), &["env", &binding]);
+    let namespace = match jurisdictions.get(target.agent) {
+        Some(j) => call(
+            ident("__agentNamespace"),
+            vec![namespace, str_lit(j.as_str())],
+        ),
+        None => namespace,
+    };
     stmts.push(const_(
         "__ns",
         // `member_chain`, not a single `Member { property: "env.{binding}" }`
         // node — the printed text is two chained accesses (`deps.env.<binding>`),
         // and a `format!`-built dotted-property slot would claim it is one
         // property literally named "env.<binding>" (review of #1322, finding 3).
-        member_chain(ident("deps"), &["env", &binding]),
+        namespace,
     ));
     stmts.push(const_(
         "__stub",

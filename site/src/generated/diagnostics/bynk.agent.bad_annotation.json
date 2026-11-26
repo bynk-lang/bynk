@@ -1,10 +1,10 @@
 {
-  "blurb": "An agent has one annotation, `@busyAfter(<Duration>)`, written once, immediately before `agent`, taking a single `Duration` literal such as `5.seconds`. Another name, a second `@busyAfter`, or an argument that is not one `Duration` literal (a label, a second argument, a number, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)`, or drop the annotation.",
+  "blurb": "An agent has two annotations, each written once, immediately before `agent`: `@busyAfter(<Duration>)`, taking a single `Duration` literal such as `5.seconds`, and `@jurisdiction(\"eu\")`, taking one string literal that is `\"eu\"`, `\"fedramp\"` or `\"us\"`, which keeps every instance's state in that jurisdiction. Another name, a repeated annotation, or an argument that is not one such literal (a label, a second argument, a number, an unknown jurisdiction, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)` or `@jurisdiction(\"eu\")`, or drop the annotation.",
   "category": "Agents",
   "categoryAnchor": "agents",
   "code": "bynk.agent.bad_annotation",
   "constructs": [],
   "example": "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
   "severity": "error",
-  "summary": "An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument."
+  "summary": "An agent carries an annotation other than `@busyAfter(<Duration literal>)` and `@jurisdiction(\"eu\" | \"fedramp\" | \"us\")`, or one of them is written twice, with the wrong argument, or with an unknown jurisdiction."
 }
