@@ -17,7 +17,7 @@ use std::process::ExitCode;
 
 use bynk_emit::emitter::http_client::{
     BodyKind, ClientError, DIR_FILES, HttpClientInput, Layout, ParamInput, ReplyInput,
-    ReplyPayload, RouteInput, ServiceInput, emit_http_client,
+    ReplyPayload, RouteInput, ServiceInput, WsInput, emit_http_client,
 };
 use bynk_ide::wire_contract::{
     BoundaryKind, IrHttpMethod, ResponseOrigin, WireContractModel, real_context_count,
@@ -26,7 +26,8 @@ use bynk_ide::wire_contract::{
 use bynk_ide::{ContextBoundaryInfo, ProjectDiagnostics};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    ErrorFormat, Handler, HttpVariantPayload, TypeRef, effective_error_format, http_variant,
+    ErrorFormat, Handler, HttpVariantPayload, ServiceProtocol, TypeRef, effective_error_format,
+    http_variant,
 };
 
 use crate::openapi::{self, Error as ProjectError, Selected};
@@ -332,13 +333,17 @@ pub fn generate(
     if !errors.is_empty() {
         return Err(Error::Project(ProjectError::Invalid(errors)));
     }
-    let selected = openapi::select_services(analysis, want).map_err(Error::Project)?;
+    let selected = openapi::select_where(analysis, want, |p| {
+        matches!(p, ServiceProtocol::Http | ServiceProtocol::WebSocket { .. })
+    })
+    .map_err(Error::Project)?;
     let context_count = real_context_count(&analysis.boundary_info, &analysis.unit_sources);
     let mut services = Vec::new();
     let mut skipped = Vec::new();
     for sel in &selected {
+        let ws = ws_of(sel, &mut skipped);
         let routes = routes_of(analysis, sel, context_count, &mut skipped);
-        if routes.is_empty() {
+        if routes.is_empty() && ws.is_none() {
             continue;
         }
         services.push(ServiceInput {
@@ -351,6 +356,7 @@ pub fn generate(
                 .map(|d| d.text.trim().to_string()),
             types: sel.info.types.clone(),
             routes,
+            ws,
         });
     }
     if services.is_empty() {
@@ -365,6 +371,38 @@ pub fn generate(
     Ok(Client {
         files: emitted.files,
         skipped,
+    })
+}
+
+/// A `from websocket` service's connection: its frame types, the route parameters of its `on open`,
+/// and the credential its `by` clause reads. `None` for any other service, and, with a note in
+/// `skipped`, for one whose upgrade a client cannot make (a request signature, which a browser
+/// cannot send, is not admitted on a WebSocket at all).
+fn ws_of(sel: &Selected, skipped: &mut Vec<String>) -> Option<WsInput> {
+    let ServiceProtocol::WebSocket { in_type, out_type } = &sel.service.protocol else {
+        return None;
+    };
+    let Some(open) = sel
+        .service
+        .handlers
+        .iter()
+        .find(|h| matches!(lower_handler_kind_ir(&h.kind), IrHandlerKind::Open))
+    else {
+        skipped.push(format!(
+            "`{}`: it declares no `on open`, so there is nothing to connect to",
+            sel.service.name.name
+        ));
+        return None;
+    };
+    Some(WsInput {
+        in_ty: in_type.clone(),
+        out_ty: out_type.clone(),
+        params: open
+            .params
+            .iter()
+            .map(|p| (p.name.name.clone(), p.type_ref.clone()))
+            .collect(),
+        credential: bynk_check::actors::ws_client_credential(open, &sel.info.actors),
     })
 }
 

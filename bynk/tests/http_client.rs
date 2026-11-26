@@ -108,6 +108,37 @@ fn the_raw_project_client_is_pinned() {
 }
 
 #[test]
+fn the_websocket_project_client_is_pinned() {
+    // #3906: a `connect` for each of a Bearer, a SignedCookie and an anonymous service, beside an HTTP route.
+    golden("http_client_ws.ts", &module(&fixture("ws"), &[]));
+}
+
+#[test]
+fn a_websocket_service_is_a_service_of_the_client() {
+    let all = module(&fixture("ws"), &[]);
+    assert!(
+        all.contains("connect: (room: RoomId, credentials: GatewayCredentials"),
+        "{all}"
+    );
+    assert!(
+        all.contains("connect: (name: string, connect?: WsConnectOptions<undefined>)"),
+        "{all}"
+    );
+    assert!(
+        all.contains("connect: (stream: StreamId, connect?"),
+        "{all}"
+    );
+    // `--service` names one by its name, as for HTTP, and leaves the others out.
+    let one = module(&fixture("ws"), &["--service", "gateway"]);
+    assert!(one.contains("gateway: {"), "{one}");
+    assert!(
+        !one.contains("lounge: {") && !one.contains("pipe: {"),
+        "{one}"
+    );
+    assert!(!one.contains("getHealth"), "{one}");
+}
+
+#[test]
 fn the_output_is_byte_identical_between_runs() {
     let a = module(&fixture("rich"), &[]);
     let b = module(&fixture("rich"), &[]);

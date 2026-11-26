@@ -1,0 +1,37 @@
+context lobby
+
+type Guest = String where NonEmpty && MaxLength(64)
+type Frame = { text: String }
+
+// A browser signs in with a session cookie and opens the socket from the page: the client offers no
+// credential of its own.
+actor Visitor2 { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = Guest }
+
+service lounge from websocket(in: Frame, out: Frame) {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on open(name: String) -> Effect[()] by user: Visitor2 {
+    let _ <- Seats(name).sit(user.identity, connection)
+    ()
+  }
+
+  on close(name: String) -> Effect[()] by user: Visitor2 {
+    let _ <- Seats(name).leave(user.identity)
+    ()
+  }
+}
+
+agent Seats {
+  key id: String
+  store conns: Map[Guest, Connection[Frame]]
+
+  on call sit(u: Guest, conn: Connection[Frame]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: Guest) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}

@@ -287,6 +287,16 @@ pub(crate) fn select_services<'a>(
     analysis: &'a ProjectDiagnostics,
     want: &[&str],
 ) -> Result<Vec<Selected<'a>>, Error> {
+    select_where(analysis, want, |p| matches!(p, ServiceProtocol::Http))
+}
+
+/// [`select_services`] over the services whose protocol `accepts`: `bynk client` also takes the
+/// `from websocket` ones (#3906).
+pub(crate) fn select_where<'a>(
+    analysis: &'a ProjectDiagnostics,
+    want: &[&str],
+    accepts: fn(&ServiceProtocol) -> bool,
+) -> Result<Vec<Selected<'a>>, Error> {
     let mut all: Vec<Selected> = Vec::new();
     for (unit, ctx) in &analysis.boundary_info {
         // A synthetic unit (the `bynk` capability surface) has no source.
@@ -296,7 +306,7 @@ pub(crate) fn select_services<'a>(
         for svc in ctx.services.values() {
             // M-1's domain clause (ADR 0735, #2999 DECISION A): no `TypedCommons`
             // here to lower the protocol from (see `declared_statuses`).
-            if matches!(svc.protocol, ServiceProtocol::Http) {
+            if accepts(&svc.protocol) {
                 all.push(Selected {
                     unit,
                     service: svc,
