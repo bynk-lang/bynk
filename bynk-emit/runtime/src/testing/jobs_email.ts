@@ -32,9 +32,16 @@ export function __bynkEmailRaw(mail: any): string {
   else if (!headers.has("message-id")) headers.set("message-id", "<bynk-test@system.example>");
   headers.set("from", mail.from);
   headers.set("to", mail.to);
+  // #3886: the typed fields are written as the headers the runtime reads them back from.
+  if (mail.inReplyTo.tag === "Some") headers.set("in-reply-to", mail.inReplyTo.value);
+  if (mail.references.length > 0) headers.set("references", mail.references.join(" "));
+  if (mail.replyTo.length > 0) headers.set("reply-to", mail.replyTo.join(", "));
+  if (mail.cc.length > 0) headers.set("cc", mail.cc.join(", "));
+  if (mail.date.tag === "Some") headers.set("date", new globalThis.Date(mail.date.value).toUTCString());
   const body = __bynkMimeBody(mail.text.tag === "Some" ? mail.text.value : undefined, mail.html.tag === "Some" ? mail.html.value : undefined, mail.attachments);
   headers.set("mime-version", "1.0");
-  const lines = [...headers].map(([k, v]) => `${k}: ${v}`);
+  // `headerList` adds occurrences after the single-valued ones, in order, so a repeated header is there to read.
+  const lines = [...headers].map(([k, v]) => `${k}: ${v}`).concat((mail.headerList as ReadonlyArray<{ name: string; value: string }>).map((h) => `${h.name}: ${h.value}`));
   return `${lines.join("\r\n")}\r\nContent-Type: ${body.type}\r\n\r\n${body.body}`;
 }
 export function __bynkEmailReplyOf(raw: string): { tag: "Reply"; message: { subject: unknown; text: unknown; html: unknown } } {

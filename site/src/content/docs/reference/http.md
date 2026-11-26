@@ -402,6 +402,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | `Created(value)` | 201 | the value, as JSON |
 | `Accepted(value)` | 202 | the value, as JSON |
 | `NoContent` | 204 | none |
+| `PartialContent(body, contentType, range)` | 206 | a `Stream[Bytes]` body and the `ContentRange` it covers, sent as `Content-Range` (see [Partial content](#partial-content)) |
 
 ### 3xx redirection
 
@@ -413,6 +414,7 @@ body.
 | `MovedPermanently(url)` | 301 | `Location` header |
 | `Found(url)` | 302 | `Location` header |
 | `SeeOther(url)` | 303 | `Location` header |
+| `NotModified` | 304 | none (see [Partial content](#partial-content)) |
 | `TemporaryRedirect(url)` | 307 | `Location` header |
 | `PermanentRedirect(url)` | 308 | `Location` header |
 
@@ -890,7 +892,7 @@ on GET("/export") () -> Effect[HttpResult[Bytes]] by v: Visitor {
 | `withHeader(name, value)` | one header line; a repeated name keeps every value | any `HttpResult` |
 | `retryAfter(delay)` | `Retry-After`, `delay` in whole seconds, rounded up | `TooManyRequests`, `ServiceUnavailable` |
 | `at(url)` | `Location` of the new resource | `Created`, `RawCreated`, `Accepted` |
-| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed` |
+| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed`, `PartialContent` |
 
 A typed helper is written on the variant itself, after any other header methods
 (`TooManyRequests(m).withHeader("X-Reason", "deploy").retryAfter(90.seconds)`), because the router
@@ -900,8 +902,8 @@ refused (`bynk.http.invalid_response_header`).
 
 `withHeader` cannot set a header the router owns: the caching headers (`Cache-Control`, `ETag`,
 `Vary`, `Expires`, `Last-Modified`, `Age`, `Pragma` and the CDN directives), `Content-Type` and
-`Content-Length`, `Location`, `Retry-After` and `Content-Disposition` (the typed helpers write
-those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
+`Content-Length`, `Content-Range` (`PartialContent` writes it), `Location`, `Retry-After` and
+`Content-Disposition` (the typed helpers write those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
 `WWW-Authenticate`, `Allow` and the hop-by-hop headers. A header value is ASCII: a literal with
 another character is `bynk.http.invalid_response_header`, and a computed one answers `500`; `at`
 percent-encodes a URL instead. A literal name that is one is
@@ -1356,6 +1358,52 @@ stream to a response consumes it, since [a stream is read once](/reference/types
 A unit-tier test matches `RawStreamed(body, contentType)` and drains `body` with
 `.collect()`; at the system tier it reads as `Ok(_)`, with the body's text as the
 value.
+
+### Partial content {#partial-content}
+
+`PartialContent(body, contentType, range)` answers a range request with a **206**. `body` is a
+[`Stream[Bytes]`](/reference/types/#stream), as for `RawStreamed`, holding just the bytes the
+client asked for, and `range` is the `ContentRange` (from `bynk`) they cover:
+
+```bynk,fragment
+consumes bynk { ContentRange }
+
+service files from http {
+  on GET("/files/:key") (key: String, headers: Range) -> Effect[HttpResult[()]] by v: Visitor given Blobs {
+    let part <- Blobs.readRange(key, headers.start, headers.end)
+    PartialContent(part.body, part.contentType, ContentRange { start: headers.start, end: headers.end, total: Some(part.size) })
+  }
+}
+```
+
+`ContentRange { start, end, total }` is `Content-Range: bytes start-end/total`: `start` and `end`
+are the first and last byte, inclusive, and `total` is the size of the whole representation, or
+`None` when it is not known (written `*`). The router does not read the request's `Range` header:
+the handler works the range out (an object store such as R2 does it for you) and states what it
+sent. A range that is not one (`start` below 0 or past `end`, or `end` at or past a known `total`)
+is a fault, so the answer is `500` and the route is logged, and a malformed `Content-Range` is never
+sent. The body is streamed like `RawStreamed`'s: no `ETag`, no `content-length`, and a fault mid-body
+aborts the response. So does a body that yields more or fewer bytes than the range says (`end - start + 1`),
+rather than going out under a `Content-Range` it does not match.
+
+`NotModified` is a **304** with no body, for a conditional read the handler has resolved itself, such
+as an `If-None-Match` an object store checked against its own entity tag. It is separate from the
+automatic `304` the router gives an eligible `GET` (see [Automatic revalidation](#automatic-revalidation-etag--304)),
+which needs no handler code.
+
+Neither variant can carry a validator yet. `ETag`, `Last-Modified`, `Cache-Control` and the other
+caching headers are ones the router owns, so [`withHeader`](#response-headers) refuses them, and these
+two variants have no argument for one as `RawTagged` has. RFC 9110 §15.4.5 says a `304` should repeat the
+validators a `200` would have sent, and a client resumes a download with `If-Range` only against an `ETag`
+on the `206`: a handler that needs either cannot send it today.
+
+Both are answers to a `GET`. A route of another method that names either in its own body is
+[`bynk.http.status_needs_get`](/reference/diagnostics/bynk.http.status_needs_get/). A variant built in a
+helper `fn` and returned from such a route is not seen at compile time: that route answers `500` and
+logs the fault. A `HEAD` is answered by the `GET` route as ever. OpenAPI lists a `PartialContent` response with a required
+`Content-Range` header, and the generated client reads it as a raw body. A unit-tier test matches
+`PartialContent(body, contentType, range)`; at the system tier a `206` reads back as
+`PartialContent` with the range parsed from `Content-Range`, and a `304` as `NotModified`.
 
 ## Raw request bodies
 

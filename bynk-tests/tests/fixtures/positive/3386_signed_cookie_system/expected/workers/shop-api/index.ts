@@ -46,7 +46,7 @@ export default {
           if (method === "DELETE" && __matchPath("/session", path) !== null) {
             __route = "DELETE /session";
             const result = await surface.http_DELETE_session(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -90,7 +90,7 @@ export default {
           if (method === "POST" && __matchPath("/rename", path) !== null) {
             __route = "POST /rename";
             const result = await surface.http_POST_rename(request);
-            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         if (__matchPath("/cookie-header", path) !== null) {
