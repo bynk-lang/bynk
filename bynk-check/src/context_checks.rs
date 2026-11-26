@@ -932,6 +932,8 @@ fn check_class_declarations(table: &UnitTable, errors: &mut Vec<CompileError>) {
     let mut agents: Vec<&AgentDecl> = table.agents.values().map(|a| &**a).collect();
     agents.sort_by_key(|a| a.span.start);
     for a in agents {
+        // #3793: the source-only rules for a `store` field's `replaces`.
+        errors.extend(crate::field_renames::check_store(a));
         let Some(old) = &a.replaces else { continue };
         if table.agents.contains_key(&old.name) {
             errors.push(
@@ -4876,6 +4878,7 @@ fn check_agent_decls(
             .filter(|f| f.kind.head.name == "Cell" && f.kind.args.len() == 1)
             .map(|f| RecordField {
                 annotations: Vec::new(),
+                replaces: None,
                 documentation: None,
                 trivia: Default::default(),
                 name: f.name.clone(),
@@ -4998,6 +5001,7 @@ fn check_agent_decls(
                 trailing_comments: Default::default(),
                 fields: vec![RecordField {
                     annotations: Vec::new(),
+                    replaces: None,
                     documentation: None,
                     trivia: Default::default(),
                     name: Ident {

@@ -2693,6 +2693,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #3793: each field `replaces` clause's keyword, as `keyword`.
+        dt.extend(
+            bynk_ide::field_rename::replaces_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         // #3885: each `fallback` section keyword of an email service, as `keyword`.
         dt.extend(
             bynk_ide::email_fallback::fallback_keyword_spans(text)
@@ -4190,6 +4196,8 @@ impl LanguageServer for Backend {
         // #3885: inside a `fallback { }` block, the `forward` key; at a service-body item
         // start, the `fallback` section keyword.
         items.extend(fallback_completions(&text, offset, &line_prefix));
+        // #3793: `replaces` after a field's type.
+        items.extend(field_rename_completions(&line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
@@ -6164,6 +6172,24 @@ fn fallback_completions(text: &str, offset: usize, line: &str) -> Vec<Completion
         }];
     }
     Vec::new()
+}
+
+/// #3793: the `replaces` clause, offered after a field's complete type.
+fn field_rename_completions(line: &str) -> Vec<CompletionItem> {
+    if !bynk_ide::field_rename::in_replaces_position(line) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "replaces".to_string(),
+        kind: Some(CompletionItemKind::KEYWORD),
+        detail: Some("renames this field from an old name".to_string()),
+        documentation: Some(Documentation::String(
+            bynk_ide::field_rename::REPLACES_DOC.to_string(),
+        )),
+        insert_text: Some("replaces ${1:oldName}".to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// #3880: the `QueueDelivery` parameter of a queue consumer's `on message`, at a

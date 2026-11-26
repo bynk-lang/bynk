@@ -1,0 +1,73 @@
+context demo.users
+
+---
+#3793: a record whose fields were renamed. Each `replaces` names the field's old key,
+which a payload built against the earlier contract still sends.
+---
+type User = {
+	displayName: String replaces name,
+	age: Int replaces years = 18,
+	nickname: Option[String] replaces handle,
+}
+
+---
+Probes of the two spellings, to see what a `User` is written as.
+---
+type NewKeys = {
+	displayName: String,
+	age: Int,
+}
+
+type OldKeys = {
+	name: String,
+}
+
+fn decoded(s: String) -> Option[User] {
+	match Json.decode[User](s) {
+		Ok(u) => Some(u),
+		Err(_) => None,
+	}
+}
+
+fn displayName(s: String) -> String {
+	match decoded(s) {
+		Some(u) => u.displayName,
+		None => "<undecodable>",
+	}
+}
+
+fn age(s: String) -> Int {
+	match decoded(s) {
+		Some(u) => u.age,
+		None => -1,
+	}
+}
+
+fn nickname(s: String) -> Option[String] {
+	match decoded(s) {
+		Some(u) => u.nickname,
+		None => Some("<undecodable>"),
+	}
+}
+
+fn writtenUnderNewKeys(u: User) -> Bool {
+	match Json.decode[NewKeys](Json.encode(u)) {
+		Ok(_) => true,
+		Err(_) => false,
+	}
+}
+
+fn writtenUnderOldKey(u: User) -> Bool {
+	match Json.decode[OldKeys](Json.encode(u)) {
+		Ok(_) => true,
+		Err(_) => false,
+	}
+}
+
+fn sample() -> User {
+	User {
+		displayName: "Ada",
+		age: 36,
+		nickname: None,
+	}
+}

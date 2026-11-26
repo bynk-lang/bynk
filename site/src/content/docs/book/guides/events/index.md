@@ -10,6 +10,9 @@ finish). See [Understand events](/book/concepts/events/understand-events/).
 **Understand**
 - [Understand events](/book/concepts/events/understand-events/)
 
+**Do**
+- [Rename a field safely](/book/guides/type-system/rename-a-field-safely/)
+
 **Worked example:** [`bynk-tests/tests/events_behaviour.rs`](https://github.com/bynk-lang/bynk/blob/main/bynk-tests/tests/events_behaviour.rs)
 — a publisher, a subscriber, and the release-at-commit/abort-suppression proof,
 compiled and run under real `tsc` + `node`.

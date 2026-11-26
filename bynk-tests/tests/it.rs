@@ -419,6 +419,10 @@ mod system {
     mod failure_explanation_behaviour;
     #[path = "fetch_headers.rs"]
     mod fetch_headers;
+    #[path = "field_rename_behaviour.rs"]
+    mod field_rename_behaviour;
+    #[path = "field_rename_lock.rs"]
+    mod field_rename_lock;
     #[path = "float_codec_behaviour.rs"]
     mod float_codec_behaviour;
     #[path = "header_question_lint.rs"]
