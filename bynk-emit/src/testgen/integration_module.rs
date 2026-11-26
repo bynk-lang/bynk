@@ -512,7 +512,12 @@ pub(super) fn emit_integration_module(
             // #2138 (§3.7): and, against a named target, its `env` must agree
             // with the target's `vars`. Under `dev` the runner applies `env`
             // itself, one `bynk dev` per distinct map.
-            let refusal = test_suites::remote_unsupported(input.case, &callees).or_else(|| {
+            let refusal = test_suites::remote_unsupported(input.case, &callees)
+                .or_else(|| {
+                    let actors = &unit_tables.get(suite)?.actors;
+                    bynk_check::api_key::remote_unsupported_api_key(input.case, &callees, actors)
+                })
+                .or_else(|| {
                 (!remote.dev)
                     .then(|| {
                         bynk_check::test_env::remote_env_disagreement(

@@ -11201,6 +11201,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     d(
+        "bynk.test.remote_unsupported_api_key",
+        "A case acting as an `ApiKey` actor, or driving `by Malformed` or `by Unknown`, under `bynk test --against` (#3939).",
+    ),
+    d(
         "bynk.tier.system_needs_wire",
         "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
     ),

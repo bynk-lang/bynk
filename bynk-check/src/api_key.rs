@@ -482,6 +482,50 @@ pub(crate) fn expired_needs_ttl(span: Span) -> CompileError {
     )
 }
 
+/// #3939 (track §10): under `bynk test --against`, a case acting as an `ApiKey` actor, or driving
+/// an `ApiKey` seam's own refusals, is refused: its key is minted into the participant's
+/// in-process key store, which a deployment does not have, and minting through the service would
+/// make a test run touch real data.
+pub fn remote_unsupported_api_key(
+    case: &bynk_syntax::ast::Case,
+    callees: &HashMap<bynk_syntax::ast::ExprId, crate::checker::Callee>,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<CompileError> {
+    use crate::actors::{BadCredential, CallSitePrincipal};
+    let mut named: Vec<String> = callees
+        .values()
+        .filter_map(|c| match c {
+            crate::checker::Callee::Principal(CallSitePrincipal::Actor(a))
+                if actors.get(a).is_some_and(is_api_key_actor) =>
+            {
+                Some(format!("acts as the `ApiKey` actor `{a}`"))
+            }
+            crate::checker::Callee::Principal(CallSitePrincipal::BadCredential(
+                b @ (BadCredential::Malformed | BadCredential::Unknown),
+            )) => Some(format!("drives `by {}`", b.name())),
+            _ => None,
+        })
+        .collect();
+    named.sort();
+    let what = named.into_iter().next()?;
+    Some(
+        CompileError::new(
+            "bynk.test.remote_unsupported_api_key",
+            case.name_span,
+            format!(
+                "case `\"{}\"` {what}, which a run against a real runtime can't honour",
+                case.name
+            ),
+        )
+        .with_note(
+            "an `ApiKey` actor's test key is minted into the participant's in-process key store, which a deployment does not have; minting one through the service would make a test run touch real data",
+        )
+        .with_note(
+            "run it in process (`bynk test` without `--against`), or pass `--skip-unsupported` to skip it with this reason",
+        ),
+    )
+}
+
 /// #3939 (D2 D): whether the named type is, or holds at any depth, an `ApiKeyValue`.
 pub fn carries_api_key_value(name: &str, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     fn walk(

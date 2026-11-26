@@ -53,6 +53,7 @@ pub use bynk_project::is_workspace_root;
 
 pub mod actor_refinement;
 pub mod actor_sum;
+pub mod api_key_completion;
 pub mod agent_busy;
 pub mod agent_effects;
 pub mod agent_erase;
