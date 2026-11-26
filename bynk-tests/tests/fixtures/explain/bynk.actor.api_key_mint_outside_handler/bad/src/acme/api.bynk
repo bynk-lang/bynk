@@ -1,0 +1,16 @@
+context acme.api
+
+consumes bynk { Clock, ApiKeyLabel }
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+
+agent Accounts {
+	key id: AccountId
+	store opened: Cell[Int] = 0
+	on call open(label: ApiKeyLabel) -> Effect[()] given Clock {
+		let _ <- Client.mint(self.id, label)
+	}
+}

@@ -106,7 +106,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.api_key_agent_name_reserved",
         blurb: "An `ApiKey` actor's keys live in two agents the compiler generates and names after it: `<Actor>Keys`, which holds one identity's keys and is the only agent a request asks, and `<Actor>KeyOwner`, which maps an identity to its key store. Their names are reserved in the declaring context, so an author's agent, type, function, service, actor or capability with one of them is refused. Rename it.",
-        example: "agent ClientKeys { key id: String }   // ✗ the name of `Client`'s generated key store\n\nagent ClientLedger { key id: String }   // ✓",
+        example: "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
     },
     Explain {
         code: "bynk.actor.api_key_bad_arg",
@@ -121,7 +121,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.api_key_mint_outside_handler",
         blurb: "`Actor.mint(identity, label)` hashes the new key under the pepper, and the pepper reaches a service handler's dependencies, not a provider's, an agent's or a function's. So `mint` is legal only in a service handler. Mint the key there and return it; a provider or agent gets what it needs from the handler.",
-        example: "agent Accounts { key id: String\n    on call open(a: AccountId, l: ApiKeyLabel) -> Effect[()] given Clock { let _ <- Client.mint(a, l) }   // ✗ in an agent\n}\n\non POST(\"/keys\") (body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by u: User given Clock { … Client.mint(u.identity, body.label) … }   // ✓",
+        example: "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
     },
     Explain {
         code: "bynk.actor.api_key_missing_secret",
@@ -5484,7 +5484,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.test.key_principal_needs_api_key_route",
         blurb: "`by Malformed` and `by Unknown` are an `ApiKey` seam's own refusals: `Malformed` sends a key with the actor's prefix and a bad checksum, which the seam refuses before any lookup, and `Unknown` sends well-formed keys that were never minted, which it refuses after comparing against a dummy digest. Only a route guarded by an `ApiKey` actor has that seam. On another route, test its own seam with `by Nobody`, `by Forged` or `by Expired`.",
-        example: "case \"refused\" {\n    let r <- api.GET(\"/me\") by Malformed   // ✗ `/me` is a `Bearer` route\n}\n\ncase \"refused\" {\n    let r <- keys.GET(\"/me\") by Malformed   // ✓ an `ApiKey` route\n}",
+        example: "let r <- api.GET(\"/me\") by Malformed    // ✗ `api` is a `Bearer` service\n\nlet r <- keys.GET(\"/key\") by Malformed  // ✓ `keys` is guarded by an `ApiKey` actor",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",

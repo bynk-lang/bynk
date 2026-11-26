@@ -4,7 +4,7 @@
   "categoryAnchor": "actors",
   "code": "bynk.actor.api_key_agent_name_reserved",
   "constructs": [],
-  "example": "agent ClientKeys { key id: String }   // ✗ the name of `Client`'s generated key store\n\nagent ClientLedger { key id: String }   // ✓",
+  "example": "agent ClientKeys {   // ✗ the name of `Client`'s generated key store\n    key id: String\n}\n\nagent ClientLedger {   // ✓\n    key id: String\n}",
   "severity": "error",
   "summary": "An author's declaration takes the name of an agent the compiler generates for an `ApiKey` actor (`<Actor>Keys`, `<Actor>KeyOwner`) (#3939)."
 }

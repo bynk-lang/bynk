@@ -1,0 +1,10 @@
+context acme.api
+
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }

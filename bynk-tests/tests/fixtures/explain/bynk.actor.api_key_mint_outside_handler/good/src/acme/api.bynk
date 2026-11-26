@@ -1,0 +1,20 @@
+context acme.api
+
+consumes bynk { Clock, ApiKeyLabel, ApiKeySecret }
+consumes bynk.crypto { Crypto }
+
+type AccountId = String where NonEmpty
+
+type NewKey = { label: ApiKeyLabel }
+
+actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER"), identity = AccountId }
+
+service api from http {
+	on POST("/accounts/:id/keys") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {
+		let r <- Client.mint(id, body.label)
+		match r {
+			Ok(key) => Created(key),
+			Err(_) => Conflict("too many keys"),
+		}
+	}
+}

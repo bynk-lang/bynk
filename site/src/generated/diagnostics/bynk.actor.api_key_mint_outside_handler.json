@@ -4,7 +4,7 @@
   "categoryAnchor": "actors",
   "code": "bynk.actor.api_key_mint_outside_handler",
   "constructs": [],
-  "example": "agent Accounts { key id: String\n    on call open(a: AccountId, l: ApiKeyLabel) -> Effect[()] given Clock { let _ <- Client.mint(a, l) }   // ✗ in an agent\n}\n\non POST(\"/keys\") (body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by u: User given Clock { … Client.mint(u.identity, body.label) … }   // ✓",
+  "example": "agent Accounts {\n    key id: AccountId\n}\n\non call open(label: ApiKeyLabel) -> Effect[()] given Clock {\n    let _ <- Client.mint(self.id, label)   // ✗ in an agent\n}\n\non POST(\"/accounts/:id/keys\") (id: AccountId, body: NewKey) -> Effect[HttpResult[ApiKeySecret]] by Visitor given Clock {\n    let r <- Client.mint(id, body.label)   // ✓ in a service handler\n}",
   "severity": "error",
   "summary": "`Actor.mint` on an `ApiKey` actor is called outside a service handler, where the pepper is not (#3939)."
 }

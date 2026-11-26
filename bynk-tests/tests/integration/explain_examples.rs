@@ -82,6 +82,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/4038_store_unique_behaviour` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.actor.api_key_unlimited",
+        "a warning; `positive/3939_api_key_unlimited` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.actor.signed_cookie_ttl_long",
         "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
     ),

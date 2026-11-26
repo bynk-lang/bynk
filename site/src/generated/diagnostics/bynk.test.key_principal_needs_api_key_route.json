@@ -4,7 +4,7 @@
   "categoryAnchor": "tests",
   "code": "bynk.test.key_principal_needs_api_key_route",
   "constructs": [],
-  "example": "case \"refused\" {\n    let r <- api.GET(\"/me\") by Malformed   // ✗ `/me` is a `Bearer` route\n}\n\ncase \"refused\" {\n    let r <- keys.GET(\"/me\") by Malformed   // ✓ an `ApiKey` route\n}",
+  "example": "let r <- api.GET(\"/me\") by Malformed    // ✗ `api` is a `Bearer` service\n\nlet r <- keys.GET(\"/key\") by Malformed  // ✓ `keys` is guarded by an `ApiKey` actor",
   "severity": "error",
   "summary": "`by Malformed` or `by Unknown` on a route no `ApiKey` actor guards (#3939)."
 }
