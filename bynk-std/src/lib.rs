@@ -934,6 +934,16 @@ pub const ANALYTICS_SQL_BINDING_NAME: &str = "CF_ANALYTICS_SQL";
 /// the entry's `ctx` instead.
 pub const EDGE_CACHE_BINDING_PREFIX: &str = "EDGE_CACHE";
 
+/// #3752 (D13): the prefix of an `Upstream` instance's name. It reaches its
+/// origin with `fetch`, so no Worker binding is emitted for it.
+pub const UPSTREAM_BINDING_PREFIX: &str = "UPSTREAM";
+
+/// The origin an `Upstream` instance forwards to (`@origin("https://…")`).
+pub const UPSTREAM_ORIGIN_OPTION: &str = "origin";
+
+/// How long an `Upstream` instance waits for a response head (`@timeout(30.seconds)`).
+pub const UPSTREAM_TIMEOUT_OPTION: &str = "timeout";
+
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
@@ -993,9 +1003,28 @@ pub const UNITS: &[Unit] = &[
             "Fetch.receiveStream",
             "Fetch.sendStream",
             "Logger.log",
+            // #3752: the pass-through surface.
+            "Upstream",
+            "InboundRequest",
+            "Forwarded",
+            "PassThrough",
+            "UpstreamError",
         ],
-        extensible: &["FetchError", "Method", "Redirect"],
-        instantiable: &[],
+        extensible: &["FetchError", "Method", "Redirect", "UpstreamError"],
+        // #3752 (D13): an upstream origin a pass-through route forwards to. Its
+        // instances reach the origin with `fetch`, so the binding name is never
+        // emitted as a Worker binding.
+        instantiable: &[Instantiable {
+            capability: "Upstream",
+            binding_prefix: UPSTREAM_BINDING_PREFIX,
+            options: &[
+                (UPSTREAM_ORIGIN_OPTION, OptionKind::Str),
+                (UPSTREAM_TIMEOUT_OPTION, OptionKind::Duration),
+            ],
+            required: &[UPSTREAM_ORIGIN_OPTION],
+            bare: false,
+            linked: false,
+        }],
         singletons: &[],
     },
     Unit {

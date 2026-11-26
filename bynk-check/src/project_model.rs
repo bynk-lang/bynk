@@ -1552,6 +1552,10 @@ fn instance_option_value(
             );
             return None;
         }
+        // #3752: an `Upstream`'s `@timeout`, a positive whole number of seconds.
+        (firstparty::OptionKind::Duration, kind) if base == "Upstream" => OptionValue::Seconds(
+            crate::http_pass_through::upstream_timeout(kind, option, arg.span, path, errors)?,
+        ),
         (firstparty::OptionKind::Duration, _) if base == "Container" => OptionValue::Seconds(
             container_sleep_after(&arg.value.kind, arg.span, path, errors)?,
         ),
@@ -1598,6 +1602,11 @@ fn instance_option_value(
     let OptionValue::Str(text) = &value else {
         return Some(value);
     };
+    // #3752 (D13): an `Upstream`'s `@origin` is a serialised origin.
+    if base == "Upstream" && option == "origin" {
+        return crate::http_pass_through::upstream_origin_ok(text, arg.span, path, errors)
+            .then_some(value);
+    }
     if base == "Email" && option == crate::firstparty::EMAIL_TO_OPTION && !is_email_address(text) {
         errors.push_for(
             Some(path),

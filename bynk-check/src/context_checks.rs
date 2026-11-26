@@ -355,6 +355,11 @@ fn check_handler_inputs_not_external_opaque(
     }
     for h in &s.handlers {
         for p in &h.params {
+            // #3752: a pass-through route's `InboundRequest` is the router's own
+            // request, never decoded.
+            if crate::http_pass_through::is_inbound_request(&p.type_ref, &typed.types) {
+                continue;
+            }
             let mut names = Vec::new();
             crate::project_model::type_ref_names(&p.type_ref, &HashSet::new(), &mut names);
             if let Some((name, owner)) = external_opaque_reaching(names, typed, consumed) {
@@ -3884,7 +3889,12 @@ fn check_service_decls(
 
     check_unreachable_routes(table, errors);
     crate::http_rest::check_rest_routes(table, &typed.stability, errors);
-    crate::http_pass_through::check_pass_through_routes(table, &typed.stability, errors);
+    crate::http_pass_through::check_pass_through_routes(
+        table,
+        &typed.types,
+        &typed.stability,
+        errors,
+    );
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -6916,7 +6926,17 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !refused && !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
+        // #3752: a pass-through route's `request`, judged in `crate::http_pass_through`.
+        let is_request = crate::http_pass_through::owns_param(method, p, types);
+        if !refused
+            && !is_path
+            && !is_body
+            && !is_headers
+            && !is_query
+            && !is_cookies
+            && !is_cf
+            && !is_request
+        {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
@@ -6965,11 +6985,14 @@ fn validate_http_handler(
             );
         }
     }
-    // Validate return type shape.
-    let return_ok = match &handler.return_type {
-        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
-        _ => false,
-    };
+    // Validate return type shape. #3752: a pass-through route's is judged by
+    // `crate::http_pass_through`.
+    let return_ok =
+        crate::http_pass_through::owns_return_check(method, &handler.return_type, types)
+            || match &handler.return_type {
+                TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
+                _ => false,
+            };
     if !return_ok {
         errors.push(CompileError::new(
             "bynk.http.return_not_effect_http_result",

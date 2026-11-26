@@ -79,6 +79,7 @@ pub(crate) mod nested_effect;
 pub(crate) mod nested_wrapper;
 mod par;
 mod partial_content;
+mod pass_through_calls;
 mod pattern_as;
 mod pattern_literals;
 mod query_more;

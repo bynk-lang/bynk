@@ -3084,7 +3084,7 @@ fn reject_method_type_args(method: &Ident, args: &[Expr], span: Span, ctx: &mut 
 /// have, which the kernel checker has then rejected (`method_not_found`), so no
 /// callee is recorded; an *accepted* call with no op is a gap between the
 /// checker's dispatch and [`crate::kernel_op`], a compiler bug.
-fn record_kernel(
+pub(super) fn record_kernel(
     ctx: &mut Ctx,
     expr_id: ExprId,
     recv: TyId,
@@ -3800,6 +3800,12 @@ fn check_method_call_inner(
     }
     // #4111: a `Secret` has only the built-ins `reveal` and `matches`.
     if let Some(r) = check_secret_call(recv_ty, method, args, span, expr_id, ctx) {
+        return r;
+    }
+    // #3752: an `InboundRequest`'s and a `Forwarded`'s reads.
+    if let Some(r) = super::pass_through_calls::check_pass_through_call(
+        recv_ty, method, args, span, expr_id, ctx,
+    ) {
         return r;
     }
     // Find a named type for the receiver, then look up its instance methods.
