@@ -1,13 +1,6 @@
----
-level: minor
-probes: ts_writes
-raises: ts_writes — the queue entry builds a sum consumer's resolved actor (`const __who = { tag: … }`) from the verified signer, one more generated-TypeScript write, as the call entry does for its sum
-changelog: A queue consumer can name several `Foreign` actors in a sum, `by who: Legacy | Partner`, and its body `match`es on which one signed the message
----
+# 1017 — A queue consumer's sum of Foreign senders resolves by the message's signer, through the call-sum seam
 
-## ADR: queue-foreign-sum
-title: A queue consumer's sum of Foreign senders resolves by the message's signer, through the call-sum seam
-summary: A `from queue` handler whose `by` is a sum of only `Foreign` actors gets the resolved actor as `deps.who`, built by the generated entry from the sender the admission verified, using the same tagged union and compose-wrapper parameter a `call` sum uses
+- **Status:** Accepted (v0.751)
 
 **Context.** Part of #3899. A consumer that admits several foreign producers needs to know which one sent a message, as an `on call` sum does for its callers. Without a seam the handler read a `who` nothing bound, so the checker refused any sum or binder on a queue consumer.
 
