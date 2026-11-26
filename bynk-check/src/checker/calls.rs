@@ -372,6 +372,7 @@ pub(crate) fn check_fn_in(
             },
         },
         in_test_body: false,
+        lambda_depth: 0,
         claims_binder: None,
         claims_sum_arms: Vec::new(),
         test_services: HashMap::new(),
@@ -556,6 +557,7 @@ fn type_static_initialiser(
             fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
+            lambda_depth: 0,
             claims_binder: None,
             claims_sum_arms: Vec::new(),
             test_services: HashMap::new(),
@@ -2025,8 +2027,14 @@ pub(crate) fn check_static_call(
             args,
             ctx,
         );
+        // #4104: `AnalyticsSql.query` names its dataset by an `Analytics` instance and takes literal SQL.
+        let analytics_query = d1::is_analytics_sql_query(&type_name.name, &method.name, ctx)
+            && op.params.len() == args.len();
+        if analytics_query {
+            d1::check_analytics_sql_query(args, ctx);
+        }
         if op.params.len() != args.len() {
-            ctx.errors.push(CompileError::new(
+            let mut err = CompileError::new(
                 "bynk.capability.op_arity",
                 span,
                 format!(
@@ -2036,7 +2044,12 @@ pub(crate) fn check_static_call(
                     op.params.len(),
                     args.len()
                 ),
-            ));
+            );
+            // #4104: the old two-argument `query(sql, params)`, the change most programs meet.
+            if d1::is_analytics_sql_query(&type_name.name, &method.name, ctx) {
+                err = err.with_note(d1::ANALYTICS_QUERY_HELP);
+            }
+            ctx.errors.push(err);
             for a in args {
                 let _ = type_of(a, None, ctx);
             }
@@ -2180,6 +2193,8 @@ pub(crate) fn check_static_call(
             let param_ty = substitute(*param_ty, &subst, tys);
             let arg_ty = match &arg_tys {
                 Some(cached) => cached[i],
+                // #4104: the instance was checked above and is no value to type.
+                None if analytics_query && i == 0 => Some(param_ty),
                 None => type_of(arg, Some(param_ty), ctx),
             };
             if let Some(actual) = arg_ty

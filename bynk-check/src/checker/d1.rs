@@ -274,7 +274,7 @@ fn sql_not_literal(span: Span, what: &str) -> CompileError {
 
 /// [`sql_not_literal`], naming the placeholders of the dialect the call is in
 /// (`$1`, `$2` for `Postgres`, #3318).
-fn sql_not_literal_with(span: Span, what: &str, placeholders: &str) -> CompileError {
+pub(crate) fn sql_not_literal_with(span: Span, what: &str, placeholders: &str) -> CompileError {
     CompileError::new(
         "bynk.types.sql_not_literal",
         span,
@@ -376,6 +376,111 @@ pub(crate) fn check_sql_argument(
                 &format!("the SQL of `{cap}.{method}`"),
             ));
         }
+    }
+}
+
+/// #4104: whether this call is `AnalyticsSql.query` of `bynk.cloudflare`, found by the unit the
+/// name was consumed from, so a user capability of the same name is untouched.
+pub(crate) fn is_analytics_sql_query(cap: &str, method: &str, ctx: &Ctx) -> bool {
+    cap == "AnalyticsSql"
+        && method == "query"
+        && ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .get(cap)
+            .is_some_and(|unit| unit == crate::firstparty::CLOUDFLARE_UNIT)
+}
+
+/// #4104: what to write instead of SQL built at run time, or of the old two-argument call.
+pub(crate) const ANALYTICS_QUERY_HELP: &str = "name the dataset with `{dataset}` and pass the `Analytics` instance: \
+     `AnalyticsSql.query(Signups, \"… FROM {dataset} …\", params)`";
+
+/// Whether `info` is an instance of `bynk.cloudflare`'s `Analytics`.
+fn is_analytics_instance(info: &CapabilityInfo) -> bool {
+    info.derived_from.as_ref().is_some_and(|(unit, base)| {
+        unit == crate::firstparty::CLOUDFLARE_UNIT && base == "Analytics"
+    })
+}
+
+/// #4104: `AnalyticsSql.query(dataset, sql, params)`. The SQL is a literal or a `String` constant,
+/// as for the other SQL capabilities, so no request data can reach the text and reach another
+/// dataset; the dataset is named by a `{dataset}` placeholder, filled from the `Analytics`
+/// instance passed first, which must itself be in `given`. The instance is not an ordinary value
+/// (a capability is not one), so it is checked here and left out of the generic argument typing.
+/// The instance's identifier is recorded as a `dataset` read of that capability, which is how the
+/// emitter knows to pass its table: the rule is decided once, here.
+pub(crate) fn check_analytics_sql_query(args: &[Expr], ctx: &mut Ctx) {
+    if let Some(first) = args.first() {
+        let instance = match &first.kind {
+            ExprKind::Ident(id) => Some(id),
+            _ => None,
+        };
+        match instance {
+            Some(id)
+                if ctx
+                    .caps
+                    .capabilities
+                    .get(&id.name)
+                    .is_some_and(is_analytics_instance) =>
+            {
+                ctx.refs.record(id.span, SymbolKind::Capability, &id.name);
+                ctx.caps.given_used.insert(id.name.clone());
+                ctx.callees.insert(
+                    first.id,
+                    Callee::Capability {
+                        cap: id.name.clone(),
+                        op: "dataset".to_string(),
+                        wire: None,
+                        first_party: None,
+                        event: None,
+                        type_args: Vec::new(),
+                    },
+                );
+            }
+            // An `Analytics` instance the handler does not list: the only case "add it to `given`"
+            // is the advice for.
+            Some(id)
+                if !ctx.caps.capabilities.contains_key(&id.name)
+                    && ctx
+                        .caps
+                        .declared_capabilities
+                        .get(&id.name)
+                        .is_some_and(is_analytics_instance) =>
+            {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.given.undeclared_capability",
+                        id.span,
+                        format!(
+                            "capability `{}` is used but not listed in the handler's `given` clause",
+                            id.name
+                        ),
+                    )
+                    .with_note(format!(
+                        "add `{}` to the handler's `given` clause: the dataset named in `AnalyticsSql.query` is a capability this handler uses",
+                        id.name
+                    )),
+                );
+            }
+            _ => ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.argument_mismatch",
+                    first.span,
+                    "the first argument of `AnalyticsSql.query` is the `Analytics` instance whose dataset the query reads"
+                        .to_string(),
+                )
+                .with_note(ANALYTICS_QUERY_HELP),
+            ),
+        }
+    }
+    if let Some(sql) = args.get(1)
+        && sql_literal_text(sql, ctx).is_none()
+    {
+        ctx.errors.push(
+            sql_not_literal_with(sql.span, "the SQL of `AnalyticsSql.query`", "`$1`, `$2`")
+                .with_note(ANALYTICS_QUERY_HELP),
+        );
     }
 }
 

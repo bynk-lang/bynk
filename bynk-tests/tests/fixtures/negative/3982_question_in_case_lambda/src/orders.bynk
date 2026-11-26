@@ -1,0 +1,5 @@
+commons orders
+
+fn parse(s: String) -> Result[Int, String] {
+	if s == "7" { Ok(7) } else { Err("not a number: \(s)") }
+}

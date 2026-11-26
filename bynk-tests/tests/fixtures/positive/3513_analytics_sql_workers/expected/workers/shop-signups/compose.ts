@@ -15,6 +15,9 @@ export function compose(env: Env) {
   const Signups = new bynk_cloudflare__binding.WorkersAnalytics(env, "ANALYTICS_SIGNUPS");
   const deps = { AnalyticsSql, Signups };
   return {
+    async http_GET_weekly() {
+      return handlers.report.http_GET_weekly(deps);
+    },
     async http_GET_signups_Param_country(country: string) {
       return handlers.report.http_GET_signups_Param_country(country, deps);
     },
