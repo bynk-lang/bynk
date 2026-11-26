@@ -2572,7 +2572,11 @@ pub fn phase_function_type_boundaries(parsed: &[ParsedFile], errors: &mut ErrorS
         // #4111: `consumes bynk { Secret as Token }` writes the type as `Token` here, so a
         // file that renames a type sees it under the new name too.
         let aliased = with_consumed_type_aliases(&types, pf.consumes());
-        check_function_type_boundary_items(pf.items(), aliased.as_ref().unwrap_or(&types), &mut file_errors);
+        check_function_type_boundary_items(
+            pf.items(),
+            aliased.as_ref().unwrap_or(&types),
+            &mut file_errors,
+        );
         for err in file_errors {
             errors.push_for(Some(&pf.identity_path()), err);
         }
