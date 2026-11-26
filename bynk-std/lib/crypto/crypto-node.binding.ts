@@ -332,7 +332,13 @@ export class CryptoProvider implements Crypto {
     if (!parsed) {
       return false;
     }
-    const candidate = await pbkdf2(password, parsed.salt, parsed.iterations, parsed.hash.length);
+    // A count this platform's Web Crypto refuses is a hash this platform cannot check: `false`, never a fault.
+    let candidate: Bytes;
+    try {
+      candidate = await pbkdf2(password, parsed.salt, parsed.iterations, parsed.hash.length);
+    } catch {
+      return false;
+    }
     return constantTimeEqual(candidate, parsed.hash);
   }
 

@@ -522,4 +522,23 @@ export function cryptoSuite(stem, b, platform) {
     const higher = `${fresh[0]}$700000$${fresh[2]}$${fresh[3]}`;
     assert.equal(await c.needsRehash(higher), false);
   });
+
+  t("CryptoProvider.verifyPassword: a count the platform refuses is false, not a fault, while hashPassword says so", async () => {
+    const c = provider();
+    const real = globalThis.crypto.subtle.deriveBits.bind(globalThis.crypto.subtle);
+    // A platform whose Web Crypto limits PBKDF2 (the limit is an example; the contract is the shape).
+    globalThis.crypto.subtle.deriveBits = async (algorithm, key, length) => {
+      if (algorithm.name === "PBKDF2" && algorithm.iterations > 100000) {
+        throw Object.assign(new Error("iteration counts above 100000 are not supported"), { name: "NotSupportedError" });
+      }
+      return real(algorithm, key, length);
+    };
+    try {
+      assert.equal(await c.verifyPassword(PW, stored(150000)), false);
+      assert.equal(await c.verifyPassword(PW, stored(4096)), true);
+      await assert.rejects(() => c.hashPassword("x"), /not supported/);
+    } finally {
+      globalThis.crypto.subtle.deriveBits = real;
+    }
+  });
 }
