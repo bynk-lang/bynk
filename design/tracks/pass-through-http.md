@@ -680,7 +680,7 @@ Response, from the upstream to the client:
 | Header | Policy |
 |---|---|
 | Hop-by-hop, `proxy-authenticate` | Always stripped. |
-| `set-cookie` | **Stripped unless** `@responseCookies(true)`. Then each cookie's `Domain` is removed (it becomes host-only on the proxy) and its `Path` is placed under the mount (`/` → `/blog/`, `/x` → `/blog/x`). A `__Host-` cookie, which must have `Path=/`, is dropped and logged. |
+| `set-cookie` | **Stripped unless** `@responseCookies(true)`. Then each cookie's `Domain` is removed (it becomes host-only on the proxy) and its `Path` is placed under the mount (`/` → `/blog/`, `/x` → `/blog/x`; unchanged under a root mount). A `__Host-` cookie, which must have `Path=/`, is dropped and logged. |
 | `location` | Rewritten per §7.5. |
 | Every other header | Passed through, subject to §6.3's `Cache-Control` rule and security-header filling. |
 
@@ -739,8 +739,12 @@ upstream origin is rewritten onto the proxy; any other passes unchanged.**
     and a rewritten `Location` of `//blog/posts/x/` would be a
     protocol-relative URL for the host `blog`. Under `ANY("/:tenant/*path")`,
     a request for `//evil.example/x` would let the requester choose that
-    host. Rebuilt, `M` always starts with exactly one `/`: `/blog`, or
-    `/evil.example` as a path on the proxy.
+    host. Rebuilt, `M` is either empty or starts with exactly one `/`:
+    `/blog`, or `/evil.example` as a path on the proxy.
+  - **A root mount is empty.** When no segments precede the rest
+    (`ANY("/*path")`), `M` is `""`, not `/`. Otherwise every rewrite would
+    begin `//` and fall back to the upstream's absolute URL, and an opted-in
+    cookie's `Path` would become `//…`.
   - **The upstream base `B`.** `forward` knows the upstream `path` `P` it
     sent, and the router knows the raw rest `R` it bound. When `P` ends with
     `R`, `B` = `P` without `R`, with any trailing `/` removed.
@@ -833,8 +837,9 @@ an internal dashboard is a common, legitimate use).
 ### 9.3 Other features
 
 - **`EdgeCache`**: D9's row. A `public` upstream answer on a route
-  `by Visitor` with no credentials forwarded is cached at the edge by URL;
-  anything credentialed is `private`.
+  `by Visitor` with no credentials forwarded, and no `Vary` beyond
+  `Accept-Encoding`, is cached at the edge by URL; anything credentialed is
+  `private`.
 - **Rate limiting**: `@rateLimit` works unchanged, asked before anything is
   forwarded.
 - **Tracing** — **[DECISION D18] don't propagate `traceparent` by default;
@@ -1066,7 +1071,7 @@ its own pending file, ADR and docs. Sizes are estimates.
 | 1 | **Rest segments and the router.** `*name` (D2–D6) in ordinary routes: checker rules and diagnostics, `route_order` with `Seg::Rest`, `matchPath`, `param_count`, `Rest_` naming and the duplicate-name check, `bynk client` and `bynk openapi` leaving rest routes out, the test address, LSP hover. | — | A `GET /files/*key` serves R2 keys with `/` at unit and workerd tiers; every row of §5.2 and §5.4 is a fixture; `unreachable_route` covers rests; `HEAD`, `405` and CORS work on a rest route; `/_bynk/` unaffected under `/*path`; ADR and reference updated. | M |
 | 2 | **Header enumeration.** `RequestHeaders.entries()` (D12), consumed credentials still hidden, `RequestHeaders.of` and the system-tier driver honouring it. | — | A handler lists a request's headers; repeated fields arrive combined; a `Bearer` route's `entries()` has no `authorization`. | S |
 | 3 | **The pass-through route and response.** `ANY` in the grammar, parser, IR, tree-sitter and `vscode-bynk`; `PassThrough`, `Forwarded`, `InboundRequest`; `Upstream` with `@origin` and `@timeout`; `forward` sending method, path, raw query and body, **and no inbound headers**; every row of D9 except `Set-Cookie` re-scoping, `Location` rewriting and the `Cache-Control` and `Vary` rules (slice 4's, since forced `private` is triggered by forwarded credentials); D10; `501` for other methods and `Upgrade`; the unit-tier double (D20). | 1 | The status, headers and streamed body of a local upstream pass through at workerd tier, `200`, `304`, `404`, `308` included; no `ETag`, `HEAD` or `OPTIONS` is synthesised on an `ANY` path; the SSRF cases of §8 are refused at unit and workerd tiers. Safe but not yet useful: an upstream gets no `If-None-Match`. | L |
-| 4 | **Forwarding with the safety defaults.** The header policy (D14) with `@forwardHeaders`, `@forwardedFor`, `@responseCookies`; `Location` rewriting (D16), with fixtures for a request with extra leading slashes, a parameter in the mount, and a base that is a string prefix but not a segment prefix (`/v1` against `/v1beta`); the `Cache-Control` and `Vary` rules (D9); `@propagateTrace` (D18); the body length (D15); the workerd case of §10.2 in full; sandbox scripts S1–S7 written. | 2, 3 | Every row of §7.3 and §8 has a unit or workerd case; the scripts are in the PR, with their results recorded by the maintainer before the slice is marked done. | M |
+| 4 | **Forwarding with the safety defaults.** The header policy (D14) with `@forwardHeaders`, `@forwardedFor`, `@responseCookies`; `Location` rewriting (D16), with fixtures for a request with extra leading slashes, a parameter in the mount, a root mount (`ANY("/*path")`, `M` = `""`), and a base that is a string prefix but not a segment prefix (`/v1` against `/v1beta`); the `Cache-Control` and `Vary` rules (D9); `@propagateTrace` (D18); the body length (D15); the workerd case of §10.2 in full; sandbox scripts S1–S7 written. | 2, 3 | Every row of §7.3 and §8 has a unit or workerd case; the scripts are in the PR, with their results recorded by the maintainer before the slice is marked done. | M |
 | 5 | **The blog port.** §11.2 replacing `bynk-lang/blog` `proxy/` (or per D22), its tests restated, the deploy switched; the README's "Why not Bynk?" retired; a guide, *Serve another site under a path*. | 4 | The ten tests of §11.1 pass against the Bynk Worker with only §11.3's differences; deployed and checked at `bynk-lang.org/blog/` and a post; S1's answer recorded. | M |
 
 The track retires after slice 5, with this doc's closing summary in
