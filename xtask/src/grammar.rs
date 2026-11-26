@@ -593,7 +593,8 @@ mod tests {
         // #3916 (`errors { }`) added: errors_policy, errors_field. Net +2.
         // #4045 (`uses` braced list and alias) added: qualified_type_ref. Net +1.
         // #4035 (`expect <call> violates <name>`) added: violates_name. Net +1.
-        assert_eq!(rules.len(), 202);
+        // #3885 (email `fallback { }`) added: fallback_policy, fallback_field. Net +2.
+        assert_eq!(rules.len(), 204);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

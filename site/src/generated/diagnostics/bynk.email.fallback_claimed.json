@@ -1,0 +1,12 @@
+{
+  "blurb": "A fallback forwards mail to an address outside the service. If a `from email` service of the project claims that address, directly or through its domain's catch-all, the forwarded message is routed straight back to Bynk, and a fault there would forward it again. Name a verified destination address that no service of the project claims.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.fallback_claimed",
+  "constructs": [
+    "fallback_policy"
+  ],
+  "example": "service support from email(\"support@shop.example\") {\n    fallback { forward: \"help@shop.example\" }   // ✗ `helpdesk` claims it\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice helpdesk from email(\"help@shop.example\") { … }\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ not routed to a service\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+  "severity": "error",
+  "summary": "A `fallback` address is one a `from email` service of the project claims."
+}

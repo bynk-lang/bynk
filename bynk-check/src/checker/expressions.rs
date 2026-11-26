@@ -1894,6 +1894,7 @@ pub(crate) fn check_lambda(
     let saved_return_ty_span = ctx.return_ty_span;
     let saved_agent_state_ty = ctx.agent_state_ty.take();
     let saved_commit_seen = ctx.commit_seen;
+    ctx.lambda_depth += 1;
     ctx.effectful = body_effectful;
     ctx.return_ty = match &expected_fn {
         Some((_, er)) if ret_constrained => *er,
@@ -1916,6 +1917,7 @@ pub(crate) fn check_lambda(
     ctx.return_ty_span = saved_return_ty_span;
     ctx.agent_state_ty = saved_agent_state_ty;
     ctx.commit_seen = saved_commit_seen;
+    ctx.lambda_depth -= 1;
     ctx.pop_scope();
 
     match expected_fn {
@@ -3412,6 +3414,15 @@ fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx)
 pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let inner_ty = type_of(inner, None, ctx)?;
+    // #3982: in a test case or property body, outside any lambda, `?` fails the case (or the
+    // property for that input) on any `Err` and on `None`, so any `Result` or `Option` is
+    // accepted: a case returns no type an author sees for the error to convert to.
+    if ctx.in_test_body
+        && ctx.lambda_depth == 0
+        && let Ty::Option(t) | Ty::Result(t, _) = &*tys.get(inner_ty)
+    {
+        return Some(*t);
+    }
     // v0.153 (ADR 0177): `Option[T]?` lifts into an HttpResult-returning
     // handler — `Some(v)` yields `v`, `None` early-returns `NotFound` (404).
     // Allowed where the enclosing return peels to `HttpResult[_]` (a bare
@@ -5102,20 +5113,35 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             };
             // Clone the payload so the immutable borrow of `ctx.input` (via
             // `expected_variants`) is released before we recurse with `&mut ctx`.
-            let payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            let mut payload: Vec<(String, TyId)> = variant_info.payload.clone();
+            // #4344: a `Bearer` arm of an HTTP actor sum also carries its verified claims, bound by a
+            // second binder, `User(u, c)`. The one-binder form is unchanged.
+            let claims_arm = bindings.len() >= 2
+                && payload.len() == 1
+                && matches!(&*tys.get(ty), Ty::ActorSum(_))
+                && ctx.claims_sum_arms.contains(&variant.name);
+            if claims_arm {
+                payload.push(("claims".to_string(), tys.intern(Ty::TokenClaims)));
+            }
             if bindings.is_empty() {
                 // Nullary pattern (or "don't bind the payload"): matches the tag.
                 return;
             }
             if payload.is_empty() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
                         "variant `{}` has no payload, but the pattern binds fields",
                         variant.name
                     ),
-                ));
+                );
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "this arm (an open or a `Signature` actor) carries no identity and no claims; write it without bindings",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
                 return;
             }
@@ -5155,7 +5181,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                     }
                 }
             } else if bindings.len() != payload.len() {
-                ctx.errors.push(CompileError::new(
+                let mut err = CompileError::new(
                     "bynk.types.pattern_arity",
                     *pat_span,
                     format!(
@@ -5164,7 +5190,14 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                         payload.len(),
                         bindings.len()
                     ),
-                ));
+                );
+                // #4344: only a `Bearer` arm of an http actor sum carries claims beside its identity.
+                if matches!(&*tys.get(ty), Ty::ActorSum(_)) {
+                    err = err.with_note(
+                        "an actor-sum arm binds its identity, `User(u)`; only a `Bearer` or `Oidc` arm of an `http` sum also binds its verified claims, `User(u, c)`",
+                    );
+                }
+                ctx.errors.push(err);
                 bind_as_error(pat, ctx);
             } else {
                 for (b, (_, field_ty)) in bindings.iter().zip(payload.iter()) {

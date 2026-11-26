@@ -460,7 +460,8 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
 /// own delimiters. Both read the buffer text and the expression types.
 fn operator_hover(a: &HoverAnalysis<'_>, tys: &bynk_check::checker::Types) -> Option<String> {
     let text = a.snapshots.get(a.rel)?;
-    let entries = a.expr_types.get(a.rel)?;
+    // #3982: a suite file may have no retained expression types; a `?` in a case needs none.
+    let entries = a.expr_types.get(a.rel).map_or(&[][..], |e| e.as_slice());
     crate::symbols::describe_question_at(text, a.offset, entries, tys)
         .or_else(|| crate::symbols::describe_interpolation_hole_at(text, a.offset, entries, tys))
 }
