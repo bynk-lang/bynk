@@ -960,7 +960,9 @@ type Signup = {
 	amount: Decimal,
 	seconds: Duration,
 }
+```
 
+```bynk,fragment
 on POST("/signup/:plan") (plan: String) -> Effect[HttpResult[String]] by Visitor given Signups {
 	let _ <- Signups.writeValue(Signup { plan: plan, channel: "web", country: "GB", amount: 9.99d, seconds: 2.seconds })
 	Created("counted")

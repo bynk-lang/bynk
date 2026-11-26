@@ -5811,6 +5811,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
     },
     Explain {
+        code: "bynk.types.analytics_point_shape",
+        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
+        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }    // ✗ `hops` has no column\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })\n\ntype Visit = { @index path: String, ms: Float, hops: Int }    // ✓\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })",
+    },
+    Explain {
         code: "bynk.types.argument_mismatch",
         blurb: "An argument has a different type from the parameter it is passed to. Bynk \
                 compares types exactly and converts nothing implicitly, so a `String` is \
@@ -6665,11 +6670,6 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.sql_not_literal",
         blurb: "The SQL of a `D1`, `Postgres` or `MySql` call must be a string literal, or a `String` constant bound to one, so it is fixed when the program compiles and no request data can become part of the statement: that is how SQL injection happens. An interpolated string, a parameter or a `let` binding is refused. Put the value in the parameter list, as `?1` with `Text(id)`, which is always bound and never spliced in.",
         example: "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = '\\(id)'\", [])         // ✗ built at run time\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])      // ✓ bound",
-    },
-    Explain {
-        code: "bynk.types.analytics_point_shape",
-        blurb: "`writeValue` writes a record as one Analytics Engine data point: its text-like fields (`String`, a payload-less enum, `Bool`) become `blob1…` and its numeric fields (`Int`, `Float`, `Decimal`, `Duration`, `Instant`) become `double1…`, both in declaration order, and one `String` field marked `@index` is the sampling key. A data point has at most twenty of each, one `@index`, and no column for any other field type, so a record that breaks one of these is refused, naming the field. Flatten or drop the field, or build the `DataPoint` yourself and use `write`.",
-        example: "type Visit = { @index path: String, ms: Float, hops: List[Int] }\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: [] })    // ✗ `hops` has no column\n\ntype Visit = { @index path: String, ms: Float, hops: Int }\nlet _ <- Visits.writeValue(Visit { path: \"/\", ms: 1.5, hops: 0 })    // ✓",
     },
     Explain {
         code: "bynk.types.sql_row_shape",
@@ -10897,6 +10897,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A transition predicate does not have type `Bool`.",
     ),
     dg(
+        "bynk.types.analytics_point_shape",
+        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.argument_mismatch",
         "A call, method, capability, or constructor argument has the wrong type.",
         &["call"],
@@ -11432,11 +11437,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.sql_not_literal",
         "A `D1` or `Postgres` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or the `sql` of a `SqlStatement` or a `PgStatement`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` or `PgValue` parameter (standard-library P4c, Hyperdrive H1 and H3).",
         &["method_call", "record_construction", "record_spread"],
-    ),
-    dg(
-        "bynk.types.analytics_point_shape",
-        "`Analytics.writeValue`'s record is not a data point's shape: a field with no column (anything but `String`, a payload-less enum, `Bool`, `Int`, `Float`, `Decimal`, `Duration`, `Instant`, or a refined or opaque type over one), more than twenty blob or twenty double fields, an `@index` field that is not a `String`, or two `@index` fields (#4105).",
-        &["method_call"],
     ),
     dg(
         "bynk.types.sql_row_shape",
