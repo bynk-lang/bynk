@@ -25,6 +25,9 @@ pub(crate) fn check_api_key_call(
     if ctx.lookup(actor.name.as_str()).is_some() {
         return None;
     }
+    if actor.name == "ApiKey" {
+        return Some(check_internal_equal(method, args, span, expr_id, ctx));
+    }
     let decl = api_key_actor(&actor.name, ctx)?;
     ctx.refs.record(actor.span, SymbolKind::Actor, &actor.name);
     if method.name != "mint" {
@@ -124,6 +127,41 @@ pub(crate) fn check_api_key_call(
     }
     let result = tys.intern(Ty::Result(secret, too_many));
     Some(Some(tys.intern(Ty::Effect(result))))
+}
+
+/// #3939: `ApiKey.equal(a, b)`, the key store's constant-time comparison of two digests. It is
+/// internal: only the agents the compiler generates for an `ApiKey` actor reach it, so no
+/// capability is put in the author's scope for code they did not write. Anywhere else it is
+/// `bynk.actor.api_key_internal`. It lowers to the runtime's one constant-time comparison, the
+/// function `bynk.crypto`'s `Crypto.equal` calls.
+fn check_internal_equal(
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let tys = ctx.tys;
+    if method.name != "equal" || !crate::api_key::in_generated_agent(span, &ctx.input.commons.items) {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.actor.api_key_internal",
+                span,
+                "`ApiKey` names an actor scheme, which has no members a program can call",
+            )
+            .with_note(
+                "the key store's comparison is internal to the agents the compiler generates for an `ApiKey` actor; compare secrets with `Secret.matches` or `bynk.crypto`'s `Crypto.equal`",
+            ),
+        );
+        let _ = give_up(args, ctx);
+        return None;
+    }
+    let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+    for a in args {
+        check_arg(a, bytes, "an `ApiKey.equal` digest", ctx);
+    }
+    ctx.callees.insert(expr_id, Callee::ApiKeyEqual);
+    Some(tys.intern(Ty::Effect(tys.intern(Ty::Base(BaseType::Bool)))))
 }
 
 /// Type the arguments for their errors alone, and give the call no type.

@@ -311,3 +311,21 @@ test("D3 B harness counter: compares are counted, dummy ones apart, and a mismat
   apiKeyExpectCompares(counts, before, { all: 1, dummy: 1 }, "Unknown");
   assert.throws(() => apiKeyExpectCompares(counts, before, { all: 1, dummy: 0 }, "Forged"), /dummy/);
 });
+
+// ---- D3 B: the one constant-time comparison ---------------------------------------------------
+
+test("D3 B / §13 timing: the platform primitive and the double-HMAC fallback agree", async () => {
+  const { constantTimeEqualBytes, platformTimingSafeEqualBytes } = await import("../src/bytes.ts");
+  const { apiKeyEqual } = await import("../src/apikey.ts");
+  const native = platformTimingSafeEqualBytes();
+  assert.ok(native !== undefined, "Node has node:crypto's timingSafeEqual");
+  for (let i = 0; i < 50; i++) {
+    const a = crypto.getRandomValues(new Uint8Array(32));
+    const b = i % 2 === 0 ? a.slice() : crypto.getRandomValues(new Uint8Array(32));
+    const want = i % 2 === 0;
+    assert.equal(await constantTimeEqualBytes(a, b, native), want);
+    assert.equal(await constantTimeEqualBytes(a, b, undefined), want, "the double-HMAC path");
+    assert.equal(await apiKeyEqual(a, b), want, "the key store's entry point");
+  }
+  assert.equal(await constantTimeEqualBytes(new Uint8Array(32), new Uint8Array(31), undefined), false);
+});

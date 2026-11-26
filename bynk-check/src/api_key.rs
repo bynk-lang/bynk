@@ -16,6 +16,9 @@ use bynk_syntax::span::Span;
 use crate::actors::Scheme;
 use crate::symbols::UnitTable;
 
+/// The one `[unstable] allow` name that admits the scheme, its types and its members (track §17).
+pub const GATE: &str = "bynk.actor.ApiKey";
+
 /// The prefix a key carries when the actor names none.
 pub const DEFAULT_PREFIX: &str = "bk";
 
@@ -159,9 +162,12 @@ pub(crate) fn check_api_key_actor(
     actor: &ActorDecl,
     auth: &Ident,
     table: &UnitTable,
-    types: &HashMap<String, Arc<TypeDecl>>,
+    resolved: &crate::resolver::ResolvedCommons,
     errors: &mut Vec<CompileError>,
 ) {
+    // Track §17: the scheme, its types and its members are experimental, behind one name.
+    errors.extend(resolved.stability.policy.check(GATE, auth.span));
+    let types = &resolved.types;
     check_keys(actor, errors);
     check_secret(actor, auth, table, errors);
     check_prefix(actor, table, errors);
@@ -414,6 +420,16 @@ fn check_reserved_names(actor: &ActorDecl, table: &UnitTable, errors: &mut Vec<C
             )),
         );
     }
+}
+
+/// Whether `span` lies inside an agent the compiler generated for an `ApiKey` actor.
+pub fn in_generated_agent(span: Span, items: &[bynk_syntax::ast::CommonsItem]) -> bool {
+    items.iter().filter_map(|i| i.as_agent()).any(|a| {
+        is_generated_agent(a)
+            && a.span.file == span.file
+            && a.span.start <= span.start
+            && span.end <= a.span.end
+    })
 }
 
 /// Whether `agent` is one the compiler generated for an `ApiKey` actor.

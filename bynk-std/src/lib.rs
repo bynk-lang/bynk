@@ -1726,6 +1726,26 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// #3939 (D3 B): every `bynk.crypto` binding compares through the runtime's one constant-time
+    /// function, the one the `ApiKey` key store calls (`apiKeyEqual`), rather than a copy.
+    #[test]
+    fn every_crypto_binding_shares_the_runtime_constant_time_comparison() {
+        for (name, src) in [
+            ("cloudflare", CRYPTO_CLOUDFLARE_BINDING),
+            ("node", CRYPTO_NODE_BINDING),
+            ("browser", CRYPTO_BROWSER_BINDING),
+        ] {
+            assert!(
+                src.contains("return constantTimeEqualBytes(a, b, platformTimingSafeEqual());"),
+                "the {name} binding must call the runtime's `constantTimeEqualBytes`"
+            );
+            assert!(
+                !src.contains("s.verify(\"HMAC\", key, mac"),
+                "the {name} binding must not carry its own double-HMAC copy"
+            );
+        }
+    }
+
     #[test]
     fn first_party_pins_are_exact() {
         for d in super::FIRST_PARTY_NPM {

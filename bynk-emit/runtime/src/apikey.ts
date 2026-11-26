@@ -19,6 +19,7 @@
 // request, and the fault names the variable, never its value.
 
 import { BynkSecret } from "./secret.ts";
+import { constantTimeEqualBytes, platformTimingSafeEqualBytes } from "./bytes.ts";
 
 /** The base62 alphabet: digit value `i` is `ALPHABET[i]`, so `0` is the pad character. */
 const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -360,6 +361,16 @@ export async function freshApiKey(peppers: readonly ApiKeyPepper[]): Promise<Fre
 /** A fresh random handle, lower-case hex: a new `<Actor>Keys` instance. */
 export function newApiKeyHandle(): string {
   return hex(crypto.getRandomValues(new Uint8Array(API_KEY_HANDLE_BYTES)));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The key store's comparison
+// ---------------------------------------------------------------------------------------------
+
+/** `ApiKey.equal(a, b)` in a generated key store: the runtime's one constant-time comparison,
+ *  the function `bynk.crypto`'s `Crypto.equal` calls, given this platform's primitive. */
+export function apiKeyEqual(a: Uint8Array, b: Uint8Array): Promise<boolean> {
+  return constantTimeEqualBytes(a, b, platformTimingSafeEqualBytes());
 }
 
 // ---------------------------------------------------------------------------------------------

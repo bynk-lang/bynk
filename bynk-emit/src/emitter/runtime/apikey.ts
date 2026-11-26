@@ -19,6 +19,7 @@
 // request, and the fault names the variable, never its value.
 
 import { BynkSecret } from "./secret.ts";
+import { constantTimeEqualBytes, platformTimingSafeEqualBytes } from "./bytes.ts";
 
 /** The base62 alphabet: digit value `i` is `ALPHABET[i]`, so `0` is the pad character. */
 const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -363,6 +364,16 @@ export function newApiKeyHandle(): string {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The key store's comparison
+// ---------------------------------------------------------------------------------------------
+
+/** `ApiKey.equal(a, b)` in a generated key store: the runtime's one constant-time comparison,
+ *  the function `bynk.crypto`'s `Crypto.equal` calls, given this platform's primitive. */
+export function apiKeyEqual(a: Uint8Array, b: Uint8Array): Promise<boolean> {
+  return constantTimeEqualBytes(a, b, platformTimingSafeEqualBytes());
+}
+
+// ---------------------------------------------------------------------------------------------
 // The seam's arguments to `<Actor>Keys.verify`
 // ---------------------------------------------------------------------------------------------
 
@@ -563,4 +574,4 @@ export function apiKeyExpectCompares(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { apiKeyBadKey as __apiKeyBadKey, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };
+export { apiKeyEqual as __apiKeyEqual, apiKeyBadKey as __apiKeyBadKey, apiKeyCountCompares as __apiKeyCountCompares, apiKeyExpectCompares as __apiKeyExpectCompares, apiKeyForTest as __apiKeyForTest, apiKeyPeppersOf as __apiKeyPeppersOf, mintApiKey as __mintApiKey, apiKeyDummyDigest as __apiKeyDummyDigest, apiKeyFirstDigest as __apiKeyFirstDigest, apiKeyPresented as __apiKeyPresented, apiKeyCredentialOf as __apiKeyCredentialOf, apiKeyDigests as __apiKeyDigests, apiKeyIdOf as __apiKeyIdOf, formatApiKey as __formatApiKey, freshApiKey as __freshApiKey, loadApiKeyPeppers as __loadApiKeyPeppers, newApiKeyHandle as __newApiKeyHandle, newApiKeyPepper as __newApiKeyPepper, parseApiKey as __parseApiKey, parseApiKeyId as __parseApiKeyId };

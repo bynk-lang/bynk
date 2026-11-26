@@ -3674,7 +3674,7 @@ fn check_actor_contracts(
             }
             // #3939: an API key actor.
             Some(Scheme::ApiKey) => {
-                crate::api_key::check_api_key_actor(actor, auth, table, &resolved.types, errors);
+                crate::api_key::check_api_key_actor(actor, auth, table, resolved, errors);
             }
             Some(_) => {}
         }

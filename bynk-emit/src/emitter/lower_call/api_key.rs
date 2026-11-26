@@ -99,3 +99,15 @@ pub(in crate::emitter) fn lower_api_key_mint(
         vec![identity, label, now],
     ))
 }
+
+/// `ApiKey.equal(a, b)` in a generated key store: `__apiKeyEqual(a, b)`, the runtime's one
+/// constant-time comparison (the function `bynk.crypto`'s `Crypto.equal` calls).
+pub(in crate::emitter) fn lower_api_key_equal(
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<TsExpr> {
+    let a = pre.lower_node(args.first()?, cx);
+    let b = pre.lower_node(args.get(1)?, cx);
+    Some(call(ident("__apiKeyEqual"), vec![a, b]))
+}

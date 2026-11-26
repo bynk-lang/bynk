@@ -49,6 +49,83 @@ export const Authorization = {
 };
 
 /**
+ * An API key, as an `ApiKey` actor's `mint` answers it: the one time the key is
+ * shown. Like a `Secret` it cannot leak by accident: it has no string form, is
+ * not `Eq`, a `Key` or `Codable`, and cannot be stored or sent
+ * (`bynk.types.secret_at_boundary`). Its one way out is a handler returning the
+ * `ApiKeySecret` that `mint` answered, which encodes it on the wire as the key
+ * string. Anywhere else it renders as `<secret>`.
+ */
+export type ApiKeyValue = __BynkSecret & { readonly __brand: "ApiKeyValue" };
+
+export const ApiKeyValue = {
+  of(value: string): Result<ApiKeyValue, ValidationError> {
+    return Ok(__bynkSecret(value) as ApiKeyValue);
+  },
+  unsafe(value: string): ApiKeyValue {
+    return __bynkSecret(value) as ApiKeyValue;
+  },
+};
+
+/**
+ * An API key's public id, `<prefix>_<33 base62 characters>`: it names the key
+ * without being it, so it is safe to log, to show in a console and to pass to
+ * `revoke`.
+ */
+export type ApiKeyId = string & { readonly __brand: "ApiKeyId" };
+
+export const ApiKeyId = {
+  of(value: string): Result<ApiKeyId, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}" + ")$", "u").test(value))) {
+      return Err({ field: "ApiKeyId", message: "must match /[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}/", rule: { tag: "Matches", pattern: "[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}" }, value });
+    }
+    return Ok(value as ApiKeyId);
+  },
+};
+
+/**
+ * A key's label, shown beside its id: 1 to 64 characters, none of them a
+ * control character.
+ */
+export type ApiKeyLabel = string & { readonly __brand: "ApiKeyLabel" };
+
+export const ApiKeyLabel = {
+  of(value: string): Result<ApiKeyLabel, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "[^\\x00-\\x1F\\x7F]{1,64}" + ")$", "u").test(value))) {
+      return Err({ field: "ApiKeyLabel", message: "must match /[^\\x00-\\x1F\\x7F]{1,64}/", rule: { tag: "Matches", pattern: "[^\\x00-\\x1F\\x7F]{1,64}" }, value });
+    }
+    return Ok(value as ApiKeyLabel);
+  },
+};
+
+/**
+ * A key an `ApiKey` actor's `mint` has just made. `key` is the key itself,
+ * shown this once: the service stores only a peppered hash of it. `id` names it
+ * from now on. `expires` is `None`: keys do not expire yet.
+ */
+export interface ApiKeySecret {
+  readonly id: ApiKeyId;
+  readonly key: ApiKeyValue;
+  readonly label: ApiKeyLabel;
+  readonly created: number;
+  readonly expires: Option<number>;
+}
+
+export const ApiKeySecret = {
+};
+
+/**
+ * The refusal of `mint` when the identity already holds the most live keys it
+ * may (`limit`, 100).
+ */
+export interface TooManyKeys {
+  readonly limit: number;
+}
+
+export const TooManyKeys = {
+};
+
+/**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
  */
 export type Uuid = string & { readonly __brand: "Uuid" };

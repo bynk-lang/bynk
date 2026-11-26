@@ -51,6 +51,83 @@ export const Authorization = {
 };
 
 /**
+ * An API key, as an `ApiKey` actor's `mint` answers it: the one time the key is
+ * shown. Like a `Secret` it cannot leak by accident: it has no string form, is
+ * not `Eq`, a `Key` or `Codable`, and cannot be stored or sent
+ * (`bynk.types.secret_at_boundary`). Its one way out is a handler returning the
+ * `ApiKeySecret` that `mint` answered, which encodes it on the wire as the key
+ * string. Anywhere else it renders as `<secret>`.
+ */
+export type ApiKeyValue = __BynkSecret & { readonly __brand: "ApiKeyValue" };
+
+export const ApiKeyValue = {
+  of(value: string): Result<ApiKeyValue, ValidationError> {
+    return Ok(__bynkSecret(value) as ApiKeyValue);
+  },
+  unsafe(value: string): ApiKeyValue {
+    return __bynkSecret(value) as ApiKeyValue;
+  },
+};
+
+/**
+ * An API key's public id, `<prefix>_<33 base62 characters>`: it names the key
+ * without being it, so it is safe to log, to show in a console and to pass to
+ * `revoke`.
+ */
+export type ApiKeyId = string & { readonly __brand: "ApiKeyId" };
+
+export const ApiKeyId = {
+  of(value: string): Result<ApiKeyId, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}" + ")$", "u").test(value))) {
+      return Err({ field: "ApiKeyId", message: "must match /[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}/", rule: { tag: "Matches", pattern: "[a-z][a-z0-9]{1,15}_[0-9A-Za-z]{33}" }, value });
+    }
+    return Ok(value as ApiKeyId);
+  },
+};
+
+/**
+ * A key's label, shown beside its id: 1 to 64 characters, none of them a
+ * control character.
+ */
+export type ApiKeyLabel = string & { readonly __brand: "ApiKeyLabel" };
+
+export const ApiKeyLabel = {
+  of(value: string): Result<ApiKeyLabel, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "[^\\x00-\\x1F\\x7F]{1,64}" + ")$", "u").test(value))) {
+      return Err({ field: "ApiKeyLabel", message: "must match /[^\\x00-\\x1F\\x7F]{1,64}/", rule: { tag: "Matches", pattern: "[^\\x00-\\x1F\\x7F]{1,64}" }, value });
+    }
+    return Ok(value as ApiKeyLabel);
+  },
+};
+
+/**
+ * A key an `ApiKey` actor's `mint` has just made. `key` is the key itself,
+ * shown this once: the service stores only a peppered hash of it. `id` names it
+ * from now on. `expires` is `None`: keys do not expire yet.
+ */
+export interface ApiKeySecret {
+  readonly id: ApiKeyId;
+  readonly key: ApiKeyValue;
+  readonly label: ApiKeyLabel;
+  readonly created: number;
+  readonly expires: Option<number>;
+}
+
+export const ApiKeySecret = {
+};
+
+/**
+ * The refusal of `mint` when the identity already holds the most live keys it
+ * may (`limit`, 100).
+ */
+export interface TooManyKeys {
+  readonly limit: number;
+}
+
+export const TooManyKeys = {
+};
+
+/**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
  */
 export type Uuid = string & { readonly __brand: "Uuid" };
@@ -690,6 +767,95 @@ export interface Events {
 }
 
 export const __EventsToken: symbol = globalThis.Symbol("Events");
+
+export function __serialise_ApiKeyId(value: ApiKeyId): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_ApiKeyId(json: __JsonValue, path: string = "$"): Result<ApiKeyId, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (ApiKeyId as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (ApiKeyId as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as ApiKeyId) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as ApiKeyId);
+}
+
+export function __serialise_ApiKeyLabel(value: ApiKeyLabel): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_ApiKeyLabel(json: __JsonValue, path: string = "$"): Result<ApiKeyLabel, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (ApiKeyLabel as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (ApiKeyLabel as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as ApiKeyLabel) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as ApiKeyLabel);
+}
+
+export function __serialise_ApiKeySecret(value: ApiKeySecret): __JsonValue {
+  return {
+    id: __serialise_ApiKeyId(value.id),
+    key: __serialise_ApiKeyValue(value.key),
+    label: __serialise_ApiKeyLabel(value.label),
+    created: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.created),
+    expires: __serialise_Option_Instant(value.expires),
+  };
+}
+
+export function __deserialise_ApiKeySecret(json: __JsonValue, path: string = "$"): Result<ApiKeySecret, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_id = __deserialise_ApiKeyId(obj["id"], `${path}.id`);
+  if (__r_id.tag === "Err") return __r_id;
+  const __id = __r_id.value;
+  const __r_key = __deserialise_ApiKeyValue(obj["key"], `${path}.key`);
+  if (__r_key.tag === "Err") return __r_key;
+  const __key = __r_key.value;
+  const __r_label = __deserialise_ApiKeyLabel(obj["label"], `${path}.label`);
+  if (__r_label.tag === "Err") return __r_label;
+  const __label = __r_label.value;
+  const __created$ms = __bynkInstantFromWire(obj["created"]);
+  if (typeof __created$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.created`, expected: "number", actual: typeof __created$ms });
+  }
+  if (!globalThis.Number.isSafeInteger(__created$ms)) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.created`, expected: "safe integer", actual: String(__created$ms) });
+  }
+  const __created = __created$ms;
+  const __r_expires = __deserialise_Option_Instant(obj["expires"], `${path}.expires`);
+  if (__r_expires.tag === "Err") return __r_expires;
+  const __expires = __r_expires.value;
+  return Ok({ id: __id, key: __key, label: __label, created: __created, expires: __expires } as ApiKeySecret);
+}
+
+export function __serialise_ApiKeyValue(value: ApiKeyValue): __JsonValue {
+  return (value as unknown as { reveal(): string }).reveal();
+}
+
+export function __deserialise_ApiKeyValue(json: __JsonValue, path: string = "$"): Result<ApiKeyValue, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (ApiKeyValue as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (ApiKeyValue as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as ApiKeyValue) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as ApiKeyValue);
+}
 
 export function __serialise_Authorization(value: Authorization): __JsonValue {
   return value as unknown as string;
@@ -1528,6 +1694,27 @@ export function __deserialise_TimedOut(json: __JsonValue, path: string = "$"): R
   return Ok({ after: __after } as TimedOut);
 }
 
+export function __serialise_TooManyKeys(value: TooManyKeys): __JsonValue {
+  return {
+    limit: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.limit),
+  };
+}
+
+export function __deserialise_TooManyKeys(json: __JsonValue, path: string = "$"): Result<TooManyKeys, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["limit"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "number", actual: typeof obj["limit"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["limit"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: String(obj["limit"]) });
+  }
+  const __limit = obj["limit"];
+  return Ok({ limit: __limit } as TooManyKeys);
+}
+
 export function __serialise_Uuid(value: Uuid): __JsonValue {
   return value as unknown as string;
 }
@@ -1545,6 +1732,51 @@ export function __deserialise_Uuid(json: __JsonValue, path: string = "$"): Resul
   return Ok(validated.value as Uuid);
 }
 
+
+export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __v$ms = __bynkInstantFromWire(raw);
+  if (typeof __v$ms !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
+  }
+  if (!globalThis.Number.isSafeInteger(__v$ms)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
+  }
+  const __v = __v$ms;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Instant(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Instant(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Instant(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 export function __serialise_Map_String_String(value: ReadonlyMap<string, string>): __JsonValue {
   const entries: __JsonValue[] = [];
@@ -1664,51 +1896,6 @@ export function __deserialise_Option_Duration(json: __JsonValue, path: string = 
     }
   }
   const __b = __option_value_Duration(json, path);
-  if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
-  }
-  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
-    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
-  }
-  return __b;
-}
-
-export function __serialise_Option_Instant(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
-  return { kind: "None" };
-}
-
-function __option_value_Instant(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  const __v$ms = __bynkInstantFromWire(raw);
-  if (typeof __v$ms !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof __v$ms });
-  }
-  if (!globalThis.Number.isSafeInteger(__v$ms)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(__v$ms) });
-  }
-  const __v = __v$ms;
-  return Ok(__v);
-}
-
-export function __deserialise_Option_Instant(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
-  if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
-  }
-  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
-    const obj = json as { [k: string]: __JsonValue };
-    const __keys = globalThis.Object.keys(obj);
-    if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
-    }
-    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Instant(obj["value"], `${path}.value`);
-      if (__t.tag === "Err") {
-        return __t;
-      }
-      return Ok(Some(__t.value as number) as Option<number>);
-    }
-  }
-  const __b = __option_value_Instant(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as number) as Option<number>);
   }

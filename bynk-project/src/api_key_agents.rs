@@ -10,16 +10,18 @@
 //!   only agent the request path asks, and it compares digests only: the pepper never reaches it.
 //! - `<Actor>KeyOwner(identity)` holds the identity's handle. Only the members use it.
 //!
-//! Neither reads a clock: the seam and the members pass `now`. The comparison is `Crypto.equal`,
-//! constant time, and the store compares exactly once per `verify` whatever it holds: against the
-//! record's digest when there is one under a pepper the seam sent, else against a fixed dummy
-//! digest (D3 B). `Crypto` is consumed for them: when the declaring file does not already list it,
-//! `consumes bynk.crypto { Crypto }` is added on the context's header line, so no line moves.
+//! Neither reads a clock: the seam and the members pass `now`. The comparison is `ApiKey.equal`,
+//! an internal kernel only these agents can name, which lowers to the runtime's one constant-time
+//! comparison, the function `bynk.crypto`'s `Crypto.equal` calls: the same primitive as track §6's
+//! "consumes `Crypto`", with no capability put in the author's scope. The store compares exactly
+//! once per `verify` whatever it holds: against the record's digest when there is one under a
+//! pepper the seam sent, else against a fixed dummy digest (D3 B). The text is appended after
+//! everything the author wrote, so no author line or column moves.
 //!
 //! The names come from `bynk_check::api_key::{keys_agent_name, key_owner_agent_name}`, which
 //! this crate cannot depend on; the two are pinned equal by a test there.
 
-use bynk_syntax::ast::{ActorDecl, CommonsForm, CommonsItem, Context, SourceUnit, TypeRef};
+use bynk_syntax::ast::{ActorDecl, CommonsForm, CommonsItem, SourceUnit, TypeRef};
 
 /// The marker the generated agents' documentation begins with (`bynk_check::api_key::GENERATED_MARKER`).
 pub const GENERATED_MARKER: &str = "Generated for the `ApiKey` actor";
@@ -60,9 +62,6 @@ pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String>
             CommonsForm::Brace => source.get(..ctx.span.end)?.rfind('}')?,
         };
         inserts.push((at, text));
-        if !consumes_crypto(ctx) {
-            inserts.push((crypto_insert_at(source, ctx)?, CONSUMES_CRYPTO.to_string()));
-        }
     }
     if inserts.is_empty() {
         return None;
@@ -74,31 +73,6 @@ pub fn with_api_key_agents(source: &str, units: &[SourceUnit]) -> Option<String>
         out.insert_str(at, &text);
     }
     Some(out)
-}
-
-/// The clause added for the agents' `Crypto.equal`, on the header line so no line moves.
-const CONSUMES_CRYPTO: &str = " consumes bynk.crypto { Crypto }";
-
-/// Whether the file already lists `Crypto` from `bynk.crypto` in a braced `consumes`.
-fn consumes_crypto(ctx: &Context) -> bool {
-    ctx.consumes.iter().any(|c| {
-        c.target.joined() == "bynk.crypto"
-            && c.selected.as_ref().is_some_and(|items| {
-                items
-                    .iter()
-                    .any(|i| i.name.name == "Crypto" && i.alias.is_none())
-            })
-    })
-}
-
-/// Where the clause goes: just after the context's name (`context shop`), or just inside the brace
-/// of a brace-bodied context (`context shop {`).
-fn crypto_insert_at(source: &str, ctx: &Context) -> Option<usize> {
-    let after_name = ctx.name.span.end;
-    match ctx.form {
-        CommonsForm::Fragment => Some(after_name),
-        CommonsForm::Brace => Some(after_name + source.get(after_name..)?.find('{')? + 1),
-    }
 }
 
 /// Whether an item of the context already has `name`.
@@ -135,7 +109,7 @@ agent {agent} {{\n\
 \tstore created: Map[String, Int]\n\
 \tstore scopes: Map[String, Set[String]]\n\
 \n\
-\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, dummy: Bytes) -> Effect[Option[{identity}]] given Crypto {{\n\
+\ton call verify(keyNo: String, presented: Map[String, Bytes], first: Bytes, dummy: Bytes) -> Effect[Option[{identity}]]{{\n\
 \t\tlet stored <- digests.get(keyNo)\n\
 \t\tlet kid <- kids.get(keyNo)\n\
 \t\tlet nothing: Option[Bytes] = None\n\
@@ -158,7 +132,7 @@ agent {agent} {{\n\
 \t\t\tSome(_) => candidate.isSome(),\n\
 \t\t\tNone => false,\n\
 \t\t}}\n\
-\t\tlet same <- Crypto.equal(expected, actual)\n\
+\t\tlet same <- ApiKey.equal(expected, actual)\n\
 \t\tlet who = owner\n\
 \t\tif same && real && !retired {{\n\
 \t\t\tEffect.pure(who)\n\
@@ -233,22 +207,27 @@ mod tests {
     }
 
     #[test]
-    fn a_fragment_context_gains_both_agents_and_crypto_on_its_header_line() {
+    fn a_fragment_context_gains_both_agents_after_the_authors_text() {
         let src = "context shop\n\ntype AccountId = String where NonEmpty\n\nactor Client { auth = ApiKey(secret = \"P\"), identity = AccountId }\n";
         let out = with_api_key_agents(src, &parse(src)).expect("generated");
-        assert!(out.starts_with("context shop consumes bynk.crypto { Crypto }\n"));
+        assert!(out.starts_with(src), "the author's text is unchanged, byte for byte");
         assert!(out.contains("agent ClientKeys {"));
         assert!(out.contains("agent ClientKeyOwner {"));
-        // The author's lines keep their numbers: everything added is on the header line or after.
-        assert_eq!(out.lines().nth(4), src.lines().nth(4));
+        assert!(!out.contains("consumes"), "no capability is put in scope");
+        assert!(!out.contains("Crypto"), "the agents use the internal comparison");
         let _ = parse(&out);
     }
 
+    /// D2 B: the pepper never enters an agent. The generated source names no pepper, no secret
+    /// and no environment read: only digests, `kid`s and the identity cross into it.
     #[test]
-    fn an_existing_crypto_consume_is_not_repeated() {
-        let src = "context shop\n\nconsumes bynk.crypto { Crypto }\n\ntype AccountId = String where NonEmpty\n\nactor Client { auth = ApiKey(secret = \"P\"), identity = AccountId }\n";
+    fn the_generated_agents_never_name_the_pepper() {
+        let src = "context shop\n\ntype AccountId = String where NonEmpty\n\nactor Client { auth = ApiKey(secret = \"CLIENT_KEY_PEPPER\"), identity = AccountId }\n";
         let out = with_api_key_agents(src, &parse(src)).expect("generated");
-        assert_eq!(out.matches("consumes bynk.crypto").count(), 1);
+        let agents = &out[src.len()..];
+        for forbidden in ["CLIENT_KEY_PEPPER", "pepper", "Secrets", "secret", "env"] {
+            assert!(!agents.contains(forbidden), "the agents mention `{forbidden}`");
+        }
     }
 
     #[test]
