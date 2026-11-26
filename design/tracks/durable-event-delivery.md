@@ -259,17 +259,38 @@ non-empty, it also sets the DO alarm about 30 seconds ahead.
   already pays for. The reply is held only until that write confirms (ADR 0109 D2's output
   gate), not until any send. The live measurement is §9 L3.
 
-**Services.** No outbox. After the body completes, the wrapper sends each emission to its
-subscribers' queues, all queues concurrently, one `sendBatch` per queue per handler. A failed
-send is retried twice (after 100 ms and 400 ms); if it still fails, the handler faults with
-`EventSendFailed`, logged with the event type and the queue.
+**Services.** No outbox. A service has no storage transaction, so "commit" for a service means
+"the body completed". Emissions keep today's release point.
 
+- **When the send happens.** `Events.emit` in a service only appends to the handler's
+  `__events` buffer (`lower_call/platform.rs:lower_events_emit_call`). Nothing is sent at the
+  emit call. After the body returns without a fault, the wrapper sends the buffer
+  (`handlers.rs:events_release_body`, whose flush moves from `deps.__eventsDispatch` to the
+  queue sends), all queues concurrently, one `sendBatch` per queue per handler.
+- **A body that faults sends nothing,** as today. Release-at-commit holds for services in the
+  sense ADR 0109 gives it.
+- **A failed send** is retried twice (after 100 ms and 400 ms). If it still fails, the handler
+  faults with `EventSendFailed`, logged with the event type and the queue.
+- **What the caller sees when the send fails.** By then the body has done everything else it
+  does: KV or D1 writes, outbound `fetch` calls, calls into agents (which have committed), and
+  sends on user queues. None of those can be undone, because a service has no transaction to
+  roll back. The caller sees a fault (a 5xx for HTTP, `Retry` for a queue handler, a faulted
+  run for cron), even though those effects happened. If the caller retries, the body runs again
+  and repeats them, with new `eventId`s. Some emissions may also already have been sent to
+  some subscriber queues before the failing one. So the guarantee for a service is precise:
+  - *a service handler that completes successfully has sent every emission to every matching
+    subscriber queue*;
+  - *a service handler that faults may have performed any of its other effects and sent any
+    subset of its emissions*.
+
+  This is the same position as any service handler that faults after a side effect today. The
+  guide states it, and points authors who need effects and events to be atomic to an agent,
+  whose outbox gives exactly that.
 - A successful `send` is durable: *"messages written to a queue should never be lost once the
   write succeeds"* (§3). The queue write is therefore the durable hop.
-- A fault reaches the caller as one (a 5xx for HTTP, `Retry` for a queue handler, a faulted run
-  for cron), so nothing is lost silently.
-- Some emissions may already have been sent when the handler faults. That is consistent with at
-  least once.
+
+Sending at the end of the handler, rather than at each emit call, is the recommendation: a
+body that faults half-way sends nothing, which an emit-time send could not promise.
 
 **Rejected:**
 
@@ -282,6 +303,11 @@ send is retried twice (after 100 ms and 400 ms); if it still fails, the handler 
   emission. The inline flush keeps the common case as fast as today's hand-off.
 - **An agent that sends before it commits.** That breaks release-at-commit: a commit that then
   fails would have delivered events for state that never existed.
+- **A service that sends at each `Events.emit` call.** A body that faults after an emit would
+  already have delivered that event, which breaks release-at-commit for services, the
+  property that
+  `bynk-tests/tests/system/events_behaviour.rs:bundle_events_publish_subscribe_and_abort_suppresses_delivery`
+  pins today.
 
 ### D2 (Q2). Protecting the internal queues
 
@@ -351,9 +377,9 @@ code** (reported to the coordinator as a finding):
   no previous value.
 
 So today a `--force` rotation makes queued `Producer`-refinement messages fail `bad_signature`,
-and they are acknowledged and dropped. Slice 1 adds `BYNK_CALL_FROM_<X>_PREVIOUS`. Deploy writes
-the replaced key there when it rotates an edge, records the rotation time in the ledger, and
-removes it on the first deploy 15 days after. `queueForeignKeys` tries both keys.
+and they are acknowledged and dropped. That is filed as bynk-lang/bynk#4526, and this track
+depends on it (slice 1): events must not start using edge keys on queues until a rotated key
+keeps verifying for the 15-day window.
 
 **Rejected:**
 
@@ -383,7 +409,7 @@ target. The trace travels in the envelope. (Recommended.)**
   256 KB ([limits](https://developers.cloudflare.com/queues/platform/limits/)).
 - **This lowers today's cap.** `/_bynk/event/` accepts up to 1 MiB (`boundary.ts:MAX_BODY_BYTES`).
   An event between about 127 KB and 1 MiB that delivers today faults after the cut-over. It is
-  listed as breaking in §8.
+  breaking. §8.1 says how an affected project finds its large events before the cut-over.
 - **Trace (#3895):** `envelope.trace` is carried in the signed body as today, so the subscriber's
   `queue` entry restores the emission's trace. This differs from user queue messages, which
   carry no trace (`reference/queue.md`, "Traces"), because the envelope is the compiler's own.
@@ -411,6 +437,29 @@ serialising delivery, with consumer `concurrency: 1` plus a reorder buffer on th
 That costs throughput and reintroduces a bottleneck. The guide states best effort and keeps its
 existing advice: *"A subscriber that needs a total order across concurrent publishes must
 carry its own sequence number in the event payload."*
+
+**What currently promises the ordering D4 withdraws:**
+
+- `design/decisions/0290-events-per-publisher-fifo-scope.md`: guarantees (a) and (b) as
+  measured, accepted at v0.238.1.
+- `site/src/content/docs/book/concepts/events/understand-events.md`, the "Delivery, concretely,
+  per platform" table, row "Cloudflare Workers": *"Ordering is preserved within one emission
+  (everything a single handler invocation emits) and across successive, non-overlapping calls
+  to one agent"*. Its closing paragraph, which says order does not hold across *concurrent*
+  invocations, implies the rest does.
+- `design/bynk-design-notes.md` §7, "**Ordering: per-publisher.** Events emitted by the same
+  agent are delivered to each subscriber in emission order" (line 231). The Open-questions
+  summary repeats it: *"Events are committed as a service protocol with at-least-once
+  delivery, per-publisher ordering, …"* (line 1947). ADR 0290 already narrowed these
+  statements in practice, but their text was never amended.
+- `design/decisions/0284-events-fanout-substrate.md`: chose the DO partly as *"a natural,
+  honest home for per-publisher ordering"*.
+- The test `bynk-tests/tests/system/events_ordering_workerd.rs`, which measures (a) and (b).
+
+Nothing else promises event order. `reference/spec/static-semantics.md` §5.7b and the events
+guide index say nothing about it; the design notes' *per-sender FIFO* (§12, cross-agent
+calls) is about agent calls, not events, and is unaffected. The ruling therefore amends
+ADR 0290, the concepts page, the design notes' §7 and its summary, and the measurement test.
 
 **Why a ruling:** this withdraws behaviour that is documented and measured today, which a
 subscriber may rely on, for example an "order created" then "order paid" pair emitted by one
@@ -585,13 +634,43 @@ below. (Recommended.)**
     under 64 KB, plus one read per retry and one write per dead letter
     ([pricing](https://developers.cloudflare.com/queues/platform/pricing/)). The price is
     $0.40 per million operations beyond the 1,000,000 a month included (same page).
-  - D1: 2 writes per delivery (the claim, then the confirm), in the subscriber's
-    `D1_IDEMPOTENCY` database.
+  - D1: about 3 rows written per delivery for the claim, its confirm and the sweep of
+    expired claims, in the subscriber's `D1_IDEMPOTENCY` database (broken down below).
   - Agents: one outbox `put` inside the commit, one delete after the flush, and an alarm only
     when a flush fails.
-- **Worked example:** 1,000,000 emissions a month to 2 subscribers each, under 64 KB: 6,000,000
-  queue operations, of which 5,000,000 are billed, so **$2.00 a month** for Queues, plus
-  4,000,000 D1 rows written.
+- **The claim's D1 cost, per delivery** (D11, through `queue_admit.ts:claimQueueMessage`,
+  `confirmQueueMessage`):
+  - the claim is one `batch` of an upsert of the claim row and a `DELETE` of up to 20 expired
+    rows;
+  - the confirm is one more upsert;
+  - so at least **2 rows written** per delivery, plus the expired rows the sweep deletes, which
+    in a steady state equal the claims that lapse, so about **1 more** on average. Deletes count
+    as rows written, and an index on the key column adds a written row per write
+    ([D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)). Planning figure:
+    **about 3 rows written per delivery** without counting the index, up to 5 with it. Live
+    check L9 measures the real figure.
+  - D1 on Workers Paid includes 50 million rows written a month, then $1.00 per million. On
+    Workers Free it is **100,000 rows written a day**, and queries fail beyond it (same page).
+    So a Free-plan project tops out at very roughly 20,000–33,000 event deliveries a day,
+    shared with any other `Idempotency` use. The guide states this limit.
+- **Worked example:** 1,000,000 emissions a month to 2 subscribers each, under 64 KB, on
+  Workers Paid:
+
+  | Item | Volume | Billed | Cost |
+  |---|---|---|---|
+  | Queue operations (3 per delivery) | 6,000,000 | 5,000,000 beyond the included 1,000,000 | $2.00 |
+  | D1 rows written by claims (3–5 per delivery) | 6,000,000–10,000,000 | 0: within the included 50,000,000 | $0.00 |
+  | Agent outbox, if the publisher is an agent (about 3 DO rows written per emitting commit: the row, its delete, and `setAlarm`) | up to 3,000,000 | 0: within Durable Objects' own included 50,000,000 | $0.00 |
+  | **Total beyond the plan** | | | **about $2.00 a month** |
+
+  The claims spend 6–10 million of D1's 50 million included rows a month. Durable Object
+  storage is billed on the same metric with its own allowance
+  ([Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/): *"Each
+  `setAlarm()` is billed as a single row written"*, and deletes count as rows written). At
+  about 5–8 million emissions a month to 2 subscribers, the claims cross D1's allowance. Each
+  further million such emissions then costs about $6–10 in D1 rows, on top of $2.40 in queue
+  operations. The claim is the larger cost at volume, which is why D11 records it as the price
+  of always-on deduplication.
 - **Against today:** each emission is one DO request (the fan-out) plus N Service Binding
   subrequests, with a subscriber invocation each. Every subscriber is invoked, matching or not
   (P6), and all of it is in the publisher's request. The new model moves cost from the
@@ -646,8 +725,9 @@ Worker's `queue` entry. (Recommended.)**
 - **Retention:** `QUEUE_DEDUP_WINDOW_SECONDS`, 15 days: the longest retention (14 days) plus the
   longest delay (24 hours). A message signed longer ago than that is refused as `stale`, so a
   lapsed claim can never let a replay through.
-- **Cost:** two D1 writes per delivery (§D9), and every subscriber Worker gets
-  `D1_IDEMPOTENCY`, as `Idempotency` users and signed consumers already do.
+- **Cost:** about 3 D1 rows written per delivery, up to 5 with the key's index (D9's
+  breakdown and worked example). Every subscriber Worker gets `D1_IDEMPOTENCY`, as
+  `Idempotency` users and signed consumers already do.
 - **Author code:** `Idempotency.claim(env.eventId, …)` in a subscriber stays legal and correct,
   but it is redundant for redelivery. The guide's "idempotency idiom" changes from "the habit
   that will matter once delivery is durable" to "built in". `claim` remains the tool for
@@ -780,7 +860,7 @@ verification or deduplication (slices 1, 3, 4 and 5), per ADR 0076's security-re
 | At most once | At least once (agents end to end; services from completion) | Yes: duplicates are possible, normally absorbed by D11 |
 | Ordered within a handler and across non-overlapping agent calls (ADR 0290) | Best effort (D4, ruling needed) | Yes |
 | Publisher waits for every subscriber | Publisher waits for the hand-off only | Behavioural |
-| Up to 1 MiB per delivery | About 127 KB per event, faulting before commit | Yes, for large events |
+| Up to 1 MiB per delivery | About 127 KB per event, faulting before commit; warned a release earlier (§8.1) | Yes, for large events |
 | Every subscriber invoked | Only matching subscribers (D6) | No (unobservable, except in cost) |
 | Publisher↔subscriber call cycle refused | Deploys | No (relaxes) |
 | `/_bynk/event/` route | Queue entry; the route kept for one release (D8) | No, within the overlap |
@@ -788,6 +868,34 @@ verification or deduplication (slices 1, 3, 4 and 5), per ADR 0076's security-re
 
 Source is unchanged: nothing has to be edited. The upgrading note and changelog entry come with
 slice 4 (the cut-over).
+
+### 8.1 Finding events that exceed the new cap
+
+The compiler cannot size an event statically: almost every payload holds a `String` or a
+collection, whose length is known only at run time. So detection comes in three layers, and
+the first ships a release *before* the cap starts to fault.
+
+1. **A measurement before the cut-over (slice 3).** The release that adds the subscriber's
+   queue entry also adds D3's size measurement to `Events.emit` on every target. In that
+   release it only *warns*: an emission whose message would exceed the budget logs
+   `EventNearLimit` with the event type, the size and the budget, once per event type per
+   isolate. It also warns from 96,000 bytes, about three quarters of the budget, so an event that is
+   growing shows up early. A project upgraded to that release and run normally (or under
+   `bynk test`, where the log is visible) finds every event that would fault, by its type,
+   from its own traffic.
+2. **The fault at the cut-over (slice 4).** From the cut-over release the same measurement
+   faults with `EventTooLarge` before commit (D3), so nothing is lost: the handler fails
+   visibly, and an agent's state does not commit.
+3. **A compile-time warning where a payload is plainly unbounded.**
+   `bynk.event.unbounded_payload` is a warning on an `event` declaration whose payload type
+   contains `Bytes`, or a `List`, `Map` or `Set` of a non-scalar type, with no refinement that
+   bounds its size. That is where large events come from. A payload made of scalars and
+   `String`s does not warn: it would warn on nearly every event and train authors to ignore it.
+   The warning names the budget and suggests storing the blob (R2, D1) and sending a
+   reference. It is a warning, not an error, because a bounded use of such a type is legal.
+
+The upgrading note tells a project to run the slice-3 release and grep its logs for
+`EventNearLimit` before taking the cut-over.
 
 ---
 
@@ -830,16 +938,12 @@ cites this doc. Each slice that touches signing, verification or deduplication r
 
 *Done when:* the five ADRs have merged with numbers, and the spine's checklist links them.
 
-**Slice 1: Edge-key rotation keeps the previous key.** Depends on: none. It can land before
-slice 0, since it fixes shipped #3899 behaviour.
-- `decide_edge_key` writes the replaced key to `BYNK_CALL_FROM_<X>_PREVIOUS` (and the
-  `_TO_` side) on rotation, and records the time in the ledger. A deploy 15 days later removes
-  it.
-- `queueForeignKeys` tries the current key, then the previous one, for a context.
+**Slice 1: Edge-key rotation keeps the previous key.** This is bynk-lang/bynk#4526, filed from
+this settling's finding and owned there; this track does not re-specify it. Its requirement as
+seen from here: a message signed under an edge key replaced within the last 15 days still
+verifies. Depends on: none. It can land before slice 0, since it fixes shipped #3899 behaviour.
 
-*Done when:* a unit test of `decide_edge_key` covers rotation, keeping and expiry; a runtime
-test admits a message under the previous key and refuses one under an unknown key; L1 has
-passed; `reference/wire-format.md` and `reference/queue.md` describe the window.
+*Done when (for this track):* #4526 has closed, and L1 has passed.
 
 **Slice 2: Reserved queue names.** Depends on: none.
 - `bynk.queue.reserved_name` for `bynk-ev-`/`bynk-dl-` in `Queue @name`, `from queue` and
@@ -861,6 +965,9 @@ changes for users yet: nothing sends to the new queues.
 - Deploy: the `EventQueue` kind, creation before push, the ledger, `--prune` as §7, and
   environments.
 - `system`: `svc.event` through the queue entry, with D10's cases.
+- The size measurement in `Events.emit`, warning only (`EventNearLimit`), and the
+  `bynk.event.unbounded_payload` warning (§8.1), so projects find their large events a release
+  before the cap faults.
 - Settles R1 (`bynk dev`).
 
 *Done when:* the `system` cases of D10 pass; plan snapshot tests show the queues for a
@@ -1015,4 +1122,7 @@ None of these pages is edited by this settling PR. Each is updated by the slice 
 - `reference/upgrading.md` and the changelog (slice 4): §8's table.
 - `design/bynk-design-notes.md` §7 (slice 0 ADRs): the emit-lowering note's "Queues with
   topic-as-queue routing, or a custom event-fanout DO" fork, now resolved as a queue per
-  subscriber.
+  subscriber; and, as D4 is ruled, "**Ordering: per-publisher.**" (line 231) and the
+  Open-questions summary's "per-publisher ordering" (line 1947).
+- `book/concepts/events/understand-events.md`'s ordering sentence in the Workers row, as D4 is
+  ruled (slice 4).
