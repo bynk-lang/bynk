@@ -610,7 +610,7 @@ pub(crate) fn resolve_selects(
                                 r.iter().next().map(String::as_str).unwrap_or("")
                             ),
                             None => format!(
-                                "field `{field}` of `{row_name}` is not an alias of the select list, and `{cap}` is never written with `writeValue` in this context, so there is no record to read it from"
+                                "no written type for `{cap}` in this context: it is never written with `writeValue`, so field `{field}` of `{row_name}` has no column, and it is not an alias of the select list either"
                             ),
                         },
                     )
