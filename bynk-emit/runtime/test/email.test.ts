@@ -788,9 +788,15 @@ test("a failure building the routes is a fixed reject, not a throw", async () =>
   assert.ok(!f.calls.logs.join("").includes("SECRET"));
 });
 
-// ------------------------------------------------------------- Route (#3887)
+// ------------------------------------------------------------------ fallback (#3885)
 
-function routing(raw: string | Uint8Array, over: Partial<InboundMessage> = {}) {
+// A fallback forwards what the service could not process, labelled with the outcome only, and
+// rejects as it always did when there is none or the forward itself is refused.
+function withFallback(r: EmailRoute, fallback = "ops@ops.example"): EmailRoute {
+  return { ...r, fallback };
+}
+
+function recording(raw: string | Uint8Array, over: Partial<InboundMessage> = {}) {
   const forwards: { to: string; headers: Record<string, string> }[] = [];
   const f = fake(raw, {
     forward: async (to, headers) => void forwards.push({ to, headers: Object.fromEntries(headers?.entries() ?? []) }),
@@ -812,7 +818,7 @@ function routeOf(actions: { forward?: string[]; reply?: boolean; tag?: Record<st
 
 test("Route: a reply and two forwards all succeed, the reply first, tags on the forwards", async () => {
   const order: string[] = [];
-  const { message, calls, forwards } = routing(mime(), {
+  const { message, calls, forwards } = recording(mime(), {
     reply: async () => void order.push("reply"),
     forward: async (to, headers) => void order.push(`forward ${to} ${headers?.get("X-Ticket")}`),
   });
@@ -823,13 +829,13 @@ test("Route: a reply and two forwards all succeed, the reply first, tags on the 
 });
 
 test("Route: duplicates are forwarded once, without regard to case", async () => {
-  const { message, forwards } = routing(mime());
+  const { message, forwards } = recording(mime());
   await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["A@x.example", "a@X.example", "b@x.example"] }))], factory, () => {});
   assert.deepEqual(forwards.map((f) => f.to), ["A@x.example", "b@x.example"]);
 });
 
 test("Route: one forward refused is logged and the rest still run, and the message is handled", async () => {
-  const { message, calls, forwards } = routing(mime(), {
+  const { message, calls, forwards } = recording(mime(), {
     forward: async (to) => {
       if (to === "bad@x.example") throw Object.assign(new Error("not verified: bad@x.example"), { name: "ForwardError" });
     },
@@ -845,42 +851,42 @@ test("Route: when every action is refused the message is rejected with the first
   const refuse = async (): Promise<never> => {
     throw new Error("no");
   };
-  const { message, calls } = routing(mime(), { reply: refuse, forward: refuse });
+  const { message, calls } = recording(mime(), { reply: refuse, forward: refuse });
   await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], reply: true }))], factory, () => {});
   assert.deepEqual(calls.rejects, ["reply refused"]);
-  const only = routing(mime(), { forward: refuse });
+  const only = recording(mime(), { forward: refuse });
   await handleEmail(only.message, [route("support@shop.example", routeOf({ forward: ["a@x.example", "b@x.example"] }))], factory, () => {});
   assert.deepEqual(only.calls.rejects, ["forward refused"]);
 });
 
 test("Route: a reply that fails does not stop the forwards, which handle the message", async () => {
-  const { message, calls, forwards } = routing(mime(), { reply: async () => { throw new Error("no"); } });
+  const { message, calls, forwards } = recording(mime(), { reply: async () => { throw new Error("no"); } });
   await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], reply: true }))], factory, () => {});
   assert.deepEqual([calls.rejects, forwards.map((f) => f.to)], [[], ["a@x.example"]]);
 });
 
 test("Route: an empty route is Accept", async () => {
-  const { message, calls, forwards } = routing(mime());
+  const { message, calls, forwards } = recording(mime());
   await handleEmail(message, [route("support@shop.example", routeOf({}))], factory, () => {});
   assert.deepEqual([calls.rejects, forwards, calls.replies], [[], [], []]);
 });
 
 test("Route: 21 destinations is a handler fault, and 20 is not", async () => {
   const many = (n: number) => Array.from({ length: n }, (_, i) => `d${i}@x.example`);
-  const over = routing(mime());
+  const over = recording(mime());
   await handleEmail(over.message, [route("support@shop.example", routeOf({ forward: many(21) }))], factory, () => {});
   assert.deepEqual([over.calls.rejects, over.forwards.length], [["message could not be processed"], 0]);
-  const at = routing(mime());
+  const at = recording(mime());
   await handleEmail(at.message, [route("support@shop.example", routeOf({ forward: many(20) }))], factory, () => {});
   assert.equal(at.forwards.length, 20);
   // Duplicates count once: 21 spellings of 20 destinations are within the cap.
-  const dup = routing(mime());
+  const dup = recording(mime());
   await handleEmail(dup.message, [route("support@shop.example", routeOf({ forward: [...many(20), "D0@X.example"] }))], factory, () => {});
   assert.equal(dup.forwards.length, 20);
 });
 
 test("Route: a bad tag is dropped and logged by name only, a good one is written", async () => {
-  const { message, calls, forwards } = routing(mime());
+  const { message, calls, forwards } = recording(mime());
   const tag = { "X-Good": "yes", "Subject": "hijack", "X-Bad Name": "v", "X-Split": "a\r\nBcc: e@x.example", "X-Ok-2": "fine" };
   await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], tag }))], factory, (l) => calls.logs.push(l));
   assert.deepEqual(forwards[0]!.headers, { "x-good": "yes", "x-ok-2": "fine" });
@@ -893,7 +899,74 @@ test("Route: a bad tag is dropped and logged by name only, a good one is written
 
 test("Route: a forward with no tags is made as the plain forward is", async () => {
   const seen: unknown[][] = [];
-  const { message } = routing(mime(), { forward: async (...args: unknown[]) => void seen.push(args) } as Partial<InboundMessage>);
+  const { message } = recording(mime(), { forward: async (...args: unknown[]) => void seen.push(args) } as Partial<InboundMessage>);
   await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"] }))], factory, () => {});
   assert.deepEqual(seen, [["a@x.example"]]);
+});
+
+test("fallback: a handler fault is forwarded with the outcome header, not rejected", async () => {
+  const { message, calls, forwards } = recording(mime());
+  const faulting = withFallback(route("support@shop.example", async () => { throw new Error("SECRET-BODY-TEXT"); }));
+  await handleEmail(message, [faulting], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards, [{ to: "ops@ops.example", headers: { "x-bynk-fallback": "handler-fault" } }]);
+  assert.deepEqual(calls.rejects, []);
+  assert.ok(calls.logs.every((l) => !l.includes("SECRET-BODY-TEXT")), "nothing from the message is logged");
+  assert.match(calls.logs.join("\n"), /forwarded to the fallback/);
+});
+
+test("fallback: a return that is not a verdict is a handler fault too", async () => {
+  const { message, forwards } = recording(mime());
+  const bad = withFallback(route("support@shop.example", (async () => "oops") as unknown as () => Promise<EmailVerdict>));
+  await handleEmail(message, [bad], factory, () => {});
+  assert.deepEqual(forwards.map((f) => f.headers["x-bynk-fallback"]), ["handler-fault"]);
+});
+
+test("fallback: an unparseable message is forwarded as unreadable, and the handler never sees it", async () => {
+  let body = `${CF}Content-Type: multipart/mixed; boundary="b"\r\n\r\n`;
+  for (let i = 0; i <= EMAIL_MAX_PARTS; i++) body += `--b\r\nContent-Type: text/plain\r\n\r\nx\r\n`;
+  body += "--b--\r\n";
+  const { message, calls, forwards } = recording(body);
+  const seen: { mail?: InboundEmail } = {};
+  await handleEmail(message, [withFallback(route("support@shop.example", { tag: "Accept" }, seen))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards, [{ to: "ops@ops.example", headers: { "x-bynk-fallback": "unreadable" } }]);
+  assert.deepEqual(calls.rejects, []);
+  assert.equal(seen.mail, undefined);
+});
+
+test("fallback: a stream that errors is forwarded as unreadable", async () => {
+  const broken = new ReadableStream<Uint8Array>({ pull() { throw new Error("SECRET"); } });
+  const { message, calls, forwards } = recording(mime(), { raw: broken });
+  await handleEmail(message, [withFallback(route("support@shop.example", { tag: "Accept" }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(forwards.map((f) => f.headers["x-bynk-fallback"]), ["unreadable"]);
+  assert.deepEqual(calls.rejects, []);
+});
+
+test("fallback: an oversized message, a refused reply and a refused forward are rejected as without one", async () => {
+  const big = recording(mime(), { rawSize: EMAIL_MAX_RAW_BYTES + 1 });
+  await handleEmail(big.message, [withFallback(route("support@shop.example", { tag: "Accept" }))], factory, () => {});
+  assert.deepEqual([big.calls.rejects, big.forwards], [["message too large"], []]);
+
+  const reply = recording(mime(), { reply: async () => { throw new Error("refused"); } });
+  const replying = withFallback(route("support@shop.example", { tag: "Reply", message: { body: "hi" } as unknown as EmailReply }));
+  await handleEmail(reply.message, [replying], factory, () => {});
+  assert.deepEqual([reply.calls.rejects, reply.forwards], [["reply refused"], []]);
+
+  const refusing = recording(mime(), { forward: async () => { throw new Error("not verified"); } });
+  await handleEmail(refusing.message, [withFallback(route("support@shop.example", { tag: "Forward", to: "x@y.example" }))], factory, () => {});
+  assert.deepEqual(refusing.calls.rejects, ["forward refused"]);
+});
+
+test("fallback: if the fallback forward is itself refused, the rejection is today's", async () => {
+  const { message, calls } = fake(mime(), { forward: async () => { throw Object.assign(new Error("not verified: ops@ops.example"), { name: "ForwardError" }); } });
+  const faulting = withFallback(route("support@shop.example", async () => { throw new Error("boom"); }));
+  await handleEmail(message, [faulting], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(calls.rejects, ["message could not be processed"]);
+  assert.match(calls.logs.join("\n"), /fallback forward refused \(ForwardError\)/);
+  assert.ok(calls.logs.every((l) => !l.includes("ops@ops.example")), "the address is not logged");
+});
+
+test("fallback: with none declared the behaviour is today's", async () => {
+  const { message, calls, forwards } = recording(mime());
+  await handleEmail(message, [route("support@shop.example", async () => { throw new Error("boom"); })], factory, () => {});
+  assert.deepEqual([calls.rejects, forwards], [["message could not be processed"], []]);
 });

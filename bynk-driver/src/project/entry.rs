@@ -232,6 +232,8 @@ pub struct EmailForward {
     /// The literal destination, or `None` when the argument is computed and so
     /// cannot be known at deploy time.
     pub to: Option<String>,
+    /// #3885: this is the service's `fallback { forward: … }` address, not a `Forward` verdict.
+    pub fallback: bool,
 }
 
 /// #3142: one D1 call's SQL argument, as the checker recorded it.
@@ -422,7 +424,19 @@ fn email_forwards_of(
                 service: service.name.name.clone(),
                 address: address.clone(),
                 to,
+                fallback: false,
             }));
+            // #3885: the fallback is forwarded to like a verdict's `Forward`, and Cloudflare
+            // refuses an unverified destination the same way, so it is checked the same way.
+            if let Some(to) = bynk_check::email_fallback::fallback_address(service) {
+                out.push(EmailForward {
+                    context: ctx.name.joined(),
+                    service: service.name.name.clone(),
+                    address: address.clone(),
+                    to: Some(to.to_string()),
+                    fallback: true,
+                });
+            }
         }
     }
     out.sort();

@@ -11,28 +11,35 @@ case "an unstubbed query faults" {
 }
 
 case "a stubbed result is read" {
-	stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[{\"n\":4}]", rows: 1, statistics: AnalyticsSqlStatistics { elapsedMs: 3, rowsRead: 9, bytesRead: 72 } })
 	let r <- report.GET("/signups/:country", "uk") by Visitor
 	expect r is Ok(1)
 	expect AnalyticsSql.query called once
 }
 
 case "a retryable error is matched" {
-	stub AnalyticsSql.query(_, _) returns Err(SqlRetryable("busy"))
+	stub AnalyticsSql.query(_, _, _) returns Err(SqlRetryable("busy"))
 	let r <- report.GET("/signups/:country", "uk") by Visitor
 	expect r is ServerError("try again shortly")
 }
 
 case "a rejected query is matched" {
-	stub AnalyticsSql.query(_, _) returns Err(SqlRejected("syntax error"))
+	stub AnalyticsSql.query(_, _, _) returns Err(SqlRejected("syntax error"))
 	let r <- report.GET("/signups/:country", "uk") by Visitor
 	expect r is ServerError("the query was refused")
 }
 
 case "the query reads the environment's own dataset" {
 	stub Signups.dataset() returns "events.analyticsEngine.shop_signups_signups_staging"
-	stub AnalyticsSql.query(_, _) returns Ok(AnalyticsSqlResult { data: "[]", rows: 0, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[]", rows: 0, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
 	let r <- report.GET("/signups/:country", "uk") by Visitor
 	expect r is Ok(0)
-	expect AnalyticsSql.query called with sql == "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+	expect AnalyticsSql.query called with dataset == "events.analyticsEngine.shop_signups_signups_staging" && sql == "SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
+}
+
+case "a constant's SQL is passed as written, with the placeholder" {
+	stub AnalyticsSql.query(_, _, _) returns Ok(AnalyticsSqlResult { data: "[]", rows: 0, statistics: AnalyticsSqlStatistics { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } })
+	let r <- report.GET("/weekly") by Visitor
+	expect r is Ok(0)
+	expect AnalyticsSql.query called with sql == "SELECT count() AS n, (SELECT count() FROM {dataset}) AS total FROM {dataset} WHERE timestamp > NOW() - INTERVAL '7' DAY"
 }

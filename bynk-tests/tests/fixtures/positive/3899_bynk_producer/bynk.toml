@@ -1,0 +1,9 @@
+[project]
+name = "3899-bynk-producer"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = ["bynk.cloudflare.Queue", "bynk.cloudflare.Queue.sendValue"]

@@ -10,7 +10,7 @@ import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout,
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { QueueResult } from "../../__bynk_runtime/queue.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS } from "../../__bynk_runtime/agent.js";
-import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse } from "../../__bynk_runtime/connection.js";
+import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __webSocketBearerProtocol } from "../../__bynk_runtime/connection.js";
 
 export type Tag = string & { readonly __brand: "gateway.Tag" };
 
@@ -84,7 +84,7 @@ export const api = {
   async http_GET_oidc_Param_function(__id_function: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__id_function);
   },
-  async http_GET_sum_Param_import(__id_import: string, deps: { who: { tag: "Member"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_sum_Param_import(__id_import: string, deps: { who: { tag: "Member"; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
     switch (deps.who.tag) {
       case "Member": {
         const m = deps.who.identity;
@@ -220,7 +220,7 @@ export class Room {
       const connection = __acceptHibernatableConnection<ServerFrame>(this.state, __pair.server);
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_ChatGateway(connection, __payload.args[0] as RoomId, { identity: __payload.identity as UserId, ...{ env: env as never } });
-      return __webSocketUpgradeResponse(__pair.client);
+      return __webSocketUpgradeResponse(__pair.client, __webSocketBearerProtocol(request.headers.get("Sec-WebSocket-Protocol")));
     }
     if (url.pathname.startsWith("/_bynk/agent/")) {
       const methodName = url.pathname.slice("/_bynk/agent/".length);

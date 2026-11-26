@@ -240,7 +240,8 @@ body matches on. Each arm runs its own seam, so the cookie arm's cross-site chec
   when clients may hold both, so an explicit token wins over an ambient cookie, and a cross-site
   page cannot succeed through the cookie by attaching a forged token.
 
-An arm's identity is its `identity`, as in any sum. A sum arm does not read `.claims` yet (#4344). Two
+An arm's identity is its `identity`, as in any sum, and a `Bearer` arm reads its verified claims through a
+second binder ([In an actor sum](#in-an-actor-sum)). Two
 cookie members, or two members of one scheme, are still refused (`bynk.actor.duplicate_sum_scheme`), as is
 a refinement in a sum (`bynk.actor.refinement_in_sum`).
 
@@ -283,7 +284,28 @@ read where the token arrives and never kept: a `TokenClaims` can't be a field, o
 cross a call, a message or an agent (`bynk.types.claims_at_boundary`). Read the
 claim you need and keep that `String`. Only the binder of an `Oidc` or a `Bearer`
 actor has `.claims` (not another scheme's, and not a sum's: the binder of `by who: A | B` is the
-resolved arm).
+resolved arm, which reads claims as below).
+
+### In an actor sum
+
+The binder of an actor sum is the resolved arm, so it has no `.claims`. A `Bearer` or an `Oidc` arm of an
+`http` handler's sum binds the verified claims with a **second pattern binder**, beside its identity:
+
+```bynk,fragment
+on GET("/who") () -> Effect[HttpResult[String]] by who: User | Visitor {
+	match who {
+		User(u, c) => Ok("\(u) \(c.get("tenant").getOrElse("default"))")   // c: TokenClaims
+		Visitor => Ok("anonymous")
+	}
+}
+```
+
+The one-name form, `User(u)`, is unchanged, and an arm that binds no claims reads none. The claims are the
+verified token's, as for a lone `Bearer` or `Oidc` binder: an arm resolves only after its token's signature
+and checks pass, and a `Visitor` or any other arm has none. Only a `Bearer` or `Oidc` arm of an `http` sum has
+the second binder: a second binder on any other arm (`Signature`, `SignedCookie` or an open one), on a sum of
+another protocol, or a third on a `Bearer` or `Oidc` arm, is `bynk.types.pattern_arity`. A test supplies the
+claims as the principal's second argument, as for a lone actor: `by User("ada", TokenClaims.of([…]))`.
 
 A claim says what the token asserts, not whose data the handler may touch: an object-level check
 (*is this report this tenant's?*) stays in the handler. See [Who, not whose](#who-not-whose).
@@ -359,9 +381,11 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   secret, in [the signed-message format](/reference/wire-format/#signed-queue-messages):
   an unsigned or wrongly signed message is acknowledged, reported and never handled, and a
   replayed one likewise. A refinement of `Producer` (`actor Shop = Producer where
-  IsContext(shop)`) is a valid declaration, but naming one, or a `Foreign` actor beside an unsigned one
-  or alone with a binder, is `bynk.actor.queue_actor_not_enforced` until Bynk producers sign. Several
-  `Foreign` actors may share a sum, `by who: Legacy | Partner`. An email `on message` handler writes at least `by Sender`, the explicit
+  IsContext(shop)`) admits only messages a Bynk producer in one of those contexts signed, and a
+  `Queue` instance in such a context signs what it sends with nothing written. A `Foreign` actor or a
+  refinement beside an unsigned one, or alone with a binder, is `bynk.actor.queue_actor_not_enforced`.
+  Foreign actors and refinements may share a sum, `by who: Legacy | Shop`; a refinement's member carries
+  the sending context's name. An email `on message` handler writes at least `by Sender`, the explicit
   "any mail" (`bynk.actor.missing_by_on_email`); `bynk check --fix=bynk.actor.missing_by_on_email`
   inserts it. The platform-only protocol defaults: cron → `Scheduler`. An agent's
   `on call` operations are reached only from inside

@@ -11,7 +11,7 @@ import * as __ns_bynk_cloudflare from "./../bynk/cloudflare.js";
 
 type __Analytics_write_Call = { point: __ns_bynk_cloudflare.DataPoint };
 type __Analytics_dataset_Call = {};
-type __AnalyticsSql_query_Call = { sql: string; params: readonly __ns_bynk_cloudflare.SqlValue[] };
+type __AnalyticsSql_query_Call = { dataset: string; sql: string; params: readonly __ns_bynk_cloudflare.SqlValue[] };
 type __Signups_write_Call = { point: __ns_bynk_cloudflare.DataPoint };
 type __Signups_dataset_Call = {};
 
@@ -22,11 +22,11 @@ class __Stub_AnalyticsSql {
   }
 
   __applies(op: string): boolean {
-    if (op === "query") return this.__case === "a rejected query is matched" || this.__case === "a retryable error is matched" || this.__case === "a stubbed result is read" || this.__case === "the query reads the environment's own dataset";
+    if (op === "query") return this.__case === "a constant's SQL is passed as written, with the placeholder" || this.__case === "a rejected query is matched" || this.__case === "a retryable error is matched" || this.__case === "a stubbed result is read" || this.__case === "the query reads the environment's own dataset";
     return true;
   }
 
-  async query(sql: string, params: readonly __ns_bynk_cloudflare.SqlValue[]): globalThis.Promise<Result<__ns_bynk_cloudflare.AnalyticsSqlResult, __ns_bynk_cloudflare.AnalyticsSqlError>> {
+  async query(dataset: string, sql: string, params: readonly __ns_bynk_cloudflare.SqlValue[]): globalThis.Promise<Result<__ns_bynk_cloudflare.AnalyticsSqlResult, __ns_bynk_cloudflare.AnalyticsSqlError>> {
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -149,6 +149,9 @@ class __Stub_AnalyticsSql {
       return Err(AnalyticsSqlError.SqlRejected("syntax error"));
     }
     if (this.__case === "the query reads the environment's own dataset") {
+      return Ok({ data: "[]", rows: 0, statistics: { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } });
+    }
+    if (this.__case === "a constant's SQL is passed as written, with the placeholder") {
       return Ok({ data: "[]", rows: 0, statistics: { elapsedMs: 1, rowsRead: 0, bytesRead: 0 } });
     }
     throw new globalThis.Error("bynk: no stub clause matched for AnalyticsSql.query");
@@ -331,7 +334,7 @@ function __bynkTest_Analytics(): __ns_bynk_cloudflare.Analytics {
 function __bynkTest_AnalyticsSql(): __ns_bynk_cloudflare.AnalyticsSql {
   return {
     async query() {
-      throw new globalThis.Error("bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _) returns …`");
+      throw new globalThis.Error("bynk: `AnalyticsSql.query` is not stubbed, and a test never reads Analytics Engine — add `stub AnalyticsSql.query(_, _, _) returns …`");
     },
   };
 }
@@ -344,7 +347,7 @@ function __makeTestDeps(__case?: string) {
 async function test_an_unstubbed_query_faults() {
   try {
     const deps = __makeTestDeps();
-    const { report } = __ns_shop_signups;
+    const { WEEKLY, report } = __ns_shop_signups;
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -482,7 +485,7 @@ async function test_a_stubbed_result_is_read() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed result is read"), { Analytics: ["dataset", "write"], AnalyticsSql: ["query"], Signups: ["dataset", "write"] }, __obs);
-    const { report } = __ns_shop_signups;
+    const { WEEKLY, report } = __ns_shop_signups;
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -596,8 +599,8 @@ async function test_a_stubbed_result_is_read() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await report.http_GET_signups_Param_country("uk", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:16:9", 666, 676, "expect r is Ok(1)", "r", () => __bynkShow(r)); }
-    if (!(((__obs.log["AnalyticsSql.query"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/signups.bynk:17:9", 685, 715, "expect AnalyticsSql.query called once"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:16:9", 669, 679, "expect r is Ok(1)", "r", () => __bynkShow(r)); }
+    if (!(((__obs.log["AnalyticsSql.query"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/shop/signups.bynk:17:9", 688, 718, "expect AnalyticsSql.query called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -611,7 +614,7 @@ async function test_a_stubbed_result_is_read() {
 async function test_a_retryable_error_is_matched() {
   try {
     const deps = __makeTestDeps("a retryable error is matched");
-    const { report } = __ns_shop_signups;
+    const { WEEKLY, report } = __ns_shop_signups;
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -725,7 +728,7 @@ async function test_a_retryable_error_is_matched() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await report.http_GET_signups_Param_country("uk", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "try again shortly"))) { throw __bynkExpectFailure("tests/shop/signups.bynk:23:9", 889, 926, "expect r is ServerError(\"try again shortly\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "try again shortly"))) { throw __bynkExpectFailure("tests/shop/signups.bynk:23:9", 895, 932, "expect r is ServerError(\"try again shortly\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -739,7 +742,7 @@ async function test_a_retryable_error_is_matched() {
 async function test_a_rejected_query_is_matched() {
   try {
     const deps = __makeTestDeps("a rejected query is matched");
-    const { report } = __ns_shop_signups;
+    const { WEEKLY, report } = __ns_shop_signups;
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -853,7 +856,7 @@ async function test_a_rejected_query_is_matched() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await report.http_GET_signups_Param_country("uk", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "the query was refused"))) { throw __bynkExpectFailure("tests/shop/signups.bynk:29:9", 1106, 1147, "expect r is ServerError(\"the query was refused\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError" && r.message === "the query was refused"))) { throw __bynkExpectFailure("tests/shop/signups.bynk:29:9", 1115, 1156, "expect r is ServerError(\"the query was refused\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -868,7 +871,7 @@ async function test_the_query_reads_the_environment_s_own_dataset() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("the query reads the environment's own dataset"), { Analytics: ["dataset", "write"], AnalyticsSql: ["query"], Signups: ["dataset", "write"] }, __obs);
-    const { report } = __ns_shop_signups;
+    const { WEEKLY, report } = __ns_shop_signups;
     const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -982,11 +985,143 @@ async function test_the_query_reads_the_environment_s_own_dataset() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const r = await report.http_GET_signups_Param_country("uk", deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 0))) { throw __bynkExpectFailure("tests/shop/signups.bynk:36:9", 1525, 1535, "expect r is Ok(0)", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 0))) { throw __bynkExpectFailure("tests/shop/signups.bynk:36:9", 1537, 1547, "expect r is Ok(0)", "r", () => __bynkShow(r)); }
     if (!((((__obs.log["AnalyticsSql.query"] ?? []).filter((__c: { args: unknown[] }) => {
-      const { sql, params } = { sql: __c.args[0], params: __c.args[1] } as __AnalyticsSql_query_Call;
-      return (sql === "SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY");
-    }).length) >= 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:37:9", 1544, 1718, "expect AnalyticsSql.query called with sql == \"SELECT count() AS n FROM events.analyticsEngine.shop_signups_signups_staging WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY\""); }
+      const { dataset, sql, params } = { dataset: __c.args[0], sql: __c.args[1], params: __c.args[2] } as __AnalyticsSql_query_Call;
+      return (dataset === "events.analyticsEngine.shop_signups_signups_staging" && sql === "SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY");
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:37:9", 1556, 1756, "expect AnalyticsSql.query called with dataset == \"events.analyticsEngine.shop_signups_signups_staging\" && sql == \"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY\""); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_constant_s_SQL_is_passed_as_written__with_the_placeholder() {
+  try {
+    const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
+    const deps = __bynkRecordDeps(__makeTestDeps("a constant's SQL is passed as written, with the placeholder"), { Analytics: ["dataset", "write"], AnalyticsSql: ["query"], Signups: ["dataset", "write"] }, __obs);
+    const { WEEKLY, report } = __ns_shop_signups;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type SseEvent = __ns_bynk.SseEvent;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
+    type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
+    type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
+    type AnalyticsSqlStatistics = __ns_bynk_cloudflare.AnalyticsSqlStatistics;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
+    type ContainerError = __ns_bynk_cloudflare.ContainerError;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
+    type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
+    type EmailError = __ns_bynk_cloudflare.EmailError;
+    type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
+    type ImageFit = __ns_bynk_cloudflare.ImageFit;
+    type ImageFormat = __ns_bynk_cloudflare.ImageFormat;
+    type ImageInfo = __ns_bynk_cloudflare.ImageInfo;
+    type ImageResult = __ns_bynk_cloudflare.ImageResult;
+    type ImageStream = __ns_bynk_cloudflare.ImageStream;
+    type ImagesError = __ns_bynk_cloudflare.ImagesError;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
+    type OutputOptions = __ns_bynk_cloudflare.OutputOptions;
+    type Overlay = __ns_bynk_cloudflare.Overlay;
+    type PgError = __ns_bynk_cloudflare.PgError;
+    type PgReadError = __ns_bynk_cloudflare.PgReadError;
+    type PgRun = __ns_bynk_cloudflare.PgRun;
+    type PgStatement = __ns_bynk_cloudflare.PgStatement;
+    type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelay = __ns_bynk_cloudflare.QueueDelay;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RequestCf = __ns_bynk_cloudflare.RequestCf;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type TransformOptions = __ns_bynk_cloudflare.TransformOptions;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
+    const r = await report.http_GET_weekly(deps);
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === 0))) { throw __bynkExpectFailure("tests/shop/signups.bynk:43:9", 2049, 2059, "expect r is Ok(0)", "r", () => __bynkShow(r)); }
+    if (!((((__obs.log["AnalyticsSql.query"] ?? []).filter((__c: { args: unknown[] }) => {
+      const { dataset, sql, params } = { dataset: __c.args[0], sql: __c.args[1], params: __c.args[2] } as __AnalyticsSql_query_Call;
+      return (sql === "SELECT count() AS n, (SELECT count() FROM {dataset}) AS total FROM {dataset} WHERE timestamp > NOW() - INTERVAL '7' DAY");
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/shop/signups.bynk:44:9", 2068, 2227, "expect AnalyticsSql.query called with sql == \"SELECT count() AS n, (SELECT count() FROM {dataset}) AS total FROM {dataset} WHERE timestamp > NOW() - INTERVAL '7' DAY\""); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -998,7 +1133,7 @@ async function test_the_query_reads_the_environment_s_own_dataset() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["an unstubbed query faults", "a stubbed result is read", "a retryable error is matched", "a rejected query is matched", "the query reads the environment's own dataset"];
+export const __bynkCases: readonly string[] = ["an unstubbed query faults", "a stubbed result is read", "a retryable error is matched", "a rejected query is matched", "the query reads the environment's own dataset", "a constant's SQL is passed as written, with the placeholder"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -1030,6 +1165,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the query reads the environment's own dataset")) {
     const started = __bynkCaseNow();
     const r = { name: "the query reads the environment's own dataset", ...(await test_the_query_reads_the_environment_s_own_dataset()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a constant's SQL is passed as written, with the placeholder")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a constant's SQL is passed as written, with the placeholder", ...(await test_a_constant_s_SQL_is_passed_as_written__with_the_placeholder()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

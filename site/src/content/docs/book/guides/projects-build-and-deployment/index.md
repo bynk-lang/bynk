@@ -16,6 +16,7 @@ Workers.
 - [Run your project locally](/book/guides/projects-build-and-deployment/run-locally/)
 - [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
 - [Roll back a deployment](/book/guides/projects-build-and-deployment/roll-back-a-deployment/)
+- [Follow a request across contexts](/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/)
 - [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/)
 - [Adopt Bynk beside a TypeScript Worker](/book/guides/projects-build-and-deployment/adopt-beside-a-typescript-worker/)
 

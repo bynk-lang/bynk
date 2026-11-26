@@ -65,6 +65,7 @@ pub mod completion;
 pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;
+pub mod email_fallback;
 pub mod env_const;
 pub mod expected_type;
 pub mod first_party_docs;
@@ -81,6 +82,7 @@ pub mod symbols;
 pub mod token_claims;
 pub mod violates;
 pub mod wire_contract;
+pub mod ws_handshake;
 
 /// One diagnostic produced from a recovery-mode compile of a single file.
 #[derive(Debug, Clone)]

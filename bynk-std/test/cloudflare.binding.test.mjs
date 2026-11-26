@@ -32,6 +32,7 @@ import assert from "node:assert/strict";
 import { WorkersAi, WorkersAiSearch, WorkersImages, WorkersAnalytics, WorkersAnalyticsSql, WorkersContainer, WorkersD1, WorkersEdgeCache, WorkersEmail, WorkersKv, WorkersMtls, WorkersMySql, WorkersPostgres, WorkersQueue, WorkersR2, WorkersRateLimit, WorkersService, WorkersStoredSecret, WorkersVectorize, WorkersVersion } from "./bynk/cloudflare.binding.js";
 import { Method, FetchError } from "./bynk.js";
 import { __makeIntegrationAi, __makeIntegrationAiSearch, __makeIntegrationAnalyticsSql, __makeIntegrationContainer, __makeIntegrationHyperdrive, __makeIntegrationImages, __makeIntegrationMtls, __makeIntegrationSecretsStoreSecret } from "./__bynk_runtime/testing/bindings.js";
+import { verifyQueueMessage } from "./__bynk_runtime/queue_signing.js";
 import { Some, None } from "./__bynk_runtime/result.js";
 
 function fakeKv(pageSize = 2) {
@@ -398,7 +399,7 @@ const failing = (message, retryable) => () => {
 
 t("WorkersAnalyticsSql.query: sends the query and positional params, and reads the documented reply", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT count() AS n FROM events.analyticsEngine.signups WHERE blob1 = $1", [
     { tag: "Text", value: "uk" },
   ]);
   assert.deepEqual(b.calls, [
@@ -412,7 +413,7 @@ t("WorkersAnalyticsSql.query: sends the query and positional params, and reads t
 
 t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean parameters", async () => {
   const b = fakeAnalyticsSql();
-  await sqlOf(b).query("SELECT 1", [
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT 1", [
     { tag: "Null" },
     { tag: "Integer", value: 7 },
     { tag: "Real", value: 1.5 },
@@ -424,7 +425,7 @@ t("WorkersAnalyticsSql.query: maps Null, Integer, Real, Text and Boolean paramet
 
 t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and nothing is sent", async () => {
   const b = fakeAnalyticsSql();
-  const res = await sqlOf(b).query("SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
+  const res = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Text", value: "a" }, { tag: "Blob", value: new Uint8Array([1]) }]);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /parameter \$2 is a Blob/);
@@ -433,24 +434,24 @@ t("WorkersAnalyticsSql.query: a Blob parameter is SqlRejected, naming it, and no
 
 t("WorkersAnalyticsSql.query: an unsafe Integer or non-finite Real is SqlRejected", async () => {
   const b = fakeAnalyticsSql();
-  const big = await sqlOf(b).query("SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
+  const big = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Integer", value: 2 ** 60 }]);
   assert.equal(big.error.tag, "SqlRejected");
-  const nan = await sqlOf(b).query("SELECT $1", [{ tag: "Real", value: Number.NaN }]);
+  const nan = await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1", [{ tag: "Real", value: Number.NaN }]);
   assert.equal(nan.error.tag, "SqlRejected");
   assert.equal(b.calls.length, 0);
 });
 
 t("WorkersAnalyticsSql.query: a retryable failure is SqlRetryable, any other is SqlRejected", async () => {
-  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("SELECT 1", []);
+  const retry = await sqlOf(fakeAnalyticsSql(failing("busy", true))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.deepEqual(retry, { tag: "Err", error: { tag: "SqlRetryable", message: "busy" } });
-  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("SELECT", []);
+  const bad = await sqlOf(fakeAnalyticsSql(failing("syntax error", false))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.deepEqual(bad, { tag: "Err", error: { tag: "SqlRejected", message: "syntax error" } });
-  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("SELECT", []);
+  const bare = await sqlOf(fakeAnalyticsSql(failing("no flag", undefined))).query("events.analyticsEngine.signups", "SELECT", []);
   assert.equal(bare.error.tag, "SqlRejected");
 });
 
 t("WorkersAnalyticsSql.query: a reply of another shape is SqlRejected", async () => {
-  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("SELECT 1", []);
+  const res = await sqlOf(fakeAnalyticsSql(() => ({ data: "nope" }))).query("events.analyticsEngine.signups", "SELECT 1", []);
   assert.equal(res.tag, "Err");
   assert.equal(res.error.tag, "SqlRejected");
   assert.match(res.error.message, /not the shape Analytics SQL documents/);
@@ -462,14 +463,14 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
   console.warn = (m) => warned.push(m);
   try {
     const dev = sqlEnv(fakeAnalyticsSql(), { BYNK_DEV: "1" });
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
-    await new WorkersAnalyticsSql(dev).query("SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
+    await new WorkersAnalyticsSql(dev).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 1, "once");
     assert.match(warned[0], /Analytics SQL has no local implementation/);
     assert.match(warned[0], /analytics-sql = "allow" under \[dev\]/);
     assert.doesNotMatch(warned[0], /charge|price|pricing|\$/i);
     warned.length = 0;
-    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("SELECT 1", []);
+    await new WorkersAnalyticsSql({ ...dev, BYNK_DEV_ACK_ANALYTICS_SQL: "allow" }).query("events.analyticsEngine.signups", "SELECT 1", []);
     assert.equal(warned.length, 0, "silenced");
   } finally {
     console.warn = warn;
@@ -477,7 +478,29 @@ t("WorkersAnalyticsSql.query: a dev notice names no price, and is silenced by th
 });
 
 t("WorkersAnalyticsSql.query: a missing binding names it", async () => {
-  await assert.rejects(new WorkersAnalyticsSql({}).query("SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+  await assert.rejects(new WorkersAnalyticsSql({}).query("events.analyticsEngine.signups", "SELECT 1", []), /requires an Analytics SQL binding \(env\.CF_ANALYTICS_SQL\)/);
+});
+
+t("WorkersAnalyticsSql.query: {dataset} is the instance's table, once, several times or never", async () => {
+  const b = fakeAnalyticsSql();
+  const table = "events.analyticsEngine.shop_signups_signups_staging";
+  await sqlOf(b).query(table, "SELECT count() FROM {dataset} WHERE timestamp > NOW() - INTERVAL '1' DAY", []);
+  await sqlOf(b).query(table, "SELECT (SELECT count() FROM {dataset}) AS a, count() AS n FROM {dataset}", []);
+  await sqlOf(b).query(table, "SELECT 1", []);
+  assert.deepEqual(
+    b.calls.map((c) => c.query),
+    [
+      `SELECT count() FROM ${table} WHERE timestamp > NOW() - INTERVAL '1' DAY`,
+      `SELECT (SELECT count() FROM ${table}) AS a, count() AS n FROM ${table}`,
+      "SELECT 1",
+    ],
+  );
+});
+
+t("WorkersAnalyticsSql.query: a parameter that looks like the placeholder is never substituted", async () => {
+  const b = fakeAnalyticsSql();
+  await sqlOf(b).query("events.analyticsEngine.signups", "SELECT $1 FROM {dataset}", [{ tag: "Text", value: "{dataset}" }]);
+  assert.deepEqual(b.calls[0], { query: "SELECT $1 FROM events.analyticsEngine.signups", params: ["{dataset}"] });
 });
 
 // P5 (#2323): `WorkersR2`, against a fake that follows Cloudflare's documented
@@ -1131,6 +1154,34 @@ t("WorkersQueue.send: sends the JSON text parsed, as contentType json", async ()
   const q = fakeQueue();
   await new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS").send('{"id":7,"tags":["a"]}');
   assert.deepEqual(q.sends, [{ body: { id: 7, tags: ["a"] }, options: { contentType: "json" } }]);
+});
+
+// #3899: a producer whose queue has a signed consumer sends each message in a signed envelope, under
+// the key of the edge to the consumer's context, so the consumer verifies which context sent it.
+const signedQueue = (env, q) => new WorkersQueue({ QUEUE_ORDERS: q, ...env }, "QUEUE_ORDERS", "shop.orders", "shop.fulfil", "order-events");
+const verifies = (sent) => verifyQueueMessage(sent, "order-events", (from) => (from === "shop.orders" ? ["edge-key"] : []));
+
+t("WorkersQueue (signed): every send path wraps the body in an envelope the consumer verifies", async () => {
+  const q = fakeQueue();
+  const queue = signedQueue({ BYNK_CALL_TO_SHOP__FULFIL: "edge-key" }, q);
+  await queue.send('{"id":1}');
+  await queue.sendWith('{"id":2}', { delay: None });
+  await queue.sendValue({ id: 3 });
+  await queue.sendValueWith({ id: 4 }, { delay: Some(2000) });
+  await queue.sendBatch(['{"id":5}']);
+  await queue.sendValueBatch([{ id: 6 }]);
+  const sent = [...q.sends.map((s) => s.body), ...q.batches.flat().map((m) => m.body)];
+  const verified = await Promise.all(sent.map(verifies));
+  assert.deepEqual(verified.map((v) => v.ok && v.body.id), [1, 2, 3, 4, 5, 6]);
+  assert.ok(verified.every((v) => v.ok && v.from === "shop.orders"));
+  assert.equal(new Set(verified.map((v) => v.id)).size, 6, "every message has its own id");
+  assert.deepEqual(q.sends[3].options, { contentType: "json", delaySeconds: 2 });
+});
+
+t("WorkersQueue (signed): a Worker without the edge key faults, and nothing is sent", async () => {
+  const q = fakeQueue();
+  await assert.rejects(signedQueue({}, q).send('{"id":1}'), /BYNK_CALL_TO_/);
+  assert.deepEqual([q.sends, q.batches], [[], []]);
 });
 
 t("WorkersQueue.send: text that is not JSON faults, and nothing is sent", async () => {
@@ -3329,7 +3380,7 @@ t("WorkersAi: an unstubbed integration double faults every operation, never an E
 
 t("WorkersAnalyticsSql: an unstubbed integration double faults the query, never an Err", async () => {
   const sql = new WorkersAnalyticsSql({ CF_ANALYTICS_SQL: __makeIntegrationAnalyticsSql() });
-  await assert.rejects(sql.query("SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
+  await assert.rejects(sql.query("events.analyticsEngine.signups", "SELECT 1", []), /`AnalyticsSql` binding is not stubbed/);
 });
 
 t("WorkersAiSearch: an unstubbed integration double faults search and answer, never an Err", async () => {

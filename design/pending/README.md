@@ -110,6 +110,20 @@ summary: How a case addresses a handler and names its principal
   the PR's *base* revision, so editing a growth row in
   `design/greenfield-status.md` by hand does not avoid a `raises:`. Locally it
   defaults to `git merge-base HEAD origin/main`, and errors if no base is found.
+
+  **A PR's moves are its own (#4428).** The table gate and the growth gate above
+  excuse a probe when *any* pending file in the tree names it, and the tree holds
+  every increment merged since the last stamp. So a PR could move a probe without
+  naming it, be excused by another PR's file, pass CI and the merge queue, and go
+  red on the stamp that consumed that other file. The same `--check-growth` step
+  therefore also reads the PR's own moves: it runs the gated probes on a checkout
+  of the base revision and on the PR's tree, and requires every probe whose reading
+  differs to be named in `probes:` (and every growth probe whose count rose in
+  `raises:`) by a pending file **this PR adds or changes** against the base. A
+  probe only another increment's file names is not excused, and the failure says
+  so. Name every gated probe your PR moves in your own pending file. A stamp PR
+  deletes pending files and rewrites the table but changes no code, so it moves no
+  probe and owes nothing.
   A stamp PR deletes the pending files whose `raises:` it consumes, so the check
   also accepts a rise that `design/greenfield-status-raises.md` gained a row for
   since the base revision, with exactly that probe's `from` and `to` (the stamp

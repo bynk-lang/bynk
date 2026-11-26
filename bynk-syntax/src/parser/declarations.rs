@@ -2889,6 +2889,7 @@ impl<'a> Parser<'a> {
         let mut json: Option<JsonPolicy> = None;
         let mut errors: Option<ErrorsPolicy> = None;
         let mut delivery: Option<DeliveryPolicy> = None;
+        let mut fallback: Option<FallbackPolicy> = None;
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
         loop {
@@ -2933,6 +2934,7 @@ impl<'a> Parser<'a> {
                             ("json", json.is_some()),
                             ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -2964,6 +2966,7 @@ impl<'a> Parser<'a> {
                             ("json", json.is_some()),
                             ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -2994,6 +2997,7 @@ impl<'a> Parser<'a> {
                             ("json", json.is_some()),
                             ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -3021,6 +3025,7 @@ impl<'a> Parser<'a> {
                         &[
                             ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -3045,7 +3050,10 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "errors",
                         policy.span,
-                        &[("delivery", delivery.is_some())],
+                        &[
+                            ("delivery", delivery.is_some()),
+                            ("fallback", fallback.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     errors = Some(policy);
@@ -3066,8 +3074,22 @@ impl<'a> Parser<'a> {
                             "a service declares at most one `delivery { }` policy",
                         ));
                     }
-                    self.check_policy_order("delivery", policy.span, &[], !handlers.is_empty())?;
+                    self.check_policy_order(
+                        "delivery",
+                        policy.span,
+                        &[("fallback", fallback.is_some())],
+                        !handlers.is_empty(),
+                    )?;
                     delivery = Some(policy);
+                }
+                // `fallback { … }` is a contextual keyword like `delivery` (#3885).
+                Some(TokenKind::Ident) if self.peek_is_fallback_kw() => {
+                    self.parse_fallback_item(
+                        item_doc,
+                        leading,
+                        &mut fallback,
+                        !handlers.is_empty(),
+                    )?;
                 }
                 // A leading `@name(args)` introduces a handler-position annotation
                 // (v0.140): consume the annotation run, then the `on` handler it
@@ -3132,6 +3154,7 @@ impl<'a> Parser<'a> {
             json,
             errors,
             delivery,
+            fallback,
             handlers,
             documentation: None,
             span: kw.span.merge(close.span),
@@ -3163,6 +3186,12 @@ impl<'a> Parser<'a> {
     /// introducing a queue consumer's delivery policy section.
     fn peek_is_delivery_kw(&self) -> bool {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "delivery")
+    }
+
+    /// True when the next token is the contextual keyword `fallback` (#3885),
+    /// introducing an email service's fallback address section.
+    fn peek_is_fallback_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "fallback")
     }
 
     /// True when the next token is the contextual keyword `json` (#2858),
@@ -3218,7 +3247,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before the service's handlers"),
             )
             .with_note(
-                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`, `errors`",
+                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`, `errors`, `delivery`, `fallback`",
             ));
         }
         if let Some((after, _)) = later.iter().find(|(_, seen)| *seen) {
@@ -3228,7 +3257,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before `{after} {{ }}`"),
             )
             .with_note(
-                "a service's policies come in the order `cors`, `security`, `limits`, `json`, `errors`",
+                "a service's policies come in the order `cors`, `security`, `limits`, `json`, `errors`, `delivery`, `fallback`",
             ));
         }
         Ok(())
@@ -3340,6 +3369,61 @@ impl<'a> Parser<'a> {
                 .fields
                 .into_iter()
                 .map(|f| DeliveryField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// The `fallback { … }` item of a service body (#3885): at most one, after the other policies
+    /// and before the handlers. `item_doc` is a doc block before it, which documents nothing.
+    fn parse_fallback_item(
+        &mut self,
+        item_doc: Option<DocLead>,
+        mut leading: Vec<Comment>,
+        fallback: &mut Option<FallbackPolicy>,
+        handlers_seen: bool,
+    ) -> Result<(), CompileError> {
+        if let Some(doc) = item_doc {
+            self.warn_orphan_before_policy(doc.span);
+            keep_orphan(&mut leading, doc);
+        }
+        let policy = self.parse_fallback_policy(leading)?;
+        if fallback.is_some() {
+            return Err(CompileError::new(
+                "bynk.parse.duplicate_fallback",
+                policy.span,
+                "a service declares at most one `fallback { }` policy",
+            ));
+        }
+        self.check_policy_order("fallback", policy.span, &[], handlers_seen)?;
+        *fallback = Some(policy);
+        Ok(())
+    }
+
+    /// Parse a `fallback { name: value, … }` policy (#3885), as
+    /// [`Self::parse_delivery_policy`]; the checker validates the closed field set
+    /// (`forward`), the value's shape and the protocol.
+    fn parse_fallback_policy(
+        &mut self,
+        leading: Vec<Comment>,
+    ) -> Result<FallbackPolicy, CompileError> {
+        let kw = self.expect_ident("to start a `fallback` policy")?;
+        let body = self.parse_policy_body("fallback")?;
+        Ok(FallbackPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| FallbackField {
                     name: f.name,
                     value: f.value,
                     span: f.span,

@@ -1,0 +1,18 @@
+// #3885: a `system` case posts the message to the Worker's real `email()` entry. The handler's
+// fault is forwarded to the service's fallback; the service with none rejects as before.
+suite shop.support as system {
+  case "a handler fault is forwarded to the fallback" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "boom" })
+    expect r is Forward("ops@ops.example")
+  }
+
+  case "what the handler decides is applied as before" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "spam" })
+    expect r is Reject("not wanted")
+  }
+
+  case "a service with no fallback rejects a fault" {
+    let r <- sales.message(InboundEmail { from: "a@b.example", to: "sales@shop.example", subject: "boom" })
+    expect r is Reject("message could not be processed")
+  }
+}

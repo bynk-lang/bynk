@@ -1,0 +1,7 @@
+suite appname {
+	case "the home page greets the visitor" {
+		let r <- api.GET("/") by Visitor
+		expect r is Ok("Hello from appname!")
+		expect Logger.info called once
+	}
+}

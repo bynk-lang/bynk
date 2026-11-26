@@ -114,6 +114,7 @@
 /book/guides/projects-build-and-deployment/contract-skew/
 /book/guides/projects-build-and-deployment/deploy-from-ci/
 /book/guides/projects-build-and-deployment/deploy-to-cloudflare/
+/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/
 /book/guides/projects-build-and-deployment/layout/
 /book/guides/projects-build-and-deployment/roll-back-a-deployment/
 /book/guides/projects-build-and-deployment/run-a-private-registry/
@@ -379,6 +380,9 @@
 /book/reference/diagnostics/bynk.email.bad_tag/
 /book/reference/diagnostics/bynk.email.duplicate_address/
 /book/reference/diagnostics/bynk.email.duplicate_handler/
+/book/reference/diagnostics/bynk.email.fallback_bad_option/
+/book/reference/diagnostics/bynk.email.fallback_claimed/
+/book/reference/diagnostics/bynk.email.fallback_not_email/
 /book/reference/diagnostics/bynk.email.invalid_address/
 /book/reference/diagnostics/bynk.email.return_not_email_verdict/
 /book/reference/diagnostics/bynk.embed.binary_content/
@@ -650,6 +654,7 @@
 /book/reference/diagnostics/bynk.parse.doc_block_contains_code/
 /book/reference/diagnostics/bynk.parse.duplicate_cors/
 /book/reference/diagnostics/bynk.parse.duplicate_errors/
+/book/reference/diagnostics/bynk.parse.duplicate_fallback/
 /book/reference/diagnostics/bynk.parse.duplicate_json/
 /book/reference/diagnostics/bynk.parse.duplicate_limits/
 /book/reference/diagnostics/bynk.parse.duplicate_security/
@@ -1541,6 +1546,9 @@
 /reference/diagnostics/bynk.email.bad_tag/
 /reference/diagnostics/bynk.email.duplicate_address/
 /reference/diagnostics/bynk.email.duplicate_handler/
+/reference/diagnostics/bynk.email.fallback_bad_option/
+/reference/diagnostics/bynk.email.fallback_claimed/
+/reference/diagnostics/bynk.email.fallback_not_email/
 /reference/diagnostics/bynk.email.invalid_address/
 /reference/diagnostics/bynk.email.return_not_email_verdict/
 /reference/diagnostics/bynk.embed.binary_content/
@@ -1837,6 +1845,7 @@
 /reference/diagnostics/bynk.parse.duplicate_cors/
 /reference/diagnostics/bynk.parse.duplicate_delivery/
 /reference/diagnostics/bynk.parse.duplicate_errors/
+/reference/diagnostics/bynk.parse.duplicate_fallback/
 /reference/diagnostics/bynk.parse.duplicate_json/
 /reference/diagnostics/bynk.parse.duplicate_limits/
 /reference/diagnostics/bynk.parse.duplicate_security/

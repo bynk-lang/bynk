@@ -455,11 +455,44 @@ fn open_key_literal(e: &bynk_syntax::ast::Expr) -> TsExpr {
     }
 }
 
+/// #3900: the statements reading a Bearer upgrade's offered subprotocols into `__offer`, refusing the
+/// old single-element form with `400`. With `require_token`, an offer with no token is `401` too, so
+/// `__offer` is a `Token` after them.
+fn bearer_offer_stmts(require_token: bool) -> Vec<TsStmt> {
+    let mut stmts = vec![
+        const_(
+            "__offer",
+            call(
+                ident("__webSocketBearerOffer"),
+                vec![method_call(
+                    member(ident("request"), "headers"),
+                    "get",
+                    vec![str_lit("Sec-WebSocket-Protocol")],
+                )],
+            ),
+        ),
+        if_(
+            strict_eq(member(ident("__offer"), "tag"), str_lit("Legacy")),
+            return_(Some(call(ident("__webSocketBearerRefusal"), vec![]))),
+        ),
+    ];
+    if require_token {
+        stmts.push(if_(
+            strict_neq(member(ident("__offer"), "tag"), str_lit("Token")),
+            return_(Some(new_response(vec![
+                str_lit("Unauthorized"),
+                status_object("401"),
+            ]))),
+        ));
+    }
+    stmts
+}
+
 /// v0.104 (real-time track slice 3b): emit the WebSocket upgrade route — the
 /// edge half of DECISION A. The upgrade authenticates the actor **in the Worker,
 /// before any request reaches the Durable Object** (the safety boundary): it
-/// reads the Bearer token from the first `Sec-WebSocket-Protocol` element
-/// (DECISION C), verifies it fail-closed with the same audited JWT verifier HTTP
+/// reads the Bearer token from the `Sec-WebSocket-Protocol` pair
+/// `["bynk.bearer", token]` (DECISION C, #3900), verifies it fail-closed with the same audited JWT verifier HTTP
 /// uses, and only on success forwards the upgrade request to the addressed DO —
 /// the agent the `on open` transfers the connection to (DECISION B), keyed by a
 /// request parameter. The verified identity rides in a trusted internal header
@@ -519,9 +552,8 @@ pub(super) fn emit_websocket_upgrade(
         ]))),
     ));
 
-    // DECISION C: a Bearer token arrives as the first `Sec-WebSocket-Protocol`
-    // subprotocol element (a browser sets it via `new WebSocket(url, [token])`),
-    // verified fail-closed before the request is forwarded. The `on open` requires
+    // DECISION C (#3900): a Bearer token arrives as the `Sec-WebSocket-Protocol` subprotocol after
+    // `bynk.bearer` (a browser sets it via `new WebSocket(url, ["bynk.bearer", token])`), verified fail-closed before the request is forwarded. The `on open` requires
     // a `by` actor, but — exactly as an HTTP `by v: Visitor` route — that actor's
     // scheme may be `None` (an intentional anonymous channel): then `seam` is
     // `None` and no token is read. `Signature` is rejected at the WS boundary (a
@@ -534,39 +566,23 @@ pub(super) fn emit_websocket_upgrade(
     // HTTP path threads through `deps.who`, so the Durable Object rebuilds it.
     if let Some(members) = sum {
         use bynk_check::actors::SumMemberSeam;
-        stmts.push(const_(
-            "__proto",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Sec-WebSocket-Protocol")],
-            ),
-        ));
         stmts.push(TsStmt::let_stmt(
             TsBindingName::Ident("__token".to_string()),
             Some(TsType::named("string | undefined")),
             Some(ident("undefined")),
             None,
         ));
-        stmts.push(if_(
-            strict_neq(ident("__proto"), null_lit()),
-            TsStmt::assign(
-                ident("__token"),
-                method_call(
-                    TsExpr::Index {
-                        object: Box::new(method_call(
-                            ident("__proto"),
-                            "split",
-                            vec![str_lit(",")],
-                        )),
-                        index: Box::new(num_lit("0")),
-                    },
-                    "trim",
-                    vec![],
-                ),
-                None,
-            ),
-        ));
+        // #3900: the token is the subprotocol after `bynk.bearer`; the old `[token]` form is a `400`.
+        if members
+            .iter()
+            .any(|m| matches!(m.seam, SumMemberSeam::Bearer { .. }))
+        {
+            stmts.extend(bearer_offer_stmts(false));
+            stmts.push(if_(
+                strict_eq(member(ident("__offer"), "tag"), str_lit("Token")),
+                TsStmt::assign(ident("__token"), member(ident("__offer"), "token"), None),
+            ));
+        }
         stmts.push(TsStmt::let_stmt(
             TsBindingName::Ident("__who".to_string()),
             Some(TsType::named(
@@ -667,32 +683,10 @@ pub(super) fn emit_websocket_upgrade(
 
     if let Some(seam) = seam {
         let secret = crate::emitter::escape_ts_string(&seam.secret);
-        stmts.push(const_(
-            "__proto",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Sec-WebSocket-Protocol")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(ident("__proto"), null_lit()),
-            return_(Some(new_response(vec![
-                str_lit("Unauthorized"),
-                status_object("401"),
-            ]))),
-        ));
-        stmts.push(const_(
-            "__token",
-            method_call(
-                TsExpr::Index {
-                    object: Box::new(method_call(ident("__proto"), "split", vec![str_lit(",")])),
-                    index: Box::new(num_lit("0")),
-                },
-                "trim",
-                vec![],
-            ),
-        ));
+        // #3900: the token is the subprotocol after `bynk.bearer`; the old `[token]` form is a
+        // `400` naming the form that works, and no token at all is a `401`.
+        stmts.extend(bearer_offer_stmts(true));
+        stmts.push(const_("__token", member(ident("__offer"), "token")));
         // The hosting context's `Env` carries the DO binding (a non-empty object
         // type), so the secret probe casts through `unknown` to index it.
         stmts.push(const_("__secret", secret_probe_expr(&secret)));

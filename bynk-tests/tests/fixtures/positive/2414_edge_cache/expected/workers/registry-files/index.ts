@@ -2,6 +2,7 @@
 // Worker entry point for context `registry.files`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __applyEdgeCache, __noStore, __edgeCacheGuard, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
@@ -115,7 +116,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
   } catch (e) {
     const __busy = __agentBusyResponse(e, __route);
     if (__busy !== null) return __busy;
-    globalThis.console.error(`registry.files ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+    globalThis.console.error(__withTrace(`registry.files ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
     __bynkReportFault(ctx, e);
     return __faultResponse("registry.files", __route);
   }
@@ -130,6 +131,8 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    return __edgeCacheGuard(request, await __bynkFetch(request, env, ctx));
+    return __enterTrace(async () => {
+      return __edgeCacheGuard(request, await __bynkFetch(request, env, ctx));
+    });
   },
 };

@@ -9,13 +9,23 @@ consumes bynk.cloudflare { Analytics, AnalyticsSql, AnalyticsSqlError, Analytics
 
 capability Signups = Analytics
 
+const WEEKLY: String = "SELECT count() AS n, (SELECT count() FROM {dataset}) AS total FROM {dataset} WHERE timestamp > NOW() - INTERVAL '7' DAY"
+
 service report from http {
+	on GET("/weekly") () -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
+		let res <- AnalyticsSql.query(Signups, WEEKLY, [])
+		match res {
+			Ok(r) => Ok(r.rows),
+			Err(_) => ServerError("the query failed"),
+		}
+	}
+
 	on GET("/signups/:country") (country: String) -> Effect[HttpResult[Int]] by Visitor given AnalyticsSql, Signups {
-		// `dataset()` is this environment's table: `events.analyticsEngine.shop_signups_signups`, or
-		// the `_staging` one under `--env staging`.
-		let table <- Signups.dataset()
-		let sql = "SELECT count() AS n FROM \(table) WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY"
-		let res <- AnalyticsSql.query(sql, [Text(country)])
+		// #4104: the SQL is a literal; `{dataset}` is this environment's table for `Signups`:
+		// `events.analyticsEngine.shop_signups_signups`, or the `_staging` one under `--env staging`.
+		let res <- AnalyticsSql.query(Signups,
+			"SELECT count() AS n FROM {dataset} WHERE blob1 = $1 AND timestamp > NOW() - INTERVAL '1' DAY",
+			[Text(country)])
 		match res {
 			Ok(r) => Ok(r.rows),
 			Err(SqlRetryable(_)) => ServerError("try again shortly"),

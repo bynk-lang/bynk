@@ -9,7 +9,7 @@ import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, call
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { currentSession, expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, eventEnvelopeOf, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
-import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketUpgradeResponse } from "./connection.ts";
+import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocketPair, resolveConnection, webSocketBearerOffer, webSocketBearerProtocol, webSocketBearerRefusal, webSocketUpgradeResponse } from "./connection.ts";
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
@@ -20,7 +20,7 @@ import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitAllowsKey, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withDownload, withHeartbeat, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type SecurityPolicy } from "./http.ts";
-import { currentTraceId } from "./traceparent.ts";
+import { currentTraceId, enterTrace, withTrace } from "./traceparent.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -93,6 +93,8 @@ export {
   deserialiseEventEnvelope as __deserialiseEventEnvelope,
   eventEnvelopeOf as __eventEnvelopeOf,
   currentTraceId as __currentTraceId,
+  enterTrace as __enterTrace,
+  withTrace as __withTrace,
   dispatchToEventsFanout as __dispatchToEventsFanout,
   edgeCacheGuard as __edgeCacheGuard,
   encodeAgentResult as __encodeAgentResult,
@@ -205,6 +207,9 @@ export {
   tokenClaims as __tokenClaims,
   verifySignatureHmacSha256 as __verifySignatureHmacSha256,
   wakeForMigration as __wakeForMigration,
+  webSocketBearerOffer as __webSocketBearerOffer,
+  webSocketBearerProtocol as __webSocketBearerProtocol,
+  webSocketBearerRefusal as __webSocketBearerRefusal,
   webSocketUpgradeResponse as __webSocketUpgradeResponse,
   historyBefore as __historyBefore,
   historyRecord as __historyRecord,

@@ -53,6 +53,7 @@ mod config;
 pub(crate) mod containers;
 mod declared;
 mod destinations;
+pub(crate) mod email;
 mod facts;
 mod first_deploy;
 mod gates;

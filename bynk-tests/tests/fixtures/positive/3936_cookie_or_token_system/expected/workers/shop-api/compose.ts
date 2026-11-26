@@ -3,7 +3,7 @@
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { __sessionCookieOf, __csrfAllowed } from "../../__bynk_runtime/http.js";
-import { __verifyOidcJwt } from "../../__bynk_runtime/auth.js";
+import { __verifyOidcJwt, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import { __verifySignedCookie } from "../../__bynk_runtime/session.js";
 import * as handlers from "./handlers.js";
 
@@ -37,7 +37,7 @@ export function compose(env: Env) {
           const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
           if (__claims.tag === "Ok") {
             const __id = handlers.UserId.of(__claims.value.sub);
-            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value };
+            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
           }
         }
       }
@@ -53,7 +53,7 @@ export function compose(env: Env) {
           const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
           if (__claims.tag === "Ok") {
             const __id = handlers.UserId.of(__claims.value.sub);
-            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value };
+            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
           }
         }
       }
@@ -93,7 +93,7 @@ export function compose(env: Env) {
           const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
           if (__claims.tag === "Ok") {
             const __id = handlers.UserId.of(__claims.value.sub);
-            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value };
+            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value, claims: __tokenClaims(__claims.value.claims) };
           }
         }
       }

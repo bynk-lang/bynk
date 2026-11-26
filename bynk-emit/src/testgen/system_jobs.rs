@@ -156,6 +156,7 @@ pub(super) fn emit_system_job_support(
                             ident("as"),
                             str_lit(name.clone()),
                             body,
+                            ident("identity"),
                         ],
                     )),
                     None => body,
@@ -192,6 +193,8 @@ pub(super) fn emit_system_job_support(
                 }
                 if signed.is_some() {
                     driver_params.push(TsParam::optional("as", Some(TsType::named("string"))));
+                    // The Bynk context a `Producer` refinement is acted as.
+                    driver_params.push(TsParam::optional("identity", Some(any_type())));
                     services.signed_queue.insert(sname.clone());
                 }
                 drivers.push(async_driver(

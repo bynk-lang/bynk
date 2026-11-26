@@ -277,8 +277,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor beside an unsigned one in a sum, or alone with a binder, because the message of an unsigned actor carries no signature to tell it from a signed one and a lone actor identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors, a lone one with no binder.",
-        example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
+        blurb: "A queue consumer can narrow who may send to it with `Foreign` actors, which admit only messages signed under the actor's secret, and with refinements of `Producer`, which admit only messages a Bynk producer in the named contexts signed. Two forms are not enforced, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: one of those beside the unsigned `Producer` in a sum, because an unsigned message carries no signature to tell it from a signed one, and a lone one with a binder, because it identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors and `Producer` refinements, a lone one with no binder.",
+        example: "context shop\n\ntype Order = { id: String }\nactor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by who: Legacy | Producer {   // ✗ an unsigned message cannot be told from a signed one\n    match who {\n      Legacy => Ack\n      Producer => Ack\n    }\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Legacy {   // ✓ only messages signed under its secret\n    Ack\n  }\n}",
     },
     Explain {
         code: "bynk.actor.refinement_base_unsupported",
@@ -1775,6 +1775,21 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
         example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_bad_option",
+        blurb: "A `fallback { }` block on a `from email` service has one field, `forward`: the address mail a handler faulted on, or that could not be read, is forwarded to. It is a string literal holding a bare address, not a display name and not a domain's catch-all, and it must be a verified destination address on the account (`bynk deploy` warns of one that is not). A second `forward`, any other field or a missing `forward` is this error.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"*@ops.example\" }   // ✗ a catch-all, not one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one address\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_claimed",
+        blurb: "A fallback forwards mail to an address outside the service. If a `from email` service of the project claims that address, directly or through its domain's catch-all, the forwarded message is routed straight back to Bynk, and a fault there would forward it again. Name a verified destination address that no service of the project claims.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"help@shop.example\" }   // ✗ `helpdesk` claims it\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice helpdesk from email(\"help@shop.example\") { … }\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ not routed to a service\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
+    },
+    Explain {
+        code: "bynk.email.fallback_not_email",
+        blurb: "A `fallback { }` block says where mail a handler faulted on is forwarded, so only a `from email` service, which receives mail, can have one. A queue's equivalent is its `delivery { }` dead-letter queue.",
+        example: "service jobs from queue(\"jobs\") {\n    delivery { deadLetter: None }\n    fallback { forward: \"ops@ops.example\" }   // ✗ not a `from email` service\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice jobs from queue(\"jobs\") {\n    delivery { deadLetter: \"jobs-dead\" }   // ✓ a queue's counterpart\n    on message(job: String) -> Effect[QueueResult] by Producer { Ack }\n}",
     },
     Explain {
         code: "bynk.email.invalid_address",
@@ -3481,6 +3496,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.parse.duplicate_errors",
         blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
         example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_fallback",
+        blurb: "A `from email` service has one `fallback` block: the one address mail a handler faulted on is forwarded to. A second block could name another address, and the reader would not know which holds, so it is refused. Keep one.",
+        example: "service support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }\n    fallback { forward: \"oncall@ops.example\" }   // ✗ a second `fallback`\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}\n\nservice support from email(\"support@shop.example\") {\n    fallback { forward: \"ops@ops.example\" }   // ✓ one policy\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -6823,23 +6843,6 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   }",
     },
     Explain {
-        code: "bynk.uses.second_spelling",
-        blurb: "A unit reaches each declaration of a used commons by one spelling: the bare name \
-                its `uses` brings in, the alias (`uses lib.billing as B`, then `B.Amount`), or the \
-                full name (`lib.billing.Amount`). Reading the same declaration by a second spelling \
-                would make two names for one type, so the compiler refuses the second and names the \
-                one to keep. Use that spelling everywhere, or change the `uses` clauses so that only \
-                one spelling reaches it.",
-        example: "// lib/billing.bynk\n\
-                  commons lib.billing\n\n\
-                  type Amount = Int where Positive\n\n\
-                  // orders.bynk\n\
-                  commons orders\n\n\
-                  uses lib.billing { Amount }\n\n\
-                  type Order = { a: Amount, b: lib.billing.Amount }    // ✗ `Amount` is already in scope\n\
-                  type Order = { a: Amount, b: Amount }                // ✓ one spelling",
-    },
-    Explain {
         code: "bynk.uses.self_reference",
         blurb: "`uses` brings another commons into scope. A commons' own declarations are already there, so using itself adds nothing, and a unit that depends on itself is a cycle of length one. Delete the clause, or, if you meant another commons, name it. The mirror of this for contexts is `bynk.consumes.self_reference`.",
         example: "// tax.bynk\ncommons tax\n\nfn rate() -> Int { 20 }\n\n// money.bynk\ncommons money\n\nuses money                       // ✗ a commons cannot use itself\nuses tax                         // ✓ a different commons\n\ntype Amount = Int where NonNegative",
@@ -7185,6 +7188,14 @@ pub const RETIRED: &[Retired] = &[
             "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
         ),
     },
+    Retired {
+        code: "bynk.uses.second_spelling",
+        last_release: "0.661.1",
+        why: "Every spelling of a used declaration (`Status`, `Y.Status`, `lib.y.Status`) now resolves to the one declaration (#4352), so reading it by a second spelling is no longer an error.",
+        replacement: Some(
+            "any spelling of the declaration, which are all one type, function or constant",
+        ),
+    },
 ];
 
 /// The tombstone for a retired `code`, or `None` when it was never retired.
@@ -7335,7 +7346,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, which nothing enforces yet.",
+        "A queue consumer names a signed actor beside an unsigned one, or a lone one with a binder, which nothing enforces.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",
@@ -8166,6 +8177,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.email.duplicate_handler",
         "A `from email` service declares more than one `on message` handler; it has exactly one.",
+    ),
+    dg(
+        "bynk.email.fallback_bad_option",
+        "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_claimed",
+        "A `fallback` address is one a `from email` service of the project claims.",
+        &["fallback_policy"],
+    ),
+    dg(
+        "bynk.email.fallback_not_email",
+        "A `fallback { }` block is on a service that is not `from email`.",
+        &["fallback_policy"],
     ),
     d(
         "bynk.email.invalid_address",
@@ -9458,6 +9484,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_errors",
         "A service declares more than one `errors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_fallback",
+        "A service declares more than one `fallback { }` policy.",
         &["service_decl"],
     ),
     dg(
@@ -11486,11 +11517,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.name_conflict",
         "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
-        &["uses_decl"],
-    ),
-    dg(
-        "bynk.uses.second_spelling",
-        "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type.",
         &["uses_decl"],
     ),
     dg(
