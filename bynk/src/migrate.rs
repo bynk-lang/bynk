@@ -17,6 +17,7 @@ use bynk_project::schema_registry::SchemaRegistry;
 use bynk_project::worker_layout::WorkerLayout;
 use serde::Serialize;
 
+pub(crate) mod duplicates;
 pub(crate) mod live;
 pub(crate) mod sweep;
 

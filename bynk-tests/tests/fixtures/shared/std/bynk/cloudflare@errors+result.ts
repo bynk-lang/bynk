@@ -675,24 +675,52 @@ export const EmailReply = {
 };
 
 /**
+ * Everything a `Route` verdict does with one message. `reply` answers the
+ * sender, and is applied first. Each `forward` destination, which must be a
+ * verified destination address in the account, then gets the message, de-duplicated
+ * without regard to case; at most 20 are allowed, and more is a handler fault.
+ * `tag` is added to each forward as headers: a name starts with `X-` and holds only
+ * letters, digits and `-`, and a value has no line break (a literal map that breaks
+ * this is `bynk.email.bad_tag`, and a bad entry built at run time is dropped, with
+ * its name logged and never written). Tags apply to forwards only, since a reply's
+ * headers are the runtime's.
+ */
+export interface EmailActions {
+  readonly forward: readonly string[];
+  readonly reply: Option<EmailReply>;
+  readonly tag: ReadonlyMap<string, string>;
+}
+
+export const EmailActions = {
+};
+
+/**
  * What a `from email` handler decides about a message, returned as
  * `Effect[EmailVerdict]` (the agency rule of ADR 0078, as `QueueResult` is).
  * `Accept` handles it and nothing else happens; `Reject(reason)` refuses it
  * permanently with an SMTP rejection carrying `reason`; `Forward(to)` passes it
  * to one destination, which must be a verified destination address in the
- * account; `Reply(message)` answers the sender. One decision per message.
+ * account; `Reply(message)` answers the sender. `Route(actions)` does any
+ * combination of these, `Forward(to)` and `Reply(m)` being shorthands for a
+ * `Route` with only that action; a `Route` with nothing to do behaves as `Accept`.
+ * A `Route` is applied reply first, then each forward; a refusal is logged and
+ * the rest still run, the message is rejected (with the reason of the first
+ * refusal) only when every action was refused, and handled when any succeeded,
+ * because a forward cannot be taken back.
  */
 export type EmailVerdict =
     { readonly tag: "Accept" }
   | { readonly tag: "Reject"; readonly reason: string }
   | { readonly tag: "Forward"; readonly to: string }
-  | { readonly tag: "Reply"; readonly message: EmailReply };
+  | { readonly tag: "Reply"; readonly message: EmailReply }
+  | { readonly tag: "Route"; readonly actions: EmailActions };
 
 export const EmailVerdict = {
   Accept: { tag: "Accept" } as EmailVerdict,
   Reject: (reason: string): EmailVerdict => ({ tag: "Reject", reason }),
   Forward: (to: string): EmailVerdict => ({ tag: "Forward", to }),
   Reply: (message: EmailReply): EmailVerdict => ({ tag: "Reply", message }),
+  Route: (actions: EmailActions): EmailVerdict => ({ tag: "Route", actions }),
 };
 
 /**

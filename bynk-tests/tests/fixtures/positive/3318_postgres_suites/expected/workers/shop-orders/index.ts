@@ -102,7 +102,7 @@ export default {
           if (method === "POST" && __matchPath("/orders", path) !== null) {
             __route = "POST /orders";
             const result = await surface.http_POST_orders();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"shop.orders\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /orders" }), request, ["Bynk realm=\"shop.orders\""]), __security_api);
           }
         }
         if (__matchPath("/orders", path) !== null) {

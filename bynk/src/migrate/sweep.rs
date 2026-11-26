@@ -235,6 +235,9 @@ pub(crate) struct ClassResult {
     pub layout_moved: usize,
     /// The woken instances whose record was already in the Worker's layout (or a later one).
     pub layout_already: usize,
+    /// The `@unique(by:)` values more than one key already holds, found in the woken instances
+    /// (#4390). Information only: it never fails the sweep or holds a floor.
+    pub duplicates: super::duplicates::Duplicates,
     /// Why the target could not be swept at all.
     pub error: Option<String>,
 }
@@ -287,6 +290,7 @@ pub(crate) fn execute(
             layout: None,
             layout_moved: 0,
             layout_already: 0,
+            duplicates: Default::default(),
             error: Some(error),
         };
         let key = match mint() {
@@ -371,6 +375,10 @@ fn summary_line(r: &ClassResult) -> String {
     for (id, fault) in &r.failed {
         line.push_str(&format!("\n    {id}: {fault}"));
     }
+    for duplicates in r.duplicates.lines() {
+        line.push('\n');
+        line.push_str(&duplicates);
+    }
     line
 }
 
@@ -406,6 +414,7 @@ fn wake_class(
         layout: None,
         layout_moved: 0,
         layout_already: 0,
+        duplicates: Default::default(),
         error: None,
     };
     let mut ready = Err("not tried".to_string());
@@ -443,6 +452,7 @@ fn wake_class(
     let absorb = |result: &mut ClassResult, answer: Answer, retry: Option<&mut Vec<String>>| {
         let mut retry = retry;
         for w in answer.results {
+            result.duplicates.absorb(w.unique);
             match w.outcome {
                 Outcome::Woke {
                     after,
@@ -514,6 +524,8 @@ struct Answer {
 struct Woken {
     id: String,
     outcome: Outcome,
+    /// The `@unique(by:)` duplicates this instance holds (#4390).
+    unique: Vec<super::duplicates::Reported>,
 }
 
 enum Outcome {
@@ -551,7 +563,11 @@ fn parse_answer(text: &str) -> Result<Answer, String> {
                     layout_before: r.get("layoutBefore").and_then(serde_json::Value::as_i64),
                 },
             };
-            Woken { id, outcome }
+            Woken {
+                id,
+                outcome,
+                unique: super::duplicates::parse(r),
+            }
         })
         .collect();
     let layout = v.get("layout").and_then(serde_json::Value::as_i64);
@@ -1333,8 +1349,35 @@ mod tests {
             layout: None,
             layout_moved: 0,
             layout_already: 0,
+            duplicates: Default::default(),
             error: None,
         }
+    }
+
+    #[test]
+    fn existing_unique_duplicates_are_reported_without_failing_or_holding_the_sweep() {
+        let secrets = FakeSecrets::default();
+        let mut worker = FakeWorker::new(3, 3);
+        worker.answers = vec![(
+            "id0".to_string(),
+            serde_json::json!({
+                "id": "id0", "before": 3, "after": 3,
+                "unique": [{ "map": "people", "by": "email", "holders": [2, 2, 4] }]
+            }),
+        )];
+        let (results, out) = run(&one_plan(2), &secrets, &worker, false);
+        assert!(results[0].complete(), "duplicates never fail a sweep");
+        assert_eq!(results[0].woke, 2);
+        assert!(
+            out.contains(
+                "@unique(by: email) on `people`: 3 values are held by more than one key: \
+                 2, 2 and 4 holders (in 1 instance)"
+            ),
+            "{out}"
+        );
+        let (clean, out) = run(&one_plan(2), &secrets, &FakeWorker::new(3, 3), false);
+        assert!(clean[0].duplicates.lines().is_empty());
+        assert!(!out.contains("@unique"), "{out}");
     }
 
     #[test]

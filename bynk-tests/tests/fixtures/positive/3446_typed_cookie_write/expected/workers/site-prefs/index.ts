@@ -55,21 +55,21 @@ export default {
           if (method === "POST" && __matchPath("/leaves", path) !== null) {
             __route = "POST /leaves";
             const result = await surface.http_POST_leaves();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /leaves" }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
           }
         }
         {
           if (method === "POST" && __matchPath("/theme/dark", path) !== null) {
             __route = "POST /theme/dark";
             const result = await surface.http_POST_theme_dark();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /theme/dark" }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
           }
         }
         {
           if (method === "POST" && __matchPath("/theme/reset", path) !== null) {
             __route = "POST /theme/reset";
             const result = await surface.http_POST_theme_reset();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /theme/reset" }), request, ["Bynk realm=\"site.prefs\""]), __security_site);
           }
         }
         if (__matchPath("/leaves", path) !== null) {

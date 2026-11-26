@@ -360,6 +360,30 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     return false;
   }
 
+  /** The postings of one index sort by value, so the holders of a value are one run of keys; only the run lengths are kept (#4390). */
+  async duplicateHolders(index: string): Promise<number[]> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    await this.ready();
+    const prefix = postingPrefix(this.field, index);
+    const holders: number[] = [];
+    let current: string | undefined;
+    let run = 0;
+    for await (const page of pagesOf<unknown>(this.overlay, { prefix })) {
+      for (const [k] of page) {
+        const by = k.slice(prefix.length, k.indexOf("/", prefix.length));
+        if (by === current) {
+          run += 1;
+        } else {
+          if (run > 1) holders.push(run);
+          current = by;
+          run = 1;
+        }
+      }
+    }
+    if (run > 1) holders.push(run);
+    return holders;
+  }
+
   async byIndex(index: string, by: string): Promise<readonly V[]> {
     if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
     await this.ready();

@@ -919,3 +919,21 @@ export async function checkUnique(
     }
   }
 }
+
+/**
+ * The `@unique(by:)` values that more than one entry already holds (#4390), for `bynk migrate sweep`: for each
+ * `[field, index]` the staged map has, the holders of each such value (`[2, 2, 4]`: three values). A map with none
+ * is left out. A value is never named: the count of holders is all a report may carry.
+ */
+export async function uniqueDuplicates(
+  state: object,
+  declared: ReadonlyArray<readonly [string, string]>,
+): Promise<Array<{ map: string; by: string; holders: number[] }>> {
+  const handles = state as Readonly<Record<string, { duplicateHolders(index: string): number[] | Promise<number[]> }>>;
+  const out: Array<{ map: string; by: string; holders: number[] }> = [];
+  for (const [field, index] of declared) {
+    const holders = [...(await (handles[field] as { duplicateHolders(index: string): number[] | Promise<number[]> }).duplicateHolders(index))].sort((a, b) => a - b);
+    if (holders.length > 0) out.push({ map: field, by: index, holders });
+  }
+  return out;
+}

@@ -46,14 +46,14 @@ export default {
           if (method === "POST" && __matchPath("/bump", path) !== null) {
             __route = "POST /bump";
             const result = await surface.http_POST_bump();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"app\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /bump" }), request, ["Bynk realm=\"app\""]), __security_api);
           }
         }
         {
           if (method === "POST" && __matchPath("/note", path) !== null) {
             __route = "POST /note";
             const result = await surface.http_POST_note();
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: true }), request, ["Bynk realm=\"app\""]), __security_api);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null, { notGet: "POST /note" }), request, ["Bynk realm=\"app\""]), __security_api);
           }
         }
         if (__matchPath("/bump", path) !== null) {

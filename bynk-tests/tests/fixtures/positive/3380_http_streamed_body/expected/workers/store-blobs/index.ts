@@ -55,7 +55,7 @@ export default {
             }
             const body = __bytes;
             const result = await surface.http_POST_small(body);
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /small" }), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
           }
         }
         {
@@ -80,7 +80,7 @@ export default {
               return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
             }
             const result = __handled.value;
-            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: true }), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
+            return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "PUT /blobs/:name" }), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
           }
         }
         if (__matchPath("/blobs/:name", path) !== null) {
