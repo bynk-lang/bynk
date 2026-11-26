@@ -2939,6 +2939,8 @@ pub fn phase_tables_uses_consts(
 ) -> (HashMap<String, UnitTable>, HashMap<String, Vec<String>>) {
     let mut unit_tables = phase_symbol_tables(groups, kinds, parsed, errors);
     let unit_uses = phase_resolve_uses(groups, kinds, parsed, &unit_tables, policy, errors);
+    // #4455: the items of a braced `uses` list are references to what they select.
+    crate::uses_view::record_selected_items(&unit_uses, parsed, groups, &unit_tables, refs);
     crate::annotation_consts::resolve_annotation_consts(
         groups,
         kinds,

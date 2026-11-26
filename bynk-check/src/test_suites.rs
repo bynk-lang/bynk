@@ -6331,6 +6331,7 @@ pub fn integration_view(
         for name in [
             "InboundEmail",
             "InboundAttachment",
+            "EmailHeader",
             "EmailVerdict",
             "EmailReply",
             "DmarcVerdict",
