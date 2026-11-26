@@ -1,0 +1,39 @@
+suite shop.orders {
+  case "as keeps the whole value beside its shape" {
+    let paid = Order { id: "a", status: Paid, total: 5 }
+    expect shipPaid(Some(paid)) == 5
+    expect shipPaid(Some(Order { id: "a", status: Pending, total: 5 })) == 0
+    expect shipPaid(None) == 0
+  }
+
+  case "a variant pattern binds the sum value" {
+    let o = Order { id: "a", status: Paid, total: 5 }
+    expect orderOf(Placed(o)) == Some(o)
+    expect orderOf(Refunded(o)) == Some(o)
+    expect orderOf(Shipped(o, "t")) == Some(o)
+    expect orderOf(Dropped) == None
+  }
+
+  case "a list element binds beside the rest" {
+    let a = Order { id: "a", status: Paid, total: 5 }
+    expect firstOrder([a]) == 10
+    expect firstOrder([]) == 0
+    expect headTotal([a, a]) == 6
+    expect headTotal([Order { id: "b", status: Pending, total: 1 }]) == 1
+    expect headTotal([]) == 0
+  }
+
+  case "as after is" {
+    let o = Order { id: "a", status: Paid, total: 5 }
+    expect isShipped(Shipped(o, "x"))
+    expect !isShipped(Shipped(o, "y"))
+    expect !isShipped(Dropped)
+    expect paidOrder(o) == 5
+    expect paidOrder(Order { id: "a", status: Pending, total: 5 }) == 0
+  }
+
+  case "as in a lambda parameter" {
+    let o = Order { id: "ab", status: Paid, total: 5 }
+    expect withLambda([o]) == [7]
+  }
+}

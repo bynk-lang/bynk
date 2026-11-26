@@ -1,0 +1,70 @@
+commons shop.orders {
+  type Status = enum { Pending, Paid, Cancelled }
+
+  type Order = { id: String, status: Status, total: Int }
+
+  type Event =
+    | Placed(order: Order)
+    | Shipped(order: Order, tracking: String)
+    | Refunded(order: Order)
+    | Dropped
+
+  fn totalOf(o: Order) -> Int { o.total }
+
+  // The shape check and the whole value in one arm: no guard, so the match
+  // stays exhaustive without a `_` arm.
+  fn shipPaid(o: Option[Order]) -> Int {
+    match o {
+      Some(Order { status: Paid, .. } as paid) => totalOf(paid)
+      Some(Order { status: Pending, .. }) => 0
+      Some(Order { status: Cancelled, .. }) => 0
+      None => 0
+    }
+  }
+
+  // A variant pattern's `as` is the whole sum value.
+  fn keep(e: Event) -> Event {
+    match e {
+      Placed(_) as placed => placed
+      Shipped(_, _) as shipped => shipped
+      other => other
+    }
+  }
+
+  // `as` binds tighter than `|`; parentheses bind either alternative.
+  fn orderOf(e: Event) -> Option[Order] {
+    match e {
+      (Placed(o) | Refunded(o)) as ev => match ev {
+        Placed(_) => Some(o)
+        _ => Some(o)
+      }
+      Shipped(order: o, tracking: _) => Some(o)
+      Dropped => None
+    }
+  }
+
+  fn firstOrder(orders: List[Order]) -> Int {
+    let [first as head, ..] = orders else { 0 }
+    totalOf(head) + totalOf(first)
+  }
+
+  fn headTotal(orders: List[Order]) -> Int {
+    match orders {
+      [Order { status: Paid, .. } as head, ..rest] => totalOf(head) + rest.length()
+      [_, ..] => 1
+      [] => 0
+    }
+  }
+
+  fn isShipped(e: Event) -> Bool {
+    if e is (Shipped(tracking: t, order: _) as s) { t == "x" && keep(s) is Shipped(_, _) } else { false }
+  }
+
+  fn paidOrder(o: Order) -> Int {
+    if o is (Order { status: Paid, .. } as p) { totalOf(p) } else { 0 }
+  }
+
+  fn withLambda(orders: List[Order]) -> List[Int] {
+    orders.map((Order { id, .. } as item) => totalOf(item) + id.length())
+  }
+}

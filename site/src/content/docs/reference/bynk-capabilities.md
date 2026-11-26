@@ -2941,7 +2941,9 @@ capabilities may arrive experimental first, as `D1` did.
 ### Extensible enums
 
 `FetchError` and `Method`, and `bynk.crypto`'s `Digest`, `Signature` and
-`CryptoError`, are **extensible**: they may gain variants in a minor release. Listing every variant they have today is not enough, so a `match` that
+`CryptoError`, are **extensible**: they may gain variants in a minor release.
+So is the built-in [`HttpResult`](/reference/http/#httpresult-variants), whose
+status vocabulary grows in 1.x minor releases. Listing every variant they have today is not enough, so a `match` that
 covers one, at any depth, needs a wildcard:
 
 ```bynk,fail=bynk.types.extensible_match_needs_wildcard
@@ -2984,6 +2986,7 @@ service probe {
 
 An enum of your own with the same name is not extensible; the rule follows the
 first-party enum, not the name.
+(`HttpResult` is a reserved name, so no type of your own can take it.)
 
 ## Related first-party modules
 

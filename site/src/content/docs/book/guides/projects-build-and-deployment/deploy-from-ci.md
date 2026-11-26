@@ -85,6 +85,7 @@ anything, and a refusal names the permission it lacked.
 
 | Resource | Permission | Used by |
 |---|---|---|
+| KV namespace | Workers KV Storage: Edit | Creating, listing and deleting namespaces through Cloudflare's API |
 | Hyperdrive config (`Postgres`) | Hyperdrive: Edit | Creating the config from its connection string |
 | Secrets Store secret | Secrets Store: Read | Checking the stored secret exists, before the deploy |
 | AI Search instance | AI Search: Edit and AI Search: Run | Checking the instance exists (Cloudflare names no read-only permission) |

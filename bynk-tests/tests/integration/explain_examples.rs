@@ -154,6 +154,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3931_agent_erase_write_after` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.match.as_on_wildcard",
+        "a warning; `positive/3971_as_on_wildcard` holds it with `expected_warnings.txt`, and `positive/3971_pattern_as` holds the good case",
+    ),
+    (
         "bynk.match.refined_pattern_is_range",
         "a warning; `positive/3972_refined_pattern_is_range` holds it with `expected_warnings.txt`, and `positive/3972_range_pattern_is_exhaustive` holds the good case",
     ),

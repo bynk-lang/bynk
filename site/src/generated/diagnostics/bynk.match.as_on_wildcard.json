@@ -1,0 +1,12 @@
+{
+  "blurb": "`pattern as name` binds `name` to the whole value the pattern matched, so that a pattern can check a value's shape and keep the value too: `Some(Order { status: Paid, .. } as paid)`. On `_` it adds nothing, because `_` already matches every value and a bare name binds that same value: `_ as x` is `x`. The warning's quick fix writes the name, and `bynk check --fix` applies it. If the pattern was meant to check a shape first, write that shape in front of `as`.",
+  "category": "Match",
+  "categoryAnchor": "match",
+  "code": "bynk.match.as_on_wildcard",
+  "constructs": [
+    "as_pattern"
+  ],
+  "example": "match o {\n    Some(_ as order) => ship(order)    // ✗ `_ as order` is just `order`\n    None => nothing()\n}\n\nmatch o {\n    Some(order) => ship(order)        // ✓\n    None => nothing()\n}",
+  "severity": "warning",
+  "summary": "`_ as name` binds the same value as the bare name `name` (warning; auto-fixable)."
+}

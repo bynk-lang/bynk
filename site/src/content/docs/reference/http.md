@@ -389,6 +389,30 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 `Stream[Bytes]` body streamed chunk by chunk (`RawStreamed`), or no body at all
 (`None`).
 
+`HttpResult` is **extensible**, like [`FetchError` and
+`Method`](/reference/bynk-capabilities/#extensible-enums): the vocabulary grows
+in 1.x minor releases, so listing every variant it has today is not enough. A
+`match` that covers an `HttpResult`, at top level or inside a `Result` or
+`Option`, needs a wildcard or binding arm, or it is
+`bynk.types.extensible_match_needs_wildcard`:
+
+```bynk
+commons app.status
+
+fn label(r: HttpResult[String]) -> String {
+	match r {
+		Ok(_) => "ok",
+		NotFound => "missing",
+		_ => "other",
+	}
+}
+```
+
+The `_` arm covers every status not named, including those a later release
+adds. It also catches a status you would want to handle by name once it
+exists, the same trade-off as for `FetchError`. A `match` in a suite case, and
+`expect r is …`, are not under the rule.
+
 ### 2xx success
 
 | Variant | Status | Payload |

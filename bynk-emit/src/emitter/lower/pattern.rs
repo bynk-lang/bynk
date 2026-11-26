@@ -145,6 +145,7 @@ pub(in crate::emitter) fn pattern_tests(
     let tys = cx.ty_render();
     match pattern {
         Pattern::Wildcard(_) | Pattern::Binding(_) => {}
+        Pattern::As { inner, .. } => pattern_tests(path, path_ty, inner, cx, tests),
         Pattern::Literal { value, .. } => {
             tests.push(path_test(
                 path,
@@ -351,6 +352,13 @@ pub(in crate::emitter) fn emit_pattern_bindings(
             let local = cx.bind_local_name(&id.name);
             body.push(const_binding(&local, path.node().clone()));
         }
+        // #3971: `p as name` binds the value at `path`, then whatever `p`
+        // binds inside it.
+        Pattern::As { inner, name, .. } => {
+            let local = cx.bind_local_name(&name.name);
+            body.push(const_binding(&local, path.node().clone()));
+            emit_pattern_bindings(body, path, path_ty, inner, cx);
+        }
         // #472: a refined pattern binds only what its inner pattern binds
         // (`_ where P` binds nothing today).
         Pattern::Refined { inner, .. } => {
@@ -530,6 +538,10 @@ fn pattern_binding_paths(
     match pattern {
         Pattern::Wildcard(_) | Pattern::Literal { .. } | Pattern::Range(_) => {}
         Pattern::Binding(id) => out.push((id.name.clone(), path.node().clone())),
+        Pattern::As { inner, name, .. } => {
+            out.push((name.name.clone(), path.node().clone()));
+            pattern_binding_paths(path, path_ty, inner, cx, out);
+        }
         Pattern::Variant {
             variant, bindings, ..
         } => {
