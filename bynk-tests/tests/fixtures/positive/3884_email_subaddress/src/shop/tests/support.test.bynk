@@ -1,0 +1,26 @@
+suite shop.support as system {
+  case "a plus-addressed recipient reaches the base address's service, with the tag readable" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support+1234@shop.example", subject: "hello" })
+    expect r is Forward("tickets@shop.example")
+  }
+
+  case "mail without a tag reaches the same service with no subaddress" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello" })
+    expect r is Accept
+  }
+
+  case "the case of the recipient and the tag is ignored" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "SUPPORT+X@shop.example", subject: "hello" })
+    expect r is Forward("tickets@shop.example")
+  }
+
+  case "an exact claim on a tagged address wins over its base address" {
+    let r <- vip.message(InboundEmail { from: "a@b.example", to: "support+vip@shop.example", subject: "hello" })
+    expect r is Reject("vip mail goes elsewhere")
+  }
+
+  case "a tagged recipient with no base claim falls to the catch-all" {
+    let r <- rest.message(InboundEmail { from: "a@b.example", to: "sales+9@shop.example", subject: "hello" })
+    expect r is Reject("no such mailbox")
+  }
+}
