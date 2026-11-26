@@ -5,7 +5,7 @@
 //! [`bynk_emit::compile_with_warnings`] — exactly `bynk check`'s two branches, so the
 //! output is identical. The body is [`bynk_driver::run_check`], shared with `bynk`.
 
-use bynk_driver::emsg;
+use bynk_driver::{CheckOutput, emsg};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -20,12 +20,25 @@ pub fn run(
     each: bool,
     environment: &str,
 ) -> ExitCode {
-    let short = format == CheckFormatArg::Short;
+    let output = match format {
+        CheckFormatArg::Rich => CheckOutput::Rich,
+        CheckFormatArg::Short => CheckOutput::Short,
+        CheckFormatArg::Json => CheckOutput::Json,
+        CheckFormatArg::Ndjson => CheckOutput::Ndjson,
+    };
+    let short = output == CheckOutput::Short;
     if emit && !input.is_dir() {
         emsg!("bynk check: error: `--emit` takes a project directory, not a single file");
         return ExitCode::FAILURE;
     }
-    let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each, environment);
+    // #4123: `--emit`'s findings are `tsc`'s, which have no JSON form here.
+    if emit && output.is_machine() {
+        emsg!(
+            "bynk check: error: `--emit` reports `tsc` diagnostics, which `--format json` and `--format ndjson` do not carry; use `--format rich` or `short` with it"
+        );
+        return ExitCode::FAILURE;
+    }
+    let checked = bynk_driver::run_check("bynk", &input, output, fix.as_deref(), each, environment);
     // #3068: `--emit` type-checks the generated TypeScript, but only for a
     // program that passed the check; a failed check has nothing to emit.
     if emit && checked == ExitCode::SUCCESS {
