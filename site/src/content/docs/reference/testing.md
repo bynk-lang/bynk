@@ -1718,8 +1718,8 @@ suite shop.orders as system {
 - **Every tier.** At `system` the entries go on each participant's Worker `env`,
   as Wrangler would put them there, so `Secrets.get` (and anything else that
   reads `env`) sees them. At `unit` and `integration` they are what the
-  [`Secrets` double](#platform-doubles) answers: `Some(value)` for a name an
-  entry gives, `None` for any other. The same body with the same `env` runs at
+  [`Secrets` double](#platform-doubles) answers: `Some(secret)`, a [`Secret`](/reference/bynk-capabilities/#the-secret-type) wrapping the
+  entry, for a name an entry gives, `None` for any other. The same body with the same `env` runs at
   every tier.
 - **Not a `stub`.** `env` sets the environment and replaces no seam, so it is
   legal at `system`, where a [`stub`](#stub) is not.
@@ -1762,7 +1762,7 @@ fresh for each case:
 |---|---|
 | `Clock` | `now()` reads the case's [harness clock](#time-in-tests): the epoch (`Instant.fromEpochMillis(0)`) plus what the case has advanced |
 | `Random` | `uuid()` counts up (`00000000-0000-4000-8000-000000000001`, `…002`, …); `int(lo, hi)` draws from a fixed seed |
-| `Secrets` | `get(name)` is the [`env`](#env) entry for `name`, else `None` |
+| `Secrets` | `get(name)` is the [`env`](#env) entry for `name` as a `Secret`, else `None` |
 | `Locale` | `current()` is `"en"` |
 | `Logger` | records every level (`log` too), prints nothing |
 | `Events` | records, delivers nothing |
@@ -1773,7 +1773,7 @@ fresh for each case:
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |
 | `Analytics` | each instance accepts every write within the platform's limits (20 blobs totalling 16 KB, 20 finite doubles, a 96-byte index) and faults on one over them — at `integration` and `system` each Worker binds a recorder |
 | `Version` | `current()` is a fixed version: id `"test"`, no tag, `deployed` at the epoch — at `system` each Worker binds version `"integration"` |
-| `StoredSecret` | each instance's `get()` **faults** until stubbed: a test never reads the Secrets Store, and the stubbed value is never printed |
+| `StoredSecret` | each instance's `get()` **faults** until stubbed: a test never reads the Secrets Store, and the stubbed `Secret` is never printed; stub one with `Secret.of("…")` |
 | `Email` | each instance is the binding's own provider over an in-memory outbox: a send needs no stub, is recorded (`expect Mail.send called with …`), answers `"test-message-N"`, and faults on 51 recipients, 33 attachments, 25 MiB, neither `text` nor `html`, and a reserved or line-broken header — at `integration` and `system` each Worker binds an outbox |
 | `Postgres` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection string until the instance is stubbed. With `[test] postgres = "pglite"` each instance is instead the binding's own provider over a real in-memory Postgres ([PGlite](#postgres-under-test)): statements run for real, on a database that starts each case from `schema.sql` |
 | `MySql` | each instance's `all(_, _)`, `first(_, _)`, `run(_, _)` and `transaction(_)` **fault** until stubbed: a test never reaches a database, and there is no in-memory double — at `integration` each Worker's `env.HYPERDRIVE_<NAME>` faults on its connection until the instance is stubbed |

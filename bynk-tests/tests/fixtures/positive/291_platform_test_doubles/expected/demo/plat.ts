@@ -35,7 +35,17 @@ export const ids = {
 
 export const secret = {
   async call(name: string, deps: { Secrets: bynk.Secrets }): globalThis.Promise<Option<string>> {
-    return deps.Secrets.get(name);
+    const found = await deps.Secrets.get(name);
+    switch (found.tag) {
+      case "Some": {
+        const s = found.value;
+        return Some(s.reveal());
+      }
+      case "None": {
+        return None;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   },
 };
 

@@ -3,12 +3,32 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "./__bynk_runtime/bytes.js";
+import { __BynkSecret, __bynkSecret } from "./__bynk_runtime/secret.js";
 import { __bynkIsCron, __bynkInstantFromWire } from "./__bynk_runtime/time.js";
 import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "./__bynk_runtime/boundary.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
+
+/**
+ * A secret read from the platform's secret store. It cannot leak by accident: it
+ * has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+ * (comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+ * never stored, sent, encoded or returned across a boundary
+ * (`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+ * text, and `matches(candidate)` the constant-time comparison.
+ */
+export type Secret = __BynkSecret & { readonly __brand: "Secret" };
+
+export const Secret = {
+  of(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+  unsafe(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+};
 
 /**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -564,7 +584,7 @@ export const __FetchToken: symbol = globalThis.Symbol("Fetch");
  * Reads named secrets from the platform's secret store.
  */
 export interface Secrets {
-  get(name: string): globalThis.Promise<Option<string>>;
+  get(name: string): globalThis.Promise<Option<Secret>>;
 }
 
 export const __SecretsToken: symbol = globalThis.Symbol("Secrets");
@@ -1394,6 +1414,23 @@ export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): R
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_Secret(value: Secret): __JsonValue {
+  return value as unknown as string;
+}
+
+export function __deserialise_Secret(json: __JsonValue, path: string = "$"): Result<Secret, __BoundaryError> {
+  if (typeof json !== "string") {
+    return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
+  }
+  const validated = (typeof (Secret as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (Secret as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as Secret) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as Secret);
 }
 
 export function __serialise_SseEvent(value: SseEvent): __JsonValue {

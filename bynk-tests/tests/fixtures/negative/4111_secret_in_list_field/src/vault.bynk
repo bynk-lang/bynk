@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+type Ring = {
+    keys: List[Secret],
+}

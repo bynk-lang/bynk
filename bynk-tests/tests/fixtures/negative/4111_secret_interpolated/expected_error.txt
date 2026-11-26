@@ -1,0 +1,2 @@
+bynk.types.interpolation_non_scalar
+type `Secret` has no string form

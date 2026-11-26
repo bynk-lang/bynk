@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret as Token }
+
+fn same(a: Token, b: Token) -> Bool {
+    a == b
+}

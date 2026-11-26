@@ -1,0 +1,16 @@
+context vault
+
+consumes bynk { Logger, LogLevel, Secrets }
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[String]] by Visitor given Logger, Secrets {
+        let found <- Secrets.get("TOKEN")
+        match found {
+            Some(s) => {
+                let _ <- Logger.log(LogLevel.Info, "using", Map.empty().insert("token", s))
+                Ok("ok")
+            }
+            None => Ok("none")
+        }
+    }
+}

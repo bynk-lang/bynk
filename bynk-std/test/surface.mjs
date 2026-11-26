@@ -160,6 +160,8 @@ async function withProcessEnv(name, value, body) {
  */
 export function surfaceSuite(name, b, rt, bynk, shape) {
   const { Some, None } = rt;
+  // #4111: a `Secret` option read back as text, for comparing with what the env held.
+  const revealed = (opt) => (opt.tag === "Some" ? Some(opt.value.reveal()) : opt);
   const t = (claim, fn) => test(`${name} ${claim}`, fn);
 
   // --- Clock -------------------------------------------------------------
@@ -836,17 +838,20 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     t("SecretsProvider.get: reads the explicit env before process.env", async () => {
       await withProcessEnv("BYNK_S2_SECRET", "from-process", async () => {
         const got = await new b.SecretsProvider({ BYNK_S2_SECRET: "from-env" }).get("BYNK_S2_SECRET");
-        assert.deepEqual(got, Some("from-env"));
+        assert.deepEqual(revealed(got), Some("from-env"));
+        // #4111: what the provider returns is a `Secret`, which never shows its text.
+        assert.equal(String(got.value), "<secret>");
+        assert.ok(!JSON.stringify(got).includes("from-env"));
       });
     });
 
     t("SecretsProvider.get: falls back to process.env when the env lacks the name", async () => {
       await withProcessEnv("BYNK_S2_SECRET", "from-process", async () => {
-        assert.deepEqual(await new b.SecretsProvider({}).get("BYNK_S2_SECRET"), Some("from-process"));
-        assert.deepEqual(await new b.SecretsProvider().get("BYNK_S2_SECRET"), Some("from-process"));
+        assert.deepEqual(revealed(await new b.SecretsProvider({}).get("BYNK_S2_SECRET")), Some("from-process"));
+        assert.deepEqual(revealed(await new b.SecretsProvider().get("BYNK_S2_SECRET")), Some("from-process"));
         // A non-string env value is not a secret; the lookup falls through.
         assert.deepEqual(
-          await new b.SecretsProvider({ BYNK_S2_SECRET: 42 }).get("BYNK_S2_SECRET"),
+          revealed(await new b.SecretsProvider({ BYNK_S2_SECRET: 42 }).get("BYNK_S2_SECRET")),
           Some("from-process"),
         );
       });

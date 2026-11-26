@@ -20,7 +20,7 @@ export class PlainTone implements Tone {
     switch (t.tag) {
       case "Some": {
         const v = t.value;
-        return v;
+        return v.reveal();
       }
       case "None": {
         return "plain";

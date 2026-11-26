@@ -30,6 +30,6 @@ export class JoseJwt implements Jwt {
 
   private async secret(): Promise<string> {
     const s = await this.deps.Secrets.get("JWT_SECRET");
-    return s.tag === "Some" ? s.value : "";
+    return s.tag === "Some" ? s.value.reveal() : "";
   }
 }

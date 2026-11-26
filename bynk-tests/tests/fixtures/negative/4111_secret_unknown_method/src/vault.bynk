@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn leak(s: Secret) -> String {
+    s.toString()
+}

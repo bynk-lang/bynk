@@ -2998,6 +2998,12 @@ fn member_candidates_from(
                             {
                                 format!("of(value) -> {receiver}")
                             }
+                            // #4111: a `Secret`'s `of` cannot fail.
+                            bynk_syntax::ast::TypeBody::Opaque { .. }
+                                if bynk_check::context_checks::is_secret_decl(t) =>
+                            {
+                                format!("of(value) -> {receiver}")
+                            }
                             _ => format!("of(value) -> Result[{receiver}, ValidationError]"),
                         };
                         for (label, sig) in [
