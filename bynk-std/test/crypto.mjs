@@ -446,6 +446,10 @@ export function cryptoSuite(stem, b, platform) {
   const b64 = (bytes) => Buffer.from(bytes).toString("base64").replace(/=+$/, "");
   const PW_HASH = nodeCrypto.pbkdf2Sync(PW, Buffer.from(PW_SALT), 4096, 40, "sha256");
   const stored = (iterations) => `pbkdf2-sha256$${iterations}$${b64(PW_SALT)}$${b64(PW_HASH)}`;
+  // The count `hashPassword` uses on this platform. Deployed Workers refuse more than 100,000 (the
+  // cloudflare binding documents the exact error), so there it is 100,000, about six times below
+  // OWASP's 600,000; everywhere else it is 600,000.
+  const COUNT = platform === "cloudflare" ? 100000 : 600000;
 
   t("CryptoProvider.verifyPassword: accepts a PBKDF2-SHA-256 hash made elsewhere and rejects a wrong password", async () => {
     const c = provider();
@@ -489,7 +493,7 @@ export function cryptoSuite(stem, b, platform) {
     const c = provider();
     const one = await c.hashPassword("correct horse");
     const two = await c.hashPassword("correct horse");
-    assert.match(one, /^pbkdf2-sha256\$600000\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/);
+    assert.match(one, new RegExp(`^pbkdf2-sha256\\$${COUNT}\\$[A-Za-z0-9+/]{22}\\$[A-Za-z0-9+/]{43}$`));
     assert.notEqual(one, two, "a fresh salt each time");
     assert.equal(await c.verifyPassword("correct horse", one), true);
     assert.equal(await c.verifyPassword("correct horse", two), true);
@@ -515,7 +519,8 @@ export function cryptoSuite(stem, b, platform) {
     const c = provider();
     assert.equal(await c.needsRehash(await c.hashPassword("x")), false);
     assert.equal(await c.needsRehash(stored(4096)), true);
-    assert.equal(await c.needsRehash(stored(600000)), false);
+    assert.equal(await c.needsRehash(stored(COUNT)), false);
+    assert.equal(await c.needsRehash(stored(COUNT - 1)), true);
     const fresh = (await c.hashPassword("x")).split("$");
     const shortSalt = `${fresh[0]}$${fresh[1]}$${b64(Buffer.from(fresh[2], "base64").subarray(0, 8))}$${fresh[3]}`;
     assert.equal(await c.needsRehash(shortSalt), true);
@@ -523,10 +528,11 @@ export function cryptoSuite(stem, b, platform) {
     assert.equal(await c.needsRehash(higher), false);
   });
 
-  t("CryptoProvider.verifyPassword: a count the platform refuses is false, not a fault, while hashPassword says so", async () => {
+  t("CryptoProvider.verifyPassword: a stored count the platform cannot run is false and says why, never a fault", async () => {
     const c = provider();
     const real = globalThis.crypto.subtle.deriveBits.bind(globalThis.crypto.subtle);
-    // A platform whose Web Crypto limits PBKDF2 (the limit is an example; the contract is the shape).
+    // The limit deployed Workers have (the cloudflare binding documents it); a local run cannot see it, so
+    // it is simulated here on every platform to pin what each binding does about it.
     globalThis.crypto.subtle.deriveBits = async (algorithm, key, length) => {
       if (algorithm.name === "PBKDF2" && algorithm.iterations > 100000) {
         throw Object.assign(new Error("iteration counts above 100000 are not supported"), { name: "NotSupportedError" });
@@ -539,10 +545,23 @@ export function cryptoSuite(stem, b, platform) {
     try {
       assert.equal(await c.verifyPassword(PW, stored(150000)), false);
       assert.equal(warnings.length, 1);
-      assert.match(warnings[0], /150000 iterations \(NotSupportedError\)/);
+      if (platform === "cloudflare") {
+        // Refused before the platform is asked, naming the cap.
+        assert.match(warnings[0], /150000 iterations: this platform's Web Crypto accepts at most 100000/);
+      } else {
+        // No cap is known here, so the platform is asked and its refusal is reported.
+        assert.match(warnings[0], /refused PBKDF2 at 150000 iterations \(NotSupportedError\)/);
+      }
       assert.ok(!warnings[0].includes(PW));
       assert.equal(await c.verifyPassword(PW, stored(4096)), true);
-      await assert.rejects(() => c.hashPassword("x"), /not supported/);
+      if (platform === "cloudflare") {
+        // This platform's own count is one the limit allows: it hashes, and verifies what it hashed.
+        const own = await c.hashPassword("x");
+        assert.match(own, /^pbkdf2-sha256\$100000\$/);
+        assert.equal(await c.verifyPassword("x", own), true);
+      } else {
+        await assert.rejects(() => c.hashPassword("x"), /not supported/);
+      }
     } finally {
       globalThis.crypto.subtle.deriveBits = real;
       console.warn = realWarn;

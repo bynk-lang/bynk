@@ -117,10 +117,13 @@ export const VerifyKey = {
  * PBKDF2-HMAC-SHA-256 at a count Bynk chooses, returned as a self-describing
  * string; `verifyPassword` reads the parameters from it and compares in constant
  * time (a string not in the format is `false`); `needsRehash` says whether to
- * hash again after a successful login. Cost: one `hashPassword` or
- * `verifyPassword` can take on the order of a second of CPU, which counts against
- * a Worker's CPU limit, and there is no cheaper setting. On a plan where that is
- * too much, use an identity provider.
+ * hash again after a successful login. The count is 600,000 on Node and in the
+ * browser and 100,000 on Cloudflare Workers, which is the most Workers will run
+ * and is below OWASP's guidance of 600,000 for this algorithm; a hash made off
+ * Workers above 100,000 cannot be verified on Workers (`verifyPassword` is
+ * `false`, with a logged warning). Cost: one `hashPassword` or `verifyPassword`
+ * spends significant CPU, counted against a Worker's CPU limit, and there is no
+ * cheaper setting. On a plan where that is too much, use an identity provider.
  */
 export interface Crypto {
   digest(algorithm: Digest, data: globalThis.Uint8Array): globalThis.Promise<globalThis.Uint8Array>;

@@ -107,7 +107,7 @@ async function constantTimeEqual(a: Bytes, b: Bytes): Promise<boolean> {
   return s.verify("HMAC", key, mac, b as BufferSource);
 }
 
-// --- platform: constant-time comparison primitive ---------------------------
+// --- platform: constant-time comparison primitive, and the PBKDF2 iteration count ---
 // Node has `crypto.timingSafeEqual` in `node:crypto`, reached through
 // `process.getBuiltinModule` (Node >= 22.3) so the binding needs no import of a
 // Node module, and so no @types/node, to type-check.
@@ -118,6 +118,10 @@ function platformTimingSafeEqual(): ((a: Bytes, b: Bytes) => boolean) | undefine
     | undefined;
   return nodeCrypto?.timingSafeEqual ? (a, b) => nodeCrypto.timingSafeEqual!(a, b) : undefined;
 }
+// #4118: the PBKDF2 iteration count `hashPassword` uses on this platform (OWASP's current guidance for
+// PBKDF2-HMAC-SHA-256), and the most this platform's Web Crypto will run: no cap is known here.
+const PASSWORD_ITERATIONS = 600000;
+const PASSWORD_ITERATION_CAP: number | undefined = undefined;
 // --- end platform ------------------------------------------------------------
 
 // #4118: key derivation and password hashing, over `crypto.subtle` alone.
@@ -126,11 +130,12 @@ function platformTimingSafeEqual(): ((a: Bytes, b: Bytes) => boolean) | undefine
 // at most 255 hash blocks, 8160 bytes for SHA-256.
 const HKDF_MAX_LENGTH = 255 * 32;
 
-// Password hashing is PBKDF2-HMAC-SHA-256 at an iteration count Bynk chooses (OWASP's current guidance
-// for this algorithm), with a fresh 16-byte salt and a 32-byte hash. The count is written into each
-// stored hash, so a later release can raise it and every older hash still verifies.
+// Password hashing is PBKDF2-HMAC-SHA-256 at an iteration count Bynk chooses per platform (above), with a
+// fresh 16-byte salt and a 32-byte hash. The count is written into each stored hash, so a later release can
+// raise it and every older hash still verifies. `needsRehash` compares with this platform's count, so a
+// hash is stale only against what this platform can make; a stored count above the platform's cap is one
+// this platform cannot check at all (`verifyPassword` is false), so it never reaches a rehash here.
 const PASSWORD_SCHEME = "pbkdf2-sha256";
-const PASSWORD_ITERATIONS = 600000;
 const PASSWORD_SALT_BYTES = 16;
 const PASSWORD_HASH_BYTES = 32;
 // What a stored hash may claim: a crafted `stored` cannot make `verifyPassword` spin for minutes.
@@ -332,7 +337,14 @@ export class CryptoProvider implements Crypto {
     if (!parsed) {
       return false;
     }
-    // A count this platform's Web Crypto refuses is a hash this platform cannot check: `false`, never a fault.
+    // A count above this platform's cap is a hash this platform cannot check: `false`, never a fault, and
+    // not silent.
+    if (PASSWORD_ITERATION_CAP !== undefined && parsed.iterations > PASSWORD_ITERATION_CAP) {
+      globalThis.console?.warn(
+        `bynk.crypto: verifyPassword cannot check a stored hash made at ${parsed.iterations} iterations: this platform's Web Crypto accepts at most ${PASSWORD_ITERATION_CAP}`,
+      );
+      return false;
+    }
     let candidate: Bytes;
     try {
       candidate = await pbkdf2(password, parsed.salt, parsed.iterations, parsed.hash.length);

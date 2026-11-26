@@ -91,13 +91,21 @@ service login {
 `Some(hash)` is a replacement to store; `None` means leave the row as it is, or,
 for a failed login, that there is nothing to store.
 
-## What it costs
+## What it costs, and what Workers allows
 
-A password hash is slow on purpose. One at the current count can take on the
-order of a second of CPU, and it counts against a request's CPU limit on
-Workers. Measure it on your plan; if your plan's limit is too low for it, use an
-identity provider rather than a cheaper hash. There is no lower setting, and
-that is deliberate.
+A password hash is slow on purpose. It spends significant CPU, and that counts
+against a request's CPU limit. How much on a Workers plan has not been measured,
+so do not assume the Free plan's 10 ms is enough: it may need the Paid plan. If
+your plan's limit is too low for it, use an identity provider rather than a
+cheaper hash. There is no lower setting, and that is deliberate.
+
+The count differs by platform. Node and the browser use 600,000, OWASP's
+guidance for this algorithm. Deployed Cloudflare Workers refuse more than
+100,000, so there it is 100,000: about six times fewer rounds, and **below** that
+guidance. If that is too weak for what you protect, hash elsewhere or use an
+identity provider. A hash made off Workers at more than 100,000 cannot be
+verified on Workers: `verifyPassword` returns `false` there and logs a warning
+naming the count and the cap. Make hashes on the platform that will check them.
 
 The password is normalised to Unicode NFC before hashing, so the same typed
 password matches however a keyboard composed its characters. Anything beyond

@@ -2612,9 +2612,9 @@ No third-party crypto runs and nothing is polyfilled.
 | `sign(key: SigningKey, data: Bytes)` | `Effect[Bytes]`. |
 | `verify(key: VerifyKey, data: Bytes, signature: Bytes)` | `Effect[Bool]`; a malformed signature is `false`. |
 | `deriveKey(secret: Bytes, salt: Bytes, info: Bytes, length: Int)` | `Effect[Bytes]` — HKDF-SHA-256 ([RFC 5869](https://www.rfc-editor.org/rfc/rfc5869)). `length` is from 1 to 8160 bytes and `secret` must not be empty; either outside that is a fault. |
-| `hashPassword(password: String)` | `Effect[String]` — PBKDF2-HMAC-SHA-256 with a fresh random 16-byte salt, as the self-describing `pbkdf2-sha256$<iterations>$<salt>$<hash>` (the salt and hash in unpadded base64). |
-| `verifyPassword(password: String, stored: String)` | `Effect[Bool]`, read from the parameters in `stored` and compared in constant time. A `stored` that is not in that format is `false`. |
-| `needsRehash(stored: String)` | `Effect[Bool]` — `true` for a `stored` made at a lower iteration count than this release uses, with a shorter salt or hash, or not in the format at all. |
+| `hashPassword(password: String)` | `Effect[String]` — PBKDF2-HMAC-SHA-256 with a fresh random 16-byte salt, as the self-describing `pbkdf2-sha256$<iterations>$<salt>$<hash>` (the salt and hash in unpadded base64). The count is 600,000, except on Cloudflare Workers, where it is 100,000 — below that guidance; see [Passwords](#cryptography--bynkcrypto). |
+| `verifyPassword(password: String, stored: String)` | `Effect[Bool]`, read from the parameters in `stored` and compared in constant time. A `stored` that is not in that format is `false`, and so is one whose count the platform cannot run (a Workers cap of 100,000), with a logged warning. |
+| `needsRehash(stored: String)` | `Effect[Bool]` — `true` for a `stored` made at a lower iteration count than this platform uses, with a shorter salt or hash, or not in the format at all. |
 
 `Digest` is `Sha256 | Sha384 | Sha512`. `Signature` is `Ed25519 |
 EcdsaP256Sha256 | RsaPkcs1Sha256`: ECDSA over P-256 with SHA-256, signing the raw
@@ -2650,20 +2650,43 @@ here, and they take no parameters, because the ones people choose are the ones
 that go wrong: a missing salt, a low or fixed count, a comparison that stops at
 the first difference. The salt is random and internal. The password is
 normalised to Unicode NFC before hashing, so the same typed password always
-matches. The iteration count (600,000, [OWASP's guidance for
-PBKDF2-HMAC-SHA-256](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html))
-is Bynk's to set and is written into every stored hash, so a later release can
-raise it and the hashes already stored still verify; `needsRehash` tells a login
-flow to hash again after a successful `verifyPassword`.
+matches. The iteration count is Bynk's to set, differs by platform, and is
+written into every stored hash, so a later release can raise it and the hashes
+already stored still verify; `needsRehash` tells a login flow to hash again after
+a successful `verifyPassword`.
 
-`hashPassword` and `verifyPassword` spend real CPU: one hash at this count can
-take on the order of a second, and that counts against a request's CPU limit.
-Measure it on your plan. On a
-Workers plan with a low CPU limit that is too much, and an identity provider, or
-`Oidc`, is the better answer; there is no
-lower-cost option, because a cheap password hash is not a password hash. Argon2
-and scrypt are not available, since Web Crypto offers neither; the format names
-its algorithm, so one can be added without breaking a stored hash.
+| Platform | Count `hashPassword` uses |
+|---|---|
+| Node, browser | 600,000, [OWASP's guidance for PBKDF2-HMAC-SHA-256](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) |
+| Cloudflare Workers | 100,000 |
+
+**The Workers count is below that guidance.** 100,000 is about six times fewer
+rounds than OWASP's 600,000, and it does not meet it. It is the most deployed
+Workers will run: Web Crypto there refuses more with `NotSupportedError: Pbkdf2
+failed: iteration counts above 100000 are not supported (requested N).` (a local
+`wrangler dev` accepts more, so the limit does not show up in a local run).
+Nothing in Bynk can raise it. If the Workers count is too low for what you
+protect, hash somewhere that can run the stronger count, or use an identity
+provider.
+
+The cross-platform consequence follows from the count being in the hash. A hash
+made off Workers at more than 100,000 cannot be checked on Workers:
+`verifyPassword` there returns `false`, and logs one warning naming the stored
+count and the platform's cap, so an operator can see why a login fails and does
+not mistake it for a wrong password. A hash made on Workers verifies everywhere.
+`needsRehash` compares with the count of the platform it runs on, so on Workers
+it reports `false` for any count of 100,000 or more, and a stronger hash is
+adopted only where it can be made; it is asked after a successful
+`verifyPassword`, which a count Workers cannot run never is.
+
+`hashPassword` and `verifyPassword` spend significant CPU, and it counts against
+a request's CPU limit. How much on a Workers plan has not been measured (a
+Worker's clock does not advance while it computes), so do not assume the Free
+plan's 10 ms is enough: this may need the Paid plan. An identity provider, or
+`Oidc`, is the better answer where it does not fit. There is no lower-cost
+option, because a cheap password hash is not a password hash. Argon2 and scrypt
+are not available, since Web Crypto offers neither; the format names its
+algorithm, so one can be added without breaking a stored hash.
 
 **Timing.** `verifyHmac`, `verify` and `equal` don't return early on the first
 differing byte, so they are the way to compare a secret, a MAC, a signature or a

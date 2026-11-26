@@ -870,11 +870,14 @@ service api from http {
 
 #[test]
 fn crypto_password_hashing_and_hkdf_run_on_workerd() {
-    // #4118: `crypto.subtle` on a real `workerd`, not Node. The Node suite
-    // cannot see a runtime that limits what Web Crypto accepts (a PBKDF2
-    // iteration count, say), so this runs the shipped count (600,000) through
-    // `hashPassword` and `verifyPassword`, a stored hash claiming a count
-    // above 100,000, and the HKDF answer `node:crypto` gives for the same input.
+    // #4118: `crypto.subtle` on a real `workerd`, not Node: `hashPassword` and `verifyPassword` at the
+    // Workers count (100,000), a stored hash above it (refused by the binding's own cap, `false`), and the
+    // HKDF answer `node:crypto` gives for the same input. What this cannot see is the limit itself:
+    // `wrangler dev` runs the open-source workerd, which accepts 600,000, while deployed Workers refuse
+    // more than 100,000 (`NotSupportedError: Pbkdf2 failed: iteration counts above 100000 are not
+    // supported`), so a local run would pass at either count. The cap is pinned by the binding's own tests
+    // (`bynk-std/test/crypto.mjs`), which simulate the platform's refusal, and by the count the binding
+    // chooses for the cloudflare platform.
     let steps: &[(&str, u16, &str)] = &[
         ("/roundtrip/horse", 200, "\"true false false\""),
         (
@@ -882,7 +885,7 @@ fn crypto_password_hashing_and_hkdf_run_on_workerd() {
             200,
             "\"c1a70c6be6f6e6bf655da130593cef039aa373a2c7b62622c0bbc3c62fe6f146\"",
         ),
-        ("/high/passwordPASSWORDpassword", 200, "\"true false\""),
+        ("/high/passwordPASSWORDpassword", 200, "\"false false\""),
     ];
     let Some((failures, log)) = run_smoke("cr-smoke", "cr", CRYPTO_SOURCE, "/derive", &|port| {
         check_steps(port, steps)
