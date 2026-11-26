@@ -91,6 +91,10 @@ const ED25519_RAW_LENGTH = 32;
 // The constant-time comparison of two equal-length byte strings: the runtime's one implementation
 // (#3939; the `ApiKey` key store calls it too), given this platform's primitive.
 async function constantTimeEqual(a: Bytes, b: Bytes): Promise<boolean> {
+  // Without Web Crypto, an equal-length comparison fails loudly, as every other operation does.
+  if (a.length === b.length) {
+    subtle();
+  }
   return constantTimeEqualBytes(a, b, platformTimingSafeEqual());
 }
 

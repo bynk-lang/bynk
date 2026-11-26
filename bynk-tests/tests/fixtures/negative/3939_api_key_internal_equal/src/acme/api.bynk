@@ -1,14 +1,10 @@
 context acme.api
 
-type AccountId = String where NonEmpty
-
-actor Client { auth = ApiKey(secret = "CLIENT_KEY_PEPPER", prefix = "acme"), identity = AccountId }
-
 // #3939 (D3 B, §13 timing): the generated key store's constant-time comparison is internal. User
 // source cannot name `ApiKey.equal`; it compares secrets with `Crypto.equal` or `Secret.matches`.
-service api from http {
-	on POST("/compare") (body: String) -> Effect[HttpResult[Bool]] by Client {
-		let same <- ApiKey.equal(Bytes.fromUtf8(body), Bytes.fromUtf8("x"))
-		Effect.pure(Ok(same))
+service compare {
+	on call(a: Bytes, b: Bytes) -> Effect[Bool] by Caller {
+		let same <- ApiKey.equal(a, b)
+		Effect.pure(same)
 	}
 }
