@@ -614,32 +614,13 @@ pub(super) fn emit_http_route_dispatch(
     // #1825: names the route, by its pattern, for the fault log.
     let mut guarded = route_prelude(route, (cors_const, security_const, rejected));
 
-    // #3926: `@rateLimit(Limiter, key: clientIp)`: the limiter is asked before any other
-    // step (the media-type and body-size checks, the actor, the body read), so a flood
-    // costs a counter and a `429`, and a body over the cap still gets `429`, not `413`.
-    if let Some(limit) = &route.rate_limit {
-        guarded.push(if_(
-            TsExpr::Unary {
-                op: bynk_ts::TsUnaryOp::Not,
-                expr: Box::new(await_expr(call(
-                    ident("__rateLimitAllows"),
-                    vec![
-                        member(ident("env"), limit.binding.clone()),
-                        ident("request"),
-                    ],
-                ))),
-            },
-            block(vec![return_(Some(stamp_rejection(
-                call(
-                    ident("__rateLimitedResponse"),
-                    vec![num_lit(limit.period_secs.to_string())],
-                ),
-                cors_const,
-                security_const,
-                rejected,
-            )))]),
-        ));
-    }
+    // #3926: a route's `@rateLimit`, asked before anything else is read or checked: by address
+    // (`clientIp`) first of all, or (`identity`) after the route's actor is verified; see
+    // `rate_limit_guards`.
+    let (rate_guards, identity_refusal_at) =
+        rate_limit_guards(route, &method_key, (cors_const, security_const, rejected));
+    let identity_early_at = identity_refusal_at.map(|rel| guarded.len() + rel);
+    guarded.extend(rate_guards);
 
     // v0.142 (ADR 0165): the request-body ceiling. A route with an effective cap
     // rejects an oversized body with a synthesised `413` derived from the declared
@@ -1181,17 +1162,21 @@ pub(super) fn emit_http_route_dispatch(
     // Invoke the handler and serialise the HttpResult. The handler is
     // wrapped on the surface so its deps are wired by `compose`. v0.47: a
     // Bearer wrapper takes the request first (it runs the verification seam).
-    let surface_args: Vec<TsExpr> =
-        if route.bearer || route.sum || route.oidc || route.signed_cookie.is_some() {
-            // The Bearer, Oidc, and sum wrappers take the request first (they run the
-            // verification seam); a sum wrapper also reads/parses the body itself,
-            // so `call_args` here carries only the path params.
-            let mut a = vec![ident("request")];
-            a.extend(call_args.iter().cloned());
-            a
-        } else {
-            call_args
-        };
+    let surface_args: Vec<TsExpr> = if identity_early_at.is_some() {
+        // #3926: the verified principal replaces the request: the wrapper's seam already ran.
+        let mut a = call_args;
+        a.push(member(member(ident("__v"), "value"), "principal"));
+        a
+    } else if route.bearer || route.sum || route.oidc || route.signed_cookie.is_some() {
+        // The Bearer, Oidc, and sum wrappers take the request first (they run the
+        // verification seam); a sum wrapper also reads/parses the body itself,
+        // so `call_args` here carries only the path params.
+        let mut a = vec![ident("request")];
+        a.extend(call_args.iter().cloned());
+        a
+    } else {
+        call_args
+    };
     push_handler_invocation(route, method_key, surface_args, too_large, &mut guarded);
     let inner_ty = http_result_inner(&h.return_type);
     let ser_fn = crate::emitter::serialisation::serialise_ref_via(&inner_ty, "handlers.", ru);
@@ -1279,19 +1264,108 @@ pub(super) fn emit_http_route_dispatch(
     // and headers with an empty body — the handler ran, so the headers are the
     // real ones a `GET` would produce; `headResponse` discards the body without
     // reading it (a `Streaming` body is never drained).
-    if route.method == bynk_model::IrHttpMethod::Get {
-        guarded.push(const_("__response", build_expr));
-        guarded.push(return_(Some(cond_expr(
-            strict_eq(ident("method"), str_lit("HEAD")),
-            call(ident("__headResponse"), vec![ident("__response")]),
-            ident("__response"),
-        ))));
-    } else {
-        guarded.push(return_(Some(build_expr)));
+    // #3926: the refusal of an identity route's verification goes through the same response
+    // policy as any other result (challenge, CORS, security headers, `HEAD`), so it is the
+    // `401`/`403` the wrapper always gave.
+    let finish = |build: TsExpr| final_return(route, build);
+    if let Some(at) = identity_early_at {
+        let mut refusal = vec![const_("result", member(ident("__v"), "error"))];
+        refusal.extend(finish(build_expr.clone()));
+        guarded.insert(
+            at,
+            if_(
+                strict_eq(member(ident("__v"), "tag"), str_lit("Err")),
+                block(refusal),
+            ),
+        );
     }
+    guarded.extend(finish(build_expr));
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #3926: the statements of a route's `@rateLimit`, and for an `identity` route the offset (within
+/// them) where the refusal of the verification belongs.
+///
+/// `clientIp`: the limiter is asked before any other step (the media-type and body-size checks, the
+/// actor, the body read), so a flood costs a counter and a `429`, and a body over the cap still gets
+/// `429`, not `413`.
+///
+/// `identity`: the route's actor is verified first, by the compose `verify` step (an unverified
+/// caller gets the `401`/`403` the wrapper always gave and never touches the limiter), then the
+/// limiter is asked about the verified caller, then everything else runs: media type, length, body,
+/// and the handler with the principal the verification left. Verification runs once.
+fn rate_limit_guards(
+    route: &HttpRoute,
+    method_key: &str,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
+) -> (Vec<TsStmt>, Option<usize>) {
+    use bynk_check::http_rate_limit::RateLimitKey;
+    let Some(limit) = route.rate_limit.as_ref() else {
+        return (Vec::new(), None);
+    };
+    let mut out: Vec<TsStmt> = Vec::new();
+    let mut refusal_at = None;
+    let allowed = match limit.key {
+        RateLimitKey::ClientIp => call(
+            ident("__rateLimitAllows"),
+            vec![
+                member(ident("env"), limit.binding.clone()),
+                ident("request"),
+            ],
+        ),
+        RateLimitKey::Identity => {
+            out.push(const_(
+                "__v",
+                await_expr(call(
+                    member(ident("surface"), format!("{method_key}__verify")),
+                    vec![ident("request")],
+                )),
+            ));
+            refusal_at = Some(out.len());
+            call(
+                ident("__rateLimitAllowsKey"),
+                vec![
+                    member(ident("env"), limit.binding.clone()),
+                    member(member(ident("__v"), "value"), "key"),
+                ],
+            )
+        }
+    };
+    out.push(if_(
+        TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(await_expr(allowed)),
+        },
+        block(vec![return_(Some(stamp_rejection(
+            call(
+                ident("__rateLimitedResponse"),
+                vec![num_lit(limit.period_secs.to_string())],
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        )))]),
+    ));
+    (out, refusal_at)
+}
+
+/// The statements that return a route's finished response: on a `GET` route a `HEAD` answers the
+/// same status and headers with an empty body.
+fn final_return(route: &HttpRoute, build: TsExpr) -> Vec<TsStmt> {
+    if route.method == bynk_model::IrHttpMethod::Get {
+        vec![
+            const_("__response", build),
+            return_(Some(cond_expr(
+                strict_eq(ident("method"), str_lit("HEAD")),
+                call(ident("__headResponse"), vec![ident("__response")]),
+                ident("__response"),
+            ))),
+        ]
+    } else {
+        vec![return_(Some(build))]
+    }
 }
 
 /// #3276: the `415` a `@form` or `@multipart` route answers to a body of another

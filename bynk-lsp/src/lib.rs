@@ -4186,6 +4186,7 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
+        items.extend(rate_limit_completions(&text, offset, &line_prefix));
         // Inside `@raw( … )`, offer the `contentType` argument; at a service-body
         // item start, offer the `@raw` snippet.
         items.extend(raw_completions(&text, offset, &line_prefix));
@@ -6007,6 +6008,63 @@ fn limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
                     .to_string(),
             ),
             insert_text: Some("@limit(maxBody: ${1:1048576})".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// #3926: the `@rateLimit` completion cells: inside `@rateLimit( … )`, the `RateLimit`
+/// instances the document declares, then the `key:` label, then the two keys; at a
+/// service-body item start, the annotation snippet.
+fn rate_limit_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    use bynk_ide::rate_limit_completion::{
+        RATE_LIMIT_KEYS, RateLimitArg, rate_limit_arg_position, rate_limit_limiters,
+    };
+    match rate_limit_arg_position(text, offset) {
+        Some(RateLimitArg::Limiter) => {
+            return rate_limit_limiters(text)
+                .into_iter()
+                .map(|name| CompletionItem {
+                    label: name,
+                    kind: Some(CompletionItemKind::CLASS),
+                    detail: Some("a `RateLimit` this context declares".to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        Some(RateLimitArg::KeyLabel) => {
+            return vec![CompletionItem {
+                label: "key".to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some("what the limit counts by".to_string()),
+                insert_text: Some("key: ".to_string()),
+                ..Default::default()
+            }];
+        }
+        Some(RateLimitArg::KeyValue) => {
+            return RATE_LIMIT_KEYS
+                .iter()
+                .map(|(name, doc)| CompletionItem {
+                    label: name.to_string(),
+                    kind: Some(CompletionItemKind::ENUM_MEMBER),
+                    detail: Some((*doc).to_string()),
+                    ..Default::default()
+                })
+                .collect();
+        }
+        None => {}
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "@rateLimit".to_string(),
+            kind: Some(CompletionItemKind::SNIPPET),
+            detail: Some(
+                "refuse a client over its limit before the request body is read (`429`)"
+                    .to_string(),
+            ),
+            insert_text: Some("@rateLimit(${1:Limiter}, key: ${2|clientIp,identity|})".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];
@@ -11646,6 +11704,46 @@ mod tests {
             values.contains(&"AppOrigin".to_string()),
             "an in-scope String constant: {values:?}"
         );
+    }
+
+    /// #3926: inside `@rateLimit( … )` the declared `RateLimit` instances are offered for the
+    /// limiter, then the two keys after `key:`, through the real `Backend::completion`.
+    #[tokio::test]
+    async fn rate_limit_annotation_offers_limiters_and_keys() {
+        let head = "context shop\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\ncapability Sessions = Kv\n\nservice api from http {\n";
+        let tail = "\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"y\") }\n}\n";
+        let s = scratch_project(
+            "rate_limit_completion",
+            &[("bynk.toml", "[project]\nname=\"shop\"\n")],
+        );
+        let backend = backend_at(&s.0).await;
+        for (tag, line, needle, want, not_want) in [
+            (
+                "limiter",
+                "  @rateLimit(",
+                "@rateLimit(",
+                "SignupLimit",
+                "Sessions",
+            ),
+            (
+                "key",
+                "  @rateLimit(SignupLimit, key: ",
+                "key: ",
+                "identity",
+                "SignupLimit",
+            ),
+        ] {
+            let src = format!("{head}{line}{tail}");
+            let rel = format!("src/{tag}.bynk");
+            std::fs::create_dir_all(s.0.join("src")).unwrap();
+            std::fs::write(s.0.join(&rel), &src).unwrap();
+            let uri = file_uri(&s.0, &rel);
+            open(&backend, &uri, &src).await;
+            backend.run_round().await;
+            let labels = complete_at(&backend, &uri, &src, needle).await;
+            assert!(labels.contains(&want.to_string()), "{tag}: {labels:?}");
+            assert!(!labels.contains(&not_want.to_string()), "{tag}: {labels:?}");
+        }
     }
 
     /// #4312: a store collection read in an agent predicate through `old.`,
