@@ -2,12 +2,12 @@
 // context room
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __bynkCodePointLength, __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
-import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";

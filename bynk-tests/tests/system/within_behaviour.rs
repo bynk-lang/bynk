@@ -394,6 +394,12 @@ fn the_virtual_time_runtime_advances_only_virtual_time() {
         include_str!("../../../bynk-emit/runtime/src/result.ts"),
     )
     .unwrap();
+    // `settle.ts` reads the request's trace for the lines it logs (#3895).
+    fs::write(
+        tmp.join("traceparent.ts"),
+        include_str!("../../../bynk-emit/runtime/src/traceparent.ts"),
+    )
+    .unwrap();
     fs::write(
         tmp.join("settle.ts"),
         include_str!("../../../bynk-emit/runtime/src/settle.ts"),

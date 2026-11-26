@@ -2,6 +2,7 @@
 // Worker entry point for context `jobs`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
+import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
@@ -54,95 +55,99 @@ function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds
 
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
-    const url = new globalThis.URL(request.url);
-    const path = url.pathname;
-    const method = request.method;
-    const surface = compose(env);
-    let __route: string = "request";
-    try {
-      if (path.startsWith("/_bynk/call/")) {
-        if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
-        const __body = await __verifyCall(request, env, "jobs");
-        if (typeof __body !== "string") return __body;
-        const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
-        const servicePath = path.slice("/_bynk/call/".length);
-        switch (servicePath) {
-          default:
-            return new globalThis.Response("Not found", { status: 404 });
+    return __enterTrace(async () => {
+      const url = new globalThis.URL(request.url);
+      const path = url.pathname;
+      const method = request.method;
+      const surface = compose(env);
+      let __route: string = "request";
+      try {
+        if (path.startsWith("/_bynk/call/")) {
+          if (method !== "POST") return new globalThis.Response(null, { status: 405, headers: { allow: "POST" } });
+          const __body = await __verifyCall(request, env, "jobs");
+          if (typeof __body !== "string") return __body;
+          const __wire = request.headers.get("X-Bynk-Wire");
+          if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
+          const servicePath = path.slice("/_bynk/call/".length);
+          switch (servicePath) {
+            default:
+              return new globalThis.Response("Not found", { status: 404 });
+          }
         }
-      }
 
-      return new globalThis.Response("Not Found", { status: 404 });
-    } catch (e) {
-      const __busy = __agentBusyResponse(e, __route);
-      if (__busy !== null) return __busy;
-      globalThis.console.error(`jobs ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
-      __bynkReportFault(ctx, e);
-      return __faultResponse("jobs", __route);
-    }
+        return new globalThis.Response("Not Found", { status: 404 });
+      } catch (e) {
+        const __busy = __agentBusyResponse(e, __route);
+        if (__busy !== null) return __busy;
+        globalThis.console.error(__withTrace(`jobs ${__route} faulted`), e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
+        __bynkReportFault(ctx, e);
+        return __faultResponse("jobs", __route);
+      }
+    });
   },
   async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; readonly attempts: number; readonly timestamp: globalThis.Date; ack(): void; retry(): void }> }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
-    const surface = compose(env);
-    switch (batch.queue) {
-      case "kept-jobs": {
-        for (const msg of batch.messages) {
-          try {
-            const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
-            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, "__BYNK_DLQ_KEPT_JOBS", "kept-jobs", "String", __r.error, msg); continue; }
-            const result = await surface.queue_kept_0(__r.value);
-            if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue kept-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("kept-jobs", msg, result); }
-          } catch (e) {
-            globalThis.console.error("queue kept-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+    return __enterTrace(async () => {
+      const surface = compose(env);
+      switch (batch.queue) {
+        case "kept-jobs": {
+          for (const msg of batch.messages) {
+            try {
+              const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
+              if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, "__BYNK_DLQ_KEPT_JOBS", "kept-jobs", "String", __r.error, msg); continue; }
+              const result = await surface.queue_kept_0(__r.value);
+              if (result.tag === "Ack") msg.ack();
+              else { globalThis.console.error("queue kept-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("kept-jobs", msg, result); }
+            } catch (e) {
+              globalThis.console.error("queue kept-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+            }
           }
+          return;
         }
-        return;
-      }
-      case "plain-jobs": {
-        for (const msg of batch.messages) {
-          try {
-            const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
-            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "plain-jobs", "String", __r.error, msg); continue; }
-            const result = await surface.queue_plain_0(__r.value);
-            if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue plain-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("plain-jobs", msg, result); }
-          } catch (e) {
-            globalThis.console.error("queue plain-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+        case "plain-jobs": {
+          for (const msg of batch.messages) {
+            try {
+              const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
+              if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "plain-jobs", "String", __r.error, msg); continue; }
+              const result = await surface.queue_plain_0(__r.value);
+              if (result.tag === "Ack") msg.ack();
+              else { globalThis.console.error("queue plain-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("plain-jobs", msg, result); }
+            } catch (e) {
+              globalThis.console.error("queue plain-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+            }
           }
+          return;
         }
-        return;
-      }
-      case "throwaway-jobs": {
-        for (const msg of batch.messages) {
-          try {
-            const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
-            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "throwaway-jobs", "String", __r.error, msg); continue; }
-            const result = await surface.queue_throwaway_0(__r.value);
-            if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue throwaway-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("throwaway-jobs", msg, result); }
-          } catch (e) {
-            globalThis.console.error("queue throwaway-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+        case "throwaway-jobs": {
+          for (const msg of batch.messages) {
+            try {
+              const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
+              if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "throwaway-jobs", "String", __r.error, msg); continue; }
+              const result = await surface.queue_throwaway_0(__r.value);
+              if (result.tag === "Ack") msg.ack();
+              else { globalThis.console.error("queue throwaway-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("throwaway-jobs", msg, result); }
+            } catch (e) {
+              globalThis.console.error("queue throwaway-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+            }
           }
+          return;
         }
-        return;
-      }
-      case "tuned-jobs": {
-        for (const msg of batch.messages) {
-          try {
-            const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
-            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "tuned-jobs", "String", __r.error, msg); continue; }
-            const result = await surface.queue_tuned_0(__r.value);
-            if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue tuned-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("tuned-jobs", msg, result); }
-          } catch (e) {
-            globalThis.console.error("queue tuned-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+        case "tuned-jobs": {
+          for (const msg of batch.messages) {
+            try {
+              const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))((msg.body as __JsonValue));
+              if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "tuned-jobs", "String", __r.error, msg); continue; }
+              const result = await surface.queue_tuned_0(__r.value);
+              if (result.tag === "Ack") msg.ack();
+              else { globalThis.console.error("queue tuned-jobs retry", (result as { readonly reason: string }).reason); __bynkRetryMessage("tuned-jobs", msg, result); }
+            } catch (e) {
+              globalThis.console.error("queue tuned-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
+            }
           }
+          return;
         }
-        return;
+        default:
+          return;
       }
-      default:
-        return;
-    }
+    });
   },
 };
