@@ -10,6 +10,9 @@ export interface Env {
 export function compose(env: Env) {
   const deps = {};
   return {
+    async queue_escalate_0(mail: handlers.InboundEmail, __sender: __SenderIdentity) {
+      return handlers.escalate.queue_escalate_0(mail, deps);
+    },
     async queue_support_0(mail: handlers.InboundEmail, __sender: __SenderIdentity) {
       return handlers.support.queue_support_0(mail, deps);
     },

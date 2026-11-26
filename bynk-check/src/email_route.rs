@@ -9,7 +9,7 @@ use bynk_syntax::ast::{Block, Expr, ExprKind, ServiceDecl, ServiceProtocol};
 use bynk_syntax::error::CompileError;
 
 fn name_problem(name: &str) -> Option<&'static str> {
-    match name.strip_prefix("X-") {
+    match name.strip_prefix("X-").or_else(|| name.strip_prefix("x-")) {
         None => Some(
             "a tag name starts with `X-`: Cloudflare removes every other header from a forward",
         ),

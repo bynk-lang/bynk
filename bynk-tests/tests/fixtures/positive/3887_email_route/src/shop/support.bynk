@@ -26,3 +26,22 @@ service support from email("support@shop.example") {
     }
   }
 }
+
+// #3885 with #3887: a service with a fallback. A `Route` it returns stays a `Route`: the fallback's
+// outcome header is the runtime's, not a tag the handler chose. A fault is still forwarded.
+service escalate from email("escalate@shop.example") {
+  fallback { forward: "ops@ops.example" }
+
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    if mail.subject == "boom" {
+      // Dividing by zero is a fault, not a value.
+      let share = 10 / (mail.subject.length() - 4)
+      if share > 0 { Reject("unreachable") } else { Accept }
+    } else {
+      Route(EmailActions {
+        forward: ["billing@shop.example", "audit@shop.example"],
+        tag: Map.empty().insert("X-Ticket", "T-9"),
+      })
+    }
+  }
+}

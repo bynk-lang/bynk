@@ -640,8 +640,8 @@ const VERDICT_TAGS = new Set(["Accept", "Reject", "Forward", "Reply", "Route"]);
 /** The most destinations one `Route` forwards to (#3887): more is a handler fault. */
 export const EMAIL_MAX_ROUTE_FORWARDS = 20;
 
-/** A `tag` header name: `X-` and letters, digits and `-`, the only headers `forward()` keeps. */
-const TAG_NAME = /^X-[A-Za-z0-9-]*$/;
+/** A `tag` header name: `X-` (or `x-`, names are case-insensitive) and letters, digits and `-`, the only headers `forward()` keeps. */
+const TAG_NAME = /^[Xx]-[A-Za-z0-9-]*$/;
 
 /**
  * The destinations of a `Route`, de-duplicated without regard to case (the first spelling stays),
@@ -660,13 +660,20 @@ export function routeDestinations(actions: EmailActions): string[] {
   return out;
 }
 
-/** The tags `forward()` may carry, and the names of those it dropped (a bad name or a value with a line break). */
+/** The tags `forward()` may carry, and the names of those it dropped (a bad name, or a value with a line break or one `Headers` refuses). */
 export function routeTags(tag: ReadonlyMap<string, string>): { readonly headers: Headers; readonly dropped: string[] } {
   const headers = new Headers();
   const dropped: string[] = [];
   for (const [name, value] of tag) {
-    if (TAG_NAME.test(name) && !/[\r\n]/.test(value)) headers.set(name, value);
-    else dropped.push(oneLine(String(name)).slice(0, 64));
+    if (TAG_NAME.test(name) && !/[\r\n]/.test(value)) {
+      try {
+        headers.set(name, value);
+        continue;
+      } catch {
+        // #3887: a value `Headers` refuses (a NUL, a character outside Latin-1) is dropped like any other bad tag.
+      }
+    }
+    dropped.push(oneLine(String(name)).slice(0, 64));
   }
   return { headers, dropped };
 }

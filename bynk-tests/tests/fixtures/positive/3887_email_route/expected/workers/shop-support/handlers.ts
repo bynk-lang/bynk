@@ -2,6 +2,7 @@
 // context shop.support
 
 import { Some } from "../../__bynk_runtime/result.js";
+import { __bynkIntDiv } from "../../__bynk_runtime/int.js";
 
 import { EmailVerdict, InboundEmail } from "../../bynk/cloudflare.js";
 import { __serialise_EmailActions, __deserialise_EmailActions, __serialise_EmailReply, __deserialise_EmailReply, __serialise_EmailVerdict, __deserialise_EmailVerdict, __serialise_InboundAttachment, __deserialise_InboundAttachment, __serialise_InboundEmail, __deserialise_InboundEmail } from "../../bynk/cloudflare.js";
@@ -11,6 +12,17 @@ export { type InboundEmail };
 export const support = {
   async queue_support_0(mail: InboundEmail, deps: {}): globalThis.Promise<EmailVerdict> {
     return (mail.subject === "billing" ? EmailVerdict.Route({ forward: ["billing@shop.example", "audit@shop.example"], reply: Some({ text: Some("Thanks, billing has your message."), subject: { tag: "None" as const }, html: { tag: "None" as const } }), tag: new globalThis.Map(new globalThis.Map<string, string>()).set("X-Ticket", "T-1234") }) : (mail.subject === "duplicates" ? EmailVerdict.Route({ forward: ["audit@shop.example", "AUDIT@shop.example"], reply: { tag: "None" as const }, tag: new globalThis.Map() }) : (mail.subject === "nothing" ? EmailVerdict.Route({ forward: [], reply: { tag: "None" as const }, tag: new globalThis.Map() }) : EmailVerdict.Forward("billing@shop.example"))));
+  },
+};
+
+export const escalate = {
+  async queue_escalate_0(mail: InboundEmail, deps: {}): globalThis.Promise<EmailVerdict> {
+    if (mail.subject === "boom") {
+      const share = __bynkIntDiv(10, (mail.subject.length - 4));
+      return (share > 0 ? EmailVerdict.Reject("unreachable") : EmailVerdict.Accept);
+    } else {
+      return EmailVerdict.Route({ forward: ["billing@shop.example", "audit@shop.example"], tag: new globalThis.Map(new globalThis.Map<string, string>()).set("X-Ticket", "T-9"), reply: { tag: "None" as const } });
+    }
   },
 };
 

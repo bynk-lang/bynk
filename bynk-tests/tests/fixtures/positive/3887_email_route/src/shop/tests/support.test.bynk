@@ -28,4 +28,21 @@ suite shop.support as system {
     let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "other" })
     expect r is Forward("billing@shop.example")
   }
+
+  case "a service with a fallback still reads its Route, tags and all" {
+    let r <- escalate.message(InboundEmail { from: "a@b.example", to: "escalate@shop.example", subject: "route" })
+    match r {
+      Route(a) => {
+        expect a.forward == ["billing@shop.example", "audit@shop.example"]
+        let expected: Map[String, String] = Map.empty().insert("x-ticket", "T-9")
+        expect a.tag == expected
+      }
+      _ => expect false
+    }
+  }
+
+  case "a fault in a service with a fallback is the fallback's forward, with no tag" {
+    let r <- escalate.message(InboundEmail { from: "a@b.example", to: "escalate@shop.example", subject: "boom" })
+    expect r is Forward("ops@ops.example")
+  }
 }

@@ -72,7 +72,11 @@ async function __bynkDeliverEmail<T>(mail: any, run: (message: __BynkEmailMessag
     setReject(reason: string): void { rejected = { tag: "Reject", reason }; },
     async forward(to: string, headers?: Headers): Promise<void> {
       forwards.push(to);
-      if (headers !== undefined && tags.size === 0) tags = new globalThis.Map(headers.entries());
+      if (headers !== undefined && tags.size === 0) {
+        // #3885: the fallback forward's outcome header is the runtime's, not a tag the handler chose.
+        const chosen = [...headers.entries()].filter(([n]) => n !== "x-bynk-fallback");
+        if (chosen.length > 0) tags = new globalThis.Map(chosen);
+      }
     },
     async reply(m: unknown): Promise<void> { replied = __bynkEmailReplyOf((m as { raw: string }).raw); },
   };

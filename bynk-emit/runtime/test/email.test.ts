@@ -897,6 +897,18 @@ test("Route: a bad tag is dropped and logged by name only, a good one is written
   assert.ok(!log.includes("hijack") && !log.includes("Bcc"), "values are never logged");
 });
 
+test("Route: a tag value `Headers` refuses is dropped like any bad tag, and the rest of the route still runs", async () => {
+  const { message, calls, forwards } = recording(mime());
+  const tag = { "X-Nul": "a\0b", "X-Wide": "caf\u00e9 \u4f60\u597d", "x-lower": "kept", "X-Fine": "yes" };
+  await handleEmail(message, [route("support@shop.example", routeOf({ forward: ["a@x.example"], tag }))], factory, (l) => calls.logs.push(l));
+  assert.deepEqual(calls.rejects, []);
+  assert.deepEqual(forwards.map((f) => f.to), ["a@x.example"]);
+  assert.deepEqual(forwards[0]!.headers, { "x-lower": "kept", "x-fine": "yes" });
+  const log = calls.logs.join("\n");
+  assert.match(log, /tag dropped \(X-Nul\)/);
+  assert.match(log, /tag dropped \(X-Wide\)/);
+});
+
 test("Route: a forward with no tags is made as the plain forward is", async () => {
   const seen: unknown[][] = [];
   const { message } = recording(mime(), { forward: async (...args: unknown[]) => void seen.push(args) } as Partial<InboundMessage>);

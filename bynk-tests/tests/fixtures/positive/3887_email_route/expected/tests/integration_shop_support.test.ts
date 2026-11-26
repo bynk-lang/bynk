@@ -25,6 +25,10 @@ function __makeHarness() {
 
 <<bynk-shared: testing/jobs>>
 <<bynk-shared: testing/jobs_email>>
+async function __sysdrive_message_escalate(mail: any) {
+  const __h = __makeHarness();
+  return __bynkDeliverEmail<Awaited<ReturnType<typeof __ns_shop_support.escalate.queue_escalate_0>>>(mail, (message, exec) => worker___ns_shop_support.email(message, __h.env___ns_shop_support, exec));
+}
 async function __sysdrive_message_support(mail: any) {
   const __h = __makeHarness();
   return __bynkDeliverEmail<Awaited<ReturnType<typeof __ns_shop_support.support.queue_support_0>>>(mail, (message, exec) => worker___ns_shop_support.email(message, __h.env___ns_shop_support, exec));
@@ -109,9 +113,55 @@ async function test_a_plain_forward_is_still_a_forward() {
   }
 }
 
+async function test_a_service_with_a_fallback_still_reads_its_Route__tags_and_all() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "route", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    void (((__d) => {
+      switch (__d.tag) {
+        case "Route": {
+          const a = __d.actions;
+          if (!(__bynkEq(a.forward, ["billing@shop.example", "audit@shop.example"]))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:36:16", 1589, 1648, "expect a.forward == [\"billing@shop.example\", \"audit@shop.example\"]\n  expected: a.forward == [\"billing@shop.example\", \"audit@shop.example\"]\n  actual:   " + __bynkShow((a.forward)) + " == " + __bynkShow((["billing@shop.example", "audit@shop.example"]))); }
+          const expected: ReadonlyMap<string, string> = new globalThis.Map(new globalThis.Map<string, string>()).set("x-ticket", "T-9");
+          if (!(__bynkEq(a.tag, expected))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:38:16", 1746, 1763, "expect a.tag == expected\n  expected: a.tag == expected\n  actual:   " + __bynkShow((a.tag)) + " == " + __bynkShow((expected))); }
+          return undefined;
+        }
+        default: {
+          return __bynkExpect((false), "src/shop/tests/support.test.bynk:40:19", 1790, 1795, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    })(r));
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_fault_in_a_service_with_a_fallback_is_the_fallback_s_forward__with_no_tag() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_message_escalate({ from: "a@b.example", to: "escalate@shop.example", subject: "boom", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0, subaddress: { tag: "None" as const } });
+    if (!(((__c: boolean) => __c)(r.tag === "Forward" && r.to === "ops@ops.example"))) { throw __bynkExpectFailure("src/shop/tests/support.test.bynk:46:12", 2019, 2050, "expect r is Forward(\"ops@ops.example\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a reply and two forwards, with the tag on the forwards", "destinations that differ only in case are forwarded once", "a route with nothing to do is accepted", "a plain forward is still a forward"];
+export const __bynkCases: readonly string[] = ["a reply and two forwards, with the tag on the forwards", "destinations that differ only in case are forwarded once", "a route with nothing to do is accepted", "a plain forward is still a forward", "a service with a fallback still reads its Route, tags and all", "a fault in a service with a fallback is the fallback's forward, with no tag"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -137,6 +187,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a plain forward is still a forward")) {
     const started = __bynkCaseNow();
     const r = { name: "a plain forward is still a forward", ...(await test_a_plain_forward_is_still_a_forward()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a service with a fallback still reads its Route, tags and all")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a service with a fallback still reads its Route, tags and all", ...(await test_a_service_with_a_fallback_still_reads_its_Route__tags_and_all()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a fault in a service with a fallback is the fallback's forward, with no tag")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a fault in a service with a fallback is the fallback's forward, with no tag", ...(await test_a_fault_in_a_service_with_a_fallback_is_the_fallback_s_forward__with_no_tag()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
