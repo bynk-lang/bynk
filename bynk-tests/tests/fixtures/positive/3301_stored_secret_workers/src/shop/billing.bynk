@@ -21,6 +21,6 @@ service api from http {
 	on GET("/status") () -> Effect[HttpResult[Status]] by Visitor given StripeKey, WebhookKey {
 		let key <- StripeKey.get()
 		let hook <- WebhookKey.get()
-		Ok(Status { live: key != "", hooked: hook != "" })
+		Ok(Status { live: key.reveal() != "", hooked: hook.reveal() != "" })
 	}
 }

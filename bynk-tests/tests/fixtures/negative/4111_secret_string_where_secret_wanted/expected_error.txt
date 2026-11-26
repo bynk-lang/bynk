@@ -1,0 +1,2 @@
+bynk.types.argument_mismatch
+expects `Secret`

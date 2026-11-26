@@ -1,0 +1,8 @@
+context vault
+
+consumes bynk { Secret }
+
+type Holder = {
+    name: String,
+    key: Secret,
+}

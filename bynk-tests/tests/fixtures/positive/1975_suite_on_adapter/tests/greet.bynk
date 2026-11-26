@@ -1,11 +1,11 @@
 suite greet
 
-consumes bynk { Secrets }
+consumes bynk { Secret, Secrets }
 
 // #1975: a suite on an adapter tests its binding, so the binding runs at
 // every tier; its `given` takes the tier's doubles, and a `stub` on one.
 case "the binding reads its secret" {
-	stub Secrets.get(_) returns Some("hi")
+	stub Secrets.get(_) returns Some(Secret.of("hi"))
 	let s <- Greeter.hello("ann")
 	expect s == "hi, ann at 0"
 }

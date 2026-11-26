@@ -2,11 +2,31 @@
 // adapter bynk
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
+import { __BynkSecret, __bynkSecret } from "./__bynk_runtime/secret.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
 import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
+
+/**
+ * A secret read from the platform's secret store. It cannot leak by accident: it
+ * has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+ * (comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+ * never stored, sent, encoded or returned across a boundary
+ * (`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+ * text, and `matches(candidate)` the constant-time comparison.
+ */
+export type Secret = __BynkSecret & { readonly __brand: "Secret" };
+
+export const Secret = {
+  of(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+  unsafe(value: string): Secret {
+    return __bynkSecret(value) as Secret;
+  },
+};
 
 /**
  * A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -544,7 +564,7 @@ export const __FetchToken: symbol = globalThis.Symbol("Fetch");
  * Reads named secrets from the platform's secret store.
  */
 export interface Secrets {
-  get(name: string): globalThis.Promise<Option<string>>;
+  get(name: string): globalThis.Promise<Option<Secret>>;
 }
 
 export const __SecretsToken: symbol = globalThis.Symbol("Secrets");

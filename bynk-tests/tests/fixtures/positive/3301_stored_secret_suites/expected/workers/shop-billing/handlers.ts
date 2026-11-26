@@ -27,7 +27,7 @@ export const api = {
   async http_GET_status(deps: { StripeKey: StripeKey; WebhookKey: WebhookKey }): globalThis.Promise<HttpResult<Status>> {
     const key = await deps.StripeKey.get();
     const hook = await deps.WebhookKey.get();
-    return HttpResult.Ok({ live: key !== "", hooked: hook !== "" });
+    return HttpResult.Ok({ live: key.reveal() !== "", hooked: hook.reveal() !== "" });
   },
 };
 
@@ -45,7 +45,7 @@ export class KeySigner implements Signer {
 
   async sign(body: string): globalThis.Promise<boolean> {
     const key = await this.deps.StripeKey.get();
-    return key !== "" && body !== "";
+    return key.reveal() !== "" && body !== "";
   }
 }
 

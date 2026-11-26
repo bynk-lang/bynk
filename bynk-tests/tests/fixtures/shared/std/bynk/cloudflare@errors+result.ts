@@ -4,7 +4,7 @@
 import { Ok, Err, type Result, type Option } from "../__bynk_runtime/result.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 
-import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
+import { BytesResponse, FetchError, Request, Response, Secret } from "../bynk.js";
 
 /**
  * A KV expiry span: a `Duration` of at least 60 seconds, the shortest the
@@ -2084,15 +2084,16 @@ export const __ImagesToken: symbol = globalThis.Symbol("Images");
  * the store and the secret, when either is missing (create the secret with
  * `wrangler secrets-store secret create`). The deploy needs
  * `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
- * "Secrets Store: Read". `get` returns the value as a `String`, not an
+ * "Secrets Store: Read". `get` returns the value as a `Secret`, not an
  * `Option`: the binding exists only if the deploy found the secret, so an
  * absence at run time is a platform fault, not something a handler can act
- * on. The value is not logged by Bynk; do not log it either. Under `bynk dev`
+ * on. A `Secret` has no text to log: read it with `reveal()` where the value
+ * has to leave, or compare it with `matches`. Under `bynk dev`
  * the secret is read from the local store, and a test faults until
  * `stub StripeKey.get() returns …` gives it a value.
  */
 export interface StoredSecret {
-  get(): globalThis.Promise<string>;
+  get(): globalThis.Promise<Secret>;
 }
 
 export const __StoredSecretToken: symbol = globalThis.Symbol("StoredSecret");

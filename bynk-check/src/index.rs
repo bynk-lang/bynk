@@ -59,6 +59,14 @@ pub enum SymbolKind {
     /// #2617: a `const Name: Type = …` declaration — a value of its annotated
     /// type, keyed by its name in the declaring unit.
     Const,
+    /// #4183 (decision A): a unit — a context or a commons — keyed by its
+    /// qualified name (`shop.pay`) in itself, since a unit is not declared in
+    /// another. Its definition is the name in the `context …` / `commons …`
+    /// header (the first file's, for a unit split across files); its references
+    /// are the same name in the other files' headers, in a `consumes` or `uses`
+    /// clause, as a suite's target and inside `IsContext(…)`. Each site spans the
+    /// whole dotted name, and a token is drawn per segment.
+    Unit,
 }
 
 impl SymbolKey {
@@ -91,6 +99,7 @@ impl SymbolKind {
             SymbolKind::Asset => "asset",
             SymbolKind::Embed => "embed",
             SymbolKind::Const => "constant",
+            SymbolKind::Unit => "unit",
         }
     }
 }

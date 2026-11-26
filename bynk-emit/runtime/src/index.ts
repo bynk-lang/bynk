@@ -4,6 +4,7 @@
 export * from "./result.ts";
 export * from "./traceparent.ts";
 export * from "./bytes.ts";
+export * from "./secret.ts";
 export * from "./decimal.ts";
 export * from "./time.ts";
 export * from "./settle.ts";

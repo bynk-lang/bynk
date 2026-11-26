@@ -1601,6 +1601,14 @@ pub(crate) fn check_binop(op: BinOp, lhs: &Expr, rhs: &Expr, ctx: &mut Ctx) -> O
                             op.name()
                         ),
                     ),
+                    super::equality::NotComparable::Secret => (
+                        "bynk.types.secret_not_comparable",
+                        format!(
+                            "operator `{}` cannot compare `{shown}` — a `Secret` is compared with `matches`, never `{}`: comparing text is variable-time",
+                            op.name(),
+                            op.name()
+                        ),
+                    ),
                     super::equality::NotComparable::Computation(part) => (
                         "bynk.types.not_comparable",
                         if top {
@@ -3401,11 +3409,13 @@ fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx)
     let Some(base) = type_decl_base(decl) else {
         return err;
     };
-    if !bynk_syntax::ast::of_is_total(
-        base,
-        type_decl_refinement(decl),
-        matches!(decl.body, TypeBody::Opaque { .. }),
-    ) {
+    if !crate::context_checks::is_secret_decl(decl)
+        && !bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
         return err;
     }
     err.with_note(format!(
