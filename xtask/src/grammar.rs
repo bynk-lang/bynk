@@ -595,8 +595,9 @@ mod tests {
         // #4035 (`expect <call> violates <name>`) added: violates_name. Net +1.
         // #3885 (email `fallback { }`) added: fallback_policy, fallback_field. Net +2.
         // #3975 (wire names) added: _variant_annotation. Net +1.
-        // #3971 (`pattern as name`) added: as_pattern, _is_as_pattern, _let_as_pattern. Net +3.
-        assert_eq!(rules.len(), 208);
+        // #3971 (`pattern as name`) added: as_pattern, _is_as_pattern, _let_as_pattern,
+        // _lambda_as_pattern. Net +4.
+        assert_eq!(rules.len(), 209);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

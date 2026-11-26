@@ -6962,6 +6962,10 @@
         "required": false,
         "types": [
           {
+            "type": "as_pattern",
+            "named": true
+          },
+          {
             "type": "record_pattern",
             "named": true
           }

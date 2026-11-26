@@ -2310,6 +2310,13 @@ a [`let_pattern`](#rule-_let_pattern): `let Ok(x) | Err(x) = r else { … }`.
 An [`as_pattern`](#rule-as_pattern) after `let`, whose pattern opens as a
 [`let_pattern`](#rule-_let_pattern): `let [first, ..] as all = xs else { … }`.
 
+### lambda_as_pattern {#rule-_lambda_as_pattern}
+
+{{#grammar _lambda_as_pattern}}
+
+An [`as_pattern`](#rule-as_pattern) as a lambda parameter, over the irrefutable record
+pattern a parameter admits: `(Item { sku, .. } as item) => …`.
+
 ### is_pattern {#rule-_is_pattern}
 
 {{#grammar _is_pattern}}

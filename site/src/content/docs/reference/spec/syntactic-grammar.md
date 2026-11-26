@@ -1443,6 +1443,10 @@ whichever alternative matched; the formatter keeps those parentheses. After
 `is`, the pattern in front of `as` follows the `is` restrictions: a record
 pattern MUST be parenthesised, `x is (T { f, .. } as t)`.
 
+A lambda parameter may be an irrefutable record pattern with an `as` name:
+
+{{#grammar _lambda_as_pattern}}
+
 After `is`, `as` follows a base pattern, and a record pattern keeps its parentheses:
 
 {{#grammar _is_as_pattern}}

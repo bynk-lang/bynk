@@ -2269,6 +2269,14 @@ module.exports = grammar({
           optional(seq(":", field("type", $._type_ref))),
         ),
         field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
+        // #3971: `(Item { sku, .. } as item) => …`
+        field("pattern", alias($._lambda_as_pattern, $.as_pattern)),
+      ),
+    _lambda_as_pattern: ($) =>
+      seq(
+        field("pattern", alias($._lambda_record_pattern, $.record_pattern)),
+        "as",
+        field("name", $.identifier),
       ),
     // The irrefutable subset a lambda parameter admits: each field is a bare
     // name, `name: binding`, `name: _`, or a nested such pattern. (A bare

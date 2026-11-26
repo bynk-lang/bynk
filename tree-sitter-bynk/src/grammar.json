@@ -10659,6 +10659,49 @@
             "named": true,
             "value": "record_pattern"
           }
+        },
+        {
+          "type": "FIELD",
+          "name": "pattern",
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_lambda_as_pattern"
+            },
+            "named": true,
+            "value": "as_pattern"
+          }
+        }
+      ]
+    },
+    "_lambda_as_pattern": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "pattern",
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_lambda_record_pattern"
+            },
+            "named": true,
+            "value": "record_pattern"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "as"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
         }
       ]
     },

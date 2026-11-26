@@ -209,3 +209,43 @@ commons d {
             (boolean_literal))
           (block
             (boolean_literal)))))))
+
+==========================
+as pattern — a lambda's record-pattern parameter
+==========================
+
+commons d {
+	fn f(orders: List[Order]) -> List[Int] {
+		orders.map((Order { id, .. } as item) => 1)
+	}
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (generic_type_ref
+          (builtin_type)
+          (identifier)))
+      (generic_type_ref
+        (builtin_type)
+        (base_type))
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (lambda_expr
+            (lambda_param
+              (as_pattern
+                (record_pattern
+                  (identifier)
+                  (record_pattern_field
+                    (identifier)))
+                (identifier)))
+            (number_literal)))))))
