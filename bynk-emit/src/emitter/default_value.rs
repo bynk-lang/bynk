@@ -9,16 +9,16 @@
 use bynk_check::wire_default::DefaultValue;
 use bynk_ts::{TsExpr, TsLit, TsObjectEntry, TsType, TsTypeMember};
 
-/// Where a default value goes, for a refined value in it (#3759).
+/// Where a default value goes, for a refined or opaque value in it (#3759, #3842).
 #[derive(Clone)]
 pub(super) enum Slot {
-    /// A position of this TS type: a refined value is cast to it, `(5 as Review["rating"])`, so
+    /// A position of this TS type: a refined or opaque value is cast to it, `(5 as Review["rating"])`, so
     /// it is branded without naming the refined type, which the module that builds the record may
     /// not import. Each part's type is indexed from it: a field by its key, a list element by
     /// `number`, a variant's payload through `Extract<…, { tag: "V" }>`.
     Typed(TsType),
-    /// Test scaffolding, where a declared type is not nameable: a refined value is branded as
-    /// `unchecked_construct_test_node` brands a refined literal there.
+    /// Test scaffolding, where a declared type is not nameable: a refined or opaque value is branded by
+    /// an `as any` cast, which names no type and so needs no import of the declaring unit.
     Scaffold,
     /// No brand (a value with no refined part needs none).
     Unbranded,
@@ -76,22 +76,17 @@ pub(super) fn default_value_node(value: &DefaultValue, slot: &Slot) -> TsExpr {
         }
         // #3759, #3842: a refined or an opaque value, branded as its slot is. An opaque type's TS
         // type is a brand alias like a refined one (ADR 0182), so the same cast brands it where the
-        // type is not nameable; test scaffolding has no declared type to cast to, so it brands an
-        // opaque value through `Name.unsafe(…)` and a refined one with a cast.
-        DefaultValue::Branded {
-            name,
-            value,
-            opaque,
-        } => {
+        // type is not nameable; test scaffolding has no declared type to cast to, so it casts to `any`.
+        DefaultValue::Branded { name, value, .. } => {
             let base = default_value_node(value, &Slot::Unbranded);
             match slot {
                 Slot::Typed(ty) => TsExpr::Paren(Box::new(TsExpr::As {
                     expr: Box::new(base),
                     ty: ty.clone(),
                 })),
-                Slot::Scaffold => {
-                    super::ts_types::unchecked_construct_test_node(name, base, *opaque)
-                }
+                // A cast, not `Tok.unsafe(…)`: the scaffold need not have `Tok` in scope when the
+                // default is reached through another record's default (an opaque brand is erased).
+                Slot::Scaffold => super::ts_types::unchecked_construct_test_node(name, base, false),
                 Slot::Unbranded => base,
             }
         }
@@ -379,7 +374,7 @@ mod tests {
 
     /// #3842: an opaque leaf is branded as its field is, by the same cast where the type is not
     /// nameable (an opaque type's TS type is a brand alias like a refined one), and in test
-    /// scaffolding as an opaque test literal is there, through `Name.unsafe(…)`.
+    /// scaffolding by an `as any` cast, which needs no opaque type in scope.
     #[test]
     fn an_opaque_leaf_is_branded_like_a_refined_one() {
         let slot = TsType::Indexed {
@@ -396,7 +391,7 @@ mod tests {
                 &DefaultValue::List(vec![some(tok.clone())]),
                 &Slot::Scaffold
             )),
-            "[{ tag: \"Some\" as const, value: Tok.unsafe(\"k\") }]"
+            "[{ tag: \"Some\" as const, value: (\"k\" as any) }]"
         );
         // A refined leaf beside it keeps its cast, which a refined type has no `unsafe` for.
         assert_eq!(
