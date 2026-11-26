@@ -1,2 +1,2 @@
-# exact
 bynk.given.kind_needs_parameter `Kv` has instances, so a commons names it as a capability parameter
+# exact

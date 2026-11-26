@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: diagnostic_coverage, emit_diagnostics, explained_codes
 changelog: A commons function may take a capability parameter, `given Store: Kv`, beside shared capabilities such as `Logger`, and every call binds each parameter explicitly inside its arguments, `remember(key, value, given Store = Sessions)`, never inferred; a commons selects the kinds with `consumes bynk.cloudflare { Kv }` (experimental, behind the `[unstable] allow` entry `bynk.given.parameters`)
 ---
 

@@ -1,2 +1,2 @@
-# exact
 bynk.given.shared_as_parameter `Logger` has no instances, so it cannot bound a capability parameter
+# exact
