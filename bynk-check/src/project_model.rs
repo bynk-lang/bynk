@@ -3230,17 +3230,13 @@ pub fn phase_resolve_consumes(
                         .unwrap_or_default();
                     for item in names {
                         let cap = &item.name;
-                        if !parsed[i].is_synthetic()
-                            && let Some(err) =
-                                policy.check(&format!("{target}.{}", cap.name), cap.span)
-                        {
-                            errors.push_for(Some(&parsed[i].identity_path()), err);
-                        }
-                        // #3959: a capability in a commons' `consumes` is experimental.
-                        if kind == UnitKind::Commons
-                            && exported.contains(&cap.name)
-                            && let Some(err) = crate::cap_params::gate(policy, cap.span)
-                        {
+                        for err in crate::cap_params::selection_gates(
+                            policy,
+                            &target,
+                            cap,
+                            parsed[i].is_synthetic(),
+                            kind == UnitKind::Commons && exported.contains(&cap.name),
+                        ) {
                             errors.push_for(Some(&parsed[i].identity_path()), err);
                         }
                         // #2765: the braces may also name a type `U` exports

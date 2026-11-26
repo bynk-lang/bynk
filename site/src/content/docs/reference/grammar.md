@@ -1826,6 +1826,13 @@ function with capability parameters ends its arguments with their bindings,
 **Static semantics.**
 {{#grammar-semantics call}}
 
+### _call_arguments {#rule-_call_arguments}
+
+{{#grammar _call_arguments}}
+
+A call's arguments, then its capability bindings: `f(x, y)`, `f(x, given S = A)`,
+`f(given S = A)`.
+
 ### capability_bindings {#rule-capability_bindings}
 
 {{#grammar capability_bindings}}

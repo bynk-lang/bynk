@@ -49,6 +49,24 @@ pub(crate) fn gate(policy: &crate::stability::StabilityPolicy, span: Span) -> Op
     policy.check(GATE, span)
 }
 
+/// The stability errors for one name `cap` selected in a `consumes` of
+/// `target`: the item's own experimental gate (not in a first-party unit's own
+/// sources, `synthetic`), and (#3959) [`GATE`] for a capability in a commons'
+/// `consumes`, which is experimental as a form.
+pub(crate) fn selection_gates(
+    policy: &crate::stability::StabilityPolicy,
+    target: &str,
+    cap: &bynk_syntax::ast::Ident,
+    synthetic: bool,
+    commons_capability: bool,
+) -> Vec<CompileError> {
+    let item = (!synthetic)
+        .then(|| policy.check(&format!("{target}.{}", cap.name), cap.span))
+        .flatten();
+    let form = commons_capability.then(|| gate(policy, cap.span)).flatten();
+    item.into_iter().chain(form).collect()
+}
+
 /// Type-check this commons file's free functions that declare `given`, with
 /// the capabilities their clauses name in scope. A refused declaration
 /// (`given_fn_refusal`) was reported by the plain function check.
