@@ -383,17 +383,24 @@ test("an oversize check comes before the kind check (#3905)", () => {
 });
 
 test("a Bytes frame is sent as a binary message and any other as JSON text (#3905)", async () => {
-  const ws = fakeSocket({ connId: "c", max: 64 });
+  const ws = fakeSocket({ connId: "c", max: 64, bin: true });
   const conn = new WorkersConnection<unknown>(ws, "c");
   const bytes = new Uint8Array([1, 2, 3]);
   await conn.send(bytes);
   await conn.send({ text: "hi" });
   assert.equal(ws.sent[0], bytes);
   assert.equal(ws.sent[1], '{"text":"hi"}');
+  // A service that is not `out: Bytes` records no `bin`, and sends JSON, whatever the frame's representation.
+  const json = fakeSocket({ connId: "c", max: 64 });
+  await new WorkersConnection<unknown>(json, "c").send({ text: "hi" });
+  assert.equal(json.sent[0], '{"text":"hi"}');
+  const notBin = fakeSocket({ connId: "c", max: 64 });
+  await new WorkersConnection<unknown>(notBin, "c").send(new Uint8Array([1]));
+  assert.equal(typeof notBin.sent[0], "string");
 });
 
 test("a frame the server sends over the attachment's maxFrame faults the send (#3905)", async () => {
-  const ws = fakeSocket({ connId: "c", max: 8 });
+  const ws = fakeSocket({ connId: "c", max: 8, bin: true });
   const conn = new WorkersConnection<unknown>(ws, "c");
   await conn.send(new Uint8Array(8));
   await assert.rejects(conn.send(new Uint8Array(9)), /9 bytes is over the service's maxFrame of 8/);

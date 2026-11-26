@@ -55,6 +55,8 @@ pub(super) struct WsOpenHost<'a> {
     pub(super) max_frame: i64,
     /// #3905: the `in:` frame type is `Bytes`, so inbound frames are binary and not JSON text.
     pub(super) in_bytes: bool,
+    /// #3905: the `out:` frame type is `Bytes`, so the connection sends binary messages.
+    pub(super) out_bytes: bool,
     /// An actor-sum `by who: A | B`: the members in first-wins order. The edge
     /// forwards which one verified (`{ tag, identity? }`) and the DO rebuilds
     /// `deps.who` from it. Mutually exclusive with `seam`, which a sum never has.
@@ -162,10 +164,8 @@ pub(super) fn ws_open_hosts_for<'a>(
                         .limits
                         .as_ref()
                         .map_or(bynk_syntax::ast::DEFAULT_MAX_FRAME, |l| l.max_frame()),
-                    in_bytes: matches!(
-                        &*commons.tys().get(in_ty),
-                        bynk_check::checker::Ty::Base(bynk_syntax::ast::BaseType::Bytes)
-                    ),
+                    in_bytes: is_plain_bytes(commons, in_ty),
+                    out_bytes: is_plain_bytes(commons, out_ty),
                     oidc: h
                         .by_clause
                         .as_ref()
@@ -257,6 +257,26 @@ fn ws_decode_attempt(target: &str, value: bynk_ts::TsExpr, reason: &str) -> bynk
         bynk_ts::TsStmt::inline_block(vec![close, bynk_ts::TsStmt::return_stmt(None, None)], None),
         None,
     )
+}
+
+/// #3905: whether a frame type is exactly `Bytes`. Both directions key on this one rule: a plain `Bytes`
+/// frame is a binary message and any other frame type is JSON text, so an opaque or refined type over
+/// `Bytes` is JSON in both.
+fn is_plain_bytes(commons: &TypedCommons, ty: TyId) -> bool {
+    matches!(
+        &*commons.tys().get(ty),
+        bynk_check::checker::Ty::Base(bynk_syntax::ast::BaseType::Bytes)
+    )
+}
+
+/// #3905: the socket attachment's send settings: the frame ceiling `maxFrame` and, for an `out: Bytes`
+/// service, `bin`, so `send` reads both after any wake, whatever handlers the service declares.
+fn ws_send_meta(host: &WsOpenHost<'_>) -> Vec<(String, bynk_ts::TsExpr)> {
+    let mut meta = vec![("max".to_string(), num_lit(host.max_frame))];
+    if host.out_bytes {
+        meta.push(("bin".to_string(), bool_lit(true)));
+    }
+    meta
 }
 
 /// #3905: `if (!__webSocketAdmit(ws, message, <maxFrame>, <binary>)) return;`: the first thing an
@@ -960,8 +980,8 @@ pub(super) fn ws_open_fetch_branch_stmt(
                 },
             ));
         }
-        // #3905: the frame ceiling, which `send` reads from the socket after any wake.
-        meta.push(("max".to_string(), num_lit(host.max_frame)));
+        // #3905: the frame ceiling and kind, which `send` reads from the socket after any wake.
+        meta.extend(ws_send_meta(host));
         // #3903: and the credential's expiry, which a waking `webSocketMessage` checks.
         if host.reads_bearer_token() {
             meta.push((
@@ -984,6 +1004,8 @@ pub(super) fn ws_open_fetch_branch_stmt(
             ));
         }
         accept_args.push(bynk_ts::TsExpr::object(meta));
+    } else {
+        accept_args.push(bynk_ts::TsExpr::object(ws_send_meta(host)));
     }
     // #1818: the edge forwards the agent's key with the upgrade.
     if let Some((codec, key_ty)) = &host.agent_key {
@@ -1297,8 +1319,10 @@ pub(super) fn emit_ws_dispatch_handlers(
                  codec-eligible"
             )
         });
-        let decode =
-            serialisation::deserialise_expr(&in_type, &ident("__json"), "frame", runtime_use);
+        // A `Bytes` frame is binary and is never decoded, so its codec is not built (nor its imports noted).
+        let decode = (!host.in_bytes).then(|| {
+            serialisation::deserialise_expr(&in_type, &ident("__json"), "frame", runtime_use)
+        });
         let mut stmts = vec![ws_admit_stmt(host)];
         att_guard(&mut stmts);
         stmts.extend(host.rebuild.stmts());
@@ -1309,7 +1333,7 @@ pub(super) fn emit_ws_dispatch_handlers(
             ));
         }
         // #3905: a `Bytes` frame is binary and is handed over as it arrived; any other frame is JSON text.
-        if !host.in_bytes {
+        if let Some(decode) = decode {
             stmts.extend(ws_text_decode_stmts(decode));
         }
         // The decoded frame fills the param typed as the service `in`; the rest are

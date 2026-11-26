@@ -50,8 +50,8 @@ export function closeArguments(code?: number, reason?: string): { code?: number;
 // push oversized frames at clients.
 const frameEncoder = new TextEncoder();
 
-function outboundFrame(frame: unknown): { data: string | Uint8Array; size: number } {
-  if (frame instanceof Uint8Array) return { data: frame, size: frame.byteLength };
+function outboundFrame(frame: unknown, binary?: boolean): { data: string | Uint8Array; size: number } {
+  if (frame instanceof Uint8Array && binary !== false) return { data: frame, size: frame.byteLength };
   const data = JSON.stringify(frame);
   return { data, size: frameEncoder.encode(data).byteLength };
 }
@@ -202,9 +202,15 @@ export class WorkersConnection<F> implements Connection<F> {
   // service's `maxFrame`, which the upgrade wrote into the socket's attachment so it is known after any
   // wake, faults the send (#3905). A socket accepted before that has no ceiling recorded.
   async send(frame: F): Promise<void> {
-    const attachment = this.ws.deserializeAttachment?.() as { max?: number } | null | undefined;
+    const attachment = this.ws.deserializeAttachment?.() as { max?: number; bin?: boolean } | null | undefined;
     const max = attachment?.max;
-    this.ws.send((max === undefined ? outboundFrame(frame) : checkOutboundFrame(frame, max)).data);
+    // `bin` is the `out: Bytes` service the upgrade recorded: its frames go out as binary messages, and any
+    // other service's as JSON, whatever the frame's representation, as the inbound side decides by type.
+    const out = outboundFrame(frame, attachment?.bin === true);
+    if (max !== undefined && out.size > max) {
+      throw new Error(`Connection.send: a frame of ${out.size} bytes is over the service's maxFrame of ${max}`);
+    }
+    this.ws.send(out.data);
   }
 
   async close(code?: number, reason?: string): Promise<void> {
