@@ -77,6 +77,18 @@ export function __serialise_Action(value: Action): __JsonValue {
 }
 
 export function __deserialise_Action(json: __JsonValue, path: string = "$"): Result<Action, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Opened":
+        return Ok({ tag: "Opened" } as Action);
+      case "Closed":
+        return Ok({ tag: "Closed" } as Action);
+      case "Labeled":
+        return Ok({ tag: "Labeled" } as Action);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }

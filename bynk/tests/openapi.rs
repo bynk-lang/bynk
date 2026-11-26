@@ -567,6 +567,40 @@ fn plain_json_options_are_nullable() {
     assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
 }
 
+/// #3974: a plain-JSON route writes an enum as a string enum, a `String`-keyed `Map` as an
+/// object and an `Instant` as a `date-time` string; the tagged route keeps the tagged shapes.
+#[test]
+fn plain_json_enum_map_and_instant_shapes() {
+    let dir = scratch("plain-json-shapes");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"plainshapes\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Action = enum { Opened, Closed }\n\n\
+         type Hook = { action: Action, labels: Map[String, String], at: Instant, tally: Map[Int, String] }\n\n\
+         service plain from http {\n  json { options: plain }\n\n  \
+           on GET(\"/plain\") () -> Effect[HttpResult[Hook]] by v: Visitor {\n    Ok(Hook { action: Opened, labels: Map.empty(), at: Instant.fromEpochMillis(0), tally: Map.empty() })\n  }\n}\n\n\
+         service tagged from http {\n  \
+           on GET(\"/tagged\") () -> Effect[HttpResult[Hook]] by v: Visitor {\n    Ok(Hook { action: Opened, labels: Map.empty(), at: Instant.fromEpochMillis(0), tally: Map.empty() })\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let s = &d["components"]["schemas"];
+    let plain = &s["Hook.plain"]["properties"];
+    assert_eq!(plain["at"]["format"], "date-time");
+    assert_eq!(plain["labels"]["type"], "object");
+    assert_eq!(plain["labels"]["additionalProperties"]["type"], "string");
+    assert_eq!(plain["tally"]["type"], "array");
+    assert_eq!(s["Action.plain"]["enum"][0], "Opened");
+    let tagged = &s["Hook"]["properties"];
+    assert_eq!(tagged["at"]["type"], "integer");
+    assert_eq!(tagged["labels"]["type"], "array");
+    assert!(s["Action"]["oneOf"].is_array());
+}
+
 /// #3916: a `format: problem` route documents its errors as `application/problem+json`
 /// with the shared `BynkProblemDetails` schema; a route with no such section, and a
 /// route that overrides it with `@errors(format: bynk)`, keep Bynk's own bodies.

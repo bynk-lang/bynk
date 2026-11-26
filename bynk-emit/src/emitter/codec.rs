@@ -198,10 +198,14 @@ impl<'a> CodecGen<'a> {
             Ty::Option(a) => self.wrap("__bynkCodecOption", vec![self.for_ty_node(*a)]),
             Ty::List(a) => self.wrap("__bynkCodecList", vec![self.for_ty_node(*a)]),
             Ty::Set(a) => self.wrap("__bynkCodecSet", vec![self.for_ty_node(*a)]),
-            Ty::Map(k, v) => self.wrap(
-                "__bynkCodecMap",
-                vec![self.for_ty_node(*k), self.for_ty_node(*v)],
-            ),
+            Ty::Map(k, v) => {
+                let mut parts = vec![self.for_ty_node(*k), self.for_ty_node(*v)];
+                // #3974: a `String`-keyed map also reads from a JSON object.
+                if !has_var(*k, self.commons) && self.is_string_key(*k) {
+                    parts.push(TsExpr::Lit(bynk_ts::TsLit::Bool(true)));
+                }
+                self.wrap("__bynkCodecMap", parts)
+            }
             Ty::Result(a, b) => self.wrap(
                 "__bynkCodecResult",
                 vec![self.for_ty_node(*a), self.for_ty_node(*b)],
@@ -238,6 +242,13 @@ impl<'a> CodecGen<'a> {
                 unreachable!("bynk internal error: no codec over a type variable in {other:?}")
             }
         }
+    }
+
+    /// #3974: whether a variable-free map key is a `String`, or a refined or opaque `String`.
+    fn is_string_key(&self, key: TyId) -> bool {
+        let tys = self.commons.tys();
+        super::ty_to_type_ref(key, tys)
+            .is_some_and(|t| serialisation::is_string_key_ref(&t, &self.commons.types))
     }
 
     /// The generated pair for a variable-free type.

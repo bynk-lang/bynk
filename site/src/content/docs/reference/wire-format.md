@@ -160,22 +160,24 @@ decoded by checking its shape, then any predicates.
 | `Bytes` | string (standard base64 with padding (RFC 4648 §4)) | valid base64; anything else is `StructuralMismatch` (`expected: "base64 string"`) | as is |
 | `Decimal` | string (plain decimal text, such as `"12.50"`) | an optional `-`, digits with no leading zero (`0` or `1`-`9` first), and optionally `.` and digits (at most 1000 characters and 100 fraction digits, the most any `Decimal` has); an exponent, a leading `+`, a leading zero (`007`), whitespace, `.5` or `5.` is `StructuralMismatch` (`expected: "decimal string"`), and so is a JSON number. The scale is the number of fraction digits written, and is kept | as is |
 | `Duration` | number (whole milliseconds) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
-| `Instant` | number (milliseconds since the Unix epoch) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
+| `Instant` | number (milliseconds since the Unix epoch) | JSON number, and `Number.isSafeInteger` (whole, within ±(2^53 − 1)); otherwise `StructuralMismatch` (`expected: "safe integer"`). A string is also read, when it is an RFC 3339 date-time with an explicit offset (`Z` or `±hh:mm`, as `Instant.fromIso` reads it): a fraction past milliseconds is truncated, and a timestamp with no offset, an impossible date or a leap second is `StructuralMismatch` (`expected: "number"`) | an unsafe value throws in the sender (a `500`), never a lossy number |
 | `()` | `null` | anything; the value is not inspected | `null` |
 
 `Int`, `Duration` and `Instant` are limited to JavaScript's safe-integer range
 on the wire, so every JSON parser reads them exactly.
+
+A plain-JSON route and `Json.encodePlain` write an `Instant` as an RFC 3339 string in UTC with exactly three fraction digits (`"2026-11-22T10:00:00.000Z"`); `Duration` and `Decimal` are written as above.
 
 ### Composite types
 
 | Type | JSON |
 |---|---|
 | record | an object keyed by field name. A missing field decodes as its default when it has one, as `None` when it is an `Option`, and otherwise fails. Unknown keys are ignored. |
-| sum (`enum` included) | an object with `"kind"`: the variant's name, beside the variant's payload fields: `{"kind":"Circle","radius":0.5}`, `{"kind":"Dot"}` |
+| sum (`enum` included) | an object with `"kind"`: the variant's name, beside the variant's payload fields: `{"kind":"Circle","radius":0.5}`, `{"kind":"Dot"}`. A sum with no payload variant (an `enum`) is also read from a bare string, the variant's name (`"Dot"`; matched exactly, case-sensitively), and a plain-JSON route and `Json.encodePlain` write it that way. The object form is tried first. |
 | `Result[T, E]` | `{"kind":"Ok","value":<T>}` or `{"kind":"Err","error":<E>}` |
 | `Option[T]` | `{"kind":"Some","value":<T>}` or `{"kind":"None"}`. A sender may also send `null` or leave the field out for `None`, or send the bare value for `Some`; Bynk encodes the tagged form, except in a plain HTTP route and for `Json.encodePlain`, which write `v` / `null` (`Option[Option[T]]` is refused there) |
 | `List[T]` | an array |
-| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order |
+| `Map[K, V]` | an array of `[key, value]` pairs, in insertion order. A map whose key is a `String`, or a refined or opaque `String`, is also read from a JSON object (`{"bug":"red"}`), each key checked as the key type; a plain-JSON route and `Json.encodePlain` write it that way. The object's keys are read in the order `JSON.parse` lists them, which puts integer-like keys (`"2"`, `"10"`) first in ascending order, and a key repeated in the text keeps its last value. Any other key type keeps the pair array |
 | refined type (`type Qty = Int where NonNegative`) | its base type's encoding. The decoder checks the predicates, refusing with `RefinementViolation` |
 | opaque type | its base type's encoding. A caller cannot see the predicate, so only the owning context checks it |
 | inline field refinement (`qty: Int where Positive`) | the field's encoding. The decoder checks the predicates, like a refined type's |

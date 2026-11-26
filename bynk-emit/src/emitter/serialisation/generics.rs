@@ -37,7 +37,7 @@ fn element_serialiser(elem: &TypeRef, depth: Option<Depth<'_>>, ru: &RuntimeUse)
 
 /// `(globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true`: whether `withPlainJson`
 /// has the plain-JSON flag set. The cast prints bracketed as the member's receiver.
-fn plain_json_test() -> TsExpr {
+pub(super) fn plain_json_test() -> TsExpr {
     strict_eq(
         member(
             TsExpr::As {
@@ -88,6 +88,30 @@ fn is_plain_key_ref(t: &TypeRef, types: &std::collections::HashMap<String, Arc<T
         | TypeRef::Fn(..)
         | TypeRef::App { .. } => false,
     }
+}
+
+/// #3974: whether a `Map` key declared as `t` is a `String`, a refined or opaque `String`, so the
+/// map also has the JSON object form (`{"k": v}`). Any other key type keeps the pair-array form.
+pub(crate) fn is_string_key_ref(
+    t: &TypeRef,
+    types: &std::collections::HashMap<String, Arc<TypeDecl>>,
+) -> bool {
+    let named_string = |id: &bynk_syntax::ast::Ident| {
+        matches!(
+            types.get(&id.name).map(|d| &d.body),
+            Some(
+                TypeBody::Refined {
+                    base: BaseType::String,
+                    ..
+                } | TypeBody::Opaque {
+                    base: BaseType::String,
+                    ..
+                }
+            )
+        )
+    };
+    matches!(t, TypeRef::Base(BaseType::String, _))
+        || matches!(t, TypeRef::Named(id) if named_string(id))
 }
 
 /// The `Ok`/`Err` (or `Some`/`None`) cascade of a generic sum's wire decoder:
@@ -900,35 +924,41 @@ pub fn emit_generic_helpers_qualified(
                     type_args: vec![key_ty.clone(), val_ty.clone()],
                 };
 
+                let string_key = is_string_key_ref(key, types);
+                let mut serialise_body = Vec::new();
+                if string_key && ru.plain_json() {
+                    serialise_body.push(plain_map_object(key, val, depth, ru));
+                }
+                serialise_body.extend([
+                    TsStmt::const_stmt(
+                        TsBindingName::Ident("entries".to_string()),
+                        Some(TsType::array(TsType::named("__JsonValue"))),
+                        TsExpr::array(vec![]),
+                        None,
+                    ),
+                    TsStmt::for_of(
+                        "[k, v]",
+                        ident("value"),
+                        block(vec![TsStmt::expr_stmt(
+                            call(
+                                member(ident("entries"), "push"),
+                                vec![TsExpr::array(vec![
+                                    serialise_field_expr(key, &ident("k"), depth, ru),
+                                    serialise_field_expr(val, &ident("v"), depth, ru),
+                                ])],
+                            ),
+                            None,
+                        )]),
+                        None,
+                    ),
+                    ret(ident("entries")),
+                ]);
                 let serialise = TsDecl::Export(Box::new(TsDecl::Function {
                     name: format!("__serialise_Map_{key_ts}_{val_ts}"),
                     generics: Vec::new(),
                     params: serialise_params(map_ty.clone(), depth),
                     return_type: Some(TsType::named("__JsonValue")),
-                    body: vec![
-                        TsStmt::const_stmt(
-                            TsBindingName::Ident("entries".to_string()),
-                            Some(TsType::array(TsType::named("__JsonValue"))),
-                            TsExpr::array(vec![]),
-                            None,
-                        ),
-                        TsStmt::for_of(
-                            "[k, v]",
-                            ident("value"),
-                            block(vec![TsStmt::expr_stmt(
-                                call(
-                                    member(ident("entries"), "push"),
-                                    vec![TsExpr::array(vec![
-                                        serialise_field_expr(key, &ident("k"), depth, ru),
-                                        serialise_field_expr(val, &ident("v"), depth, ru),
-                                    ])],
-                                ),
-                                None,
-                            )]),
-                            None,
-                        ),
-                        ret(ident("entries")),
-                    ],
+                    body: serialise_body,
                     is_async: false,
                     inline: false,
                 }));
@@ -1009,9 +1039,18 @@ pub fn emit_generic_helpers_qualified(
                         "Result",
                         vec![map_ty, TsType::named("__BoundaryError")],
                     )),
-                    body: vec![
-                        array_shape_guard(),
-                        TsStmt::const_stmt(
+                    body: [
+                        string_key
+                            .then(|| {
+                                object_form_map(
+                                    &format!("__deserialise_Map_{key_ts}_{val_ts}"),
+                                    depth,
+                                )
+                            })
+                            .into_iter()
+                            .collect::<Vec<_>>(),
+                        vec![array_shape_guard()],
+                        vec![TsStmt::const_stmt(
                             TsBindingName::Ident("out".to_string()),
                             None,
                             TsExpr::New {
@@ -1019,8 +1058,8 @@ pub fn emit_generic_helpers_qualified(
                                 args: vec![],
                             },
                             None,
-                        ),
-                        TsStmt::for_stmt(
+                        )],
+                        vec![TsStmt::for_stmt(
                             "i",
                             TsExpr::Lit(TsLit::Num("0".to_string())),
                             binary(
@@ -1030,9 +1069,10 @@ pub fn emit_generic_helpers_qualified(
                             ),
                             block(loop_body),
                             None,
-                        ),
-                        ret(call(ident("Ok"), vec![ident("out")])),
-                    ],
+                        )],
+                        vec![ret(call(ident("Ok"), vec![ident("out")]))],
+                    ]
+                    .concat(),
                     is_async: false,
                     inline: false,
                 }));
@@ -1042,6 +1082,80 @@ pub fn emit_generic_helpers_qualified(
         }
     }
     decls
+}
+
+/// #3974: the plain-mode branch of a `String`-keyed map's encoder: while `__bynkPlainJson` is
+/// set, the map is a JSON object (insertion-ordered, keys as written). The object has no
+/// prototype, so a `"__proto__"` key is an own property, not the prototype setter.
+fn plain_map_object(
+    key: &TypeRef,
+    val: &TypeRef,
+    depth: Option<Depth<'_>>,
+    ru: &RuntimeUse,
+) -> TsStmt {
+    let record = TsType::named_with_args(
+        "Record",
+        vec![TsType::named("string"), TsType::named("__JsonValue")],
+    );
+    let key_text = as_expr(
+        serialise_field_expr(key, &ident("k"), depth, ru),
+        TsType::named("string"),
+    );
+    if_(
+        plain_json_test(),
+        block(vec![
+            TsStmt::const_stmt(
+                TsBindingName::Ident("object".to_string()),
+                Some(record),
+                call(
+                    member(ident("globalThis.Object"), "create"),
+                    vec![ident("null")],
+                ),
+                None,
+            ),
+            TsStmt::for_of(
+                "[k, v]",
+                ident("value"),
+                block(vec![TsStmt::assign(
+                    index(ident("object"), key_text),
+                    serialise_field_expr(val, &ident("v"), depth, ru),
+                    None,
+                )]),
+                None,
+            ),
+            ret(ident("object")),
+        ]),
+    )
+}
+
+/// #3974: the object form of a `String`-keyed map's decoder: a JSON object is read as its
+/// `[key, value]` pairs, in the object's own order, by this same decoder, so the key decodes
+/// (and any refinement is checked) exactly as it does in the pair-array form. `JSON.parse` lists
+/// integer-like keys first, in ascending order, and keeps only the last of a repeated key; the
+/// reference says so.
+fn object_form_map(decoder: &str, depth: Option<Depth<'_>>) -> TsStmt {
+    let is_object = and_expr(
+        and_expr(
+            strict_eq(typeof_expr(ident("json")), str_lit("object")),
+            strict_neq(ident("json"), TsExpr::Lit(TsLit::Null)),
+        ),
+        not_expr(call(
+            member(ident("globalThis.Array"), "isArray"),
+            vec![ident("json")],
+        )),
+    );
+    let pairs = as_expr(
+        call(
+            member(ident("globalThis.Object"), "entries"),
+            vec![as_expr(ident("json"), index_signature_record_ty())],
+        ),
+        TsType::named("__JsonValue"),
+    );
+    let mut args = vec![pairs, ident("path")];
+    if depth.is_some() {
+        args.push(ident("depth"));
+    }
+    if_(is_object, block(vec![ret(call(ident(decoder), args))]))
 }
 
 /// #1887: the moved `bynk-tests` test `lenient_option_decode` pins the suffix a failed bare

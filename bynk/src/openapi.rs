@@ -1343,9 +1343,39 @@ impl Renderer<'_> {
         self.ref_schema(components, &shape)
     }
 
+    /// #3974: whether a map key is a `String`, or a refined or opaque `String`.
+    fn is_string_key(&self, key: &TypeRef) -> bool {
+        use bynk_syntax::ast::TypeBody;
+        let named_string = |name: &str| {
+            matches!(
+                self.types.get(name).map(|d| &d.body),
+                Some(
+                    TypeBody::Refined {
+                        base: BaseType::String,
+                        ..
+                    } | TypeBody::Opaque {
+                        base: BaseType::String,
+                        ..
+                    }
+                )
+            )
+        };
+        matches!(key, TypeRef::Base(BaseType::String, _))
+            || matches!(key, TypeRef::Named(id) if named_string(&id.name))
+    }
+
     /// The schema for one occurrence of a type.
     fn ref_schema(&self, components: &mut Components, r: &WireRef) -> Value {
         match r {
+            // #3974: a plain route writes an `Instant` as an RFC 3339 string.
+            WireRef::Base {
+                base: BaseType::Instant,
+                ..
+            } if self.plain => json!({
+                "type": "string",
+                "format": "date-time",
+                "x-bynk-base": "Instant",
+            }),
             WireRef::Base { base, .. } => Value::Object(base_schema(*base)),
             WireRef::Bytes => Value::Object(base_schema(BaseType::Bytes)),
             WireRef::Decimal => Value::Object(base_schema(BaseType::Decimal)),
@@ -1402,6 +1432,18 @@ impl Renderer<'_> {
                 s.insert("required".into(), Value::Array(required));
                 s
             }
+            // #3974: a plain route writes a payload-less sum as its variant's name.
+            WireBody::Sum(sum)
+                if self.plain
+                    && !sum.variants.is_empty()
+                    && sum.variants.iter().all(|v| v.payload.is_empty()) =>
+            {
+                let names: Vec<&str> = sum.variants.iter().map(|v| v.name.as_str()).collect();
+                Map::from_iter([
+                    ("type".to_string(), json!("string")),
+                    ("enum".to_string(), json!(names)),
+                ])
+            }
             WireBody::Sum(sum) => {
                 let variants: Vec<Value> = sum
                     .variants
@@ -1456,6 +1498,11 @@ impl Renderer<'_> {
                 "type": "array",
                 "items": self.ref_schema(components, &shape(elem)),
                 "uniqueItems": true,
+            }),
+            // #3974: a plain route writes a `String`-keyed map as a JSON object.
+            WireInst::MapInst { key, val } if self.plain && self.is_string_key(key) => json!({
+                "type": "object",
+                "additionalProperties": self.ref_schema(components, &shape(val)),
             }),
             // Entries array, insertion-ordered: `[[k, v], …]`.
             WireInst::MapInst { key, val } => json!({

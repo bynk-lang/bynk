@@ -286,6 +286,13 @@ export function __deserialise_List_Option_String(json: __JsonValue, path: string
 }
 
 export function __serialise_Map_String_Option_Int(value: ReadonlyMap<string, Option<number>>): __JsonValue {
+  if ((globalThis as { __bynkPlainJson?: boolean }).__bynkPlainJson === true) {
+    const object: Record<string, __JsonValue> = globalThis.Object.create(null);
+    for (const [k, v] of value) {
+      object[k as __JsonValue as string] = __serialise_Option_Int(v);
+    }
+    return object;
+  }
   const entries: __JsonValue[] = [];
   for (const [k, v] of value) {
     entries.push([k as __JsonValue, __serialise_Option_Int(v)]);
@@ -294,6 +301,9 @@ export function __serialise_Map_String_Option_Int(value: ReadonlyMap<string, Opt
 }
 
 export function __deserialise_Map_String_Option_Int(json: __JsonValue, path: string = "$"): Result<ReadonlyMap<string, Option<number>>, __BoundaryError> {
+  if (typeof json === "object" && json !== null && !globalThis.Array.isArray(json)) {
+    return __deserialise_Map_String_Option_Int(globalThis.Object.entries(json as { [k: string]: __JsonValue }) as __JsonValue, path);
+  }
   if (!globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
   }

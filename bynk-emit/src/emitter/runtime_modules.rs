@@ -408,6 +408,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkIdempotencyKey", "keys"),
     ("__bynkInstantFromIso", "time"),
     ("__bynkInstantFromPgText", "time"),
+    ("__bynkInstantFromWire", "time"),
     ("__bynkInstantToIso", "time"),
     ("__bynkIntAnd", "int"),
     ("__bynkIntAndNot", "int"),

@@ -101,6 +101,16 @@ export function __serialise_Mode(value: Mode): __JsonValue {
 }
 
 export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Result<Mode, __BoundaryError> {
+  if (typeof json === "string") {
+    switch (json) {
+      case "Fast":
+        return Ok({ tag: "Fast" } as Mode);
+      case "Slow":
+        return Ok({ tag: "Slow" } as Mode);
+      default:
+        return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: json });
+    }
+  }
   if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
