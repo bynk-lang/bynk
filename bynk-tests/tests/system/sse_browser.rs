@@ -77,9 +77,26 @@ const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
 
 const page = `<!doctype html><meta charset="utf-8"><title>sse</title>`;
+// The longest any one wait below may take. Generous on purpose (#4479): the browser, the
+// page and each stream share a machine that may be loaded far past its core count, and a
+// wait that expires says which one it was, so a real hang still fails by name.
+const WAIT_MS = 90000;
+
+// The page tells the server (`/ack`) once it has been handed the event that comes before a
+// fault. The server cuts the connection only then: a connection cut straight after the event
+// was flushed can be reported to the page as an error before the event itself is delivered,
+// which is the browser's ordering and not what the smoke is about (#4479).
+let acknowledge;
+const acknowledged = new Promise((resolve) => { acknowledge = resolve; });
+
 const server = http.createServer(async (req, res) => {
   if (req.url === "/") {
     res.writeHead(200, { "content-type": "text/html" }).end(page);
+    return;
+  }
+  if (req.url === "/ack") {
+    acknowledge();
+    res.writeHead(204).end();
     return;
   }
   const origin = `http://${req.headers.host}`;
@@ -93,6 +110,12 @@ const server = http.createServer(async (req, res) => {
       if (done) break;
       // Flushed before the next read, so a fault in the next element cannot cut off this one.
       await new Promise((flushed) => res.write(value, flushed));
+      // The encoder writes one line per chunk, so an event is complete on its blank line.
+      if (req.url === "/bad" && new TextDecoder().decode(value) === "\n") {
+        let timer;
+        await Promise.race([acknowledged, new Promise((late) => { timer = setTimeout(late, WAIT_MS); })]);
+        clearTimeout(timer);
+      }
     }
     res.end();
   } catch {
@@ -103,17 +126,17 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ timeout: WAIT_MS });
 try {
   const context = await browser.newContext();
   const tab = await context.newPage();
-  await tab.goto(base + "/");
-  const seen = await tab.evaluate(async () => {
-    const within = (ms, p) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timed out")), ms))]);
+  await tab.goto(base + "/", { timeout: WAIT_MS });
+  const seen = await tab.evaluate(async (waitMs) => {
+    const within = (what, p) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`timed out after ${waitMs} ms waiting for ${what}`)), waitMs))]);
     const out = {};
 
     // Named events, a multi-line `data`, and a reconnect that carries `Last-Event-ID`.
-    out.feed = await within(10000, new Promise((resolve) => {
+    out.feed = await within("the three named `tick` events of /feed", new Promise((resolve) => {
       const got = [];
       const es = new EventSource("/feed");
       es.addEventListener("tick", (e) => {
@@ -123,7 +146,7 @@ try {
     }));
 
     // A plain `Stream[String]` is unnamed events with no id.
-    out.plain = await within(10000, new Promise((resolve) => {
+    out.plain = await within("the two unnamed events of /plain", new Promise((resolve) => {
       const got = [];
       const es = new EventSource("/plain");
       es.onmessage = (e) => {
@@ -134,14 +157,14 @@ try {
 
     // An `id` with a line break faults the body in-band: the event before it arrives, the
     // faulted one never does, and the browser reports an error.
-    out.bad = await within(10000, new Promise((resolve) => {
+    out.bad = await within("the error after the faulted body of /bad", new Promise((resolve) => {
       const got = [];
       const es = new EventSource("/bad");
-      es.onmessage = (e) => got.push({ data: e.data, id: e.lastEventId });
+      es.onmessage = (e) => { got.push({ data: e.data, id: e.lastEventId }); fetch("/ack"); };
       es.onerror = () => { es.close(); resolve(got); };
     }));
     return out;
-  });
+  }, WAIT_MS);
   console.log("RESULT " + JSON.stringify(seen));
 } finally {
   await browser.close();

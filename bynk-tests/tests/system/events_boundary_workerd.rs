@@ -47,7 +47,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::Stdio;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[path = "../require/mod.rs"]
 mod require;
@@ -328,24 +328,18 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
         }
     };
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if Instant::now() > deadline {
-            let log = read_log(&log_path);
-            drop(server);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER})\n--- wrangler log ---\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
+        http_status("GET", port, "/trace", None).is_ok_and(|(status, _)| status == 200)
+    }) {
+        let log = read_log(&log_path);
+        drop(server);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n--- wrangler log ---\n{log}"
+        )) {
+            return;
         }
-        if http_status("GET", port, "/trace", None).is_ok() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
 
     let read_trace = || -> String {
@@ -528,24 +522,18 @@ fn events_boundary_field_default_cross_context_on_workerd() {
         }
     };
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if Instant::now() > deadline {
-            let log = read_log(&log_path);
-            drop(server);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER})\n--- wrangler log ---\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| {
+        http_status("GET", port, "/trace", None).is_ok_and(|(status, _)| status == 200)
+    }) {
+        let log = read_log(&log_path);
+        drop(server);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n--- wrangler log ---\n{log}"
+        )) {
+            return;
         }
-        if http_status("GET", port, "/trace", None).is_ok() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
 
     let read_trace = || -> String {
