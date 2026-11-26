@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Bearer` actor's config keys are a closed set: `secret`, `issuer`, `audience` and `trustFrom`. Any other key is refused rather than ignored, because an ignored key is a check you believed you had written: a misspelt `iss` or `aud` would leave tokens that share the secret interchangeable. Use `issuer` and `audience`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.bearer_unknown_key",
+  "constructs": [],
+  "example": "actor Learner { auth = Bearer(secret = \"AUTH_SECRET\", iss = \"web\"), identity = UserId }      // ✗ not a key of `Bearer`\nactor Learner { auth = Bearer(secret = \"AUTH_SECRET\", issuer = \"web\"), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `Bearer` actor's config has a key other than `secret`, `issuer`, `audience` and `trustFrom`, which would have been ignored (#3821)."
+}

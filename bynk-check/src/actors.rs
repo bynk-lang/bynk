@@ -211,6 +211,41 @@ pub struct BearerSeam {
     /// then checks this predicate against the verified claims (403 fail-closed),
     /// then mints the (base) identity. `None` for a plain Bearer actor.
     pub authorization: Option<ClaimPredicate>,
+    /// #3821: the `iss`/`aud` the actor's tokens must carry, and the variable that can replace them.
+    pub claims: BearerClaims,
+}
+
+/// #3821: what a `Bearer` actor declares beyond its secret: the `issuer` and `audience` a token must
+/// carry, and the `trustFrom` environment variable whose JSON `{ issuer?, audience? }` replaces them.
+/// All `None` means the token's `iss` and `aud` are not checked, as before.
+#[derive(Debug, Clone, Default)]
+pub struct BearerClaims {
+    pub issuer: Option<String>,
+    pub audience: Option<String>,
+    pub trust_from: Option<String>,
+}
+
+impl BearerClaims {
+    /// The claims `actor` declares; a refinement is read through its base by the caller.
+    pub fn of(actor: &ActorDecl) -> Self {
+        let get = |key: &str| {
+            actor
+                .scheme_arg(key)
+                .and_then(|a| a.value.as_str())
+                .filter(|v| !v.is_empty())
+                .map(str::to_string)
+        };
+        Self {
+            issuer: get("issuer"),
+            audience: get("audience"),
+            trust_from: get("trustFrom"),
+        }
+    }
+
+    /// Whether the actor checks no claim beyond the signature, so its verification is unchanged.
+    pub fn is_unchecked(&self) -> bool {
+        self.issuer.is_none() && self.audience.is_none() && self.trust_from.is_none()
+    }
 }
 
 /// Resolve a handler's Bearer seam, if its `by` clause names a local Bearer
@@ -307,6 +342,7 @@ pub fn bearer_seam_for(
         secret,
         identity_type: id.name.clone(),
         authorization,
+        claims: BearerClaims::of(base),
     })
 }
 
@@ -334,7 +370,27 @@ pub fn ws_principal_seam_for(
         secret: String::new(),
         identity_type,
         authorization: None,
+        claims: BearerClaims::default(),
     })
+}
+
+/// #3821: the `iss`/`aud` the lone `Bearer` actor of a `by` clause declares (a refinement reads its
+/// base's), for the test tier: `by WrongIssuer` and `by WrongAudience` drive such a route when it
+/// declares the claim. `None` for a sum, and for any other scheme.
+pub fn bearer_claims_of_route(
+    by: &ByClause,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<BearerClaims> {
+    if by.is_sum() {
+        return None;
+    }
+    let named = actors.get(&by.primary().name)?;
+    let base = match &named.refinement {
+        Some(r) => actors.get(&r.base.name)?,
+        None => named,
+    };
+    (Scheme::from_name(base.auth.as_ref()?.name.as_str()) == Some(Scheme::Bearer))
+        .then(|| BearerClaims::of(base))
 }
 
 /// The cookie name a `SignedCookie` actor issues and reads when `cookie` is not given.
@@ -1053,6 +1109,8 @@ pub enum SumMemberSeam {
     Bearer {
         secret: String,
         identity_type: String,
+        /// #3821: the `iss`/`aud` the member's tokens must carry.
+        claims: BearerClaims,
     },
     Signature(SignatureSeam),
     /// #3936: an `Oidc` member, verified by the same JWKS seam as a single-actor route (no binder:
@@ -1105,6 +1163,7 @@ pub fn sum_members_for(
                     SumMemberSeam::Bearer {
                         secret,
                         identity_type: id.name.clone(),
+                        claims: BearerClaims::of(decl),
                     }
                 }
                 Scheme::Signature => SumMemberSeam::Signature(signature_seam_from_decl(decl)?),

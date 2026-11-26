@@ -1620,13 +1620,18 @@ pub(super) fn platform_double(
                     "    async {op}() {{\n      throw new globalThis.Error(\"bynk: `Ai.{op}` is not stubbed, and a test never reaches Workers AI — add `stub Ai.{op}({args}) returns …`\");\n    }},\n"
                 )
             };
+            // #4099: `Ai.generateValue[T]` is lowered over a `generateJson` that is not an
+            // operation of `Ai`, so it joins the double past the interface's type; a case stubs
+            // `generate`, whose text it reads.
+            let generate_json = "    async generateJson() {\n      throw new globalThis.Error(\"bynk: `Ai.generateValue` is not stubbed, and a test never reaches Workers AI — add `stub Ai.generate(_, _) returns …` (its `text` is the JSON the model answered)\");\n    },\n";
             format!(
-                "  return {{\n{}{}{}{}{}  }};\n",
+                "  return globalThis.Object.assign({{\n{}{}{}{}{}  }}, {{\n{}  }});\n",
                 op("run", "_, _"),
                 op("generate", "_, _"),
                 op("embed", "_, _"),
                 op("runStream", "_, _"),
-                op("generateStream", "_, _")
+                op("generateStream", "_, _"),
+                generate_json
             )
         }
         // #3515: a test never reaches Cloudflare Images, so every operation

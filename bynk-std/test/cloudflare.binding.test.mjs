@@ -2094,6 +2094,40 @@ t("WorkersAi.generate: a platform refusal is a typed error, and empty messages o
   await assert.rejects(ai({}).generate("@cf/x/y", request({ messages: [chat("ToolCall", "x")] })), /no wire name/);
 });
 
+// #4099: the call behind `Ai.generateValue[T]`.
+const SCHEMA = '{"type":"object","properties":{"n":{"type":"integer"}},"required":["n"]}';
+
+t("WorkersAi.generateJson: sends the messages and the schema as `response_format`, and returns the reply's JSON text", async () => {
+  const ai = fakeAi({ response: '{"n":1}' });
+  const r = await new WorkersAi({ AI: ai }).generateJson("@cf/x/y", request({ maxTokens: Some(32) }), SCHEMA);
+  assert.deepEqual(r, { tag: "Ok", value: '{"n":1}' });
+  assert.deepEqual(ai.calls[0].input, {
+    messages: [{ role: "user", content: "hi" }],
+    max_tokens: 32,
+    response_format: { type: "json_schema", json_schema: JSON.parse(SCHEMA) },
+  });
+});
+
+t("WorkersAi.generateJson: a `response` that is already an object is written back as JSON text, and `choices` is the fallback", async () => {
+  const gen = async (reply) => new WorkersAi({ AI: fakeAi(reply) }).generateJson("@cf/x/y", request(), SCHEMA);
+  assert.deepEqual((await gen({ response: { n: 2 } })).value, '{"n":2}');
+  assert.deepEqual((await gen({ choices: [{ message: { content: '{"n":3}' } }] })).value, '{"n":3}');
+  // Neither is a BadReply, and it never carries the reply.
+  for (const bad of [{}, { response: 5 }, { response: null }, { choices: [] }, "text", null]) {
+    const r = await gen(bad);
+    assert.equal(r.error?.tag, "BadReply", JSON.stringify(bad));
+  }
+});
+
+t("WorkersAi.generateJson: a platform refusal (a model without response_format) is a typed error as it comes, and empty messages or a bad model fault", async () => {
+  const ai = (e) => new WorkersAi({ AI: fakeAi(e) });
+  const refused = "5006: this model does not take response_format";
+  assert.deepEqual((await ai(new Error(refused)).generateJson("@cf/x/y", request(), SCHEMA)).error, { tag: "InvalidInput", message: refused });
+  assert.deepEqual((await ai(new Error("3040: busy")).generateJson("@cf/x/y", request(), SCHEMA)).error, { tag: "Overloaded" });
+  await assert.rejects(ai({}).generateJson("@cf/x/y", request({ messages: [] }), SCHEMA), /at least one message/);
+  await assert.rejects(ai({}).generateJson("", request(), SCHEMA), /not a model id/);
+});
+
 t("WorkersAi.embed: sends the texts as a list and returns one vector per text in order", async () => {
   const ai = fakeAi({ shape: [2, 3], data: [[0.1, 0.2, 0.3], [1, 2, 3]], pooling: "mean" });
   const r = await new WorkersAi({ AI: ai }).embed("@cf/baai/bge-base-en-v1.5", ["a", "b"]);
