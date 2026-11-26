@@ -4657,21 +4657,54 @@ fn leading_code(text: &str) -> Option<&str> {
 /// This reads `root`'s own source, not the registry compiled into this binary. The
 /// per-PR attribution (#4428) measures the base revision and the PR's tree with the same
 /// binary, so a reading taken from compiled-in data is the same on both and a PR that adds
-/// a code never appears to have moved it (#4476). A tree without the file (a synthetic root
-/// in a test) reads the compiled-in registry instead; `registry_source_matches_the_compiled_in_one`
-/// pins the two together on the live tree, so the scan cannot drift unseen.
+/// a code never appears to have moved it (#4476). Only a tree with no such file at all (a
+/// synthetic root in a test) reads the compiled-in registry instead. A tree that has the file
+/// but not a `REGISTRY` the scan can read (the const renamed, the file split) is a failure
+/// naming it, never a silent fallback: that would bring the blindness back unseen.
 pub fn registry_codes(root: &Path) -> BTreeSet<String> {
-    let compiled_in = || {
-        bynk_syntax::diagnostics::REGISTRY
+    match registry_codes_from_source(root) {
+        SourceRead::Read(codes) => codes,
+        SourceRead::NoFile => bynk_syntax::diagnostics::REGISTRY
             .iter()
             .map(|d| d.code.to_string())
-            .collect()
-    };
+            .collect(),
+        SourceRead::Unreadable => panic!(
+            "{DIAGNOSTICS_SOURCE} exists but `pub const REGISTRY` cannot be read from it: \
+             teach `registry_codes` the new layout (the per-PR attribution depends on it)"
+        ),
+    }
+}
+
+/// How many `EXPLANATIONS` entries the tree at `root` carries: the `code: "bynk.…"` field of
+/// each `Explain`. Read from source, and failing loudly, for the reason [`registry_codes`] does.
+pub fn explained_code_count(root: &Path) -> usize {
+    match explained_count_from_source(root) {
+        SourceRead::Read(n) => n,
+        SourceRead::NoFile => bynk_syntax::diagnostics::EXPLANATIONS.len(),
+        SourceRead::Unreadable => panic!(
+            "{DIAGNOSTICS_SOURCE} exists but `pub const EXPLANATIONS` cannot be read from it: \
+             teach `explained_code_count` the new layout (the per-PR attribution depends on it)"
+        ),
+    }
+}
+
+/// What reading the diagnostics source of a tree gave. There is no fallback here: the
+/// public readers above decide what each outcome means, and the pinning test insists on `Read`.
+#[derive(Debug, PartialEq, Eq)]
+enum SourceRead<T> {
+    Read(T),
+    /// The tree has no `bynk-syntax/src/diagnostics.rs`.
+    NoFile,
+    /// The file is there but the const is not where the scan looks for it.
+    Unreadable,
+}
+
+fn registry_codes_from_source(root: &Path) -> SourceRead<BTreeSet<String>> {
     let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
-        return compiled_in();
+        return SourceRead::NoFile;
     };
     let Some(span) = const_span(&src, "pub const REGISTRY") else {
-        return compiled_in();
+        return SourceRead::Unreadable;
     };
     let ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
     let mut codes = BTreeSet::new();
@@ -4686,27 +4719,33 @@ pub fn registry_codes(root: &Path) -> BTreeSet<String> {
             codes.insert(code.to_string());
         }
     }
-    codes
+    // A registry with no entry is a scan that matched nothing, not an empty registry.
+    if codes.is_empty() {
+        return SourceRead::Unreadable;
+    }
+    SourceRead::Read(codes)
 }
 
-/// How many `EXPLANATIONS` entries the tree at `root` carries: the `code: "bynk.…"` field of
-/// each `Explain`. Read from source for the reason [`registry_codes`] is.
-pub fn explained_code_count(root: &Path) -> usize {
-    let compiled_in = || bynk_syntax::diagnostics::EXPLANATIONS.len();
+fn explained_count_from_source(root: &Path) -> SourceRead<usize> {
     let Ok(src) = std::fs::read_to_string(root.join(DIAGNOSTICS_SOURCE)) else {
-        return compiled_in();
+        return SourceRead::NoFile;
     };
     let Some(span) = const_span(&src, "pub const EXPLANATIONS") else {
-        return compiled_in();
+        return SourceRead::Unreadable;
     };
-    span.lines()
+    let n = span
+        .lines()
         .filter(|l| {
             l.trim_start()
                 .strip_prefix("code: ")
                 .and_then(leading_code)
                 .is_some()
         })
-        .count()
+        .count();
+    if n == 0 {
+        return SourceRead::Unreadable;
+    }
+    SourceRead::Read(n)
 }
 
 /// The gated probes whose reading comes from the diagnostics registry (#4476), taken of the tree
@@ -6569,16 +6608,36 @@ mod tests {
             .iter()
             .map(|d| d.code.to_string())
             .collect();
+        // The source-only readers: no fallback, so a moved file or a renamed const fails here
+        // instead of comparing the compiled-in registry with itself.
         assert_eq!(
-            registry_codes(&root),
-            compiled,
-            "the scan of {DIAGNOSTICS_SOURCE} disagrees with REGISTRY: teach `registry_codes` the new entry shape"
+            registry_codes_from_source(&root),
+            SourceRead::Read(compiled),
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with REGISTRY (or cannot find it): teach `registry_codes_from_source` the new layout or entry shape"
         );
         assert_eq!(
-            explained_code_count(&root),
-            bynk_syntax::diagnostics::EXPLANATIONS.len(),
-            "the scan of {DIAGNOSTICS_SOURCE} disagrees with EXPLANATIONS: teach `explained_code_count` the new shape"
+            explained_count_from_source(&root),
+            SourceRead::Read(bynk_syntax::diagnostics::EXPLANATIONS.len()),
+            "the scan of {DIAGNOSTICS_SOURCE} disagrees with EXPLANATIONS (or cannot find it): teach `explained_count_from_source` the new layout or shape"
         );
+    }
+
+    /// The reader tells a tree with no registry file (a synthetic root) from one whose file it
+    /// cannot read, and the second is never read as the first.
+    #[test]
+    fn an_unreadable_registry_is_not_a_missing_one() {
+        let dir = std::env::temp_dir().join(format!("xtask-unreadable-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(registry_codes_from_source(&dir), SourceRead::NoFile);
+        std::fs::create_dir_all(dir.join("bynk-syntax/src")).unwrap();
+        std::fs::write(
+            dir.join(DIAGNOSTICS_SOURCE),
+            "pub const RENAMED: &[DiagnosticInfo] = &[\n];\n",
+        )
+        .unwrap();
+        assert_eq!(registry_codes_from_source(&dir), SourceRead::Unreadable);
+        assert_eq!(explained_count_from_source(&dir), SourceRead::Unreadable);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // --- ast_importers (#1176) ------------------------------------------------
