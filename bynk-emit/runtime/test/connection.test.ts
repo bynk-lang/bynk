@@ -239,3 +239,17 @@ test("the default clock is the current time in seconds", () => {
   assert.equal(webSocketAuthExpired({ exp: now - 60 }), true);
   assert.equal(webSocketAuthExpired({ exp: now + 60 }), false);
 });
+
+test("the default clock reads whole seconds, as the HTTP Bearer check does", () => {
+  // At 100.5s a token with exp 100 is still accepted over HTTP (`100 < floor(100.5)` is false), so a
+  // connection opened with it is not closed yet; one second later it is.
+  const real = Date.now;
+  try {
+    Date.now = () => 100_500;
+    assert.equal(webSocketAuthExpired({ exp: 100 }), false);
+    Date.now = () => 101_000;
+    assert.equal(webSocketAuthExpired({ exp: 100 }), true);
+  } finally {
+    Date.now = real;
+  }
+});

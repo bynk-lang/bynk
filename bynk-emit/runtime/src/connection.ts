@@ -358,12 +358,15 @@ export async function webSocketErrored(
 
 // #3903: whether the credential a connection was opened with has expired. The upgrade records the
 // token's `exp` (seconds since the epoch) in the socket's attachment; a frame arriving after it closes
-// the connection, so an expired, rotated or revoked credential cannot keep acting through a socket that
-// outlives it (a hibernating connection can live for days). Checked per frame, not by a timer: an idle
-// expired connection can do nothing, and a timer would wake hibernating objects only to close it. The
-// bound is the HTTP Bearer check's, `exp < now`. A connection with no `exp` (a `None` upgrade, or one
+// the connection, so a connection cannot outlive its token's expiry (a hibernating connection can live
+// for days). Only the expiry is re-checked: a revoked token, or one signed with a secret that has since
+// been rotated, keeps acting until its own `exp`, which is why WebSocket tokens should be short-lived.
+// Checked per frame, not by a timer: an idle expired connection can do nothing, and a timer would wake
+// hibernating objects only to close it. The bound is the HTTP Bearer check's, `exp < now` with `now` in
+// whole seconds as `verifyBearerJwtHs256` reads it, so a connection is never closed sooner than an HTTP
+// request with the same token would be refused. A connection with no `exp` (a `None` upgrade, or one
 // accepted before this was recorded) never expires.
-export function webSocketAuthExpired(attachment: unknown, nowSeconds: number = Date.now() / 1000): boolean {
+export function webSocketAuthExpired(attachment: unknown, nowSeconds: number = Math.floor(Date.now() / 1000)): boolean {
   const exp = (attachment as { exp?: unknown } | null)?.exp;
   return typeof exp === "number" && exp < nowSeconds;
 }
