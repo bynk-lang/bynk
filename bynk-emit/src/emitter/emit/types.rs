@@ -170,6 +170,14 @@ fn emit_refined_type(
     } = shape;
     let name = t.name.name.clone();
     let base_ty = bynk_ts::TsType::named(ts_base(base));
+    // #4111: a `Secret` is a runtime `BynkSecret`, not a string, so its text never reaches
+    // `String(...)`, `JSON.stringify` or a log line; the brand sits on the wrapper.
+    let is_secret = is_opaque && bynk_check::context_checks::is_secret_decl(t);
+    let carrier_ty = if is_secret {
+        bynk_ts::TsType::named("__BynkSecret")
+    } else {
+        base_ty.clone()
+    };
 
     let brand_ty = bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
         "__brand",
@@ -179,17 +187,17 @@ fn emit_refined_type(
         bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::TypeAlias {
             name: name.clone(),
             type_params: Vec::new(),
-            ty: bynk_ts::TsType::intersection(vec![base_ty.clone(), brand_ty]),
+            ty: bynk_ts::TsType::intersection(vec![carrier_ty, brand_ty]),
         })),
         None,
     );
     let mut stmts = vec![type_alias];
 
     let cast_to_name = bynk_ts::TsExpr::As {
-        expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
+        expr: Box::new(branded_carrier(is_secret)),
         ty: bynk_ts::TsType::named(name.clone()),
     };
-    let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
+    let total = is_secret || bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
     let of_body = refined_of_body(
         t,
         &name,
@@ -275,7 +283,8 @@ pub(in crate::emitter) fn refined_of_body(
         refinement,
         is_opaque,
     } = shape;
-    let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
+    let total = (is_opaque && bynk_check::context_checks::is_secret_decl(t))
+        || bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
     let mut body = if total {
         Vec::new()
     } else {
@@ -287,7 +296,9 @@ pub(in crate::emitter) fn refined_of_body(
         runtime_use.note_decimal("__bynkDecimalToString");
     }
     let cast = bynk_ts::TsExpr::As {
-        expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
+        expr: Box::new(branded_carrier(
+            is_opaque && bynk_check::context_checks::is_secret_decl(t),
+        )),
         ty: bynk_ts::TsType::named(cast_name.to_string()),
     };
     body.push(bynk_ts::TsStmt::return_stmt(
@@ -302,6 +313,20 @@ pub(in crate::emitter) fn refined_of_body(
         None,
     ));
     body
+}
+
+/// #4111: the value a refined or opaque type's constructor brands: the parameter itself, or,
+/// for `Secret`, the runtime wrapper built around it.
+fn branded_carrier(is_secret: bool) -> bynk_ts::TsExpr {
+    let value = bynk_ts::TsExpr::Ident("value".to_string());
+    if is_secret {
+        bynk_ts::TsExpr::Call {
+            callee: Box::new(bynk_ts::TsExpr::Ident("__bynkSecret".to_string())),
+            args: vec![value],
+        }
+    } else {
+        value
+    }
 }
 
 /// The parts of a refined or opaque body [`refined_of_body`] reads.

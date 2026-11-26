@@ -1,0 +1,8 @@
+context vault
+
+consumes bynk { Secret }
+
+type Credentials = {
+    owner: String,
+    token: Secret,
+}

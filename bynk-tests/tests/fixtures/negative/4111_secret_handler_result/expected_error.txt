@@ -1,0 +1,2 @@
+bynk.types.secret_at_boundary
+cannot appear in a service handler signature

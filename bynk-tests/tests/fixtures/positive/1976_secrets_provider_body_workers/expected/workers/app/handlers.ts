@@ -40,7 +40,7 @@ export class SecretMode implements Mode {
     switch (m.tag) {
       case "Some": {
         const v = m.value;
-        return v;
+        return v.reveal();
       }
       case "None": {
         return "default";

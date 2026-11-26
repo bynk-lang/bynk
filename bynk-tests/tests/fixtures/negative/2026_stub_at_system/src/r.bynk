@@ -6,7 +6,7 @@ service mode {
 	on call() -> Effect[String] by c: Caller given Secrets {
 		let m <- Secrets.get("MODE")
 		match m {
-			Some(v) => v,
+			Some(v) => v.reveal(),
 			None => "unset",
 		}
 	}

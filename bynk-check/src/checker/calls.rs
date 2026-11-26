@@ -1806,11 +1806,14 @@ fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
 /// refined type is known — see `admit_refined_literal`, used by `type_of` — so
 /// `.of`'s type depends on the declaration, never on the form of its argument.
 fn of_result_ty(decl: &Arc<TypeDecl>, base: BaseType, tys: &Types) -> TyId {
-    if bynk_syntax::ast::of_is_total(
-        base,
-        type_decl_refinement(decl),
-        matches!(decl.body, TypeBody::Opaque { .. }),
-    ) {
+    // #4111: a `Secret` has no predicate to fail, so its `of` returns it directly.
+    if crate::context_checks::is_secret_decl(decl)
+        || bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
         return named_ty(decl, tys);
     }
     let named = named_ty(decl, tys);
@@ -3118,6 +3121,33 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
+/// #4111: a method call on a `Secret`, or `None` when the receiver is not one.
+fn check_secret_call(
+    recv_ty: TyId,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty) else {
+        return None;
+    };
+    if !crate::context_checks::is_secret_type(name, &ctx.input.types) {
+        return None;
+    }
+    let kop = SecretOp::from_name(&method.name);
+    let r = check_secret_method(method, kop, args, span, ctx);
+    Some(record_kernel(
+        ctx,
+        expr_id,
+        recv_ty,
+        kop.map(KernelOp::Secret),
+        method,
+        r,
+    ))
+}
+
 /// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
 /// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
 #[allow(clippy::too_many_arguments)]
@@ -3728,6 +3758,10 @@ fn check_method_call_inner(
             }
         }
         _ => {}
+    }
+    // #4111: a `Secret` has only the built-ins `reveal` and `matches`.
+    if let Some(r) = check_secret_call(recv_ty, method, args, span, expr_id, ctx) {
+        return r;
     }
     // Find a named type for the receiver, then look up its instance methods.
     let type_name = match &*tys.get(recv_ty) {

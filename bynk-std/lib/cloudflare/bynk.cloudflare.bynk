@@ -1,5 +1,5 @@
 adapter bynk.cloudflare {
-	consumes bynk { Fetch }
+	consumes bynk { Fetch, Secret }
 	exports capability {
 		Kv,
 		Service,
@@ -1494,15 +1494,16 @@ adapter bynk.cloudflare {
 	the store and the secret, when either is missing (create the secret with
 	`wrangler secrets-store secret create`). The deploy needs
 	`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
-	"Secrets Store: Read". `get` returns the value as a `String`, not an
+	"Secrets Store: Read". `get` returns the value as a `Secret`, not an
 	`Option`: the binding exists only if the deploy found the secret, so an
 	absence at run time is a platform fault, not something a handler can act
-	on. The value is not logged by Bynk; do not log it either. Under `bynk dev`
+	on. A `Secret` has no text to log: read it with `reveal()` where the value
+	has to leave, or compare it with `matches`. Under `bynk dev`
 	the secret is read from the local store, and a test faults until
 	`stub StripeKey.get() returns …` gives it a value.
 	---
 	capability StoredSecret {
-		fn get() -> Effect[String]
+		fn get() -> Effect[Secret]
 	}
 
 	---

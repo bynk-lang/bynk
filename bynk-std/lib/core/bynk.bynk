@@ -1,6 +1,7 @@
 adapter bynk {
 	uses bynk.locale.types
 	exports capability { Clock, Random, Logger, Fetch, Secrets, Locale, Idempotency, Events }
+	exports opaque { Secret }
 	exports transparent {
 		Uuid,
 		CronSchedule,
@@ -26,6 +27,16 @@ adapter bynk {
 		Claim,
 		EventEnvelope,
 	}
+
+	---
+	A secret read from the platform's secret store. It cannot leak by accident: it
+	has no string form (it cannot be interpolated), is not `Eq` or a `Key`
+	(comparing two is variable-time; use `matches`), and is not `Codable`, so it is
+	never stored, sent, encoded or returned across a boundary
+	(`bynk.types.secret_at_boundary`). `reveal()` is the one explicit way to the
+	text, and `matches(candidate)` the constant-time comparison.
+	---
+	type Secret = opaque String
 
 	---
 	A UUID in canonical 8-4-4-4-12 lowercase-hex form.
@@ -414,7 +425,7 @@ adapter bynk {
 	Reads named secrets from the platform's secret store.
 	---
 	capability Secrets {
-		fn get(name: String) -> Effect[Option[String]]
+		fn get(name: String) -> Effect[Option[Secret]]
 	}
 
 	---

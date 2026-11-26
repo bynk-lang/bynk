@@ -439,6 +439,12 @@ kernel_ops! {
         Get = "get", "get(name: String) -> Option[String]";
         Has = "has", "has(name: String) -> Bool";
     }
+/// `Secret` (#4111): the two ways a secret is used. Nothing else reads it: it has no `==`, no
+/// interpolation and no codec.
+    SecretOp {
+        Reveal = "reveal", "reveal() -> String";
+        Matches = "matches", "matches(candidate: String) -> Bool";
+    }
 /// `TestConnection[F]` (#3051): a case's recording handle for a `from
 /// websocket` connection; a test body only.
     TestConnectionOp {
@@ -510,6 +516,8 @@ pub enum KernelOp {
     RequestQuery(RequestQueryOp),
     RequestCookies(RequestCookiesOp),
     TokenClaims(TokenClaimsOp),
+    /// #4111: `reveal` and `matches` on a `Secret`.
+    Secret(SecretOp),
     Bytes(BytesOp),
     /// #3955: `compare` on any `Ord` value.
     Ord(OrdOp),
@@ -543,6 +551,7 @@ impl KernelOp {
             KernelOp::RequestQuery(o) => o.name(),
             KernelOp::RequestCookies(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
+            KernelOp::Secret(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
             KernelOp::Ord(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),
@@ -1000,6 +1009,7 @@ mod tests {
             RequestQueryOp,
             RequestCookiesOp,
             TokenClaimsOp,
+            SecretOp,
             BytesOp,
             OrdOp,
             DecimalOp,

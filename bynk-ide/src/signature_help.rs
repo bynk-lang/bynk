@@ -400,7 +400,11 @@ fn resolve_qualified_from(
                             base_name(*base),
                             bynk_syntax::ast::of_is_total(*base, refinement.as_ref(), false),
                         ),
-                        TypeBody::Opaque { base, .. } => (base_name(*base), false),
+                        // #4111: a `Secret`'s `of` cannot fail; every other opaque type's can.
+                        TypeBody::Opaque { base, .. } => (
+                            base_name(*base),
+                            bynk_check::context_checks::is_secret_decl(t),
+                        ),
                         _ => return,
                     };
                     out = Some(if member == "of" && total {
