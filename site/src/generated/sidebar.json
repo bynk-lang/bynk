@@ -630,6 +630,10 @@
             "link": "/book/guides/projects-build-and-deployment/deploy-from-ci/"
           },
           {
+            "label": "Keep a project's data in one jurisdiction",
+            "link": "/book/guides/projects-build-and-deployment/keep-data-in-a-jurisdiction/"
+          },
+          {
             "label": "Roll back a deployment",
             "link": "/book/guides/projects-build-and-deployment/roll-back-a-deployment/"
           },
