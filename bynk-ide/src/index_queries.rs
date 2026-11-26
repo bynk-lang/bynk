@@ -1249,9 +1249,23 @@ pub fn narrow_qualified_edits(
         for s in spans.iter_mut() {
             *s = narrow_qualified_span(text, *s, &old);
         }
+        // #4455: a site written under another spelling of the declaration (`S` of
+        // `uses lib.y { Status as S }`) is the unit's own name for it, which a rename of the
+        // declaration leaves alone.
+        spans.retain(|s| !is_other_spelling(text, *s, &old));
         spans.sort();
         spans.dedup();
     }
+}
+
+/// Whether `span` of `text` is a plain identifier other than `name`: a declaration written under
+/// an alias, not `name` itself or `name` after a qualifier.
+fn is_other_spelling(text: &str, span: Span, name: &str) -> bool {
+    text.get(span.start..span.end).is_some_and(|written| {
+        written != name
+            && !written.is_empty()
+            && written.chars().all(|c| c.is_alphanumeric() || c == '_')
+    })
 }
 
 /// #4352: `span` of `text`, narrowed to the segment after the last dot when it is `name` written
