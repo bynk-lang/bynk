@@ -277,6 +277,7 @@ service tagged from http {
                     &r.boundary_info,
                     &r.unit_sources,
                 ),
+                analytics: &r.analytics,
             }),
             doc: Some((text, offset)),
             path: None,
