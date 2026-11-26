@@ -791,7 +791,9 @@ pub struct FmtArgs {
     /// Files or directories to format. A directory formats the `.bynk` files
     /// `check` would read in it: a project root's `[paths] include` trees minus
     /// `exclude`, a workspace root's members, or any other directory walked
-    /// recursively. Use `-` for stdin → stdout.
+    /// recursively. With none, formats the project holding the working
+    /// directory (the same files `check` reads); outside a project that is an
+    /// error. Use `-` for stdin → stdout.
     pub inputs: Vec<PathBuf>,
     /// Check formatting without writing changes. Exits non-zero if any
     /// file is not already canonical.
@@ -980,19 +982,53 @@ impl ManifestCache {
     }
 }
 
+/// #4124: the nearest ancestor of the working directory holding a `bynk.toml`,
+/// as a path relative to it (`.`, `..`, `../..`), so the files `fmt` names and
+/// reports read the way a typed `bynk fmt <dir>` would.
+fn enclosing_project_root() -> Option<PathBuf> {
+    let cwd = std::env::current_dir().ok()?;
+    let mut relative = PathBuf::from(".");
+    let mut dir = cwd.as_path();
+    loop {
+        if dir.join("bynk.toml").is_file() {
+            return Some(relative);
+        }
+        dir = dir.parent()?;
+        relative = if relative == Path::new(".") {
+            PathBuf::from("..")
+        } else {
+            relative.join("..")
+        };
+    }
+}
+
 /// The `fmt` command body run by `bynk fmt`: each input is
 /// formatted and rewritten only when it changes; `--check` reports
 /// non-canonical files without writing; `-` reads stdin and writes the
 /// formatted result to stdout. `prog` prefixes messages (`bynk fmt: …`).
 pub fn run_fmt(prog: &str, args: &FmtArgs) -> ExitCode {
     let check = args.check;
-    if args.inputs.is_empty() {
-        crate::emsg!(
-            "{prog} fmt: error: no input files (pass file or directory paths, or `-` for stdin)"
-        );
-        return ExitCode::FAILURE;
-    }
-    let inputs = match expand_fmt_inputs(&args.inputs) {
+    // #4124: with no paths, format the enclosing project, the same file set
+    // `check` reads (`[paths] include` minus `exclude`). Outside a project
+    // there is nothing to default to, so today's error stands.
+    let defaulted;
+    let given: &[PathBuf] = if args.inputs.is_empty() {
+        match enclosing_project_root() {
+            Some(root) => {
+                defaulted = [root];
+                &defaulted
+            }
+            None => {
+                crate::emsg!(
+                    "{prog} fmt: error: no input files (pass file or directory paths, or `-` for stdin)"
+                );
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        &args.inputs
+    };
+    let inputs = match expand_fmt_inputs(given) {
         Ok(inputs) => inputs,
         Err(e) => {
             crate::emsg!("{prog} fmt: error: {e}");
