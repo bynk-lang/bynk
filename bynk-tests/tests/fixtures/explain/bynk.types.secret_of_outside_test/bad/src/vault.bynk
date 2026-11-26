@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn fabricated() -> Secret {
+    Secret.of("hunter2")
+}

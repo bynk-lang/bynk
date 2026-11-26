@@ -1,0 +1,2 @@
+bynk.types.secret_of_outside_test
+`Secret.of` is only valid inside a test case body

@@ -410,7 +410,7 @@ adapter bynk {
 	Reads named secrets from the platform's secret store.
 	---
 	capability Secrets {
-		fn get(name: String) -> Effect[Option[String]]
+		fn get(name: String) -> Effect[Option[Secret]]
 	}
 
 	---

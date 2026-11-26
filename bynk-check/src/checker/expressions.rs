@@ -3390,11 +3390,13 @@ fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx)
     let Some(base) = type_decl_base(decl) else {
         return err;
     };
-    if !bynk_syntax::ast::of_is_total(
-        base,
-        type_decl_refinement(decl),
-        matches!(decl.body, TypeBody::Opaque { .. }),
-    ) {
+    if !crate::context_checks::is_secret_decl(decl)
+        && !bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
         return err;
     }
     err.with_note(format!(

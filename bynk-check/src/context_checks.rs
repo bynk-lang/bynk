@@ -7356,12 +7356,15 @@ pub fn is_secret_type(
     name: &str,
     types: &std::collections::HashMap<String, Arc<TypeDecl>>,
 ) -> bool {
-    name == "Secret"
-        && types.get(name).is_some_and(|decl| {
-            crate::firstparty::unit(bynk_std::BYNK_UNIT).is_some_and(|unit| {
-                decl.span.file == crate::project_model::firstparty_file_id(unit)
-            })
-        })
+    name == "Secret" && types.get(name).is_some_and(|decl| is_secret_decl(decl))
+}
+
+/// #4111: whether `decl` is the `Secret` declaration `bynk` itself ships, which the emitter
+/// builds as a runtime `BynkSecret` rather than a branded string.
+pub fn is_secret_decl(decl: &TypeDecl) -> bool {
+    decl.name.name == "Secret"
+        && crate::firstparty::unit(bynk_std::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
 }
 
 /// #3276: whether `name` is the `File` record `bynk` exports, found by its

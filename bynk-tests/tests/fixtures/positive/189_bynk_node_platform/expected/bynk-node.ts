@@ -9,7 +9,7 @@ import type {
   Response as FetchResponse,
   StreamResponse,
 } from "./bynk.js";
-import { Claim, FetchError, Uuid } from "./bynk.js";
+import { Claim, FetchError, Secret, Uuid } from "./bynk.js";
 import { LocaleTag } from "./bynk/locale/types.js";
 import { Err, None, Ok, Some, type Option, type Result } from "./__bynk_runtime/result.js";
 import { withTraceField } from "./__bynk_runtime/traceparent.js";
@@ -387,14 +387,14 @@ export class SecretsProvider implements Secrets {
   constructor(env?: unknown) {
     this.env = env;
   }
-  async get(name: string): Promise<Option<string>> {
+  async get(name: string): Promise<Option<Secret>> {
     const fromEnv = (this.env as Record<string, unknown> | undefined)?.[name];
     if (typeof fromEnv === "string") {
-      return Some(fromEnv);
+      return Some(Secret.unsafe(fromEnv));
     }
     const v = (globalThis as { process?: { env?: Record<string, string | undefined> } })
       .process?.env?.[name];
-    return typeof v === "string" ? Some(v) : None;
+    return typeof v === "string" ? Some(Secret.unsafe(v)) : None;
   }
 }
 

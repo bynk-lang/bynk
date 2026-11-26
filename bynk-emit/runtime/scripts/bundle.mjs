@@ -34,6 +34,7 @@ const MODULES = [
   "result",
   "traceparent",
   "bytes",
+  "secret",
   "decimal",
   "time",
   "settle",

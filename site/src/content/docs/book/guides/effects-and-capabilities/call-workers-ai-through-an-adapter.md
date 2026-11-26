@@ -79,9 +79,9 @@ export class WorkersAi implements Ai {
 
     const res = await this.deps.Fetch.send({
       method: Method.Post,
-      url: `https://api.cloudflare.com/client/v4/accounts/${account.value}/ai/run/${model}`,
+      url: `https://api.cloudflare.com/client/v4/accounts/${account.value.reveal()}/ai/run/${model}`,
       contentType: Some("application/json"),
-      authorization: Some(`Bearer ${token.value}`),
+      authorization: Some(`Bearer ${token.value.reveal()}`),
       headers: new Map(),
       body: Some(JSON.stringify({ prompt })),
     });
@@ -162,9 +162,9 @@ provides Ai = CloudflareAi given Fetch, Secrets {
 				} else {
 					let res <- Fetch.send(Request {
 						method: Post,
-						url: "https://api.cloudflare.com/client/v4/accounts/\(a)/ai/run/\(model)",
+						url: "https://api.cloudflare.com/client/v4/accounts/\(a.reveal())/ai/run/\(model)",
 						contentType: Some("application/json"),
-						authorization: Some("Bearer \(t)"),
+						authorization: Some("Bearer \(t.reveal())"),
 						headers: Map.empty(),
 						body: Some(body),
 					})

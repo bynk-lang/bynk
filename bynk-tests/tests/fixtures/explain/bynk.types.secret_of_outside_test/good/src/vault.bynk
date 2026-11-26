@@ -1,0 +1,7 @@
+context vault
+
+consumes bynk { Secret }
+
+fn accepts(token: Secret, guess: String) -> Bool {
+    token.matches(guess)
+}

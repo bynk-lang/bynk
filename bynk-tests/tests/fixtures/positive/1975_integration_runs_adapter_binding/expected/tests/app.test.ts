@@ -22,7 +22,7 @@ class __Stub_Greeter {
   }
 
   async hello(name: string): globalThis.Promise<string> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -41,6 +41,7 @@ class __Stub_Greeter {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
@@ -66,8 +67,8 @@ class __Stub_Secrets {
     return true;
   }
 
-  async get(name: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+  async get(name: string): globalThis.Promise<Option<__ns_bynk.Secret>> {
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -86,12 +87,13 @@ class __Stub_Secrets {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     if (this.__case === "the real binding runs at the integration tier") {
-      return Some("hi");
+      return Some(Secret.of("hi"));
     }
     throw new globalThis.Error("bynk: no stub clause matched for Secrets.get");
   }
@@ -129,7 +131,7 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
   try {
     const deps = __makeIntegrationDeps("the real binding runs at the integration tier");
     const { welcome } = __ns_app;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -148,12 +150,13 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
-    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/app.bynk:12:9", 441, 460, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
+    if (!(s === "hi, ann at 0")) { throw __bynkExpectFailure("tests/app.bynk:12:9", 460, 479, "expect s == \"hi, ann at 0\"\n  expected: s == \"hi, ann at 0\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("hi, ann at 0"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -168,7 +171,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
   try {
     const deps = __makeTestDeps("the unit tier stubs the adapter");
     const { welcome } = __ns_app;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -187,12 +190,13 @@ async function test_the_unit_tier_stubs_the_adapter() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await welcome.call("ann", deps);
-    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/app.bynk:19:9", 648, 662, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
+    if (!(s === "stubbed")) { throw __bynkExpectFailure("tests/app.bynk:19:9", 667, 681, "expect s == \"stubbed\"\n  expected: s == \"stubbed\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("stubbed"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -207,7 +211,7 @@ async function test_a_case_calls_a_capability_directly() {
   try {
     const deps = __makeTestDeps("a case calls a capability directly");
     const { welcome } = __ns_app;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -226,12 +230,13 @@ async function test_a_case_calls_a_capability_directly() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type Secret = __ns_bynk.Secret;
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const s = await deps.Greeter.hello("ann");
-    if (!(s === "direct")) { throw __bynkExpectFailure("tests/app.bynk:26:9", 842, 855, "expect s == \"direct\"\n  expected: s == \"direct\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("direct"))); }
+    if (!(s === "direct")) { throw __bynkExpectFailure("tests/app.bynk:26:9", 861, 874, "expect s == \"direct\"\n  expected: s == \"direct\"\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow(("direct"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

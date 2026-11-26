@@ -308,7 +308,10 @@ pub(in crate::emitter) fn lower_kernel_method_call(
             }
             // #2341 (decision A): an HTTP handler's `headers` is a runtime
             // object with these very methods, each answering an `Option`.
-            KernelOp::RequestHeaders(_)
+            // #4111: a `Secret` is a runtime `BynkSecret` whose `reveal` and
+            // constant-time `matches` are its only readers.
+            KernelOp::Secret(_)
+            | KernelOp::RequestHeaders(_)
             | KernelOp::RequestQuery(_)
             | KernelOp::RequestCookies(_)
             | KernelOp::TokenClaims(_) => {

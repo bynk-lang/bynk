@@ -33,7 +33,7 @@ environment), so code that stays on this surface is portable.
 | **`Random`** | `uuid() -> Effect[Uuid]` · `int(lo: Int, hi: Int) -> Effect[Int]` (lo-inclusive, hi-exclusive) · `bytes(n: Int) -> Effect[Bytes]` — `n` random bytes. `int` is **not** for secrets; use `bytes`. |
 | **`Logger`** | `info(msg: String) -> Effect[()]` · `error(msg: String) -> Effect[()]` · `warn(msg: String) -> Effect[()]` · `debug(msg: String) -> Effect[()]` · `log(level: LogLevel, msg: String, fields: Map[String, String]) -> Effect[()]` — a structured record (experimental). See [Log levels and structured fields](#log-levels-and-structured-fields). |
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
-| **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
+| **`Secrets`** | `get(name: String) -> Effect[Option[Secret]]` — read a secret from the platform's store; `None` if unset. A [`Secret`](#the-secret-type) has no text to print: read it with `reveal()` or compare it with `matches`. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/concepts/localisation/understand-localisation/). |
 | **`Idempotency`** | `dedup[T, K: Key](key: K) -> Effect[Option[T]]` · `remember[T, K: Key](key: K, value: T, expiresAfter: Duration) -> Effect[()]` · `claim[K: Key](key: K, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
 | **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context. Delivery is at most once, and on Workers the emitter waits for it to finish. See below. |
@@ -79,6 +79,52 @@ bound it:
 
 A context that `uses` the commons gets the constant and the functions, and still
 writes `consumes bynk { … }` for any `bynk` type it names itself.
+
+### The `Secret` type {#the-secret-type}
+
+`Secrets.get` and `StoredSecret.get` return a `Secret`, not a `String`. A `Secret` is
+a value read from the platform's secret store, built so it cannot leak by accident:
+
+- **It has no string form.** `"{token}"` is refused, and a `Secret` is not `Codable`, so
+  `Json.encode` refuses it, and it is not a `Key`, so it cannot key a `Map` or a `Set`.
+- **It cannot be stored, sent or returned.** A `Secret` is refused as a record, event or
+  `store` field and as a handler parameter or result
+  (`bynk.types.secret_at_boundary`). Keep it in a local binding and use it where it is read.
+  A capability operation may take or return one, which is how `Secrets.get` produces it.
+- **It cannot be compared with `==`.** Text comparison stops at the first differing
+  character, so how long it takes tells a caller how much of a guess was right.
+  `==` and `!=` on a `Secret`, or on a type that holds one, is
+  `bynk.types.secret_not_comparable`.
+- **It is never written in source.** `Secret.of("…")` is valid only inside a test case
+  body (`bynk.types.secret_of_outside_test`), where it stands in for a secret the
+  platform would supply. Its `of` returns the `Secret` directly: there is no predicate to fail.
+
+Two methods read one:
+
+| Method | Result |
+|---|---|
+| `reveal()` | the secret's text, as a `String`. The one deliberate exit: write it where the value has to leave, such as an `Authorization` header or a key import. |
+| `matches(candidate: String)` | `true` if `candidate` is the secret. It takes the same time however the two differ, and never returns early on a length mismatch. |
+
+At run time a `Secret` is a wrapper whose `toString`, `toJSON` and inspection all render
+as `<secret>`, so one that reaches a log line or a thrown error's message through a path
+the checker cannot see still shows no text. A failing test prints `<secret>` for one too.
+
+```bynk
+context gate
+
+consumes bynk { Secrets }
+
+service api from http {
+	on POST("/admin/:token") (token: String) -> Effect[HttpResult[String]] by Visitor given Secrets {
+		let expected <- Secrets.get("ADMIN_TOKEN")
+		match expected {
+			Some(secret) => if secret.matches(token) { Ok("welcome") } else { Ok("denied") }
+			None => Ok("denied")
+		}
+	}
+}
+```
 
 ### The `Idempotency` capability
 
@@ -508,7 +554,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]`. One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
-| **`StoredSecret`** *(experimental)* | `get() -> Effect[String]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
+| **`StoredSecret`** *(experimental)* | `get() -> Effect[Secret]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
 | **`Email`** *(experimental)* | `send(message: EmailMessage) -> Effect[Result[String, EmailError]]`. Used only through a named instance, which may restrict its senders and recipients; see [Outbound email](#outbound-email-email). |
 | **`Postgres`** *(experimental)* | `all(sql: String, params: List[PgValue]) -> Effect[Result[String, PgError]]` · `first(sql, params) -> Effect[Result[Option[String], PgError]]` · `run(sql, params) -> Effect[Result[PgRun, PgError]]` · `transaction(statements: List[PgStatement]) -> Effect[Result[List[PgRun], PgError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Used only through a named instance; see [Postgres databases](#postgres-databases-postgres). |
 | **`MySql`** *(experimental)* | `all(sql: String, params: List[MySqlValue]) -> Effect[Result[String, MySqlError]]` · `first(sql, params) -> Effect[Result[Option[String], MySqlError]]` · `run(sql, params) -> Effect[Result[MySqlRun, MySqlError]]` · `transaction(statements: List[MySqlStatement]) -> Effect[Result[List[MySqlRun], MySqlError]]`, and the compiler-lowered typed reads `select[T]` and `firstAs[T]`. Takes an optional `@tls("…")`. Used only through a named instance; see [MySQL databases](#mysql-databases-mysql). |
@@ -1322,7 +1368,7 @@ type Charged = { ok: Bool }
 service billing from http {
 	on POST("/charge") () -> Effect[HttpResult[Charged]] by Visitor given StripeKey {
 		let key <- StripeKey.get()
-		Ok(Charged { ok: key.length() > 0 })
+		Ok(Charged { ok: key.reveal().length() > 0 })
 	}
 }
 ```
@@ -1332,10 +1378,11 @@ entry. `@store` and `@secret` are names, each 1 to 255 letters, digits, `-` or
 `_` (`bynk.capability.invalid_option`); the store is named, never given by id,
 so ids stay out of source.
 
-`get()` returns the value as a `String`, not an `Option`. The binding exists
-only if `bynk deploy` found the secret, so a missing value at run time is a
-platform fault, not something a handler can act on. Bynk never logs the value;
-nor should a handler.
+`get()` returns the value as a [`Secret`](#the-secret-type), not an `Option`. The
+binding exists only if `bynk deploy` found the secret, so a missing value at run
+time is a platform fault, not something a handler can act on. A `Secret` cannot
+be logged or interpolated by accident; `reveal()` is the one deliberate way to
+its text.
 
 `bynk deploy` **links** a stored secret and never creates one. It resolves the
 store by name through Cloudflare's API, checks the secret is in it, and records
@@ -1350,7 +1397,7 @@ Under `bynk dev` the secret is read from the local store, not the account's:
 create it with `wrangler secrets-store secret create <store> --name <secret>
 --scopes workers` (without `--remote`), where `<store>` is the name written in
 `@store`. A test never reads a store: `get()` **faults** until
-`stub StripeKey.get() returns "…"` gives it a value, and the value is not
+`stub StripeKey.get() returns` a `Secret` gives it a value, and the value is not
 printed by a passing or a failing test. `StoredSecret` is experimental: list
 `"bynk.cloudflare.StoredSecret"` under `[unstable] allow`.
 

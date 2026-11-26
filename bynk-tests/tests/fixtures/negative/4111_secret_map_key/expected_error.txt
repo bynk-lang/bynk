@@ -1,0 +1,2 @@
+bynk.types.not_keyable
+`Secret` is not

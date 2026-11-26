@@ -1799,7 +1799,7 @@ fn double_uses(owner: &str, cap: &str, harness_clock: bool, pglite: bool) -> Vec
 }
 
 /// #2134: the `Secrets` test double of a module whose cases run with `env`
-/// entries: it answers `Some(value)` for a name the running case's `env`
+/// entries: it answers `Some(secret)` (the value wrapped as a `Secret`) for a name the running case's `env`
 /// gives (`__bynkEnv`), and `None` for any other, as [`platform_double`]'s
 /// does for every name. `None` for any other capability.
 pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -> Option<TsStmt> {
@@ -1811,8 +1811,8 @@ pub(super) fn env_secrets_double(owner: &str, cap: &str, ns: &str, name: &str) -
         ns,
         cap,
         Vec::new(),
-        "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(v);\n    },\n  };\n".to_string(),
-        &["None", "Some", "__bynkEnv"],
+        "  return {\n    async get(key) {\n      const v = __bynkEnv[key];\n      return v === undefined ? None : Some(__bynkSecret(v));\n    },\n  };\n".to_string(),
+        &["None", "Some", "__bynkEnv", "__bynkSecret"],
     ))
 }
 

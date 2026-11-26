@@ -1804,11 +1804,14 @@ fn record_capability_ref(span: Span, name: &str, ctx: &mut Ctx) {
 /// refined type is known — see `admit_refined_literal`, used by `type_of` — so
 /// `.of`'s type depends on the declaration, never on the form of its argument.
 fn of_result_ty(decl: &Arc<TypeDecl>, base: BaseType, tys: &Types) -> TyId {
-    if bynk_syntax::ast::of_is_total(
-        base,
-        type_decl_refinement(decl),
-        matches!(decl.body, TypeBody::Opaque { .. }),
-    ) {
+    // #4111: a `Secret` has no predicate to fail, so its `of` returns it directly.
+    if crate::context_checks::is_secret_decl(decl)
+        || bynk_syntax::ast::of_is_total(
+            base,
+            type_decl_refinement(decl),
+            matches!(decl.body, TypeBody::Opaque { .. }),
+        )
+    {
         return named_ty(decl, tys);
     }
     let named = named_ty(decl, tys);
@@ -2274,6 +2277,23 @@ pub(crate) fn check_static_call(
                 ),
             ));
             return None;
+        }
+        // #4111: a `Secret` is minted only by the platform's secret store. `Secret.of` is
+        // a test fixture, so text in source never becomes a secret in a deployed program.
+        if crate::context_checks::is_secret_type(&type_name.name, &ctx.input.types)
+            && !ctx.in_test_body
+            && !ctx.test_values
+        {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.types.secret_of_outside_test",
+                    method.span,
+                    "`Secret.of` is only valid inside a test case body",
+                )
+                .with_note(
+                    "a deployed program reads a secret from `Secrets.get` or `StoredSecret.get`; `Secret.of(\"…\")` writes the value into source, so it exists only to stand in for one in a test",
+                ),
+            );
         }
         let arg = &args[0];
         let expected = tys.intern(Ty::Base(base));
@@ -3731,6 +3751,15 @@ fn check_method_call_inner(
             }
         }
         _ => {}
+    }
+    // #4111: a `Secret` has exactly `reveal` and `matches`, both compiler built-ins: an
+    // opaque value has no in-language unwrap, and the text must leave by one visible call.
+    if let Ty::Named { name, .. } = &*tys.get(recv_ty)
+        && crate::context_checks::is_secret_type(name, &ctx.input.types)
+    {
+        let kop = SecretOp::from_name(&method.name);
+        let r = check_secret_method(method, kop, args, span, ctx);
+        return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Secret), method, r);
     }
     // Find a named type for the receiver, then look up its instance methods.
     let type_name = match &*tys.get(recv_ty) {

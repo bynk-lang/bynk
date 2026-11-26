@@ -9,7 +9,10 @@ service vault {
     let hit <- Kv.get(key)
     match hit {
       Some(v) => Some(v),
-      None => fallback,
+      None => match fallback {
+        Some(s) => Some(s.reveal()),
+        None => None,
+      },
     }
   }
 }
