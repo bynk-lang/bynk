@@ -5028,7 +5028,21 @@ fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
     );
 }
 
+/// A whole pattern, at a `match` arm (and so `let … else`, a destructuring
+/// `let` and a lambda parameter pattern): its duplicate bindings (#4550), then
+/// [`check_sub_pattern`], which recurses through the pattern.
 fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
+    report_duplicate_bindings(pat, ctx);
+    check_sub_pattern(pat, ty, ctx);
+}
+
+/// #4550: a name bound twice in one pattern is `bynk.types.duplicate_pattern_binding`.
+fn report_duplicate_bindings(pat: &Pattern, ctx: &mut Ctx) {
+    ctx.errors
+        .extend(crate::duplicate_bindings::duplicate_binding_errors(pat));
+}
+
+fn check_sub_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     match pat {
         Pattern::Wildcard(_) => {}
@@ -5103,7 +5117,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             predicate,
             span,
         } => {
-            check_pattern(inner, ty, ctx);
+            check_sub_pattern(inner, ty, ctx);
             if let Some(base) = literal_base_of(ty, tys) {
                 check_refinement(base, *span, Some(predicate), ctx.errors);
                 // #3972: on an `Int` a range pattern is the stronger spelling.
@@ -5235,7 +5249,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                                 bind_as_error(pattern, ctx);
                                 continue;
                             };
-                            check_pattern(pattern, field_ty, ctx);
+                            check_sub_pattern(pattern, field_ty, ctx);
                         }
                         PatternBindingKind::Positional { .. } => {
                             ctx.errors.push(CompileError::new(
@@ -5269,7 +5283,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             } else {
                 for (b, (_, field_ty)) in bindings.iter().zip(payload.iter()) {
                     let field_ty = *field_ty;
-                    check_pattern(b.pattern(), field_ty, ctx);
+                    check_sub_pattern(b.pattern(), field_ty, ctx);
                 }
             }
         }
@@ -5278,7 +5292,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         // #3971: `p as name` checks `p`, then binds `name` to the whole value
         // at this position's type.
         Pattern::As { inner, name, .. } => {
-            check_pattern(inner, ty, ctx);
+            check_sub_pattern(inner, ty, ctx);
             ctx.pattern_binding_types.insert(name.span, ty);
             ctx.bind(name.name.clone(), ty);
             ctx.errors.extend(super::pattern_as::as_on_wildcard(pat));
@@ -5290,7 +5304,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         // cross-alternative rules by reading back what that just wrote.
         Pattern::Or(alts, _) => {
             for alt in alts {
-                check_pattern(alt, ty, ctx);
+                check_sub_pattern(alt, ty, ctx);
             }
             check_or_pattern_bindings(alts, ctx);
         }
@@ -5398,7 +5412,7 @@ fn check_record_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         );
         let field_ty = field_ty.unwrap_or_else(|| tys.intern(Ty::Error));
         match sub {
-            Some(p) => check_pattern(p, field_ty, ctx),
+            Some(p) => check_sub_pattern(p, field_ty, ctx),
             None => {
                 ctx.pattern_binding_types.insert(name.span, field_ty);
                 ctx.bind(name.name.clone(), field_ty);
@@ -5442,7 +5456,7 @@ fn check_list_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
         }
     };
     for e in elems {
-        check_pattern(e, elem_ty, ctx);
+        check_sub_pattern(e, elem_ty, ctx);
     }
     if let Some(binder) = rest.as_ref().and_then(|r| r.binder.as_ref()) {
         ctx.pattern_binding_types.insert(binder.span, ty);
@@ -5791,6 +5805,7 @@ pub(crate) fn check_is(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    report_duplicate_bindings(pattern, ctx);
     let value_ty = type_of(value, None, ctx)?;
     let variants = variants_of(value_ty, &ctx.input.types, tys);
     check_is_pattern(pattern, value_ty, &variants, ctx);
@@ -6000,7 +6015,7 @@ fn check_is_pattern(
         // are collected separately by `gather_pattern_bindings`.
         Pattern::Record { .. } | Pattern::List { .. } => {
             ctx.push_scope();
-            check_pattern(pattern, value_ty, ctx);
+            check_sub_pattern(pattern, value_ty, ctx);
             ctx.pop_scope();
         }
         // #474 §2.3.6: an or-pattern is legal after `is` (unlike a literal —
@@ -6069,7 +6084,7 @@ fn validate_is_pattern(pattern: &Pattern, ty: TyId, ctx: &mut Ctx) {
     // #2641: a nested record pattern is checked in full, in a scratch scope.
     if let Pattern::Record { .. } | Pattern::List { .. } = pattern {
         ctx.push_scope();
-        check_pattern(pattern, ty, ctx);
+        check_sub_pattern(pattern, ty, ctx);
         ctx.pop_scope();
         return;
     }

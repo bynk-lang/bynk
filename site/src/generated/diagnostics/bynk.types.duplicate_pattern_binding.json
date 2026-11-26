@@ -1,0 +1,13 @@
+{
+  "blurb": "A pattern binds each name once. With `Both(a, a)`, or `Some(a as a)`, the arm's body would read a name that stands for two values, and which one it saw would be an accident of how the match is compiled. The rule holds wherever a pattern binds: variant payloads, record fields, list elements and their `..rest`, `as` names, nested patterns, `let … else`, a lambda's parameter pattern and the `is` operator. Rename one of the bindings, or write `_` where the value is not needed. An or-pattern is different: its alternatives must bind the same names (`bynk.types.or_pattern_binding_mismatch`), so `Walk(n) | Run(n)` is required, not a duplicate; a name repeated within one alternative is still refused. A field named twice in a record pattern is `bynk.types.duplicate_pattern_field`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.duplicate_pattern_binding",
+  "constructs": [
+    "match_arm",
+    "is_expr"
+  ],
+  "example": "type Pair =\n    | Both(l: Int, r: Int)\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, a) => a + a,    // ✗ `a` is bound twice\n    }\n}\n\nfn sum(p: Pair) -> Int {\n    match p {\n        Both(a, b) => a + b,    // ✓\n    }\n}",
+  "severity": "error",
+  "summary": "A pattern binds the same name more than once."
+}
