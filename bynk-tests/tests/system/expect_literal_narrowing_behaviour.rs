@@ -69,6 +69,14 @@ fn successive_literal_comparisons_never_rely_on_narrowing() {
     ] {
         assert!(all.contains(passing), "{all}");
     }
-    assert!(all.contains("4 passed, 1 failed."), "{all}");
+    for failing in [
+        "✗ negative literals",
+        "✗ boolean ne then eq",
+        "✗ string fails at run time",
+    ] {
+        assert!(all.contains(failing), "{all}");
+    }
+    assert!(all.contains("actual:   \"pos\" == \"neg\""), "{all}");
+    assert!(all.contains("4 passed, 4 failed."), "{all}");
     assert!(!out.status.success(), "{all}");
 }

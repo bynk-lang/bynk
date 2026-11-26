@@ -28,4 +28,19 @@ suite calc as unit {
     expect 1500 == a
     expect 7 != a
   }
+  case "negative literals" {
+    let n = total(1, -1)
+    expect n == -1
+    expect n == -2
+  }
+  case "boolean ne then eq" {
+    let b = flag(1)
+    expect b != false
+    expect b == false
+  }
+  case "string fails at run time" {
+    let s = label(1)
+    expect s == "pos"
+    expect s == "neg"
+  }
 }

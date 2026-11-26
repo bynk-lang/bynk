@@ -1150,6 +1150,14 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
 
 /// The TypeScript base type a literal operand has, when it is a number, string or boolean literal.
 fn literal_base(e: &bynk_ts::TsExpr) -> Option<&'static str> {
+    // A negative number (`-1`) is a negation of a literal, which TypeScript also narrows to.
+    if let bynk_ts::TsExpr::Unary {
+        op: bynk_ts::TsUnaryOp::Neg,
+        expr,
+    } = e
+    {
+        return literal_base(expr).filter(|b| *b == "number");
+    }
     let bynk_ts::TsExpr::Lit(lit) = e else {
         return None;
     };
@@ -1175,7 +1183,8 @@ fn read_key(e: &bynk_ts::TsExpr) -> Option<String> {
 /// #3775: `expect a == 1500` throws unless `a === 1500`, so TypeScript narrows `a` to `1500` for
 /// the statements after it, and a later `expect a == 7` is a TS2367 error. After one `==` of a
 /// read against a literal, the read is widened to the literal's base type (`a as number`) in every
-/// later comparison, so the check never relies on narrowing.
+/// later comparison, so the check never relies on narrowing. Not covered: a bare `expect b` or a
+/// comparison inside a conjunction (`expect a == 1 && ok`), which narrow the same way.
 fn narrowing_proof(
     op: BinOp,
     lv: bynk_ts::TsExpr,
@@ -1195,7 +1204,9 @@ fn narrowing_proof(
         return (lv, rv);
     };
     let seen = cx.expect_narrowed.contains(&key);
-    if op == BinOp::Eq {
+    // `b != false` narrows a boolean to `true`, as `b == true` does; for a number or a string a
+    // `!=` leaves the type as it was.
+    if op == BinOp::Eq || base == "boolean" {
         cx.expect_narrowed.insert(key);
     }
     if !seen {
