@@ -1,0 +1,34 @@
+commons demo.holder
+
+---
+#3842: an opaque type and a record whose defaults hold `Tok` values, at the top level and nested
+in a list, an option, a sum payload and a sub-record. A default `Tok.unsafe(…)` is written where
+the opaque type is declared, since construction is confined to it.
+---
+type Tok = opaque String
+
+type Marked = | Plain | Tagged(tok: Tok)
+
+type Inner = { tok: Tok = Tok.unsafe("n") }
+
+type Holder = {
+  name: String,
+  tok: Tok = Tok.unsafe("k"),
+  toks: List[Tok] = [Tok.unsafe("k"), Tok.unsafe("n")],
+  best: Option[Tok] = Some(Tok.unsafe("k")),
+  marked: Marked = Tagged(Tok.unsafe("n")),
+  inner: Inner = Inner { },
+}
+
+fn isK(t: Tok) -> Bool {
+  t == Tok.unsafe("k")
+}
+
+fn isN(t: Tok) -> Bool {
+  t == Tok.unsafe("n")
+}
+
+// The issue's own shape: the record is built in the unit that declares the opaque type.
+fn own() -> Holder {
+  Holder { name: "own" }
+}

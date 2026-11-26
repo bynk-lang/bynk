@@ -1,0 +1,11 @@
+commons demo.top
+
+uses demo.outer
+
+---
+#3842: this unit uses `demo.outer` and not `demo.holder`, so `Tok` is not a name in scope here or
+in its tests.
+---
+fn built() -> Outer {
+  Outer { }
+}
