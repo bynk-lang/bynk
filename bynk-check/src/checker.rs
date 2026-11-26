@@ -101,6 +101,7 @@ pub fn string_refinement_violation<'a>(
     let refinement = refinements::type_decl_refinement(decl)?;
     refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
 }
+mod decode_kind;
 mod regex_ambiguity;
 mod response_headers;
 mod string_more;
@@ -5605,6 +5606,8 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 };
                 match type_of(hole, None, ctx) {
                     Some(ty) if interpolable(ty, tys) => {}
+                    // #3976: a `DecodeErrorKind` interpolates as its variant's name.
+                    Some(ty) if decode_kind::decode_error_kind_ty(ctx) == Some(ty) => {}
                     Some(other) => ctx.errors.push(
                         CompileError::new(
                             "bynk.types.interpolation_non_scalar",

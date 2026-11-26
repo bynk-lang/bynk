@@ -322,6 +322,10 @@ pub const ORDERING_UNIT: &str = "bynk.ordering";
 /// Reached implicitly by a unit that names either type or reads `.rule`.
 pub const VALIDATION_UNIT: &str = "bynk.validation";
 
+/// `bynk.decode` — the `DecodeErrorKind` sum a `DecodeError` names why a decode failed
+/// with (`e.kind`, #3976). Reached implicitly by a unit that names the type or reads `.kind`.
+pub const DECODE_UNIT: &str = "bynk.decode";
+
 /// #4231: a type every unit may name with no `uses`, and the first-party unit
 /// that declares it. A unit reaches `unit` as if it wrote `uses <unit>` when its
 /// source mentions the type's name or one of `triggers` (a method the type
@@ -360,6 +364,12 @@ pub const PRELUDE_TYPES: &[PreludeType] = &[
         unit: VALIDATION_UNIT,
         triggers: &[],
     },
+    // #3976: why a decode failed. `e.kind` on a `DecodeError` yields one.
+    PreludeType {
+        name: "DecodeErrorKind",
+        unit: DECODE_UNIT,
+        triggers: &[".kind"],
+    },
 ];
 
 /// `bynk.ordering` — the `Ordering` enum (`Less`, `Equal`, `Greater`) that
@@ -375,6 +385,9 @@ pub const BYNK_HTML_SRC: &str = include_str!("../lib/core/bynk.html.bynk");
 
 /// `bynk.validation` — `ValidationRule` and `Bound`.
 pub const BYNK_VALIDATION_SRC: &str = include_str!("../lib/core/bynk.validation.bynk");
+
+/// `bynk.decode` — `DecodeErrorKind`.
+pub const BYNK_DECODE_SRC: &str = include_str!("../lib/core/bynk.decode.bynk");
 
 /// The reserved `bynk` conformance-surface adapter (env-free core). It has no
 /// `binding` clause — the toolchain supplies one per platform (see
@@ -1438,6 +1451,22 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: DECODE_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/decode.bynk",
+        source: BYNK_DECODE_SRC,
+        binding: Binding::None,
+        // 14: `bynk.html` takes 13.
+        id_block: 14,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2246,6 +2275,7 @@ mod tests {
                 ("bynk.ordering", 11),
                 ("bynk.validation", 12),
                 ("bynk.html", 13),
+                ("bynk.decode", 14),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2280,6 +2310,7 @@ mod tests {
                 "bynk.ordering",
                 "bynk.validation",
                 "bynk.html",
+                "bynk.decode",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

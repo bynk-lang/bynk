@@ -412,6 +412,43 @@ fn refined_raw_quick_fix_drops_dot_raw() {
     assert_clean("app/refine.bynk", &fixed);
 }
 
+// -- #3976: `e.kind == "Malformed"` → compare with the variant --
+
+#[test]
+fn decode_error_kind_string_comparison_is_fixed_to_the_variant() {
+    // `DecodeError.kind` was a `String`; it is a `DecodeErrorKind` now.
+    let src = "commons app.refine\n\n\
+               fn bad(e: DecodeError) -> Bool {\n  e.kind == \"Malformed\"\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let s = sole_suggestion(&diags, "bynk.types.type_mismatch");
+    assert_eq!(s.applicability, Applicability::MachineApplicable);
+    let fixed = apply(src, &s);
+    assert!(
+        fixed.contains("e.kind == Malformed") && !fixed.contains('"'),
+        "the literal becomes the variant: {fixed:?}"
+    );
+    assert_clean("app/refine.bynk", &fixed);
+}
+
+#[test]
+fn decode_error_kind_comparison_with_no_such_kind_gets_no_fix() {
+    let src = "commons app.refine\n\n\
+               fn bad(e: DecodeError) -> Bool {\n  e.kind == \"Malfomed\"\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let d = diags
+        .iter()
+        .find(|d| d.error.category == "bynk.types.type_mismatch")
+        .expect("a type mismatch");
+    assert!(d.error.suggestions.is_empty(), "no fix for a typo: {d:?}");
+    assert!(
+        d.error
+            .notes
+            .iter()
+            .any(|n| n.contains("no kind is named \"Malfomed\"")),
+        "the note says so: {d:?}"
+    );
+}
+
 // -- #3946: `?` on a predicate-free named type's `.of` → "drop the `?`" quick-fix --
 
 #[test]

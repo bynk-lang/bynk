@@ -107,7 +107,7 @@ if (back.tag === "Ok") {
 const malformed = load("{");
 assert(malformed.tag === "Err", "malformed input errs");
 if (malformed.tag === "Err") {
-  assert(malformed.error.kind === "Malformed", "kind is Malformed");
+  assert(malformed.error.kind.tag === "Malformed", "kind is Malformed");
   assert(malformed.error.path === "$", "path is the root");
 }
 
@@ -117,7 +117,7 @@ assert(missing.tag === "Ok", "well-shaped decodes");
 const wrong = load('{"id":42,"price":1.5,"qty":2,"status":{"kind":"Pending"},"tags":[]}');
 assert(wrong.tag === "Err", "wrong field type errs");
 if (wrong.tag === "Err") {
-  assert(wrong.error.kind === "StructuralMismatch", "kind is StructuralMismatch");
+  assert(wrong.error.kind.tag === "StructuralMismatch", "kind is StructuralMismatch");
   assert(wrong.error.path === "$.id", `path tracks the field, got ${wrong.error.path}`);
 }
 
@@ -133,9 +133,9 @@ if (fractional.tag === "Err") {
 const many = loadMany('[{"id":"a","price":1.0,"qty":1,"status":{"kind":"Pending"},"tags":[]}]');
 assert(many.tag === "Ok" && many.value.length === 1, "List[Order] decodes");
 
-// 6) The Bynk-side DecodeError fields compose (describe() formats kind/path/message).
+// 6) The Bynk-side DecodeError fields compose (describe() formats path/message).
 const description = describe("{");
-assert(description.startsWith("Malformed at $"), `describe formats the error, got: ${description}`);
+assert(description.startsWith("$: "), `describe formats the error, got: ${description}`);
 
 console.log("ALL OK");
 "#;

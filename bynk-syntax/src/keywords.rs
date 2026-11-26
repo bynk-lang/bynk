@@ -26,7 +26,7 @@ pub const KEYWORDS: &[KeywordInfo] = &[
     ),
     k(
         "DecodeError",
-        "The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (`Malformed`, `StructuralMismatch` or `RefinementViolation`), `path` (e.g. `$.qty`) and `message`, all `String`: write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
+        "The decode error type, `Result[T, DecodeError]` from `Json.decode`. Its fields are `kind` (a `DecodeErrorKind`: `Malformed`, `StructuralMismatch`, `RefinementViolation`, …), `path` (e.g. `$.qty`) and `message` (both `String`): write `\"\\(e.kind) at \\(e.path): \\(e.message)\"`.",
     ),
     k(
         "Duration",

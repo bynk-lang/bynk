@@ -1,5 +1,5 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
-import type { DecodeError } from "./errors.ts";
+import type { DecodeError, DecodeErrorKind } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { ContentRange, HttpResult, SseEvent } from "./httpresult.ts";
 
@@ -1845,7 +1845,13 @@ export function formDecode(
       : e.kind === "RefinementViolation"
         ? e.violation.message
         : e.details;
-  return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
+  const kind: DecodeErrorKind =
+    e.kind === "StructuralMismatch"
+      ? { tag: "StructuralMismatch" }
+      : e.kind === "RefinementViolation"
+        ? { tag: "RefinementViolation" }
+        : { tag: "Malformed" };
+  return { tag: "Err", error: { kind, path, message } } as Result<JsonValue, DecodeError>;
 }
 
 /** The JSON a text value of `kind` reads as: an `Int` that is plain digits within the safe-integer
