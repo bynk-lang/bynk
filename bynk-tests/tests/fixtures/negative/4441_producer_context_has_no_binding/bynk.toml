@@ -1,0 +1,6 @@
+[project]
+name = "queue-producer-no-binding"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

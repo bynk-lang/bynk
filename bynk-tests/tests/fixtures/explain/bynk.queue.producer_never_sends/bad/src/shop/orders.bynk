@@ -1,0 +1,9 @@
+context shop.orders
+
+type Order = { id: String }
+
+service place {
+  on call(o: Order) -> Effect[()] by Caller {
+    Effect.pure(())
+  }
+}
