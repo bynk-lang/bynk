@@ -3,7 +3,7 @@
 
 import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -38,8 +38,16 @@ export default {
           }
         }
 
-        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/login/:token", path) !== null || __matchPath("/signin/:token", path) !== null)) {
+        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/refresh", path) !== null || __matchPath("/login/:token", path) !== null || __matchPath("/signin/:token", path) !== null)) {
           return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
+        }
+        {
+          if ((method === "GET" || method === "HEAD") && __matchPath("/refresh", path) !== null) {
+            __route = "GET /refresh";
+            const result = await surface.http_GET_refresh(request);
+            const __response = __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
         }
         {
           const __m = __matchPath("/login/:token", path);
@@ -69,6 +77,11 @@ export default {
           }
         }
         if (__matchPath("/login/:token", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+        }
+        if (__matchPath("/refresh", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;
           const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
           return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

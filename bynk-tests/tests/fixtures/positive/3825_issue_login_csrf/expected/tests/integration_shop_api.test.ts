@@ -4,18 +4,23 @@
 import { Ok, Err } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
-import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaders, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import { __makeIntegrationDoNamespace } from "../__bynk_runtime/testing/bindings.js";
+import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutcome, __requestHeaders, __requestHeaderPairs } from "../__bynk_runtime/http.js";
+import { __makeIntegrationDoNamespace, __makeIntegrationRateLimit } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_api from "../workers/shop-api/handlers.js";
 import worker___ns_shop_api from "../workers/shop-api/index.js";
 
 <<bynk-shared: testing/expectation>>
 
 <<bynk-shared: testing/clock>>
+// #2134: the running case's `env` entries, set by each case runner.
+let __bynkEnv: globalThis.Record<string, string> = {};
+
 function __buildHarness() {
   const env___ns_shop_api: any = {};
+  globalThis.Object.assign(env___ns_shop_api, __bynkEnv);
   env___ns_shop_api.__bynkClock = __bynkClock;
   env___ns_shop_api.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
+  env___ns_shop_api.RATELIMIT_EXCHANGE_LIMIT = __makeIntegrationRateLimit(5, 60, () => __bynkClockNow);
   env___ns_shop_api.LOGINS = __makeIntegrationDoNamespace(__ns_shop_api.Logins, env___ns_shop_api);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__API = "bynk-local-call-key";
@@ -28,6 +33,8 @@ function __makeHarness() {
 }
 
 <<bynk-shared: testing/jwt_signer>>
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
+(globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["API_TOKEN_SECRET"] = "__bynk_test_secret";
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SESSION_KEY"] = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
 async function __sysdrive_api_http_POST_login(body: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
@@ -42,6 +49,32 @@ async function __sysdrive_raw_api_http_POST_login(body: string, __extraHeaders: 
   const __req = new globalThis.Request(`https://test/login`, { method: "POST", headers: { "sec-fetch-site": "same-origin", "content-type": "application/json", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_api_http_POST_exchange(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/exchange`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? ""))}` } });
+  const __res = await __h.env.SHOP_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_POST_exchange(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/exchange`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.SHOP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_POST_exchange(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/exchange`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.SHOP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_POST_exchange(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/exchange`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.SHOP_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_api_http_POST_ping(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
@@ -64,13 +97,14 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
 
 async function test_a_same_origin_login_is_handled() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "ada" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "welcome"))) { throw __bynkExpectFailure("tests/api.bynk:8:10", 390, 413, "expect r is Created(\"welcome\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "welcome"))) { throw __bynkExpectFailure("tests/api.bynk:10:10", 437, 460, "expect r is Created(\"welcome\")", "r", () => __bynkShow(r)); }
     const n = await __sysdrive_api_http_GET_logins(undefined, "");
-    if (!(((__c: boolean) => __c)(n.tag === "Ok" && n.value === 1))) { throw __bynkExpectFailure("tests/api.bynk:10:10", 453, 463, "expect n is Ok(1)", "n", () => __bynkShow(n)); }
+    if (!(((__c: boolean) => __c)(n.tag === "Ok" && n.value === 1))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 500, 510, "expect n is Ok(1)", "n", () => __bynkShow(n)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -82,14 +116,15 @@ async function test_a_same_origin_login_is_handled() {
 
 async function test_a_cross_site_login_from_an_unlisted_origin_is_refused_before_its_body_runs() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const before = await __sysdrive_api_http_GET_logins(undefined, "");
     const r = await __sysdrive_api_http_POST_login({ user: "mallory" }, __requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 737, 751, "expect r is Forbidden", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:18:10", 784, 798, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     const after = await __sysdrive_api_http_GET_logins(undefined, "");
-    if (!(__bynkEq(after, before))) { throw __bynkExpectFailure("tests/api.bynk:18:10", 795, 810, "expect after == before\n  expected: after == before\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((before))); }
+    if (!(__bynkEq(after, before))) { throw __bynkExpectFailure("tests/api.bynk:20:10", 842, 857, "expect after == before\n  expected: after == before\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((before))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -101,11 +136,12 @@ async function test_a_cross_site_login_from_an_unlisted_origin_is_refused_before
 
 async function test_a_same_site_login_from_an_unlisted_origin_is_refused() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "mallory" }, __requestHeaders(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:23:10", 1026, 1040, "expect r is Forbidden", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:25:10", 1073, 1087, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -117,11 +153,12 @@ async function test_a_same_site_login_from_an_unlisted_origin_is_refused() {
 
 async function test_a_login_with_a_null_origin_is_refused() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "mallory" }, __requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: null"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:28:10", 1226, 1240, "expect r is Forbidden", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 1273, 1287, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -133,11 +170,12 @@ async function test_a_login_with_a_null_origin_is_refused() {
 
 async function test_a_user_initiated_navigation_is_not_a_login() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "mallory" }, __requestHeaders(["Sec-Fetch-Site: none", "Origin: https://app.example.com"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 1444, 1458, "expect r is Forbidden", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:35:10", 1491, 1505, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -149,11 +187,12 @@ async function test_a_user_initiated_navigation_is_not_a_login() {
 
 async function test_a_cross_site_login_from_a_listed_origin_is_handled() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "ada" }, __requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "welcome"))) { throw __bynkExpectFailure("tests/api.bynk:38:10", 1672, 1695, "expect r is Created(\"welcome\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "welcome"))) { throw __bynkExpectFailure("tests/api.bynk:40:10", 1719, 1742, "expect r is Created(\"welcome\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -165,11 +204,34 @@ async function test_a_cross_site_login_from_a_listed_origin_is_handled() {
 
 async function test_a_route_that_does_not_issue_is_not_checked() {
   try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_ping(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "pong"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1874, 1889, "expect r is Ok(\"pong\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "pong"))) { throw __bynkExpectFailure("tests/api.bynk:45:10", 1921, 1936, "expect r is Ok(\"pong\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_an_identity_limited_route_guarded_by_another_actor_is_checked_before_its_body() {
+  try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const ok = await __sysdrive_api_http_POST_exchange(undefined, ("ada" as any), {});
+    if (!(((__c: boolean) => __c)(ok.tag === "Created" && ok.value === "exchanged"))) { throw __bynkExpectFailure("tests/api.bynk:50:10", 2090, 2116, "expect ok is Created(\"exchanged\")", "ok", () => __bynkShow(ok)); }
+    const before = await __sysdrive_api_http_GET_logins(undefined, "");
+    const r = await __sysdrive_api_http_POST_exchange(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), ("ada" as any), {});
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:53:10", 2295, 2309, "expect r is Forbidden", "r", () => __bynkShow(r)); }
+    const after = await __sysdrive_api_http_GET_logins(undefined, "");
+    if (!(__bynkEq(after, before))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 2353, 2368, "expect after == before\n  expected: after == before\n  actual:   " + __bynkShow((after)) + " == " + __bynkShow((before))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -181,7 +243,7 @@ async function test_a_route_that_does_not_issue_is_not_checked() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a same-origin login is handled", "a cross-site login from an unlisted origin is refused before its body runs", "a same-site login from an unlisted origin is refused", "a login with a null origin is refused", "a user-initiated navigation is not a login", "a cross-site login from a listed origin is handled", "a route that does not issue is not checked"];
+export const __bynkCases: readonly string[] = ["a same-origin login is handled", "a cross-site login from an unlisted origin is refused before its body runs", "a same-site login from an unlisted origin is refused", "a login with a null origin is refused", "a user-initiated navigation is not a login", "a cross-site login from a listed origin is handled", "a route that does not issue is not checked", "an identity-limited route guarded by another actor is checked before its body"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -225,6 +287,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a route that does not issue is not checked")) {
     const started = __bynkCaseNow();
     const r = { name: "a route that does not issue is not checked", ...(await test_a_route_that_does_not_issue_is_not_checked()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an identity-limited route guarded by another actor is checked before its body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an identity-limited route guarded by another actor is checked before its body", ...(await test_an_identity_limited_route_guarded_by_another_actor_is_checked_before_its_body()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

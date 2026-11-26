@@ -5533,6 +5533,11 @@ fn warn_issue_on_safe_method(
         ) {
             continue;
         }
+        // A `GET` guarded by a `SignedCookie` actor (a sliding session that re-issues its caller's own
+        // identity) has nothing to plant: the caller already has the session.
+        if crate::actors::signed_cookie_seam_for(handler, &table.actors).is_some() {
+            continue;
+        }
         for actor in crate::actors::issued_cookie_actors(handler, &table.actors) {
             errors.push(
                 CompileError::new(

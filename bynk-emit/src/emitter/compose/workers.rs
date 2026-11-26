@@ -195,6 +195,12 @@ fn http_route_wrappers(
 /// wrapper. A wrapper that verifies first (`<route>__verify`, #3926) refuses as its outcome's `Err`.
 fn add_issue_csrf_check(entries: &mut [TsObjectEntry], origins: &[String]) {
     use crate::ts_build::{call, ident, if_, member, not_expr, return_, str_lit};
+    // An identity-limited route (#3926) is a pair: `<route>__verify(request)`, which verifies the caller, and
+    // the run step, which takes the verified principal. The check belongs to the first, before the limiter and
+    // the body; the second takes no request and is left alone.
+    let verifies_first = entries
+        .iter()
+        .any(|e| matches!(e, TsObjectEntry::Method { name, .. } if name.ends_with("__verify")));
     for entry in entries {
         let TsObjectEntry::Method {
             name, body, params, ..
@@ -202,6 +208,9 @@ fn add_issue_csrf_check(entries: &mut [TsObjectEntry], origins: &[String]) {
         else {
             continue;
         };
+        if verifies_first && !name.ends_with("__verify") {
+            continue;
+        }
         // A plain wrapper takes no request; this one does now, first, as a seam's wrapper takes it.
         if params.first().is_none_or(|p| p.name != "request") {
             params.insert(

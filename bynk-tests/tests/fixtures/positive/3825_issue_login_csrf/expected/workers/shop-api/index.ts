@@ -3,7 +3,7 @@
 
 import { __enterTrace, __withTrace } from "../../__bynk_runtime/traceparent.js";
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, __privateByDefault, __rateLimitAllowsKey, __rateLimitedResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -24,7 +24,7 @@ export default {
       const path = url.pathname;
       const method = request.method;
       const surface = compose(env);
-      const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"], credentials: true, maxAgeSecs: null };
+      const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type", "authorization"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"], credentials: true, maxAgeSecs: null };
       const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
       let __route: string = "request";
       try {
@@ -41,7 +41,7 @@ export default {
           }
         }
 
-        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/logins", path) !== null || __matchPath("/login", path) !== null || __matchPath("/ping", path) !== null)) {
+        if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/logins", path) !== null || __matchPath("/exchange", path) !== null || __matchPath("/login", path) !== null || __matchPath("/ping", path) !== null)) {
           return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
         }
         {
@@ -50,6 +50,21 @@ export default {
             const result = await surface.http_GET_logins();
             const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
             return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+        }
+        {
+          if (method === "POST" && __matchPath("/exchange", path) !== null) {
+            __route = "POST /exchange";
+            const __v = await surface.http_POST_exchange__verify(request);
+            if (__v.tag === "Err") {
+              const result = __v.error;
+              return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /exchange" }), request, ["Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            if (!await __rateLimitAllowsKey(env.RATELIMIT_EXCHANGE_LIMIT, __v.value.key)) {
+              return __applySecurityHeaders(__applyCors(__rateLimitedResponse(60), __cors_api, request.headers.get("origin")), __security_api);
+            }
+            const result = await surface.http_POST_exchange(__v.value.principal);
+            return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /exchange" }), request, ["Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           }
         }
         {
@@ -90,6 +105,11 @@ export default {
             const result = await surface.http_POST_ping();
             return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { notGet: "POST /ping" }), request, ["Bynk realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           }
+        }
+        if (__matchPath("/exchange", path) !== null) {
+          const __status = method === "OPTIONS" ? 204 : 405;
+          const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+          return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
         }
         if (__matchPath("/login", path) !== null) {
           const __status = method === "OPTIONS" ? 204 : 405;

@@ -153,7 +153,8 @@ The service therefore needs `cors { origins: [...], credentials: true }` for a s
 origin. A service with no `cors` accepts an issuing request from its own origin only. There is no opt-out.
 A non-browser client (a native app or a server) posting to a sign-in route must send an `Origin` listed in
 `cors` or `Sec-Fetch-Site: same-origin`, or use a `Bearer` actor instead. A `GET` that issues is outside the
-check and warns (`bynk.actor.signed_cookie_issue_on_safe_method`); sign in with a `POST`.
+check and warns (`bynk.actor.signed_cookie_issue_on_safe_method`); sign in with a `POST`. A `GET` guarded by the
+same actor that re-issues its caller's own session (a sliding expiry) has nothing to plant and does not warn.
 
 A stateless cookie (the default) **cannot be revoked** before it expires: a copy a user already took keeps
 working until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl`

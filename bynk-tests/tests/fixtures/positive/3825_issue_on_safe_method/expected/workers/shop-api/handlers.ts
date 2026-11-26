@@ -52,4 +52,8 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_GET_refresh(deps: { Clock: bynk.Clock; identity: UserId }): globalThis.Promise<HttpResult<string>> {
+    const c = await (async () => __issueSessionCookie(__sessionKeysOf(deps, "User"), "User", "__Host-session", "Lax", deps.identity, 43200, await deps.Clock.now()))();
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (c)] }))(HttpResult.Ok("refreshed"));
+  },
 };

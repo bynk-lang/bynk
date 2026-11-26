@@ -1,12 +1,18 @@
 context shop.api
 
 consumes bynk { Cookie, Clock }
+consumes bynk.cloudflare { RateLimit }
 
 type UserId = String where NonEmpty && MaxLength(64)
 
 type Login = { user: String }
 
-actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+// An API client exchanges its token for a session: a route guarded by `Partner` that issues one for `Member`.
+actor Partner { auth = Bearer(secret = "API_TOKEN_SECRET"), identity = UserId }
+
+capability ExchangeLimit = RateLimit @limit(5) @period(60.seconds)
+
+actor Member { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 // Counts the logins whose body ran, so a case can tell a refused request from one that was handled.
 agent Logins {
@@ -28,14 +34,23 @@ service api from http {
 
 	// #3825: the route that issues the session is `by Visitor`, so the actor cannot guard it, and it is where
 	// login CSRF happens: a hostile page makes a signed-out victim's browser post the attacker's credential.
-	// A route that calls `User.issue` gets the check a guarded route gets, before its body.
+	// A route that calls `Member.issue` gets the check a guarded route gets, before its body.
 	on POST("/login") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock {
 		let _ <- Logins("all").bump()
 		let Ok(id) = UserId.of(body.user) else {
 			BadRequest("bad user")
 		}
-		let c <- User.issue(id)
+		let c <- Member.issue(id)
 		Created("welcome").withCookie(c)
+	}
+
+	// An identity-limited route guarded by another actor, which issues too: the check runs in the verify step,
+	// before the limiter and the body, and the run step is left as it was (#3926 splits such a route in two).
+	@rateLimit(ExchangeLimit, key: identity)
+	on POST("/exchange") () -> Effect[HttpResult[String]] by p: Partner given Clock {
+		let _ <- Logins("all").bump()
+		let c <- Member.issue(p.identity)
+		Created("exchanged").withCookie(c)
 	}
 
 	// A route that does not issue is unchanged: no check.

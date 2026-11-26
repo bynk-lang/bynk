@@ -2,7 +2,8 @@
 // composition root for `shop.api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __csrfAllowed } from "../../__bynk_runtime/http.js";
+import { __sessionCookieOf, __csrfAllowed } from "../../__bynk_runtime/http.js";
+import { __verifySignedCookie } from "../../__bynk_runtime/session.js";
 import * as handlers from "./handlers.js";
 import * as bynk__binding from "../../bynk-cloudflare.js";
 
@@ -19,6 +20,15 @@ export function compose(env: Env) {
     async http_POST_signin_Param_token(request: globalThis.Request, token: string) {
       if (!__csrfAllowed(request, ["https://app.example.com"])) return HttpResult.Forbidden;
       return handlers.api.http_POST_signin_Param_token(token, deps);
+    },
+    async http_GET_refresh(request: globalThis.Request) {
+      const __cookie = __sessionCookieOf(request, "__Host-session");
+      if (__cookie === null) return HttpResult.Unauthorized;
+      const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
+      if (__session.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.UserId.of(__session.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_refresh({ ...deps, identity: __id.value });
     },
   };
 }

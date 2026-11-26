@@ -25,4 +25,11 @@ service api from http {
 		let c <- User.issue(id)
 		Ok("welcome").withCookie(c)
 	}
+
+	// A `GET` guarded by the same actor, re-issuing its caller's own identity (a sliding session), plants
+	// nothing and draws no warning.
+	on GET("/refresh") () -> Effect[HttpResult[String]] by u: User given Clock {
+		let c <- User.issue(u.identity)
+		Ok("refreshed").withCookie(c)
+	}
 }

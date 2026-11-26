@@ -12,6 +12,7 @@ import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __Age
 import { __issueSessionCookie, __sessionKeysOf } from "../../__bynk_runtime/session.js";
 
 import * as bynk from "../../bynk.js";
+import * as bynk_cloudflare from "../../bynk/cloudflare.js";
 
 export type UserId = string & { readonly __brand: "shop.api.UserId" };
 
@@ -33,6 +34,10 @@ export interface Login {
 
 export const Login = {
 };
+
+export type ExchangeLimit = bynk_cloudflare.RateLimit;
+
+export const __ExchangeLimitToken: symbol = globalThis.Symbol("ExchangeLimit");
 
 export interface LoginsState {
   readonly n: number;
@@ -119,11 +124,11 @@ export function __makeLogins(key: string, env?: { LOGINS?: __DurableObjectNamesp
 export const api = {
   async http_POST_login(body: Login, deps: { Clock: bynk.Clock; env: { LOGINS: __DurableObjectNamespace } }): globalThis.Promise<HttpResult<string>> {
     const __r0 = await __makeLogins("all", deps.env).bump(deps);
-    const __letElse1024 = UserId.of(body.user);
-    switch (__letElse1024.tag) {
+    const __letElse1327 = UserId.of(body.user);
+    switch (__letElse1327.tag) {
       case "Ok": {
-        const id = __letElse1024.value;
-        const c = await (async () => __issueSessionCookie(__sessionKeysOf(deps, "User"), "User", "__Host-session", "Lax", id, 43200, await deps.Clock.now()))();
+        const id = __letElse1327.value;
+        const c = await (async () => __issueSessionCookie(__sessionKeysOf(deps, "Member"), "Member", "__Host-session", "Lax", id, 43200, await deps.Clock.now()))();
         return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (c)] }))(HttpResult.Created("welcome"));
       }
       default: {
@@ -131,6 +136,11 @@ export const api = {
       }
     }
     throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_exchange(deps: { Clock: bynk.Clock; env: { LOGINS: __DurableObjectNamespace }; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
+    const __r0 = await __makeLogins("all", deps.env).bump(deps);
+    const c = await (async () => __issueSessionCookie(__sessionKeysOf(deps, "Member"), "Member", "__Host-session", "Lax", deps.identity, 43200, await deps.Clock.now()))();
+    return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (c)] }))(HttpResult.Created("exchanged"));
   },
   async http_POST_ping(deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("pong");

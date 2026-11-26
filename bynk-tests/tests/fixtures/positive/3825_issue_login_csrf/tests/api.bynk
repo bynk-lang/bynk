@@ -1,4 +1,6 @@
 suite shop.api as system {
+	env { API_TOKEN_SECRET = "test-api-secret" }
+
 	// #3825: login CSRF, end to end through the real Worker. The driver sends `Sec-Fetch-Site: same-origin`
 	// unless a case's own headers say otherwise, as on a guarded route. A refused login never runs its
 	// body: `GET /logins` counts the bodies that ran.
@@ -41,5 +43,15 @@ suite shop.api as system {
 	case "a route that does not issue is not checked" {
 		let r <- api.POST("/ping", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]))
 		expect r is Ok("pong")
+	}
+
+	case "an identity-limited route guarded by another actor is checked before its body" {
+		let ok <- api.POST("/exchange") by Partner("ada")
+		expect ok is Created("exchanged")
+		let before <- api.GET("/logins")
+		let r <- api.POST("/exchange", RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])) by Partner("ada")
+		expect r is Forbidden
+		let after <- api.GET("/logins")
+		expect after == before
 	}
 }
