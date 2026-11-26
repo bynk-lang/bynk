@@ -1517,6 +1517,7 @@
 /reference/diagnostics/bynk.container.build_missing/
 /reference/diagnostics/bynk.container.build_path/
 /reference/diagnostics/bynk.container.output_outside_project/
+/reference/diagnostics/bynk.container.unbounded_instances/
 /reference/diagnostics/bynk.context.consumes_cycle/
 /reference/diagnostics/bynk.context.duplicate_binding/
 /reference/diagnostics/bynk.context.external_construction/
