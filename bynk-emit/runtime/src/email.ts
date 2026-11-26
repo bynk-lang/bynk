@@ -82,6 +82,8 @@ export interface InboundEmail {
   readonly html: Option<string>;
   readonly attachments: readonly InboundAttachment[];
   readonly size: number;
+  /** #3884: the text after the first `+` of the recipient's local part (RFC 5233), `None` without one. */
+  readonly subaddress: Option<string>;
 }
 
 export interface EmailReply {
@@ -171,15 +173,43 @@ function domainOf(address: string): string {
 }
 
 /**
+ * The base address and the tag of a plus-addressed recipient (RFC 5233, as Cloudflare Email
+ * Routing defines it): the local part is split at its first `+`, and the base is the local
+ * part up to it, at the same domain. `undefined` when the local part has no `+`, or starts
+ * with one (nothing to be the base of). The recipient is lower-cased by the caller.
+ */
+function subaddressOf(recipient: string): { readonly base: string; readonly tag: string } | undefined {
+  const at = recipient.lastIndexOf("@");
+  const plus = recipient.indexOf("+");
+  if (at < 0 || plus <= 0 || plus > at) return undefined;
+  return { base: recipient.slice(0, plus) + recipient.slice(at), tag: recipient.slice(plus + 1, at) };
+}
+
+/**
+ * The tag of `recipient`'s plus-address as the handler reads it (`mail.subaddress`), keeping
+ * the case the sender wrote. `undefined` without a `+` in the local part.
+ */
+export function subaddressTag(recipient: string): string | undefined {
+  return subaddressOf(recipient)?.tag;
+}
+
+/**
  * The route that claims `recipient`, or `undefined`. The comparison is
  * case-insensitive throughout (Email Routing matches without regard to case,
- * ADR 0805 A), an exact address wins over the domain's catch-all, and a
- * catch-all `*@domain` matches only that domain.
+ * ADR 0805 A). The order is Email Routing's own (#3884): a claim on the exact
+ * recipient (`support+vip@shop.example`), then on its base address with the
+ * `+tag` removed (`support@shop.example`), then the domain's catch-all `*@domain`,
+ * which matches only that domain.
  */
 export function pickRoute(routes: readonly EmailRoute[], recipient: string): EmailRoute | undefined {
   const to = recipient.toLowerCase();
   const exact = routes.find((r) => r.address.toLowerCase() === to);
   if (exact !== undefined) return exact;
+  const sub = subaddressOf(to);
+  if (sub !== undefined) {
+    const base = routes.find((r) => r.address.toLowerCase() === sub.base);
+    if (base !== undefined) return base;
+  }
   const domain = domainOf(to);
   return routes.find((r) => {
     const a = r.address.toLowerCase();
@@ -393,6 +423,7 @@ export async function parseInbound(
     html: present(parsed.html),
     attachments,
     size: raw.byteLength,
+    subaddress: present(subaddressTag(envelope.to)),
   };
   return { ok: true, mail, dmarc: dmarcVerdict(parsed.headers) };
 }

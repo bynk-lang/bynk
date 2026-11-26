@@ -1,0 +1,48 @@
+suite ci.api as system {
+	// #3926: the Oidc seam verifies the token before the limiter is asked, which counts per `sub`.
+
+	case "a verified workload over the limit is refused with 429" {
+		let a <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		let b <- api.POST("/release", Wire("\"v2\"")) by Workload("wid")
+		let c <- api.POST("/release", Wire("\"v3\"")) by Workload("wid")
+		expect a is Handled(Ok("released v1 by wid"))
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "two workloads count separately" {
+		let a <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		let b <- api.POST("/release", Wire("\"v2\"")) by Workload("wid")
+		let other <- api.POST("/release", Wire("\"v1\"")) by Workload("other")
+		expect other is Handled(Ok("released v1 by other"))
+	}
+
+	case "a forged token is refused and never consumes the limiter" {
+		let f1 <- api.POST("/release", Wire("\"x\"")) by Forged
+		let f2 <- api.POST("/release", Wire("\"x\"")) by Forged
+		let f3 <- api.POST("/release", Wire("\"x\"")) by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		let b <- api.POST("/release", Wire("\"v2\"")) by Workload("wid")
+		expect b is Handled(Ok("released v2 by wid"))
+	}
+
+	case "a token for another issuer is refused and never consumes the limiter" {
+		let w1 <- api.POST("/release", Wire("\"x\"")) by WrongIssuer
+		let w2 <- api.POST("/release", Wire("\"x\"")) by WrongIssuer
+		let w3 <- api.POST("/release", Wire("\"x\"")) by WrongIssuer
+		expect w3 is Rejected(Unauthorized)
+		let a <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		let b <- api.POST("/release", Wire("\"v2\"")) by Workload("wid")
+		expect b is Handled(Ok("released v2 by wid"))
+	}
+
+	case "an expired token is refused and never consumes the limiter" {
+		let e1 <- api.POST("/release", Wire("\"x\"")) by Expired
+		let e2 <- api.POST("/release", Wire("\"x\"")) by Expired
+		let e3 <- api.POST("/release", Wire("\"x\"")) by Expired
+		expect e3 is Rejected(Unauthorized)
+		let a <- api.POST("/release", Wire("\"v1\"")) by Workload("wid")
+		let b <- api.POST("/release", Wire("\"v2\"")) by Workload("wid")
+		expect b is Handled(Ok("released v2 by wid"))
+	}
+}
