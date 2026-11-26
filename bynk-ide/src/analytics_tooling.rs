@@ -52,9 +52,21 @@ fn skip_string(text: &str, from: usize) -> usize {
     text.len()
 }
 
-/// The top-level argument ranges of the call whose `(` is at `open`, and whether it is closed.
+/// The top-level argument ranges of the call whose `(` is at `open`. A call that is never closed
+/// (still being typed, or named in a comment) is read to the end of its own line only, so it
+/// cannot claim the rest of the file.
 fn scan_args(text: &str, open: usize) -> Vec<(usize, usize)> {
-    let bytes = text.as_bytes();
+    if let Some(args) = scan_to(text, open, text.len(), true) {
+        return args;
+    }
+    let line_end = text[open..].find('\n').map_or(text.len(), |p| open + p);
+    scan_to(text, open, line_end, false).unwrap_or_default()
+}
+
+/// The argument ranges of the call opened at `open`, scanning no further than `limit`. `None` when
+/// the call is not closed before `limit` and `need_close` holds.
+fn scan_to(text: &str, open: usize, limit: usize, need_close: bool) -> Option<Vec<(usize, usize)>> {
+    let bytes = &text.as_bytes()[..limit];
     let mut args = Vec::new();
     let mut depth = 0usize;
     let mut start = open + 1;
@@ -75,7 +87,7 @@ fn scan_args(text: &str, open: usize) -> Vec<(usize, usize)> {
             b')' | b']' | b'}' => {
                 if depth == 0 {
                     args.push((start, i));
-                    return args;
+                    return Some(args);
                 }
                 depth -= 1;
             }
@@ -87,14 +99,22 @@ fn scan_args(text: &str, open: usize) -> Vec<(usize, usize)> {
         }
         i += 1;
     }
-    args.push((start, text.len()));
-    args
+    if need_close {
+        return None;
+    }
+    args.push((start, limit.max(start)));
+    Some(args)
 }
 
 /// Every call of the two typed Analytics SQL operations in `text`.
 fn analytics_calls(text: &str) -> Vec<AnalyticsCall> {
     let mut out = Vec::new();
     for (at, _) in text.match_indices("AnalyticsSql.") {
+        // A mention in a line comment is not a call.
+        let line_start = text[..at].rfind('\n').map_or(0, |p| p + 1);
+        if text[line_start..at].contains("//") {
+            continue;
+        }
         let rest = &text[at + "AnalyticsSql.".len()..];
         let (op, after_op): (&'static str, usize) = if rest.starts_with("query") {
             ("query", "query".len())
@@ -107,7 +127,6 @@ fn analytics_calls(text: &str) -> Vec<AnalyticsCall> {
         let mut type_arg = None;
         if text[i..].starts_with('[') {
             let mut depth = 0usize;
-            let mut j = i;
             let mut close = None;
             for (k, c) in text[i..].char_indices() {
                 match c {
@@ -121,10 +140,8 @@ fn analytics_calls(text: &str) -> Vec<AnalyticsCall> {
                     }
                     _ => {}
                 }
-                j = i + k;
             }
             let Some(close) = close else { continue };
-            let _ = j;
             type_arg = Some(text[i + 1..close].trim().to_string());
             i = close + 1;
         }
@@ -176,7 +193,6 @@ pub fn instance_candidates_at(
             .first()
             .is_some_and(|&(s, e)| offset >= s && offset <= e)
     })?;
-    let _ = call.op;
     let names = analytics_instances(text, files);
     if names.is_empty() {
         return None;
@@ -286,7 +302,7 @@ pub fn read_field_candidates_at(
 ) -> Option<Vec<Completion>> {
     let (record, open) = record_being_declared(text, offset)?;
     // The instance of the select that reads `record`, in this buffer or the project's files.
-    let mut instance: Option<String> = None;
+    let mut instance: Option<(String, Option<String>)> = None;
     let mut sources: Vec<&str> = vec![text];
     if let Some(files) = files {
         sources.extend(files.values().map(String::as_str));
@@ -297,7 +313,7 @@ pub fn read_field_candidates_at(
                 && call.type_arg.as_deref() == Some(record.as_str())
                 && let Some(&(s, e)) = call.args.first()
             {
-                instance = Some(source[s..e].trim().to_string());
+                instance = Some((source[s..e].trim().to_string(), context_name(source)));
                 break;
             }
         }
@@ -305,11 +321,16 @@ pub fn read_field_candidates_at(
             break;
         }
     }
-    let instance = instance?;
-    let entry = analytics
-        .iter()
-        .find(|(k, _)| k.rsplit('.').next() == Some(instance.as_str()))
-        .map(|(_, e)| e)?;
+    let (instance, unit) = instance?;
+    // The mapping of the select's own unit; failing that, the first instance of that name.
+    let entry = unit
+        .and_then(|u| analytics.get(&format!("{u}.{instance}")))
+        .or_else(|| {
+            analytics
+                .iter()
+                .find(|(k, _)| k.rsplit('.').next() == Some(instance.as_str()))
+                .map(|(_, e)| e)
+        })?;
     // The fields `record` already declares, up to the closing brace.
     let close = text[open..].find('}').map_or(text.len(), |p| open + p);
     let declared: Vec<&str> = text[open + 1..close]
@@ -318,7 +339,6 @@ pub fn read_field_candidates_at(
         .map(str::trim)
         .filter(|f| !f.is_empty())
         .collect();
-    let _ = files;
     let mut candidates: Vec<(String, String)> = Vec::new();
     if let Some(i) = &entry.index {
         candidates.push((i.clone(), "index1 (sampling key)".to_string()));
@@ -391,9 +411,17 @@ pub fn dataset_hover_at(text: &str, offset: usize) -> Option<String> {
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
     let table = match (instance.is_empty(), context_name(text)) {
-        (false, Some(ctx)) => {
-            Some(format!("{}_{}", ctx.replace(['.', '-'], "_"), instance).to_ascii_lowercase())
-        }
+        // The binding's derivation (`bynk-emit`'s `analytics_dataset_name`): the Worker, then the
+        // capability in snake case, all lowercase with `_` for `-`. The Worker is taken to be
+        // the context's own, as it is unless the project groups contexts into one.
+        (false, Some(ctx)) => Some(
+            format!(
+                "{}_{}",
+                ctx.replace(['.', '-'], "_"),
+                bynk_check::worker_bindings::screaming_snake(&instance)
+            )
+            .to_ascii_lowercase(),
+        ),
         _ => None,
     };
     Some(match table {
@@ -475,6 +503,55 @@ mod tests {
         assert!(hover.contains("_staging"), "{hover}");
         // Outside the SQL of an Analytics call, no hover.
         assert!(dataset_hover_at(SRC, 0).is_none());
+    }
+
+    /// A multi-word instance is in snake case in the table name, as the binding derives it.
+    #[test]
+    fn a_multi_word_instance_names_its_table_in_snake_case() {
+        let src = SRC.replace("Signups", "PageViews");
+        let at = src.find("{dataset}").unwrap() + 2;
+        let hover = dataset_hover_at(&src, at).expect("a hover");
+        assert!(
+            hover.contains("events.analyticsEngine.shop_cart_page_views"),
+            "{hover}"
+        );
+    }
+
+    /// Two units writing an instance of one name: the select's own unit's mapping is offered.
+    #[test]
+    fn a_selects_own_units_mapping_is_preferred() {
+        let mut m = mapping();
+        m.insert(
+            "a.first.Signups".to_string(),
+            AnalyticsEntry {
+                record: "Other".to_string(),
+                index: None,
+                blobs: vec!["zzz:text".to_string()],
+                doubles: vec![],
+            },
+        );
+        let at = SRC.find("  country: String,\n  \n}").unwrap() + "  country: String,\n  ".len();
+        let got = read_field_candidates_at(SRC, at, None, &m).expect("offers");
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            labels.contains(&"seats") && !labels.contains(&"zzz"),
+            "{labels:?}"
+        );
+    }
+
+    /// A mention in a comment, or a call left open, does not claim the rest of the file.
+    #[test]
+    fn a_comment_or_an_open_call_stays_contained() {
+        let src = "/// e.g. AnalyticsSql.query(\ncapability Signups = Analytics\nlet x = 1\n";
+        assert!(analytics_calls(src).is_empty());
+        let open = "AnalyticsSql.query(\nlet later = 1, 2\n";
+        let calls = analytics_calls(open);
+        assert_eq!(calls.len(), 1);
+        assert!(
+            calls[0].args[0].1 <= "AnalyticsSql.query(".len(),
+            "{:?}",
+            calls[0].args
+        );
     }
 
     #[test]

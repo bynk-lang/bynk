@@ -916,11 +916,15 @@ fn analyse_project_inner(
     //        #1133's cost note about paying for it on every keystroke. The
     //        reconciled registry is discarded: analysis never writes. --
     let mut contract_diff = ContractDiff::default();
-    let mut lock_as_read: Option<bynk_project::schema_registry::SchemaRegistry> = None;
+    // The registry as read and as reconciled so far, for the Analytics check once the units are
+    // checked (#4502); neither is written anywhere.
+    let mut lock_state: Option<(
+        bynk_project::schema_registry::SchemaRegistry,
+        bynk_project::schema_registry::SchemaRegistry,
+    )> = None;
     if let SchemaLock::On { existing } = schema_lock {
         match crate::schema_registry::parse_or_diagnose(existing.as_deref(), roots.project_root()) {
             Ok(existing_reg) => {
-                lock_as_read = Some(existing_reg.clone());
                 // #2467: the same registry, reported as a diff (read-only).
                 contract_diff.lock = LockState::Read;
                 contract_diff.changes = crate::schema_registry::diff_against_lock(
@@ -955,6 +959,7 @@ fn analyse_project_inner(
                     &mut order_errors,
                 );
                 errors.extend_attributed_by_span(&parsed, order_errors);
+                lock_state = Some((existing_reg, updated));
             }
             Err(err) => {
                 contract_diff.lock = LockState::Unreadable;
@@ -1223,11 +1228,10 @@ fn analyse_project_inner(
 
     // #4502: the Analytics column mappings, for the editor, and the lock's check of them (which
     // needs the checked units, so it runs here and not with the declaration-only passes).
-    if let Some(existing) = &lock_as_read {
-        let mut scratch = existing.clone();
+    if let Some((existing, mut scratch)) = lock_state {
         let mut analytics_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
         crate::analytics_lock::reconcile_analytics(
-            existing,
+            &existing,
             &mut scratch,
             &unit_callees,
             &mut analytics_errors,

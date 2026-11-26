@@ -139,3 +139,36 @@ fn hover_on_the_dataset_placeholder_names_the_table() {
         "{md}"
     );
 }
+
+/// The lock's check reaches the editor's own analysis: a recorded mapping that differs from the
+/// source is `bynk.analytics.mapping_changed`, attributed to the record's file, and the lock text
+/// handed in is not changed.
+#[test]
+fn a_changed_mapping_is_reported_by_the_editors_analysis() {
+    let f = fixture("lock");
+    let root = f.top.join("src");
+    let lock = "version = 4\n\n[events]\n\n[analytics.\"shop.cart.Signups\"]\nrecord = \"Signup\"\nindex = \"plan\"\nblobs = [\"channel:text\", \"country:text\"]\ndoubles = [\"seats:number\"]\n";
+    let sources =
+        bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+    let handed = Some(lock.to_string());
+    let r = bynk_ide::diagnose_project_with(
+        &bynk_ide::AnalysisRoots::SingleTree(root),
+        &sources,
+        &bynk_ide::SchemaLock::On {
+            existing: handed.clone(),
+        },
+    );
+    let file = r
+        .files
+        .iter()
+        .find(|x| x.source_path.ends_with("cart.bynk"))
+        .expect("cart.bynk analysed");
+    assert!(
+        file.diagnostics
+            .iter()
+            .any(|d| d.error.category == "bynk.analytics.mapping_changed"),
+        "{:?}",
+        file.diagnostics
+    );
+    assert_eq!(handed.as_deref(), Some(lock), "the lock is only read");
+}
