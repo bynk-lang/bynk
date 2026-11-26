@@ -181,13 +181,17 @@ pub fn registry_id_problem(id: &str) -> Option<String> {
     if !problem.starts_with("must match") {
         return Some(problem);
     }
-    let mut chars = id.chars();
-    if !chars.next().is_some_and(|c| c.is_ascii_lowercase()) {
+    if !id.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
         return Some("must start with a lowercase letter `a`-`z`".to_string());
     }
-    let bad = id
+    // `segment_problem` has refused the id, so a refusal always comes back; were the two
+    // character sets ever to drift apart, fall back to its own wording rather than accept.
+    let Some(bad) = id
         .chars()
-        .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-'))?;
+        .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-'))
+    else {
+        return Some(problem);
+    };
     Some(format!(
         "can't contain `{bad}`: use lowercase letters, digits and `-`"
     ))

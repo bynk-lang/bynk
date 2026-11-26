@@ -210,14 +210,18 @@ fn init_accepts_the_first_party_id_bynk() {
 #[test]
 fn init_refuses_a_malformed_id_and_names_the_fault() {
     let root = scratch("init-bad-id");
-    for (id, fault) in [
+    for (n, (id, fault)) in [
         ("", "is empty"),
         ("1acme", "start with a lowercase letter"),
         ("Acme", "start with a lowercase letter"),
         ("ac me", "can't contain ` `"),
         ("acme_labs", "did you mean `acme-labs`"),
-    ] {
-        let (code, out, reg) = init_with_id(&root, &format!("bad-{}", id.len()), id);
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // Each case has its own directory, so "nothing is written" is checked independently.
+        let (code, out, reg) = init_with_id(&root, &format!("bad-{n}"), id);
         assert_ne!(code, 0, "`{id}` must be refused: {out}");
         assert!(
             out.contains(&format!("`{id}` isn't a registry id")),
