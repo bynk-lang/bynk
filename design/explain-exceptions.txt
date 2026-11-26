@@ -43,6 +43,7 @@ bynk.registry.publish_refused: needs the network, git, a registry, lockfile stat
 bynk.registry.source_mismatch: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.registry.unavailable: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.contract_skew: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
+bynk.deploy.accept_fresh_agent_unused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.agent_move_refused: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.deploy.foreign_contract_skew: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example
 bynk.test.remote_unsupported_advance: needs the network, git, a registry, lockfile state or a live deployment: not expressible as a compiled example

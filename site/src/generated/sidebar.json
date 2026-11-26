@@ -290,6 +290,10 @@
           {
             "label": "Rename a field safely",
             "link": "/book/guides/type-system/rename-a-field-safely/"
+          },
+          {
+            "label": "Decode a third-party webhook into typed values",
+            "link": "/book/guides/type-system/decode-a-third-party-webhook/"
           }
         ]
       },
@@ -412,6 +416,10 @@
           {
             "label": "Sign and verify data",
             "link": "/book/guides/effects-and-capabilities/sign-and-verify-data/"
+          },
+          {
+            "label": "Store a password",
+            "link": "/book/guides/effects-and-capabilities/store-a-password/"
           }
         ]
       },

@@ -140,7 +140,7 @@ export class Room {
     if (url.pathname === "/_bynk/ws/open/chat") {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string; exp?: number };
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, exp: __payload.exp });
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args, max: 1048576, exp: __payload.exp });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       const __givenDeps = { Clock: new bynk__binding.ClockProvider() };
       await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__givenDeps, ...{ env: env as never } });

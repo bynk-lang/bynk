@@ -1574,6 +1574,18 @@ impl LimitsPolicy {
         }
     }
 
+    /// #3905: a `from websocket` service's `maxFrame`, the largest frame in bytes the Durable Object
+    /// reads or sends; [`DEFAULT_MAX_FRAME`] when the author gave none. A malformed value has been
+    /// reported by the checker and falls back to the default.
+    pub fn max_frame(&self) -> i64 {
+        match self.field("maxFrame").map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) if (1..=MAX_FRAME_CEILING).contains(value) => {
+                *value
+            }
+            _ => DEFAULT_MAX_FRAME,
+        }
+    }
+
     /// #3276: the service-wide per-file ceiling of a `@multipart` route, in bytes
     /// (`maxFile:`); `None` leaves a file part bounded by the body cap alone.
     pub fn max_file(&self) -> Option<i64> {
@@ -1592,6 +1604,14 @@ impl LimitsPolicy {
         }
     }
 }
+
+/// #3905: the frame size, in bytes (1 MiB), a `from websocket` service reads and sends when no
+/// `limits { maxFrame }` says otherwise.
+pub const DEFAULT_MAX_FRAME: i64 = 1_048_576;
+
+/// #3905: the largest `maxFrame` a service may declare, in bytes (32 MiB): Cloudflare's own limit on
+/// an inbound message, which it closes with `1009` above it.
+pub const MAX_FRAME_CEILING: i64 = 33_554_432;
 
 /// #3276: the parts a `@multipart` request may carry when no `maxParts` says
 /// otherwise.
@@ -3070,6 +3090,9 @@ pub struct TypeDecl {
     pub derives_kw: Option<Span>,
     /// Documentation block attached to this declaration (v0.3).
     pub documentation: Option<Doc>,
+    /// #3975: annotations before the `type` keyword (`@discriminator("type")` on a
+    /// sum). The checker admits only `@discriminator`, and only on a sum.
+    pub annotations: Vec<Annotation>,
     /// #2618: the span of a leading `private` modifier, when the declaration
     /// is unit-private: visible across its own unit's files (and to that
     /// unit's suites), never through `uses`. `None` is the default, public.
@@ -3117,7 +3140,7 @@ impl EventDecl {
     /// emission, `from Events(E)`/`Events.emit[E]`'s "must be an event, not
     /// just any type" gate) track that separately, alongside this.
     ///
-    /// Deliberately lossy: a `TypeDecl` has no `annotations`, so `@schema(N)`
+    /// Deliberately lossy: a `TypeDecl`'s annotations are a sum's `@discriminator`, so `@schema(N)`
     /// does not survive this conversion. Nothing downstream of this
     /// synthesis needs the event's schema version — only the emitter's own
     /// `Events.emit` lowering does, and it reads [`EventDecl::schema_version`]
@@ -3130,6 +3153,7 @@ impl EventDecl {
             type_params: Vec::new(),
             body: TypeBody::Record(self.body.clone()),
             documentation: self.documentation.clone(),
+            annotations: Vec::new(),
             span: self.span,
             trivia: self.trivia.clone(),
             private: None,
@@ -3334,16 +3358,45 @@ impl RecordField {
     /// a query key, a form field), `None` when it reads under its own name. The
     /// checker refuses a `@name` that is not exactly one string literal.
     pub fn wire_name(&self) -> Option<String> {
-        self.annotations
-            .iter()
-            .find(|a| a.name.name == "name")
-            .and_then(|a| match a.args.as_slice() {
-                [arg] => match &arg.value.kind {
-                    ExprKind::StrLit(s) => Some(s.clone()),
-                    _ => None,
-                },
+        annotation_string(&self.annotations, "name")
+    }
+}
+
+/// #3975: the string a `@<name>("…")` annotation among `annotations` carries, `None` when there
+/// is no such annotation or its argument is not one string literal (the checker reports that).
+pub fn annotation_string(annotations: &[Annotation], name: &str) -> Option<String> {
+    annotations
+        .iter()
+        .find(|a| a.name.name == name)
+        .and_then(|a| match a.args.as_slice() {
+            [arg] => match &arg.value.kind {
+                ExprKind::StrLit(s) => Some(s.clone()),
                 _ => None,
-            })
+            },
+            _ => None,
+        })
+}
+
+impl TypeDecl {
+    /// #3975: the sum's `@discriminator("…")`, the JSON key that names the variant; `None`
+    /// when the sum uses the default `kind`.
+    pub fn discriminator(&self) -> Option<String> {
+        annotation_string(&self.annotations, "discriminator")
+    }
+}
+
+impl Variant {
+    /// #3975: the variant's `@name("…")`, the value the discriminator takes on the wire;
+    /// `None` when it is the variant's own name.
+    pub fn wire_name(&self) -> Option<String> {
+        annotation_string(&self.annotations, "name")
+    }
+}
+
+impl VariantField {
+    /// #3975: the payload field's `@name("…")`, its key on the wire.
+    pub fn wire_name(&self) -> Option<String> {
+        annotation_string(&self.annotations, "name")
     }
 }
 
@@ -3377,6 +3430,9 @@ pub struct EmbedsClause {
 /// payload-less variant is a simple tag.
 #[derive(Debug, Clone)]
 pub struct Variant {
+    /// #3975: annotations before the variant (`@name("charge.succeeded") ChargeSucceeded`), in
+    /// the pipe form (after the `|`) and the `enum { }` shorthand. Only `@name` is admitted.
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub payload: Vec<VariantField>,
     pub span: Span,
@@ -3394,6 +3450,8 @@ pub struct Variant {
 /// declarations like record fields, but do not carry refinement in v0.2.
 #[derive(Debug, Clone)]
 pub struct VariantField {
+    /// #3975: annotations before the payload field (`@name("pull_request") pr: PullRequest`).
+    pub annotations: Vec<Annotation>,
     pub name: Ident,
     pub type_ref: TypeRef,
     pub span: Span,

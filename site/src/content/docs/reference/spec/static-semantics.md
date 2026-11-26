@@ -843,8 +843,16 @@ keeps the author's grouping verbatim.
 
 ### §5.2c Record field annotations {#field-annotations}
 
-A record field MAY be annotated. `@name("…")` gives the field its external name on an HTTP request
-(§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
+A record field MAY be annotated. `@name("…")` gives the field its name on the wire, at every
+boundary the record is encoded at (#3975): it takes one string literal, or a `String` constant bound
+to one (`bynk.types.field_name_bad_arg`), may not be empty (`bynk.types.field_name_invalid`), and
+two fields may not share a wire name (`bynk.types.field_name_duplicate`). A sum variant and a variant's
+payload field take `@name` the same way, and `@discriminator("…")` before a sum's `type` replaces
+the discriminator key `kind` (`bynk.types.discriminator_bad_arg`, `bynk.types.discriminator_not_sum`);
+no payload field's wire name may be the discriminator (`bynk.types.discriminator_collides`), and any
+other annotation on a type or a variant is `bynk.types.annotation_unknown`. The Bynk names do not
+change: only the codecs, the OpenAPI document, the typed drivers and a decode error's path use the wire
+name. A request record adds the rules of its surface (§5.2 and the request surfaces). `@index`, which takes no argument, marks the field as the sampling
 key of an Analytics Engine data point; it is accepted on a field of any record and has meaning only
 where the record is written with `writeValue` (#4105), which requires at most one `@index` field, a
 `String` (or a refined or opaque `String`), and refuses a second or a non-`String` one
@@ -1323,12 +1331,11 @@ between its `store` fields and its handlers.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
 
-**Renaming a `store` field.** `store New: Cell[T] replaces Old` declares that the
-`Cell` field `Old` was renamed to `New`.
+**Renaming a `store` field.** `store New: Kind[T] replaces Old` declares that the
+field `Old` was renamed to `New`.
 - **What may be named.** `Old` MUST NOT be the field itself, another field the agent
-  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Only a
-  `Cell`, `Set` or `Map` field without `@indexed` or `@unique` MAY carry the clause
-  (`bynk.store.replaces_collection`).
+  declares, or a name another field replaces (`bynk.field.replaces_conflict`). Any
+  storage kind MAY carry the clause.
 - **What the lock does.** With a lock, `Old` MUST be a field the class's current
   snapshot records, unless the rename has already been recorded
   (`bynk.field.replaces_unknown`), and `New` MUST NOT be recorded beside it
@@ -1336,7 +1343,8 @@ between its `store` fields and its handlers.
   before comparing, so a rename on its own is additive: the class's version increments
   and the new snapshot lists `New` with `renamed_from` naming `Old` and the names `Old`
   was itself renamed from. Earlier snapshots keep their names.
-- **What loading does.** A `Map` or `Set` has every entry under `Old`'s storage keys moved
+- **What loading does.** A `Map`, `Set`, `Cache` or `Log` has every key under `Old`'s
+  storage prefixes (its entries, a `Cache`'s expiries, the postings of its indexes) moved
   to `New`'s, in bounded batches that each commit together, before the first read; an
   entry already under `New` wins (and a collection with entries under both names has its
   count and next sequence merged), and a failure part-way leaves each entry under exactly
@@ -2505,6 +2513,10 @@ connection-lifecycle handlers:
   (`bynk.ws.open_transfer_key`).
 - **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
   route params plus the decoded frame of type `I`.
+  A service may declare **`limits { maxFrame: <bytes> }`**, a positive `Int` literal of at most `33_554_432`
+  (default `1_048_576`), the largest frame it reads or sends; any other field, or a value outside the range,
+  is `bynk.http.limits_unknown_field` or `bynk.http.limits_invalid_field`. `Bytes` is admitted as `I` and as `O`:
+  binary frames exchanged as they are.
 - **`on close`** (v0.106) — **required**, exactly one: the connection ended, and the
   stored connection is disposed (typically via the owning agent). `on open` always transfers its
   connection into an agent's state and the runtime cannot tell which store entry holds it, so

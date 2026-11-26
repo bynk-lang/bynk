@@ -17,69 +17,36 @@ use bynk_syntax::error::CompileError;
 /// The code every rule here reports.
 pub const REPLACES_CONFLICT: &str = "bynk.field.replaces_conflict";
 
-/// A collection `store` field `replaces` cannot rename (yet): a `Cache` or `Log`, or a `Map` with an
-/// `@indexed` index. A `Map` or `Set` is renamed (#4482), by moving its entries to the new name.
-pub const STORE_REPLACES_COLLECTION: &str = "bynk.store.replaces_collection";
-
-/// Whether `replaces` can rename this `store` field: a `Cell`, or a `Map` or `Set` that keeps no index
-/// (`@indexed` or `@unique`).
-fn renamable(f: &bynk_syntax::ast::StoreField) -> bool {
-    match f.kind.head.name.as_str() {
-        "Cell" | "Set" => true,
-        // `@unique` keeps the same index postings `@indexed` does.
-        "Map" => !f
-            .annotations
-            .iter()
-            .any(|a| matches!(a.name.name.as_str(), "indexed" | "unique")),
-        _ => false,
-    }
-}
-
 /// The clauses of one record (a type or an event body).
 pub(crate) fn check_record(body: &RecordBody) -> Vec<CompileError> {
-    let fields: Vec<(&Ident, Option<&Ident>)> = body
+    // #3975: a field is known on the wire, in the lock and in storage by its wire name (its
+    // `@name`, or its own name), so a clause is judged against those names.
+    let keys: Vec<Ident> = body
         .fields
         .iter()
-        .map(|f| (&f.name, f.replaces.as_ref()))
+        .map(|f| Ident {
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
+            span: f.name.span,
+        })
+        .collect();
+    let fields: Vec<(&Ident, Option<&Ident>)> = keys
+        .iter()
+        .zip(&body.fields)
+        .map(|(k, f)| (k, f.replaces.as_ref()))
         .collect();
     check(&fields, "record")
 }
 
 /// The clauses of one agent's `store` fields.
 pub(crate) fn check_store(agent: &AgentDecl) -> Vec<CompileError> {
-    // A `Map`, `Set`, `Cache` or `Log` keeps every entry under a key of its own that carries the
-    // field's name, so a rename moves storage keys rather than reading an old one. A `Map` and a
-    // `Set` are moved (#4482); the rest are refused for every layout, as which layout a record is in
-    // is not the author's to see.
-    let mut errors: Vec<CompileError> = agent
-        .store_fields
-        .iter()
-        .filter(|f| !renamable(f))
-        .filter_map(|f| f.replaces.as_ref().map(|old| (f, old)))
-        .map(|(f, old)| {
-            CompileError::new(
-                STORE_REPLACES_COLLECTION,
-                old.span,
-                format!(
-                    "`store {}` is a `{}`, which `replaces` cannot rename",
-                    f.name.name, f.kind.head.name
-                ),
-            )
-            .with_note(
-                "a `Cell`, a `Set` and a `Map` without `@indexed` or `@unique` are renamed by \
-                 `replaces`; a `Cache`, a `Log` and an indexed `Map` keep every entry, expiry or posting under \
-                 a storage key of its own that carries the field's name. Keep the collection's \
-                 name, or move its entries with a `migrate from` step into a new field",
-            )
-        })
-        .collect();
+    // Every storage kind is renamed by `replaces` (#3793, #4482): a `Cell` is read under its old
+    // key, and a `Map`, `Set`, `Cache` or `Log` has its per-entry keys moved on the first load.
     let fields: Vec<(&Ident, Option<&Ident>)> = agent
         .store_fields
         .iter()
         .map(|f| (&f.name, f.replaces.as_ref()))
         .collect();
-    errors.extend(check(&fields, "agent"));
-    errors
+    check(&fields, "agent")
 }
 
 fn check(fields: &[(&Ident, Option<&Ident>)], owner: &str) -> Vec<CompileError> {

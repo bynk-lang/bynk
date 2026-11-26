@@ -712,7 +712,7 @@ fn websocket_lifecycle_call(
                     TsStmt::expr_stmt(
                         call(
                             member(ident("__c"), "remember"),
-                            vec![TsExpr::array(c), last],
+                            vec![TsExpr::array(c), last, member(ident(svc), "maxFrame")],
                         ),
                         None,
                     ),

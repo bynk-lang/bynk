@@ -75,6 +75,7 @@
 /book/guides/effects-and-capabilities/share-a-handler-step/
 /book/guides/effects-and-capabilities/share-across-contexts/
 /book/guides/effects-and-capabilities/sign-and-verify-data/
+/book/guides/effects-and-capabilities/store-a-password/
 /book/guides/effects-and-capabilities/store-files-in-r2/
 /book/guides/effects-and-capabilities/synchronous-and-asynchronous-sends/
 /book/guides/effects-and-capabilities/understand-the-capability-model/
@@ -135,6 +136,7 @@
 /book/guides/type-system/
 /book/guides/type-system/constructors-for-generic-types/
 /book/guides/type-system/declare-eq-bounds/
+/book/guides/type-system/decode-a-third-party-webhook/
 /book/guides/type-system/decode-json/
 /book/guides/type-system/decode-yaml/
 /book/guides/type-system/define-and-validate/
@@ -348,7 +350,9 @@
 /book/reference/diagnostics/bynk.d1.sql_invalid/
 /book/reference/diagnostics/bynk.d1.sql_param_count/
 /book/reference/diagnostics/bynk.dependency.path_outside_root/
+/book/reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /book/reference/diagnostics/bynk.deploy.agent_move_refused/
+/book/reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /book/reference/diagnostics/bynk.deploy.asset_path_conflict/
 /book/reference/diagnostics/bynk.deploy.binding_collision/
 /book/reference/diagnostics/bynk.deploy.context_in_two_groups/
@@ -1515,7 +1519,9 @@
 /reference/diagnostics/bynk.d1.sql_invalid/
 /reference/diagnostics/bynk.d1.sql_param_count/
 /reference/diagnostics/bynk.dependency.path_outside_root/
+/reference/diagnostics/bynk.deploy.accept_fresh_agent_unused/
 /reference/diagnostics/bynk.deploy.agent_move_refused/
+/reference/diagnostics/bynk.deploy.agent_starts_fresh/
 /reference/diagnostics/bynk.deploy.asset_path_conflict/
 /reference/diagnostics/bynk.deploy.binding_collision/
 /reference/diagnostics/bynk.deploy.context_in_two_groups/
@@ -2062,7 +2068,6 @@
 /reference/diagnostics/bynk.store.kind_arity/
 /reference/diagnostics/bynk.store.kind_unsupported/
 /reference/diagnostics/bynk.store.log_needs_clock/
-/reference/diagnostics/bynk.store.replaces_collection/
 /reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
@@ -2168,6 +2173,7 @@
 /reference/diagnostics/bynk.transition.no_step_reference/
 /reference/diagnostics/bynk.transition.not_bool/
 /reference/diagnostics/bynk.types.analytics_point_shape/
+/reference/diagnostics/bynk.types.annotation_unknown/
 /reference/diagnostics/bynk.types.argument_mismatch/
 /reference/diagnostics/bynk.types.asset_at_boundary/
 /reference/diagnostics/bynk.types.bad_field_default/
@@ -2184,6 +2190,9 @@
 /reference/diagnostics/bynk.types.deprecated_json_error/
 /reference/diagnostics/bynk.types.derives_automatic/
 /reference/diagnostics/bynk.types.derives_field_not_orderable/
+/reference/diagnostics/bynk.types.discriminator_bad_arg/
+/reference/diagnostics/bynk.types.discriminator_collides/
+/reference/diagnostics/bynk.types.discriminator_not_sum/
 /reference/diagnostics/bynk.types.duplicate_example/
 /reference/diagnostics/bynk.types.duplicate_literal_arm/
 /reference/diagnostics/bynk.types.duplicate_pattern_field/

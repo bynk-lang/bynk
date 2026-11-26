@@ -28,6 +28,7 @@ records, and `Result`/`Option` errors-as-values, all checked before emission.
 - [Recursive generic types](/book/guides/type-system/recursive-generic-types/)
 - [Handle money correctly](/book/guides/type-system/handle-money-correctly/)
 - [Rename a field safely](/book/guides/type-system/rename-a-field-safely/)
+- [Decode a third-party webhook into typed values](/book/guides/type-system/decode-a-third-party-webhook/)
 - [Understand ordering your own types](/book/concepts/type-system/ordering-your-own-types/)
 - [Generic code that crosses the boundary](/book/guides/type-system/generic-code-that-crosses-the-boundary/)
 - [Constructors for generic types](/book/guides/type-system/constructors-for-generic-types/)

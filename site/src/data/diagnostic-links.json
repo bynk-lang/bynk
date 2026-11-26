@@ -2065,6 +2065,9 @@
   "bynk.transition.not_bool": [
     "/reference/agent-invariants/#step-invariants"
   ],
+  "bynk.types.annotation_unknown": [
+    "/reference/types/#field-name"
+  ],
   "bynk.types.argument_mismatch": [
     "/reference/types/"
   ],
@@ -2106,6 +2109,15 @@
   ],
   "bynk.types.derives_field_not_orderable": [
     "/reference/types/#ordering-your-own-types"
+  ],
+  "bynk.types.discriminator_bad_arg": [
+    "/reference/types/#field-name"
+  ],
+  "bynk.types.discriminator_collides": [
+    "/reference/types/#field-name"
+  ],
+  "bynk.types.discriminator_not_sum": [
+    "/reference/types/#field-name"
   ],
   "bynk.types.duplicate_example": [
     "/reference/testing/#val-example"
@@ -2171,12 +2183,6 @@
     "/reference/types/#field-name"
   ],
   "bynk.types.field_name_invalid": [
-    "/reference/types/#field-name"
-  ],
-  "bynk.types.field_name_not_request_record": [
-    "/reference/types/#field-name"
-  ],
-  "bynk.types.field_name_record_not_boundary": [
     "/reference/types/#field-name"
   ],
   "bynk.types.field_refinement_not_base": [

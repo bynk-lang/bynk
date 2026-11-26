@@ -1,0 +1,3 @@
+commons test {
+  type Event = | @name("created") Created(id: Int) | @name("created") Made(id: Int)
+}

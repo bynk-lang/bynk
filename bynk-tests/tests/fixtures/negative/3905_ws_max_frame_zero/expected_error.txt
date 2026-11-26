@@ -1,0 +1,2 @@
+bynk.http.limits_invalid_field `limits` `maxFrame` must be a positive `Int` literal
+# exact

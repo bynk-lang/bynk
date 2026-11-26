@@ -311,26 +311,41 @@ fn a_map_and_a_set_are_renamed_with_replaces() {
 }
 
 #[test]
-fn a_cache_a_log_and_an_indexed_map_cannot_yet_be_renamed_with_replaces() {
-    let p = agent_project("store-collection-refused");
-    for (kind, extra) in [
-        ("Cache[String, Int]", " @ttl(5.minutes)"),
-        ("Log[Int]", ""),
-        ("Map[String, Int]", " @indexed(by: id)"),
-        // `@unique` keeps the same postings `@indexed` does.
-        ("Map[String, Order]", " @unique(by: customer)"),
-    ] {
-        let err = p.err(
-            &cart(&format!("  store visited: {kind}{extra} replaces seen")).replace(
-                "agent Cart",
-                "type Order = { customer: String, total: Int }\n\nagent Cart",
-            ),
-        );
+fn a_cache_a_log_and_an_indexed_map_are_renamed_with_replaces() {
+    // #4482 (part B): every collection kind, including an index and a `Cache`'s expiries.
+    let p = agent_project("store-collection-all");
+    let before = [
+        "  store sessions: Cache[String, Int] @ttl(5.minutes)",
+        "  store trail: Log[Int]",
+        "  store orders: Map[String, Order] @indexed(by: customer)",
+        "  store accounts: Map[String, Order] @unique(by: customer)",
+    ];
+    let after = [
+        "  store live: Cache[String, Int] @ttl(5.minutes) replaces sessions",
+        "  store journal: Log[Int] replaces trail",
+        "  store purchases: Map[String, Order] @indexed(by: customer) replaces orders",
+        "  store holders: Map[String, Order] @unique(by: customer) replaces accounts",
+    ];
+    let with_order = |fields: &[&str]| {
+        cart(&fields.join("\n")).replace(
+            "agent Cart",
+            "type Order = { customer: String, total: Int }\n\nagent Cart",
+        )
+    };
+    p.ok(&with_order(&before));
+    assert_eq!(agent_version(&p.lock()), "1");
+    p.ok(&with_order(&after));
+    let lock = p.lock();
+    assert_eq!(agent_version(&lock), "2", "a rename is a step: {lock}");
+    for old in ["sessions", "trail", "orders", "accounts"] {
         assert!(
-            err.contains("bynk.store.replaces_collection"),
-            "{kind}: {err}"
+            lock.contains(&format!("renamed_from = [\"{old}\"]")),
+            "{lock}"
         );
     }
+    // The clause stays: no change.
+    p.ok(&with_order(&after));
+    assert_eq!(agent_version(&p.lock()), "2");
 }
 
 #[test]
@@ -339,6 +354,82 @@ fn the_non_additive_refusal_names_replaces_for_a_cell() {
     p.ok(&cart("  store owner: Cell[String]"));
     let err = p.err(&cart("  store ownerName: Cell[String]"));
     assert!(err.contains("replaces owner"), "{err}");
+}
+
+// ---- wire names (#3975) -----------------------------------------------------
+
+#[test]
+fn an_event_field_is_recorded_under_its_wire_name() {
+    let p = event_project("wire-name-recorded");
+    p.ok(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int,",
+        "id: id, captured: 1",
+    ));
+    let lock = p.lock();
+    assert!(lock.contains("name = \"amount_captured\""), "{lock}");
+    assert!(
+        !lock.contains("name = \"captured\""),
+        "the Bynk name is not the recorded key: {lock}"
+    );
+}
+
+#[test]
+fn changing_an_event_fields_wire_name_is_a_rename_to_declare() {
+    let p = event_project("wire-name-change");
+    p.ok(&event(
+        "  id: String,\n  captured: Int,",
+        "id: id, captured: 1",
+    ));
+    let before = p.lock();
+
+    // The Bynk name is unchanged, but the key a payload carries is not: that is a removal and an
+    // addition without a default, as for any rename.
+    let refused = p.err(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int,",
+        "id: id, captured: 1",
+    ));
+    assert!(
+        refused.contains("bynk.event.non_additive_schema_change"),
+        "{refused}"
+    );
+    assert_eq!(p.lock(), before, "a refused build leaves the lock alone");
+
+    // Declared with `replaces`, which names the previous key, it is a recorded step.
+    p.ok(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int replaces captured,",
+        "id: id, captured: 1",
+    ));
+    let lock = p.lock();
+    assert_eq!(schema(&lock), "2", "{lock}");
+    assert!(lock.contains("renamed_from = [\"captured\"]"), "{lock}");
+    assert!(lock.contains("name = \"amount_captured\""), "{lock}");
+}
+
+#[test]
+fn a_clause_naming_the_fields_own_wire_name_is_refused() {
+    let p = event_project("wire-name-self");
+    let refused = p.err(&event(
+        "  id: String,\n  @name(\"amount_captured\") captured: Int replaces amount_captured,",
+        "id: id, captured: 1",
+    ));
+    assert!(refused.contains("replaces itself"), "{refused}");
+}
+
+#[test]
+fn a_wire_name_inside_a_stored_record_is_a_change_to_the_stored_shape() {
+    let p = agent_project("wire-name-store");
+    let source = |field: &str| {
+        format!(
+            "context shop\n\ntype Prefs = {{\n  {field}\n}}\n\nagent Cart {{\n  key id: String\n  store prefs: Cell[Prefs]\n\n  on call ping() -> Effect[Int] {{\n    1\n  }}\n}}\n"
+        )
+    };
+    p.ok(&source("size: Int = 1,"));
+    let before = p.lock();
+    // The stored value's key moves from `size` to `sz`: the lock sees the path go, as for a rename
+    // inside a stored record, and wants a `migrate` step.
+    let refused = p.err(&source("@name(\"sz\") size: Int = 1,"));
+    assert!(refused.contains("non_additive"), "{refused}");
+    assert_eq!(p.lock(), before);
 }
 
 // ---- a record field inside a stored value (#4483) ---------------------------

@@ -19,7 +19,7 @@ pub(super) fn enum_schema(sum: &WireSum) -> Option<Map<String, Value>> {
     if sum.variants.is_empty() || sum.variants.iter().any(|v| !v.payload.is_empty()) {
         return None;
     }
-    let names: Vec<&str> = sum.variants.iter().map(|v| v.name.as_str()).collect();
+    let names: Vec<&str> = sum.variants.iter().map(|v| v.wire_name.as_str()).collect();
     Some(Map::from_iter([
         ("type".to_string(), json!("string")),
         ("enum".to_string(), json!(names)),

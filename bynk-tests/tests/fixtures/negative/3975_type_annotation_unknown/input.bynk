@@ -1,0 +1,4 @@
+commons test {
+  @label("x")
+  type Event = | Created(id: Int)
+}

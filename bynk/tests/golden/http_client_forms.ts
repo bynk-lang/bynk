@@ -483,13 +483,17 @@ export function __queryString(wire: JsonValue, fields: readonly __QueryField[]):
     if (typeof v === "object" && !globalThis.Array.isArray(v)) {
       if (v.kind === "None") return undefined;
       if (v.kind === "Some") return leaf(v.value ?? null);
-      return typeof v.kind === "string" ? v.kind : undefined;
+      // A payload-less sum's one value is its variant's wire name, under whatever key its
+      // `@discriminator` gave it.
+      const first = globalThis.Object.values(v)[0];
+      return typeof first === "string" ? first : undefined;
     }
     return globalThis.String(v);
   };
   if (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire)) {
     for (const f of fields) {
-      const value = wire[f.name];
+      // The wire form is keyed by wire name.
+      const value = wire[f.wire ?? f.name];
       if (value === undefined) continue;
       for (const item of globalThis.Array.isArray(value) ? value : [value]) {
         const text = leaf(item);
@@ -553,7 +557,7 @@ export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[])
   // A field is a list when its wire value is an array.
   const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
   const lists = new globalThis.Set(
-    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+    fields.filter((f) => globalThis.Array.isArray(record[f.wire ?? f.name])).map((f) => f.wire ?? f.name),
   );
   new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
     const bad = (expected: string): never => {
@@ -1094,7 +1098,7 @@ export function __deserialise_Note(json: __JsonValue, path: string = "$"): Resul
 export function __serialise_Prefs(value: __Wire_Prefs): __JsonValue {
   return {
     theme: value.theme as __JsonValue,
-    lang: __serialise_Option_String(value.lang),
+    "lang-pref": __serialise_Option_String(value.lang),
     visits: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.visits),
   };
 }
@@ -1108,7 +1112,7 @@ export function __deserialise_Prefs(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.theme`, expected: "string", actual: typeof obj["theme"] });
   }
   const __theme = obj["theme"];
-  const __r_lang = __deserialise_Option_String(obj["lang"], `${path}.lang`);
+  const __r_lang = __deserialise_Option_String(obj["lang-pref"], `${path}.lang-pref`);
   if (__r_lang.tag === "Err") return __r_lang;
   const __lang = __r_lang.value;
   const __d_visits: __JsonValue = "visits" in obj ? obj["visits"] : 1;
@@ -1363,7 +1367,7 @@ const __route_api_postUpload: __Route = {
 const __route_api_getPrefs: __Route = {
   method: "GET",
   path: "/prefs",
-  contract: "0ddac1a6cd1ffcba",
+  contract: "90a57762833ca81a",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -1388,11 +1392,11 @@ const __route_api_getOrigin: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "6a3327eeb1bf5aa5",
+    service: "7bc2f70e9a2b3dac",
     routes: {
       postNotes: "4b821cfe592cf4a2",
       postUpload: "f97755165e28a732",
-      getPrefs: "0ddac1a6cd1ffcba",
+      getPrefs: "90a57762833ca81a",
       getOrigin: "9b5bc1bd95601bb9",
     },
   },
@@ -1435,7 +1439,7 @@ export function createClient(options: ClientOptions = {}) {
       getPrefs: (cookies: GetPrefsCookies, init?: globalThis.RequestInit): globalThis.Promise<GetPrefsResponse | CallFailure> => __call(options, init, __route_api_getPrefs, () => {
         const __w_cookies: { [k: string]: JsonValue } = {};
         __w_cookies["theme"] = cookies.theme as __JsonValue;
-        if (cookies.lang !== undefined) __w_cookies["lang"] = __serialise_Option_String(__nullToOpt(cookies.lang, (x0) => x0));
+        if (cookies.lang !== undefined) __w_cookies["lang-pref"] = __serialise_Option_String(__nullToOpt(cookies.lang, (x0) => x0));
         if (cookies.visits !== undefined) __w_cookies["visits"] = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(cookies.visits);
         const __c_cookies = __checked(__w_cookies, __deserialise_Prefs, "cookies");
         if (__c_cookies.tag === "Err") return __c_cookies;

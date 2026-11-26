@@ -46,7 +46,7 @@ const __route_api_getOrderById: __Route = {
 const __route_api_getSearch: __Route = {
   method: "GET",
   path: "/search",
-  contract: "2d4544f1493d4088",
+  contract: "b24aaa695af85a25",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
@@ -71,12 +71,12 @@ const __route_api_deleteOrderById: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "761dcb2dd0ff7e23",
+    service: "76d9e01fecc11ea8",
     routes: {
       postOrders: "a0cd3f51d4395a9c",
       getOrders: "8ba5cacf5f1a167c",
       getOrderById: "963bc9758fe525f1",
-      getSearch: "2d4544f1493d4088",
+      getSearch: "b24aaa695af85a25",
       deleteOrderById: "4bcc28c604f336bc",
     },
   },
@@ -112,7 +112,7 @@ export function createClient(options: ClientOptions = {}) {
       getSearch: (query: GetSearchQuery, init?: globalThis.RequestInit): globalThis.Promise<GetSearchResponse | CallFailure> => __call(options, init, __route_api_getSearch, () => {
         const __w_query: { [k: string]: JsonValue } = {};
         __w_query["q"] = query.q as __JsonValue;
-        if (query.page !== undefined) __w_query["page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
+        if (query.page !== undefined) __w_query["x-page"] = __serialise_Option_Int(__nullToOpt(query.page, (x0) => x0));
         const __c_query = __checked(__w_query, __deserialise_Search, "query");
         if (__c_query.tag === "Err") return __c_query;
         return Ok({ params: {}, query: __queryString(__w_query, [{ name: "q" }, { name: "page", wire: "x-page" }]) });

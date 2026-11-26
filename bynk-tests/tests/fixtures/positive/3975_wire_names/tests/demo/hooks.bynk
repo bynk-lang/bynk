@@ -1,0 +1,46 @@
+suite demo.hooks
+
+case "a field is read under its wire name" {
+	expect captured("{\"id\": \"c\", \"amount_captured\": 7, \"content-type\": \"a/b\"}") == 7
+	expect contentType("{\"id\": \"c\", \"amount_captured\": 7, \"content-type\": \"a/b\"}") == "a/b"
+}
+
+case "the Bynk name is not a wire key" {
+	expect captured("{\"id\": \"c\", \"captured\": 7, \"content-type\": \"a/b\"}") == -1
+}
+
+case "an optional wire-named field is absent or present" {
+	expect requestId("{\"id\": \"c\", \"amount_captured\": 7, \"content-type\": \"a/b\"}") == None
+	expect requestId(
+		"{\"id\": \"c\", \"amount_captured\": 7, \"content-type\": \"a/b\", \"x-request-id\": {\"kind\": \"Some\", \"value\": \"r1\"}}"
+	) == Some("r1")
+}
+
+case "a decode error path names the wire key" {
+	expect errorPath("{\"id\": \"c\", \"amount_captured\": \"seven\", \"content-type\": \"a/b\"}") == "$.amount_captured"
+}
+
+case "a sum is discriminated by its key, and a variant by its wire name" {
+	expect describe("{\"type\": \"charge.succeeded\", \"data\": {\"id\": \"c1\", \"amount_captured\": 1, \"content-type\": \"x\"}}") == "succeeded c1"
+	expect describe("{\"type\": \"charge.refunded\", \"object\": {\"id\": \"c2\", \"amount_captured\": 1, \"content-type\": \"x\"}}") == "refunded c2"
+	expect describe("{\"type\": \"Ping\"}") == "ping"
+}
+
+case "the default key and the Bynk variant name no longer read" {
+	expect describe("{\"kind\": \"Ping\"}") == "<undecodable>"
+	expect describe("{\"type\": \"ChargeSucceeded\", \"data\": {\"id\": \"c1\", \"amount_captured\": 1, \"content-type\": \"x\"}}") == "<undecodable>"
+}
+
+case "an enum reads by wire name, as a bare string or tagged" {
+	expect action("\"opened\"") == "Opened"
+	expect action("{\"kind\": \"closed\"}") == "Closed"
+	expect action("\"Opened\"") == "<undecodable>"
+}
+
+case "a value is written under the wire names" {
+	expect encodedCharge() == "{\"id\":\"ch_1\",\"amount_captured\":700,\"content-type\":\"text/plain\",\"x-request-id\":{\"kind\":\"None\"}}"
+	expect encodedHook() == "{\"type\":\"charge.refunded\",\"object\":{\"id\":\"ch_1\",\"amount_captured\":700,\"content-type\":\"text/plain\",\"x-request-id\":{\"kind\":\"None\"}}}"
+	expect encodedPing() == "{\"type\":\"Ping\"}"
+	expect encodedAction() == "{\"kind\":\"opened\"}"
+	expect encodedBox() == "{\"box-id\":3}"
+}

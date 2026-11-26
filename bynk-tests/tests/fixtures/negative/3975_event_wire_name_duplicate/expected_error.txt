@@ -1,0 +1,2 @@
+bynk.types.field_name_duplicate
+two fields of `Charged` read the same wire name `id`

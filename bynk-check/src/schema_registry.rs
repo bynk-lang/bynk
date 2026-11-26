@@ -74,7 +74,8 @@ fn snapshot(event: &EventDecl) -> Vec<FieldShape> {
         .fields
         .iter()
         .map(|f| FieldShape {
-            name: f.name.name.clone(),
+            // #3975: an event field is recorded under its wire name, the key a payload carries.
+            name: f.wire_name().unwrap_or_else(|| f.name.name.clone()),
             ty: canon_type(&f.type_ref),
             default: f.init.is_some(),
             renamed_from: f.replaces.iter().map(|o| o.name.clone()).collect(),
@@ -1857,15 +1858,18 @@ fn non_additive_state_error(
                  is a rename, deployed `{from}` values are not carried over to `{to}` — they \
                  would read as `{to}`'s zero"
             ));
-            // #3793: a `Cell` rename needs no step: `replaces` reads the old key.
-            if stored_fields
+            // #3793, #4482: a rename of any storage kind needs no step: `replaces` reads a `Cell`'s
+            // old key, and moves a collection's entries on the first load.
+            if let Some(kind) = stored_fields
                 .iter()
-                .any(|f| f.name == *from && f.kind == "Cell")
+                .find(|f| f.name == *from)
+                .map(|f| f.kind.as_str())
             {
                 err = err.with_note(format!(
                     "if it is a rename, write `{to}`'s declaration with `replaces {from}` after \
-                     its type (`store {to}: Cell[…] replaces {from}`): the stored value is then \
-                     read under `{from}`, and no `migrate` step is needed"
+                     its type (`store {to}: {kind}[…] replaces {from}`): the stored value is then \
+                     read under `{from}` (a collection's entries are moved on the first load), \
+                     and no `migrate` step is needed"
                 ));
             }
             // State-migrations S2 (#2224): name the step that carries it. A

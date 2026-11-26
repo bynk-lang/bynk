@@ -210,3 +210,84 @@ test("a request from outside cannot choose its id or claim a parent", async () =
   assert.notEqual(got[0]!.id, "forged-id");
   assert.equal(got[0]!.parent, null);
 });
+
+// #3787: each step carries `start_ms`, its start as an offset from the request's start, on the clock
+// `duration_ms` is measured on, so a client can draw a true timeline.
+const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(done, ms));
+
+type StepLine = { start_ms: number; ms: number; target: string };
+
+test("a step carries its start offset from the request's start, on the clock of duration_ms", async () => {
+  const { line } = await traced(async () => {
+    await sleep(15);
+    await traceStep("capability", "Db.query", null)(sleep(5));
+    return new Response("ok");
+  });
+  const [step] = line.steps as StepLine[];
+  // It began after the handler's own 15 ms, and inside the request.
+  assert.ok(step!.start_ms >= 10, `start_ms ${step!.start_ms}`);
+  assert.ok(step!.start_ms + step!.ms <= (line.duration_ms as number) + 1, "the step ends inside the request");
+});
+
+test("two concurrent steps report overlapping intervals", async () => {
+  const { line } = await traced(async () => {
+    await Promise.all([
+      traceStep("call", "other.authorise", null)(sleep(40)),
+      traceStep("agent", "Ledger.tally", null)(sleep(40)),
+    ]);
+    return new Response("ok");
+  });
+  const [a, b] = line.steps as StepLine[];
+  // Each began before the other ended.
+  assert.ok(a!.start_ms < b!.start_ms + b!.ms, JSON.stringify(line.steps));
+  assert.ok(b!.start_ms < a!.start_ms + a!.ms, JSON.stringify(line.steps));
+});
+
+test("sequential steps do not overlap, and the handler's own time is the gap between them", async () => {
+  const { line } = await traced(async () => {
+    await traceStep("capability", "Db.first", null)(sleep(10));
+    await sleep(30); // the handler's own computation
+    await traceStep("capability", "Db.second", null)(sleep(10));
+    return new Response("ok");
+  });
+  const [a, b] = line.steps as StepLine[];
+  assert.ok(a!.start_ms + a!.ms <= b!.start_ms, JSON.stringify(line.steps));
+  // The gap is the handler's 30 ms, give or take timer slack.
+  assert.ok(b!.start_ms - (a!.start_ms + a!.ms) >= 25, JSON.stringify(line.steps));
+});
+
+test("steps are listed in the order they began, and a step that settles last still lists first", async () => {
+  const { line } = await traced(async () => {
+    await Promise.all([
+      traceStep("call", "slow", null)(sleep(40)),
+      traceStep("call", "fast", null)(sleep(1)),
+    ]);
+    return new Response("ok");
+  });
+  const steps = line.steps as StepLine[];
+  assert.deepEqual(steps.map((s) => s.target), ["slow", "fast"]);
+  for (let i = 1; i < steps.length; i++) assert.ok(steps[i]!.start_ms >= steps[i - 1]!.start_ms);
+});
+
+test("a callee's steps are relative to its own start, and it stays joinable through request and parent", async () => {
+  const got = await lines(async () => {
+    await traceFetch(
+      "callee",
+      async () => {
+        await sleep(20); // the callee's own time before it makes a call
+        traceStep("capability", "Db.query", null)(1);
+        return new Response("ok");
+      },
+      new Request("http://x/_bynk/call/shop.pay.charge", {
+        headers: { [TRACE_REQUEST_HEADER]: "c1", [TRACE_PARENT_HEADER]: "p0" },
+      }),
+      {},
+      {},
+    );
+  });
+  assert.equal(got[0]!.id, "c1");
+  assert.equal(got[0]!.parent, "p0");
+  const [step] = got[0]!.steps as StepLine[];
+  // Measured from the callee's own start (its 20 ms of work), not from anything the caller's clock said.
+  assert.ok(step!.start_ms >= 15 && step!.start_ms <= (got[0]!.duration_ms as number), JSON.stringify(got[0]));
+});

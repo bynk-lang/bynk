@@ -714,14 +714,12 @@ values are not carried over, and the build is refused (`bynk.agent.non_additive_
   (`bynk.field.replaces_unknown`), and not one the lock records beside the new name
   (`bynk.field.replaces_conflict`). It cannot name the field itself, a field the agent still declares, or a
   name another field replaces (`bynk.field.replaces_conflict`).
-- **A `Cell`, a `Set` or a `Map`.** A `Map` or `Set` keeps each entry under a storage key that carries the
-  field's name, so the first load after the deploy moves its entries to the new name, in batches (a
-  collection's cost grows with its size, and a crash part-way resumes on the next
-  load; a rolled-back deploy that wrote under the old name is moved on the next roll-forward). A record a
-  [`migrate from` step](#migrations) covers is left for the step, which reads the old name. A `Cache`, a `Log`
-  and a `Map` with `@indexed` or `@unique` are not renamed this way yet
-  (`bynk.store.replaces_collection`): keep the collection's name, or move its entries with a
-  [`migrate from` step](#migrations).
+- **Every storage kind.** A `Cell` is read under its old key. A `Map`, `Set`, `Cache` or `Log` keeps each
+  entry (and a `Cache`'s expiry, and the postings of an `@indexed` or `@unique` index) under a storage key that
+  carries the field's name, so the first load after the deploy moves them to the new name, in batches (a
+  collection's cost grows with its size, and a crash part-way resumes on the next load; a rolled-back deploy
+  that wrote under the old name is moved on the next roll-forward). A record a
+  [`migrate from` step](#migrations) covers is left for the step, which reads the old name.
 - **Keep the clause while a version needs it.** While any stored version the lock still holds keeps the
   value under the old name, deleting the clause would read those records as the field's zero, so the build is
   refused (`bynk.field.replaces_needed`). Once `bynk migrate` has raised the class's [floor](#the-floor) past

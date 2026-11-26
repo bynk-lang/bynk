@@ -28,8 +28,10 @@ use super::protocol::{
 /// signing key written to `key_out`. Returns the `key = "…"` line consumers
 /// pin.
 pub fn init(dir: &Path, id: &str, key_out: &Path) -> Result<String, String> {
-    if bynk_project::manifest::registry_name_problem(id).is_some() {
-        return Err(format!("`{id}` isn't a registry id: use `[a-z][a-z0-9-]*`"));
+    // #4512: an id gets the segment rule only. The `[registries]` name rule also reserves
+    // `bynk`, which is the first-party registry's own id.
+    if let Some(problem) = bynk_project::manifest::registry_id_problem(id) {
+        return Err(format!("`{id}` isn't a registry id: it {problem}"));
     }
     let config_path = dir.join("config.json");
     if config_path.exists() {

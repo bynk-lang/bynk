@@ -128,10 +128,10 @@ export function __deserialise_Mode(json: __JsonValue, path: string = "$"): Resul
 
 export function __serialise_UploadHeaders(value: UploadHeaders): __JsonValue {
   return {
-    length: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.length),
-    key: __serialise_Option_IdempotencyKey(value.key),
-    tags: __serialise_List_String(value.tags),
-    mode: __serialise_Option_Mode(value.mode),
+    "content-length": ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.length),
+    "idempotency-key": __serialise_Option_IdempotencyKey(value.key),
+    "x-tag": __serialise_List_String(value.tags),
+    "x-mode": __serialise_Option_Mode(value.mode),
     priority: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.priority),
   };
 }
@@ -141,24 +141,24 @@ export function __deserialise_UploadHeaders(json: __JsonValue, path: string = "$
     return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
   }
   const obj = json as { [k: string]: __JsonValue };
-  if (typeof obj["length"] !== "number") {
-    return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "number", actual: typeof obj["length"] });
+  if (typeof obj["content-length"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content-length`, expected: "number", actual: typeof obj["content-length"] });
   }
-  if (!globalThis.Number.isSafeInteger(obj["length"])) {
-    return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "safe integer", actual: String(obj["length"]) });
+  if (!globalThis.Number.isSafeInteger(obj["content-length"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.content-length`, expected: "safe integer", actual: String(obj["content-length"]) });
   }
-  const __length = obj["length"];
+  const __length = obj["content-length"];
   if (!(__length >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.length`, violation: { field: "length", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __length } });
+    return Err({ kind: "RefinementViolation", path: `${path}.content-length`, violation: { field: "length", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __length } });
   }
-  const __r_key = __deserialise_Option_IdempotencyKey(obj["key"], `${path}.key`);
+  const __r_key = __deserialise_Option_IdempotencyKey(obj["idempotency-key"], `${path}.idempotency-key`);
   if (__r_key.tag === "Err") return __r_key;
   const __key = __r_key.value;
-  const __d_tags: __JsonValue = "tags" in obj ? obj["tags"] : [];
-  const __r_tags = __deserialise_List_String(__d_tags, `${path}.tags`);
+  const __d_tags: __JsonValue = "x-tag" in obj ? obj["x-tag"] : [];
+  const __r_tags = __deserialise_List_String(__d_tags, `${path}.x-tag`);
   if (__r_tags.tag === "Err") return __r_tags;
   const __tags = __r_tags.value;
-  const __r_mode = __deserialise_Option_Mode(obj["mode"], `${path}.mode`);
+  const __r_mode = __deserialise_Option_Mode(obj["x-mode"], `${path}.x-mode`);
   if (__r_mode.tag === "Err") return __r_mode;
   const __mode = __r_mode.value;
   const __d_priority: __JsonValue = "priority" in obj ? obj["priority"] : 5;
