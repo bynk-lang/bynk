@@ -5914,24 +5914,40 @@ fn cache_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIte
 /// service-body item start, offer the `limits` section keyword. Both are lexical
 /// (offset-based), mirroring `security_completions`.
 fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    let websocket = completion::in_websocket_service_limits(text, offset);
     if completion::in_limits_field_position(text, offset) {
-        return completion::LIMITS_FIELDS
-            .iter()
-            .map(|(name, doc)| CompletionItem {
-                label: name.to_string(),
-                kind: Some(CompletionItemKind::FIELD),
-                detail: Some((*doc).to_string()),
-                insert_text: Some(format!("{name}: ")),
-                ..Default::default()
-            })
-            .collect();
+        return if websocket {
+            completion::WS_LIMITS_FIELDS
+        } else {
+            completion::LIMITS_FIELDS
+        }
+        .iter()
+        .map(|(name, doc)| CompletionItem {
+            label: name.to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some((*doc).to_string()),
+            insert_text: Some(format!("{name}: ")),
+            ..Default::default()
+        })
+        .collect();
     }
     if completion::in_service_body_item_position(text, offset, line) {
+        let (detail, snippet) = if websocket {
+            (
+                "the frame size limit for this WebSocket service",
+                "limits {\n\tmaxFrame: $0,\n}",
+            )
+        } else {
+            (
+                "request limits for this HTTP service",
+                "limits {\n\tmaxBody: $0,\n}",
+            )
+        };
         return vec![CompletionItem {
             label: "limits".to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            detail: Some("request limits for this HTTP service".to_string()),
-            insert_text: Some("limits {\n\tmaxBody: $0,\n}".to_string()),
+            detail: Some(detail.to_string()),
+            insert_text: Some(snippet.to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];

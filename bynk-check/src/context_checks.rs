@@ -5933,16 +5933,21 @@ fn validate_limits_policy(
 ) {
     // A request-body ceiling is an HTTP-surface concern; it is meaningless on any
     // other protocol (mirrors the `cors_not_http` / `security_not_http` gate).
+    // #3905: a `from websocket` service takes `limits { maxFrame }`, its own frame ceiling.
+    if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
+        validate_ws_limits_policy(policy, errors);
+        return;
+    }
     if !matches!(service.protocol, ServiceProtocol::Http) {
         errors.push(
             CompileError::new(
                 "bynk.http.limits_not_http",
                 policy.span,
-                "a `limits { }` policy is only valid on a `from http` service",
+                "a `limits { }` policy is only valid on a `from http` or `from websocket` service",
             )
             .with_note(
-                "a request-body size ceiling governs the HTTP surface, \
-                 which only a `from http` service has",
+                "a size ceiling governs the HTTP request body or a WebSocket frame, \
+                 which only a `from http` or `from websocket` service has",
             ),
         );
         return;
@@ -5958,7 +5963,7 @@ fn validate_limits_policy(
                     field.name.span,
                     format!("unknown `limits` field `{}`", field.name.name),
                 )
-                .with_note("the fields are `maxBody`, and (for `@multipart` routes) `maxFile` and `maxParts`"),
+                .with_note("the fields are `maxBody`, and (for `@multipart` routes) `maxFile` and `maxParts`; `maxFrame` bounds a `from websocket` service"),
             );
         }
     }
@@ -5989,6 +5994,43 @@ fn validate_limits_policy(
                 "`limits` `maxBody` must be a positive `Int` literal — a byte count (e.g. `1_048_576`) — no larger than 524_288_000",
             )
             .with_note(MAX_BODY_NOTE),
+        );
+    }
+}
+
+/// #3905: a `from websocket` service's `limits { }`: the closed field set is `maxFrame`, a positive
+/// `Int` byte count no larger than Cloudflare's own 32 MiB inbound message limit. The request-body
+/// fields belong to `from http`.
+fn validate_ws_limits_policy(policy: &LimitsPolicy, errors: &mut Vec<CompileError>) {
+    for field in &policy.fields {
+        if field.name.name != "maxFrame" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.limits_unknown_field",
+                    field.name.span,
+                    format!(
+                        "unknown `limits` field `{}` on a `from websocket` service",
+                        field.name.name
+                    ),
+                )
+                .with_note(
+                    "a WebSocket service's only field is `maxFrame`; `maxBody`, `maxFile` and `maxParts` bound an HTTP request",
+                ),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("maxFrame")
+        && !matches!(&expr.kind, ExprKind::IntLit { value: n, .. } if (1..=MAX_FRAME_CEILING).contains(n))
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.http.limits_invalid_field",
+                expr.span,
+                "`limits` `maxFrame` must be a positive `Int` literal, a byte count (e.g. `262_144`), no larger than 33_554_432",
+            )
+            .with_note(
+                "a frame over `maxFrame` is closed with `1009` before it is parsed, and one the server sends over it faults the send; 33_554_432 (32 MiB) is Cloudflare's own limit on an inbound message, and the default is 1_048_576",
+            ),
         );
     }
 }

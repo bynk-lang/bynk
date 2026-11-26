@@ -2513,6 +2513,10 @@ connection-lifecycle handlers:
   (`bynk.ws.open_transfer_key`).
 - **`on message`** (v0.106) — an inbound frame arrived; its parameters are the
   route params plus the decoded frame of type `I`.
+  A service may declare **`limits { maxFrame: <bytes> }`**, a positive `Int` literal of at most `33_554_432`
+  (default `1_048_576`), the largest frame it reads or sends; any other field, or a value outside the range,
+  is `bynk.http.limits_unknown_field` or `bynk.http.limits_invalid_field`. `Bytes` is admitted as `I` and as `O`:
+  binary frames exchanged as they are.
 - **`on close`** (v0.106) — **required**, exactly one: the connection ended, and the
   stored connection is disposed (typically via the owning agent). `on open` always transfers its
   connection into an agent's state and the runtime cannot tell which store entry holds it, so

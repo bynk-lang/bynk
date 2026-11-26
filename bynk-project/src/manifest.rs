@@ -167,6 +167,36 @@ pub fn registry_name_problem(name: &str) -> Option<String> {
     segment_problem(name, true)
 }
 
+/// The problem with a registry's own id (#4512): the segment rule alone, `[a-z][a-z0-9-]*`.
+///
+/// A registry's id (the `id` in its `config.json`, what `bynk registry init --id` writes) is not
+/// a project's `[registries.<name>]` key. The key reserves `bynk`, because `mirror-of = "bynk"`
+/// names the first-party registry there ([`registry_name_problem`]); the first-party registry's
+/// own id *is* `bynk`, so an id must not be held to that reservation.
+///
+/// The answer names the actual fault: empty, too long, a first character that is not a
+/// lowercase letter, or the first character that is not allowed.
+pub fn registry_id_problem(id: &str) -> Option<String> {
+    let problem = segment_problem(id, true)?;
+    if !problem.starts_with("must match") {
+        return Some(problem);
+    }
+    if !id.chars().next().is_some_and(|c| c.is_ascii_lowercase()) {
+        return Some("must start with a lowercase letter `a`-`z`".to_string());
+    }
+    // `segment_problem` has refused the id, so a refusal always comes back; were the two
+    // character sets ever to drift apart, fall back to its own wording rather than accept.
+    let Some(bad) = id
+        .chars()
+        .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-'))
+    else {
+        return Some(problem);
+    };
+    Some(format!(
+        "can't contain `{bad}`: use lowercase letters, digits and `-`"
+    ))
+}
+
 /// The environment variable a registry's token is read from (track §6.1):
 /// `BYNK_REGISTRY_<NAME>_TOKEN`, the name uppercased with `-` mapped to `_`.
 /// A registry name holds no `_`, so two names never share a variable.
@@ -730,6 +760,27 @@ mod tests {
         );
         // `acme_internal` is not a registry name, so it can't collide.
         assert!(registry_name_problem("acme_internal").is_some());
+    }
+
+    #[test]
+    fn a_registry_id_may_be_bynk_but_a_registries_name_may_not() {
+        // #4512: the first-party registry's own id is `bynk`; only the manifest key reserves it.
+        assert!(registry_id_problem("bynk").is_none());
+        assert!(registry_name_problem("bynk").is_some());
+        assert!(registry_id_problem("acme-labs").is_none());
+    }
+
+    #[test]
+    fn a_registry_id_refusal_names_the_fault() {
+        let said = |id: &str| registry_id_problem(id).unwrap_or_else(|| panic!("`{id}` is bad"));
+        assert_eq!(said(""), "is empty");
+        assert!(said("1acme").contains("start with a lowercase letter"));
+        assert!(said("-acme").contains("start with a lowercase letter"));
+        assert!(said("Acme").contains("start with a lowercase letter"));
+        assert!(said("ac me").contains("can't contain ` `"));
+        assert!(said("acme.io").contains("can't contain `.`"));
+        assert!(said("acme_labs").contains("did you mean `acme-labs`"));
+        assert!(said(&"a".repeat(65)).contains("longer than"));
     }
 
     #[test]

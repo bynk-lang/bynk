@@ -121,7 +121,7 @@ export class Board {
       const __pair = __newWebSocketPair();
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; key: unknown };
       this.__key = __decodeAgentKey(__BoardKey, __payload.key) as string;
-      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: "", args: __payload.args, key: __payload.key });
+      const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: "", args: __payload.args, max: 1048576, key: __payload.key });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
       await this.__wsOpen_live(connection, __payload.args[0] as string, { ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
