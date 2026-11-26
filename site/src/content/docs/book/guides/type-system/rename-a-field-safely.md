@@ -64,12 +64,18 @@ this way (`bynk.store.replaces_collection`).
 A record that a `store` field holds is renamed the same way, in a `Cell` or in the value of a `Map`:
 
 ```bynk,fragment
+context shop
+
 type Prefs = { size: Int replaces width }
 
 agent Cart {
 	key id: String
 	store prefs: Cell[Prefs]
 	store named: Map[String, Prefs]
+
+	on call prefs() -> Effect[Prefs] {
+		prefs
+	}
 }
 ```
 
