@@ -496,11 +496,14 @@ fn resolve_stubs(
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
             // non-existent capability. Either way it is not a seam.
-            let note = if target_kind == UnitKind::Commons {
-                "commons have no capability seams — `stub` overrides a capability the target context declares or consumes"
-            } else {
-                "a `stub` clause names a capability the target context declares or reaches through a consumed context"
-            };
+            let note = crate::cap_params::parameter_seam_note(&cap_name, target_kind, unit_tables)
+            .unwrap_or_else(|| {
+                if target_kind == UnitKind::Commons {
+                    "a commons suite's seams are the doubles of the capabilities its commons selects, and its suite-local instances".to_string()
+                } else {
+                    "a `stub` clause names a capability the target context declares or reaches through a consumed context".to_string()
+                }
+            });
             errors.push(
                 CompileError::new(
                     "bynk.stub.not_a_seam",

@@ -285,3 +285,47 @@ fn parameterised_fn_value_note_lambda_follows_the_callee_arity() {
         );
     }
 }
+
+/// #3959, track §9 and §14.1: a `stub` or `expect … called` that names a capability
+/// parameter is told what to name instead: the kind's double in a commons suite, the
+/// bound instance in a context's suite. The fixtures pin the messages; the notes are
+/// pinned here.
+#[test]
+fn a_seam_named_after_a_capability_parameter_says_what_to_name() {
+    for (fixture, code, want) in [
+        (
+            "3959_stub_parameter_commons_suite",
+            "bynk.stub.not_a_seam",
+            "the kind's own `Kv` (`given Store = Kv`) or a suite-local instance",
+        ),
+        (
+            "3959_stub_parameter_context_suite",
+            "bynk.stub.not_a_seam",
+            "stub and observe the instance of `Kv` the call binds it to",
+        ),
+        (
+            "3959_observe_parameter",
+            "bynk.observe.not_a_seam",
+            "observe the capability the call binds it to, an instance of `Kv`",
+        ),
+    ] {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/negative")
+            .join(fixture);
+        let target = bynk_driver::project::BuildTarget::Bundle;
+        let Err(failure) = super::e2e::compile_fixture(&dir, target) else {
+            panic!("{fixture}: expected a compile failure");
+        };
+        let e = failure
+            .errors
+            .iter()
+            .map(|a| &a.error)
+            .find(|e| e.category == code)
+            .unwrap_or_else(|| panic!("{fixture}: a `{code}` error"));
+        assert!(
+            e.notes.iter().any(|n| n.contains(want)),
+            "{fixture}: a note should say {want}: {:?}",
+            e.notes
+        );
+    }
+}

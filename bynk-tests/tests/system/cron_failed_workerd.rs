@@ -162,25 +162,25 @@ fn a_failed_cron_run_is_reported_on_workerd() {
     let log = || fs::read_to_string(&log_path).unwrap_or_default();
     let trigger = |cron: &str| get(port, &format!("/cdn-cgi/handler/scheduled?cron={cron}"));
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    let ok = loop {
-        if let Ok(r) = trigger("0+*+*+*+*") {
-            break r;
+    let booted = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_ready(&log_path, port, &|| match trigger("0+*+*+*+*") {
+        Ok(r) => {
+            *booted.borrow_mut() = Some(r);
+            true
         }
-        if Instant::now() > deadline {
-            let log = log();
-            drop(guard);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the worker did not answer within the boot window (likely no network \
-                 to provision {WRANGLER})\n{log}"
-            )) {
-                return;
-            }
-            unreachable!()
+        Err(_) => false,
+    }) {
+        let log = log();
+        drop(guard);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{log}"
+        )) {
+            return;
         }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+        unreachable!()
+    }
+    let ok = booted.into_inner().expect("the probe answered");
     assert_eq!(ok.0, 200, "an Ok run is a success: {ok:?}\n{}", log());
     assert!(
         ok.1.eq_ignore_ascii_case("ok"),

@@ -332,30 +332,30 @@ fn a_subscriber_mutating_the_publisher_during_the_fanout_loses_no_write_on_worke
     };
     let wranglers = Wranglers(vec![pub_child, sub_child]);
 
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if Instant::now() > deadline {
-            let logs = format!(
-                "--- publisher log ---\n{}\n--- subscriber log ---\n{}",
-                read_log(&pub_log),
-                read_log(&sub_log)
-            );
-            drop(wranglers);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "wrangler dev did not serve within the boot window (likely no \
-                 network to provision {WRANGLER})\n{logs}"
-            )) {
-                return;
-            }
-            unreachable!()
+    // Each Worker must have logged its own Ready line and answer its probe before any trigger
+    // fires.
+    let booted = wrangler::wait_until_ready(&pub_log, pub_port, &|| {
+        http("GET", pub_port, "/count", None).is_ok()
+    })
+    .and_then(|()| {
+        wrangler::wait_until_ready(&sub_log, sub_port, &|| {
+            http("GET", sub_port, "/ready", None).is_ok()
+        })
+    });
+    if let Err(why) = booted {
+        let logs = format!(
+            "--- publisher log ---\n{}\n--- subscriber log ---\n{}",
+            read_log(&pub_log),
+            read_log(&sub_log)
+        );
+        drop(wranglers);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{logs}"
+        )) {
+            return;
         }
-        let pub_up = http("GET", pub_port, "/count", None).is_ok();
-        let sub_up = http("GET", sub_port, "/ready", None).is_ok();
-        if pub_up && sub_up {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
 
     let logs = || {

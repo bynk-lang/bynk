@@ -33,7 +33,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const REQUIRE_ENV: &str = "BYNK_REQUIRE_TSC";
 
@@ -174,6 +174,7 @@ fn every_generated_client_passes_tsc_strict() {
         ("raw", fixture("raw")),
         ("shapes", shapes_project()),
         ("plain", plain_project()),
+        ("ws", fixture("ws")),
     ] {
         let dir = scratch(&format!("tsc-{name}"));
         let proj = dir.join("project");
@@ -822,9 +823,7 @@ fn skip_workerd(reason: &str) -> bool {
 /// `probe` answers `200`: the process and its port, or `None` (and a skip) where
 /// workerd cannot be had.
 fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::Wrangler>, u16)> {
-    // Its own band, clear of the other smokes'.
-    let pid = std::process::id();
-    let port = 61_000 + 2 * (pid % 2_000) as u16;
+    let [port, inspector] = wrangler::ports::free_ports();
     let log = dir.join("wrangler.log");
     let out_log = fs::File::create(&log).unwrap();
     let err_log = out_log.try_clone().unwrap();
@@ -835,7 +834,7 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
                 "--port",
                 &port.to_string(),
                 "--inspector-port",
-                &(port + 1).to_string(),
+                &inspector.to_string(),
             ])
             .current_dir(dir.join("out/workers").join(worker))
             .stdout(Stdio::from(out_log))
@@ -847,22 +846,18 @@ fn boot_workerd(dir: &Path, worker: &str, probe: &str) -> Option<(Vec<wrangler::
         return None;
     };
     let mut wranglers = vec![wrangler];
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if get(port, probe).is_ok_and(|r| r.contains("200 OK")) {
-            return Some((wranglers, port));
-        }
-        if Instant::now() > deadline {
-            let log = fs::read_to_string(&log).unwrap_or_default();
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!(
-                "the Worker did not answer within the boot window (likely no network to provision {})\n{log}",
-                wrangler::SPEC
-            ));
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&log, port, &|| {
+        get(port, probe).is_ok_and(|r| r.contains("200 OK"))
+    }) {
+        let log = fs::read_to_string(&log).unwrap_or_default();
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!(
+            "{why} (likely no network to provision {})\n{log}",
+            wrangler::SPEC
+        ));
+        return None;
     }
+    Some((wranglers, port))
 }
 
 #[test]
@@ -1097,10 +1092,8 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
     )
     .unwrap();
 
-    let pid = std::process::id();
-    let base = 56_000 + 4 * (pid % 900) as u16;
-    let (bynk_port, web_port) = (base, base + 1);
-    let spawn = |cwd: &Path, port: u16, log: &str| {
+    let [bynk_port, web_port, bynk_inspector, web_inspector] = wrangler::ports::free_ports();
+    let spawn = |cwd: &Path, port: u16, inspector: u16, log: &str| {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
@@ -1110,7 +1103,7 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
                     "--port",
                     &port.to_string(),
                     "--inspector-port",
-                    &(port + 2).to_string(),
+                    &inspector.to_string(),
                 ])
                 .current_dir(cwd)
                 .stdout(Stdio::from(out_log))
@@ -1119,8 +1112,13 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
         )
     };
     let (a, b) = (
-        spawn(&dir.join("out/workers/forms"), bynk_port, "bynk.log"),
-        spawn(&web, web_port, "web.log"),
+        spawn(
+            &dir.join("out/workers/forms"),
+            bynk_port,
+            bynk_inspector,
+            "bynk.log",
+        ),
+        spawn(&web, web_port, web_inspector, "web.log"),
     );
     let (Ok(a), Ok(b)) = (a, b) else {
         skip_workerd("could not launch npx");
@@ -1128,28 +1126,31 @@ fn a_worker_hosted_server_can_set_origin_through_the_client() {
     };
     let mut wranglers = vec![a, b];
     let path = format!("/?base=http://127.0.0.1:{bynk_port}");
-    let deadline = Instant::now() + Duration::from_secs(180);
-    let answer = loop {
-        if let Ok(r) = get(web_port, &path)
-            && r.contains("\"status\":200")
-        {
-            break r;
-        }
-        if Instant::now() > deadline {
-            let logs = format!(
-                "{}\n{}",
-                fs::read_to_string(dir.join("bynk.log")).unwrap_or_default(),
-                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
-            );
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!(
-                "the Workers did not answer within the boot window (likely no network to provision {})\n{logs}",
-                wrangler::SPEC
-            ));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+    let answered = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_all_ready(
+        &[(&dir.join("bynk.log"), bynk_port)],
+        (&dir.join("web.log"), web_port),
+        &|| match get(web_port, &path) {
+            Ok(r) if r.contains("\"status\":200") => {
+                *answered.borrow_mut() = Some(r);
+                true
+            }
+            _ => false,
+        },
+    ) {
+        let logs = format!(
+            "{}\n{}",
+            fs::read_to_string(dir.join("bynk.log")).unwrap_or_default(),
+            fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+        );
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!(
+            "{why} (likely no network to provision {})\n{logs}",
+            wrangler::SPEC
+        ));
+        return;
+    }
+    let answer = answered.into_inner().expect("the probe answered");
     wrangler::stop_all(&mut wranglers);
     assert!(
         answer.contains(r#""body":"https://app.example""#),
@@ -1540,10 +1541,8 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
     )
     .unwrap();
 
-    let pid = std::process::id();
-    let base = 60_000 + 4 * (pid % 900) as u16;
-    let (api_port, web_port) = (base, base + 1);
-    let spawn = |cwd: &Path, port: u16, log: &str| {
+    let [api_port, web_port, api_inspector, web_inspector] = wrangler::ports::free_ports();
+    let spawn = |cwd: &Path, port: u16, inspector: u16, log: &str| {
         let out_log = fs::File::create(dir.join(log)).unwrap();
         let err_log = out_log.try_clone().unwrap();
         wrangler::Wrangler::spawn(
@@ -1553,7 +1552,7 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
                     "--port",
                     &port.to_string(),
                     "--inspector-port",
-                    &(port + 2).to_string(),
+                    &inspector.to_string(),
                 ])
                 .current_dir(cwd)
                 .stdout(Stdio::from(out_log))
@@ -1562,45 +1561,45 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
         )
     };
     // The API first, so the binding finds it in the dev registry.
-    let Ok(a) = spawn(&api_dir, api_port, "api.log") else {
+    let Ok(a) = spawn(&api_dir, api_port, api_inspector, "api.log") else {
         skip_workerd("could not launch npx");
         return;
     };
     let mut wranglers = vec![a];
-    let deadline = Instant::now() + Duration::from_secs(180);
-    while !get(api_port, "/logo").is_ok_and(|r| r.contains("200 OK")) {
-        if Instant::now() > deadline {
-            let log = fs::read_to_string(dir.join("api.log")).unwrap_or_default();
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!("the API Worker did not answer in time\n{log}"));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
+    if let Err(why) = wrangler::wait_until_ready(&dir.join("api.log"), api_port, &|| {
+        get(api_port, "/logo").is_ok_and(|r| r.contains("200 OK"))
+    }) {
+        let log = fs::read_to_string(dir.join("api.log")).unwrap_or_default();
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!("the API Worker: {why}\n{log}"));
+        return;
     }
-    let Ok(b) = spawn(&web, web_port, "web.log") else {
+    let Ok(b) = spawn(&web, web_port, web_inspector, "web.log") else {
         wrangler::stop_all(&mut wranglers);
         skip_workerd("could not launch npx");
         return;
     };
     wranglers.push(b);
-    let answer = loop {
-        if let Ok(r) = get(web_port, "/")
-            && r.contains("\"put\"")
-        {
-            break r;
+    let answered = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_ready(&dir.join("web.log"), web_port, &|| match get(
+        web_port, "/",
+    ) {
+        Ok(r) if r.contains("\"put\"") => {
+            *answered.borrow_mut() = Some(r);
+            true
         }
-        if Instant::now() > deadline {
-            let logs = format!(
-                "{}\n{}",
-                fs::read_to_string(dir.join("api.log")).unwrap_or_default(),
-                fs::read_to_string(dir.join("web.log")).unwrap_or_default()
-            );
-            wrangler::stop_all(&mut wranglers);
-            skip_workerd(&format!("the front end did not answer in time\n{logs}"));
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(500));
-    };
+        _ => false,
+    }) {
+        let logs = format!(
+            "{}\n{}",
+            fs::read_to_string(dir.join("api.log")).unwrap_or_default(),
+            fs::read_to_string(dir.join("web.log")).unwrap_or_default()
+        );
+        wrangler::stop_all(&mut wranglers);
+        skip_workerd(&format!("the front end: {why}\n{logs}"));
+        return;
+    }
+    let answer = answered.into_inner().expect("the probe answered");
     wrangler::stop_all(&mut wranglers);
     let json = answer.split("\r\n\r\n").nth(1).unwrap_or(&answer);
     let v: serde_json::Value =
@@ -1619,6 +1618,271 @@ fn the_client_calls_a_bynk_worker_through_a_service_binding() {
     assert_eq!(
         v["detached"], "Transport",
         "a detached `fetch` fails as a Transport failure: {answer}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #3906: the connection of a `from websocket` service, against the real Worker under `wrangler dev`.
+/// Node 22's own `WebSocket` is the platform one the client defaults to.
+const WS_DRIVER: &str = r#"
+import { createHmac } from "node:crypto";
+import { createClient } from "./dist/api.js";
+
+const BASE = process.env.BASE;
+const SECRET = "ws-test-secret";
+const assert = (cond, msg) => { if (!cond) throw new Error(`assertion failed: ${msg}`); };
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+const token = (sub, expIn = 3600, secret = SECRET) => {
+  const head = b64({ alg: "HS256", typ: "JWT" });
+  const body = b64({ sub, exp: Math.floor(Date.now() / 1000) + expIn });
+  return `${head}.${body}.${createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url")}`;
+};
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const next = (conn) => conn.frames[Symbol.asyncIterator]().next();
+
+const api = createClient({ baseUrl: BASE });
+
+// The HTTP route of the same client still works beside the connection.
+const health = await api.health.getHealth();
+assert(health.kind === "Ok" && health.body === "up", "the HTTP route answers");
+
+// A route parameter the server would refuse is refused before any connection is made.
+const badRoom = api.gateway.connect("Not A Room", { bearer: token("ada") });
+assert(badRoom.kind === "Invalid", "an invalid route parameter is a CallFailure");
+
+// A good connection: the welcome frame, typed frames both ways, an Option as `T | null`.
+const conn = api.gateway.connect("lobby", { bearer: token("ada") });
+assert(conn.state !== undefined, "connect returns a connection");
+const frames = conn.frames[Symbol.asyncIterator]();
+await conn.opened;
+const welcome = await frames.next();
+assert(welcome.value.text === "welcome" && welcome.value.note === null, "the welcome frame is decoded, None as null");
+assert(conn.send({ text: "hi", reply: "r" }) === null, "a valid frame is sent");
+const echo = await frames.next();
+assert(echo.value.text === "hi" && echo.value.note === "r", "the echo is decoded, Some as a value");
+assert(conn.send({ text: "again", reply: null }) === null, "a null Option is sent");
+const echo2 = await frames.next();
+assert(echo2.value.note === null, "None comes back as null");
+
+// A frame the server would refuse is refused locally, and never reaches it.
+assert(conn.send({ text: "", reply: null }).kind === "Invalid", "an empty text is refused locally");
+assert(conn.send({ text: "x".repeat(21), reply: null }).kind === "Invalid", "an over-long text is refused locally");
+assert(conn.send({ text: "after", reply: null }) === null, "the connection is still good");
+const after = await frames.next();
+assert(after.value.text === "after", "only the valid frames reached the server");
+conn.close(1000, "bye");
+const closed = await new Promise((resolve) => conn.onClose(resolve));
+assert(closed.code === 1000 && closed.willReconnect === false, "a close the client made does not reconnect");
+assert(conn.state === "closed", "the connection is closed");
+
+// A token that is a function is read at connect; a forged one is refused at the edge.
+const viaFunction = api.gateway.connect("lobby", { bearer: async () => token("grace") });
+await viaFunction.opened;
+viaFunction.close();
+const forged = api.gateway.connect("lobby", { bearer: token("ada", 3600, "another-secret") });
+let refused = false;
+await forged.opened.catch(() => { refused = true; });
+assert(refused && forged.state === "closed", "a forged token never opens");
+
+// An expired token: the server closes with 1008 at the next frame, and the client reconnects with a fresh one.
+let issued = 0;
+const short = api.gateway.connect("lobby", { bearer: token("ada", 2) }, {
+  reconnect: { credentials: async () => ({ bearer: token("ada", 3600) }), backoff: () => 50 },
+});
+const shortFrames = short.frames[Symbol.asyncIterator]();
+await short.opened;
+await shortFrames.next();
+const reconnected = new Promise((resolve) => short.onReconnect(resolve));
+const closes = [];
+short.onClose((c) => closes.push(c));
+await wait(3000);
+short.send({ text: "late", reply: null });
+assert((await reconnected) === 1, "the client reconnected once");
+assert(closes.length === 1 && closes[0].code === 1008 && closes[0].reason === "authentication expired" && closes[0].willReconnect === true, "it was the expiry close");
+assert(short.state === "open", "and is open again");
+const welcome2 = await shortFrames.next();
+assert(welcome2.value.text === "welcome", "the new connection's welcome frame reaches the same iterator");
+short.send({ text: "fresh", reply: null });
+assert((await shortFrames.next()).value.text === "fresh", "frames flow after the reconnect");
+short.close();
+
+// A cookie service offers no credential of its own: the upgrade carries no subprotocol, and with no session
+// the Worker refuses it.
+const lounge = api.lounge.connect("main");
+let noSession = false;
+await lounge.opened.catch(() => { noSession = true; });
+assert(noSession, "a cookie upgrade with no session or origin is refused");
+
+console.log("ALL OK");
+"#;
+
+#[test]
+fn a_websocket_connection_is_typed_both_ways_against_a_real_worker() {
+    if skip_without_tools() {
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    let dir = scratch("ws");
+    let proj = dir.join("project");
+    copy_project(&fixture("ws"), &proj);
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `ws` client");
+    fs::write(
+        dir.join("out/workers/chat/.dev.vars"),
+        "CHAT_SECRET=ws-test-secret\n",
+    )
+    .unwrap();
+
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "chat", "/health") else {
+        return;
+    };
+    let base = format!("http://127.0.0.1:{port}");
+    let out = run_driver(&dir, WS_DRIVER, &[("BASE", base.as_str())]);
+    wrangler::stop_all(&mut wranglers);
+    assert!(out.contains("ALL OK"), "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// #3906: a real browser connects to a `SignedCookie` service. Only Chromium can show that the browser
+/// itself sends the session cookie and the `Origin` on the upgrade, which the injected constructor of a Node
+/// test cannot prove: a page that signed in over HTTP opens the socket with no credential, and a page at an
+/// origin the service does not list is refused.
+const BROWSER_DRIVER: &str = r#"
+import http from "node:http";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { chromium } = require("playwright");
+const [pagePort, base] = [process.env.PAGE_PORT, process.env.BASE];
+const WAIT_MS = 60000;
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/api.js") {
+    res.writeHead(200, { "content-type": "text/javascript" }).end(fs.readFileSync("dist/api.js"));
+  } else {
+    res.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><meta charset=utf-8><title>ws</title>");
+  }
+});
+await new Promise((resolve) => server.listen(Number(pagePort), "127.0.0.1", resolve));
+
+const browser = await chromium.launch({ timeout: WAIT_MS });
+try {
+  const context = await browser.newContext();
+  const run = (origin, signIn) => async () => {
+    const tab = await context.newPage();
+    await tab.goto(`${origin}/`, { timeout: WAIT_MS });
+    const seen = await tab.evaluate(async ({ base, signIn, waitMs }) => {
+      const within = (what, p) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`timed out waiting for ${what}`)), waitMs))]);
+      const { createClient } = await import("/api.js");
+      const api = createClient({ baseUrl: base, credentials: "include" });
+      const out = {};
+      if (signIn) out.login = (await within("the sign-in", api.sign.postLogin({ name: "ada" }))).kind;
+      const conn = api.lounge.connect("main");
+      if ("kind" in conn) return { ...out, failure: conn.kind };
+      let opened = true;
+      await within("the upgrade", conn.opened.catch(() => { opened = false; }));
+      out.opened = opened;
+      if (opened) {
+        const first = await within("the welcome frame", conn.frames[Symbol.asyncIterator]().next());
+        out.welcome = first.value.text;
+        conn.close();
+      }
+      return out;
+    }, { base, signIn, waitMs: WAIT_MS });
+    await tab.close();
+    return seen;
+  };
+  const listed = await run(`http://127.0.0.1:${pagePort}`, true)();
+  // The same browser, the session it now holds, from a page at an origin the service does not list.
+  const unlisted = await run(`http://localhost:${pagePort}`, false)();
+  console.log("RESULT " + JSON.stringify({ listed, unlisted }));
+} finally {
+  await browser.close();
+  server.close();
+}
+process.exit(0);
+"#;
+
+#[test]
+fn a_browser_connects_a_cookie_service_with_the_session_it_signed_in_with() {
+    if skip_without_tools() {
+        return;
+    }
+    let has_playwright = Command::new("node")
+        .args(["-e", "require('playwright').chromium"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_playwright {
+        eprintln!("\n!!! WS BROWSER VERIFICATION SKIPPED !!!\nPlaywright is not installed\n");
+        if std::env::var("BYNK_REQUIRE_BROWSER").is_ok() {
+            panic!("BYNK_REQUIRE_BROWSER is set but Playwright is not installed");
+        }
+        return;
+    }
+    if !tools::tool_exists("npx") && skip_workerd("`npx` is not on PATH") {
+        return;
+    }
+    // The page's origin, which the service lists exactly: a port chosen now.
+    let page_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let dir = scratch("ws-browser");
+    let proj = dir.join("project");
+    copy_project(&fixture("ws"), &proj);
+    let lobby = proj.join("src/lobby.bynk");
+    let text = fs::read_to_string(&lobby).unwrap().replace(
+        "https://app.example.com",
+        &format!("http://127.0.0.1:{page_port}"),
+    );
+    fs::write(&lobby, text).unwrap();
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the `ws` client");
+    // 32 bytes, base64url: the key the session cookie is signed with.
+    fs::write(
+        dir.join("out/workers/lobby/.dev.vars"),
+        "SESSION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+    )
+    .unwrap();
+    let Some((mut wranglers, port)) = boot_workerd(&dir, "lobby", "/health") else {
+        return;
+    };
+    fs::write(dir.join("dist/package.json"), "{\"type\":\"module\"}\n").unwrap();
+    fs::write(dir.join("browser.mjs"), BROWSER_DRIVER).unwrap();
+    let run = Command::new("node")
+        .arg("browser.mjs")
+        .current_dir(&dir)
+        .env("PAGE_PORT", page_port.to_string())
+        .env("BASE", format!("http://127.0.0.1:{port}"))
+        .output()
+        .expect("run node");
+    wrangler::stop_all(&mut wranglers);
+    let log = format!(
+        "{}{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(run.status.success(), "the browser driver failed:\n{log}");
+    let line = log
+        .lines()
+        .find_map(|l| l.strip_prefix("RESULT "))
+        .unwrap_or_else(|| panic!("the driver printed no result:\n{log}"));
+    let seen: serde_json::Value = serde_json::from_str(line).unwrap();
+    assert_eq!(
+        seen["listed"],
+        serde_json::json!({ "login": "Created", "opened": true, "welcome": "welcome" }),
+        "a page at the listed origin that signed in opens the socket with no credential of its own\n{log}"
+    );
+    assert_eq!(
+        seen["unlisted"],
+        serde_json::json!({ "opened": false }),
+        "a page at an origin the service does not list is refused, session or not\n{log}"
     );
     let _ = fs::remove_dir_all(&dir);
 }

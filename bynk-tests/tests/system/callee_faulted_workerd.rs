@@ -214,26 +214,33 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
     // The control call answers once both Workers are up and the Service
     // Binding has connected (it starts `[not connected]` and converges), so
     // it doubles as the readiness probe.
-    let deadline = Instant::now() + Duration::from_secs(180);
-    loop {
-        if let Ok((200, body)) = get(caller_port, "/square/3") {
-            assert_eq!(body, "\"9\"", "the control call answers the square");
-            break;
-        }
-        if Instant::now() > deadline {
-            let logs = logs();
-            drop(wranglers);
-            let _ = fs::remove_dir_all(&tmp);
-            if skip(&format!(
-                "the control call did not answer within the boot window (likely \
-                 no network to provision {WRANGLER})\n{logs}"
-            )) {
-                return;
+    let squared = std::cell::RefCell::new(None);
+    if let Err(why) = wrangler::wait_until_all_ready(
+        &[(&callee_log, callee_port)],
+        (&caller_log, caller_port),
+        &|| match get(caller_port, "/square/3") {
+            Ok((200, body)) => {
+                *squared.borrow_mut() = Some(body);
+                true
             }
-            unreachable!()
+            _ => false,
+        },
+    ) {
+        let logs = logs();
+        drop(wranglers);
+        let _ = fs::remove_dir_all(&tmp);
+        if skip(&format!(
+            "{why} (likely no network to provision {WRANGLER})\n{logs}"
+        )) {
+            return;
         }
-        std::thread::sleep(Duration::from_millis(500));
+        unreachable!()
     }
+    assert_eq!(
+        squared.into_inner().expect("the probe answered"),
+        "\"9\"",
+        "the control call answers the square"
+    );
 
     // 100000000² is past the safe-integer range, so the callee's handler
     // faults encoding it, and the caller faults in turn. Only the caller's log

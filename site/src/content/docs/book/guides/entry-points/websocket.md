@@ -202,6 +202,29 @@ stall the room, and it waits for every send to settle before it raises a fault);
 the sender's key (`u != sender`); a `Connection` cannot be compared with `==`
 (`bynk.types.held_not_comparable`).
 
+## Connect from a front end
+
+You do not write the browser side by hand. [`bynk client`](/reference/http-client/#websocket-services) reads the
+service's frame types, its route parameters and the actor on its `on open`, and generates a typed `connect`
+beside the HTTP routes:
+
+```sh
+bynk client --out web/src/lib/api.ts
+```
+
+```ts
+const api = createClient({ baseUrl: "https://api.example.com" });
+const conn = api.ChatGateway.connect("room1", { bearer: token });   // a Bearer actor takes a token
+if ("kind" in conn) throw new Error(conn.kind);                       // a refused route parameter
+conn.send({ text: "hi" });                                            // a ClientFrame, checked first
+for await (const frame of conn.frames) show(frame.text);              // a ServerFrame, decoded
+```
+
+It offers the token the way the server reads it (the `Sec-WebSocket-Protocol` pair), applies the server's
+checks to a frame before it is sent, closes on a frame the server's type refuses, and, if you ask for it,
+reconnects with a fresh token after the server closes for an expired one. A session-cookie service takes no
+credential: the browser sends the cookie.
+
 ## Test it with no Cloudflare runtime
 
 A `suite` drives the service by address, against a `TestConnection[F]()` that

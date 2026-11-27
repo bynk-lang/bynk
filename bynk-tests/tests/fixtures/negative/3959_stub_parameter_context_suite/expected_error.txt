@@ -1,0 +1,2 @@
+bynk.stub.not_a_seam `Store` is not a capability seam of `shop`
+# exact

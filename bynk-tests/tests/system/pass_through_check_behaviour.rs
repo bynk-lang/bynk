@@ -1,9 +1,8 @@
 //! #3752 (pass-through HTTP, slice 3a): what `bynk check` accepts of the
-//! pass-through surface. Slice 3a type-checks an `on ANY(…)` route but builds none
-//! (`bynk.http.pass_through_not_emitted`, pinned by its negative fixture), so these
-//! cases run `bynk check` itself: the track's §11.2 blog port, a program whose own
-//! variants are called `Forward` and `Respond`, and one whose own type is called
-//! `InboundRequest`. The refusals are the `3752_*` negative fixtures.
+//! pass-through surface: the track's §11.2 blog port, a program whose own variants
+//! are called `Forward` and `Respond`, and one whose own type is called
+//! `InboundRequest`. The refusals are the `3752_*` negative fixtures, and what a
+//! built route does is `pass_through_workerd.rs`'s.
 
 use std::fs;
 use std::process::Command;

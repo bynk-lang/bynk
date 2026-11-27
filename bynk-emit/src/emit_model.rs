@@ -555,6 +555,26 @@ pub fn new_call_ts_expr(ns: &str, class: &str, args: Vec<bynk_ts::TsExpr>) -> by
 /// (below in this file) repointed here too — `instantiate_provider_expr`
 /// itself had no callers left and is deleted; its parameter-contract prose
 /// and body rationale comments (below) moved here rather than being lost.
+/// #3752 (D13): an `Upstream` provider's arguments: `{ origin, timeoutSecs }` (the
+/// head timeout defaults to 30 seconds) and the runtime's `upstreamForward`.
+fn upstream_provider_args(inst: &bynk_check::symbols::DerivedInstance) -> Vec<bynk_ts::TsExpr> {
+    let origin = inst.option("origin").unwrap_or_default().to_string();
+    let timeout = inst.number("timeout").unwrap_or(30);
+    vec![
+        bynk_ts::TsExpr::object(vec![
+            (
+                "origin".to_string(),
+                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(origin)),
+            ),
+            (
+                "timeoutSecs".to_string(),
+                bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(timeout.to_string())),
+            ),
+        ]),
+        bynk_ts::TsExpr::Ident("__upstreamForward".to_string()),
+    ]
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn instantiate_provider_ts_expr(
     provider_ctx: &str,
@@ -602,6 +622,15 @@ pub fn instantiate_provider_ts_expr(
                 (namespaces, &mut expr)
             {
                 args.push(bynk_ts::TsExpr::Ident("exec".to_string()));
+            }
+            return expr;
+        }
+        // #3752 (D13): an `Upstream` instance reaches its declared origin with
+        // `fetch`, so it has no binding: its provider takes the origin and head
+        // timeout, and the runtime's one `upstreamForward`, shared by every platform.
+        if inst.base_unit == bynk_check::firstparty::BYNK_UNIT && inst.base_cap == "Upstream" {
+            if let bynk_ts::TsExpr::New { args, .. } = &mut expr {
+                *args = upstream_provider_args(inst);
             }
             return expr;
         }

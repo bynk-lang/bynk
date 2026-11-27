@@ -4597,6 +4597,17 @@ fn check_test_service_address(
                 extra_headers: false,
             },
         );
+        // #3752: a pass-through route has no suite address until its double lands.
+        let kinds = sig.handlers.iter().map(|h| &h.kind);
+        if let Some(err) =
+            crate::http_pass_through::suite_address_refusal(kinds, &id.name, method, path)
+        {
+            ctx.errors.push(err);
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
         let matched = sig.handlers.iter().find(|h| {
             matches!(&h.kind, HandlerKind::Http { method: m, path: p } if m.as_str() == method.name && p == path)
         });
@@ -5555,7 +5566,9 @@ pub(crate) fn check_effect_let_principal(
             // now-allowed wrong-method call would otherwise drop the `by`.)
             let wrong_method = bynk_syntax::ast::HttpMethod::from_ident(&method.name).is_some()
                 && matches!(args.first().map(|a| &a.kind), Some(bynk_syntax::ast::ExprKind::StrLit(path))
-                    if sig.handlers.iter().any(|h| matches!(&h.kind, bynk_syntax::ast::HandlerKind::Http { path: p, .. } if p == path)));
+                    if sig.handlers.iter().any(|h| matches!(&h.kind, bynk_syntax::ast::HandlerKind::Http { method: m, path: p }
+                        // #3752: a pass-through route's own refusal says why.
+                        if p == path && *m != bynk_syntax::ast::HttpMethod::Any)));
             if wrong_method {
                 ctx.errors.push(
                     CompileError::new(

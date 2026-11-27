@@ -1,0 +1,50 @@
+context chat
+
+type RoomId = String where Matches("^[a-z]+$")
+type UserId = opaque String
+type Said = { text: String where NonEmpty && MaxLength(20), reply: Option[String] }
+type Heard = { text: String, note: Option[String] }
+
+actor Member { auth = Bearer(secret = "CHAT_SECRET"), identity = UserId }
+
+// The client is generated from the frame types, the route parameter and the actor below: `connect(room,
+// credentials)` takes a `RoomId`, a bearer token, and sends `Said` and reads `Heard`.
+service gateway from websocket(in: Said, out: Heard) {
+  on open(room: RoomId) -> Effect[()] by who: Member {
+    let _ <- connection.send(Heard { text: "welcome", note: None })
+    let _ <- Room(room).join(who.identity, connection)
+    ()
+  }
+
+  on message(room: RoomId, frame: Said) -> Effect[()] by who: Member {
+    let _ <- connection.send(Heard { text: frame.text, note: frame.reply })
+    ()
+  }
+
+  on close(room: RoomId) -> Effect[()] by who: Member {
+    let _ <- Room(room).leave(who.identity)
+    ()
+  }
+}
+
+agent Room {
+  key id: RoomId
+  store conns: Map[UserId, Connection[Heard]]
+
+  on call join(u: UserId, conn: Connection[Heard]) -> Effect[()] {
+    let _ <- conns.put(u, conn)
+    ()
+  }
+
+  on call leave(u: UserId) -> Effect[()] {
+    let _ <- conns.remove(u)
+    ()
+  }
+}
+
+// The same client also has the HTTP route, which the Worker answers once it is up.
+service health from http {
+  on GET("/health") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("up")
+  }
+}

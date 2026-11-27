@@ -338,3 +338,37 @@ fn unused_selected_capabilities(
         })
         .collect()
 }
+
+/// #3959, track §9: the `bynk.stub.not_a_seam` note for a `stub` or `expect …
+/// called` that names a capability parameter. A parameter is never in scope in
+/// a case: the case names what the call binds it to. `None` unless `name` is a
+/// parameter of some commons function in the project.
+pub(crate) fn parameter_seam_note(
+    name: &str,
+    target_kind: bynk_project::UnitKind,
+    unit_tables: &HashMap<String, crate::symbols::UnitTable>,
+) -> Option<String> {
+    let mut commons: Vec<(&String, &crate::symbols::UnitTable)> = unit_tables
+        .iter()
+        .filter(|(_, t)| t.kind == Some(bynk_project::UnitKind::Commons))
+        .collect();
+    commons.sort_by_key(|(n, _)| *n);
+    let bound = commons
+        .into_iter()
+        .flat_map(|(_, t)| t.fns.values())
+        .flat_map(|f| &f.given)
+        .find(|g| g.is_parameter() && g.key() == name)?
+        .bound
+        .as_ref()?
+        .name
+        .clone();
+    Some(if target_kind == bynk_project::UnitKind::Commons {
+        format!(
+            "`{name}` is a capability parameter, which a case binds and never names: stub and observe the double it is bound to, the kind's own `{bound}` (`given {name} = {bound}`) or a suite-local instance"
+        )
+    } else {
+        format!(
+            "`{name}` is a capability parameter, which a case never names: stub and observe the instance of `{bound}` the call binds it to"
+        )
+    })
+}
