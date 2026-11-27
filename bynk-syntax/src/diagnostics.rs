@@ -397,6 +397,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
     },
     Explain {
+        code: "bynk.actor.signed_cookie_issue_on_safe_method",
+        blurb: "A route that issues a session cannot be guarded by the actor it issues for: the caller has no session yet. So that route is where login CSRF happens, a hostile page making a signed-out visitor's browser post the attacker's own credential, after which the victim works signed in as the attacker, and `SameSite` does not help because the attacker wants the cookie set. A route that issues a session and is not a `GET` is therefore checked as a guarded route is, before its body: fetch metadata, then `Origin` against the service's `cors` origins. A `GET` is outside that check (a link click, a prefetch and an image all send one), so a sign-in done as a `GET` is unprotected, and this warns. A `GET` guarded by the same actor, which re-issues its caller's own session, is not warned: there is no session to plant. Issue the session from a `POST`.",
+        example: "on GET(\"/login\") (token: String) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ⚠ issues a session from a `GET`\n\non POST(\"/login\") (body: Login) -> Effect[HttpResult[String]] by v: Visitor given Clock { … }   // ✓ checked for login CSRF",
+    },
+    Explain {
         code: "bynk.actor.signed_cookie_issue_outside_handler",
         blurb: "The signing key reaches a service handler, which is where a request arrives and a `Set-Cookie` is sent. A provider or an agent holds only the capabilities in its `given`, so `User.issue(identity)` there would find no key and fault on every request. Issue the cookie in the handler.",
         example: "User.issue(id)   // ✗ in a provider or an agent\n\nlet c <- User.issue(body)   // ✓ in a service handler",
@@ -1360,6 +1365,25 @@ pub const EXPLANATIONS: &[Explain] = &[
                   [build]\n\
                   out = \"../dist\"    # ✗ outside the project\n\
                   out = \"dist\"       # ✓ inside it",
+    },
+    Explain {
+        code: "bynk.container.unbounded_instances",
+        blurb: "`Container.send` starts, or reuses, one container for each distinct instance name, \
+                and a running container costs money. A name built from a request's own input on a \
+                route whose caller is not authenticated (`by Visitor`) lets anyone start as many \
+                containers as they have values to send, with nothing limiting how many. The check \
+                follows the handler's parameters, and the locals bound from them, into the instance \
+                argument; a name that comes from a constant, from the authenticated identity or from \
+                a closed set (an enum's names) does not warn, and neither does one passed through a \
+                function, which is where a set is bounded and is not followed. Serve the route `by` \
+                an authenticated actor, or choose the name from a fixed set. A refined type limits \
+                the shape of a name, not how many there are, so pair a keyed instance with an \
+                authenticated actor or a `RateLimit`. A later release is expected to let an \
+                instance declare a typed key that bounds its names, and a name from such a key \
+                will then not warn; that is not available yet.",
+        example: "capability Renderer = Container @build(\"containers/renderer\") @port(8080)\n\n\
+                  service api from http {\n    on GET(\"/render/:tenant\") (tenant: String) -> Effect[HttpResult[String]] by Visitor given Renderer {\n        let res <- Renderer.send(\"tenant-\\(tenant)\", req)   // ⚠ any caller picks the instance\n        …\n    }\n}\n\n\
+                  service api from http {\n    on GET(\"/render\") () -> Effect[HttpResult[String]] by m: Member given Renderer {\n        let res <- Renderer.send(m.identity, req)       // ✓ the authenticated identity chooses\n        …\n    }\n}",
     },
     Explain {
         code: "bynk.context.consumes_cycle",
@@ -7628,6 +7652,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.actor.signed_cookie_issue_needs_clock",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`.",
     ),
+    warn(d(
+        "bynk.actor.signed_cookie_issue_on_safe_method",
+        "A `GET` route issues a `SignedCookie` session, so it is outside the login-CSRF check a state-changing route gets (warning, #3825).",
+    )),
     d(
         "bynk.actor.signed_cookie_issue_outside_handler",
         "`Actor.issue(identity)` on a `SignedCookie` actor is called outside a service handler (in a provider or an agent).",
@@ -8129,6 +8157,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.container.output_outside_project",
         "A build with a `Container` is written to an output directory outside the project, so `wrangler` cannot reach the container's Dockerfile from the Worker's output directory by a relative path inside the project.",
     ),
+    warn(d(
+        "bynk.container.unbounded_instances",
+        "A `Container` instance name is built from a request's own input on a route whose caller is not authenticated, so any caller can start as many containers as they have values to send (warning).",
+    )),
     d(
         "bynk.context.consumes_cycle",
         "Contexts form a `consumes` dependency cycle.",

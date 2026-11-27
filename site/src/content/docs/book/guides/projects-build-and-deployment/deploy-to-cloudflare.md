@@ -21,7 +21,8 @@ Authenticate first. There are two halves:
   Cloudflare's API, which needs both `CLOUDFLARE_API_TOKEN` and
   `CLOUDFLARE_ACCOUNT_ID`. A `wrangler login` session is not enough, and the
   token needs the permission of each kind it touches; the sections below name
-  them. Today that is KV, R2 and D1, along with Hyperdrive and the linked kinds.
+  them. Today that is KV, R2, D1 and Vectorize, along with Hyperdrive and the
+  linked kinds.
 
   A deploy that needs them and lacks one stops before the confirmation, with
   nothing created, and names the missing variable and the permission. A
@@ -630,11 +631,16 @@ vectorize create shop-cart-docs (VECTORIZE_DOCS, 768, cosine; metadata indexes c
 ```
 
 An index is named `<worker>-<capability>`, with an environment suffix under
-`--env`, and made with `wrangler vectorize create` in the dimensions and metric the
+`--env`, and made through Cloudflare's API in the dimensions and metric the
 declaration states. Cloudflare takes 1 to 64 bytes of lowercase letters, digits,
 hyphens and underscores, starting with a letter; a name the environment suffix
 would push past that, or two instances would share, is an error naming the
 instance.
+
+Every deploy of a project with a `Vectorize` reads its indexes through Cloudflare's API, so
+every such deploy needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, the token with
+"Vectorize: Edit", even when nothing is created; without them it stops before the
+confirmation.
 
 An index's dimensions and metric cannot change once it exists, and recreating it
 would delete every vector in it, so **the deploy never recreates one**. Every
