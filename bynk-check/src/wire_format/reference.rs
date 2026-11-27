@@ -19,9 +19,10 @@ use bynk_syntax::ast::{BaseType, CommonsItem, SourceUnit, TypeDecl};
 
 use super::{
     ACCEPTED_WIRE_VERSIONS, CALL_CHECKS, CALL_METHOD, CALL_PATH_PREFIX, CALLER_HEADER,
-    CONTRACT_HEADER, EDGE_FROM_PREFIX, EDGE_TO_PREFIX, HEADERS, MAX_BODY_BYTES, SIGNATURE_HEADER,
-    SIGNATURE_WINDOW_SECONDS, SIGNING_SCHEME, TIMESTAMP_HEADER, WIRE_HEADER, WIRE_VERSION,
-    edge_key_from, edge_key_to, signing_input,
+    CONTRACT_HEADER, EDGE_FROM_PREFIX, EDGE_FROM_SLOT2_PREFIX, EDGE_TO_PREFIX, EDGE_UNTIL_PREFIX,
+    EDGE_UNTIL_SLOT2_PREFIX, HEADERS, MAX_BODY_BYTES, SIGNATURE_HEADER, SIGNATURE_WINDOW_SECONDS,
+    SIGNING_SCHEME, TIMESTAMP_HEADER, WIRE_HEADER, WIRE_VERSION, edge_key_from, edge_key_to,
+    signing_input,
 };
 use crate::contract::{FNV1A64_OFFSET, FNV1A64_PRIME, contract_hash, service_normal_form};
 use crate::resolver::cross_context_service_for;
@@ -535,7 +536,7 @@ bynk-queue-v1
 
 The **source queue name** is the queue the producer sent to, not the queue the message was delivered from. Naming it stops a message being moved from one queue to another, and it lets a dead-letter consumer verify a message the platform moved. The **canonical body** is the body in the JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785): object keys sorted by UTF-16 code unit at every depth, no whitespace, strings escaped as ECMAScript's `JSON.stringify` does, numbers written as ECMAScript does, and arrays in their given order. A producer that is not written in JavaScript should use a JCS library rather than its language's default JSON writer, which differs for non-ASCII text, for numbers such as `1.0` and `1e2`, and for keys outside the Basic Multilingual Plane. `from` and `id` must not contain a line feed.
 
-A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation, a consumer that also has the previous key in `<SECRET>_PREVIOUS` (for `LEGACY_QUEUE_KEY`, `LEGACY_QUEUE_KEY_PREVIOUS`) admits it as well as the current one, so messages queued before the rotation still verify. A Bynk context that a `Producer` refinement admits is verified under its edge key, which `bynk deploy` rotates and keeps in two slots: after a rotation the consumer admits the new key and the previous one, until the instant in the previous key's marker (`BYNK_CALL_UNTIL_<CALLER>` or `BYNK_CALL_UNTIL2_<CALLER>`, whole seconds since the Unix epoch) passes, 15 days after the rotation. The consumer checks that instant when it verifies, so the previous key stops being admitted on time whether or not another deploy runs, and a marker that is not a plain whole number refuses its slot. `bynk deploy --revoke-previous-edge-key <context>` drops the previous key at once, for a key that leaked. A consumer whose secret is missing or empty admits nothing from that sender. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
+A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation, a consumer that also has the previous key in `<SECRET>_PREVIOUS` (for `LEGACY_QUEUE_KEY`, `LEGACY_QUEUE_KEY_PREVIOUS`) admits it as well as the current one, so messages queued before the rotation still verify. A Bynk context that a `Producer` refinement admits is verified under its edge key, which `bynk deploy` rotates and keeps in two slots: after a rotation the consumer admits the new key and the previous one, until the instant in the previous key's marker (whole seconds since the Unix epoch, named under Keys) passes, 15 days after the rotation. The consumer checks that instant when it verifies, so the previous key stops being admitted on time whether or not another deploy runs, and a marker that is not a plain whole number refuses its slot. `bynk deploy --revoke-previous-edge-key <context>` drops the previous key at once, for a key that leaked. A consumer whose secret is missing or empty admits nothing from that sender. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
 
 This provides **authenticity** of the sender and **integrity** of the body. It does not provide confidentiality, because anyone with access to the account can read a queued body through the dashboard or by pulling, and it does not provide availability, because an account member can still flood or drain a queue. Keep secrets out of message bodies.
 "#;
@@ -830,7 +831,7 @@ dot written `__` (`shop.orders` → `{from_example}`, `shop.payment` →
 `{to_example}`). A name the key can be named from is dot-separated segments of
 lowercase letters and digits, each starting with a letter, with single
 underscores between runs. `bynk deploy` mints each key and sets it on both
-Workers, and a rotation keeps the key it replaces verifying on the callee for 15 days in a second slot, `BYNK_CALL_FROM2_<CALLER>`, retired by a marker (`BYNK_CALL_UNTIL_<CALLER>` or `BYNK_CALL_UNTIL2_<CALLER>`); `bynk dev` uses a fixed local key.
+Workers, and a rotation keeps the key it replaces verifying on the callee for 15 days in a second slot, `{EDGE_FROM_SLOT2_PREFIX}<CALLER>`, retired by a marker (`{EDGE_UNTIL_PREFIX}<CALLER>` or `{EDGE_UNTIL_SLOT2_PREFIX}<CALLER>`); `bynk dev` uses a fixed local key.
 
 **Signing.** The caller sends `{CALLER_HEADER}` (its qualified name),
 `{TIMESTAMP_HEADER}` (whole seconds since the Unix epoch) and `{SIGNATURE_HEADER}`:
