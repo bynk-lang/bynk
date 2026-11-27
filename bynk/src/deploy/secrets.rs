@@ -643,6 +643,33 @@ pub(crate) fn decide_session_key(
     decide_foreign_key(supplied, presence, force, mint)
 }
 
+/// #3939 (track §18, K1; the maintainer's ruling on #4595): what this run does with an `ApiKey`
+/// actor's pepper. Unlike a session key, a set pepper is **kept even under `--force`**: the key
+/// store holds every issued key's digest under it, and with rotation (`previous`) refused until a
+/// later slice, a new pepper would end every key for good, while `--force` is also the flag that
+/// fixes a cookie-key mismatch. Replacing it takes a deliberate act: a value the operator supplies
+/// is always set. Unset, `deploy` mints one. A supplied value must have the session key's form.
+pub(crate) fn decide_pepper(
+    supplied: Option<String>,
+    presence: Presence,
+    mint: &mut dyn FnMut() -> Result<String, String>,
+) -> Result<ForeignKey, String> {
+    if let Some(value) = supplied {
+        check_session_key(&value)?;
+        return Ok(ForeignKey::Set {
+            value,
+            minted: false,
+        });
+    }
+    if presence != Presence::Absent {
+        return Ok(ForeignKey::Keep);
+    }
+    Ok(ForeignKey::Set {
+        value: mint()?,
+        minted: true,
+    })
+}
+
 /// I3 (#1971): what this run does with one foreign caller's secret, on the
 /// context that admits it. Only that end is ours: the foreign Worker's
 /// operator sets the other from the hand-off [`foreign_hand_off`] prints.
@@ -1823,6 +1850,54 @@ WITH_EQUALS=a=b
             assert!(session(Some("hunter2"), presence, true, never).is_err());
             assert!(session(Some(""), presence, false, never).is_err());
         }
+    }
+
+    /// K1 (track §18, #3939): every row of the pepper's matrix, absent or present (or unknown), forced
+    /// or not, supplied or not, beside the session key's rows, which are unchanged: `--force` never
+    /// replaces a set pepper, a supplied one always does, and only an absent one is minted.
+    #[test]
+    fn k1_force_keeps_a_set_pepper_and_only_a_supplied_value_replaces_it() {
+        let minted_set = Ok(ForeignKey::Set {
+            value: "minted".into(),
+            minted: true,
+        });
+        let supplied_set = Ok(ForeignKey::Set {
+            value: GOOD_KEY.into(),
+            minted: false,
+        });
+        let pepper =
+            |supplied: Option<&str>, presence, mut mint: fn() -> Result<String, String>| {
+                decide_pepper(supplied.map(str::to_string), presence, &mut mint)
+            };
+        for force in [false, true] {
+            // Not supplied: an absent pepper is minted; a held one (or an unknown answer) is kept.
+            assert_eq!(pepper(None, Absent, minted), minted_set, "force={force}");
+            assert_eq!(
+                pepper(None, Present, never),
+                Ok(ForeignKey::Keep),
+                "force={force}"
+            );
+            assert_eq!(
+                pepper(None, Unknown, never),
+                Ok(ForeignKey::Keep),
+                "force={force}"
+            );
+            // Supplied: always set, never minted over, whether held or not.
+            for presence in [Absent, Present, Unknown] {
+                assert_eq!(pepper(Some(GOOD_KEY), presence, never), supplied_set);
+            }
+        }
+        // A weak supplied pepper is refused before anything is decided.
+        assert!(pepper(Some("hunter2"), Present, never).is_err());
+        // The session key's rows are unchanged: `--force` replaces a held key, a supplied value
+        // is kept over a held one unless forced.
+        assert_eq!(session(None, Present, true, minted), minted_set);
+        assert_eq!(session(None, Present, false, never), Ok(ForeignKey::Keep));
+        assert_eq!(
+            session(Some(GOOD_KEY), Present, false, never),
+            Ok(ForeignKey::Keep)
+        );
+        assert_eq!(session(Some(GOOD_KEY), Present, true, never), supplied_set);
     }
 
     // ---- I3 (#1971): foreign callers' secrets ---------------------------------

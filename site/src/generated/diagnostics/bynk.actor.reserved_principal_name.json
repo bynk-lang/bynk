@@ -1,0 +1,10 @@
+{
+  "blurb": "A test case's `by` names the principal it acts as, and some names there are not actors: `Nobody` sends no credential, and `Forged`, `Stale`, `Expired`, `Revoked`, `Malformed`, `Unknown` and the other bad-credential principals drive the seam to refuse. An actor with one of those names could never be acted as, since `by Unknown(\"x\")` would mean the principal, not the actor. So an actor may not take a reserved principal's name. Rename it.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.reserved_principal_name",
+  "constructs": [],
+  "example": "actor Unknown { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✗ `by Unknown` is a reserved principal\n\nactor Anonymous { auth = Bearer(secret = \"AUTH_SECRET\"), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "An actor takes the name of a reserved call-site principal (`Nobody` or a bad-credential principal such as `Forged` or `Unknown`)."
+}

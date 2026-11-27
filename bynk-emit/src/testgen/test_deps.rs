@@ -339,7 +339,7 @@ pub(super) fn emit_test_deps(
             },
         ));
     }
-    entries.extend(session_keys_entry(target_name, target_kind, unit_tables));
+    entries.extend(credential_keys(target_name, target_kind, unit_tables));
     let mut entries: Vec<TsObjectEntry> = entries
         .into_iter()
         .map(|(k, v)| TsObjectEntry::prop(k, v))
@@ -1118,6 +1118,57 @@ pub(super) fn base64(bytes: &[u8]) -> String {
         }
     }
     out
+}
+
+/// `deps.__session` and (#3939) `deps.__apiKey`: the keys a handler's `Actor.issue` and
+/// `Actor.mint` take, both fixed in a test run.
+fn credential_keys(
+    target_name: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> Vec<(String, TsExpr)> {
+    let mut out: Vec<(String, TsExpr)> = Vec::new();
+    out.extend(session_keys_entry(target_name, target_kind, unit_tables));
+    out.extend(api_key_peppers_entry(target_name, target_kind, unit_tables));
+    out
+}
+
+/// #3939: `deps.__apiKey`, for a handler's `Actor.mint`: every `ApiKey` actor of the target hashes
+/// under the fixed `TEST_API_KEY_PEPPER`. (The `system` tier sets the Worker's pepper variable to
+/// the session-key test value instead, with its other keyed secrets; each tier mints and verifies
+/// under its own pepper, so the two need not agree.)
+fn api_key_peppers_entry(
+    target_name: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+) -> Option<(String, TsExpr)> {
+    if target_kind != UnitKind::Context {
+        return None;
+    }
+    let mut actors: Vec<String> = unit_tables
+        .get(target_name)?
+        .actors
+        .values()
+        .filter_map(|a| bynk_check::api_key::api_key_seam_of(a, None))
+        .map(|s| s.actor)
+        .collect();
+    if actors.is_empty() {
+        return None;
+    }
+    actors.sort();
+    let peppers = actors
+        .into_iter()
+        .map(|a| {
+            (
+                a,
+                TsExpr::object(vec![(
+                    "secret".to_string(),
+                    str_lit(crate::testgen::TEST_API_KEY_PEPPER),
+                )]),
+            )
+        })
+        .collect();
+    Some(("__apiKey".to_string(), TsExpr::object(peppers)))
 }
 
 /// `deps.__session`, for a handler's `Actor.issue(identity)`: every `SignedCookie` actor of the target

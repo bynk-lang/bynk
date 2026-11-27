@@ -86,8 +86,38 @@ impl CloudflareApi for Recording {
         })
     }
 
-    /// A reply of `Ok` deletes; the reply `"absent"` finds no queue to delete.
-    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
+    /// The reply `"absent"` finds no queue; otherwise each word is a consumer: `id=script` for a
+    /// Worker, `id=pull` for an HTTP pull consumer (an empty reply: no consumers).
+    fn queue_consumers(
+        &self,
+        name: &str,
+    ) -> Result<Option<Vec<crate::cloudflare::rest::queues::Consumer>>, CloudflareError> {
+        let reply = self.rest(Op::QueueConsumers { name })?;
+        if reply.trim() == "absent" {
+            return Ok(None);
+        }
+        Ok(Some(
+            reply
+                .split_whitespace()
+                .map(|word| {
+                    let (id, of) = word.split_once('=').unwrap_or((word, ""));
+                    crate::cloudflare::rest::queues::Consumer {
+                        id: id.to_string(),
+                        script: (of != "pull" && !of.is_empty()).then(|| of.to_string()),
+                        pull: of == "pull",
+                    }
+                })
+                .collect(),
+        ))
+    }
+
+    /// A reply of `Ok` deletes; the reply `"absent"` finds no queue to delete. `detach` is the
+    /// real account's to check ([`super::Account`]); the fake logs only the delete.
+    fn queue_delete(
+        &self,
+        name: &str,
+        _detach: &BTreeSet<String>,
+    ) -> Result<bool, CloudflareError> {
         Ok(self.rest(Op::QueueDelete { name })?.trim() != "absent")
     }
 

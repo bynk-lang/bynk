@@ -829,6 +829,17 @@ pub(crate) fn check_typed(
     {
         return Some(typed);
     }
+    // #4101: `Vectorize.queryValue[M]` and `getByIdsValue[M]`, compiler-lowered the same way.
+    if let Some(typed) = super::vector::check_typed(
+        cap,
+        derived_from,
+        method,
+        (type_args, args),
+        (span, expr_id),
+        ctx,
+    ) {
+        return Some(typed);
+    }
     if is_select(cap, &method.name, ctx) {
         return Some(check_select(
             cap, method, type_args, args, span, expr_id, ctx,

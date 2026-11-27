@@ -1,0 +1,5 @@
+context demo
+
+type UserId = String where NonEmpty
+
+actor Unknown { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
