@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.account_note",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "Checking the plan against the Cloudflare account found something worth saying, such as a resource it could not check. The message says what; the plan is still made (warning)."
+}

@@ -8193,6 +8193,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.account_name_conflict",
         "Two instances in the build would take the same name on the Cloudflare account, so `bynk deploy` stopped before planning. The message names the instances and the name they share; rename one.",
     ),
+    warn(d(
+        "bynk.deploy.account_note",
+        "Checking the plan against the Cloudflare account found something worth saying, such as a resource it could not check. The message says what; the plan is still made (warning).",
+    )),
+    warn(d(
+        "bynk.deploy.adoption_partial",
+        "`[deploy.vectorize.<Capability>]` or `[deploy.containers.<Capability>]` in `bynk.toml` adopts an index or image only for some environments, and this environment is not one of them, so the deploy creates (or builds) one (warning).",
+    )),
+    d(
+        "bynk.deploy.adoption_unmatched",
+        "An entry under `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` names no capability of this project, so `bynk deploy` stopped before planning: an entry that matches nothing would have the deploy create a new, empty index or build an image instead of adopting yours. The message names the entry and the nearest capability.",
+    ),
+    d(
+        "bynk.deploy.adoption_unreadable",
+        "`[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` did not read, so `bynk deploy` stopped before planning. The message names the problem.",
+    ),
     d(
         "bynk.deploy.agent_move_refused",
         "`bynk deploy` refused to put a context that hosts agents on a different Worker script than it was last deployed to (into or out of a `[deploy.workers.<key>]` group, between groups, or after a group is renamed or re-keyed): an agent's state belongs to its script, so it would start empty and the old data would stay behind. Start it fresh deliberately with `--accept-fresh-agent <context>`, which a move out of a group that stays cannot use.",
@@ -8241,6 +8257,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.deploy.email_claim_refused",
         "`bynk deploy` could not decide which inbound email addresses the Worker claims in a named environment from `[deploy.email]` in `bynk.toml`, so it stopped before planning. With `--format json` the plan's `refusals` carries it with the `environment`.",
     ),
+    warn(d(
+        "bynk.deploy.email_forward_destination",
+        "A handler's `Forward` goes to an address Cloudflare may refuse, or one that cannot be checked at deploy: it is computed at run time, is not a verified destination address, or the lookup did not answer. The plan is still made, and the sender's mail would bounce if Cloudflare refuses the forward (warning).",
+    )),
     d(
         "bynk.deploy.empty_group",
         "A `[deploy.workers.<key>]` group lists no context.",

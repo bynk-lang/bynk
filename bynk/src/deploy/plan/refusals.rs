@@ -85,6 +85,41 @@ pub(crate) fn strict_environments_unchecked(printed: &str, environment: &str) ->
         .with("environment", environment)
 }
 
+/// `[deploy.vectorize]` or `[deploy.containers]` in `bynk.toml` did not read.
+pub(crate) fn adoption_unreadable(table: &str, cause: &dyn std::fmt::Display) -> Entry {
+    Entry::new(code::ADOPTION_UNREADABLE, cause.to_string()).with("table", table)
+}
+
+/// An adoption entry that names no capability of the project.
+pub(crate) fn adoption_unmatched(table: &str, capability: &str, printed: &str) -> Entry {
+    Entry::from_printed(code::ADOPTION_UNMATCHED, printed)
+        .with("table", table)
+        .with("capability", capability)
+}
+
+/// An adoption entry with nothing for this environment, so the deploy creates (or builds) one.
+pub(crate) fn adoption_partial(
+    table: &str,
+    capability: &str,
+    environment: &str,
+    printed: &str,
+) -> Entry {
+    Entry::from_printed(code::ADOPTION_PARTIAL, printed)
+        .with("table", table)
+        .with("capability", capability)
+        .with("environment", environment)
+}
+
+/// What checking the plan against the account found, as the plan printed it.
+pub(crate) fn account_note(printed: &str) -> Entry {
+    Entry::from_printed(code::ACCOUNT_NOTE, printed)
+}
+
+/// A `Forward` destination Cloudflare would refuse, or that could not be checked.
+pub(crate) fn email_forward_destination(printed: &str) -> Entry {
+    Entry::from_printed(code::EMAIL_FORWARD_DESTINATION, printed)
+}
+
 /// `[deploy.hyperdrive]` in `bynk.toml` did not read.
 pub(crate) fn hyperdrive_settings_unreadable(cause: &dyn std::fmt::Display) -> Entry {
     Entry::new(code::HYPERDRIVE_SETTINGS_UNREADABLE, cause.to_string())
@@ -196,6 +231,23 @@ mod tests {
             hyperdrive_unresolved(&"no variable").code,
             "bynk.deploy.hyperdrive_unresolved"
         );
+        let e = adoption_unreadable("vectorize", &"bad table");
+        assert_eq!(e.code, "bynk.deploy.adoption_unreadable");
+        assert_eq!(e.subject["table"], "vectorize");
+        let e = adoption_unmatched("containers", "Web", "bynk: error: names no capability\n");
+        assert_eq!(e.code, "bynk.deploy.adoption_unmatched");
+        assert_eq!(e.message, "names no capability");
+        assert_eq!(e.subject["capability"], "Web");
+        let e = adoption_partial("vectorize", "Docs", "staging", "bynk: note: only for prod");
+        assert_eq!(e.code, "bynk.deploy.adoption_partial");
+        assert_eq!(e.message, "only for prod");
+        assert_eq!(e.subject["environment"], "staging");
+        let e = account_note("bynk: note: KV was not checked");
+        assert_eq!(e.code, "bynk.deploy.account_note");
+        assert_eq!(e.message, "KV was not checked");
+        let e = email_forward_destination("bynk: warning: `a@b.c` is not verified");
+        assert_eq!(e.code, "bynk.deploy.email_forward_destination");
+        assert_eq!(e.message, "`a@b.c` is not verified");
         let e = recreate_needs_yes("move the data, then re-run with --yes");
         assert_eq!(e.code, "bynk.deploy.recreate_needs_yes");
         assert!(e.subject.is_empty());

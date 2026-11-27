@@ -684,7 +684,7 @@ derived and prints `environment`, `refusals`, `warnings` and the upload `order`;
 gets as far as the plan prints the whole plan (`orphans`, `order`, `contexts`, …) with the
 arrays beside it. The human `bynk: …` line is still written to stderr.
 
-**A refusal that is not in the table yet leaves no entry** (the account checks and confirmations still fall here): the run exits non-zero and writes
+**A refusal that is not in the table yet leaves no entry** (the account checks and confirmations of a run that applies, which `--plan` never reaches, still fall here): the run exits non-zero and writes
 its reason to stderr alone, and stdout can be empty, or hold a plan whose `refusals` is `[]`
 (a refusal made after the plan is printed). A client treats a non-zero exit with no entry in
 `refusals` as a refusal it cannot explain, and reads stderr.
@@ -722,6 +722,11 @@ refusal or warning, never as a pass.
 | `bynk.deploy.strict_environments_unchecked` | `refusals` | `environment`: `default` could not be built, so nothing was compared. |
 | `bynk.deploy.hyperdrive_settings_unreadable` | `refusals` | none: `[deploy.hyperdrive]` did not read. |
 | `bynk.deploy.hyperdrive_unresolved` | `refusals` | none: a Hyperdrive binding did not resolve. |
+| `bynk.deploy.adoption_unreadable` | `refusals` | `table` (`vectorize` or `containers`): its `bynk.toml` entries did not read. |
+| `bynk.deploy.adoption_unmatched` | `refusals` | `table`, `capability`: an adoption entry that names no capability of the project. |
+| `bynk.deploy.adoption_partial` | `warnings` | `table`, `capability`, `environment`: the entry adopts nothing for this environment, so the deploy creates or builds one. |
+| `bynk.deploy.account_note` | `warnings` | none: what checking the plan against the account found, as the message says it. |
+| `bynk.deploy.email_forward_destination` | `warnings` | none: a `Forward` destination Cloudflare may refuse or that could not be checked. |
 | `bynk.deploy.recreate_needs_yes` | `refusals` | none: a changed `@jurisdiction` would make a new R2 bucket, which `--yes` accepts. |
 
 **Secrets** — `deploy` sets three kinds, and the plan marks which is which:

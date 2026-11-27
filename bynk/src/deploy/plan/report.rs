@@ -39,6 +39,8 @@ impl Entry {
     pub(crate) fn from_printed(code: &str, printed: &str) -> Self {
         let message = printed
             .strip_prefix("bynk: error: ")
+            .or_else(|| printed.strip_prefix("bynk: warning: "))
+            .or_else(|| printed.strip_prefix("bynk: note: "))
             .unwrap_or(printed)
             .trim_end();
         Self::new(code, message)
@@ -111,6 +113,11 @@ pub(crate) mod code {
     pub(crate) const UPLOAD_ORDER_CYCLE: &str = "bynk.deploy.upload_order_cycle";
     pub(crate) const RECREATE_NEEDS_YES: &str = "bynk.deploy.recreate_needs_yes";
     pub(crate) const PINS_UNREADABLE: &str = "bynk.deploy.pins_unreadable";
+    pub(crate) const ADOPTION_UNREADABLE: &str = "bynk.deploy.adoption_unreadable";
+    pub(crate) const ADOPTION_UNMATCHED: &str = "bynk.deploy.adoption_unmatched";
+    pub(crate) const ADOPTION_PARTIAL: &str = "bynk.deploy.adoption_partial";
+    pub(crate) const ACCOUNT_NOTE: &str = "bynk.deploy.account_note";
+    pub(crate) const EMAIL_FORWARD_DESTINATION: &str = "bynk.deploy.email_forward_destination";
     pub(crate) const ACCOUNT_NAME_CONFLICT: &str = "bynk.deploy.account_name_conflict";
     pub(crate) const SECRETS_FILE_PASSTHROUGH: &str = "bynk.deploy.secrets_file_passthrough";
     pub(crate) const STRICT_ENVIRONMENTS_SHARED: &str = "bynk.deploy.strict_environments_shared";
@@ -159,10 +166,14 @@ impl Stop {
         Self::refused(entry)
     }
 
-    /// The upload order, for a stop made after the run had one and which did not carry it.
-    pub(crate) fn with_order(mut self, order: &[String]) -> Self {
+    /// What the run knew when it stopped: the upload order and the warnings it had gathered
+    /// (stderr has printed them), for a stop that did not carry them.
+    pub(crate) fn with_run(mut self, order: &[String], warnings: &[Entry]) -> Self {
         if self.order.is_empty() {
             self.order = order.to_vec();
+        }
+        if self.warnings.is_empty() {
+            self.warnings = warnings.to_vec();
         }
         self
     }
