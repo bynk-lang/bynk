@@ -66,6 +66,7 @@ pub mod architecture;
 pub mod call_outcome;
 pub mod capability_path;
 pub mod completion;
+pub mod decimal_patterns;
 pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;

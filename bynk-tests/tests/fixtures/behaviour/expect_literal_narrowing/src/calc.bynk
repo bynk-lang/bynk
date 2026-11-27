@@ -1,0 +1,5 @@
+commons calc
+
+fn total(qty: Int, price: Int) -> Int { qty * price }
+fn label(n: Int) -> String { if n > 0 { "pos" } else { "non" } }
+fn flag(n: Int) -> Bool { n > 0 }

@@ -628,6 +628,10 @@ pub fn pattern_to_string(p: &Pattern) -> String {
             LiteralValue::Int(n) => text.clone().unwrap_or_else(|| n.to_string()),
             LiteralValue::Str(s) => format!("\"{}\"", escape_string(s)),
             LiteralValue::Bool(b) => b.to_string(),
+            // #3973: as written (`20.0d`), so the scale the author chose survives formatting.
+            LiteralValue::Decimal { .. } | LiteralValue::Float(_) => {
+                text.clone().unwrap_or_else(|| value.describe())
+            }
         },
         // #2699: `lo..hi`, `lo..`, `..hi`, with no spaces.
         Pattern::Range(r) => r.describe_source(),

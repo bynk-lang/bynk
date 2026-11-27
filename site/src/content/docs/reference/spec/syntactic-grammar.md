@@ -1339,8 +1339,11 @@ or `field: _` to ignore it.
 
 {{#grammar literal_pattern}}
 
-An integer (optionally negated), a string, or a boolean, matching a primitive
-scrutinee by value. Exhaustiveness: [§5.6](/reference/spec/static-semantics/#56-pattern-matching).
+An integer (optionally negated), a string, a boolean, or a `Decimal` literal
+(optionally negated), matching a primitive scrutinee by value. A `Float` literal is
+admitted by the grammar so that the checker can refuse it with a reason
+(`bynk.types.float_literal_pattern`, §5.6). Exhaustiveness:
+[§5.6](/reference/spec/static-semantics/#56-pattern-matching).
 
 ### §4.7.8 or_pattern
 

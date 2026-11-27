@@ -81,6 +81,7 @@ pub(crate) mod nested_wrapper;
 mod par;
 mod partial_content;
 mod pattern_as;
+mod pattern_literals;
 mod query_more;
 mod query_par;
 mod refined_range;

@@ -2154,10 +2154,14 @@ module.exports = grammar({
       );
     },
     // v0.130 §2.3.4: a literal pattern — an integer (optionally negated), a
-    // string, or a boolean. A closed set (ADR 0001); no `Float`, no `()`.
+    // string, or a boolean (ADR 0001), and a `Decimal` or `Float` literal (#3973); no `()`.
     literal_pattern: ($) =>
       choice(
         seq(optional("-"), $.number_literal),
+        // #3973: a `Decimal` literal matches by value; a `Float` literal parses so the checker
+        // can say why it is refused (`bynk.types.float_literal_pattern`).
+        seq(optional("-"), $.decimal_literal),
+        seq(optional("-"), $.float_literal),
         $.string_literal,
         $.boolean_literal,
       ),

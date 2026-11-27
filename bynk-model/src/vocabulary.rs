@@ -817,6 +817,10 @@ fn pattern_has_nested_test(pat: &Pattern) -> bool {
             .any(|p| !p.bound_names().is_empty() || pattern_has_nested_test(p)),
         // #3971: `as` binds the whole value, which a `case` label cannot.
         Pattern::As { .. } => true,
-        Pattern::Wildcard(_) | Pattern::Binding(_) | Pattern::Literal { .. } => false,
+        // #3973: a `Decimal` is tested by value (`__bynkDecimalEqual`), which no `case` label is.
+        Pattern::Literal { value, .. } => {
+            matches!(value, bynk_syntax::ast::LiteralValue::Decimal { .. })
+        }
+        Pattern::Wildcard(_) | Pattern::Binding(_) => false,
     }
 }

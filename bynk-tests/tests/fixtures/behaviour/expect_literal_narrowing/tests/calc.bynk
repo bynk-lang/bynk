@@ -1,0 +1,66 @@
+suite calc as unit {
+  case "eq then other eq fails" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a == 7
+  }
+  case "eq then ne passes" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a != 7
+  }
+  case "three successive literals" {
+    let a = total(3, 500)
+    expect a == 1500
+    expect a != 7
+    expect a != 8
+  }
+  case "strings and bools" {
+    let s = label(1)
+    expect s == "pos"
+    expect s != "non"
+    let b = flag(1)
+    expect b == true
+    expect b != false
+  }
+  case "literal on the left" {
+    let a = total(3, 500)
+    expect 1500 == a
+    expect 7 != a
+  }
+  case "negative literals" {
+    let n = total(1, -1)
+    expect n == -1
+    expect n == -2
+  }
+  case "boolean ne then eq" {
+    let b = flag(1)
+    expect b != false
+    expect b == false
+  }
+  case "string fails at run time" {
+    let s = label(1)
+    expect s == "pos"
+    expect s == "neg"
+  }
+  case "bare then eq" {
+    let b = flag(1)
+    expect b
+    expect b == false
+  }
+  case "conjunction narrows left to right" {
+    let a = total(3, 500)
+    expect a == 1 && a == 2
+  }
+  case "conjunction then eq" {
+    let a = total(3, 500)
+    let b = flag(1)
+    expect a == 1500 && b
+    expect a == 7
+  }
+  case "negation then eq" {
+    let b = flag(1)
+    expect !b
+    expect b == true
+  }
+}
