@@ -34,9 +34,10 @@
 // Each file that includes this module uses a part of it (see `it.rs` on `#[path]` helpers).
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const OPEN: &str = "<<bynk-shared: ";
 const CLOSE: &str = ">>";
@@ -56,16 +57,20 @@ fn marker(id: &str) -> String {
 /// The snapshot file of a shared region: `std/bynk/locale/types#a+b` is
 /// `shared/std/bynk/locale/types@a+b.ts`; `testing/expectation` is `shared/testing/expectation.ts`.
 fn snapshot_path(id: &str) -> PathBuf {
+    shared_root().join(snapshot_rel(id))
+}
+
+/// [`snapshot_path`] relative to the shared root.
+fn snapshot_rel(id: &str) -> PathBuf {
     let (base, variant) = match id.split_once('#') {
         Some((b, v)) => (b, Some(v)),
         None => (id, None),
     };
     let base = base.strip_suffix(".ts").unwrap_or(base);
-    let file = match variant {
+    PathBuf::from(match variant {
         Some(v) => format!("{base}@{v}.ts"),
         None => format!("{base}.ts"),
-    };
-    shared_root().join(file)
+    })
 }
 
 /// The test-runtime fragments, longest first so one that contains another claims it first.
@@ -233,12 +238,62 @@ impl SharedBless {
 
     /// Rewrite `tests/fixtures/shared/` to exactly the regions recorded.
     pub fn write(self) {
-        let root = shared_root();
-        let _ = fs::remove_dir_all(&root);
-        for (id, (_, text)) in self.regions {
-            let path = snapshot_path(&id);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(path, text).unwrap();
+        write_snapshots(
+            &shared_root(),
+            self.regions.into_iter().map(|(id, (_, text))| (id, text)),
+        );
+    }
+}
+
+/// #4540: make `root` hold exactly `regions`, one snapshot file each, without a moment at which
+/// a recorded snapshot is missing. Other tests read the snapshots while a bless runs (`expand`,
+/// `check_regions`), so the tree is never deleted and rebuilt. A changed snapshot is written to a
+/// temporary file beside it and renamed over it, so a reader sees the old bytes or the new ones;
+/// an unchanged one is not touched; and only then are the files no recorded region owns, and the
+/// directories they leave empty, removed.
+fn write_snapshots(root: &Path, regions: impl IntoIterator<Item = (String, String)>) {
+    let mut keep = BTreeSet::new();
+    for (id, text) in regions {
+        let path = root.join(snapshot_rel(&id));
+        if fs::read_to_string(&path).is_ok_and(|now| now == text) {
+            keep.insert(path);
+            continue;
+        }
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let tmp = temporary_beside(&path);
+        fs::write(&tmp, &text).unwrap();
+        fs::rename(&tmp, &path)
+            .unwrap_or_else(|e| panic!("could not move {} into place: {e}", path.display()));
+        keep.insert(path);
+    }
+    remove_unrecorded(root, &keep);
+}
+
+/// A file name beside `path` that no other writer uses, for a write that is then renamed into
+/// place. It is not a snapshot's name, so a leftover one is removed as unrecorded.
+fn temporary_beside(path: &Path) -> PathBuf {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    let name = path.file_name().unwrap().to_string_lossy();
+    // The thread too: each test module that includes this file has its own `NEXT`.
+    let thread = format!("{:?}", std::thread::current().id());
+    let thread: String = thread.chars().filter(char::is_ascii_digit).collect();
+    path.with_file_name(format!(".{name}.{}.{thread}.{n}.tmp", std::process::id()))
+}
+
+/// Remove every file under `dir` not in `keep`, then every directory that leaves empty.
+fn remove_unrecorded(dir: &Path, keep: &BTreeSet<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|t| t.is_dir()) {
+            remove_unrecorded(&path, keep);
+            // Fails, and is meant to, while the directory still holds a snapshot.
+            let _ = fs::remove_dir(&path);
+        } else if !keep.contains(&path) {
+            let _ = fs::remove_file(&path);
         }
     }
 }
@@ -267,4 +322,121 @@ pub fn expand(text: &str) -> String {
         }
     }
     out
+}
+
+/// #4540: a bless rewrites the shared snapshots while other tests read them.
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::thread;
+
+    /// A fresh directory for one test, under the system's temporary directory. Several test
+    /// modules include this file, so each copy of a test gets its own.
+    fn scratch(name: &str) -> PathBuf {
+        let copy = module_path!().replace("::", "-");
+        let dir = std::env::temp_dir().join(format!(
+            "bynk-shared-snapshots-{name}-{copy}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    /// Forty snapshots in five directories, each fifty identical lines naming `generation`.
+    fn regions(generation: usize) -> Vec<(String, String)> {
+        (0..40)
+            .map(|i| {
+                (
+                    format!("std/bynk/m{}/f{i}#a+b", i % 5),
+                    format!("// generation {generation}, file {i}\n").repeat(50),
+                )
+            })
+            .collect()
+    }
+
+    /// Readers in parallel with repeated blesses never find a snapshot missing, and never read a
+    /// partly written one. The old `write`, which deleted the tree and rewrote it, fails this
+    /// within its first few rewrites.
+    #[test]
+    fn a_bless_never_hides_a_snapshot_from_a_parallel_reader() {
+        let root = scratch("race");
+        write_snapshots(&root, regions(0));
+        let paths: Vec<PathBuf> = regions(0)
+            .iter()
+            .map(|(id, _)| root.join(snapshot_rel(id)))
+            .collect();
+        let done = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..4)
+            .map(|_| {
+                let (paths, done) = (paths.clone(), Arc::clone(&done));
+                thread::spawn(move || {
+                    let mut reads = 0usize;
+                    while !done.load(Ordering::Relaxed) {
+                        for p in &paths {
+                            let text = fs::read_to_string(p).unwrap_or_else(|e| {
+                                panic!("{} is missing during a bless: {e}", p.display())
+                            });
+                            let first = text.lines().next().unwrap_or_default();
+                            assert!(
+                                text.lines().count() == 50 && text.lines().all(|l| l == first),
+                                "{} was read partly written",
+                                p.display()
+                            );
+                            reads += 1;
+                        }
+                    }
+                    reads
+                })
+            })
+            .collect();
+        for generation in 1..=200 {
+            write_snapshots(&root, regions(generation));
+        }
+        done.store(true, Ordering::Relaxed);
+        for reader in readers {
+            let reads = reader.join().expect("a reader failed during the blesses");
+            assert!(reads > 0, "a reader never ran");
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A bless removes the snapshots it no longer records, the directories they leave empty and
+    /// any leftover temporary file, and leaves an unchanged snapshot untouched.
+    #[test]
+    fn a_bless_removes_only_what_it_no_longer_records() {
+        let root = scratch("stale");
+        let stale_id = "std/bynk/gone/old#x";
+        let mut first = regions(0);
+        first.push((stale_id.to_string(), "old\n".to_string()));
+        write_snapshots(&root, first);
+        let stale = root.join(snapshot_rel(stale_id));
+        assert!(stale.is_file());
+        let leftover = root.join("std/bynk/m0/.f0@a+b.ts.1.0.tmp");
+        fs::write(&leftover, "partial").unwrap();
+        let kept = root.join(snapshot_rel(&regions(0)[0].0));
+        let before = fs::metadata(&kept).unwrap().modified().unwrap();
+
+        write_snapshots(&root, regions(0));
+
+        assert!(!stale.exists(), "an unrecorded snapshot is removed");
+        assert!(
+            !stale.parent().unwrap().exists(),
+            "and the directory it left empty"
+        );
+        assert!(!leftover.exists(), "a leftover temporary file is removed");
+        for (id, text) in regions(0) {
+            assert_eq!(
+                fs::read_to_string(root.join(snapshot_rel(&id))).unwrap(),
+                text
+            );
+        }
+        assert_eq!(
+            fs::metadata(&kept).unwrap().modified().unwrap(),
+            before,
+            "an unchanged snapshot is not rewritten"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
 }
