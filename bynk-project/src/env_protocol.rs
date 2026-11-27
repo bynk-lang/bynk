@@ -152,6 +152,17 @@ pub const CALL_FROM_PREFIX: &str = "BYNK_CALL_FROM_";
 /// The prefix of the secret a caller holds for the edge to one callee,
 /// followed by the callee's edge suffix.
 pub const CALL_TO_PREFIX: &str = "BYNK_CALL_TO_";
+/// #4526: the prefix of the callee's **second** verification slot for the edge from one caller,
+/// followed by the caller's edge suffix. A rotation puts the new key in the slot the live key
+/// is not in, so the old key stays where it is and is never read back (Cloudflare returns no
+/// secret's value); the callee verifies under every slot present and unexpired.
+pub const CALL_FROM_SLOT2_PREFIX: &str = "BYNK_CALL_FROM2_";
+/// #4526: the prefix of the secret marking the callee's first slot (`BYNK_CALL_FROM_<S>`) as
+/// retiring, followed by the caller's edge suffix. Its value is the instant, in whole seconds
+/// since the Unix epoch, after which that slot is no longer verified under.
+pub const CALL_UNTIL_PREFIX: &str = "BYNK_CALL_UNTIL_";
+/// #4526: [`CALL_UNTIL_PREFIX`] for the second slot (`BYNK_CALL_FROM2_<S>`).
+pub const CALL_UNTIL_SLOT2_PREFIX: &str = "BYNK_CALL_UNTIL2_";
 /// The edge key from `bynk dev inspect`'s caller, `bynk.dev`: the
 /// [`CALL_FROM_PREFIX`] family's one fixed member.
 pub const CALL_FROM_BYNK_DEV: &str = "BYNK_CALL_FROM_BYNK__DEV";
@@ -329,6 +340,27 @@ pub const PROTOCOL: &[Entry] = &[
         Carrier::Secret,
         Shape::Prefix { members: &[] },
         "bynk::deploy::secrets and bynk::dev (bynk-check::wire_format::edge_key_to)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
+        CALL_FROM_SLOT2_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_key_from_slot2)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
+        CALL_UNTIL_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_until)",
+        &[runtime("boundary.ts")],
+    ),
+    worker(
+        CALL_UNTIL_SLOT2_PREFIX,
+        Carrier::Secret,
+        Shape::Prefix { members: &[] },
+        "bynk::deploy::secrets (bynk-check::wire_format::edge_until_slot2)",
         &[runtime("boundary.ts")],
     ),
     worker(

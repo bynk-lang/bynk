@@ -461,14 +461,38 @@ an edge must hold the same key, and Cloudflare won't give one back, so:
   fresh key and sets it on **both** ends. Calls along that edge can fail for the
   moment between one end taking the new key and the other.
 - A redeploy where both ends hold the key leaves it alone. `--force` rotates the
-  key of every edge the run deploys both ends of.
+  key of every edge the run deploys both ends of, and so does redeploying a
+  Worker after it was deleted.
+- **A rotation keeps the key it replaces working for 15 days.** The consumer holds
+  an edge's key in one of two slots (`BYNK_CALL_FROM_<CALLER>` and
+  `BYNK_CALL_FROM2_<CALLER>`). A rotation puts the new key in the slot the live
+  one is not in, then marks the old slot with the instant it stops verifying
+  (`BYNK_CALL_UNTIL_<CALLER>` or `BYNK_CALL_UNTIL2_<CALLER>`, whole seconds since
+  the Unix epoch). The consumer is deployed before its producer, so no message is
+  signed under a key the consumer cannot verify. A signed message waits in a queue
+  for up to 14 days and is verified when it is delivered, so a message signed
+  under the old key before the rotation is still admitted, and a `Producer`
+  refinement does not lose it. The consumer checks the instant itself, so the old
+  key stops working on schedule even if no later deploy runs; the next deploy
+  past it deletes the old slot and its marker, and the plan says so. Cloudflare
+  never returns a key's value, so the old key is never copied: it stays where it
+  is. A second rotation inside the window replaces the key that was retiring.
+- **If the old key leaked, do not wait it out.** `bynk deploy --revoke-previous-edge-key
+  <context>` (repeatable) re-keys every edge key on that context at once and
+  deletes the old key, so it stops verifying immediately. A message still in a
+  queue that was signed under it is then refused, not handled. It needs both
+  Workers of each edge in the run, and a revoke that cannot be applied stops the
+  deploy rather than leaving the key working.
 - `--context NAME` can't mint a key for an edge whose other end it doesn't
   deploy. If such an edge lacks its key, the deploy stops before pushing
   anything and asks for a whole-project deploy.
 
 If a deploy that is rotating keys stops partway, the two ends of an edge can
 hold different keys, and a plain rerun keeps both. The deploy names those edges
-when it stops. Rerun `bynk deploy --force` to set one key on both ends.
+when it stops. Rerun `bynk deploy --force` to set one key on both ends. Until you
+do, calls along the edge keep working while the consumer still accepts the
+previous key, which is 15 days after a rotation, and are refused at once after a
+revoke.
 
 You can't supply an edge key: one in `--secrets-file` is ignored, since spread
 to every context it would break the edges it doesn't belong to. `bynk dev` and

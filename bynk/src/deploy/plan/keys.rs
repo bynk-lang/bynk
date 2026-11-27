@@ -212,7 +212,7 @@ pub(crate) fn interrupted_rotation_hint(
         return None;
     }
     Some(format!(
-        "bynk: note: this run was setting new keys on {} and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.\n  \
+        "bynk: note: this run was setting new keys on {} and stopped before both ends of each were deployed, so each end may hold a different key. The consumer still accepts the previous key for 15 days after a rotation (calls along it are refused at once after a `--revoke-previous-edge-key`), and the producer keeps signing under the old one.\n  \
          Rerun `{} --force` (the whole project) to set one key on both ends; a plain rerun would keep both.\n",
         split.join(", "),
         deploy_command(environment)

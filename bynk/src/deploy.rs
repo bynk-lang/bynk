@@ -53,6 +53,7 @@ mod config;
 pub(crate) mod containers;
 mod declared;
 mod destinations;
+mod edge_slots;
 pub(crate) mod email;
 mod facts;
 mod first_deploy;
@@ -788,6 +789,7 @@ mod tests {
             EdgeKey::Set {
                 value: "minted-value".into(),
                 rotating: true,
+                callee: crate::deploy::edge_slots::CalleeWrite::default(),
             },
         )]
         .into_iter()
@@ -819,7 +821,12 @@ mod tests {
                     false,
                     false,
                     &mut || panic!("a refused edge mints nothing"),
-                    environment,
+                    &Rotation {
+                        callee_slots: crate::deploy::edge_slots::SlotState::default(),
+                        mode: crate::deploy::edge_slots::Mode::Grace,
+                        now: 0,
+                        environment,
+                    },
                 )
                 .expect_err("refused"),
             );

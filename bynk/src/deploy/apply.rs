@@ -23,6 +23,7 @@
 //! reaches a step. Where the apply still asks the account on top of a step's decision, the kind
 //! names the guard ([`ResourceKind::GUARDS`]).
 
+use super::edge_slots::{apply_edge_deletes, record_edge_slots};
 use super::*;
 use bynk_driver::{colour, emsg};
 
@@ -340,6 +341,7 @@ pub(crate) fn apply_plan(
                 source: secret_source,
                 force: opts.force,
                 edge_keys: &keys.edge_keys,
+                expired: &keys.expired,
                 foreign_keys: &keys.foreign_keys,
                 foreign_secrets: &keys.foreign_secrets,
                 listed: &keys.listed,
@@ -355,7 +357,14 @@ pub(crate) fn apply_plan(
                 // P3 (#2342): e.g. a rate limiter's id the source dropped is free again.
                 let pushed = PushedWorker::of(worker, workers_dir, groups, &resources[worker]);
                 let recorded = record_pushed(writer, &opts.environment, &pushed, |lock| {
-                    record_fresh_moves(lock, opts, worker, moves)
+                    record_fresh_moves(lock, opts, worker, moves);
+                    // #4526: what its rotations left retiring, and what was cleaned up.
+                    record_edge_slots(
+                        lock,
+                        &opts.environment,
+                        worker,
+                        (&keys.edge_keys, &keys.expired),
+                    );
                 });
                 // I3 (#1971): the secrets just minted for this context's
                 // foreign callers, handed to their operators.
@@ -776,6 +785,7 @@ fn push_worker(
     let wrangler_args = wrangler_args.as_slice();
     if !first_deploy {
         apply_secrets(api, worker_dir, worker, &prepared, environment)?;
+        apply_edge_deletes(api, run.secrets, worker, environment)?;
         return push(
             api,
             worker_dir,

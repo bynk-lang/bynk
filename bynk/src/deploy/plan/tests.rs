@@ -2631,6 +2631,7 @@ fn an_interrupted_rotation_says_how_to_repair_it() {
     let set = |rotating: bool| EdgeKey::Set {
         value: "minted-value".into(),
         rotating,
+        callee: crate::deploy::edge_slots::CalleeWrite::default(),
     };
     let keys: BTreeMap<Edge, EdgeKey> = [
         (edge("commerce-orders", "commerce-payment"), set(true)),

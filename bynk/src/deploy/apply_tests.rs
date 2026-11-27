@@ -542,6 +542,7 @@ fn apply(environment: &str, fail_call: Option<usize>, fail_write: Option<usize>)
                         source: &source,
                         force: false,
                         edge_keys: &edge_keys,
+                        expired: &std::collections::BTreeMap::new(),
                         foreign_keys: &foreign_keys,
                         foreign_secrets: &foreign_secrets,
                         listed: &listed,
