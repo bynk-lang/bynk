@@ -6119,20 +6119,54 @@ impl SuiteView {
                 crate::project_model::type_ref_names(&h.return_type, &no_vars, &mut queue);
             }
         }
-        // `bynk` is read before `bynk.cloudflare`; the two declare no name in
-        // common, so which unit a participant consumed a name from is not
-        // ambiguous.
-        let first_party = [
+        // #4619: a type a participant takes by name (`consumes bynk { CloseInfo }`) is in scope
+        // for a case that names it, whether or not any service signature does. Without it a
+        // case building a `CloseInfo` had the record left unchecked, and a method on a list
+        // of them recorded no callee. A braced list leaves the types it does not name out.
+        for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
+            for unit in &table.first_party_consumes {
+                let Some(t) = unit_tables.get(unit) else {
+                    continue;
+                };
+                // Filed from the unit it was consumed from, so a name two first-party units
+                // share is the consumed one's. `unlisted_consumed_types` is every type the
+                // braces do not list, including those a listed capability's signature reaches,
+                // which the target cannot name.
+                let mut names: Vec<&String> = t
+                    .types
+                    .keys()
+                    .filter(|n| !table.unlisted_consumed_types.contains(*n))
+                    .collect();
+                names.sort();
+                for n in names {
+                    if let Some(decl) = t.types.get(n)
+                        && !self.types.contains_key(n)
+                    {
+                        queue.extend(crate::project_model::type_decl_ref_names(decl));
+                        self.types.insert(n.clone(), decl.clone());
+                    }
+                }
+            }
+        }
+        // The first-party units a participant consumes, and `bynk` and `bynk.cloudflare`, whose
+        // types a handler's signature may name through a commons. Read in name order: a name two
+        // of them declare is taken from the first, which `consumes` would have refused unrenamed.
+        let mut first_party: Vec<&str> = vec![
             crate::firstparty::BYNK_UNIT,
             crate::firstparty::CLOUDFLARE_UNIT,
         ];
+        for table in participants.iter().filter_map(|p| unit_tables.get(p)) {
+            first_party.extend(table.first_party_consumes.iter().map(String::as_str));
+        }
+        first_party.sort_unstable();
+        first_party.dedup();
         while let Some(name) = queue.pop() {
             if self.types.contains_key(&name) {
                 continue;
             }
             let found = first_party
-                .into_iter()
-                .find_map(|u| unit_tables.get(u).and_then(|t| t.types.get(&name)));
+                .iter()
+                .find_map(|u| unit_tables.get(*u).and_then(|t| t.types.get(&name)));
             if let Some(decl) = found {
                 queue.extend(crate::project_model::type_decl_ref_names(decl));
                 self.types.insert(name, decl.clone());
@@ -7298,6 +7332,75 @@ service check {
             !a.categories().contains(&"bynk.effect.bind_on_non_effect"),
             "{:?}",
             a.categories()
+        );
+    }
+
+    /// #4619: a prelude type the target consumes is in scope for a `system` case when no service
+    /// signature names it. The record is checked like any other (a wrong field is refused), where
+    /// it was left unchecked and a method on a list of them recorded no callee.
+    #[test]
+    fn a_consumed_prelude_type_no_signature_names_is_checked_in_a_system_case() {
+        let orders = ORDERS.replace(
+            "consumes bynk { CloseInfo, Cookie }",
+            "consumes bynk { CloseInfo }",
+        );
+        let orders = orders
+            .split("service one {")
+            .next()
+            .expect("the part before `one`")
+            .to_string();
+        let suite = |body: &str| {
+            format!("suite shop.orders as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n")
+        };
+        let good = suite(
+            "    let cs = [CloseInfo { code: 1000, reason: \"d\", clean: true }]\n    expect cs.length() == 1",
+        );
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", &orders),
+            ("shop/tests/orders.test.bynk", &good),
+        ])
+        .assert_clean();
+        let bad = suite(
+            "    let cs = [CloseInfo { code: 1000, reason: \"d\", clean: true, nope: 1 }]\n    expect cs.length() == 1",
+        );
+        crate::testkit::analyse(&[
+            ("shop/orders.bynk", &orders),
+            ("shop/tests/orders.test.bynk", &bad),
+        ])
+        .assert_reports("bynk.resolve.unknown_field");
+    }
+
+    /// A braced `consumes` brings in only the names it lists: the view holds `CloseInfo`, which
+    /// the target consumed, and not `Cookie`, a `bynk` type the braces leave out, so a wrong
+    /// field is refused on the one and the other record is not seeded into the view.
+    #[test]
+    fn a_prelude_type_a_braced_consumes_leaves_out_is_not_seeded_into_a_system_view() {
+        let orders = ORDERS.replace(
+            "consumes bynk { CloseInfo, Cookie }",
+            "consumes bynk { CloseInfo }",
+        );
+        let orders = orders
+            .split("service one {")
+            .next()
+            .expect("the part before `one`")
+            .to_string();
+        let case = |record: &str| {
+            let suite = format!(
+                "suite shop.orders as system {{\n  case \"c\" {{\n    let r = {record}\n    expect true\n  }}\n}}\n"
+            );
+            crate::testkit::analyse(&[
+                ("shop/orders.bynk", &orders),
+                ("shop/tests/orders.test.bynk", &suite),
+            ])
+            .categories()
+            .contains(&"bynk.resolve.unknown_field")
+        };
+        assert!(case(
+            "CloseInfo { code: 1, reason: \"r\", clean: true, nope: 1 }"
+        ));
+        assert!(
+            !case("Cookie { name: \"a\", value: \"b\", nope: 1 }"),
+            "`Cookie` is not in the view, so its record is not checked"
         );
     }
 

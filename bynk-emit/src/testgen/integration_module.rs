@@ -179,6 +179,15 @@ fn std_namespace_import() -> TsStmt {
     )
 }
 
+/// #4619: whether the finished tree still names an unbound `Cookie`, so the module-level
+/// `import type { Cookie }` is used. A case that binds its own (the std `bynk` types a case
+/// destructures, #4613) shadows the import and leaves it unused.
+fn tree_names_cookie(stmts: &[TsStmt]) -> bool {
+    bynk_ts::unbound_names_in(stmts, |_| true)
+        .iter()
+        .any(|n| n == "Cookie")
+}
+
 /// Emit a single integration-test module plus its [`RunnableTest`] pointer.
 /// The module imports each participant's workers-mode handler namespace (for
 /// serialise/deserialise) and Worker entry (for dispatch), builds an in-process
@@ -910,7 +919,7 @@ pub(super) fn emit_integration_module(
     let mut head =
         emitter::runtime_files::runtime_import_stmts(false, &runtime_names, &runtime_import);
     // #3277: a case that reads a result's cookies names the `Cookie` type.
-    if runtime_use.http_result_cookie() {
+    if runtime_use.http_result_cookie() && tree_names_cookie(&stmts) {
         head.push(TsStmt::decl(
             TsDecl::Import {
                 type_only: true,

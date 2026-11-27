@@ -1,0 +1,16 @@
+suite shop.orders as system {
+  case "reversed: a list of consumed prelude records" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }, CloseInfo { code: 1006, reason: "gone", clean: false }]
+    expect cs.any((c) => c.code == 1006)
+  }
+
+  case "reversed: a call's list of records" {
+    let xs <- shop.orders.items()
+    expect xs.any((i) => i.sku == "b")
+  }
+
+  case "a call's list of prelude records" {
+    let ts <- shop.orders.timeouts()
+    expect ts.any((t) => t.after == 5.seconds)
+  }
+}

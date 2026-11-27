@@ -1,0 +1,13 @@
+// #4619: a prelude type the target consumes, and no service signature names, is in scope for a
+// `system` case, so a method on a list of them is checked and lowers, in either case order.
+suite shop.orders as system {
+  case "a call's list of records" {
+    let xs <- shop.orders.items()
+    expect xs.any((i) => i.sku == "b")
+  }
+
+  case "a list of consumed prelude records" {
+    let cs = [CloseInfo { code: 1000, reason: "done", clean: true }, CloseInfo { code: 1006, reason: "gone", clean: false }]
+    expect cs.any((c) => c.code == 1006)
+  }
+}

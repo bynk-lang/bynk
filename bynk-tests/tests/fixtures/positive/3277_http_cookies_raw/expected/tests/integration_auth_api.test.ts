@@ -5,9 +5,9 @@ import { Ok, Err } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __requestCookies, __requestCookiesHeader, __requestHeaderPairs } from "../__bynk_runtime/http.js";
-import type { Cookie } from "../bynk.js";
 import * as __ns_auth_api from "../workers/auth-api/handlers.js";
 import worker___ns_auth_api from "../workers/auth-api/index.js";
+import * as __ns_bynk from "./../bynk.js";
 
 <<bynk-shared: testing/expectation>>
 
@@ -113,8 +113,10 @@ async function test_a_prefixed_cookie_the_login_sets_is_the_one_the_view_reads()
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    const { Cookie } = __ns_bynk;
+    type Cookie = __ns_bynk.Cookie;
     const login = await __sysdrive_api_http_POST_login(undefined, "");
-    if (!(__bynkEq((((login as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)), ["__Host-sid"]))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 984, 1036, "expect login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  expected: login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  actual:   " + __bynkShow(((((login as any).cookies ?? [])).map((__x: Cookie) => ((c) => c.name)(__x)))) + " == " + __bynkShow((["__Host-sid"]))); }
+    if (!(__bynkEq((((login as any).cookies ?? [])).map((__x: Cookie) => ((c: Cookie) => c.name)(__x)), ["__Host-sid"]))) { throw __bynkExpectFailure("tests/api.bynk:33:10", 984, 1036, "expect login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  expected: login.cookies().map((c) => c.name) == [\"__Host-sid\"]\n  actual:   " + __bynkShow(((((login as any).cookies ?? [])).map((__x: Cookie) => ((c: Cookie) => c.name)(__x)))) + " == " + __bynkShow((["__Host-sid"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
