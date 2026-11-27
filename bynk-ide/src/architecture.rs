@@ -206,6 +206,21 @@ pub struct ArchHandlerUses {
     pub uses: Vec<ArchUse>,
     /// Model-diagrams slice 5: the services and agents the handler calls.
     pub calls: Vec<ArchCall>,
+    /// #3959: the instance each call binds to a commons function's capability
+    /// parameter, so a diagram draws which instance a library reaches.
+    pub bindings: Vec<ArchBinding>,
+}
+
+/// #3959: one `given Param = Instance` binding of a call to a commons function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArchBinding {
+    /// The commons function called.
+    pub function: String,
+    /// Its capability parameter.
+    pub parameter: String,
+    /// The handler's capability bound to it.
+    pub capability: String,
+    pub loc: Located,
 }
 
 /// Model-diagrams slice 5: one service or agent a handler calls, at its first
@@ -608,6 +623,16 @@ fn node_uses(unit: &str, facts: &ArchitectureFacts) -> Vec<ArchHandlerUses> {
                         handler: Some(handler.clone()),
                         loc: located(&c.site),
                     },
+                })
+                .collect(),
+            bindings: h
+                .bindings
+                .iter()
+                .map(|b| ArchBinding {
+                    function: b.function.clone(),
+                    parameter: b.parameter.clone(),
+                    capability: b.capability.clone(),
+                    loc: located(&b.site),
                 })
                 .collect(),
         })
@@ -1025,6 +1050,55 @@ service checkout {
   }
 }
 "#;
+
+    /// #3959 (capability-parameters track §13, slice 4): a handler that calls a
+    /// commons function records the instance each capability parameter is bound
+    /// to, so a diagram draws which instance the library reaches.
+    #[test]
+    fn handlers_carry_the_instances_their_calls_bind() {
+        let root = setup_project(
+            "arch-bindings",
+            &[
+                (
+                    "bynk.toml",
+                    "[project]\nname = \"shop\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.given.parameters\"]\n",
+                ),
+                (
+                    "lib/cache.bynk",
+                    "commons lib.cache\n\nconsumes bynk.cloudflare { Kv }\n\nfn remember(key: String) -> Effect[()] given Store: Kv {\n  Store.put(key, \"v\")\n}\n",
+                ),
+                (
+                    "shop.bynk",
+                    "context shop\n\nconsumes bynk.cloudflare { Kv }\n\nuses lib.cache\n\ncapability Sessions = Kv\n\nservice api {\n  on call(key: String) -> Effect[()] by Caller given Sessions {\n    remember(key, given Store = Sessions)\n  }\n}\n",
+                ),
+            ],
+        );
+        let diag = crate::testkit::diagnose_project(&root);
+        let model = build_model(&diag);
+        let node = model
+            .nodes
+            .iter()
+            .find(|n| n.name == "shop")
+            .expect("the shop node");
+        let api = node
+            .uses
+            .iter()
+            .find(|h| h.member.container == "api")
+            .expect("the api handler");
+        let bindings: Vec<(&str, &str, &str)> = api
+            .bindings
+            .iter()
+            .map(|b| {
+                (
+                    b.function.as_str(),
+                    b.parameter.as_str(),
+                    b.capability.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(bindings, [("remember", "Store", "Sessions")]);
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn handlers_carry_their_calls_and_agents_their_key_and_state() {

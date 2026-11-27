@@ -184,6 +184,21 @@ fn with_kind_appendix(
 }
 
 /// #4451: a `{dataset}` placeholder in an Analytics SQL literal names its table.
+/// #3959: a call's bindings, appended to its function's description.
+fn with_call_bindings(content: String, a: &HoverAnalysis<'_>) -> String {
+    let bindings = a
+        .snapshots
+        .get(a.rel)
+        .and_then(|text| crate::binding_hover::call_bindings_at(text, a.offset));
+    match bindings {
+        Some(b) => format!(
+            "{content}\n\n{}",
+            crate::binding_hover::bindings_section(&b)
+        ),
+        None => content,
+    }
+}
+
 fn dataset_hover(input: &HoverInput<'_>) -> Option<String> {
     let (text, offset) = input.doc?;
     crate::analytics_tooling::dataset_hover_at(text, offset)
@@ -245,6 +260,12 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    match below. The `Some` guard remains — it is what a new kind added
         //    without an arm would fall through, silently, which is how
         //    `Method`/`CapabilityOp` came to render the wrong declaration.
+        // #3959: a binding's parameter name, `given St|ore = Sessions`.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some((callee, b)) = crate::binding_hover::binding_param_at(text, a.offset)
+        {
+            return Some(crate::binding_hover::binding_param_hover(&callee, &b));
+        }
         if let Some((key, def)) = crate::index_queries::definition_at(a.index, a.rel, a.offset)
             && let Some(def_text) = a.snapshots.get(&def.path)
             && let Some(content) = describe_indexed(a, key, &def.path, def_text)
@@ -268,6 +289,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 Some(&ctx),
             );
             let content = with_kind_appendix(content, a, key, &def.path, def_text);
+            let content = with_call_bindings(content, a);
             return Some(with_capability_path(
                 with_used_name_note(content, a, key),
                 a,
