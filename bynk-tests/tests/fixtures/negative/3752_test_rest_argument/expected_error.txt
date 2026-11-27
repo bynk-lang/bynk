@@ -1,0 +1,2 @@
+bynk.test.rest_argument
+is not a rest the route `/raw/*path` could bind

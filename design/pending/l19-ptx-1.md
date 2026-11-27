@@ -1,8 +1,8 @@
 ---
 level: minor
 probes: emit_diagnostics, ts_writes, diagnostic_coverage, explained_codes
-changelog: A route's last segment may be a `*name` rest segment, which matches zero or more remaining segments and binds them, still percent-encoded, as a `String` (`on GET("/files/*key")`); it is the weakest segment when routes are ordered, never answers under `/_bynk/`, and is left out of `bynk client` and `bynk openapi`; experimental, behind `bynk.http.rest` in `[unstable] allow`. Two handlers of a service whose emitted names would collide (`/a-b` and `/a_b`) are now `bynk.http.handler_name_collision`
-breaking: Two HTTP routes of one service whose emitted handler names collide (`GET /a-b` beside `GET /a_b`, both `http_GET_a_b`), where one handler silently answered both paths, are now refused as `bynk.http.handler_name_collision`; spell one route differently, or move it to another service
+changelog: A route's last segment may be a `*name` rest segment, which matches zero or more remaining segments and binds them, still percent-encoded, as a `String` (`on GET("/files/*key")`); it is the weakest segment when routes are ordered, never answers under `/_bynk/`, and is left out of `bynk client` and `bynk openapi`; experimental, behind `bynk.http.rest` in `[unstable] allow`. Two handlers of a context whose emitted names would collide (`/a-b` and `/a_b`) are now `bynk.http.handler_name_collision`
+breaking: Two HTTP routes of one context whose emitted handler names collide (`GET /a-b` beside `GET /a_b`, both `http_GET_a_b`, in one service or two), where one handler silently answered both paths, are now refused as `bynk.http.handler_name_collision`; spell one route differently
 ---
 
 ## ADR: rest-segments
@@ -53,8 +53,9 @@ and ADR 0914 set the route order: segment by segment, a literal before a `:name`
     as written.
 - **Handler names.** The emitted handler name was not one-to-one: `/a-b` and `/a_b`
   were both `http_GET_a_b`, and one handler answered both paths. The naming scheme
-  moves into `bynk_check::emitted_names`, and two handlers of one service whose names
-  would collide are `bynk.http.handler_name_collision`.
+  moves into `bynk_check::emitted_names`, and two handlers of one context whose names
+  would collide are `bynk.http.handler_name_collision`. The names are the context's,
+  because every service of a context is composed into one surface object.
 - **Experimental.** The form needs `bynk.http.rest` in `[unstable] allow`. That is an
   entry in `bynk-std`'s `BUILTIN_EXPERIMENTAL`, the list of experimental built-ins.
 

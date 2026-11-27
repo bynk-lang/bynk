@@ -38,22 +38,98 @@ pub(crate) fn check_rest_routes(
     stability: &UnitStability,
     errors: &mut Vec<CompileError>,
 ) {
-    for service in table.services.values() {
-        let mut names: HashMap<String, (&Handler, &str)> = HashMap::new();
+    // Every service of a context is composed into one surface object, so the
+    // emitted names are the context's, not a service's. Services in name order,
+    // so the route reported is always the same one.
+    let mut services: Vec<_> = table.services.values().collect();
+    services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    let mut names: HashMap<String, (&Handler, String)> = HashMap::new();
+    for service in services {
         for handler in &service.handlers {
             let HandlerKind::Http { method, path } = &handler.kind else {
                 continue;
             };
             check_rest(handler, path, stability, errors);
             let name = crate::emitted_names::http_handler_name(method.as_str(), path);
+            let shape = route_shape(path);
             match names.get(&name) {
-                // The same route spelt twice is `bynk.http.duplicate_route`'s.
-                Some((_, first_path)) if *first_path == path.as_str() => {}
+                // One route spelt twice (`/a`, `/a/`) is `bynk.http.duplicate_route`'s
+                // or `bynk.http.unreachable_route`'s.
+                Some((_, first_shape)) if *first_shape == shape => {}
                 Some((first, _)) => errors.push(name_collision(handler, first, &name)),
                 None => {
-                    names.insert(name, (handler, path));
+                    names.insert(name, (handler, shape));
                 }
             }
+        }
+    }
+}
+
+/// A route's segments with the empty ones dropped, which is what the router
+/// compares: `/a`, `/a/` and `//a` are one route.
+fn route_shape(path: &str) -> String {
+    path.split('/')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// #3752 (D6): why `value`, a literal a test case gives for the rest of the route
+/// `pattern`, is not a rest the router could bind, or `None` when it is one. The
+/// system tier sends it as written after the prefix, so it must be what the
+/// router hands a handler: `""` or starting with `/` (never `""` under a root
+/// rest, which always binds at least `/`), with no `?` or `#` (they end the path)
+/// and no `.` or `..` segment (the router refuses one).
+pub fn rest_argument_problem(pattern: &str, value: &str) -> Option<&'static str> {
+    let root = route_shape(pattern)
+        .split('/')
+        .next()
+        .is_some_and(crate::route_order::is_rest_segment);
+    if value.is_empty() {
+        return root.then_some("a root rest always holds at least `/`");
+    }
+    if !value.starts_with('/') {
+        return Some("a rest that isn't empty starts with `/`");
+    }
+    if value.contains(['?', '#']) {
+        return Some("`?` and `#` end a path, so they are never part of a rest");
+    }
+    let dot = |s: &str| {
+        let s = s.to_ascii_lowercase().replace("%2e", ".");
+        s == "." || s == ".."
+    };
+    if value.split('/').any(dot) {
+        return Some("the router refuses a `.` or `..` segment");
+    }
+    None
+}
+
+/// #3752: `bynk.test.rest_argument` for each string-literal argument a test
+/// case gives a route's rest that [`rest_argument_problem`] refuses.
+pub(crate) fn check_rest_arguments(
+    pattern: &str,
+    params: &[bynk_syntax::ast::Param],
+    args: &[bynk_syntax::ast::Expr],
+    errors: &mut Vec<CompileError>,
+) {
+    let Some(name) = rest_name(pattern) else {
+        return;
+    };
+    for (param, arg) in params.iter().zip(args) {
+        if param.name.name != name {
+            continue;
+        }
+        if let bynk_syntax::ast::ExprKind::StrLit(value) = &arg.kind
+            && let Some(why) = rest_argument_problem(pattern, value)
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.test.rest_argument",
+                    arg.span,
+                    format!("`\"{value}\"` is not a rest the route `{pattern}` could bind: {why}"),
+                )
+                .with_note("a rest is the rest of the path as the router receives it, so give it as a request would carry it: `\"\"`, or `\"/a/b.png\"`; at the `system` tier it is sent as written"),
+            );
         }
     }
 }
@@ -102,10 +178,10 @@ fn name_collision(handler: &Handler, first: &Handler, name: &str) -> CompileErro
     CompileError::new(
         "bynk.http.handler_name_collision",
         handler.span,
-        format!("this route's handler would be emitted as `{name}`, the same name as another route's in this service"),
+        format!("this route's handler would be emitted as `{name}`, the same name as another route's in this context"),
     )
     .with_label(first.span, "this route has that name too")
-    .with_note("`/` and every character outside `A-Z`, `a-z` and `0-9` are written `_` in the emitted name, so `/a-b`, `/a_b` and `/a/b` collide; change one route's spelling, or move it to another service")
+    .with_note("`/` and every character outside `A-Z`, `a-z` and `0-9` are written `_` in the emitted name, so `/a-b`, `/a_b` and `/a/b` collide; spell one route differently")
 }
 
 #[cfg(test)]
@@ -120,5 +196,22 @@ mod tests {
         assert_eq!(rest_name("/*a/b"), None);
         assert_eq!(rest_name("/files/:key"), None);
         assert!(is_unnamed_rest("*"));
+    }
+
+    // #3752 (review of #4559): a case's rest is what the router could bind.
+    #[test]
+    fn a_rest_argument_is_one_the_router_could_bind() {
+        let p = |pat, v| rest_argument_problem(pat, v);
+        assert_eq!(p("/raw/*path", ""), None);
+        assert_eq!(p("/raw/*path", "/a//b/"), None);
+        assert_eq!(p("/raw/*path", "/caf%C3%A9"), None);
+        assert!(p("/raw/*path", "a/b").is_some());
+        assert!(p("/*path", "").is_some());
+        assert_eq!(p("/*path", "/"), None);
+        assert!(p("/raw/*path", "/a?b").is_some());
+        assert!(p("/raw/*path", "/a#b").is_some());
+        assert!(p("/raw/*path", "/a/../b").is_some());
+        assert!(p("/raw/*path", "/%2E%2e").is_some());
+        assert_eq!(p("/raw/*path", "/a..b/.env"), None);
     }
 }

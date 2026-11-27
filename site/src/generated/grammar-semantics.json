@@ -1107,7 +1107,7 @@
     },
     {
       "code": "bynk.http.handler_name_collision",
-      "summary": "Two HTTP handlers of a service would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
+      "summary": "Two HTTP handlers of a context would be emitted under one method name (`/a-b` and `/a_b` are both `http_GET_a_b`)."
     },
     {
       "code": "bynk.http.headers_field_consumed",

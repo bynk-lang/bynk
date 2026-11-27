@@ -197,8 +197,8 @@ service files from http {
   `[unstable] allow`.
 
 A handler's emitted name comes from its route (`http_GET_files_Rest_key` here), and two
-routes of a service whose names would be the same (`/a-b` and `/a_b`) are
-`bynk.http.handler_name_collision`.
+routes of a context whose names would be the same (`/a-b`, `/a_b` and `/a/b`), in one
+service or in two, are `bynk.http.handler_name_collision`.
 
 ## Request headers
 
