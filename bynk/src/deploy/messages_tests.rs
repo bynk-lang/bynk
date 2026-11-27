@@ -942,6 +942,20 @@ const REST_SPECIAL: &[(&str, &str, Answers)] = &[
     ),
     (
         "Queues delete (REST)",
+        "gone before its consumers are read, code 11000",
+        &[
+            (
+                200,
+                r#"{"success":true,"result":[{"queue_id":"0a1b2c3d","queue_name":"jobs-old"},{"queue_id":"4e5f6a7b","queue_name":"jobs"}],"result_info":{"page":1,"per_page":100,"total_pages":1}}"#,
+            ),
+            (
+                404,
+                r#"{"success":false,"errors":[{"code":11000,"message":"Queue 'jobs' not found"}]}"#,
+            ),
+        ],
+    ),
+    (
+        "Queues delete (REST)",
         "not found, code 10104",
         &[
             (

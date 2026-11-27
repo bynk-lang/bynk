@@ -846,6 +846,10 @@
    request: GET /accounts/acct/queues/4e5f6a7b/consumers
    request: DELETE /accounts/acct/queues/4e5f6a7b
    -> ok ()
+== Queues delete (REST) · gone before its consumers are read, code 11000
+   request: GET /accounts/acct/queues?per_page=100&page=1
+   request: GET /accounts/acct/queues/4e5f6a7b/consumers
+   -> ok ()
 == Queues delete (REST) · not found, code 10104
    request: GET /accounts/acct/queues?per_page=100&page=1
    request: GET /accounts/acct/queues/4e5f6a7b/consumers
