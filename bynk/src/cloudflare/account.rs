@@ -76,13 +76,16 @@ impl<'a> Account<'a> {
     /// #4601: remove each of queue `name`'s consumers (id `queue_id`), so the queue can then be
     /// deleted. Cloudflare refuses to delete a queue a Worker consumes (400 `11005`) and to delete
     /// that Worker while it consumes the queue (403 `10064`); removing the consumer first breaks
-    /// the cycle. A consumer that cannot be removed stops the prune with the order named, so the
-    /// queue is never left half-torn-down without saying why.
+    /// the cycle. A removal answered 404 (the consumer, or the whole queue, already gone) is
+    /// skipped: the queue's own delete then answers for it, and a queue already gone reads as
+    /// such (`10104`) to the prune. Any other refusal stops before the queue is deleted, naming
+    /// the order and any consumers this call already removed, since those stay removed.
     fn remove_queue_consumers(&self, name: &str, queue_id: &str) -> Result<(), CloudflareError> {
         let request = rest::queues::list_consumers(queue_id);
         let body = self.send(Purpose::Queues, &request)?;
         let consumers = rest::queues::consumers(&body)
             .ok_or_else(|| unreadable(&request, "`result` list of consumers"))?;
+        let mut removed = Vec::new();
         for consumer in consumers {
             let who = consumer.script.as_deref().map_or_else(
                 || format!("`{}`", consumer.id),
@@ -95,17 +98,25 @@ impl<'a> Account<'a> {
                     consumer.id
                 )));
             }
-            self.send(
+            match self.send(
                 Purpose::Queues,
                 &rest::queues::delete_consumer(queue_id, &consumer.id),
-            )
-            .map_err(|e| {
-                CloudflareError::Other(format!(
-                    "could not remove {who} as a consumer of the queue `{name}`, so the queue was \
-                     not deleted (a consumed queue is deleted only after its consumers are \
-                     removed): {e}"
-                ))
-            })?;
+            ) {
+                Ok(_) => removed.push(who),
+                Err(e) if e.status() == Some(404) => {}
+                Err(e) => {
+                    let already = if removed.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; already removed: {}", removed.join(", "))
+                    };
+                    return Err(CloudflareError::Other(format!(
+                        "could not remove {who} as a consumer of the queue `{name}`, so the queue \
+                         was not deleted (a consumed queue is deleted only after its consumers are \
+                         removed{already}): {e}"
+                    )));
+                }
+            }
         }
         Ok(())
     }

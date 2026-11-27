@@ -1546,10 +1546,13 @@ a namespace or a queue. Clean one up by hand with `wrangler delete` if you're
 sure it's unused.
 
 A queue still consumed by a Worker can't be deleted: Cloudflare refuses with
-`11005`. So before `--prune` deletes a queue, it removes the queue's consumers,
-including an orphaned Worker that still consumes it. The Worker itself stays; it
-just stops consuming that queue. If a consumer can't be removed, the queue is left
-and the prune says which Worker held it.
+`11005`. So before `--prune` deletes a queue, it removes **every** consumer the
+queue has: an orphaned Worker of the project, a Worker outside the project, or an
+HTTP pull consumer alike. A Worker stays deployed; it just stops consuming that
+queue. Check the queue's consumers (`wrangler queues info <queue>`) before you
+confirm if something outside the project might still read from it. If a consumer
+can't be removed, the queue is left, and the prune names that consumer and any it
+had already removed.
 
 Tearing a project down by hand works the same way, in that order. Cloudflare
 refuses to delete a Worker that still consumes a queue (`10064`) and refuses to
