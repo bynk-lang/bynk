@@ -421,8 +421,12 @@ fn a_named_environment_moves_between_its_own_scripts() {
             let script = format!("{}-staging", self.0.scripts[worker]);
             let mut world = self.0.world();
             world.pushes.push(format!("{worker}:{}", phase.number()));
-            // No facts: each push is known by the deployment id the move records for it.
-            world.deploy(&script, None);
+            let facts = Facts {
+                v: 1,
+                transfer: Some(transfer.clone()),
+                ..Facts::default()
+            };
+            world.deploy(&script, Some(serde_json::to_string(&facts).unwrap()));
             for (class, to) in &transfer.transferred {
                 for n in world.namespaces.iter_mut() {
                     if n.script == script && &n.class == class {
@@ -965,4 +969,79 @@ fn a_move_id_is_eight_hex_digits() {
         )
         .is_ok()
     );
+}
+
+/// A set joined on a shared script can carry two classes of one name from two sources; the record
+/// keys namespaces by class, so such a set is refused before anything.
+#[test]
+fn a_set_moving_two_classes_of_one_name_is_refused() {
+    let moves = vec![
+        entry("a", "Cart", "a", "b"),
+        entry("c.pay", "Ledger", "c", "b"),
+        entry("c.orders", "Cart", "c", "d"),
+    ];
+    let (fake, mut ledger) = (fake(&moves), Ledger::new());
+    let stop = open(&mut ledger, &fake, moves).unwrap_err();
+    assert_eq!(codes(&stop), ["bynk.deploy.agent_move_refused"]);
+    assert_eq!(subject(&stop.refusals[0], "reason"), "repeated_class");
+    assert_eq!(
+        subject(&stop.refusals[0], "contexts"),
+        serde_json::json!(["a", "c.orders"])
+    );
+    assert!(ledger.take().is_empty());
+}
+
+/// A deployment that lands just after this move's push, by something else, is not recorded as
+/// the push's: the next check still stops on it.
+#[test]
+fn a_foreign_deployment_landing_after_a_push_is_not_taken_as_its_baseline() {
+    struct Racing(Fake);
+    impl MovePusher for Racing {
+        fn push(&self, worker: &str, phase: Phase, transfer: &Transfer) -> PhasePush {
+            let landed = self.0.push(worker, phase, transfer);
+            self.0.foreign_deploy(worker);
+            landed
+        }
+        fn record(&self, _: &mut DeployLock, _: &str, _: Phase) {}
+    }
+    let (fake, mut ledger) = (fake(&one_move()), Ledger::new());
+    open(&mut ledger, &fake, one_move()).unwrap();
+    let racing = Racing(fake.clone());
+    let run = MoveRun {
+        environment: ENV,
+        account: &fake,
+        pusher: &racing,
+    };
+    ledger.with(|w| run.receive(w, "m1")).unwrap();
+    assert_eq!(ledger.record().unwrap().deployments["core"], "d1");
+    let stop = nodes(&mut ledger, &fake).unwrap_err();
+    assert_eq!(codes(&stop), [MOVE_INTERLEAVED]);
+    assert!(
+        stop.refusals[0]
+            .message
+            .contains("resumes once `d1` is live on `core` again"),
+        "{}",
+        stop.refusals[0].message
+    );
+}
+
+#[test]
+fn a_worker_live_at_another_move_is_named_in_the_refusal() {
+    let fake = fake(&fan_in());
+    let facts = Facts {
+        v: 1,
+        transfer: Some(Transfer {
+            move_id: "other".into(),
+            phase: 2,
+            ..Transfer::default()
+        }),
+        ..Facts::default()
+    };
+    fake.world()
+        .deploy("shop-billing", Some(serde_json::to_string(&facts).unwrap()));
+    let mut ledger = Ledger::new();
+    let stop = open(&mut ledger, &fake, fan_in()).unwrap_err();
+    assert_eq!(subject(&stop.refusals[0], "worker"), "shop-billing");
+    assert_eq!(subject(&stop.refusals[0], "script"), "shop-billing");
+    assert!(stop.refusals[0].subject.get("context").is_none());
 }

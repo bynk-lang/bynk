@@ -251,6 +251,32 @@ impl MoveRun<'_> {
             .map_err(|e| MoveStop::account("the Durable Object namespaces", &e))?;
         let mut namespaces = BTreeMap::new();
         let mut stop = MoveStop::default();
+        // The record keys each class's namespace by its name (§4.1), and a set is joined on any
+        // shared script, so two moves of a set may carry classes of one name from two sources.
+        // Such a set is refused: one baseline would hide the other's, and its commit could never
+        // be confirmed.
+        let mut seen: BTreeMap<&str, &AgentMoveEntry> = BTreeMap::new();
+        for m in &moves {
+            for class in &m.classes {
+                if let Some(first) = seen.insert(class, m) {
+                    stop.refusals.push(
+                        Entry::new(
+                            AGENT_MOVE_REFUSED,
+                            format!(
+                                "contexts `{}` and `{}` both move an agent named `{class}` in one move set, which this release records by class name; move them in two deploys.",
+                                first.context, m.context
+                            ),
+                        )
+                        .with("reason", "repeated_class")
+                        .with("contexts", vec![first.context.clone(), m.context.clone()])
+                        .with("agents", vec![class.clone()]),
+                    );
+                }
+            }
+        }
+        if !stop.is_empty() {
+            return Err(stop);
+        }
         for m in &moves {
             let (from, to) = (self.deployed(&m.from_script), self.deployed(&m.to_script));
             for class in &m.classes {
@@ -263,13 +289,13 @@ impl MoveRun<'_> {
                     (Some(_), Some(theirs)) => {
                         stop.refusals.push(receiver_has_class(m, class, &to, theirs))
                     }
-                    (None, Some(_)) => stop.refusals.push(already_under_way(
-                        &format!(
+                    (None, Some(_)) => stop.refusals.push(
+                        already_under_way(&format!(
                             "agent `{class}` of context `{}` is already on `{to}`, and `{from}` has none",
                             m.context
-                        ),
-                        &m.context,
-                    )),
+                        ))
+                        .with("context", m.context.as_str()),
+                    ),
                     (None, None) => stop.refusals.push(
                         Entry::new(
                             AGENT_MOVE_REFUSED,
@@ -297,13 +323,14 @@ impl MoveRun<'_> {
             if let Some((_, Some(transfer))) = &newest.1
                 && transfer.phase != Phase::GoLive.number()
             {
-                stop.refusals.push(already_under_way(
-                    &format!(
+                stop.refusals.push(
+                    already_under_way(&format!(
                         "`{script}`'s live version was pushed by phase {} of another move (`{}`)",
                         transfer.phase, transfer.move_id
-                    ),
-                    &moves[0].context,
-                ));
+                    ))
+                    .with("worker", worker.as_str())
+                    .with("script", script.as_str()),
+                );
             }
             deployments.insert(worker, newest.0);
         }
@@ -606,7 +633,7 @@ impl MoveRun<'_> {
                 Entry::new(
                     MOVE_INTERLEAVED,
                     format!(
-                        "`{script}` was deployed by something other than the agent move `{}` since the move recorded it: its live deployment is `{id}`, and the move recorded `{recorded}`. The move stops rather than push over that deployment. Find what deployed it; `bynk.deploy.lock` holds the move at step `{}`.",
+                        "`{script}` was deployed by something other than the agent move `{}` since the move recorded it: its live deployment is `{id}`, and the move recorded `{recorded}`. The move stops rather than push over that deployment, and it resumes once `{recorded}` is live on `{script}` again (for instance after a `wrangler rollback` to it); `bynk.deploy.lock` holds the move at step `{}`.",
                         record.move_id,
                         step_name(record.step)
                     ),
@@ -676,9 +703,19 @@ impl MoveRun<'_> {
         outcome: &mut Pushes,
     ) {
         let script = record_script(record, worker);
-        // The new deployment, so the next check sees it as recorded. Unread, the record keeps the
-        // old id and the next check knows the push by its facts.
-        let deployment = self.newest(&self.deployed(&script)).ok().map(|(id, _)| id);
+        // The new deployment, so the next check sees it as recorded. Unread (or not this push's),
+        // the record keeps the old id and the next check knows the push by its facts.
+        // Only this push's own deployment: one that landed just after it (another checkout, a hand
+        // `wrangler deploy`) must not become the baseline the next check accepts.
+        let deployment = self
+            .newest(&self.deployed(&script))
+            .ok()
+            .and_then(|(id, version)| {
+                let ours = version
+                    .and_then(|(_, t)| t)
+                    .is_some_and(|t| t.move_id == record.move_id && t.phase == phase.number());
+                ours.then_some(id)
+            });
         let (environment, pusher) = (self.environment, self.pusher);
         let move_id = record.move_id.as_str();
         let written = writer.change(|lock| {
@@ -814,14 +851,13 @@ fn receiver_has_class(m: &AgentMoveEntry, class: &str, to: &str, theirs: &Namesp
 }
 
 /// §7.2: a second checkout, without the open record, planning a move that is under way or done.
-fn already_under_way(what: &str, context: &str) -> Entry {
+fn already_under_way(what: &str) -> Entry {
     Entry::new(
         MOVE_INTERLEAVED,
         format!(
             "{what}: the move is already under way or done. Pull `bynk.deploy.lock` and deploy from the checkout that holds the move's record."
         ),
     )
-    .with("context", context)
 }
 
 fn names_phrase(names: &BTreeSet<String>) -> String {
