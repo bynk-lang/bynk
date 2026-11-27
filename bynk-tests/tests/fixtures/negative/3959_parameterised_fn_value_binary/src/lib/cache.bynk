@@ -1,0 +1,31 @@
+---
+#3959, track Q8 and §14.1 `bynk.given.parameterised_fn_value`, for a callee of two
+parameters and one of none: the note's lambda takes the callee's own parameters and binds every capability
+parameter (pinned in `integration::diagnostic_hints`).
+---
+commons lib.cache
+
+consumes bynk.cloudflare { Kv }
+
+fn put(key: String, value: String) -> Effect[()] given Inner: Kv, Outer: Kv {
+	let _ <- Outer.put(key, value)
+	Inner.put(key, value)
+}
+
+fn flush() -> Effect[()] given Inner: Kv {
+	Inner.delete("index")
+}
+
+fn later(run: () -> Effect[()]) -> Effect[()] {
+	run()
+}
+
+fn each(keys: List[String], write: (String, String) -> Effect[()]) -> Effect[()] {
+	keys.forEach((k) => write(k, "v"))
+}
+
+fn putAll(keys: List[String]) -> Effect[()] given Store: Kv {
+	let _ <- later(flush)
+	let _ <- Store.delete("index")
+	each(keys, put)
+}

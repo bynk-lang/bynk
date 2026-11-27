@@ -1,0 +1,2 @@
+bynk.given.binding_missing `bottom` leaves its capability parameter `Inner: Kv` unbound
+# exact

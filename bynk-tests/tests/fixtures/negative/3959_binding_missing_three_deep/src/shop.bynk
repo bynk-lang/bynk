@@ -1,0 +1,10 @@
+context shop
+
+uses lib.chain
+consumes bynk.cloudflare { Kv }
+
+capability Sessions = Kv
+
+fn forget(key: String) -> Effect[()] given Sessions {
+	top(key, given Store = Sessions)
+}
