@@ -247,8 +247,21 @@ assert(!bodies[0].includes(PEPPER) && !bodies[0].includes(secret.key.slice(-49))
 // 401 after the same one dummy compare as a key never minted.
 const second = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "second" })).json()) as { id: string; key: string };
 assert((await req("GET", "/me", bearer(second.key))).status === 200, "a second key is admitted");
-const foreign = await req("DELETE", `/accounts/acct-8/keys/${second.id}`, {});
-assert(foreign.status === 404, `revoking another identity's key answers false (404), got ${foreign.status}`);
+// `revoke` answers `false` the same way whatever the reason, so a caller cannot probe which keys
+// exist: an id that is no key id of this actor (another prefix), another identity's key, a key
+// number the store never held, and (below) a store that was retired.
+async function answer(method: string, path: string): Promise<string> {
+  const r = await req(method, path, {});
+  const hs = [...r.headers.entries()].sort().map(([k, v]) => `${k}: ${v}`).join("\n");
+  return `${r.status}\n${hs}\n\n${await r.text()}`;
+}
+const { apiKeyIdOf } = await import("./__bynk_runtime/apikey.js");
+const notFound = await answer("DELETE", `/accounts/acct-8/keys/${second.id}`);
+assert(notFound.startsWith("404\n"), `revoking another identity's key answers false (404):\n${notFound}`);
+const otherPrefix = "beta" + second.id.slice("acme".length);
+assert((await answer("DELETE", `/accounts/acct-7/keys/${otherPrefix}`)) === notFound, "an id of another prefix is the same false as another identity's key");
+const neverHeld = apiKeyIdOf("acme", real.handle, "00000000000000aa");
+assert((await answer("DELETE", `/accounts/acct-7/keys/${neverHeld}`)) === notFound, "a key number never held is the same false as another identity's key");
 assert((await req("GET", "/me", bearer(second.key))).status === 200, "another identity's revoke leaves the key");
 assert((await req("DELETE", `/accounts/acct-7/keys/${second.id}`, {})).status === 204, "the owner's revoke answers true (204)");
 same(await work(second.key), [401, 1, 1, 1], "a revoked key is one dummy compare in one store call");
@@ -267,6 +280,7 @@ assert(!JSON.stringify(listed).includes(secret.key.slice(-49)), "the list never 
 const clear = await (env.CLIENT_KEYS as ReturnType<typeof namespace>).get(real.handle).fetch("https://agent/_bynk/agent/clear", { method: "POST", body: JSON.stringify({ args: [], deps: {}, key: real.handle }) });
 assert(clear.status === 200 && (await clear.json()) === 1, "the store's own clear empties its one key");
 assert((await req("GET", "/me", bearer(secret.key))).status === 401, "a key of a cleared store is refused");
+assert((await answer("DELETE", `/accounts/acct-7/keys/${secret.id}`)) === notFound, "a revoke against a retired store is the same false as another identity's key");
 const rotated = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "after" })).json()) as { key: string };
 const after = parseApiKey(rotated.key, "acme")!;
 assert(after.handle !== real.handle, "a mint after a failed second commit takes a fresh handle");
@@ -280,6 +294,11 @@ assert((await req("GET", "/me", bearer(rotated.key))).status === 401, "an old ke
 const fresh = (await (await req("POST", "/accounts/acct-7/keys", {}, { label: "fresh" })).json()) as { key: string };
 const freshHandle = parseApiKey(fresh.key, "acme")!.handle;
 assert(freshHandle !== after.handle && freshHandle !== real.handle, "revokeAll rotates the handle");
+// The new handle is a fresh random one (the emitted call passes `__newApiKeyHandle()`, pinned by the
+// Rust side), never derived from the identity: 16 random bytes as hex, unlike every earlier one.
+assert(/^[0-9a-f]{32}$/.test(freshHandle), `the new handle is 16 bytes of hex: ${freshHandle}`);
+const identityHex = [...new TextEncoder().encode("acct-7")].map((b) => b.toString(16).padStart(2, "0")).join("");
+assert(!freshHandle.includes(identityHex), "the new handle does not encode the identity");
 assert((await req("GET", "/me", bearer(fresh.key))).status === 200, "a key minted after revokeAll is admitted");
 
 // A missing pepper faults the request; it never admits or refuses quietly.
@@ -387,6 +406,23 @@ fn drive(fixture_name: &str, driver: &str) {
                 "the emitted `{agent}` mentions `{forbidden}`"
             );
         }
+    }
+    // #3939 (slice 2, §6): `revokeAll`'s new handle comes from the runtime's random handle generator,
+    // the one `mint` uses, at every call site; it is never derived from the identity.
+    let calls: Vec<&str> = handlers
+        .match_indices(".revokeAll(")
+        .map(|(i, _)| &handlers[i..])
+        .collect();
+    assert!(
+        !calls.is_empty(),
+        "`revokeAll` is called in the emitted handlers"
+    );
+    for call in calls {
+        assert!(
+            call.starts_with(".revokeAll(__newApiKeyHandle(), "),
+            "every `revokeAll` call takes a fresh random handle: {}",
+            &call[..call.len().min(60)]
+        );
     }
     let (ran, log) = run("node", &[], &["js/driver.js"], &tmp);
     assert!(

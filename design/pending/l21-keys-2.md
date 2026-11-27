@@ -27,7 +27,9 @@ summary: Slice 2 of the API keys track: the three members that read and end keys
 - `revoke(handle, keyNo)`, which acts only when the handle is the identity's own, so another identity's key id is refused there;
 - `revokeAll(fresh)`, which clears the current store and then takes `fresh` as the identity's handle (§6).
 
-If that second commit fails, the owner still names a retired store, so the next `mint` takes a fresh handle first, as slice 1's `mint` already does on a retired store. The runtime parses `revoke`'s `ApiKeyId` and answers `false` for one that is not a key id of the actor.
+`fresh` is drawn by the runtime's random handle generator, the one `mint` uses, and is never derived from the identity. If that second commit fails, the owner still names a retired store, so the next `mint` takes a fresh handle first, as slice 1's `mint` already does on a retired store.
+
+`revoke` answers `false` the same way for an id that is not a key id of the actor (the runtime parses it first), another identity's key, a key number the store never held, and a retired store. So a caller cannot tell them apart, and cannot probe which keys exist. A test pins the four answers byte for byte, and another pins `ApiKeyInfo`'s fields, so `list` cannot start to carry key material unnoticed.
 
 **Decision D — `by Revoked` on an `ApiKey` route.** `by Revoked`, until now legal only on a `sessions = true` `SignedCookie` route, is admitted on a route a single `ApiKey` actor guards. The driver mints a real key for an identity of its own (`bynk-test-revoked`), revokes it through `<Actor>KeyOwner.revoke`, and presents it. It counts the store's comparisons like the other key principals, and fails the case unless the seam compared once against the dummy digest. `bynk.test.revoked_needs_sessions_route` keeps its code, since codes are stable, and its message names both routes it is legal on. `bynk test --against` refuses `by Revoked` at an `ApiKey` route (`bynk.test.remote_unsupported_api_key`), as it refuses `by Forged` there.
 
