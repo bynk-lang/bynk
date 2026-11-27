@@ -7315,9 +7315,8 @@ fn close_imported<S: ScopeTables + ?Sized>(
 /// A record's field default names its type in the declaring unit's scope (`Cookie`'s
 /// `sameSite: SameSite = Lax` means `bynk`'s `SameSite`), but a unit that declares its own type of
 /// the same name shadows the imported one in the composed table, so a default read there finds the
-/// wrong declaration and no value. For each such record, this holds the declaring unit's own types
-/// (its own, then its `uses`), which the emitter reads the defaults in. Empty when nothing is
-/// shadowed.
+/// wrong declaration and no value. For each such record with a default, this holds the declaring unit's own types
+/// (its own, then its `uses`), which the emitter reads the defaults in.
 pub fn default_scopes(
     name: &str,
     unit_info: &BTreeMap<String, UnitInfo>,
@@ -7326,6 +7325,7 @@ pub fn default_scopes(
     imported_from: &HashMap<String, String>,
 ) -> HashMap<String, Arc<HashMap<String, Arc<TypeDecl>>>> {
     let mut out = HashMap::new();
+    let mut by_owner: HashMap<&str, Arc<HashMap<String, Arc<TypeDecl>>>> = HashMap::new();
     for (type_name, decl) in types {
         let TypeBody::Record(r) = &decl.body else {
             continue;
@@ -7335,34 +7335,24 @@ pub fn default_scopes(
             (None, Some(c)) => c.owning_context.as_str(),
             (None, None) => continue,
         };
-        let Some(owner_info) = unit_info.get(owner).filter(|_| owner != name) else {
+        if owner == name || !unit_info.contains_key(owner) {
             continue;
-        };
-        let owners_type = |n: &str| {
-            owner_info.table.types.get(n).or_else(|| {
-                owner_info
-                    .uses
-                    .iter()
-                    .find_map(|u| unit_info.get(u).and_then(|i| i.table.types.get(n)))
-            })
-        };
-        let shadowed = r
-            .fields
-            .iter()
-            .filter(|f| f.init.is_some())
-            .filter_map(|f| match &f.type_ref {
-                TypeRef::Named(id) => Some(id.name.as_str()),
-                _ => None,
-            })
-            .any(|n| matches!((types.get(n), owners_type(n)), (Some(a), Some(b)) if !Arc::ptr_eq(a, b)));
-        if shadowed {
-            out.insert(
-                type_name.clone(),
+        }
+        // A default reaches names through `Option`, `List`, generic arguments, sum
+        // payloads and a nested record's own defaults, so no shallower test is
+        // sound: any foreign record with a default is read in its owner's scope.
+        if !r.fields.iter().any(|f| f.init.is_some()) {
+            continue;
+        }
+        let scope = by_owner
+            .entry(owner)
+            .or_insert_with(|| {
                 Arc::new(crate::symbols::combined_types_for_unit_info(
                     owner, unit_info,
-                )),
-            );
-        }
+                ))
+            })
+            .clone();
+        out.insert(type_name.clone(), scope);
     }
     out
 }

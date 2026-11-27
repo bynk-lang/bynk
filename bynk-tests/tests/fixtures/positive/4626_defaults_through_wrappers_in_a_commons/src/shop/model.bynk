@@ -1,0 +1,20 @@
+commons shop.model
+
+// #4626: a commons record's defaults reach a type through `Option`, `List` and a nested record's own
+// defaults. A unit that uses this commons and declares its own `Mode` must still build the record
+// with the commons's `Mode`.
+
+type Mode = enum { Fast, Slow }
+
+type Inner = { mode: Mode = Fast }
+
+type Setting = {
+  name: String,
+  maybe: Option[Mode] = Some(Slow),
+  many: List[Mode] = [Fast, Slow],
+  inner: Inner = Inner {},
+}
+
+fn describe(s: Setting) -> String {
+  s.name
+}
