@@ -154,8 +154,18 @@ beside the normal one (§9, slice 2). The normal provision → secrets → push 
 | Phase | Workers | What each pushes | Effect |
 |---|---|---|---|
 | **1, receive** | each receiver `Wt` (`St`) | `Wt`'s new build with each incoming `c` as a **forwarded member**: the receiver's dispatcher hands every request that `c` would own (its routes, and `/_bynk/call/<service>` and `/_bynk/event/<service>` for `c`'s services) unchanged to `c` on `Sf` over a Service Binding, and runs none of `c`'s code itself. The same build also carries the class code of `K` exported, each class as `state = "expecting-transfer"`, `storage = "sqlite"`, `transfer_from = "<Sf>"`, and **no** Durable Object binding for it. A brand-new `St` is a first deploy. | `St` expects the classes and answers for `c` by forwarding. Nothing has moved; the data is still `Sf`'s, and every call to `c`, wherever it arrives, is served by `c` on `Sf`. |
-| **2, commit** | each source `Wf` (`Sf`) | `Wf`'s new build (or, when `Wf` is no longer a Worker of the build, a **stub**: a `fetch` that answers `503`), with each outgoing class's binding removed and `state = "transferred"`, `transferred_to = "<St>"`. The class is not exported in code: both forms commit (S4). | Cloudflare reassigns the namespaces to `St`. From here the data is `St`'s. **The window opens** with the first of these pushes. |
+| **2, commit** | each source `Wf` (`Sf`) | `Wf`'s new build (or, when `Wf` is no longer a Worker of the build, a **stub**: a `fetch` that answers `503`), with each outgoing class's binding removed and `state = "transferred"`, `transferred_to = "<St>"`. The class is not exported in code, although Cloudflare's docs keep it there: see the note below the table. | Cloudflare reassigns the namespaces to `St`. From here the data is `St`'s. **The window opens** with the first of these pushes. |
 | **3, go live** | each receiver `Wt` (`St`) | `Wt`'s normal new build: `c` a member, each class plain live, with its binding. | `St` serves `K` with the old data. **The window closes** with the last of these pushes. |
+
+**The commit drops the class from the source's code** (a choice, not what the docs describe).
+Cloudflare's docs keep the class in code during the commit; S4 found that both forms commit
+(wrangler 4.168.0), and V0 had already committed without it. The dropped form is chosen
+because keeping the class means bundling the moving context's modules into a source that no
+longer builds it, with per-Worker import paths, which is real emitter work and fragile. The
+risk is that Cloudflare later enforces its documented form. If it does, the phase 2 push is
+**refused**, before anything commits: the data stays on `Sf`, the record stays at `committing`,
+and the run stops with the refusal. That is a safe failure, not a loss, and its fix is local:
+the commit variant gains an export-only member (`bynk-emit/src/emitter/workers_moves.rs`).
 
 Because phase 1 forwards `c` rather than running it, it opens no window. A member of `St`'s
 group that calls `c`, and a caller already rebound to `St`, both reach `c` on `Sf` until
@@ -173,17 +183,21 @@ moving context's addresses gets the error Email Routing gives for an address wit
 
 **Placement in the run's order** (`gates.rs:ordered`, callee first). The set is ordered as
 **two nodes**. *Receive* (every phase 1 push) depends on every Worker that the receivers call
-outside the set. *Commit* (every phase 2 push, then every phase 3 push, back to back with no
-prompt and nothing else between them; the phase 2 pushes of a set run **concurrently**, then,
-once every commit is confirmed (§3.4), its phase 3 pushes concurrently, so the window is about
-one push long whatever the set's size: S13's serial fan-in took 10.3 s, S14's fan-out 3.8 s and
-7.7 s for its two receivers) depends on *receive*, on every Worker that the sources
+outside the set. *Commit* (every phase 2 push, the commit confirmation of §3.4, then every phase 3 push, with
+no prompt and nothing else between them) depends on *receive*, on every Worker that the sources
 call outside the set, and on **every Worker that calls a moved context**. So those callers
 are pushed between the two nodes, already bound to `St`, while `St` still forwards to `Sf`.
 If the order cannot be built (a cycle through the two nodes), the run is refused
 (`reason = "order"`). Each Worker of the set is pushed only by its phases, not again in its
 ordinary slot, and the rest of the order continues after *commit*. So no caller is still
 bound to `Sf` when phase 2 lands, and the window is phase 2 to phase 3 for every caller.
+
+**Within a phase, a set's pushes run concurrently.** Every phase 2 push of a set starts at once,
+and each records `done` as it lands, through the one `LedgerWriter`, one write at a time.
+Phase 3 waits until every phase 2 push has settled and the commit is confirmed (§3.4); then
+every phase 3 push starts at once. So the window is about one push long whatever the set's
+size: run one after another, S13's fan-in took 10.3 s and S14's fan-out 3.8 s and 7.7 s for its
+two receivers.
 
 ### 3.3 What is recorded, before and after each phase
 
@@ -199,8 +213,9 @@ several pushes.
 | All receivers done | `received` | `done` cleared |
 | Before phase 2 | `committing` | each source's live deployment id as read just before its push |
 | After each source's phase 2 push | `committing` | that source in `done`, with its new deployment id; its Worker record as for any push (its members no longer list the contexts it gave up; its `transferred` tombstones in a new `transferred_classes` map beside `deleted_classes`) |
-| All sources done | `committed` | `done` cleared |
-| Before phase 3 | `going_live`, written only once the listing confirms every commit (§3.4) | nothing more |
+| All sources done, and the listing confirms every commit (§3.4) | `committed` | `done` cleared |
+| All sources done, and the listing does not confirm a commit | `committing` (stops: `move_commit_unconfirmed`) | `done` cleared for each source whose classes are not confirmed, so the next run pushes their phase 2 again |
+| Before phase 3 | `going_live` | nothing more |
 | After each receiver's phase 3 push | `going_live` | that receiver in `done`; its Worker record as for any push (`contexts`, `script`, contracts) |
 | All receivers done | record **removed** | the ledger `version` returns to 1 when no record is open |
 
@@ -233,23 +248,44 @@ something else, and the run stops with `bynk.deploy.move_interleaved` (§7.2). P
 also carry the `move` id while the record is open, so the same test covers them.
 
 **Phase 3 only after a confirmed commit** (S6, S5). Phase 3 pushed before the commit is
-accepted by Cloudflare and creates an empty namespace, dropping the pending transfer. So before
-the first phase 3 push, the run reads the namespace listing and requires that **every moved
-class's namespace has `script` equal to its `St` and the id recorded before phase 1**. If any
-does not, the run stops with **`bynk.deploy.move_commit_unconfirmed`**, naming each class, the
-script its namespace is on and the one expected, and leaves the record at `committing`, so
-the next run repeats the commit. Phase 1 cannot be confirmed this way (a pending transfer is
-invisible in the listing, S5); it rests on the push's own success and the ledger.
+accepted by Cloudflare and creates an empty namespace, dropping the pending transfer. So once
+every source is `done`, and again before any phase 3 push (on a fresh run and on a resume
+alike), the run reads the namespace listing and requires that **every moved class's namespace
+has `script` equal to its `St` and the id recorded before phase 1**. If any does not, the run
+stops with **`bynk.deploy.move_commit_unconfirmed`**, naming each class, the script its
+namespace is on and the one expected. It sets the record to `committing` and clears `done`
+for each source whose classes are not confirmed, so the next run pushes those sources' phase
+2 again; a source whose classes are confirmed stays `done`. Phase 1 cannot be confirmed this
+way (a pending transfer is invisible in the listing, S5); it rests on the push's own success
+and the ledger.
+
+**A lost transfer is not a dead end.** A repeated phase 2 is refused with
+`transferred_pending_not_found` when the receiver's pending transfer is gone: something
+cancelled it, or pushed the receiver with the class live (the S6 case). Nothing has committed,
+and the listing shows the data still on `Sf`. The run stops with
+**`bynk.deploy.move_transfer_lost`**. It says the data is safe on `Sf` and sets the record back
+to `receiving`, with that receiver's `done` cleared, so the next run pushes its phase 1 again
+and then the commit. If the receiver now holds a namespace of its own for the class (the S6
+case), that phase 1 is refused by Cloudflare (`phase_one_transfer_target_class_provisioned`),
+and the message says so. That namespace was created outside the move and holds no data from
+`Sf`. The user removes the class from the receiver (`removed agent`, after checking it is
+empty), or cancels the move with `--cancel-move` (D8) and starts it again.
 
 | Recorded step | What the account shows, per Worker not yet `done` | The re-run |
 |---|---|---|
 | `receiving` | no newer deployment, or a newer one that is this move's own phase 1 | pushes its phase 1 (again) |
 | `received`, `committing` | no newer deployment of `Sf`, or a newer one that is this move's own phase 2 | pushes its phase 2 (again; a repeat is accepted, S3) |
+| `committing` | a repeated phase 2 refused with `transferred_pending_not_found` | **stops**: `bynk.deploy.move_transfer_lost`; the record goes back to `receiving` for that receiver |
 | `committing`, every source `done` | every moved class's namespace on its `St`, with its recorded id | records `committed`, then `going_live`, then pushes phase 3 |
-| `committing`, every source `done` | any moved class's namespace not on its `St`, or with another id | **stops**: `bynk.deploy.move_commit_unconfirmed`; the record stays at `committing` |
+| `committing`, every source `done` | any moved class's namespace not on its `St`, or with another id | **stops**: `bynk.deploy.move_commit_unconfirmed`; `done` is cleared for the unconfirmed sources, so the next run repeats their commit |
 | `committed`, `going_live` | the same confirmation holds | pushes its phase 3 (again) |
+| `committed`, `going_live` | the confirmation fails (something outside the move changed the namespaces since) | **stops**: `bynk.deploy.move_commit_unconfirmed`; the record goes back to `committing`, with `done` cleared for the unconfirmed sources |
 | any | a newer deployment that is not this move's own | **stops**: `bynk.deploy.move_interleaved` |
 | any | the manifest no longer asks for these moves | **stops**: `bynk.deploy.move_open` (D8) |
+
+A hand `wrangler rollback` of a source (S8) does not move the namespace (the old version binds
+the receiver's namespace, same id), so the confirmation still holds. Its harm is the orphan
+namespace it makes on the source, which §6 warns about.
 
 **Resuming only goes forward.** Cloudflare's docs say "rollbacks cannot cross a lifecycle
 change" ([exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)),
@@ -311,8 +347,10 @@ This example is a fan-in: two standalone Workers joining group `core`, part-way 
 phase 2.
 
 Script names are stored as the ledger already stores them (`WorkerRecord::script`), and the
-environment-qualified name is derived as it is today. The record is a record of steps, not of
-namespaces.
+environment-qualified name is derived as it is today. The record is a record of steps, not a claim about
+namespaces: the namespace ids it holds are what the listing said before phase 1, kept only as
+the baseline the commit confirmation compares the listing against (§3.4), never read as the
+account's state.
 
 **Versioning.** `read_lock` refuses any `version` other than 1 (`ledger.rs:read_lock`,
 `lock_version`), and no ledger struct denies unknown fields, so a bynk from before this
@@ -446,7 +484,8 @@ The reason the refusal exists (P4). The invariants:
 1. A class of `K` is declared plain live on `St` **only** in phase 3, and phase 3 runs only
    after every source's phase 2 has landed **and the namespace listing shows each moved class's
    namespace on its `St` with the id recorded before phase 1** (§3.4). Otherwise the run stops
-   with `bynk.deploy.move_commit_unconfirmed` and the record stays at `committing`.
+   with `bynk.deploy.move_commit_unconfirmed`, with the record at `committing` and `done`
+   cleared for each unconfirmed source, so the next run repeats its commit.
 2. A move that is not named (`--move-agent`) and has no open record is refused exactly as
    today (`bynk.deploy.agent_move_refused`); nothing in this design weakens the gate for an
    unnamed move.
@@ -539,7 +578,9 @@ lifecycle changes).
 **[DECISION]** Recommend the additive `agent_moves` table, the five steps of §3.3, the per-Worker `done` list, a deployment-id baseline for every Worker taken before phase 1, and a `move` id carried in each phase version's facts.
 *Rejected:* recording only completed phases (an interrupted phase 2 would be invisible, and
 the re-run could not tell "not pushed" from "pushed but not recorded" without trusting the
-account alone); recording the namespaces themselves (ADR 0194 D1).
+account alone); recording the namespaces as the ledger's own view of the account (ADR 0194
+D1). The namespace ids the record keeps are a baseline read from the listing before phase 1,
+for the confirmation to compare against; the listing stays the source of truth.
 
 ### D5. `version = 2` while a move is open — **accepted in review: as recommended**
 
@@ -561,7 +602,8 @@ The listing confirms the commit, not the receive: it flips a namespace's `script
 phase 2 and keeps its id, but shows nothing of a pending transfer (S5), so phase 1 rests on
 the push's own success and the ledger. **Before every phase 3 push** the listing must show
 each moved class's namespace on its `St` with its recorded id, or the run stops with
-`bynk.deploy.move_commit_unconfirmed` and the record stays at `committing` (S6: Cloudflare
+`bynk.deploy.move_commit_unconfirmed`, with the record at `committing` and `done` cleared for
+each unconfirmed source (S6: Cloudflare
 accepts a phase 3 without a commit and makes an empty namespace). *Rejected:* an account-side lock (none exists for
 deploys; a lock Worker or KV key is new infrastructure on the user's account for one
 feature); trusting the ledger alone (a second checkout's ledger is not this one's).
@@ -599,11 +641,9 @@ refused, with new `reason`s on `bynk.deploy.agent_move_refused`:
   run the whole project);
 - a set whose two nodes cannot be ordered (`order`).
 
-If live check S13 shows that one phase 1 push cannot carry entries from several sources (or
-S14 that one phase 2 push cannot carry several `transferred_to`s), the set is pushed one
-source–receiver pair at a time inside the same phase, each pair's push recorded in `done`,
-and the window grows by one push per extra pair. The unit, the record and the user's single
-manifest edit stay the same.
+One phase 1 push can carry entries from several sources (S13), and one phase 2 push several
+`transferred_to`s (S14), so the pair-at-a-time fallback this paragraph once held in reserve is
+not needed.
 *Rejected:* refusing fan-in (it would keep the main adopters of groups off them); asking the
 user to edit the manifest one member at a time (each edit is a deploy with its own window,
 and the intermediate groups are not ones the user wants).
@@ -674,7 +714,7 @@ as it is until slice 4 (ruling).
 | 1 | **Ledger and facts shapes.** `agent_moves` record type and its read/write, the `version` 1↔2 rule, `Facts::transfer`, `transferred_classes`; no behaviour uses them | round-trip tests; a ledger with an open record writes `version = 2` and an older-format reader refuses it; a ledger with none is byte-identical to today's; a facts record with `transfer` decodes in the old struct with `transfer` ignored and `classes` without `K` |
 | 2 | **Emitter phase variants.** The receive build (forwarded members, `expecting-transfer` entries, no bindings for `K`, and none of the moving context's crons, consumers or addresses), the commit config (tombstones only; the class not in code, S4) and the dissolved-source stub | golden fixtures for into, out of (staying and dissolved), between groups, fan-in and fan-out; a forwarded member passes a request through unchanged (body and signature); the normal `wrangler.toml` is byte-identical (`positive_fixtures`); the receive config has no binding for `K` |
 | 3 | **Planning.** `--move-agent`, move sets, the two-node placement in the order, the new `reason`s, `move_agent_unused`, the plan's move section, the JSON `moves` array and `agent_move_window` warning, `override` change. A non-dry run with a move is still refused (`agent_move_refused`, unchanged) | `--dry-run` and `--format json` show each supported shape and each refusal; `deploy_plan_json.rs` covers them; the refusal is unchanged without `--dry-run` |
-| 4 | **Apply and resume.** The three phases (a set's phase 2 pushes concurrently, then its phase 3 pushes), the record before and after each, the account reads, `move_commit_unconfirmed`, `move_interleaved`, `move_open`, `--cancel-move`; the refusal is lifted for supported shapes | `apply_tests.rs` fixtures for every row of §3.4, with a fake account and a ledger watch (`ledger::write_watch`) pinning each write; an interrupted push at each phase resumes by **repeating** that push, never skipping it; **phase 3 is never pushed unless the fake account's listing shows every moved class's namespace on its `St` with the id recorded before phase 1, and a test pins `move_commit_unconfirmed` with the record left at `committing`** (S6) |
+| 4 | **Apply and resume.** The three phases (a set's phase 2 pushes concurrently, then its phase 3 pushes), the record before and after each, the account reads, `move_commit_unconfirmed`, `move_transfer_lost`, `move_interleaved`, `move_open`, `--cancel-move`; the refusal is lifted for supported shapes | `apply_tests.rs` fixtures for every row of §3.4, with a fake account and a ledger watch (`ledger::write_watch`) pinning each write; an interrupted push at each phase resumes by **repeating** that push, never skipping it; **phase 3 is never pushed unless the fake account's listing shows every moved class's namespace on its `St` with the id recorded before phase 1, and tests pin `move_commit_unconfirmed` (record at `committing`, `done` cleared for the unconfirmed sources, the next run repeating their commit, from a fresh run and from `committed`/`going_live`) and `move_transfer_lost` (record back to `receiving`)** (S6) |
 | 5 | **Revert.** `bynk.revert.move_open`, `bynk.revert.move_version`, and the JSON verdict vocabulary | `revert.rs` tests for each row of §6 |
 | 6 | **Docs, explain and ADR.** The §5 pages with the measured window, `bynk explain` entries and fixtures for every new error code, the new ADR amending ADR 0874 G5 | docs-consistency and explain-coverage pass; the guide states the measured window from slice 0 |
 
