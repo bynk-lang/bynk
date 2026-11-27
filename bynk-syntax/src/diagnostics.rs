@@ -3494,7 +3494,7 @@ agent Cart {
     },
     Explain {
         code: "bynk.observe.not_a_seam",
-        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+        blurb: "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type, a function or a capability parameter, has no recorded calls. Name a consumed capability; for a parameter, name what the call binds it to, the instance in a context's suite or the kind's double in a commons suite. An operation it does not declare is `bynk.observe.unknown_op`.",
         example: "// tests/t.test.bynk\nexpect AuthId.unsafe called   // ✗ `AuthId` is a type, not a capability\nexpect Logger.log called      // ✓",
     },
     Explain {
@@ -5204,9 +5204,12 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "A `stub` substitutes one of the capabilities the unit under test \
                 depends on: one the context declares, or reaches through a \
                 `consumes`. Any other name, including a misspelt one, leaves \
-                nothing to substitute. A commons has no capabilities, so it cannot \
-                be stubbed at all. Name a capability of the target, or add the \
-                `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
+                nothing to substitute. A commons suite's seams are the doubles of \
+                the capabilities its commons selects, and its suite-local \
+                instances. A capability parameter is never a seam: stub what a \
+                call binds it to, the instance in a context's suite or the kind's \
+                double in a commons suite. Name a capability of the target, or add \
+                the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong \
                 operation.",
         example: "// demo/meter.bynk\n\
                   capability Meter { … }\n\
