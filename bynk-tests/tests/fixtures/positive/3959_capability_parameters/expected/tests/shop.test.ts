@@ -272,8 +272,9 @@ async function test_a_commons_function_reads_and_writes_the_bound_instance() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"], Notes: ["note"], Sessions: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"] }, __obs);
     const { api, bare, notes } = __ns_shop;
     const { remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
@@ -420,8 +421,9 @@ async function test_the_bare_Kv_is_bound_explicitly__and_is_its_own_namespace() 
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"], Notes: ["note"], Sessions: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"] }, __obs);
     const { api, bare, notes } = __ns_shop;
     const { remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;
@@ -568,8 +570,9 @@ async function test_a_Bynk_bodied_provider_binds_its_own_given_capability() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Logger: ["debug", "error", "info", "log", "warn"], Notes: ["note"], Sessions: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"] }, __obs);
     const { api, bare, notes } = __ns_shop;
     const { remember } = __ns_lib_cache;
-    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyInfo, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, Forwarded, InboundRequest, LogLevel, Method, ParOptions, PassThrough, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, UpstreamError, Uuid } = __ns_bynk;
     type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyInfo = __ns_bynk.ApiKeyInfo;
     type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
     type ApiKeySecret = __ns_bynk.ApiKeySecret;
     type ApiKeyValue = __ns_bynk.ApiKeyValue;

@@ -9,7 +9,9 @@ import * as bynk__binding from "../../bynk-cloudflare.js";
 import * as bynk_cloudflare__binding from "../../bynk/cloudflare.binding.js";
 
 export interface Env {
+  RATELIMIT_PER_CLIENT: __RateLimiter;
   RATELIMIT_PER_IP: __RateLimiter;
+  ACCOUNTS: __DurableObjectNamespace;
   CLIENT_KEY_OWNER: __DurableObjectNamespace;
   CLIENT_KEYS: __DurableObjectNamespace;
 }
@@ -18,8 +20,9 @@ type __DurableObjectNamespace = { idFromName(name: string): { toString(): string
 
 export function compose(env: Env) {
   const Clock = (env as unknown as { __bynkClock?: bynk__binding.ClockProvider }).__bynkClock ?? new bynk__binding.ClockProvider();
+  const PerClient = new bynk_cloudflare__binding.WorkersRateLimit(env, "RATELIMIT_PER_CLIENT");
   const PerIp = new bynk_cloudflare__binding.WorkersRateLimit(env, "RATELIMIT_PER_IP");
-  const deps = { Clock, PerIp, env, __apiKey: { Client: { secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] } } };
+  const deps = { Clock, PerClient, PerIp, env, __apiKey: { Client: { secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] } } };
   return {
     async http_GET_me(request: globalThis.Request) {
       const __rawKey = __apiKeyCredentialOf(request, null);
@@ -32,6 +35,21 @@ export function compose(env: Env) {
       const __id = handlers.AccountId.of(String(__owner.value));
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_me({ ...deps, identity: __id.value });
+    },
+    async http_GET_usage__verify(request: globalThis.Request): globalThis.Promise<{ tag: "Err"; error: any } | { tag: "Ok"; value: { key: string; principal: any } }> {
+      const __rawKey = __apiKeyCredentialOf(request, null);
+      if (__rawKey === null) return { tag: "Err", error: HttpResult.Unauthorized };
+      const __key = __parseApiKey(__rawKey, "acme");
+      if (__key === null) return { tag: "Err", error: HttpResult.Unauthorized };
+      const __digests = await __apiKeyDigests(await __loadApiKeyPeppers({ secret: (env as unknown as globalThis.Record<string, unknown>)["CLIENT_KEY_PEPPER"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["CLIENT_KEY_PEPPER"] }, { secret: "CLIENT_KEY_PEPPER" }), __key.secret);
+      const __owner = await handlers.__makeClientKeys(__key.handle, env).verify(__key.keyNo, __apiKeyPresented(__digests), __apiKeyFirstDigest(__digests), __apiKeyDummyDigest(), deps);
+      if (__owner.tag !== "Some") return { tag: "Err", error: HttpResult.Unauthorized };
+      const __id = handlers.AccountId.of(String(__owner.value));
+      if (__id.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
+      return { tag: "Ok", value: { key: "identity:Client:".concat(globalThis.String(String(__id.value))), principal: { identity: __id.value } } };
+    },
+    async http_GET_usage(principal: any) {
+      return handlers.api.http_GET_usage({ ...deps, ...principal });
     },
     async http_GET_auth_header(request: globalThis.Request, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; entries(): globalThis.ReadonlyMap<string, string> }) {
       const __rawKey = __apiKeyCredentialOf(request, null);
@@ -59,6 +77,15 @@ export function compose(env: Env) {
     },
     async http_POST_accounts_Param_id_keys(id: handlers.AccountId, body: handlers.NewKey) {
       return handlers.api.http_POST_accounts_Param_id_keys(id, body, deps);
+    },
+    async http_GET_accounts_Param_id_keys(id: handlers.AccountId) {
+      return handlers.api.http_GET_accounts_Param_id_keys(id, deps);
+    },
+    async http_DELETE_accounts_Param_id_keys_Param_key(id: handlers.AccountId, key: handlers.ApiKeyId) {
+      return handlers.api.http_DELETE_accounts_Param_id_keys_Param_key(id, key, deps);
+    },
+    async http_POST_accounts_Param_id_close(id: handlers.AccountId) {
+      return handlers.api.http_POST_accounts_Param_id_close(id, deps);
     },
   };
 }
