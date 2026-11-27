@@ -281,7 +281,7 @@ fn pass_through_carrier_type(
     let carrier = match pass_through_type_of(t).filter(|_| is_opaque)? {
         PassThroughType::InboundRequest => "__InboundRequestView",
         PassThroughType::Forwarded => "__ForwardedView",
-        _ => return None,
+        PassThroughType::PassThrough | PassThroughType::UpstreamError => return None,
     };
     let name = t.name.name.clone();
     let brand_ty = bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::readonly_prop(
