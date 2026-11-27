@@ -201,7 +201,7 @@ service Audio from websocket(in: Bytes, out: Bytes) {
 A JSON frame, in either direction, is written and read by the **serialisation codec of its type**: the same
 one that carries values across a context boundary and through the HTTP client and `bynk openapi`. So
 a frame survives a round trip through the codec for every type that may be a frame, and a client that decodes
-with the codec (the [generated client](/reference/http-client/#websocket-services) does) reads what the server
+with the codec (a generated client does) reads what the server
 sends. The forms to know:
 
 | In the frame | On the wire |
