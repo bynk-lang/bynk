@@ -232,6 +232,7 @@ pub(super) fn emit_system_http_support(
             let path_params: Vec<&str> = path
                 .split('/')
                 .filter_map(|seg| seg.strip_prefix(':'))
+                .chain(bynk_check::http_rest::rest_name(&path))
                 .collect();
             // #2341 (L4), #3911: a `headers` param (the raw view or a typed record) is
             // neither: the drivers send it as the request's headers.

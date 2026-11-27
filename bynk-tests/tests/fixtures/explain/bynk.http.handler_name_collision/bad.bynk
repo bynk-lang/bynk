@@ -1,0 +1,11 @@
+context api
+
+service api from http {
+    on GET("/a-b") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+
+    on GET("/a_b") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("y")
+    }
+}

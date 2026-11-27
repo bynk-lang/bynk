@@ -272,7 +272,7 @@ fn run_smoke_awaiting(
     fs::write(
         tmp.join("proj/bynk.toml"),
         format!(
-            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.given.parameters\", \"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\"]\n"
+            "[project]\nname = \"{project}\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.given.parameters\", \"bynk.crypto\", \"bynk.cloudflare.R2\", \"bynk.cloudflare.RateLimit\", \"bynk.cloudflare.Queue\", \"bynk.cloudflare.Analytics\", \"bynk.cloudflare.Version\", \"bynk.cloudflare.StoredSecret\", \"bynk.cloudflare.Email\", \"bynk.cloudflare.Ai\", \"bynk.cloudflare.Postgres\", \"bynk.cloudflare.MySql\", \"bynk.Fetch.sendWith\", \"bynk.Fetch.receiveBytes\", \"bynk.Fetch.sendBytes\", \"bynk.Fetch.receiveStream\", \"bynk.Fetch.sendStream\", \"bynk.cloudflare.Kv.getWith\", \"bynk.cloudflare.Kv.putWith\", \"bynk.cloudflare.Kv.getBytes\", \"bynk.cloudflare.Kv.putBytes\", \"bynk.cloudflare.Kv.listPage\", \"bynk.http.rest\"]\n"
         ),
     )
     .unwrap();
@@ -913,6 +913,76 @@ fn workers_r2_round_trips_on_workerd() {
     assert!(
         failures.is_empty(),
         "WorkersR2 on workerd disagrees with the contract its fake models:\n{}\n--- wrangler log ---\n{log}",
+        failures.join("\n")
+    );
+}
+
+// #3752 (slice 1): R2 keys that hold `/`, served through a `*key` rest segment.
+// The key is the rest, decoded by the handler; a literal beside it still wins.
+const R2_REST_SOURCE: &str = "context files.smoke
+
+consumes bynk.cloudflare { R2 }
+
+capability Files = R2
+
+service files from http {
+\ton GET(\"/files/index.json\") () -> Effect[HttpResult[String]] by Visitor {
+\t\tOk(\"index\")
+\t}
+
+\ton GET(\"/seed/:value/*key\") (value: String, key: String) -> Effect[HttpResult[String]] by Visitor given Files {
+\t\tlet k = keyOf(key)
+\t\tlet _ <- Files.put(k, Bytes.fromUtf8(value))
+\t\tOk(k)
+\t}
+
+\ton GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by Visitor given Files {
+\t\tlet k = keyOf(key)
+\t\tlet got <- Files.get(k)
+\t\tmatch got {
+\t\t\tSome(b) => Ok(\"\\(k)=\\(b.decodeUtf8().getOrElse(\"?\"))\")
+\t\t\tNone => NotFound
+\t\t}
+\t}
+}
+
+// The R2 key a rest names: decoded, without its leading `/`.
+fn keyOf(rest: String) -> String {
+\tlet d = rest.percentDecode().getOrElse(rest)
+\td.slice(1, d.length())
+}
+";
+
+#[test]
+fn rest_segment_serves_r2_keys_with_slashes_on_workerd() {
+    let steps: &[(&str, u16, &str)] = &[
+        ("/seed/hello/docs/a/b.txt", 200, r#""docs/a/b.txt""#),
+        (
+            "/seed/bonjour/caf%C3%A9/menu%20du%20jour.txt",
+            200,
+            r#""café/menu du jour.txt""#,
+        ),
+        ("/files/docs/a/b.txt", 200, r#""docs/a/b.txt=hello""#),
+        (
+            "/files/caf%C3%A9/menu%20du%20jour.txt",
+            200,
+            r#""café/menu du jour.txt=bonjour""#,
+        ),
+        ("/files/docs/a", 404, ""),
+        ("/files/index.json", 200, r#""index""#),
+    ];
+    let Some((failures, log)) = run_smoke(
+        "files-smoke",
+        "files",
+        R2_REST_SOURCE,
+        "/files/index.json",
+        &|port| check_steps(port, steps),
+    ) else {
+        return;
+    };
+    assert!(
+        failures.is_empty(),
+        "a rest route over R2 on workerd answered otherwise:\n{}\n--- wrangler log ---\n{log}",
         failures.join("\n")
     );
 }

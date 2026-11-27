@@ -1,0 +1,89 @@
+context web
+
+consumes bynk.cloudflare { R2 }
+
+capability Files = R2
+
+// #3752 (slice 1): a `*name` rest segment, the route's last, matches zero or
+// more remaining segments and binds them as received: a `String`, still
+// percent-encoded, starting with `/` unless empty.
+service files from http {
+	// A literal beats a rest at the position where they differ.
+	on GET("/files/index.json") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("index")
+	}
+
+	// An R2 key may hold `/`; the handler decodes the rest itself.
+	on GET("/files/*key") (key: String) -> Effect[HttpResult[String]] by v: Visitor given Files {
+		match key.percentDecode() {
+			Some(k) => {
+				let got <- Files.get(k)
+				match got {
+					Some(bytes) => Ok(bytes.decodeUtf8().getOrElse("?"))
+					None => NotFound
+				}
+			}
+			None => BadRequest("the key is not valid percent-encoding")
+		}
+	}
+
+	on PUT("/files/*key") (key: String, body: String) -> Effect[HttpResult[String]] by v: Visitor given Files {
+		match key.percentDecode() {
+			Some(k) => {
+				let _ <- Files.put(k, Bytes.fromUtf8(body))
+				Ok("stored \(k)")
+			}
+			None => BadRequest("the key is not valid percent-encoding")
+		}
+	}
+
+	// §5.4's precedence, each line a pair of routes.
+	on GET("/a/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("id \(id)")
+	}
+
+	on GET("/a/*x") (x: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("x [\(x)]")
+	}
+
+	on GET("/a/b/*y") (y: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("y [\(y)]")
+	}
+
+	on GET("/blog") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("blog literal")
+	}
+
+	on GET("/blog/*path") (path: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("rest [\(path)]")
+	}
+
+	on GET("/raw/*path") (path: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("[\(path)]")
+	}
+
+	on GET("/t/:tenant/*key") (tenant: String, key: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("\(tenant) [\(key)]")
+	}
+}
+
+// CORS on a service whose routes include a rest: the preflight and the stamping
+// cover the rest pattern like any other.
+service api from http {
+	cors {
+		origins: ["https://app.example.com"],
+		credentials: false,
+		maxAge: 1.hour,
+	}
+
+	on GET("/api/docs/*page") (page: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("doc [\(page)]")
+	}
+}
+
+// A root catch-all: every path no other route matches, never `/_bynk/`.
+service spa from http {
+	on GET("/*path") (path: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("spa [\(path)]")
+	}
+}

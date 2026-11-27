@@ -9,7 +9,7 @@ bynk: warning: could not ask Cloudflare whether `commerce-payment` holds BYNK_CA
 the edge `commerce-orders` → `commerce-payment` needs a new key on both Workers, but Cloudflare never returns a key's value, so a `--context` run cannot copy it to the Worker it does not deploy.
   Deploy the whole project (`bynk deploy`) to mint a key for every edge.
 # interrupted rotation, environment default
-bynk: note: this run was setting new keys on `commerce-orders` → `commerce-payment` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
+bynk: note: this run was setting new keys on `commerce-orders` → `commerce-payment` and stopped before both ends of each were deployed, so each end may hold a different key. The consumer still accepts the previous key for 15 days after a rotation (calls along it are refused at once after a `--revoke-previous-edge-key`), and the producer keeps signing under the old one.
   Rerun `bynk deploy --force` (the whole project) to set one key on both ends; a plain rerun would keep both.
 # progress, environment default
 bynk: deploying `commerce-orders` (2/2)…
@@ -51,7 +51,7 @@ bynk: warning: could not ask Cloudflare whether `commerce-payment-staging` holds
 the edge `commerce-orders-staging` → `commerce-payment-staging` needs a new key on both Workers, but Cloudflare never returns a key's value, so a `--context` run cannot copy it to the Worker it does not deploy.
   Deploy the whole project (`bynk deploy --env staging`) to mint a key for every edge.
 # interrupted rotation, environment staging
-bynk: note: this run was setting new keys on `commerce-orders-staging` → `commerce-payment-staging` and stopped before both ends of each were deployed, so each end may hold a different key and calls along it are refused.
+bynk: note: this run was setting new keys on `commerce-orders-staging` → `commerce-payment-staging` and stopped before both ends of each were deployed, so each end may hold a different key. The consumer still accepts the previous key for 15 days after a rotation (calls along it are refused at once after a `--revoke-previous-edge-key`), and the producer keeps signing under the old one.
   Rerun `bynk deploy --env staging --force` (the whole project) to set one key on both ends; a plain rerun would keep both.
 # progress, environment staging
 bynk: deploying `commerce-orders-staging` (2/2)…

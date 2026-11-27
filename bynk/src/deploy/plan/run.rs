@@ -126,6 +126,9 @@ pub struct DeployOptions {
     pub secrets: Vec<String>,
     /// `--force` — overwrite a secret already set, rather than skipping it.
     pub force: bool,
+    /// #4526: `--revoke-previous-edge-key <context>` (repeatable): re-key each edge key on this
+    /// context with no grace window, so the key it replaces stops verifying at once.
+    pub revoke_edge_keys: Vec<String>,
     /// `--prune` (slice 5) — delete every reported KV/queue orphan, behind
     /// its own confirmation. Never deletes a Worker (DECISION C). Defaults
     /// to report-only, matching the track's "report or prevent, never

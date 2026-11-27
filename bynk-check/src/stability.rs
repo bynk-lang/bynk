@@ -450,7 +450,8 @@ mod tests {
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
                 "bynk.RequestHeaders.entries",
-                "bynk.given.parameters"
+                "bynk.given.parameters",
+                "bynk.http.rest"
             ]
         );
         // #3959: capability parameters are one built-in experimental entry.

@@ -1,0 +1,12 @@
+{
+  "blurb": "A rest segment, a route's last segment written `*name`, matches the rest of a path and binds it to the handler parameter of that name, as a `:name` segment binds one segment. A bare `*` binds nothing, so it is refused. Name it and take the parameter. A `*` anywhere other than the start of the last segment is `bynk.http.reserved_route_syntax`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rest_unnamed",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/files/*\") () -> Effect[HttpResult[String]] by v: Visitor { … }                // ✗\n\non GET(\"/files/*key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A route's last segment is a bare `*`, a rest segment with no name to bind."
+}

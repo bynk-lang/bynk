@@ -1,0 +1,15 @@
+context demo
+
+// #3752 (review of #4559): a context's services share one surface object, so
+// `/a-b` in one service and `/a_b` in another still collide.
+service dashes from http {
+  on GET("/a-b") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("dash")
+  }
+}
+
+service underscores from http {
+  on GET("/a_b") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("underscore")
+  }
+}
