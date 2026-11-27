@@ -306,8 +306,23 @@ fn nearest<'a>(name: &str, candidates: impl Iterator<Item = &'a str>) -> Option<
         .map(|(_, c)| c)
 }
 
+/// The diagnostic code of a tokeniser refusal.
+pub fn refusal_code(kind: html_template::tokeniser::Kind) -> &'static str {
+    use html_template::tokeniser::Kind;
+    match kind {
+        Kind::Unsupported => "bynk.template.unsupported_markup",
+        Kind::Unquoted => "bynk.template.unquoted_attribute",
+        Kind::InScript => "bynk.template.placeholder_in_script",
+        Kind::InStyle => "bynk.template.placeholder_in_style",
+        Kind::InCodeAttribute => "bynk.template.placeholder_in_code_attribute",
+        Kind::Position => "bynk.template.placeholder_position",
+        Kind::InRawText => "bynk.template.placeholder_in_raw_text",
+        Kind::ForeignUnbalanced => "bynk.template.foreign_unbalanced",
+    }
+}
+
 fn refusal_error(r: &html_template::Refusal, span: Span) -> CompileError {
-    let mut err = CompileError::new(r.code, span, r.message.clone());
+    let mut err = CompileError::new(refusal_code(r.code), span, r.message.clone());
     if let Some(note) = &r.note {
         err = err.with_note(note.clone());
     }
@@ -430,9 +445,9 @@ pub fn check_template(
                 let mut err = refusal_error(&r, span).with_label(e.name.span, "in this template");
                 if matches!(
                     r.code,
-                    html_template::tokeniser::IN_SCRIPT
-                        | html_template::tokeniser::IN_STYLE
-                        | html_template::tokeniser::IN_RAW_TEXT
+                    html_template::tokeniser::Kind::InScript
+                        | html_template::tokeniser::Kind::InStyle
+                        | html_template::tokeniser::Kind::InRawText
                 ) {
                     err = err.with_note(format!(
                         "if `\\({})` here is text, not a placeholder, rewrite it so it is not a backslash, `(`, a name and `)`",

@@ -33,23 +33,28 @@ pub enum Unit {
     Hole(usize, usize),
 }
 
-/// `bynk.template.unsupported_markup`: markup the tokeniser does not model, or
-/// error recovery that changes a context.
-pub const UNSUPPORTED: &str = "bynk.template.unsupported_markup";
-/// `bynk.template.unquoted_attribute` (C4).
-pub const UNQUOTED: &str = "bynk.template.unquoted_attribute";
-/// `bynk.template.placeholder_in_script` (C8).
-pub const IN_SCRIPT: &str = "bynk.template.placeholder_in_script";
-/// `bynk.template.placeholder_in_style` (C10).
-pub const IN_STYLE: &str = "bynk.template.placeholder_in_style";
-/// `bynk.template.placeholder_in_code_attribute` (C11).
-pub const IN_CODE_ATTRIBUTE: &str = "bynk.template.placeholder_in_code_attribute";
-/// `bynk.template.placeholder_position` (C13).
-pub const POSITION: &str = "bynk.template.placeholder_position";
-/// `bynk.template.placeholder_in_raw_text` (C14).
-pub const IN_RAW_TEXT: &str = "bynk.template.placeholder_in_raw_text";
-/// `bynk.template.foreign_unbalanced`.
-pub const FOREIGN_UNBALANCED: &str = "bynk.template.foreign_unbalanced";
+/// Why the tokeniser refuses a hole or the markup around it. The checker turns each into its
+/// diagnostic code (`crate::templates`); the tokeniser itself names no code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    /// Markup the tokeniser does not model, or error recovery that changes a context.
+    Unsupported,
+    /// C4: a hole in an unquoted attribute value.
+    Unquoted,
+    /// C8: a hole inside `<script>`.
+    InScript,
+    /// C10: a hole inside `<style>` or a `style` attribute.
+    InStyle,
+    /// C11: a hole in an attribute whose value is code or decides how markup is read.
+    InCodeAttribute,
+    /// C13: a hole in the markup's structure or inside foreign content.
+    Position,
+    /// C14: a hole in raw text, or a `<noscript>` left open.
+    InRawText,
+    /// An `<svg>` or `<math>` left open, closed without an opener, or holding an
+    /// integration point or an HTML element.
+    ForeignUnbalanced,
+}
 
 /// Where a refusal points: a byte offset in the input, or a hole.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,14 +66,14 @@ pub enum At {
 /// Why a piece of markup, or a hole in it, is refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
-    pub code: &'static str,
+    pub code: Kind,
     pub at: At,
     pub message: String,
     pub note: Option<String>,
 }
 
 impl Refusal {
-    fn new(code: &'static str, at: At, message: impl Into<String>) -> Self {
+    fn new(code: Kind, at: At, message: impl Into<String>) -> Self {
         Self {
             code,
             at,
@@ -339,7 +344,7 @@ impl<'a> Tok<'a> {
         self.failed = true;
     }
 
-    fn refuse_at(&mut self, k: usize, code: &'static str, message: impl Into<String>) {
+    fn refuse_at(&mut self, k: usize, code: Kind, message: impl Into<String>) {
         let at = At::Offset(self.offset(k));
         self.refuse(Refusal::new(code, at, message));
     }
@@ -355,7 +360,7 @@ impl<'a> Tok<'a> {
         }
     }
 
-    fn refuse_hole(&mut self, hole: usize, code: &'static str, message: impl Into<String>) {
+    fn refuse_hole(&mut self, hole: usize, code: Kind, message: impl Into<String>) {
         self.judge(hole, Err(Refusal::new(code, At::Hole(hole), message)));
     }
 
@@ -374,7 +379,7 @@ impl<'a> Tok<'a> {
     fn hole_in_tag(&mut self, hole: usize, place: &str) {
         self.refuse_hole_with(
             hole,
-            Refusal::new(POSITION, At::Hole(hole), format!("a placeholder cannot be {place}"))
+            Refusal::new(Kind::Position, At::Hole(hole), format!("a placeholder cannot be {place}"))
                 .note("a placeholder fills element text or a quoted attribute value, never the markup's structure"),
         );
     }
@@ -384,7 +389,7 @@ impl<'a> Tok<'a> {
         if self.charref {
             self.refuse_hole(
                 hole,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "a placeholder cannot continue a character reference",
             );
         } else if !self.foreign.is_empty() {
@@ -404,7 +409,7 @@ impl<'a> Tok<'a> {
             .to_string();
         self.refuse_hole_with(
             hole,
-            Refusal::new(POSITION, At::Hole(hole), format!("a placeholder cannot be inside `<{root}>`"))
+            Refusal::new(Kind::Position, At::Hole(hole), format!("a placeholder cannot be inside `<{root}>`"))
                 .note("SVG and MathML are parsed by different rules, so a placeholder is refused anywhere inside them"),
         );
     }
@@ -475,12 +480,12 @@ impl<'a> Tok<'a> {
                 }
                 Some(Unit::Char('>', _)) => self.refuse_at(
                     start,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "`</>` is not an end tag, and a browser drops it",
                 ),
                 Some(Unit::Char(..)) => self.refuse_at(
                     start,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "`</` not followed by a tag name is read as a comment by a browser",
                 ),
             },
@@ -496,7 +501,7 @@ impl<'a> Tok<'a> {
             }
             Some(Unit::Char('?', _)) => self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "`<?` is read as a comment by a browser; HTML has no processing instructions",
             ),
             Some(Unit::Hole(h, _)) => {
@@ -524,7 +529,7 @@ impl<'a> Tok<'a> {
             if self.foreign.is_empty() {
                 self.refuse_at(
                     start,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "`<![CDATA[` outside SVG or MathML is read as a comment by a browser",
                 );
             } else {
@@ -532,11 +537,15 @@ impl<'a> Tok<'a> {
             }
         } else if let Some(h) = self.hole_within(k, 9) {
             self.hole_in_tag(h, "in a comment or doctype");
-            self.refuse_at(start, UNSUPPORTED, "`<!` must start a comment or a doctype");
+            self.refuse_at(
+                start,
+                Kind::Unsupported,
+                "`<!` must start a comment or a doctype",
+            );
         } else {
             self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "`<!` that starts neither a comment nor a doctype is read as a comment by a browser",
             );
         }
@@ -571,7 +580,7 @@ impl<'a> Tok<'a> {
         if self.spells(k, ">") || self.spells(k, "->") {
             self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "`<!-->` and `<!--->` end a comment early in a browser",
             );
             return;
@@ -582,7 +591,7 @@ impl<'a> Tok<'a> {
                 if data.contains("--!>") {
                     self.refuse_at(
                         start,
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         "`--!>` ends a comment early in a browser",
                     );
                     return;
@@ -595,13 +604,13 @@ impl<'a> Tok<'a> {
                 if data.contains("--!>") {
                     self.refuse_at(
                         start,
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         "`--!>` ends a comment early in a browser",
                     );
                 } else {
                     self.refuse_at(
                         start,
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         "this comment is never closed with `-->`",
                     );
                 }
@@ -612,7 +621,11 @@ impl<'a> Tok<'a> {
     fn doctype(&mut self, start: usize, k: usize) {
         let mut data = String::new();
         let Some(next) = self.scan_to(k, ">", "in a doctype", &mut data) else {
-            self.refuse_at(start, UNSUPPORTED, "this doctype is never closed with `>`");
+            self.refuse_at(
+                start,
+                Kind::Unsupported,
+                "this doctype is never closed with `>`",
+            );
             return;
         };
         let trimmed = data.trim_matches(is_ws);
@@ -620,7 +633,7 @@ impl<'a> Tok<'a> {
         if !starts_ws || trimmed.is_empty() || !trimmed.chars().all(|c| c.is_ascii_alphanumeric()) {
             self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "only a doctype with a plain name, such as `<!doctype html>`, is supported",
             );
             return;
@@ -641,7 +654,7 @@ impl<'a> Tok<'a> {
             }
             None => self.refuse_at(
                 k,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "this CDATA section is never closed with `]]>`",
             ),
         }
@@ -672,23 +685,23 @@ impl<'a> Tok<'a> {
         match self.state {
             State::Rcdata if self.charref => self.refuse_hole(
                 h,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "a placeholder cannot continue a character reference",
             ),
             State::Rcdata => self.judge(h, Ok(Context::Rcdata { element })),
             State::ScriptData => self.refuse_hole_with(
                 h,
-                Refusal::new(IN_SCRIPT, At::Hole(h), "a placeholder cannot be inside `<script>`")
+                Refusal::new(Kind::InScript, At::Hole(h), "a placeholder cannot be inside `<script>`")
                     .note("a script's text is code, and no escape makes a value safe there; pass data through a data attribute instead"),
             ),
             _ if element == "style" => self.refuse_hole_with(
                 h,
-                Refusal::new(IN_STYLE, At::Hole(h), "a placeholder cannot be inside `<style>`")
+                Refusal::new(Kind::InStyle, At::Hole(h), "a placeholder cannot be inside `<style>`")
                     .note("CSS has its own URL and escaping rules and can leak data without any URL, so style takes no placeholder"),
             ),
             _ => self.refuse_hole_with(
                 h,
-                Refusal::new(IN_RAW_TEXT, At::Hole(h), format!("a placeholder cannot be inside `<{element}>`"))
+                Refusal::new(Kind::InRawText, At::Hole(h), format!("a placeholder cannot be inside `<{element}>`"))
                     .note(format!("the text of `<{element}>` is not parsed as markup, so it takes no placeholder")),
             ),
         }
@@ -701,7 +714,7 @@ impl<'a> Tok<'a> {
         if script && self.spells(start + 1, "!--") {
             self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "`<!--` inside `<script>` changes how a browser finds the script's end",
             );
             return;
@@ -745,20 +758,20 @@ impl<'a> Tok<'a> {
                 } else {
                     self.refuse_at(
                         start,
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         format!("an end tag `</{name}` with attributes is not supported"),
                     );
                 }
             }
             Some(Unit::Char('/', _)) => self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 format!("`</{name}/` is not supported; write `</{name}>`"),
             ),
-            None => self.refuse_at(start, UNSUPPORTED, format!("the end tag `</{name}` is never closed")),
+            None => self.refuse_at(start, Kind::Unsupported, format!("the end tag `</{name}` is never closed")),
             Some(Unit::Char(c, _)) if c.is_ascii_alphanumeric() => self.refuse_at(
                 start,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 format!("`</{name}` followed by more of a name is not the end tag, and reads too much like it"),
             ),
             Some(Unit::Hole(h, _)) => {
@@ -777,7 +790,7 @@ impl<'a> Tok<'a> {
         if self.state == State::Rcdata {
             self.refuse_hole(
                 h,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 "a placeholder cannot follow `<` or `</` here, where it could complete an end tag",
             );
         } else {
@@ -799,7 +812,7 @@ impl<'a> Tok<'a> {
             Unit::Hole(h, _) => self.refuse_hole_with(
                 h,
                 Refusal::new(
-                    IN_RAW_TEXT,
+                    Kind::InRawText,
                     At::Hole(h),
                     "a placeholder cannot follow `<plaintext>`",
                 )
@@ -834,23 +847,29 @@ impl<'a> Tok<'a> {
                     }
                 }
                 '/' if state == State::TagName => self.state = State::SelfClosingStartTag,
-                '/' => self.refuse_at(k, UNSUPPORTED, "an end tag cannot be self-closing"),
+                '/' => self.refuse_at(k, Kind::Unsupported, "an end tag cannot be self-closing"),
                 '>' => self.emit_tag(),
-                '<' | '\0' => {
-                    self.refuse_at(k, UNSUPPORTED, "this character cannot be in a tag name")
-                }
+                '<' | '\0' => self.refuse_at(
+                    k,
+                    Kind::Unsupported,
+                    "this character cannot be in a tag name",
+                ),
                 c => self.tag.name.push(c.to_ascii_lowercase()),
             },
             State::EndTagAfterName => match c {
                 c if is_ws(c) => {}
                 '>' => self.emit_tag(),
-                _ => self.refuse_at(k, UNSUPPORTED, "an end tag cannot have attributes"),
+                _ => self.refuse_at(k, Kind::Unsupported, "an end tag cannot have attributes"),
             },
             State::BeforeAttrName => match c {
                 c if is_ws(c) => {}
                 '/' => self.state = State::SelfClosingStartTag,
                 '>' => self.emit_tag(),
-                '=' => self.refuse_at(k, UNSUPPORTED, "an attribute name cannot start with `=`"),
+                '=' => self.refuse_at(
+                    k,
+                    Kind::Unsupported,
+                    "an attribute name cannot start with `=`",
+                ),
                 _ => {
                     self.tag.attrs.push((String::new(), String::new()));
                     self.i -= 1;
@@ -877,7 +896,7 @@ impl<'a> Tok<'a> {
                 }
                 '"' | '\'' | '<' | '\0' => self.refuse_at(
                     k,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "this character cannot be in an attribute name",
                 ),
                 c => {
@@ -903,7 +922,7 @@ impl<'a> Tok<'a> {
                 '\'' => self.state = State::AttrValueSq,
                 '>' => self.refuse_at(
                     k,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "an attribute's `=` must be followed by a value",
                 ),
                 _ => {
@@ -935,7 +954,7 @@ impl<'a> Tok<'a> {
                 }
                 '"' | '\'' | '<' | '=' | '`' | '\0' => self.refuse_at(
                     k,
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     "this character cannot be in an unquoted attribute value; quote the value",
                 ),
                 c => self.push_value(c),
@@ -982,7 +1001,7 @@ impl<'a> Tok<'a> {
         if self.tag.attrs[..n - 1].iter().any(|(a, _)| *a == name) {
             self.refuse_at(
                 k,
-                UNSUPPORTED,
+                Kind::Unsupported,
                 format!("the attribute `{name}` is repeated, and a browser keeps only the first"),
             );
             return false;
@@ -1004,7 +1023,7 @@ impl<'a> Tok<'a> {
                 let attr = self.tag.attrs.last().map_or(String::new(), |a| a.0.clone());
                 self.refuse_hole_with(
                     h,
-                    Refusal::new(UNQUOTED, At::Hole(h), format!("the placeholder in `{attr}=` is not quoted"))
+                    Refusal::new(Kind::Unquoted, At::Hole(h), format!("the placeholder in `{attr}=` is not quoted"))
                         .note(format!("quote the value, `{attr}=\"…\"`: an unquoted value ends at the first space, so a value could add attributes")),
                 );
                 if state == State::BeforeAttrValue {
@@ -1015,7 +1034,7 @@ impl<'a> Tok<'a> {
                 if self.charref {
                     self.refuse_hole(
                         h,
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         "a placeholder cannot continue a character reference",
                     );
                 } else {
@@ -1068,38 +1087,40 @@ impl<'a> Tok<'a> {
         let at = At::Hole(h);
         if self.tree && (!self.foreign.is_empty() || matches!(element, "svg" | "math")) {
             let root = self.foreign.first().map_or(element, |(n, _)| n.as_str());
-            return Err(Refusal::new(POSITION, at, format!("a placeholder cannot be inside `<{root}>`"))
+            return Err(Refusal::new(Kind::Position, at, format!("a placeholder cannot be inside `<{root}>`"))
                 .note("SVG and MathML are parsed by different rules, so a placeholder is refused anywhere inside them"));
         }
         if attr.starts_with("on") {
             return Err(Refusal::new(
-                IN_CODE_ATTRIBUTE,
+                Kind::InCodeAttribute,
                 at,
                 format!("a placeholder cannot be in the event handler `{attr}`"),
             )
             .note("an event handler's value is code, and no escape makes a value safe there"));
         }
         if attr == "style" {
-            return Err(Refusal::new(IN_STYLE, at, "a placeholder cannot be in a `style` attribute")
+            return Err(Refusal::new(Kind::InStyle, at, "a placeholder cannot be in a `style` attribute")
                 .note("CSS has its own URL and escaping rules and can leak data without any URL, so style takes no placeholder"));
         }
         if attr == "srcdoc" {
-            return Err(
-                Refusal::new(IN_CODE_ATTRIBUTE, at, "a placeholder cannot be in `srcdoc`")
-                    .note("`srcdoc` is a whole nested document"),
-            );
+            return Err(Refusal::new(
+                Kind::InCodeAttribute,
+                at,
+                "a placeholder cannot be in `srcdoc`",
+            )
+            .note("`srcdoc` is a whole nested document"));
         }
         let has = |name: &str| tag.attrs.iter().any(|(a, _)| a == name);
         if element == "meta" && attr == "content" && has("http-equiv") {
-            return Err(Refusal::new(IN_CODE_ATTRIBUTE, at, "a placeholder cannot be in `<meta content>` beside `http-equiv`")
+            return Err(Refusal::new(Kind::InCodeAttribute, at, "a placeholder cannot be in `<meta content>` beside `http-equiv`")
                 .note("with `http-equiv`, `content` is read as a header, such as a refresh to another URL"));
         }
         if decides_another(element, attr) {
-            return Err(Refusal::new(IN_CODE_ATTRIBUTE, at, format!("a placeholder cannot be in `<{element} {attr}>`"))
+            return Err(Refusal::new(Kind::InCodeAttribute, at, format!("a placeholder cannot be in `<{element} {attr}>`"))
                 .note(format!("`{attr}` decides how the rest of `<{element}>` is read, so it must be written literally")));
         }
         if is_srcset_attribute(attr) || is_url_attribute(attr) || element == "base" {
-            return Err(Refusal::new(UNSUPPORTED, at, format!("a placeholder in the URL attribute `{attr}` is not supported yet"))
+            return Err(Refusal::new(Kind::Unsupported, at, format!("a placeholder in the URL attribute `{attr}` is not supported yet"))
                 .note("a URL attribute takes a checked URL, not text; until templates support one, write the URL literally"));
         }
         Ok(Context::Attr {
@@ -1112,7 +1133,7 @@ impl<'a> Tok<'a> {
         let name = tag.name.as_str();
         let at = tag.start;
         if self.select_at.is_some() && !matches!(name, "option" | "optgroup" | "hr") {
-            self.refuse(Refusal::new(UNSUPPORTED, At::Offset(at), format!("`<{name}>` cannot be inside `<select>` here"))
+            self.refuse(Refusal::new(Kind::Unsupported, At::Offset(at), format!("`<{name}>` cannot be inside `<select>` here"))
                 .note("inside `<select>` a browser ignores most tags, so a template's `<select>` holds only `<option>`, `<optgroup>` and `<hr>`"));
             return;
         }
@@ -1133,7 +1154,7 @@ impl<'a> Tok<'a> {
             }
             "select" => self.select_at = Some(at),
             "frameset" | "frame" => self.refuse(Refusal::new(
-                UNSUPPORTED,
+                Kind::Unsupported,
                 At::Offset(at),
                 format!("`<{name}>` is not supported in a template"),
             )),
@@ -1152,7 +1173,7 @@ impl<'a> Tok<'a> {
         if matches!(name, "svg" | "math") {
             self.refuse(
                 Refusal::new(
-                    FOREIGN_UNBALANCED,
+                    Kind::ForeignUnbalanced,
                     At::Offset(tag.start),
                     format!("`</{name}>` closes a `<{name}>` this template never opened"),
                 )
@@ -1167,7 +1188,7 @@ impl<'a> Tok<'a> {
                 "select" => self.select_at = None,
                 "option" | "optgroup" => {}
                 _ => self.refuse(Refusal::new(
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     At::Offset(tag.start),
                     format!("`</{name}>` cannot be inside `<select>` here"),
                 )),
@@ -1187,7 +1208,7 @@ impl<'a> Tok<'a> {
         if tag.end {
             if matches!(name, "br" | "p") {
                 self.refuse(Refusal::new(
-                    FOREIGN_UNBALANCED,
+                    Kind::ForeignUnbalanced,
                     at,
                     format!("`</{name}>` inside `<{root}>` ends it early in a browser"),
                 ));
@@ -1196,7 +1217,7 @@ impl<'a> Tok<'a> {
             if self.foreign.last().is_some_and(|(n, _)| n == name) {
                 self.foreign.pop();
             } else {
-                self.refuse(Refusal::new(FOREIGN_UNBALANCED, at, format!("`</{name}>` does not close the element open inside `<{root}>`"))
+                self.refuse(Refusal::new(Kind::ForeignUnbalanced, at, format!("`</{name}>` does not close the element open inside `<{root}>`"))
                     .note("inside SVG and MathML every element must be closed in order, so the subtree's end is where a browser sees it"));
             }
             return;
@@ -1204,7 +1225,7 @@ impl<'a> Tok<'a> {
         if FOREIGN_BREAKOUT.contains(&name) {
             self.refuse(
                 Refusal::new(
-                    FOREIGN_UNBALANCED,
+                    Kind::ForeignUnbalanced,
                     at,
                     format!("`<{name}>` inside `<{root}>` ends it early in a browser"),
                 )
@@ -1219,7 +1240,7 @@ impl<'a> Tok<'a> {
         if integration {
             self.refuse(
                 Refusal::new(
-                    FOREIGN_UNBALANCED,
+                    Kind::ForeignUnbalanced,
                     at,
                     format!("`<{name}>` inside `<{root}>` is not supported"),
                 )
@@ -1243,11 +1264,11 @@ impl<'a> Tok<'a> {
                 }
                 let name = self.raw.clone();
                 if name == "noscript" {
-                    self.refuse(Refusal::new(IN_RAW_TEXT, At::Offset(self.raw_at), "this `<noscript>` is never closed")
+                    self.refuse(Refusal::new(Kind::InRawText, At::Offset(self.raw_at), "this `<noscript>` is never closed")
                         .note("`<noscript>` is read differently with scripting on and off, so it must close in the same template or fragment"));
                 } else {
                     self.refuse(Refusal::new(
-                        UNSUPPORTED,
+                        Kind::Unsupported,
                         At::Offset(self.raw_at),
                         format!("this `<{name}>` is never closed"),
                     ));
@@ -1256,7 +1277,7 @@ impl<'a> Tok<'a> {
             }
             _ => {
                 self.refuse(Refusal::new(
-                    UNSUPPORTED,
+                    Kind::Unsupported,
                     At::Offset(end),
                     "the markup ends inside a tag",
                 ));
@@ -1271,7 +1292,7 @@ impl<'a> Tok<'a> {
             let root = root.clone();
             self.refuse(
                 Refusal::new(
-                    FOREIGN_UNBALANCED,
+                    Kind::ForeignUnbalanced,
                     At::Offset(self.foreign_at),
                     format!("this `<{root}>` is never closed"),
                 )
@@ -1280,7 +1301,7 @@ impl<'a> Tok<'a> {
                 ),
             );
         } else if let Some(at) = self.select_at {
-            self.refuse(Refusal::new(UNSUPPORTED, At::Offset(at), "this `<select>` is never closed")
+            self.refuse(Refusal::new(Kind::Unsupported, At::Offset(at), "this `<select>` is never closed")
                 .note("a browser ignores most tags inside `<select>`, so it must close in the same template or fragment"));
         }
     }

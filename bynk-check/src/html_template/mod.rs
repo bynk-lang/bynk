@@ -3,8 +3,8 @@
 //!
 //! [`placeholders`] finds a template file's `\(name)` placeholders (§6), and
 //! [`tokeniser`] tokenises the markup around them as a browser does and gives
-//! each placeholder its context (§5.2) or refuses it. The checker
-//! ([`crate::templates`]) then judges each placeholder's field against its
+//! each placeholder its context (§5.2) or refuses it, as a [`tokeniser::Kind`]. The
+//! checker then judges each placeholder's field against its
 //! context, and the emitter builds the template's function from the pieces.
 //! Nothing here runs at run time: a template compiles to string concatenation
 //! and escape calls (§8).

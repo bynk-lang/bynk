@@ -2,31 +2,31 @@
 //! §6). The checker-level fixtures, named after each context and code, live in
 //! `bynk-tests`; these pin the tokeniser alone.
 
-use super::tokeniser::{self, Context, Initial, Token};
+use super::tokeniser::{self, Context, Initial, Kind, Token};
 use super::*;
 
-/// The outcome of each placeholder in `text`: `Ok(context)` or `Err(code)`,
-/// and the code of the first markup refusal, if any.
-fn judge(text: &str) -> (Vec<Result<Context, &'static str>>, Option<&'static str>) {
+/// The outcome of each placeholder in `text`: `Ok(context)` or `Err(kind)`,
+/// and the kind of the first markup refusal, if any.
+fn judge(text: &str) -> (Vec<Result<Context, Kind>>, Option<Kind>) {
     let a = analyse_template(text);
     let holes = (0..a.split.placeholders.len())
         .map(|n| match a.analysis.holes.get(n).cloned().flatten() {
             Some(Ok(c)) => Ok(c),
             Some(Err(r)) => Err(r.code),
-            None => Err("<unjudged>"),
+            None => panic!("placeholder {n} of {text:?} was not judged"),
         })
         .collect();
     (holes, a.analysis.markup.first().map(|r| r.code))
 }
 
-fn only(text: &str) -> Result<Context, &'static str> {
+fn only(text: &str) -> Result<Context, Kind> {
     let (holes, markup) = judge(text);
     assert_eq!(markup, None, "markup refused in {text:?}");
     assert_eq!(holes.len(), 1, "one placeholder in {text:?}");
     holes.into_iter().next().unwrap()
 }
 
-fn markup(text: &str) -> &'static str {
+fn markup(text: &str) -> Kind {
     judge(text)
         .1
         .unwrap_or_else(|| panic!("expected {text:?} to be refused"))
@@ -64,12 +64,18 @@ fn c2_rcdata() {
         })
     );
     // After `</` a value could complete the end tag, so it is refused.
-    assert_eq!(only("<title></\\(t)</title>"), Err(tokeniser::UNSUPPORTED));
+    assert_eq!(
+        only("<title></\\(t)</title>"),
+        Err(tokeniser::Kind::Unsupported)
+    );
     assert_eq!(
         only("<title></ti\\(t)</title>"),
-        Err(tokeniser::UNSUPPORTED)
+        Err(tokeniser::Kind::Unsupported)
     );
-    assert_eq!(only("<title><\\(t)</title>"), Err(tokeniser::UNSUPPORTED));
+    assert_eq!(
+        only("<title><\\(t)</title>"),
+        Err(tokeniser::Kind::Unsupported)
+    );
 }
 
 #[test]
@@ -85,24 +91,24 @@ fn c3_quoted_attribute() {
 
 #[test]
 fn c4_unquoted_attribute() {
-    assert_eq!(only("<img alt=\\(a)>"), Err(tokeniser::UNQUOTED));
-    assert_eq!(only("<img alt=x\\(a)>"), Err(tokeniser::UNQUOTED));
+    assert_eq!(only("<img alt=\\(a)>"), Err(tokeniser::Kind::Unquoted));
+    assert_eq!(only("<img alt=x\\(a)>"), Err(tokeniser::Kind::Unquoted));
 }
 
 #[test]
 fn c8_script() {
     assert_eq!(
         only("<script>var x = \\(a);</script>"),
-        Err(tokeniser::IN_SCRIPT)
+        Err(tokeniser::Kind::InScript)
     );
     assert_eq!(
         only("<script type=\"module\">\\(a)</script>"),
-        Err(tokeniser::IN_SCRIPT)
+        Err(tokeniser::Kind::InScript)
     );
     // A placeholder-shaped regular expression in a script is refused too.
     assert_eq!(
         only("<script>/\\(x)/.test(s)</script>"),
-        Err(tokeniser::IN_SCRIPT)
+        Err(tokeniser::Kind::InScript)
     );
 }
 
@@ -110,37 +116,40 @@ fn c8_script() {
 fn c10_style() {
     assert_eq!(
         only("<style>p { color: \\(c) }</style>"),
-        Err(tokeniser::IN_STYLE)
+        Err(tokeniser::Kind::InStyle)
     );
-    assert_eq!(only("<p style=\"color: \\(c)\">"), Err(tokeniser::IN_STYLE));
+    assert_eq!(
+        only("<p style=\"color: \\(c)\">"),
+        Err(tokeniser::Kind::InStyle)
+    );
 }
 
 #[test]
 fn c11_code_attributes() {
     assert_eq!(
         only("<a onclick=\"\\(a)\">"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
     assert_eq!(
         only("<iframe srcdoc=\"\\(a)\"></iframe>"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
     assert_eq!(
         only("<meta http-equiv=\"refresh\" content=\"\\(a)\">"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
     // `http-equiv` after `content` still counts.
     assert_eq!(
         only("<meta content=\"\\(a)\" http-equiv=\"refresh\">"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
     assert_eq!(
         only("<script type=\"\\(a)\"></script>"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
     assert_eq!(
         only("<link rel=\"\\(a)\">"),
-        Err(tokeniser::IN_CODE_ATTRIBUTE)
+        Err(tokeniser::Kind::InCodeAttribute)
     );
 }
 
@@ -154,7 +163,7 @@ fn url_attributes_are_not_ordinary_attributes() {
         "<img srcset=\"\\(h)\">",
         "<base target=\"\\(h)\">",
     ] {
-        assert_eq!(only(t), Err(tokeniser::UNSUPPORTED), "{t}");
+        assert_eq!(only(t), Err(tokeniser::Kind::Unsupported), "{t}");
     }
 }
 
@@ -175,7 +184,7 @@ fn c13_positions() {
         "<svg><![CDATA[\\(n)]]></svg>",
     ] {
         // The placeholder is refused; the markup around it may be too.
-        assert_eq!(judge(t).0, vec![Err(tokeniser::POSITION)], "{t}");
+        assert_eq!(judge(t).0, vec![Err(tokeniser::Kind::Position)], "{t}");
     }
 }
 
@@ -189,27 +198,27 @@ fn c14_raw_text() {
         "<plaintext>\\(n)",
         "<noscript>\\(n)</noscript>",
     ] {
-        assert_eq!(only(t), Err(tokeniser::IN_RAW_TEXT), "{t}");
+        assert_eq!(only(t), Err(tokeniser::Kind::InRawText), "{t}");
     }
     // A `<noscript>` left open.
-    assert_eq!(markup("<noscript><p>x</p>"), tokeniser::IN_RAW_TEXT);
+    assert_eq!(markup("<noscript><p>x</p>"), tokeniser::Kind::InRawText);
 }
 
 #[test]
 fn foreign_content_balances_within_one_piece() {
     // The three-fragment case: each piece alone.
-    assert_eq!(markup("<svg>"), tokeniser::FOREIGN_UNBALANCED);
-    assert_eq!(markup("</svg>"), tokeniser::FOREIGN_UNBALANCED);
+    assert_eq!(markup("<svg>"), tokeniser::Kind::ForeignUnbalanced);
+    assert_eq!(markup("</svg>"), tokeniser::Kind::ForeignUnbalanced);
     assert_eq!(
         markup("<math><mi>x</mi></math>"),
-        tokeniser::FOREIGN_UNBALANCED
+        tokeniser::Kind::ForeignUnbalanced
     );
     assert_eq!(
         markup("<svg><foreignObject></foreignObject></svg>"),
-        tokeniser::FOREIGN_UNBALANCED
+        tokeniser::Kind::ForeignUnbalanced
     );
-    assert_eq!(markup("<svg><p></svg>"), tokeniser::FOREIGN_UNBALANCED);
-    assert_eq!(markup("<svg><g></svg>"), tokeniser::FOREIGN_UNBALANCED);
+    assert_eq!(markup("<svg><p></svg>"), tokeniser::Kind::ForeignUnbalanced);
+    assert_eq!(markup("<svg><g></svg>"), tokeniser::Kind::ForeignUnbalanced);
     // Inside foreign content `<script>` does not switch the tokeniser.
     assert_eq!(
         judge("<svg><script>a</script></svg><p>\\(t)</p>").0,
@@ -225,9 +234,12 @@ fn select_holds_options_only() {
     );
     assert_eq!(
         markup("<select><xmp></xmp></select>"),
-        tokeniser::UNSUPPORTED
+        tokeniser::Kind::Unsupported
     );
-    assert_eq!(markup("<select><option>a</option>"), tokeniser::UNSUPPORTED);
+    assert_eq!(
+        markup("<select><option>a</option>"),
+        tokeniser::Kind::Unsupported
+    );
 }
 
 #[test]
@@ -252,15 +264,15 @@ fn error_recovery_that_changes_a_context_is_refused() {
         "</p class=\"x\">",
         "<!doctype html public \"x\">",
     ] {
-        assert_eq!(markup(t), tokeniser::UNSUPPORTED, "{t}");
+        assert_eq!(markup(t), tokeniser::Kind::Unsupported, "{t}");
     }
 }
 
 #[test]
 fn a_placeholder_cannot_continue_a_character_reference() {
-    assert_eq!(only("<p>&\\(t)</p>"), Err(tokeniser::UNSUPPORTED));
-    assert_eq!(only("<p>&am\\(t)</p>"), Err(tokeniser::UNSUPPORTED));
-    assert_eq!(only("<p a=\"&#\\(t)\">"), Err(tokeniser::UNSUPPORTED));
+    assert_eq!(only("<p>&\\(t)</p>"), Err(tokeniser::Kind::Unsupported));
+    assert_eq!(only("<p>&am\\(t)</p>"), Err(tokeniser::Kind::Unsupported));
+    assert_eq!(only("<p a=\"&#\\(t)\">"), Err(tokeniser::Kind::Unsupported));
     // A finished reference is plain text.
     assert_eq!(only("<p>&amp; \\(t)</p>"), Ok(Context::Text));
 }
