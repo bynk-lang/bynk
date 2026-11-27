@@ -183,7 +183,7 @@ export type BoundaryError =
 export type __BoundaryError = BoundaryError;
 export type __JsonValue = JsonValue;
 
-/** Why a call returned no response of the route's own. Returned, never thrown. */
+/** Why a call returned no response of the route's own. Returned, never thrown (but see `CleartextCredential`). */
 export type CallFailure =
   /** A value failed a refinement (or did not fit its type) before anything was sent. */
   | { readonly kind: "Invalid"; readonly error: BoundaryError }
@@ -235,6 +235,12 @@ export interface ClientOptions {
 }
 
 /**
+ * The `fetch`es [`viaBinding`] made. A call through one never reaches the network, so the cleartext check
+ * (#4610) skips it. A private registry, not an option: nothing a caller sets can switch the check off.
+ */
+const __bindingFetches = new globalThis.WeakSet<object>();
+
+/**
  * A Cloudflare Service Binding (`env.API`), or anything with a `fetch` method that takes
  * what `fetch` does.
  */
@@ -256,7 +262,10 @@ export function viaBinding(
   binding: FetchBinding,
   baseUrl: string = "https://bynk.invalid",
 ): { readonly baseUrl: string; readonly fetch: typeof globalThis.fetch; readonly sendContract: true } {
-  return { baseUrl, sendContract: true, fetch: ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch };
+  const send = ((input, init) => binding.fetch(input, init)) as typeof globalThis.fetch;
+  // #4610: nothing leaves the Worker, whatever `baseUrl` says, so a credential on it is not exposed.
+  __bindingFetches.add(send);
+  return { baseUrl, sendContract: true, fetch: send };
 }
 
 /** What one reply of a route is. */
@@ -609,8 +618,8 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
 
 /**
  * What iterating a call's `events` throws when the stream fails after its status was
- * sent (a dropped connection, an abort): the one place the client throws, because by
- * then there is no `CallFailure` left to return. `reason` is what the body rejected with.
+ * sent (a dropped connection, an abort): the only throw once a request is sent, because by
+ * then there is no `CallFailure` left to return. (A `CleartextCredential` is thrown before one is.) `reason` is what the body rejected with.
  */
 export class StreamFailure extends globalThis.Error {
   readonly reason: unknown;
@@ -832,7 +841,13 @@ export async function __call(
     const headers = await __headers(options, init, request, route);
     // #4610: the credential is an `Authorization` header, from the options, the init or a typed record.
     const url = __url(options, route, request);
-    if ((headers.get("authorization") ?? "") !== "" && __cleartextRemote(url)) throw new CleartextCredential(url);
+    if (
+      (headers.get("authorization") ?? "") !== "" &&
+      !(options.fetch !== undefined && __bindingFetches.has(options.fetch)) &&
+      __cleartextRemote(url)
+    ) {
+      throw new CleartextCredential(url);
+    }
     const sent: globalThis.RequestInit & { duplex?: "half" } = { ...init, method: route.method, headers };
     if (options.credentials !== undefined && sent.credentials === undefined) sent.credentials = options.credentials;
     if (request.body !== undefined) sent.body = globalThis.JSON.stringify(request.body);
