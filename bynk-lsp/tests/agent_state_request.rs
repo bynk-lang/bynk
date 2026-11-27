@@ -407,3 +407,171 @@ agent Worker {
     assert_eq!(worker["invariants"][0]["kind"], "transition");
     assert_eq!(worker["invariants"][0]["name"], "busy_stays_busy");
 }
+
+const CART_SRC: &str = r#"context orders
+
+type Line = { sku: String, qty: Int }
+
+agent Cart {
+  key id: String
+
+  store latest: Cell[Line]
+  store lines: Cell[List[Line]]
+  store blob: Cell[Bytes]
+  store prices: Map[String, Int]
+  store files: Map[String, Bytes]
+  store skus: Set[String]
+  store audit: Log[Line]
+  store sessions: Cache[String, Line] @ttl(30.minutes)
+
+  on call add(line: Line, data: Bytes) -> Effect[()] given Clock {
+    latest := line
+    lines := [line]
+    blob := data
+    let _ <- prices.put(line.sku, line.qty)
+    let _ <- files.put(line.sku, data)
+    let _ <- skus.add(line.sku)
+    let _ <- audit.append(line)
+    let _ <- prices.upsert(line.sku, line.qty, (q) => q + line.qty)
+    let _ <- prices.update(line.sku, (q) => q + 1)
+    let _ <- files.upsert(line.sku, data, (d) => d)
+    let _ <- sessions.put(line.sku, line)
+    let _ <- sessions.upsert(line.sku, line, (l) => l)
+    let _ <- sessions.update(line.sku, (l) => l)
+    let _ <- prices.remove(line.sku)
+    ()
+  }
+}
+"#;
+
+/// #3803: each write says what it stores: the value, and the field once the write has happened.
+#[test]
+fn writes_report_the_type_they_store() {
+    let root = scratch("value_types", &[("orders.bynk", CART_SRC)]);
+    let info = types(&root.0);
+    let offset = CART_SRC.find("latest := line").unwrap();
+    let (agent, model) =
+        bynk_lsp::agent_state_request::agent_state_at(CART_SRC, offset, &info.types).unwrap();
+    let effects = bynk_lsp::agent_state_request::effects_of(&agent, &Default::default());
+    let json = serde_json::to_value(bynk_lsp::agent_state_request::to_wire_with_types(
+        &agent,
+        &model,
+        &effects,
+        CART_SRC,
+        &info.types,
+        (Vec::new(), Vec::new()),
+    ))
+    .unwrap();
+    let writes = json["effects"][0]["rows"][0]["writes"].as_array().unwrap();
+    let by = |field: &str, op: &str| {
+        writes
+            .iter()
+            .find(|w| w["field"] == field && w["op"] == op)
+            .unwrap_or_else(|| panic!("no {op} write to {field} in {writes:?}"))
+    };
+
+    // A set on a record: the cell's own type, as value and field.
+    let latest = by("latest", ":=");
+    assert_eq!(latest["valueType"], "Line");
+    assert_eq!(latest["fieldType"], "Line");
+    assert_eq!(latest["valueRef"]["kind"], "Named");
+    assert_eq!(latest["valueRef"]["name"], "Line");
+    assert_eq!(latest["fieldRef"]["name"], "Line");
+
+    // A set on a list: a generic instantiation, referenced by its codec key.
+    let lines = by("lines", ":=");
+    assert_eq!(lines["valueType"], "List[Line]");
+    assert_eq!(lines["valueRef"]["kind"], "Inst");
+    assert_eq!(lines["valueRef"]["key"], "List_Line");
+
+    // A set on `Bytes`: unbounded, and its own reference kind.
+    let blob = by("blob", ":=");
+    assert_eq!(blob["valueType"], "Bytes");
+    assert_eq!(blob["valueRef"]["kind"], "Bytes");
+
+    // A put on a map: the value written and the map it went into.
+    let prices = by("prices", "put");
+    assert_eq!(prices["valueType"], "Int");
+    assert_eq!(prices["fieldType"], "Map[String, Int]");
+    assert_eq!(prices["valueRef"]["kind"], "Base");
+    assert!(prices.get("fieldRef").is_none(), "a map has no value shape");
+    let files = by("files", "put");
+    assert_eq!(files["valueType"], "Bytes");
+    assert_eq!(files["fieldType"], "Map[String, Bytes]");
+    assert_eq!(files["valueRef"]["kind"], "Bytes");
+
+    // An append to a log and an add to a set: the element and the collection.
+    let audit = by("audit", "append");
+    assert_eq!(audit["valueType"], "Line");
+    assert_eq!(audit["fieldType"], "Log[Line]");
+    let skus = by("skus", "add");
+    assert_eq!(skus["valueType"], "String");
+    assert_eq!(skus["fieldType"], "Set[String]");
+
+    // `upsert` and `update` store the map's or cache's value type too: the starting value and the
+    // combiner's result are both a `V`.
+    for (field, value, kind) in [
+        ("prices", "Int", "Map[String, Int]"),
+        ("sessions", "Line", "Cache[String, Line]"),
+    ] {
+        for op in ["upsert", "update"] {
+            let w = by(field, op);
+            assert_eq!(w["valueType"], value, "{field}.{op}: {w}");
+            assert_eq!(w["fieldType"], kind, "{field}.{op}: {w}");
+        }
+    }
+    assert_eq!(by("sessions", "put")["valueType"], "Line");
+    // The unbounded case the platform-limit hints exist for: an `upsert` of `Bytes` into a map.
+    let upserted = by("files", "upsert");
+    assert_eq!(upserted["valueType"], "Bytes");
+    assert_eq!(upserted["valueRef"]["kind"], "Bytes");
+    assert_eq!(upserted["fieldType"], "Map[String, Bytes]");
+
+    // A remove stores no value, and says what the field still is.
+    let removed = by("prices", "remove");
+    assert!(removed.get("valueType").is_none(), "{removed}");
+    assert!(removed.get("valueRef").is_none(), "{removed}");
+    assert_eq!(removed["fieldType"], "Map[String, Int]");
+}
+
+/// #3803: the writes' references point into the wire contract's own type table.
+#[test]
+fn the_type_table_is_the_wire_contracts() {
+    let root = scratch("value_table", &[("orders.bynk", CART_SRC)]);
+    let info = types(&root.0);
+    let offset = CART_SRC.find("latest := line").unwrap();
+    let (agent, model) =
+        bynk_lsp::agent_state_request::agent_state_at(CART_SRC, offset, &info.types).unwrap();
+    let index = bynk_check::index::ProjectIndex::default();
+    let table = bynk_lsp::wire_contract_request::store_type_table(
+        &agent,
+        &info.types,
+        &root.0,
+        &index,
+        &Default::default(),
+        &["orders".to_string()],
+    );
+    let json = serde_json::to_value(bynk_lsp::agent_state_request::to_wire_with_types(
+        &agent,
+        &model,
+        &[],
+        CART_SRC,
+        &info.types,
+        table,
+    ))
+    .unwrap();
+    let names: Vec<&str> = json["types"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"Line"), "{names:?}");
+    let keys: Vec<&str> = json["instantiations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["key"].as_str().unwrap())
+        .collect();
+    assert!(keys.contains(&"List_Line"), "{keys:?}");
+}

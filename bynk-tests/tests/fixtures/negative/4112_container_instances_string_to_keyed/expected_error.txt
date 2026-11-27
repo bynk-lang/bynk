@@ -1,0 +1,2 @@
+bynk.types.argument_mismatch
+argument 1 to capability `Renderer.send` has type `String`, but parameter expects `TenantId`

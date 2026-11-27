@@ -171,8 +171,10 @@ fn rewrite_instance_options(
     refs: &mut RefSink,
 ) -> bool {
     use bynk_std::OptionKind;
+    // #3752: `bynk`'s `Upstream` is instantiable too.
     let Some(kind) =
         crate::firstparty::instantiable(crate::firstparty::CLOUDFLARE_UNIT, &derived.base.name)
+            .or_else(|| crate::firstparty::instantiable(bynk_std::BYNK_UNIT, &derived.base.name))
     else {
         return false;
     };
@@ -188,6 +190,8 @@ fn rewrite_instance_options(
                 OptionKind::Duration => {
                     changed |= resolve_arg(arg, BaseType::Duration, scope, refs)
                 }
+                // A type's name is not a constant (#4112).
+                OptionKind::Type => {}
                 OptionKind::StrList => {
                     if let ExprKind::ListLit(items, ..) = &mut arg.value.kind {
                         for item in items {

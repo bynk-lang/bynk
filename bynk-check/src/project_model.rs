@@ -951,6 +951,22 @@ pub fn phase_resolve_derived(
                                         "reach a Bynk context with `consumes {context}`, which checks its contract"
                                     )),
                                 );
+                            } else if let crate::symbols::OptionValue::Type(key) = &value
+                                && let Some(problem) =
+                                    crate::containers::instance_key_problem(key, &table.types)
+                            {
+                                // #4112: `@instances(by: K)` takes a type that bounds the names.
+                                errors.push_for(
+                                    Some(&path),
+                                    CompileError::new(
+                                        "bynk.capability.invalid_option",
+                                        ann.span,
+                                        format!("`@{}`: {problem}", ann.name.name),
+                                    )
+                                    .with_note(
+                                        "write `type TenantId = String where Matches(r\"[a-z0-9-]{3,32}\")`, or an opaque `String`, and construct it where the set of names is decided",
+                                    ),
+                                );
                             } else {
                                 options.push((ann.name.name.clone(), value));
                             }
@@ -1010,11 +1026,24 @@ pub fn phase_resolve_derived(
                         .with_note("an instance's data belongs to this context; another context reaches it through this context's services"),
                     );
                 }
-                let ops = unit_tables
+                let mut ops = unit_tables
                     .get(&owner)
                     .and_then(|t| t.capabilities.get(&d.base.name))
                     .map(|base| base.ops.clone())
                     .unwrap_or_default();
+                // #4112: a `Container` with `@instances(by: K)` takes a `K` where its operations take
+                // the instance's name as a `String`, so the key's construction is where the set of
+                // names is bounded.
+                if let Some(key) = options.iter().find_map(|(o, v)| match v {
+                    crate::symbols::OptionValue::Type(k)
+                        if o == firstparty::CONTAINER_INSTANCES_OPTION =>
+                    {
+                        Some(k.clone())
+                    }
+                    _ => None,
+                }) {
+                    crate::containers::key_instance_operations(&mut ops, &key);
+                }
                 let binding = crate::worker_bindings::instance_binding_name(
                     kind.binding_prefix,
                     &c.name.name,
@@ -1287,6 +1316,7 @@ fn option_sample(option: &str) -> &'static str {
         firstparty::CONTAINER_SLEEP_AFTER_OPTION => "5.minutes",
         firstparty::CONTAINER_INSTANCE_TYPE_OPTION => "\"lite\"",
         firstparty::CONTAINER_FORWARD_OPTION => "[\"API_KEY\"]",
+        firstparty::CONTAINER_INSTANCES_OPTION => "by: TenantId",
         _ => "\"legacy-billing\"",
     }
 }
@@ -1413,6 +1443,39 @@ fn invalid_option_error(
     }
 }
 
+/// #4112: the value of a type option, written `by: Name` (`@instances(by: TenantId)`): the name of a
+/// type, checked against the context's types where the option is read.
+fn type_option_value(
+    ann: &bynk_syntax::ast::Annotation,
+    arg: &bynk_syntax::ast::AnnotationArg,
+    errors: &mut ErrorSink,
+    path: &std::path::Path,
+) -> Option<crate::symbols::OptionValue> {
+    let option = ann.name.name.as_str();
+    let invalid = |span, message: String| invalid_option_error(option, None, span, message);
+    if arg.label.as_ref().map(|l| l.name.as_str()) != Some("by") {
+        errors.push_for(
+            Some(path),
+            invalid(
+                ann.span,
+                format!("`@{option}` takes the type that names the instances, written `by: Type`"),
+            ),
+        );
+        return None;
+    }
+    let ExprKind::Ident(id) = &arg.value.kind else {
+        errors.push_for(
+            Some(path),
+            invalid(
+                arg.span,
+                format!("`@{option}` takes the name of a type: `by: TenantId`"),
+            ),
+        );
+        return None;
+    };
+    Some(crate::symbols::OptionValue::Type(id.name.clone()))
+}
+
 /// Interop I5 (#1972): the value of one instance option: one positional
 /// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
@@ -1443,6 +1506,10 @@ fn instance_option_value(
         );
         return None;
     };
+    // #4112: a type option is written `by: Name`; every other option is one positional literal.
+    if kind == firstparty::OptionKind::Type {
+        return type_option_value(ann, arg, errors, path);
+    }
     if arg.label.is_some() {
         errors.push_for(
             Some(path),
@@ -1454,6 +1521,8 @@ fn instance_option_value(
         return None;
     }
     let value = match (kind, &arg.value.kind) {
+        // Read above: a type option has its own shape.
+        (firstparty::OptionKind::Type, _) => return None,
         (firstparty::OptionKind::Str, ExprKind::StrLit(value)) => OptionValue::Str(value.clone()),
         (firstparty::OptionKind::Str, _) => {
             errors.push_for(
@@ -1552,6 +1621,10 @@ fn instance_option_value(
             );
             return None;
         }
+        // #3752: an `Upstream`'s `@timeout`, a positive whole number of seconds.
+        (firstparty::OptionKind::Duration, kind) if base == "Upstream" => OptionValue::Seconds(
+            crate::http_pass_through::upstream_timeout(kind, option, arg.span, path, errors)?,
+        ),
         (firstparty::OptionKind::Duration, _) if base == "Container" => OptionValue::Seconds(
             container_sleep_after(&arg.value.kind, arg.span, path, errors)?,
         ),
@@ -1598,6 +1671,11 @@ fn instance_option_value(
     let OptionValue::Str(text) = &value else {
         return Some(value);
     };
+    // #3752 (D13): an `Upstream`'s `@origin` is a serialised origin.
+    if base == "Upstream" && option == "origin" {
+        return crate::http_pass_through::upstream_origin_ok(text, arg.span, path, errors)
+            .then_some(value);
+    }
     if base == "Email" && option == crate::firstparty::EMAIL_TO_OPTION && !is_email_address(text) {
         errors.push_for(
             Some(path),
@@ -1625,28 +1703,8 @@ fn instance_option_value(
     if base == "Container" && !container_str_ok(text, option, ann, path, errors) {
         return None;
     }
-    // Hyperdrive H5 (#3322, DECISION B): `@tls` is one of a closed set.
-    if option == crate::firstparty::MYSQL_TLS_OPTION
-        && !crate::firstparty::MYSQL_TLS_MODES
-            .iter()
-            .any(|(mode, _)| mode == text)
+    if option == crate::firstparty::MYSQL_TLS_OPTION && !mysql_tls_ok(text, base, ann, path, errors)
     {
-        errors.push_for(
-            Some(path),
-            CompileError::new(
-                "bynk.capability.invalid_option",
-                ann.span,
-                format!("`{text}` is not a TLS mode a `{base}` can use"),
-            )
-            .with_note(format!(
-                "the modes are {}; `\"required\"` is the default",
-                crate::firstparty::MYSQL_TLS_MODES
-                    .iter()
-                    .map(|(m, _)| format!("`\"{m}\"`"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )),
-        );
         return None;
     }
     if option == crate::firstparty::SERVICE_WORKER_OPTION && !is_worker_name(text) {
@@ -1710,6 +1768,40 @@ fn instance_option_value(
         return None;
     }
     Some(value)
+}
+
+/// Hyperdrive H5 (#3322, DECISION B): whether a `@tls` is one of the closed set of
+/// modes. Pushes the error and returns `false` otherwise.
+fn mysql_tls_ok(
+    text: &str,
+    base: &str,
+    ann: &bynk_syntax::ast::Annotation,
+    path: &std::path::Path,
+    errors: &mut ErrorSink,
+) -> bool {
+    if crate::firstparty::MYSQL_TLS_MODES
+        .iter()
+        .any(|(mode, _)| *mode == text)
+    {
+        return true;
+    }
+    errors.push_for(
+        Some(path),
+        CompileError::new(
+            "bynk.capability.invalid_option",
+            ann.span,
+            format!("`{text}` is not a TLS mode a `{base}` can use"),
+        )
+        .with_note(format!(
+            "the modes are {}; `\"required\"` is the default",
+            crate::firstparty::MYSQL_TLS_MODES
+                .iter()
+                .map(|(m, _)| format!("`\"{m}\"`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    );
+    false
 }
 
 /// #3302: whether every entry of an `Email` instance's address list is an
@@ -2811,6 +2903,11 @@ pub fn check_function_type_boundary_items(
                         if streamed_body {
                             continue;
                         }
+                        // #3752: a pass-through route's `request` is where an
+                        // `InboundRequest` arrives (`crate::http_pass_through`).
+                        if crate::http_pass_through::is_inbound_request(&p.type_ref, types) {
+                            continue;
+                        }
                         if !type_ref_is_held(&p.type_ref) && !http_headers && !multipart_body {
                             // Only the `@name` arm is relaxed for a request record;
                             // every other boundary check still runs on it.
@@ -2822,7 +2919,14 @@ pub fn check_function_type_boundary_items(
                             reject_fn_types(&p.type_ref, what, types, errors);
                         }
                     }
-                    reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    // #3752: a pass-through route returns `PassThrough`, which holds the
+                    // `Forwarded` it passes through.
+                    if crate::http_pass_through::returns_pass_through(&h.return_type, types) {
+                    } else if matches!(h.kind, HandlerKind::Http { .. }) {
+                        crate::api_key::reject_http_result(&h.return_type, types, errors);
+                    } else {
+                        reject_fn_types(&h.return_type, "a service handler signature", types, errors);
+                    }
                 }
             }
             CommonsItem::Agent(a) => {

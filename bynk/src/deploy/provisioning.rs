@@ -334,48 +334,44 @@ pub(crate) fn worker_presence(api: &dyn CloudflareApi, name: &str) -> WorkerPres
 /// Create `name`, or accept that it is already there. Returns whether this call
 /// created it: a race-loser, finding it made in between, did not (#2579).
 ///
-/// Unlike KV there is no id to scrape: Cloudflare addresses a queue by the name
+/// Unlike KV there is no id to record: Cloudflare addresses a queue by the name
 /// `from queue("n")` already gave it, so a successful create and an
 /// already-existing queue are the same end state and both return `Ok`
 /// (ADR 0194 D2).
 pub(crate) fn create_queue(api: &dyn CloudflareApi, name: &str) -> Result<bool, CloudflareError> {
-    // As for KV, the call runs from the project root: the generated config may still carry
-    // the KV placeholder, and wrangler cannot load and reject a config it never reads.
     match api.queue_create(name) {
         Ok(()) => Ok(true),
         // The race-loser's path, not the common one: `queue_exists` has already
         // answered for a queue that was simply there. Someone else creating it
-        // between that check and this call lands here, so the "already exists"
-        // complaint is still read as the success it describes.
-        //
-        // This is the driver's one claim about another tool's prose, and it cannot
-        // be pinned by a test (ADR 0194 D2). It is deliberately reached only by a
-        // concurrent deploy, so being wrong about it costs a spurious failure on a
-        // rare race that a re-run fixes — not, as it would on the create-every-time
-        // shape, every re-deploy of every queue project.
-        Err(e) if e.already_exists() => Ok(false),
-        Err(e) => Err(e.into()),
+        // between that check and this call lands here. Since 1D.4d (#4056) the
+        // answer is read from the account, not from wrangler's prose: the API
+        // reference documents no code for a name already taken, so a create
+        // Cloudflare refuses is a success only when the queue is now there.
+        Err(e) if e.is_refusal() => match api.queue_find(name) {
+            Ok(Some(_)) => Ok(false),
+            Ok(None) => Err(e),
+            Err(lookup) => {
+                Err(format!("{e} (looking the queue up by name also failed: {lookup})").into())
+            }
+        },
+        Err(e) => Err(e),
     }
 }
 
 /// Is `name` already on the account?
 ///
-/// `wrangler queues info <name>` is a lookup by the same name the config binds,
-/// and it answers with an **exit code** rather than prose — which is the whole
-/// reason to ask it. Cloudflare's own deploy path reconciles queues this way
-/// (`getQueue` in wrangler's queues client), rather than by creating and reading
-/// the complaint.
-///
+/// A lookup by the same name the config binds, over Cloudflare's REST API since
+/// 1D.4d (the listing, matched exactly: the reference has no lookup by name).
 /// Asking the account, not the ledger: the ledger's queue set is a planning aid,
 /// and trusting it here would leave a queue deleted out-of-band un-recreated
 /// (ADR 0194 D2).
 ///
-/// A non-zero exit is read as "not there — try to create it". That is also what
+/// A failed lookup is read as "not there — try to create it". That is also what
 /// an auth or network failure produces, and the honest consequence is the right
-/// one: the create then fails too and surfaces wrangler's real complaint, rather
+/// one: the create then fails too and surfaces Cloudflare's real answer, rather
 /// than this call inventing a diagnosis of its own.
 pub(crate) fn queue_exists(api: &dyn CloudflareApi, name: &str) -> bool {
-    api.queue_info(name).is_ok()
+    matches!(api.queue_find(name), Ok(Some(_)))
 }
 
 /// Which of a context's queues still want a create attempt on this run, marking
@@ -418,16 +414,20 @@ pub(crate) fn queues_to_record(declared: &Resources, created: &BTreeSet<String>)
 
 /// Delete a queue by name — `--prune`'s other mutation.
 ///
-/// No confirmation flag to pass: confirmed empirically (#839) that
-/// `wrangler queues delete` has no prompt or force flag at all (`--help`
-/// shows only global flags) — it is already non-interactive by default.
-/// Idempotent against a queue already gone ([`crate::cloudflare::WranglerError::already_gone`]:
-/// `Queue "<name>" does not exist. …`, confirmed empirically, #839).
+/// Found by name and deleted by id (1D.4d, #4056). Idempotent against a queue
+/// already gone, so a re-run `--prune` is safe (#839): one the listing does not
+/// show, or a delete answered with Cloudflare's `10104 QueueNotFound`, is
+/// success.
 pub(crate) fn delete_queue(api: &dyn CloudflareApi, name: &str) -> Result<(), CloudflareError> {
     match api.queue_delete(name) {
-        Ok(()) => Ok(()),
-        Err(e) if e.already_gone() => Ok(()),
-        Err(e) => Err(e.into()),
+        Ok(_) => Ok(()),
+        Err(e)
+            if e.rest()
+                .is_some_and(|r| r.has_code(crate::cloudflare::rest::queues::NOT_FOUND)) =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -510,6 +510,8 @@ pub(crate) fn schema_agent_versions(project_root: &Path) -> BTreeMap<String, i64
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cloudflare::Op;
+    use crate::cloudflare::fake::Recording;
 
     fn names(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
@@ -599,37 +601,29 @@ mod tests {
         assert_eq!(DeployFailure::driver("nope".into()).code, 1);
     }
 
-    /// A failed `queues delete` that only says the queue is gone.
-    fn gone_queue(stderr: &str) -> bool {
-        crate::cloudflare::fake::failed(
-            &crate::cloudflare::Op::QueueDelete { name: "jobs" },
-            "",
-            stderr,
+    /// A REST refusal of `status` with Cloudflare's `code`, as the queue calls answer.
+    fn queue_refusal(method: &'static str, status: u16, code: u32) -> CloudflareError {
+        crate::cloudflare::rest::RestError::answered(
+            method,
+            "/queues",
+            status,
+            &format!(r#"[{{"code":{code},"message":"stand-in"}}]"#),
         )
-        .already_gone()
-    }
-
-    /// A failed `queues create` that only says the queue is there.
-    fn existing_queue(stderr: &str) -> bool {
-        crate::cloudflare::fake::failed(
-            &crate::cloudflare::Op::QueueCreate { name: "jobs" },
-            "",
-            stderr,
-        )
-        .already_exists()
+        .into()
     }
 
     #[test]
-    fn queue_already_deleted_matches_the_confirmed_error_shape() {
-        // Confirmed empirically (#839): `Queue "<name>" does not exist. To
-        // create it, run: wrangler queues create <name>`.
-        assert!(gone_queue(
-            "✘ [ERROR] Queue \"jobs\" does not exist. To create it, run: wrangler queues create jobs"
-        ));
-        assert!(!gone_queue(
-            "✘ [ERROR] A queue with this name already exists"
-        ));
-        assert!(!gone_queue(""));
+    fn a_queue_already_deleted_is_success() {
+        // #839, over REST since 1D.4d: a queue the listing no longer shows, or a delete answered
+        // with `10104 QueueNotFound`, is the end state `--prune` asked for.
+        let absent = Recording::new(|_: &Op<'_>| Ok::<_, CloudflareError>("absent".into()));
+        assert_eq!(delete_queue(&absent, "jobs"), Ok(()));
+        let raced = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 404, 10104)));
+        assert_eq!(delete_queue(&raced, "jobs"), Ok(()));
+        // Any other refusal is a real failure, in Cloudflare's words.
+        let other = Recording::new(|_: &Op<'_>| Err(queue_refusal("DELETE", 400, 10107)));
+        let e = delete_queue(&other, "jobs").unwrap_err();
+        assert!(e.to_string().contains("400"), "{e}");
     }
 
     #[test]
@@ -641,29 +635,41 @@ mod tests {
 
     #[test]
     fn an_existing_queue_is_success_not_a_failure() {
-        // D2: `wrangler queues create` has no `--if-not-exists` (verified
-        // against wrangler 4.103's `queues create --help`), so a create that
-        // loses the race against a concurrent deploy reads its "already there"
-        // complaint as the success it describes.
-        //
-        // This match is the driver's one unpinnable claim about wrangler's
-        // prose: the wording is Cloudflare's API text, which wrangler renders
-        // verbatim as `{message} [code: {code}]` and has no queue-specific
-        // handling for. `queue_exists` is what keeps it off the common path.
-        assert!(existing_queue(
-            "✘ [ERROR] A queue with this name already exists"
-        ));
+        // D2, read from the account since 1D.4d: a create that loses the race against a
+        // concurrent deploy is refused, and is a success only when the queue is now listed. The
+        // API reference documents no code for a name already taken, so the code is not read.
+        for code in [11009, 10101, 100] {
+            let raced = Recording::new(move |op: &Op<'_>| match op {
+                Op::QueueCreate { .. } => Err(queue_refusal("POST", 409, code)),
+                _ => Ok(String::new()),
+            });
+            assert_eq!(create_queue(&raced, "jobs"), Ok(false), "code {code}");
+            assert_eq!(raced.calls(), ["queues create jobs", "queues info jobs"]);
+        }
+        // Refused and still not listed: the create's own error.
+        let refused = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueCreate { .. } => Err(queue_refusal("POST", 400, 11009)),
+            _ => Ok("absent".to_string()),
+        });
+        let e = create_queue(&refused, "jobs").unwrap_err();
+        assert!(e.to_string().contains("400"), "{e}");
+        // A denied token or a server error is never adopted, and is not followed by a lookup.
+        for status in [403, 500] {
+            let failing =
+                Recording::new(move |_: &Op<'_>| Err(queue_refusal("POST", status, 10000)));
+            assert!(create_queue(&failing, "jobs").is_err());
+            assert_eq!(failing.calls(), ["queues create jobs"]);
+        }
+        // A lookup that fails too is reported after the create's error.
+        let both = Recording::new(|op: &Op<'_>| match op {
+            Op::QueueCreate { .. } => Err(queue_refusal("POST", 409, 11009)),
+            _ => Err(queue_refusal("GET", 500, 10000)),
+        });
+        let e = create_queue(&both, "jobs").unwrap_err().to_string();
         assert!(
-            existing_queue("queue already exists"),
-            "the match is on the phrase, whatever wrangler wraps it in"
+            e.contains("looking the queue up by name also failed"),
+            "{e}"
         );
-        // Anything else is a real failure and must surface with wrangler's own
-        // words rather than being swallowed as idempotency.
-        assert!(!existing_queue("✘ [ERROR] Authentication error [10000]"));
-        assert!(!existing_queue(
-            "✘ [ERROR] A request to the Cloudflare API failed."
-        ));
-        assert!(!existing_queue(""));
     }
 
     #[test]
@@ -730,7 +736,7 @@ mod tests {
 
     #[test]
     fn a_wrangler_complaint_is_read_from_whichever_stream_carries_it() {
-        let op = crate::cloudflare::Op::QueueCreate { name: "jobs" };
+        let op = crate::cloudflare::Op::WorkerDeployments { name: "jobs" };
         let said = |stdout: &str, stderr: &str| {
             crate::cloudflare::fake::failed(&op, stdout, stderr).to_string()
         };
@@ -743,13 +749,6 @@ mod tests {
         assert!(
             said("", "").contains("exited 1"),
             "a silent failure still reads as something, not a dangling colon"
-        );
-        // The consequence that makes this worth doing: a create whose
-        // "already exists" lands on stdout must still be read as success, or
-        // every re-deploy of a queue project fails.
-        assert!(
-            crate::cloudflare::fake::failed(&op, "A queue with this name already exists", "")
-                .already_exists()
         );
     }
 

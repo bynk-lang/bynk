@@ -1398,7 +1398,8 @@ module.exports = grammar({
         optional(field("given", $.given_clause)),
         field("body", $.block),
       ),
-    http_method: () => choice("GET", "POST", "PUT", "PATCH", "DELETE"),
+    // #3752 (D7): `ANY` declares a pass-through route.
+    http_method: () => choice("GET", "POST", "PUT", "PATCH", "DELETE", "ANY"),
     // v0.44: `on schedule("<expr>") (at: Int?) -> Effect[Result[(), E]] { … }`.
     cron_handler: ($) =>
       seq(
@@ -1527,9 +1528,10 @@ module.exports = grammar({
       ),
     // The closed, compiler-known scheme set. `None`/`Internal` are zero-crypto;
     // `Bearer` (JWT/HS256), `Signature` (HMAC over the body), and `Oidc`
-    // (JWKS/RS256+ES256) are compiler-generated verifiers.
+    // (JWKS/RS256+ES256) are compiler-generated verifiers. #3939: `ApiKey` verifies an opaque
+    // key against the digests its generated agents store.
     scheme: () =>
-      choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign", "SignedCookie"),
+      choice("None", "Internal", "Bearer", "Signature", "Oidc", "Foreign", "SignedCookie", "ApiKey"),
     // v0.51: the keyed-args scheme config — `(key = value, …)`. Values are
     // string or integer literals; the checker validates which keys each scheme
     // admits (Bearer: secret; Signature: secret/header/timestamp/tolerance).

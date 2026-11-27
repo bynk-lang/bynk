@@ -557,6 +557,47 @@ gets a stream of its own:
 `stub Fetch.receiveStream(_, _) returns Ok(StreamResponse { status: 200, headers: Map.empty(), body: Stream.of([Bytes.fromUtf8("x")]) })`.
 In the browser playground they throw, as `send` does.
 
+### Forwarding to an upstream: `Upstream` {#upstream}
+
+`Upstream` is the capability a [pass-through route](/reference/http/#pass-through-routes)
+forwards with. Each instance names one upstream **origin**, declared, never computed:
+
+```bynk,ignore
+consumes bynk { Upstream, InboundRequest, PassThrough, UpstreamError }
+
+const BlogOrigin: String = env(BLOG_ORIGIN, "https://bynk-blog.pages.dev")
+
+capability Pages = Upstream @origin(BlogOrigin) @timeout(30.seconds)
+```
+
+- **`@origin`** (required) is a serialised origin, `scheme://host[:port]`: lower case, with
+  no path, query, fragment, user information or trailing slash. It is a string literal or a
+  `String` constant, an [`env(…)`](/reference/constants/#values-that-differ-per-environment)
+  one included, read the way `cors` origins are. The scheme is `https`, or `http` for a
+  loopback host only (`localhost`, `127.0.0.1`, `[::1]`). Anything else is
+  `bynk.capability.invalid_option`.
+- **`@timeout`** bounds the wait for the upstream's response head, a positive whole number
+  of seconds (default 30). The body streams after it.
+
+`forward(request: InboundRequest, path: String) -> Effect[Result[Forwarded, UpstreamError]]`
+sends the route's request to the origin with `path` and the request's raw query. The URL is
+built textually, origin then path then query, and its origin is checked before anything is
+sent, so no `path` can change the host. A `path` that doesn't start with `/`, holds `?`, `#`
+or a control character, or has a `.` or `..` segment (encoded or not) is `Err(InvalidPath)`,
+with nothing sent. `UpstreamError` is `Timeout`, `Unreachable` or `InvalidPath`, and may gain
+variants, so a `match` on it needs a wildcard.
+
+`InboundRequest` and `Forwarded` live for the request they belong to. A record or sum may
+hold one, but no value holding one is stored, sent or returned across a boundary
+(`bynk.types.inbound_request_at_boundary`). `Forwarded` has no constructor: only `forward`
+makes one, and `status()` and `header(name)` read it.
+
+All of it is experimental: it needs `bynk.Upstream`, `bynk.InboundRequest`,
+`bynk.Forwarded`, `bynk.PassThrough` and `bynk.UpstreamError` in `[unstable] allow`
+(`bynk.http.ANY` and `bynk.http.rest` for the route). This release checks a program that
+uses it; the router and the exchange arrive in the next increment, and until then a build
+with a pass-through route is refused (`bynk.http.pass_through_not_emitted`).
+
 ### Log levels and structured fields
 
 `debug`, `info`, `warn` and `error` write the message as it is, through the
@@ -599,7 +640,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
-| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
+| **`Ai`** *(experimental)* | `run(model: String, input: String) -> Effect[Result[String, AiError]]` · `generate(model, request: GenerateRequest) -> Effect[Result[Generation, AiError]]` · `embed(model, texts: List[String]) -> Effect[Result[List[List[Float]], AiError]]` · `runStream(model, input: String) -> Effect[Result[Stream[String], AiError]]` · `generateStream(model, request: GenerateRequest) -> Effect[Result[Stream[String], AiError]]` · `generateValue[T](model, request) -> Effect[Result[T, AiError]]`, typed output (compiler-lowered). One per Worker, used bare; see [Workers AI](#workers-ai-ai). |
 | **`Images`** *(experimental)* | `info(image: Bytes) -> Effect[Result[ImageInfo, ImagesError]]` · `transform(image: Bytes, options: TransformOptions, output: OutputOptions) -> Effect[Result[ImageResult, ImagesError]]` · `transformStream(image: Stream[Bytes], options, output) -> Effect[Result[ImageStream, ImagesError]]`. One per Worker, used bare; see [Images](#images-images). |
 | **`AnalyticsSql`** *(experimental)* | `query(dataset: Analytics instance, sql: String, params: List[SqlValue]) -> Effect[Result[AnalyticsSqlResult, AnalyticsSqlError]]`. One per Worker, used bare; reads Analytics Engine datasets. The SQL is a literal or constant, with `{dataset}` for the named instance's table. See [Reading events](#reading-events-analyticssql). |
 | **`StoredSecret`** *(experimental)* | `get() -> Effect[Secret]`. Used only through a named instance that names its store and its secret; see [Account secrets](#account-secrets-storedsecret). |
@@ -1371,9 +1412,7 @@ service chat from http {
 
 Each element is one event of the model's own stream, as the JSON text of that
 event, so the client sees what Workers AI sends (the shape is the model's: a
-handler that wants text deltas maps the stream and decodes each event; for a
-chat model the events observed on a real account carry a `response` text delta,
-which Cloudflare does not document). The
+handler that wants text deltas uses `generateStream` below, which reads them). The
 binding asks the model to stream; the terminal `[DONE]` marker is consumed, not
 yielded. A refusal before the stream starts (an unknown model, a usage limit) is
 the `Err`, so the handler can answer with an ordinary response; a failure after
@@ -1383,6 +1422,38 @@ the model's stream, once the Worker next writes to it. A stream a handler never
 reads or serves is never cancelled, as with any `Stream`: read it or serve it. Like every `Stream`, the
 result is read once and cannot cross a service boundary: the handler that calls
 `runStream` is the one that serves it.
+
+`generateStream(model, request)` is `generate` streamed, and what a chat UI wants:
+the same `GenerateRequest`, and a `Stream[String]` of the **text** each event added,
+ready for `Streaming(…)`:
+
+```bynk,fragment
+service chat from http {
+	on POST("/chat") (body: String) -> Effect[HttpResult[String]] by Visitor given Ai {
+		let request = GenerateRequest {
+			messages: [ChatMessage { role: ChatRole.User, content: body }],
+		}
+		let started <- Ai.generateStream("@cf/meta/llama-3.2-1b-instruct", request)
+		match started {
+			Ok(deltas) => Streaming(deltas),
+			Err(Overloaded) => ServiceUnavailable("try again shortly"),
+			Err(_) => ServerError("model unavailable"),
+		}
+	}
+}
+```
+
+An event's text is its `response`, or `choices[0].delta.content` for a model that
+answers in that shape, as `generate` reads both. A known event that adds no text
+is skipped: a `usage` report (alone, or with the padding field `p`), a role-only
+or finishing `choices` delta, and an empty or `null` `response`. Any other event
+faults the stream, naming the event's top-level keys and never its values (they
+may echo what a user wrote), so a shape Cloudflare adds shows as a fault and not
+as silent empty text. A refusal before the first event is the `Err`, as for
+`runStream`, and a model that does not stream is `AiFailed`. Token usage is not in
+the stream. The stream is read once, like every `Stream`. In a test, stub it with
+the deltas: `stub Ai.generateStream(_, _) returns Ok(Stream.of(["Hel", "lo"]))`.
+`generateStream` is experimental, like `Ai`.
 
 An `AiError` is `ModelNotFound` (an id the platform does not know, or has
 retired), `InvalidInput(message)` (a request refused as malformed or too large),
@@ -2359,7 +2430,8 @@ shortly after the instance goes inactive, and Bynk states no figure. `@instanceT
 starts. `@forward(["NAME", …])` names Worker secrets passed to the container's process
 as environment variables. Their values stay in the Worker's secrets: they are never
 written into source, config or the lock file, but every process and dependency in the
-image can read them and Bynk cannot scope them further. There is no `@maxInstances`:
+image can read them and Bynk cannot scope them further. `@instances(by: K)` types
+the instance's names (see below). There is no `@maxInstances`:
 the platform has no per-application ceiling for these containers, so only the account's
 own limits apply, and `@sleepAfter` and a small `@instanceType` are the levers an
 author has.
@@ -2402,12 +2474,43 @@ containers as they have values to send, and `bynk check` warns
 follows the handler's parameters, and the locals bound from them, into the first
 argument of `send`, `receiveBytes` and `sendBytes`. It does not warn when the name
 comes from a constant, from the authenticated identity, from a closed set (a
-`match` over an enum's names), or from a route served `by` an actor that
-authenticates; and it does not follow a name through a function, which is where
+`match` over an enum's names), from a route served `by` an actor that
+authenticates, or from an instance's own key type (below); and it does not follow a name through a function, which is where
 an author bounds the set, so a name laundered through one is not warned about,
 rather than warned about wrongly. A refined type limits what a name looks like, not
 how many there are: bound the count with an authenticated actor, a `RateLimit`, or
 a closed set.
+
+**A typed key.** `@instances(by: K)` makes the instance's operations take a `K`
+where they take a `String`: `send`, `receiveBytes` and `sendBytes` then refuse a
+bare `String`, and the key's construction is where the author decides which names
+exist.
+
+```bynk,fragment
+type TenantId = String where Matches(r"[a-z0-9-]{3,32}")
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: TenantId)
+
+service render from http {
+	on GET("/render/:tenant") (tenant: TenantId) -> Effect[HttpResult[String]] by m: Member given Renderer {
+		let res <- Renderer.send(tenant, req)
+		Ok("done")
+	}
+}
+```
+
+`K` is a type declared in the context: a refined type with a refinement, or an
+opaque type, over `String`; any other is `bynk.capability.invalid_option`, as is
+writing the option without `by:`. The key's string form is the instance's name,
+so the limits on a name above (1 to 256 bytes, no control character) still apply
+to it. A refined type limits what a name looks like, not how many there are: a
+route anyone can call that takes a `TenantId` still lets a caller send any
+`TenantId`, so pair a key with an authenticated actor, a `RateLimit`, or a closed
+set (a `match` over an enum that builds the key). A keyed instance is not warned
+about, because the key's construction is where the author bounds the names; that
+is the author's claim, and `bynk check` does not verify it, so a key on a route
+anyone can call, with nothing else limiting how many names are sent, bounds only
+their shape.
 
 A running container costs money. See Cloudflare's
 [Containers pricing](https://developers.cloudflare.com/containers/pricing/) and

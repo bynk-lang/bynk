@@ -71,16 +71,24 @@ pub(crate) fn failed(op: &Op<'_>, stdout: &str, stderr: &str) -> WranglerError {
 }
 
 impl CloudflareApi for Recording {
-    fn queue_create(&self, name: &str) -> Result<(), WranglerError> {
-        self.call(Op::QueueCreate { name }).map(drop)
+    fn queue_create(&self, name: &str) -> Result<(), CloudflareError> {
+        self.rest(Op::QueueCreate { name }).map(drop)
     }
 
-    fn queue_info(&self, name: &str) -> Result<(), WranglerError> {
-        self.call(Op::QueueInfo { name }).map(drop)
+    /// Logged as the `queues info` it replaced. A reply of `Ok` finds the queue (with the reply
+    /// as its id, or `id-<name>` when empty); the reply `"absent"` finds none.
+    fn queue_find(&self, name: &str) -> Result<Option<String>, CloudflareError> {
+        let reply = self.rest(Op::QueueInfo { name })?;
+        Ok(match reply.trim() {
+            "absent" => None,
+            "" => Some(format!("id-{name}")),
+            id => Some(id.to_string()),
+        })
     }
 
-    fn queue_delete(&self, name: &str) -> Result<(), WranglerError> {
-        self.call(Op::QueueDelete { name }).map(drop)
+    /// A reply of `Ok` deletes; the reply `"absent"` finds no queue to delete.
+    fn queue_delete(&self, name: &str) -> Result<bool, CloudflareError> {
+        Ok(self.rest(Op::QueueDelete { name })?.trim() != "absent")
     }
 
     fn kv_create(&self, title: &str) -> Result<String, CloudflareError> {

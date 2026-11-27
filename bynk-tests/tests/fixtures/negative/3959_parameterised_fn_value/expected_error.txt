@@ -1,0 +1,2 @@
+bynk.given.parameterised_fn_value `evict` takes capability parameters, so it cannot be named as a value
+# exact

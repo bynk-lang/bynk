@@ -550,6 +550,7 @@ mod tests {
                 },
                 &[],
                 &[],
+                &[],
                 false,
                 missing,
             )

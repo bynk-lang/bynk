@@ -1,3 +1,4 @@
+use crate::http_pass_through::check_pass_through_routes;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -355,6 +356,11 @@ fn check_handler_inputs_not_external_opaque(
     }
     for h in &s.handlers {
         for p in &h.params {
+            // #3752: a pass-through route's `InboundRequest` is the router's own
+            // request, never decoded.
+            if crate::http_pass_through::is_inbound_request(&p.type_ref, &typed.types) {
+                continue;
+            }
             let mut names = Vec::new();
             crate::project_model::type_ref_names(&p.type_ref, &HashSet::new(), &mut names);
             if let Some((name, owner)) = external_opaque_reaching(names, typed, consumed) {
@@ -2283,6 +2289,9 @@ fn check_by_clause_contracts(
                     _ if contract.scheme == Scheme::Foreign => {
                         "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
+                    ServiceProtocol::WebSocket { .. } if contract.scheme == Scheme::ApiKey => {
+                        crate::api_key::WEBSOCKET_NOTE
+                    }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"
                     }
@@ -2290,6 +2299,12 @@ fn check_by_clause_contracts(
                 }),
             );
         }
+        errors.extend(crate::api_key::by_member_refusal(
+            protocol,
+            by,
+            contract.scheme,
+            actor_ref.span,
+        ));
         // #3904: a WebSocket actor sum takes `None` and `Bearer` members; a cookie or an OIDC token is
         // a single actor (it needs the `Origin` check or the `bynk.oidc` pair, not the sum's first-wins).
         if matches!(protocol, ServiceProtocol::WebSocket { .. })
@@ -3700,6 +3715,10 @@ fn check_actor_contracts(
             Some(Scheme::SignedCookie) => {
                 check_signed_cookie_actor(actor, auth, table, &resolved.types, errors);
             }
+            // #3939: an API key actor.
+            Some(Scheme::ApiKey) => {
+                crate::api_key::check_api_key_actor(actor, auth, table, resolved, errors);
+            }
             Some(_) => {}
         }
         // A declared identity must be a context-ownable (sealed) type — either
@@ -3798,7 +3817,11 @@ fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
         }
     }
     let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
-    for (r, covering) in crate::route_order::shadowed(&keys) {
+    // #3752 (D5): an `ANY` route is beaten by an ordinary route of any method.
+    let found = crate::route_order::shadowed(&keys)
+        .into_iter()
+        .chain(crate::route_order::pass_through_shadowed(&keys));
+    for (r, covering) in found {
         let (method, path, span) = routes[r];
         let mut err = CompileError::new(
             "bynk.http.unreachable_route",
@@ -3884,6 +3907,7 @@ fn check_service_decls(
 
     check_unreachable_routes(table, errors);
     crate::http_rest::check_rest_routes(table, &typed.stability, errors);
+    check_pass_through_routes(table, &typed.types, &typed.stability, errors);
 
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
@@ -6915,7 +6939,17 @@ fn validate_http_handler(
                 ),
             );
         }
-        if !refused && !is_path && !is_body && !is_headers && !is_query && !is_cookies && !is_cf {
+        // #3752: a pass-through route's `request`, judged in `crate::http_pass_through`.
+        let is_request = crate::http_pass_through::owns_param(method, p, types);
+        if !refused
+            && !is_path
+            && !is_body
+            && !is_headers
+            && !is_query
+            && !is_cookies
+            && !is_cf
+            && !is_request
+        {
             errors.push(
                 CompileError::new(
                     "bynk.http.extra_param",
@@ -6964,11 +6998,14 @@ fn validate_http_handler(
             );
         }
     }
-    // Validate return type shape.
-    let return_ok = match &handler.return_type {
-        TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
-        _ => false,
-    };
+    // Validate return type shape. #3752: a pass-through route's is judged by
+    // `crate::http_pass_through`.
+    let return_ok =
+        crate::http_pass_through::owns_return_check(method, &handler.return_type, types)
+            || match &handler.return_type {
+                TypeRef::Effect(inner, _) => matches!(inner.as_ref(), TypeRef::HttpResult(_, _, _)),
+                _ => false,
+            };
     if !return_ok {
         errors.push(CompileError::new(
             "bynk.http.return_not_effect_http_result",
@@ -7416,7 +7453,15 @@ fn validate_handler_annotations(
                 // be stored is not only a `GET`'s. Another protocol, or an agent, has no
                 // response to stamp, so it stays `cache_on_non_get`.
                 let is_http = matches!(handler.kind, HandlerKind::Http { .. });
-                if !(is_get || is_http && handler.cache_no_store()) {
+                // #3752: an `ANY` route's `@cache` is `bynk.http.cache_on_pass_through`.
+                let is_any = matches!(
+                    handler.kind,
+                    HandlerKind::Http {
+                        method: HttpMethod::Any,
+                        ..
+                    }
+                );
+                if !(is_get || is_any || is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
@@ -7836,7 +7881,7 @@ fn secret_at_boundary_error(span: Span, name: &str, what: &str) -> CompileError 
     )
 }
 
-/// #4111: which of `bynk`'s two secret-carrying opaque types a declaration is.
+/// #4111: which of `bynk`'s secret-carrying opaque types a declaration is (#3939 adds the third).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretKind {
     /// `Secret`: a value from the platform's secret store, read with `reveal` and `matches`.
@@ -7844,6 +7889,9 @@ pub enum SecretKind {
     /// `Authorization`: a header credential built from a `Secret` (`bearer`, `basic`), which
     /// `Fetch` reveals when it sends and which has no reader of its own.
     Authorization,
+    /// #3939 (D2 D): `ApiKeyValue`, the key an `ApiKey` actor's `mint` answers. It has no reader:
+    /// its one way out is a handler returning the `ApiKeySecret` that `mint` answered.
+    ApiKeyValue,
 }
 
 /// #4111: the secret-carrying `bynk` type a declaration is, found by where it is declared and
@@ -7862,6 +7910,8 @@ pub fn secret_kind(decl: &TypeDecl) -> Option<SecretKind> {
         Some(SecretKind::Secret)
     } else if text.contains("type Authorization =") {
         Some(SecretKind::Authorization)
+    } else if text.contains("type ApiKeyValue =") {
+        Some(SecretKind::ApiKeyValue)
     } else {
         None
     }
@@ -8702,7 +8752,7 @@ fn validate_queue_handler(
 
 /// True when `r` resolves to `String`, a refined-base `String`, or an
 /// opaque-base `String`. v0.9 path parameter requirement.
-fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub(crate) fn is_string_constructible(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match r {
         TypeRef::Base(BaseType::String, _) => true,
         TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
@@ -9044,8 +9094,32 @@ pub fn reject_fn_types(
         // it would leak the value into storage, a wire body or a log. A capability
         // operation is where one is returned (`Secrets.get`), in-process, so its signature
         // is exempt.
+        // #3939 (D2 D): an `ApiKeyValue`, or a record or sum that holds one (the `ApiKeySecret` that
+        // `mint` answers), would carry the key into storage, a wire body or a log. Its one exit is an
+        // HTTP handler returning it (`api_key::reject_http_result`), which never reaches here.
+        TypeRef::Named(id)
+            if what != CAPABILITY_SIGNATURE
+                && crate::api_key::carries_api_key_value(&id.name, types) =>
+        {
+            errors.push(crate::api_key::key_at_boundary_error(
+                id.span, &id.name, what,
+            ));
+        }
         TypeRef::Named(id) if what != CAPABILITY_SIGNATURE && is_secret_type(&id.name, types) => {
             errors.push(secret_at_boundary_error(id.span, &id.name, what));
+        }
+        // #3752 (D11): an `InboundRequest` is the request a pass-through route is
+        // answering, and a `Forwarded` an upstream's answer streaming through it:
+        // each lives for that request, never stored or sent. `Upstream.forward`
+        // takes and returns them, so a capability signature is exempt.
+        // A record or sum may hold one, and is refused where it is used, as for a
+        // stream.
+        TypeRef::Named(id)
+            if !stream_passes(what)
+                && crate::http_pass_through::held_in(&id.name, types).is_some() =>
+        {
+            let held = crate::http_pass_through::held_in(&id.name, types).unwrap_or_default();
+            errors.push(crate::http_pass_through::held_at_boundary(id, held, what));
         }
         // #3276: a `File` is a file part of a `@multipart` request, held in
         // memory for the handler that receives it. A record field or sum payload
@@ -9536,11 +9610,13 @@ service Api from http {
 mod secret_kind_tests {
     use super::*;
 
-    /// #4111: `secret_kind` finds `Secret` and `Authorization` by their declaration, so any other
+    /// #4111, #3939: `secret_kind` finds `Secret`, `Authorization` and `ApiKeyValue` by their declaration, so any other
     /// opaque type added to `bynk` would be neither restricted nor emitted as a secret. This pins
     /// the set: adding an opaque type to `bynk.bynk` fails here, pointing at `secret_kind`.
+    /// #3752: `InboundRequest` and `Forwarded` are opaque and not secrets; their own rules are
+    /// `crate::http_pass_through`'s (`held_in`).
     #[test]
-    fn bynk_declares_exactly_two_opaque_types_and_secret_kind_names_each() {
+    fn bynk_declares_exactly_five_opaque_types_and_secret_kind_names_each() {
         let opaque: Vec<(&str, Option<SecretKind>)> = crate::checker::std_type_decls()
             .iter()
             .filter(|t| matches!(t.body, bynk_syntax::ast::TypeBody::Opaque { .. }))
@@ -9550,16 +9626,24 @@ mod secret_kind_tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["Authorization", "Secret"],
+            [
+                "ApiKeyValue",
+                "Authorization",
+                "Forwarded",
+                "InboundRequest",
+                "Secret"
+            ],
             "`bynk` declares an opaque type that `secret_kind` does not know: decide whether it is \
              secret-carrying, and extend `secret_kind` and this test"
         );
         for (name, kind) in opaque {
             let want = match name {
-                "Secret" => SecretKind::Secret,
-                _ => SecretKind::Authorization,
+                "Secret" => Some(SecretKind::Secret),
+                "ApiKeyValue" => Some(SecretKind::ApiKeyValue),
+                "Authorization" => Some(SecretKind::Authorization),
+                _ => None,
             };
-            assert_eq!(kind, Some(want), "{name}");
+            assert_eq!(kind, want, "{name}");
         }
     }
 }

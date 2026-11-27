@@ -110,7 +110,7 @@ rejected_handler ::= "on" "rejected" "(" (param ("," param)*)? ","? ")" "->" typ
 event_handler ::= "on" "event" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 call_handler ::= "on" "call" identifier? "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 http_handler ::= "on" http_method "(" string_literal ")" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
-http_method ::= "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+http_method ::= "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "ANY"
 cron_handler ::= "on" "schedule" "(" (string_literal | identifier) ")" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 queue_handler ::= "on" "message" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
 ws_open_handler ::= "on" "open" "(" (param ("," param)*)? ","? ")" "->" type_ref by_clause? given_clause? block
@@ -120,7 +120,7 @@ capability_parameter ::= identifier ":" identifier
 capability_bindings ::= "given" capability_binding ("," capability_binding)*
 capability_binding ::= identifier "=" qualified_name
 actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "identity" "=" type_ref)? "}" | "=" identifier "where" expression)
-scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
+scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie" | "ApiKey"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
 scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier | boolean_literal)

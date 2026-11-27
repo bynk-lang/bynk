@@ -1049,4 +1049,13 @@ export function surfaceSuite(name, b, rt, bynk, shape) {
     clock.t = 30_000 + 999_999;
     assert.equal((await idem.claim("k", 1)).tag, "AlreadyClaimed", "and is confirmed for its full window");
   });
+
+  // --- Upstream ----------------------------------------------------------
+
+  // #3752 (slice 3a): the exchange arrives with the pass-through router. Until
+  // then a build with a pass-through route is refused, so the stub never runs;
+  // if it somehow did, it refuses rather than answer.
+  t("UpstreamProvider.forward: refuses until the pass-through router lands", async () => {
+    await assert.rejects(() => new b.UpstreamProvider().forward(), /not built yet/);
+  });
 }

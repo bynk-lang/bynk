@@ -43,6 +43,7 @@ export const Frame = {
 
 export const Gateway = {
   maxFrame: 1048576,
+  encodeOut: (frame: Frame) => __serialise_Frame(frame),
   async open(connection: Connection<Frame>, roomId: RoomId, deps: { identity: UserId }): globalThis.Promise<void> {
     const __r0 = await __makeRoom(roomId).join(deps.identity, connection, deps);
     return undefined;
@@ -189,6 +190,24 @@ export interface __RoomDeps {
 export function __makeSurface(deps: __RoomDeps) {
   return {
   };
+}
+
+export function __serialise_Frame(value: Frame): __JsonValue {
+  return {
+    text: value.text as __JsonValue,
+  };
+}
+
+export function __deserialise_Frame(json: __JsonValue, path: string = "$"): Result<Frame, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["text"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.text`, expected: "string", actual: typeof obj["text"] });
+  }
+  const __text = obj["text"];
+  return Ok({ text: __text } as Frame);
 }
 
 export function __serialise_UserId(value: UserId): __JsonValue {

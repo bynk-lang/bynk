@@ -7,7 +7,7 @@ use super::{
     consumed_type_ns, emit_agent_dispatch, emit_agent_factory, emit_agent_handlers,
     emit_agent_history_driver, emit_agent_load_commit_state, emit_agent_state_persistence,
     emit_ws_do_method, ws_close_do_method_name, ws_message_do_method_name, ws_open_do_method_name,
-    ws_open_hosts_for,
+    ws_open_hosts_for, ws_register_encoder_stmt,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::ctx::{BodyMode, ModuleCtx};
@@ -827,6 +827,11 @@ pub(crate) fn emit_agent(
         bynk_ts::TsDecl::Export(Box::new(class)),
         None,
     ));
+    // #4549: each hosted service's `out` codec, registered under its name so a socket's `send` writes a frame
+    // with it (the socket's attachment names the service).
+    for host in &ws_open_hosts {
+        stmts.extend(ws_register_encoder_stmt(host, commons, ctx));
+    }
     // #3932: `@busyAfter(d)` lowers this class's queue wait; the runtime reads it where the
     // class is wrapped, on every target and tier.
     if let Some(ms) = bynk_check::agent_busy::busy_after_ms(a) {

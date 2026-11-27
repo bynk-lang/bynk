@@ -1,0 +1,11 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+service proxy from http {
+  cors { origins: ["https://app.example.com"] }
+
+  on ANY("/blog/*path") (path: String) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}

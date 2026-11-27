@@ -6356,6 +6356,10 @@
         {
           "type": "STRING",
           "value": "DELETE"
+        },
+        {
+          "type": "STRING",
+          "value": "ANY"
         }
       ]
     },
@@ -7159,6 +7163,10 @@
         {
           "type": "STRING",
           "value": "SignedCookie"
+        },
+        {
+          "type": "STRING",
+          "value": "ApiKey"
         }
       ]
     },

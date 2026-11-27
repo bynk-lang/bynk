@@ -85,6 +85,7 @@ pub const BYNK_SURFACE_CAPABILITIES: &[&str] = &[
     "Locale",
     "Idempotency",
     "Events",
+    "Upstream",
 ];
 
 /// What reaches a first-party npm dependency (see [`FirstPartyNpm::reached_by`]),
@@ -679,6 +680,8 @@ pub enum OptionKind {
     /// A list literal of string literals: `@allowedSenders(["a@b.example"])`
     /// (#3302).
     StrList,
+    /// A type's name, written `by: Name`: `@instances(by: TenantId)` (#4112).
+    Type,
 }
 
 /// The Worker binding prefix of a `Service` instance (interop I5, #1972):
@@ -893,6 +896,11 @@ pub const CONTAINER_INSTANCE_TYPE_OPTION: &str = "instanceType";
 /// (#3477 J).
 pub const CONTAINER_FORWARD_OPTION: &str = "forward";
 
+/// The type that names a container's instances (#4112): `@instances(by: TenantId)` makes `send`,
+/// `receiveBytes` and `sendBytes` take a `TenantId` where they take a `String`, so the key's
+/// constructor is where an author bounds the set of names.
+pub const CONTAINER_INSTANCES_OPTION: &str = "instances";
+
 /// The instance types a `Container` can start with under the `durable_object`
 /// scheduling policy. There is no `basic` under it.
 pub const CONTAINER_INSTANCE_TYPES: &[&str] = &[
@@ -933,6 +941,16 @@ pub const ANALYTICS_SQL_BINDING_NAME: &str = "CF_ANALYTICS_SQL";
 /// no `env` binding, so the name is never emitted: the instance is built from
 /// the entry's `ctx` instead.
 pub const EDGE_CACHE_BINDING_PREFIX: &str = "EDGE_CACHE";
+
+/// #3752 (D13): the prefix of an `Upstream` instance's name. It reaches its
+/// origin with `fetch`, so no Worker binding is emitted for it.
+pub const UPSTREAM_BINDING_PREFIX: &str = "UPSTREAM";
+
+/// The origin an `Upstream` instance forwards to (`@origin("https://…")`).
+pub const UPSTREAM_ORIGIN_OPTION: &str = "origin";
+
+/// How long an `Upstream` instance waits for a response head (`@timeout(30.seconds)`).
+pub const UPSTREAM_TIMEOUT_OPTION: &str = "timeout";
 
 /// Whether a first-party item is under the 1.0 promise (track D2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -993,9 +1011,28 @@ pub const UNITS: &[Unit] = &[
             "Fetch.receiveStream",
             "Fetch.sendStream",
             "Logger.log",
+            // #3752: the pass-through surface.
+            "Upstream",
+            "InboundRequest",
+            "Forwarded",
+            "PassThrough",
+            "UpstreamError",
         ],
-        extensible: &["FetchError", "Method", "Redirect"],
-        instantiable: &[],
+        extensible: &["FetchError", "Method", "Redirect", "UpstreamError"],
+        // #3752 (D13): an upstream origin a pass-through route forwards to. Its
+        // instances reach the origin with `fetch`, so the binding name is never
+        // emitted as a Worker binding.
+        instantiable: &[Instantiable {
+            capability: "Upstream",
+            binding_prefix: UPSTREAM_BINDING_PREFIX,
+            options: &[
+                (UPSTREAM_ORIGIN_OPTION, OptionKind::Str),
+                (UPSTREAM_TIMEOUT_OPTION, OptionKind::Duration),
+            ],
+            required: &[UPSTREAM_ORIGIN_OPTION],
+            bare: false,
+            linked: false,
+        }],
         singletons: &[],
     },
     Unit {
@@ -1241,6 +1278,7 @@ pub const UNITS: &[Unit] = &[
                     (CONTAINER_SLEEP_AFTER_OPTION, OptionKind::Duration),
                     (CONTAINER_INSTANCE_TYPE_OPTION, OptionKind::Str),
                     (CONTAINER_FORWARD_OPTION, OptionKind::StrList),
+                    (CONTAINER_INSTANCES_OPTION, OptionKind::Type),
                 ],
                 required: &[CONTAINER_BUILD_OPTION, CONTAINER_PORT_OPTION],
                 bare: false,
@@ -1588,9 +1626,32 @@ pub fn stability_of(path: &str) -> Option<Stability> {
 /// ([`experimental_items`]).
 pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
+    "bynk.actor.ApiKey",
     "bynk.given.parameters",
+    "bynk.http.ANY",
     "bynk.http.rest",
 ];
+
+/// #3939 (the API keys track, §17): first-party items admitted by another item's gate, as
+/// `(item, gate)`. The `ApiKey` scheme's types are reachable only through an `ApiKey` actor, so
+/// the scheme, its types and its members are one feature behind `bynk.actor.ApiKey`, promoted as
+/// a unit.
+pub const BUILTIN_GATED: &[(&str, &str)] = &[
+    ("bynk.ApiKeyId", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyLabel", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
+    ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
+    ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
+];
+
+/// The `[unstable] allow` name that admits `path`: its gate, when [`BUILTIN_GATED`] gives one, else
+/// the path itself.
+pub fn gate_of(path: &str) -> &str {
+    BUILTIN_GATED
+        .iter()
+        .find(|(item, _)| covers(item, path))
+        .map_or(path, |(_, gate)| gate)
+}
 
 /// [`stability_of`] over a given table.
 pub fn stability_of_in(units: &[Unit], path: &str) -> Option<Stability> {
@@ -1743,6 +1804,26 @@ pub fn names_first_party_item_in(units: &[Unit], path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    /// #3939 (D3 B): every `bynk.crypto` binding compares through the runtime's one constant-time
+    /// function, the one the `ApiKey` key store calls (`apiKeyEqual`), rather than a copy.
+    #[test]
+    fn every_crypto_binding_shares_the_runtime_constant_time_comparison() {
+        for (name, src) in [
+            ("cloudflare", CRYPTO_CLOUDFLARE_BINDING),
+            ("node", CRYPTO_NODE_BINDING),
+            ("browser", CRYPTO_BROWSER_BINDING),
+        ] {
+            assert!(
+                src.contains("return constantTimeEqualBytes(a, b, platformTimingSafeEqual());"),
+                "the {name} binding must call the runtime's `constantTimeEqualBytes`"
+            );
+            assert!(
+                !src.contains("s.verify(\"HMAC\", key, mac"),
+                "the {name} binding must not carry its own double-HMAC copy"
+            );
+        }
+    }
+
     #[test]
     fn first_party_pins_are_exact() {
         for d in super::FIRST_PARTY_NPM {
@@ -2037,6 +2118,8 @@ mod tests {
         assert_eq!(
             kinds,
             [
+                // #3752: an upstream origin; it is reached with `fetch`, never bound.
+                ("bynk", "Upstream", "UPSTREAM"),
                 ("bynk.cloudflare", "Kv", "KV"),
                 ("bynk.cloudflare", "Service", "SERVICE"),
                 ("bynk.cloudflare", "R2", "R2"),
@@ -2145,7 +2228,14 @@ mod tests {
             instantiable("bynk.cloudflare", "Container").expect("Container is instantiable");
         assert_eq!(
             container.option_names().collect::<Vec<_>>(),
-            ["build", "port", "sleepAfter", "instanceType", "forward"]
+            [
+                "build",
+                "port",
+                "sleepAfter",
+                "instanceType",
+                "forward",
+                "instances"
+            ]
         );
         assert_eq!(
             container.option_kind("sleepAfter"),
@@ -2199,6 +2289,11 @@ mod tests {
                 "bynk.Fetch.receiveStream",
                 "bynk.Fetch.sendStream",
                 "bynk.Logger.log",
+                "bynk.Upstream",
+                "bynk.InboundRequest",
+                "bynk.Forwarded",
+                "bynk.PassThrough",
+                "bynk.UpstreamError",
                 "bynk.cloudflare.Service",
                 "bynk.cloudflare.R2",
                 "bynk.cloudflare.RateLimit",
@@ -2228,8 +2323,12 @@ mod tests {
                 "bynk.crypto",
                 // #3752 (D12): a method of a built-in type.
                 "bynk.RequestHeaders.entries",
+                // #3939: the `ApiKey` scheme, with its types and members behind it.
+                "bynk.actor.ApiKey",
                 // #3959: capability parameters, a language form with no unit.
                 "bynk.given.parameters",
+                // #3752 (D7): the pass-through route form.
+                "bynk.http.ANY",
                 // #3752 (D2): the rest segment, a route form.
                 "bynk.http.rest"
             ]
@@ -2244,6 +2343,7 @@ mod tests {
                 ("bynk", "FetchError"),
                 ("bynk", "Method"),
                 ("bynk", "Redirect"),
+                ("bynk", "UpstreamError"),
                 ("bynk.cloudflare", "R2Condition"),
                 ("bynk.cloudflare", "R2GetIf"),
                 ("bynk.cloudflare", "KvExpiration"),
@@ -2486,16 +2586,16 @@ mod tests {
     #[test]
     fn bynk_surface_capabilities_match_the_adapter() {
         let src = BYNK_ADAPTER_SRC;
-        let line = src
-            .lines()
-            .find(|l| l.trim_start().starts_with("exports capability {"))
+        // The list may span lines once `bynk-fmt` wraps it.
+        let (_, after) = src
+            .split_once("exports capability {")
             .expect("adapter declares `exports capability`");
-        let inner = line
-            .split_once('{')
-            .and_then(|(_, r)| r.split_once('}'))
-            .map(|(names, _)| names)
-            .expect("braced capability list");
-        let declared: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+        let (inner, _) = after.split_once('}').expect("braced capability list");
+        let declared: Vec<&str> = inner
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         assert_eq!(
             declared, BYNK_SURFACE_CAPABILITIES,
             "BYNK_SURFACE_CAPABILITIES is out of sync with bynk.bynk"

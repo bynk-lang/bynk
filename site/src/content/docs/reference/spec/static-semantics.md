@@ -1689,7 +1689,11 @@ the caller's own `given` (`bynk.given.missing_for_call`) whose kind is exactly `
 (`bynk.given.binding_kind_mismatch`): a derived instance of `K`, the bare `K` where
 `K` allows a bare use, or the caller's own parameter bounded by `K`. It counts as used
 by the caller. A binding is never inferred or defaulted. The callee's shared
-capabilities follow the inclusion rule above. The machine-applicable fix of
+capabilities follow the inclusion rule above. In a commons body the right-hand side
+is necessarily one of the function's own parameters (forwarding). A function with
+capability parameters MUST NOT be named as a value
+(`bynk.given.parameterised_fn_value`); a lambda that binds takes its place. The
+machine-applicable fix of
 `bynk.given.binding_missing` is offered only when the caller holds exactly one
 candidate.
 
@@ -2123,6 +2127,14 @@ experimental) MUST bind a `String` parameter of its name (`bynk.http.rest_param_
 to which the router MUST bind the rest of the path as received, still percent-encoded;
 no two HTTP handlers of a context may share an emitted name
 (`bynk.http.handler_name_collision`);
+an `on ANY` pass-through route (#3752, experimental) MUST return `Effect[PassThrough]` of
+`bynk` and take only path parameters, a rest, `request: InboundRequest` and `cf`, and no
+other route may return `Effect[PassThrough]` or take an `InboundRequest`
+(`bynk.http.pass_through_signature`, `bynk.http.inbound_request_not_pass_through`); it
+MUST NOT carry `@cache`, and its service MUST NOT declare `cors { }`
+(`bynk.http.cache_on_pass_through`, `bynk.http.cors_with_pass_through`); an
+`InboundRequest` or `Forwarded`, or a type holding one, MUST NOT be stored, sent or
+returned across a boundary (`bynk.types.inbound_request_at_boundary`);
 and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
 `Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
 opaque type over one of those

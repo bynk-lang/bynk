@@ -4,6 +4,14 @@
 //! TypeScript has `a` as the literal type `1500`, and a later `expect a == 7` is a TS2367 error
 //! even though the Bynk is valid. The lowering therefore widens such a read to its base type in
 //! every later comparison, so no check relies on narrowing.
+//!
+//! #4520: the same goes for an `if` or a literal `match`: inside `if a == 7 { … }` TypeScript has
+//! `a` as `7`, so `a == 8` there is TS2367. A comparison widens a read that an enclosing condition
+//! or arm narrowed. Only the narrowing TypeScript really does is tracked (`==` narrows the `then`
+//! branch, `!=` the `else`; a boolean narrows both ways), so a comparison that needs no cast keeps
+//! its text.
+
+use std::collections::HashSet;
 
 use super::super::lower_ctx::LowerCtx;
 
@@ -39,39 +47,64 @@ fn read_key(e: &bynk_ts::TsExpr) -> Option<String> {
     read_key(object).map(|o| [o.as_str(), ".", property.as_str()].concat())
 }
 
-/// #3775: `expect a == 1500` throws unless `a === 1500`, so TypeScript narrows `a` to `1500` for
-/// the statements after it, and a later `expect a == 7` is a TS2367 error. After one `==` of a
-/// read against a literal, the read is widened to the literal's base type (`a as number`) in every
-/// later comparison, so the check never relies on narrowing. `equality` is `Some(true)` for `==`,
-/// `Some(false)` for `!=` and `None` for any other operator, which narrows nothing.
-pub(in crate::emitter) fn narrowing_proof(
-    equality: Option<bool>,
+/// The reads a condition narrows: while it holds and while it does not.
+#[derive(Default)]
+struct Keys {
+    when_true: HashSet<String>,
+    when_false: HashSet<String>,
+}
+
+/// What a comparison `lv <op> rv` of a read against a literal narrows. A boolean narrows whichever
+/// way the test goes, but `a == 7` narrows `a` to `7` only when it holds, and `a != 7` only when
+/// it does not (a number or a string minus one literal is as wide as before).
+fn leaf_keys(is_eq: bool, lv: &bynk_ts::TsExpr, rv: &bynk_ts::TsExpr) -> Keys {
+    let mut keys = Keys::default();
+    let Some((key, base, _)) = narrowing_target(lv, rv) else {
+        return keys;
+    };
+    let (narrowed, other) = if is_eq {
+        (&mut keys.when_true, &mut keys.when_false)
+    } else {
+        (&mut keys.when_false, &mut keys.when_true)
+    };
+    narrowed.insert(key.clone());
+    if base == "boolean" {
+        other.insert(key);
+    }
+    keys
+}
+
+/// The read, the base type of the literal it is compared with, and whether the read is the left
+/// operand, for a comparison of one against the other.
+fn narrowing_target(
+    lv: &bynk_ts::TsExpr,
+    rv: &bynk_ts::TsExpr,
+) -> Option<(String, &'static str, bool)> {
+    let (read, base, read_is_left) = match (literal_base(lv), literal_base(rv)) {
+        (None, Some(base)) => (lv, base, true),
+        (Some(base), None) => (rv, base, false),
+        _ => return None,
+    };
+    read_key(read).map(|key| (key, base, read_is_left))
+}
+
+/// A comparison `lv <op> rv` with its read widened to the literal's base type when an enclosing
+/// condition, `match` arm or earlier statement left that read narrowed. Records nothing.
+pub(in crate::emitter) fn widen_narrowed(
     lv: bynk_ts::TsExpr,
     rv: bynk_ts::TsExpr,
-    cx: &mut LowerCtx,
+    cx: &LowerCtx,
 ) -> (bynk_ts::TsExpr, bynk_ts::TsExpr) {
-    use bynk_ts::TsType;
-    let Some(is_eq) = equality else {
-        return (lv, rv);
-    };
-    let (read, base, read_is_left) = match (literal_base(&lv), literal_base(&rv)) {
-        (None, Some(base)) => (&lv, base, true),
-        (Some(base), None) => (&rv, base, false),
-        _ => return (lv, rv),
-    };
-    let Some(key) = read_key(read) else {
-        return (lv, rv);
-    };
-    let seen = cx.expect_narrowed.contains(&key);
-    // `b != false` narrows a boolean to `true`, as `b == true` does; for a number or a string a
-    // `!=` leaves the type as it was.
-    if is_eq || base == "boolean" {
-        cx.expect_narrowed.insert(key);
-    }
-    if !seen {
+    if cx.narrowed_reads.is_empty() {
         return (lv, rv);
     }
-    let wide = |e| crate::ts_build::as_expr(e, TsType::named(base));
+    let Some((key, base, read_is_left)) = narrowing_target(&lv, &rv) else {
+        return (lv, rv);
+    };
+    if !cx.narrowed_reads.contains(&key) {
+        return (lv, rv);
+    }
+    let wide = |e| crate::ts_build::as_expr(e, bynk_ts::TsType::named(base));
     if read_is_left {
         (wide(lv), rv)
     } else {
@@ -79,65 +112,195 @@ pub(in crate::emitter) fn narrowing_proof(
     }
 }
 
-/// [`narrowing_proof`] over a whole `expect` condition that is not a single comparison: a bare
-/// boolean read (`expect b`, `expect !b`) narrows that read, and the comparisons of a conjunction or
-/// disjunction (`expect a == 1 && ok`) narrow left to right, so each leaf is widened if an earlier
-/// one narrowed its read.
-pub(in crate::emitter) fn narrowing_proof_cond(
-    cond: bynk_ts::TsExpr,
+/// #3775: after the `expect` comparison `lv <op> rv` passes, its read is narrowed. Call it once the
+/// comparison is lowered, which is what widens a read an earlier one narrowed. `is_eq` is true for
+/// `==` and false for `!=` (a `!=` that passes narrows a boolean only).
+pub(in crate::emitter) fn record_narrowing(
+    is_eq: bool,
+    lv: &bynk_ts::TsExpr,
+    rv: &bynk_ts::TsExpr,
     cx: &mut LowerCtx,
-) -> bynk_ts::TsExpr {
-    use bynk_ts::{TsBinaryOp, TsExpr, TsUnaryOp};
+) {
+    cx.narrowed_reads.extend(leaf_keys(is_eq, lv, rv).when_true);
+}
+
+/// A condition with the comparisons of a conjunction or disjunction widened left to right, and
+/// the reads it narrows. The right operand of `&&` is evaluated while the left holds, and of `||`
+/// while it does not.
+fn walk(cond: bynk_ts::TsExpr, cx: &mut LowerCtx) -> (bynk_ts::TsExpr, Keys) {
+    use bynk_ts::{TsExpr, TsUnaryOp};
     if let Some(key) = read_key(&cond) {
-        cx.expect_narrowed.insert(key);
-        return cond;
+        let keys = Keys {
+            when_true: HashSet::from([key.clone()]),
+            when_false: HashSet::from([key]),
+        };
+        return (cond, keys);
     }
     if let TsExpr::Binary { op, left, right } = cond {
-        let (left, right) = match op {
-            TsBinaryOp::And | TsBinaryOp::Or => {
-                let left = narrowing_proof_cond(*left, cx);
-                (left, narrowing_proof_cond(*right, cx))
-            }
-            TsBinaryOp::StrictEq => narrowing_proof(Some(true), *left, *right, cx),
-            TsBinaryOp::StrictNotEq => narrowing_proof(Some(false), *left, *right, cx),
-            other @ (TsBinaryOp::NullishCoalescing
-            | TsBinaryOp::GreaterThan
-            | TsBinaryOp::InstanceOf
-            | TsBinaryOp::LessThan
-            | TsBinaryOp::Add
-            | TsBinaryOp::In
-            | TsBinaryOp::GreaterThanEq
-            | TsBinaryOp::LessThanEq
-            | TsBinaryOp::Mul
-            | TsBinaryOp::Exp
-            | TsBinaryOp::Sub
-            | TsBinaryOp::Div) => {
-                return TsExpr::Binary {
-                    op: other,
-                    left,
-                    right,
-                };
-            }
-        };
-        return TsExpr::Binary {
-            op,
-            left: Box::new(left),
-            right: Box::new(right),
-        };
+        return walk_binary(op, *left, *right, cx);
     }
     if let TsExpr::Unary {
         op: TsUnaryOp::Not,
         expr,
     } = cond
     {
-        let inner = narrowing_proof_cond(*expr, cx);
-        return TsExpr::Unary {
+        let (inner, keys) = walk(*expr, cx);
+        let negated = Keys {
+            when_true: keys.when_false,
+            when_false: keys.when_true,
+        };
+        let not = TsExpr::Unary {
             op: TsUnaryOp::Not,
             expr: Box::new(inner),
         };
+        return (not, negated);
     }
     if let TsExpr::Paren(inner) = cond {
-        return TsExpr::Paren(Box::new(narrowing_proof_cond(*inner, cx)));
+        let (inner, keys) = walk(*inner, cx);
+        return (TsExpr::Paren(Box::new(inner)), keys);
     }
+    (cond, Keys::default())
+}
+
+/// [`walk`] for a binary operator: `&&` and `||` (the right operand sees what the left proved),
+/// and `===` and `!==` (a comparison of a read against a literal); any other is left as it is.
+fn walk_binary(
+    op: bynk_ts::TsBinaryOp,
+    left: bynk_ts::TsExpr,
+    right: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> (bynk_ts::TsExpr, Keys) {
+    use bynk_ts::{TsBinaryOp, TsExpr};
+    let rebuilt = |left, right| TsExpr::Binary {
+        op,
+        left: Box::new(left),
+        right: Box::new(right),
+    };
+    if matches!(op, TsBinaryOp::And | TsBinaryOp::Or) {
+        let conjunction = op == TsBinaryOp::And;
+        let (left, lk) = walk(left, cx);
+        let outer = cx.narrowed_reads.clone();
+        let proved = if conjunction {
+            &lk.when_true
+        } else {
+            &lk.when_false
+        };
+        cx.narrowed_reads.extend(proved.iter().cloned());
+        let (right, rk) = walk(right, cx);
+        cx.narrowed_reads = outer;
+        let both = |a: &HashSet<String>, b: &HashSet<String>| a.intersection(b).cloned().collect();
+        let either = |a: &HashSet<String>, b: &HashSet<String>| a.union(b).cloned().collect();
+        let keys = if conjunction {
+            Keys {
+                when_true: either(&lk.when_true, &rk.when_true),
+                when_false: both(&lk.when_false, &rk.when_false),
+            }
+        } else {
+            Keys {
+                when_true: both(&lk.when_true, &rk.when_true),
+                when_false: either(&lk.when_false, &rk.when_false),
+            }
+        };
+        return (rebuilt(left, right), keys);
+    }
+    if matches!(op, TsBinaryOp::StrictEq | TsBinaryOp::StrictNotEq) {
+        let keys = leaf_keys(op == TsBinaryOp::StrictEq, &left, &right);
+        let (left, right) = widen_narrowed(left, right, cx);
+        return (rebuilt(left, right), keys);
+    }
+    (rebuilt(left, right), Keys::default())
+}
+
+/// A whole `expect` condition that is not a single comparison (`expect b`, `expect a == 1 && ok`):
+/// widened where an earlier conjunct narrowed a read, and what it narrows is recorded, since it
+/// passed.
+pub(in crate::emitter) fn narrowing_proof_cond(
+    cond: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    let (cond, keys) = walk(cond, cx);
+    cx.narrowed_reads.extend(keys.when_true);
     cond
+}
+
+/// The narrowing of an `if`: what holds on entry, and what the `else` branch has.
+pub(in crate::emitter) struct Branches {
+    outer: HashSet<String>,
+    in_else: HashSet<String>,
+}
+
+/// #4520: `cond` guards an `if`. Returns it with its own later comparisons widened, and leaves
+/// `cx` as the `then` branch sees it; [`Branches::else_branch`] switches to the `else`, and
+/// [`Branches::leave`] ends the narrowing.
+pub(in crate::emitter) fn enter_branches(
+    cond: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> (bynk_ts::TsExpr, Branches) {
+    let outer = cx.narrowed_reads.clone();
+    let (cond, keys) = walk(cond, cx);
+    let mut in_else = outer.clone();
+    in_else.extend(keys.when_false);
+    cx.narrowed_reads.extend(keys.when_true);
+    (cond, Branches { outer, in_else })
+}
+
+impl Branches {
+    /// The `else` branch's narrowing replaces the `then` branch's.
+    pub(in crate::emitter) fn else_branch(&self, cx: &mut LowerCtx) {
+        cx.narrowed_reads = self.in_else.clone();
+    }
+
+    /// Forget what the `if` narrowed.
+    pub(in crate::emitter) fn leave(self, cx: &mut LowerCtx) {
+        cx.narrowed_reads = self.outer;
+    }
+}
+
+/// #4520: inside the arms of a `switch` on a read, TypeScript has the read narrowed to the arm's
+/// literal. Returns what to hand [`Branches::leave`]-style restoration after the arms.
+pub(in crate::emitter) fn enter_arms(
+    scrutinee: &bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> HashSet<String> {
+    let outer = cx.narrowed_reads.clone();
+    if let Some(key) = read_key(scrutinee) {
+        cx.narrowed_reads.insert(key);
+    }
+    outer
+}
+
+/// Restore what [`enter_arms`] returned.
+pub(in crate::emitter) fn leave_arms(outer: HashSet<String>, cx: &mut LowerCtx) {
+    cx.narrowed_reads = outer;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ts_build::{bool_lit, ident, num_lit, str_lit};
+
+    #[test]
+    fn a_comparison_narrows_the_branch_where_typescript_narrows() {
+        // `a == 7` narrows `a` to `7` while it holds; `a != 7` leaves a number as wide as it was.
+        let eq = leaf_keys(true, &ident("a"), &num_lit(7));
+        assert!(eq.when_true.contains("a") && eq.when_false.is_empty());
+        let ne = leaf_keys(false, &ident("a"), &num_lit(7));
+        assert!(ne.when_true.is_empty() && ne.when_false.contains("a"));
+        let s = leaf_keys(true, &str_lit("x"), &ident("s"));
+        assert!(s.when_true.contains("s") && s.when_false.is_empty());
+    }
+
+    #[test]
+    fn a_boolean_comparison_narrows_both_ways() {
+        for is_eq in [true, false] {
+            let keys = leaf_keys(is_eq, &ident("b"), &bool_lit(false));
+            assert!(keys.when_true.contains("b") && keys.when_false.contains("b"));
+        }
+    }
+
+    #[test]
+    fn a_comparison_of_two_reads_narrows_nothing() {
+        let keys = leaf_keys(true, &ident("a"), &ident("b"));
+        assert!(keys.when_true.is_empty() && keys.when_false.is_empty());
+    }
 }

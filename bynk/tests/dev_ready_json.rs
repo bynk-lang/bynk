@@ -16,7 +16,7 @@
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::Child;
 use std::time::{Duration, Instant};
 
 #[path = "support/dev_child.rs"]
@@ -25,7 +25,7 @@ mod dev_child;
 mod ports;
 
 fn have(tool: &str) -> bool {
-    Command::new(tool)
+    dev_child::tool_command(tool)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -134,7 +134,7 @@ fn ready_json_names_each_context_once_it_answers_and_is_removed_on_stop() {
     let dev_log = dir.join("bynk-dev.log");
     let (dev_stdout, dev_stderr) = dev_child::log_to(&dev_log);
     dev_child::warm_wrangler();
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_bynk"));
+    let mut cmd = dev_child::bynk_command();
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     let mut dev = Group(
         cmd.arg("dev")

@@ -1,0 +1,10 @@
+context demo
+
+consumes bynk { Upstream, InboundRequest, Forwarded, PassThrough, UpstreamError }
+
+// #3752: the `ANY` route form ships experimental.
+service proxy from http {
+  on ANY("/blog/*path") (path: String, request: InboundRequest) -> Effect[PassThrough] by Visitor {
+    Respond(NotFound)
+  }
+}

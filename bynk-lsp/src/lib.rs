@@ -2927,10 +2927,31 @@ impl Backend {
             .get(&unit)
             .map(|s| s.agents.keys().cloned().collect())
             .unwrap_or_default();
+        let search_order = analysis
+            .doc_scope
+            .get(&unit)
+            .cloned()
+            .unwrap_or_else(|| vec![unit.clone()]);
         Ok(
             agent_state_request::agent_state_at(text, offset, &info.types).map(|(agent, model)| {
                 let effects = agent_state_request::effects_of(&agent, &agents);
-                agent_state_request::to_wire(&agent, &model, &effects, text)
+                // #3803: the wire contract's type table for the agent's `store` types.
+                let table = wire_contract_request::store_type_table(
+                    &agent,
+                    &info.types,
+                    &analysis.project_root,
+                    &analysis.index,
+                    &analysis.snapshots,
+                    &search_order,
+                );
+                agent_state_request::to_wire_with_types(
+                    &agent,
+                    &model,
+                    &effects,
+                    text,
+                    &info.types,
+                    table,
+                )
             }),
         )
     }
