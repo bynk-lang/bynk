@@ -306,6 +306,8 @@ module.exports = grammar({
         $.fixture_decl,
         $.type_decl,
         $.const_decl,
+        // #3959: a commons suite's suite-local instance, `capability Archive = Kv`.
+        $.capability_decl,
         $.fn_decl,
         $.case,
         $.property_decl,

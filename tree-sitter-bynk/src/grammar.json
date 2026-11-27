@@ -630,6 +630,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "capability_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "fn_decl"
         },
         {

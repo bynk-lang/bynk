@@ -1151,12 +1151,19 @@ fn analyse_project_inner(
     // means threading a file through many internal push sites — out of scope
     // here, same as there).
     crate::phase_timing::mark(crate::phase_timing::Level::Definition);
-    let mut test_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
-    let _ready_tests = crate::test_suites::phase_test_bodies(
+    // #3959: a commons suite's suite-local instances join its target's table.
+    let (suite_tables, mut test_errors) = crate::suite_instances::suite_instance_tables(
         &test_groups,
         &parsed,
         &kinds,
         &unit_tables,
+        &policy,
+    );
+    let _ready_tests = crate::test_suites::phase_test_bodies(
+        &test_groups,
+        &parsed,
+        &kinds,
+        suite_tables.as_ref().unwrap_or(&unit_tables),
         &exports_visibility,
         &unit_consumes,
         &unit_consumes_aliases,

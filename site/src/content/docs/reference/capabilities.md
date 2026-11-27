@@ -180,6 +180,20 @@ fn session(id: String) -> Effect[String] given Sessions, Logger {
   (`bynk.given.parameterised_fn_value`): a value would leave its bindings unchosen. Write a
   lambda that binds instead, `keys.forEach((k) => evict(k, given Inner = Store))`. A
   function with only shared capabilities may still be named as a value.
+- **Testing.** A test names capabilities, never parameters. In a context's suite a call
+  through `Store` reaches the bound instance, so the case stubs and observes that one:
+  `stub Sessions.get(_) returns None`, `expect Sessions.put called once`. A commons suite
+  holds a double of every capability its commons selects, named by the kind once the suite
+  file `consumes` it (`consumes bynk.cloudflare { Kv }`): a case binds a parameter to it,
+  `remember(key, given Store = Kv)`, and stubs and observes `Kv`; a shared capability's
+  double is observed the same way (`expect Logger.info called`). Each double is fresh per
+  case. For a second double of one kind, a commons suite declares a suite-local instance,
+  `capability Archive = Kv`, with no binding and no deploy effect; a context's suite cannot
+  (`bynk.capability.derived_outside_context`), nor can a commons itself. A `given` suite
+  helper names the doubles it uses (`fn seed() -> Effect[()] given Kv`), and setup over a
+  parameter lives in a test-only commons, which a case calls with a binding. Naming a
+  parameter in a `stub` or an `expect … called` is `bynk.stub.not_a_seam` or
+  `bynk.observe.not_a_seam`, with a note naming what to stub instead.
 - **Never inferred.** A binding is written at every call, even when the caller holds only
   one candidate, because reading the wrong instance is well-typed and nothing else would
   catch it. The fix for `bynk.given.binding_missing` offers one binding per instance of

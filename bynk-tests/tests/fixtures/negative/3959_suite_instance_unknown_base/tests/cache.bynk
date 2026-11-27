@@ -1,0 +1,11 @@
+---
+#3959, track §9: a suite-local instance is a double of a kind its commons selects
+(`bynk.capability.unknown_base`).
+---
+suite lib.cache
+
+capability Archive = D1
+
+case "c" {
+	expect true
+}

@@ -104,8 +104,13 @@ pub(super) fn emit_test_deps(
     let mut service_doubles: Vec<(String, String, TsExpr)> = Vec::new();
     // #1975: an adapter target's deps are its own capabilities, built from
     // its binding: the binding is the unit under test.
-    if matches!(target_kind, UnitKind::Context | UnitKind::Adapter)
-        && let Some(table) = unit_tables.get(target_name)
+    // #3959: a commons suite's deps are the doubles of the first-party
+    // capabilities its commons selects (track §9), built as a context's
+    // flattened ones are.
+    if matches!(
+        target_kind,
+        UnitKind::Context | UnitKind::Adapter | UnitKind::Commons
+    ) && let Some(table) = unit_tables.get(target_name)
     {
         // Sorted so `__makeTestDeps` field order is deterministic across the
         // capability map's hash iteration order.

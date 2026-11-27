@@ -1697,6 +1697,16 @@ machine-applicable fix of
 `bynk.given.binding_missing` is offered only when the caller holds exactly one
 candidate.
 
+In a suite, a `stub` or an `expect … called` names a capability and never a
+parameter (`bynk.stub.not_a_seam`, `bynk.observe.not_a_seam`). A commons suite
+case holds the double of every capability its commons selects, named by the kind,
+as a capability the suite file `consumes`; a binding's right-hand side may be such
+a double. A commons suite MAY declare a suite-local instance `capability X = K`,
+under the derived-capability rules below (`K` selected by the commons, with
+instances): a fresh double, with no binding and no deploy effect. A suite whose
+target is not a commons MUST NOT declare one
+(`bynk.capability.derived_outside_context`).
+
 **Derived capabilities** (standard-library S4a, #1966). `capability X = K`
 declares a capability `X` whose operations are those of `K`, as a **distinct
 instance** of `K`, not an alias: two derivations of `Kv` are two namespaces,

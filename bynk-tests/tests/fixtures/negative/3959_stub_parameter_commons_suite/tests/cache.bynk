@@ -1,0 +1,10 @@
+---
+#3959, §14.1 `bynk.stub.not_a_seam` (note added): a commons suite stubs the double a
+parameter is bound to, never the parameter (note pinned in `integration::diagnostic_hints`).
+---
+suite lib.cache
+
+case "c" {
+	stub Store.put(_, _) returns ()
+	expect true
+}
