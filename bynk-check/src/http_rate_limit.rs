@@ -64,13 +64,15 @@ pub fn route_rate_limit(handler: &Handler, table: &UnitTable) -> Option<RateLimi
 }
 
 /// Whether the route's `by` is a single actor that verifies a credential and carries an
-/// identity (`sub`): a `Bearer`, `Oidc` or `SignedCookie` actor, not an actor sum.
+/// identity (`sub`): a `Bearer`, `Oidc`, `SignedCookie` or (#3939, slice 2) `ApiKey` actor, not
+/// an actor sum.
 fn has_identity_seam(handler: &Handler, table: &UnitTable) -> bool {
     use crate::actors;
     actors::sum_members_for(handler, &table.actors).is_none()
         && (actors::bearer_seam_for(handler, &table.actors).is_some()
             || actors::oidc_seam_for(handler, &table.actors).is_some()
-            || actors::signed_cookie_seam_for(handler, &table.actors).is_some())
+            || actors::signed_cookie_seam_for(handler, &table.actors).is_some()
+            || crate::api_key::api_key_seam_for(handler, &table.actors).is_some())
 }
 
 /// The `RateLimit` instance `name` the context declares.
@@ -180,7 +182,7 @@ fn validate_handler(handler: &Handler, table: &UnitTable, errors: &mut Vec<Compi
                         "`key: identity` needs a route whose actor carries an identity",
                     )
                     .with_note(
-                        "`identity` counts by the verified caller: the route's `by` must be a single `Bearer`, `Oidc` or `SignedCookie` actor. A `Visitor`, a `Signature` sender and an actor sum have no one identity to count by; use `key: clientIp`, or call the limiter's `allow(key)` in the handler",
+                        "`identity` counts by the verified caller: the route's `by` must be a single `Bearer`, `Oidc`, `SignedCookie` or `ApiKey` actor. A `Visitor`, a `Signature` sender and an actor sum have no one identity to count by; use `key: clientIp`, or call the limiter's `allow(key)` in the handler",
                     ),
                 );
             }

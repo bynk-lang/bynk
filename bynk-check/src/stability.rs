@@ -471,6 +471,7 @@ mod tests {
         assert!(p.blocks("bynk.actor.ApiKey"));
         for t in [
             "ApiKeyId",
+            "ApiKeyInfo",
             "ApiKeyLabel",
             "ApiKeySecret",
             "ApiKeyValue",

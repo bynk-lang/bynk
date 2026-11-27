@@ -1299,7 +1299,7 @@ fn limiter_key_prefix(h: &Handler) -> String {
 /// principal } }`; `<route>(params…, principal)` runs the handler with the principal
 /// the verification left. Verification runs once: the entry never calls the wrapper's
 /// own seam again.
-fn identity_split_wrapper(
+pub(super) fn identity_split_wrapper(
     sname: &str,
     h: &Handler,
     method: bynk_model::IrHttpMethod,

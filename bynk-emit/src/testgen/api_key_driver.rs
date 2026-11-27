@@ -10,7 +10,9 @@
 //! - `by Unknown`: a key number its store never held, then a handle no store holds, each compared
 //!   once against the dummy digest (D3 B);
 //! - `by Forged`: the real id with a secret the store does not hold, compared once against the
-//!   record.
+//!   record;
+//! - `by Revoked` (slice 2): a real key, minted for an identity of its own and revoked through
+//!   `<Actor>KeyOwner.revoke`, so its record is gone and it is compared once against the dummy.
 //!
 //! Each principal's driver counts the store's comparisons (`__apiKeyCompares`, a counter over the
 //! platform primitive the runtime's one constant-time comparison reaches) and fails the case unless
@@ -130,6 +132,42 @@ impl ApiKeyDriver {
         ))
     }
 
+    /// `await __apiKeyRevokedForTest(…)`: the real key of the identity `by Revoked` presents, revoked
+    /// through `<Actor>KeyOwner.revoke` (again, harmlessly, on each later call).
+    fn revoked_key(&self) -> TsExpr {
+        let sub = str_lit(REVOKED_SUB);
+        let env = member(call(ident("__makeHarness"), Vec::new()), self.env.clone());
+        let factory = crate::emitter::agent_factory_name(
+            &bynk_check::api_key::key_owner_agent_name(&self.actor),
+        );
+        let revoke = arrow_with(
+            vec![
+                TsParam::new("__h".to_string(), None),
+                TsParam::new("__k".to_string(), None),
+            ],
+            true,
+            method_call(
+                call(
+                    member(ident(self.ns.clone()), factory),
+                    vec![
+                        crate::ts_build::as_expr(sub.clone(), TsType::named("never")),
+                        env.clone(),
+                    ],
+                ),
+                "revoke",
+                vec![
+                    ident("__h"),
+                    ident("__k"),
+                    TsExpr::object(vec![("env".to_string(), env)]),
+                ],
+            ),
+        );
+        await_expr(call(
+            ident("__apiKeyRevokedForTest"),
+            vec![self.real_key(sub), str_lit(self.prefix.clone()), revoke],
+        ))
+    }
+
     /// The header `by <Actor>(sub)` sends: `sub`'s real key.
     pub(super) fn principal_header(&self, sub: TsExpr) -> bynk_ts::TsObjectEntry {
         self.header_entry(self.real_key(sub))
@@ -145,20 +183,26 @@ pub(super) struct KeyRoute<'a> {
     pub(super) request: (&'a str, &'a Entries, &'a bynk_ts::TsObjectEntry),
 }
 
+/// The identity `by Revoked` mints its key for, apart from `by Client(…)`'s and the other bad keys'
+/// (`bynk-test`), so revoking it changes no other principal's key.
+const REVOKED_SUB: &str = "bynk-test-revoked";
+
 /// The bad keys, each with the store comparisons the seam must make for it: every one, and those
 /// against the dummy digest.
-const BAD_KEYS: [(&str, (i64, i64)); 4] = [
+const BAD_KEYS: [(&str, (i64, i64)); 5] = [
     ("malformed", (0, 0)),
     ("unknownkey", (1, 1)),
     ("unknownhandle", (1, 1)),
     ("forged", (1, 0)),
+    ("revoked", (1, 1)),
 ];
 
 /// The principals and the bad keys each presents in turn.
-const PRINCIPALS: [(&str, &str, &[&str]); 3] = [
+const PRINCIPALS: [(&str, &str, &[&str]); 4] = [
     ("malformed", "Malformed", &["malformed"]),
     ("unknown", "Unknown", &["unknownkey", "unknownhandle"]),
     ("forged", "Forged", &["forged"]),
+    ("revoked", "Revoked", &["revoked"]),
 ];
 
 /// The failure drivers of an `ApiKey` route: one per bad key (typed, and raw when the route takes
@@ -182,14 +226,18 @@ pub(super) fn push_api_key_drivers(
         let name = ["key", bad].concat();
         let sign = const_(
             "__key",
-            call(
-                ident("__apiKeyBadKey"),
-                vec![
-                    str_lit(bad),
-                    driver.real_key(str_lit("bynk-test")),
-                    str_lit(driver.prefix.clone()),
-                ],
-            ),
+            if bad == "revoked" {
+                driver.revoked_key()
+            } else {
+                call(
+                    ident("__apiKeyBadKey"),
+                    vec![
+                        str_lit(bad),
+                        driver.real_key(str_lit("bynk-test")),
+                        str_lit(driver.prefix.clone()),
+                    ],
+                )
+            },
         );
         let (params, url, body_stmts, body) = route.typed;
         routes.push(sysdrive_driver(
