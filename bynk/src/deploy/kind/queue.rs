@@ -321,6 +321,20 @@ pub(crate) fn queue_name_problem(
     None
 }
 
+/// #4056 Decision E: whether the run's queue steps call the account's REST API. Every queue a
+/// Worker declares is looked up on each deploy, recorded or not, so any declared queue does; so
+/// does a `--prune` with a queue orphan to delete.
+pub(crate) fn queues_calls_the_account(
+    cx: &ProjectCx<'_>,
+    orphans: &[String],
+    prune: bool,
+) -> bool {
+    cx.order
+        .iter()
+        .any(|worker| !cx.resources[worker].all_queues().is_empty())
+        || (prune && !orphans.is_empty())
+}
+
 /// A Worker's queues' step (1D.2b): every queue it consumes or sends to, read from its
 /// declarations, since whether each is made is the account's to say when the step is applied.
 #[derive(Debug, Clone, Copy)]
@@ -530,5 +544,52 @@ mod tests {
         assert!(env.reused_queues.contains("jobs"));
         assert!(!env.queues.contains("outbound") && !env.reused_queues.contains("outbound"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #4056 Decision E (#4582 review): every deploy of a declared queue calls the account,
+    /// recorded or not and consumed or only sent to; a queue orphan does only under `--prune`;
+    /// a project with neither asks nothing.
+    #[test]
+    fn the_account_is_called_for_every_declared_queue_and_a_pruned_orphan() {
+        let mut lock = DeployLock::default();
+        QueueTable::created(
+            lock.environments.entry("default".into()).or_default(),
+            "jobs",
+        );
+        let resources = project(vec![
+            ("shop", Resources::default().consumes(&["jobs"])),
+            ("cart", Resources::default().produces(&["events"])),
+            ("plain", Resources::default()),
+        ]);
+        let calls = |workers: &[&str], orphans: &[&str], prune: bool| {
+            let order: Vec<String> = workers.iter().map(|w| w.to_string()).collect();
+            let orphans: Vec<String> = orphans.iter().map(|o| o.to_string()).collect();
+            queues_calls_the_account(
+                &ProjectCx {
+                    ledger: LedgerView::of(&lock, "default"),
+                    resources: &resources,
+                    order: &order,
+                },
+                &orphans,
+                prune,
+            )
+        };
+        assert!(
+            calls(&["shop"], &[], false),
+            "a recorded queue is still checked"
+        );
+        assert!(calls(&["cart"], &[], false), "so is a queue only sent to");
+        assert!(
+            calls(&["plain"], &["old-jobs"], true),
+            "a queue orphan under --prune"
+        );
+        assert!(
+            !calls(&["plain"], &["old-jobs"], false),
+            "only under --prune"
+        );
+        assert!(
+            !calls(&["plain"], &[], true),
+            "no queue and no orphan: nothing asked"
+        );
     }
 }

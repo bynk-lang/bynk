@@ -67,7 +67,11 @@ async function test_the_qualified_form_infers_the_key_and_round_trips_a_value() 
     const { DeliveryKey, Quote, api } = __ns_billing_qualified;
     type DeliveryKey = __ns_billing_qualified.DeliveryKey;
     type Quote = __ns_billing_qualified.Quote;
-    const { Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { ApiKeyId, ApiKeyLabel, ApiKeySecret, ApiKeyValue, Authorization, BytesResponse, CallFailure, CallOutcome, Claim, CloseInfo, ContentRange, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, Secret, SseEvent, StreamResponse, TimedOut, TooManyKeys, Uuid } = __ns_bynk;
+    type ApiKeyId = __ns_bynk.ApiKeyId;
+    type ApiKeyLabel = __ns_bynk.ApiKeyLabel;
+    type ApiKeySecret = __ns_bynk.ApiKeySecret;
+    type ApiKeyValue = __ns_bynk.ApiKeyValue;
     type Authorization = __ns_bynk.Authorization;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
@@ -93,6 +97,7 @@ async function test_the_qualified_form_infers_the_key_and_round_trips_a_value() 
     type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
+    type TooManyKeys = __ns_bynk.TooManyKeys;
     type Uuid = __ns_bynk.Uuid;
     const n = await api.call("r", "d1", deps);
     if (!(n === 4)) { throw __bynkExpectFailure("src/tests/billing_qualified.test.bynk:4:12", 154, 160, "expect n == 4\n  expected: n == 4\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((4))); }

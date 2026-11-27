@@ -722,6 +722,12 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     if let Some(Callee::SessionRevokeAll { actor }) = cx.commons().callees.get(&e.id).cloned() {
         return lower_session_revoke_all(&actor, args.first()?, cx, pre);
     }
+    if let Some(Callee::ApiKeyEqual) = cx.commons().callees.get(&e.id) {
+        return super::api_key::lower_api_key_equal(args, cx, pre);
+    }
+    if let Some(Callee::ApiKeyMint { actor }) = cx.commons().callees.get(&e.id).cloned() {
+        return super::api_key::lower_api_key_mint(e, &actor, args, cx, pre);
+    }
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;

@@ -9,7 +9,7 @@
 import { CryptoError } from "./crypto.js";
 import type { CipherKey, Crypto, Digest, Signature, SigningKey, VerifyKey } from "./crypto.js";
 import type { Secret } from "../bynk.js";
-import { Err, Ok, type Result } from "../runtime.js";
+import { Err, Ok, constantTimeEqualBytes, type Result } from "../runtime.js";
 
 // The shared body: identical in the three platform bindings (`bynk-std`'s drift
 // test compares them) apart from the marked region below.
@@ -88,23 +88,14 @@ function asCryptoKey(key: SigningKey | VerifyKey): CryptoKey {
 // Ed25519 public keys are 32 raw bytes or SPKI; the rest are SPKI.
 const ED25519_RAW_LENGTH = 32;
 
-// The constant-time comparison of two equal-length byte strings, by the platform
-// primitive where there is one, else the double-HMAC comparison: HMAC both
-// values under a fresh random key and compare the results with `subtle.verify`,
-// whose comparison is constant-time. The length is not a secret, so unequal
-// lengths are unequal at once.
+// The constant-time comparison of two equal-length byte strings: the runtime's one implementation
+// (#3939; the `ApiKey` key store calls it too), given this platform's primitive.
 async function constantTimeEqual(a: Bytes, b: Bytes): Promise<boolean> {
-  if (a.length !== b.length) {
-    return false;
+  // Without Web Crypto, an equal-length comparison fails loudly, as every other operation does.
+  if (a.length === b.length) {
+    subtle();
   }
-  const s = subtle();
-  const native = platformTimingSafeEqual();
-  if (native) {
-    return native(a, b);
-  }
-  const key = await s.generateKey({ name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
-  const mac = await s.sign("HMAC", key, a as BufferSource);
-  return s.verify("HMAC", key, mac, b as BufferSource);
+  return constantTimeEqualBytes(a, b, platformTimingSafeEqual());
 }
 
 // --- platform: constant-time comparison primitive, and the PBKDF2 iteration count ---

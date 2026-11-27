@@ -1,0 +1,9 @@
+context demo
+
+// #4112: the key is a refined or opaque type over `String`; a refined `Int` is not one.
+
+consumes bynk.cloudflare { Container }
+
+type Shard = Int where Positive
+
+capability Renderer = Container @build("containers/renderer") @port(8080) @instances(by: Shard)

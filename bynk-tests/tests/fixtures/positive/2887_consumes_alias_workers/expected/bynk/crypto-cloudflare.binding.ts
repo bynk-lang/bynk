@@ -1,1 +1,1 @@
-<<bynk-shared: std/bynk/crypto-cloudflare.binding.ts#result>>
+<<bynk-shared: std/bynk/crypto-cloudflare.binding.ts#bytes+result>>

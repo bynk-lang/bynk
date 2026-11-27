@@ -1,0 +1,10 @@
+context acme.api
+
+// #3939 (D3 B, §13 timing): the generated key store's constant-time comparison is internal. User
+// source cannot name `ApiKey.equal`; it compares secrets with `Crypto.equal` or `Secret.matches`.
+service compare {
+	on call(a: Bytes, b: Bytes) -> Effect[Bool] by Caller {
+		let same <- ApiKey.equal(a, b)
+		Effect.pure(same)
+	}
+}
