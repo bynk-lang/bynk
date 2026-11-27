@@ -427,6 +427,7 @@ bynk.list.deprecated_function
 bynk.list.par_traverse_unit
 bynk.locale.multiple_message_bundles
 bynk.map.deprecated_function
+bynk.messages.cross_unit_render
 bynk.messages.format_mismatch
 bynk.messages.incomplete
 bynk.messages.invalid_locale_tag
@@ -436,6 +437,7 @@ bynk.messages.missing_reference
 bynk.messages.multiple_reference
 bynk.messages.outside_commons
 bynk.messages.placeholder_mismatch
+bynk.messages.unknown_code
 bynk.mysql.sql_invalid
 bynk.mysql.sql_param_count
 bynk.namespace.reserved

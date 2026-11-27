@@ -951,6 +951,60 @@ pub(crate) fn require_callee_given(
     ctx.errors.push(err);
 }
 
+/// #911: `bynk.messages.unknown_code`. In a unit that declares a message bundle (and in its
+/// suites), a literal `message("code")` names a code of the unit's own `@reference` block: a
+/// code resolves only against the bundles of the unit where `message(code)` is called. A code
+/// the program computes (`message(code)` with `code` a parameter) is not checked, and a unit
+/// with no bundle has nothing to check against: its `render` is `bynk.locale`'s code-echo.
+fn check_message_literal(callee: &FnDecl, args: &[Expr], ctx: &mut Ctx) {
+    let Some(codes) = ctx.input.message_codes.clone() else {
+        return;
+    };
+    if !is_locale_message(callee) {
+        return;
+    }
+    let [arg] = args else {
+        return; // an arity error is reported by the call check itself
+    };
+    let ExprKind::StrLit(code) = &arg.kind else {
+        return;
+    };
+    if codes.contains(code) {
+        return;
+    }
+    let nearest = codes
+        .iter()
+        .map(|c| (crate::exports::strsim(code, c), c))
+        .filter(|(d, _)| *d <= 2)
+        .min_by_key(|(d, _)| *d)
+        .map(|(_, c)| c.clone());
+    let mut err = CompileError::new(
+        "bynk.messages.unknown_code",
+        arg.span,
+        format!("`{code}` is not a code of this unit's reference message bundle"),
+    )
+    .with_note(
+        "a message code resolves only against the bundles of the unit where `message(code)` is called; declare the code in this unit's `@reference` block, or call a function the unit that declares it exports",
+    );
+    if let Some(near) = nearest {
+        err = err.with_suggestion(
+            format!("use `{near}`"),
+            vec![(arg.span, format!("\"{near}\""))],
+            Applicability::MaybeIncorrect,
+        );
+    }
+    ctx.errors.push(err);
+}
+
+/// #911: whether `f` is `bynk.locale`'s `message(code: String) -> Message`: by its name and
+/// signature, since a suite's view of the unit does not carry where each name came from.
+fn is_locale_message(f: &FnDecl) -> bool {
+    f.name.ident().name == "message"
+        && matches!(f.params.as_slice(), [p]
+            if p.name.name == "code" && matches!(p.type_ref, TypeRef::Base(BaseType::String, _)))
+        && matches!(&f.return_type, TypeRef::Named(n) if n.name == "Message")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_call(
     name: &Ident,
@@ -981,6 +1035,7 @@ pub(crate) fn check_call(
             .insert(expr_id, Callee::Fn(Arc::clone(&fn_decl), Vec::new()));
         warn_bynk_list_deprecation(name, args, span, ctx);
         refuse_experimental_import(name, ctx);
+        check_message_literal(&fn_decl, args, ctx);
         let site = super::cap_bindings::CallSite {
             args,
             bindings,

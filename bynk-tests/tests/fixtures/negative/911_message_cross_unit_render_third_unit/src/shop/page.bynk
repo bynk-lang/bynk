@@ -1,0 +1,10 @@
+commons shop.page
+
+uses bynk.locale.types
+uses shop.cart
+
+// `uses` is not transitive: what shop.cart uses is not visible here, so the bundle's `render`
+// is out of reach however many units sit between.
+fn page(tag: LocaleTag, m: Message) -> String {
+  render(tag, m)
+}

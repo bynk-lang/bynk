@@ -1,0 +1,10 @@
+{
+  "blurb": "A message code is scoped to the unit that declares it: `message(code)`, and `render` over it, resolve only against the `messages` blocks declared in the unit where they are called. So two units, in one package or in different ones, can each own the code `cart.greeting` without colliding, and a unit's `render` never reads another unit's bundle. A `uses` of a unit that declares a bundle does not bring its `render` in. To show a message another unit owns, call a function that unit exports, which renders it where the bundle is. That is how `greeter.web` calls `greet` from `greeter.messages`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.cross_unit_render",
+  "constructs": [],
+  "example": "// shop/messages.bynk\ncommons shop.messages\n\nfn greet(tag: LocaleTag, name: String) -> String {\n  render(tag, withText(message(\"cart.greeting\"), \"name\", name))\n}\n\n// shop/cart.bynk\ncommons shop.cart\n\nuses shop.messages\n\nfn banner(tag: LocaleTag, name: String) -> String {\n  render(tag, m)                   // ✗ `render` reads shop.messages' bundle\n  greet(tag, name)                 // ✓ call what shop.messages exports\n}",
+  "severity": "error",
+  "summary": "A unit reaches for the `render` of a unit that declares a message bundle: a message code resolves only against the bundles of the unit where `message(code)` is called, so another unit's messages are used through a function it exports."
+}

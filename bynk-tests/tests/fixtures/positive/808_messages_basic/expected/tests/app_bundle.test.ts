@@ -102,8 +102,9 @@ async function test_falls_back_to_bynk_locale_render_for_a_code_the_bundle_doesn
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const msg = withWhole(message("nope"), "x", 5);
-    if (!(render(("en" as any), msg) === "nope {x=5}")) { throw __bynkExpectFailure("tests/bundle.test.bynk:28:12", 974, 1007, "expect render(\"en\", msg) == \"nope {x=5}\"\n  expected: render(\"en\", msg) == \"nope {x=5}\"\n  actual:   " + __bynkShow((render(("en" as any), msg))) + " == " + __bynkShow(("nope {x=5}"))); }
+    const code = "nope";
+    const msg = withWhole(message(code), "x", 5);
+    if (!(render(("en" as any), msg) === "nope {x=5}")) { throw __bynkExpectFailure("tests/bundle.test.bynk:31:12", 1143, 1176, "expect render(\"en\", msg) == \"nope {x=5}\"\n  expected: render(\"en\", msg) == \"nope {x=5}\"\n  actual:   " + __bynkShow((render(("en" as any), msg))) + " == " + __bynkShow(("nope {x=5}"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

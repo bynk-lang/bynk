@@ -24,7 +24,10 @@ suite app.bundle {
   }
 
   case "falls back to bynk.locale.render for a code the bundle doesn't declare" {
-    let msg = withWhole(message("nope"), "x", 5)
+    // #911: a literal code must be one of the unit's own, so the unknown one is a value the
+    // case computes, which keeps the runtime fallback.
+    let code = "nope"
+    let msg = withWhole(message(code), "x", 5)
     expect render("en", msg) == "nope {x=5}"
   }
 }

@@ -161,12 +161,37 @@ Note what the context `uses`: `bynk.locale.types` (for `LocaleTag`, which
 `Locale.current()` returns) and the bundle's commons. It does **not**
 `uses bynk.locale`.
 
-> **That omission is required, not stylistic.** `bynk.locale` exports a
-> `render`, and so does every message-bundle commons — a context that `uses`
-> both hits `bynk.uses.ambiguous_name` on the shared name where it calls
-> `render` bare. Keeping the `render`/`message`/`with*` calls inside the bundle's
-> own commons, behind a wrapper function, is the pattern that avoids it; or
-> alias one (`uses bynk.locale as Locale`).
+> **A bundle's `render` belongs to its own commons.** The `render` a `messages`
+> block generates reads that commons's bundle and no other unit's, so a `uses`
+> of the bundle's commons does not bring it in. A context that `uses` both
+> `bynk.locale` and the bundle's commons gets `bynk.locale`'s `render`, which
+> returns the code itself, never the bundle's. Keeping the
+> `render`/`message`/`with*` calls inside the bundle's own commons, behind a
+> wrapper function, is the pattern. See
+> [Message codes belong to their unit](#message-codes-belong-to-their-unit).
+
+## Message codes belong to their unit
+
+A message code is scoped to the unit that declares it. `message(code)`, and the
+`render` over it, resolve only against the bundles declared in the unit where
+they are called. Two units, in one package or in different ones, can each own
+the code `cart.greeting` without colliding, and no unit reads another's bundle.
+
+- **Another unit's messages go through a function it exports**, as `greet` does
+  above: it renders them in the unit that owns the bundle. Reaching for the
+  bundle's `render` from another unit, as `render(tag, m)` after `uses
+  shop.messages`, a braced `uses shop.messages { render }` or an alias
+  (`Messages.render(…)`), is `bynk.messages.cross_unit_render`.
+- **A literal code must be one of the unit's own.** In a unit that declares a
+  bundle, `message("cart.greting")` is `bynk.messages.unknown_code`: the code is
+  not in the `@reference` block, and the diagnostic suggests the nearest one that
+  is. The same holds in the unit's suites.
+- **A code the program computes is not checked.** `message(code)` with `code` a
+  parameter, as in `greet`, keeps the runtime fallback to the code itself, which
+  is how one function renders whichever code its caller passes.
+- **A unit with no bundle has nothing to check against.** Its `render` is
+  `bynk.locale`'s, which returns the code and its parameters, and a literal code
+  there is not checked.
 
 ## What a bundle exports
 

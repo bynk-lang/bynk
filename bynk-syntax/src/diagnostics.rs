@@ -3315,6 +3315,26 @@ agent Cart {
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
     },
     Explain {
+        code: "bynk.messages.cross_unit_render",
+        blurb: "A message code is scoped to the unit that declares it: `message(code)`, and `render` over it, resolve only against the `messages` blocks declared in the unit where they are called. So two units, in one package or in different ones, can each own the code `cart.greeting` without colliding, and a unit's `render` never reads another unit's bundle. A `uses` of a unit that declares a bundle does not bring its `render` in. To show a message another unit owns, call a function that unit exports, which renders it where the bundle is. That is how `greeter.web` calls `greet` from `greeter.messages`.",
+        example: "// shop/messages.bynk\n\
+                commons shop.messages\n\
+                \n\
+                fn greet(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, withText(message(\"cart.greeting\"), \"name\", name))\n\
+                }\n\
+                \n\
+                // shop/cart.bynk\n\
+                commons shop.cart\n\
+                \n\
+                uses shop.messages\n\
+                \n\
+                fn banner(tag: LocaleTag, name: String) -> String {\n\
+                \x20 render(tag, m)                   // ✗ `render` reads shop.messages' bundle\n\
+                \x20 greet(tag, name)                 // ✓ call what shop.messages exports\n\
+                }",
+    },
+    Explain {
         code: "bynk.messages.format_mismatch",
         blurb: "A placeholder that appears in the reference locale's template and in another \
                 locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, \
@@ -3445,6 +3465,18 @@ agent Cart {
                 messages \"fr\" {\n\
                 \x20 \"cart.greeting\" => \"Bonjour, {prenom} !\"  // ✗ the reference uses {name}\n\
                 \x20 \"cart.greeting\" => \"Bonjour, {name} !\"    // ✓\n\
+                }",
+    },
+    Explain {
+        code: "bynk.messages.unknown_code",
+        blurb: "A literal code passed to `message(…)` in a unit that declares a message bundle must be a code of that unit's `@reference` block: a code resolves only against the bundles declared in the unit where `message(code)` is called, and the reference locale holds every code (the other locales are held to it by `bynk.messages.incomplete`). The usual cause is a typo, and the diagnostic suggests the nearest declared code. A code the program computes, such as a parameter, is not checked here, and a unit that declares no bundle has nothing to check against: its `render` is `bynk.locale`'s, which returns the code itself. Fix the code, or declare it in the reference block. To show a message another unit owns, call a function that unit exports.",
+        example: "messages \"en\" @reference {\n\
+                \x20 \"cart.greeting\" => \"Hello, {name}!\"\n\
+                }\n\
+                \n\
+                fn heading() -> Message {\n\
+                \x20 message(\"cart.greting\")           // ✗ not a code of this unit's reference bundle\n\
+                \x20 message(\"cart.greeting\")          // ✓\n\
                 }",
     },
     Explain {
@@ -9871,6 +9903,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["refined_pattern"],
     )),
     d(
+        "bynk.messages.cross_unit_render",
+        "A unit reaches for the `render` of a unit that declares a message bundle: a message code resolves only against the bundles of the unit where `message(code)` is called, so another unit's messages are used through a function it exports.",
+    ),
+    d(
         "bynk.messages.format_mismatch",
         "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales.",
     ),
@@ -9905,6 +9941,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.messages.placeholder_mismatch",
         "A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's.",
+    ),
+    d(
+        "bynk.messages.unknown_code",
+        "A literal `message(\"code\")` in a unit that declares a message bundle names a code its `@reference` block does not declare.",
     ),
     warn(d(
         "bynk.mysql.sql_invalid",

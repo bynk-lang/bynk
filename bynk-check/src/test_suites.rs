@@ -6470,6 +6470,13 @@ pub fn build_privileged_resolved(
         false,
         HashSet::new(),
     )
+    // #911: a suite is part of the unit it tests, so a literal `message("code")` in a case
+    // names a code of that unit's own bundle.
+    .with_message_codes(
+        unit_tables
+            .get(owning_unit)
+            .and_then(|t| t.message_codes.clone()),
+    )
     // #1883, slice 3: the target's assets, nameable and fetchable in a case.
     .with_assets(assets)
     .with_embeds(embeds)

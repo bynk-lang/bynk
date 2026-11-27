@@ -712,6 +712,12 @@ pub struct UnitTable {
     /// under a spelling other than the declared one, by its declared name, for
     /// the emitter's import.
     pub use_origin: HashMap<String, String>,
+    /// #911: the codes of this unit's `@reference` message bundle: what a literal
+    /// `message("code")` in this unit (or one of its suites) may name. `None` for a unit that
+    /// declares no bundle, or no reference block (`bynk.messages.missing_reference` is its own
+    /// error), where `render` is `bynk.locale`'s code-echo and there is nothing to check against.
+    /// Built by `build_unit_table` from the unit's own files.
+    pub message_codes: Option<Arc<std::collections::BTreeSet<String>>>,
 }
 
 /// One type's methods: its name, then its instance and static methods in key order.
@@ -816,6 +822,8 @@ impl UnitTable {
             use_views,
             ambiguous_uses,
             use_origin: _,
+            // Built by `build_unit_table` from the unit's own files.
+            message_codes: _,
         } = self;
         (
             *kind,
@@ -852,6 +860,14 @@ impl UnitTable {
             })
     }
 
+    /// #911: whether this unit declares `messages` blocks, so its table carries the synthetic
+    /// `render` over them (`build_unit_table`). That `render` is private to the unit.
+    pub fn has_bundle_render(&self) -> bool {
+        self.fns
+            .get("render")
+            .is_some_and(|f| is_synthetic_render(f))
+    }
+
     /// #2618: the table as a unit that `uses` this one sees it — without its
     /// `private` declarations. A private type's methods go with it, public or
     /// not: an importer can neither name the type nor reach a value of it.
@@ -860,10 +876,15 @@ impl UnitTable {
     /// #2618), so an import costs no copy. The unit itself, and its suites,
     /// read the full table instead.
     pub fn importable(&self) -> std::borrow::Cow<'_, UnitTable> {
-        if !self.has_private() {
+        if !self.has_private() && !self.has_bundle_render() {
             return std::borrow::Cow::Borrowed(self);
         }
         let mut t = self.clone();
+        // #911: a bundle's `render` reads that unit's own message bundles, which no other
+        // unit reaches into. An importer's `render` is `bynk.locale`'s.
+        if t.has_bundle_render() {
+            t.fns.remove("render");
+        }
         let private_types: std::collections::HashSet<String> = t
             .types
             .iter()
@@ -915,6 +936,11 @@ impl UnitTable {
                 out.push((n.clone(), "constant"));
             }
         }
+        // #911: the bundle's own `render`, which no importer reaches (it names its own diagnostic,
+        // `bynk.messages.cross_unit_render`, in `rewrite_private_references`).
+        if self.has_bundle_render() {
+            out.push(("render".to_string(), MESSAGE_RENDERER));
+        }
         for (ty, mt) in &self.methods {
             let type_private = self.types.get(ty).is_some_and(|d| d.private.is_some());
             for (m, d) in mt.instance.iter().chain(mt.statics.iter()) {
@@ -926,6 +952,10 @@ impl UnitTable {
         out
     }
 }
+
+/// #911: the [`PrivateImport`](crate::resolver::PrivateImport) kind of a unit's own bundle
+/// `render`, which is not a `private` declaration but is private to its unit all the same.
+pub const MESSAGE_RENDERER: &str = "message renderer";
 
 /// S4a (#1966): a resolved derived capability: a distinct instance of a
 /// platform capability, provided by that platform's own provider bound to this
@@ -1906,10 +1936,10 @@ pub fn build_unit_table(
                 ),
             ));
         } else {
-            table
-                .fns
-                .insert("render".to_string(), Arc::new(synthetic_render_fn()));
+            let render = Arc::new(synthetic_render_fn());
+            table.fns.insert("render".to_string(), render);
         }
+        table.message_codes = reference_message_codes(indices, parsed);
     }
     table
 }
@@ -2069,6 +2099,35 @@ fn synthetic_render_fn() -> FnDecl {
         trivia: Trivia::default(),
         private: None,
     }
+}
+
+/// #911: the codes of a unit's `@reference` message block, across its files: what a literal
+/// `message("code")` in the unit (or one of its suites) may name. `None` when the unit declares no
+/// reference block (`bynk.messages.missing_reference` is its own error).
+fn reference_message_codes(
+    indices: &[usize],
+    parsed: &[ParsedFile],
+) -> Option<Arc<std::collections::BTreeSet<String>>> {
+    let blocks: Vec<&bynk_syntax::ast::MessagesDecl> = indices
+        .iter()
+        .flat_map(|&i| parsed[i].items().iter())
+        .filter_map(|item| match item {
+            CommonsItem::Messages(b)
+                if b.annotations.iter().any(|a| a.name.name == "reference") =>
+            {
+                Some(b)
+            }
+            _ => None,
+        })
+        .collect();
+    (!blocks.is_empty()).then(|| {
+        Arc::new(
+            blocks
+                .iter()
+                .flat_map(|b| b.entries.iter().map(|e| e.code.clone()))
+                .collect(),
+        )
+    })
 }
 
 /// #1824: whether `f` is the synthetic `render` [`build_unit_table`] registers
@@ -3292,6 +3351,131 @@ pub fn detect_context_message_bundle(
         0 => ContextMessageBundle::None,
         1 => ContextMessageBundle::One(found.pop().expect("len == 1")),
         _ => ContextMessageBundle::Many(found.into_iter().map(|b| b.commons).collect()),
+    }
+}
+
+/// #911: a bundle's `render` and codes belong to the unit that declares them.
+#[cfg(test)]
+mod message_scoping_tests {
+    use super::*;
+    use bynk_syntax::ast::{
+        Annotation, Commons, CommonsForm, MessageEntry, MessagesDecl, QualifiedName, SourceUnit,
+    };
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    /// A commons declaring one `messages` block per `(tag, is_reference, codes)`.
+    fn commons(name: &str, blocks: &[(&str, bool, &[&str])]) -> ParsedFile {
+        let items = blocks
+            .iter()
+            .map(|(tag, is_reference, codes)| {
+                CommonsItem::Messages(MessagesDecl {
+                    tag: tag.to_string(),
+                    tag_span: Span::default(),
+                    annotations: if *is_reference {
+                        vec![Annotation {
+                            name: ident("reference"),
+                            args: Vec::new(),
+                            span: Span::default(),
+                        }]
+                    } else {
+                        Vec::new()
+                    },
+                    entries: codes
+                        .iter()
+                        .map(|c| MessageEntry {
+                            code: c.to_string(),
+                            code_span: Span::default(),
+                            template: String::new(),
+                            template_span: Span::default(),
+                            span: Span::default(),
+                            documentation: None,
+                        })
+                        .collect(),
+                    documentation: None,
+                    span: Span::default(),
+                    trivia: Trivia::default(),
+                    private: None,
+                })
+            })
+            .collect();
+        ParsedFile::new(
+            PathBuf::from(format!("{}.bynk", name.replace('.', "/"))),
+            PathBuf::from(format!("src/{}.bynk", name.replace('.', "/"))),
+            None,
+            String::new(),
+            SourceUnit::Commons(Commons {
+                test_only: false,
+                name: QualifiedName {
+                    parts: name.split('.').map(ident).collect(),
+                    span: Span::default(),
+                },
+                items,
+                uses: Vec::new(),
+                consumes: Vec::new(),
+                documentation: None,
+                form: CommonsForm::Brace,
+                span: Span::default(),
+                trivia: Trivia::default(),
+                trailing_comments: Vec::new(),
+            }),
+            UnitKind::Commons,
+            false,
+        )
+    }
+
+    fn table_of(name: &str, blocks: &[(&str, bool, &[&str])]) -> UnitTable {
+        let parsed = vec![commons(name, blocks)];
+        let mut out = Vec::new();
+        build_unit_table(name, UnitKind::Commons, &[0], &parsed, &mut out)
+    }
+
+    #[test]
+    fn a_literal_code_is_checked_against_the_reference_block_only() {
+        let t = table_of(
+            "shop.cart",
+            &[("en", true, &["a", "b"]), ("fr", false, &["a", "b", "c"])],
+        );
+        let codes = t.message_codes.expect("a unit with a reference block");
+        assert_eq!(
+            codes.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+    }
+
+    #[test]
+    fn a_bundle_without_a_reference_block_has_nothing_to_check_against() {
+        // `bynk.messages.missing_reference` is its own error; no second one per literal.
+        let t = table_of("shop.cart", &[("en", false, &["a"])]);
+        assert!(t.message_codes.is_none());
+    }
+
+    #[test]
+    fn a_unit_with_no_bundle_has_no_codes_and_a_render_nobody_hides() {
+        let t = table_of("shop.cart", &[]);
+        assert!(t.message_codes.is_none());
+        assert!(!t.has_bundle_render());
+        assert!(matches!(t.importable(), std::borrow::Cow::Borrowed(_)));
+        assert!(t.private_subjects().is_empty());
+    }
+
+    #[test]
+    fn a_bundles_render_is_its_own_units_and_not_importable() {
+        let t = table_of("shop.cart", &[("en", true, &["a"])]);
+        // The unit, and its suites, read the full table: `render` is theirs.
+        assert!(t.has_bundle_render());
+        assert!(t.fns.contains_key("render"));
+        // An importer does not see it, and a reference to it is named for what it is.
+        assert!(!t.importable().fns.contains_key("render"));
+        assert!(
+            t.private_subjects()
+                .contains(&("render".to_string(), MESSAGE_RENDERER))
+        );
     }
 }
 
