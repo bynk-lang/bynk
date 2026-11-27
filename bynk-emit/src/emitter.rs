@@ -129,6 +129,7 @@ pub(crate) mod lower_stmt;
 pub(crate) mod runtime_header;
 pub(crate) mod runtime_use;
 mod tco;
+mod templates;
 pub mod ts_types;
 mod zero_value;
 pub use internal_fault::{InternalFault, MISSING_CHECKER_FACT};

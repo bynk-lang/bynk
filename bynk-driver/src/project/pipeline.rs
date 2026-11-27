@@ -765,9 +765,13 @@ pub(super) fn run_checks(
         (None, _) => None,
     };
     bynk_check::embeds::phase_embed_files(&parsed, available_embeds, &mut errors);
-    let embed_text = embed_files
-        .map(|folder| bynk_check::embeds::read_declared_embeds(&parsed, folder, &mut errors))
-        .unwrap_or_default();
+    let embed_text = read_embeds(
+        embed_files,
+        (&parsed, &unit_tables, &unit_uses),
+        &policy,
+        &mut snapshots,
+        &mut errors,
+    );
     // -- 6a0'''. #2841: likewise every suite `fixture` names a file in
     //           `fixtures/`, then the declared files alone are read, as text.
     let no_fixtures = BTreeSet::new();
@@ -1449,4 +1453,45 @@ fn extend_with_test_errors(
         test_errors.retain(|e| e.category != fault);
     }
     errors.extend_attributed_by_span(parsed, test_errors);
+}
+
+/// #2387, slice 2: the text of every declared embed, read through the folder's
+/// reader. Typed HTML (#3927, slice 1): then every `template` is checked against
+/// its file's text (`bynk_check::templates`), and each template file joins
+/// `snapshots` under its path, so a diagnostic in it renders at its line.
+fn read_embeds(
+    embed_files: Option<&assets::EmbedFolder>,
+    (parsed, tables, uses): (
+        &[ParsedFile],
+        &HashMap<String, UnitTable>,
+        &HashMap<String, Vec<String>>,
+    ),
+    policy: &bynk_check::stability::StabilityPolicy,
+    snapshots: &mut Vec<(PathBuf, String)>,
+    errors: &mut ErrorSink,
+) -> BTreeMap<String, String> {
+    let embed_text = embed_files
+        .map(|folder| bynk_check::embeds::read_declared_embeds(parsed, folder, errors))
+        .unwrap_or_default();
+    let units = bynk_check::templates::Units {
+        parsed,
+        tables,
+        uses,
+    };
+    bynk_check::templates::phase_templates(&units, &embed_text, policy, errors);
+    for pf in parsed {
+        for item in pf.items() {
+            if let bynk_syntax::ast::CommonsItem::Embed(e) = item
+                && e.is_template()
+            {
+                let key = bynk_project::assets::normalise_asset_path(&e.path);
+                if let Some(text) = embed_text.get(&key)
+                    && !snapshots.iter().any(|(p, _)| p == Path::new(&key))
+                {
+                    snapshots.push((PathBuf::from(&key), text.clone()));
+                }
+            }
+        }
+    }
+    embed_text
 }

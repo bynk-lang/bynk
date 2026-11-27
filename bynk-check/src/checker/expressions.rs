@@ -221,6 +221,10 @@ pub(crate) fn check_ident(
     // (checked above); like an asset it never shares a name with a function or
     // type in scope (`bynk.resolve.name_conflict` at declaration).
     if ctx.input.embeds.contains_key(&id.name) {
+        // #3927: a template's name is `Html`, or is used through `fill`.
+        if let Some(ty) = super::template_calls::check_template_ident(id, ctx) {
+            return ty;
+        }
         // #2387: a use edge to the declaration, as for an asset.
         ctx.refs.record(id.span, SymbolKind::Embed, &id.name);
         return Some(tys.intern(Ty::Base(BaseType::String)));

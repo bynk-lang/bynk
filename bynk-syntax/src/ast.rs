@@ -1067,6 +1067,13 @@ pub struct EmbedDecl {
     pub name: Ident,
     pub path: String,
     pub path_span: Span,
+    /// Typed HTML (#3927, slice 1): `Some` when this is a `template`
+    /// declaration, an embed whose text is parsed as HTML and whose
+    /// `\(name)` placeholders are checked against `fields`. A template shares
+    /// every rule of an embed's path, file and size, and the reading of its
+    /// text; it differs in its value (`Html`, or a `Template[F]` filled with
+    /// `.fill(fields)`) and its emission (a function, not a `string`).
+    pub template: Option<TemplateHead>,
     pub documentation: Option<Doc>,
     /// #2618: the span of a leading `private` modifier, when the declaration
     /// is unit-private: visible across its own unit's files (and to that
@@ -1074,6 +1081,32 @@ pub struct EmbedDecl {
     pub private: Option<Span>,
     pub span: Span,
     pub trivia: Trivia,
+}
+
+/// The head of a `template` declaration (#3927, slice 1): the span of its
+/// contextual `template` keyword, and its fields type, `None` for a template
+/// with no fields (`template footer = "embeds/footer.html"`), whose value is
+/// `Html`.
+#[derive(Debug, Clone)]
+pub struct TemplateHead {
+    pub keyword: Span,
+    pub fields: Option<TypeRef>,
+}
+
+impl EmbedDecl {
+    /// Whether this is a `template` declaration.
+    pub fn is_template(&self) -> bool {
+        self.template.is_some()
+    }
+
+    /// The declaration's keyword, as a diagnostic names it: `embed` or `template`.
+    pub fn keyword(&self) -> &'static str {
+        if self.is_template() {
+            "template"
+        } else {
+            "embed"
+        }
+    }
 }
 
 /// `fixture name = "path"` (#2841): a project file's text as a `String`

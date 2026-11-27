@@ -249,6 +249,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.template_decl,
         $.const_decl,
       ),
 
@@ -268,6 +269,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.template_decl,
         $.const_decl,
         $.removed_agent_decl,
       ),
@@ -294,6 +296,7 @@ module.exports = grammar({
         $.event_decl,
         $.asset_decl,
         $.embed_decl,
+        $.template_decl,
         $.const_decl,
       ),
 
@@ -418,8 +421,8 @@ module.exports = grammar({
 
     // -- Type declarations --
 
-    // #2618: `private` before a `fn`, `type`, `messages`, `asset`, `embed` or
-    // `const` declaration makes it unit-private. The word is contextual: with
+    // #2618: `private` before a `fn`, `type`, `messages`, `asset`, `embed`,
+    // `template` or `const` declaration makes it unit-private. The word is contextual: with
     // `word` set to `identifier`, it lexes as a keyword only where a
     // declaration may start, so `@cache(scope: private)` and a binding named
     // `private` keep parsing as identifiers. Placement (a commons or context, never an
@@ -539,6 +542,23 @@ module.exports = grammar({
         optional(field("visibility", $.visibility_modifier)),
         "embed",
         field("name", $.identifier),
+        "=",
+        field("path", $.string_literal),
+      ),
+
+    // Typed HTML (#3927, slice 1): `template name: Fields = "path"` or
+    // `template name = "path"` — an HTML file from `embeds/` whose `\(name)`
+    // placeholders are checked against the fields record. `template` is
+    // contextual: with `word` set to `identifier` it lexes as a keyword only
+    // where a declaration may start, so a binding named `template` keeps
+    // parsing as an identifier. Placement and the file's markup are checker
+    // concerns.
+    template_decl: ($) =>
+      seq(
+        optional(field("visibility", $.visibility_modifier)),
+        "template",
+        field("name", $.identifier),
+        optional(seq(":", field("fields", $._type_ref))),
         "=",
         field("path", $.string_literal),
       ),

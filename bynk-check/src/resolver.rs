@@ -2627,6 +2627,36 @@ pub fn check_hidden_type_names(
     g.errors
 }
 
+/// Typed HTML (#3927, §14): every `bynk.html` type the project's policy blocks,
+/// written as a type in `items`, is `bynk.stability.experimental`. A type
+/// reaches no item path through a call, so the call-site check
+/// (`refuse_experimental_import`) never sees it; this walks the written types
+/// with the same machinery as a hidden type's. `gated` maps each blocked name
+/// to its item path.
+pub fn check_gated_type_names(
+    items: &[CommonsItem],
+    gated: &std::collections::BTreeMap<String, String>,
+    policy: &crate::stability::StabilityPolicy,
+) -> Vec<CompileError> {
+    let report = |id: &Ident, path: &str| {
+        policy
+            .check(path, id.span)
+            .unwrap_or_else(|| hidden_type_error(id, String::new()))
+    };
+    let mut g = Gate {
+        hidden: gated,
+        report: &report,
+        variants: Default::default(),
+        variant_report: None,
+        locals: None,
+        caps: false,
+        units: None,
+        errors: Vec::new(),
+    };
+    gate_items(&mut g, items);
+    g.errors
+}
+
 /// `bynk.resolve.unknown_type` for a hidden type written at `id`. Not
 /// `unknown_type_error`: its note lists what is in scope, which a hidden
 /// type, reached but unnameable, is not.

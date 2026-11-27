@@ -1628,6 +1628,7 @@ pub const BUILTIN_EXPERIMENTAL: &[&str] = &[
     "bynk.RequestHeaders.entries",
     "bynk.actor.ApiKey",
     "bynk.given.parameters",
+    "bynk.html.typed",
     "bynk.http.ANY",
     "bynk.http.rest",
 ];
@@ -1642,6 +1643,11 @@ pub const BUILTIN_GATED: &[(&str, &str)] = &[
     ("bynk.ApiKeySecret", "bynk.actor.ApiKey"),
     ("bynk.ApiKeyValue", "bynk.actor.ApiKey"),
     ("bynk.TooManyKeys", "bynk.actor.ApiKey"),
+    // #3927 (typed HTML, §14): `Html` and the forms that make one are one feature behind
+    // `bynk.html.typed`, promoted as a unit. The `template` declaration is checked under the
+    // synthetic path `bynk.html.typed.template`, which the gate covers.
+    ("bynk.html.Html", "bynk.html.typed"),
+    ("bynk.html.typed.template", "bynk.html.typed"),
 ];
 
 /// The `[unstable] allow` name that admits `path`: its gate, when [`BUILTIN_GATED`] gives one, else

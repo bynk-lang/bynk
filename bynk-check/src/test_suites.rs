@@ -1684,6 +1684,7 @@ fn fixture_as_embed(f: &FixtureDecl) -> EmbedDecl {
         name: f.name.clone(),
         path: f.path.clone(),
         path_span: f.path_span,
+        template: None,
         documentation: f.documentation.clone(),
         private: None,
         span: f.span,

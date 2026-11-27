@@ -30,7 +30,11 @@ pub fn unsafe_path_error(e: &EmbedDecl) -> Option<CompileError> {
         CompileError::new(
             "bynk.embed.unsafe_path",
             e.path_span,
-            format!("embed `{}` has an unsafe path: {reason}", e.name.name),
+            format!(
+                "{} `{}` has an unsafe path: {reason}",
+                e.keyword(),
+                e.name.name
+            ),
         )
         .with_note("an embed path is relative to the project root and must stay inside it"),
     )
@@ -53,7 +57,8 @@ pub fn outside_embeds_dir_error(e: &EmbedDecl) -> Option<CompileError> {
             "bynk.embed.outside_embeds_dir",
             e.path_span,
             format!(
-                "embed `{}` must name a file in the project's `{dir}/` folder",
+                "{} `{}` must name a file in the project's `{dir}/` folder",
+                e.keyword(),
                 e.name.name
             ),
         )
@@ -74,7 +79,7 @@ pub fn placement_error(e: &EmbedDecl) -> CompileError {
     CompileError::new(
         "bynk.embed.outside_context_or_commons",
         e.span,
-        "`embed` declarations are only allowed inside a context or a commons",
+        format!("`{}` declarations are only allowed inside a context or a commons", e.keyword()),
     )
     .with_note(
         "an embed is compiled into the Worker of each context that declares it or `uses` a commons that does",
@@ -99,7 +104,8 @@ pub fn needs_project_error(e: &EmbedDecl) -> CompileError {
         "bynk.embed.needs_project",
         e.span,
         format!(
-            "embed `{}` cannot be built from a single file",
+            "{} `{}` cannot be built from a single file",
+            e.keyword(),
             e.name.name
         ),
     )
@@ -151,7 +157,7 @@ pub fn phase_embed_files(
                     CompileError::new(
                         "bynk.embed.missing_file",
                         e.path_span,
-                        format!("embed `{}` names `{key}`, which does not exist", e.name.name),
+                        format!("{} `{}` names `{key}`, which does not exist", e.keyword(), e.name.name),
                     )
                     .with_note(
                         "an embed must be a regular file in the project's `embeds/` folder; symbolic links are not followed",
@@ -282,7 +288,11 @@ fn refusal_error(code: &'static str, e: &EmbedDecl, key: &str, detail: &str) -> 
     let mut err = CompileError::new(
         code,
         e.path_span,
-        format!("embed `{}` names `{key}`, which {what}", e.name.name),
+        format!(
+            "{} `{}` names `{key}`, which {what}",
+            e.keyword(),
+            e.name.name
+        ),
     )
     .with_note(detail.to_string());
     if let Some(note) = note {
@@ -311,7 +321,7 @@ pub fn name_error(
             CompileError::new(
                 "bynk.embed.duplicate",
                 e.name.span,
-                format!("embed `{name}` is already declared"),
+                format!("{} `{name}` is already declared", e.keyword()),
             )
             .with_label(prev.span, "previously declared here"),
         );
@@ -324,7 +334,10 @@ pub fn name_error(
         CompileError::new(
             "bynk.resolve.name_conflict",
             e.name.span,
-            format!("embed `{name}` conflicts with {kind} of the same name"),
+            format!(
+                "{} `{name}` conflicts with {kind} of the same name",
+                e.keyword()
+            ),
         )
         .with_label(prev.span, "declared here"),
     )

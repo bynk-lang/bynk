@@ -1542,11 +1542,16 @@ impl<'a> Formatter<'a> {
         if e.private.is_some() {
             self.push("private ");
         }
-        self.push(&format!(
-            "embed {} = \"{}\"",
-            e.name.name,
-            escape_string(&e.path)
-        ));
+        // Typed HTML (#3927): a `template` formats as an embed does, with its
+        // fields type after the name.
+        self.push(e.keyword());
+        self.push(" ");
+        self.push(&e.name.name);
+        if let Some(fields) = e.template.as_ref().and_then(|t| t.fields.as_ref()) {
+            self.push(": ");
+            self.format_type_ref(fields);
+        }
+        self.push(&format!(" = \"{}\"", escape_string(&e.path)));
         self.emit_trailing_comment_or_newline(e.trivia.trailing.as_deref());
     }
 

@@ -149,6 +149,16 @@ pub fn emit_project(
                     e.name.name
                 )
             });
+            // #3927: a template is a function of its fields, not its text.
+            if e.is_template() {
+                body.push(super::templates::emit_template(
+                    e,
+                    &text,
+                    commons,
+                    &ctx.runtime_use,
+                ));
+                continue;
+            }
             body.push(bynk_ts::TsStmt::decl(
                 bynk_ts::TsDecl::Export(Box::new(bynk_ts::TsDecl::ConstDecl {
                     name: ts_ident(&e.name.name),

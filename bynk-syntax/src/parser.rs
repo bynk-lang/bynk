@@ -1049,7 +1049,9 @@ impl<'a> Parser<'a> {
                 | TokenKind::Asset
                 | TokenKind::Embed
                 | TokenKind::Const
-        );
+        ) || (next.kind == TokenKind::Ident
+            && self.slice(next.span) == "template"
+            && self.nth_kind(2) == Some(TokenKind::Ident));
         let declaration = modifiable
             || matches!(
                 next.kind,

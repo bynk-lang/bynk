@@ -1771,6 +1771,11 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #3927: and each `template` keyword, contextual at item position.
+    spans.extend(items.iter().filter_map(|item| match item {
+        CommonsItem::Embed(e) => e.template.as_ref().map(|t| t.keyword),
+        _ => None,
+    }));
     // #3984: and a test-only commons' `for tests` marker.
     if let SourceUnit::Commons(c) = &unit
         && c.test_only
