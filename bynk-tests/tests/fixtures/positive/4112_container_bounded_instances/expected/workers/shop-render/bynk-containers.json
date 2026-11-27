@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "containers": [
+    { "capability": "Renderer", "class": "__Container_Renderer", "build": "containers/renderer", "instance_type": null }
+  ]
+}

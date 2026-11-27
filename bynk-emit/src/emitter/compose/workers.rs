@@ -186,7 +186,69 @@ fn http_route_wrappers(
             return_entries.push(emit_http_wrapper(sname, h, method, path, None));
         }
     }
+    // #3825: a route that issues a session is checked for login CSRF before anything else, by the rule a
+    // guarded route is; the entry passes it the request.
+    if bynk_check::actors::route_checks_issue_csrf(
+        h,
+        matches!(method, bynk_model::IrHttpMethod::Get),
+        &table.actors,
+    ) {
+        add_issue_csrf_check(&mut return_entries, &csrf_origins(service));
+    }
     return_entries
+}
+
+/// #3825: `if (!__csrfAllowed(request, <origins>)) return HttpResult.Forbidden;` ahead of a route's
+/// wrapper. A wrapper that verifies first (`<route>__verify`, #3926) refuses as its outcome's `Err`.
+fn add_issue_csrf_check(entries: &mut [TsObjectEntry], origins: &[String]) {
+    use crate::ts_build::{call, ident, if_, member, not_expr, return_, str_lit};
+    // An identity-limited route (#3926) is a pair: `<route>__verify(request)`, which verifies the caller, and
+    // the run step, which takes the verified principal. The check belongs to the first, before the limiter and
+    // the body; the second takes no request and is left alone.
+    let verifies_first = entries
+        .iter()
+        .any(|e| matches!(e, TsObjectEntry::Method { name, .. } if name.ends_with("__verify")));
+    for entry in entries {
+        let TsObjectEntry::Method {
+            name, body, params, ..
+        } = entry
+        else {
+            continue;
+        };
+        if verifies_first && !name.ends_with("__verify") {
+            continue;
+        }
+        // A plain wrapper takes no request; this one does now, first, as a seam's wrapper takes it.
+        if params.first().is_none_or(|p| p.name != "request") {
+            params.insert(
+                0,
+                TsParam::new(
+                    "request".to_string(),
+                    Some(TsType::named("globalThis.Request")),
+                ),
+            );
+        }
+        let forbidden = member(ident("HttpResult"), "Forbidden");
+        let refuse = if name.ends_with("__verify") {
+            err_failure(forbidden)
+        } else {
+            return_(Some(forbidden))
+        };
+        let listed = origins
+            .iter()
+            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
+            .collect();
+        body.insert(
+            0,
+            if_(
+                not_expr(call(
+                    ident("__csrfAllowed"),
+                    vec![ident("request"), TsExpr::array(listed)],
+                )),
+                refuse,
+            ),
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

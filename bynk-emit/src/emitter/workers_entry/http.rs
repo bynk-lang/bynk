@@ -59,6 +59,8 @@ pub(super) struct HttpRoute {
     /// owns the boundary, so the entry passes `request` (+ path params) and does
     /// not read or parse the body itself.
     pub(super) sum: bool,
+    /// #3825: the route issues a session and so runs the login-CSRF check, which needs the request.
+    pub(super) issues_cookie: bool,
     /// v0.140 (ADR 0163): the GET handler's `@cache` freshness policy, if declared.
     /// `Some` only for a `GET` carrying a well-formed `@cache`; drives the
     /// `applyCache` `Cache-Control` stamp. The conditional `ETag`/`304` half is
@@ -357,14 +359,16 @@ fn push_cookies_param(
 }
 
 impl HttpRoute {
-    /// Whether the route's surface wrapper runs a verification seam and so takes the request
-    /// first: a Bearer, Oidc, `SignedCookie`, `ApiKey` (#3939) or actor-sum route.
+    /// Whether the route's surface wrapper takes the request first: it runs a verification seam
+    /// (a Bearer, Oidc, `SignedCookie`, `ApiKey` (#3939) or actor-sum route), or it issues a
+    /// signed-cookie session and so checks for login CSRF (#3825).
     pub(super) fn takes_request(&self) -> bool {
         self.bearer
             || self.sum
             || self.oidc
             || self.signed_cookie.is_some()
             || self.api_key.is_some()
+            || self.issues_cookie
     }
 
     /// How this route's router rejections are rendered (#3916).
@@ -1839,6 +1843,11 @@ pub(super) fn collect_http_routes(
                     // boundary (raw read, first-wins resolution, body parse), so
                     // the entry just passes `request` and skips the body parse.
                     sum: bynk_check::actors::sum_members_for(h, &table.actors).is_some(),
+                    issues_cookie: bynk_check::actors::route_checks_issue_csrf(
+                        h,
+                        matches!(method, bynk_model::IrHttpMethod::Get),
+                        &table.actors,
+                    ),
                     // v0.140 (ADR 0163): the handler's `@cache` freshness policy, if
                     // any — lowered to a `Cache-Control` on this GET's responses.
                     cache: bynk_model::lower_route_cache_ir(h),

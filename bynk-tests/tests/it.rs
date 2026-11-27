@@ -487,6 +487,8 @@ mod system {
     mod large_suite_behaviour;
     #[path = "let_else_staircase.rs"]
     mod let_else_staircase;
+    #[path = "login_csrf_seam.rs"]
+    mod login_csrf_seam;
     #[path = "malformed_project_config_behaviour.rs"]
     mod malformed_project_config_behaviour;
     #[path = "multi_actor_sum.rs"]

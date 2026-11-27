@@ -1,0 +1,121 @@
+context shop.render
+
+// #4112: none of these warns. The instance name comes from a constant, from the authenticated
+// identity, from a closed set, from a route only an authenticated caller reaches, or from a function
+// that bounds it (a function is where a set is bounded, so it is not followed).
+
+consumes bynk
+consumes bynk.cloudflare { Container, ContainerError }
+
+type TenantId = String where NonEmpty
+
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = TenantId }
+
+actor Browser { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = TenantId }
+
+type Plan = enum { Free, Pro }
+
+capability Renderer = Container @build("containers/renderer") @port(8080)
+
+fn shard(name: String) -> String {
+	"shard-0"
+}
+
+service api from http {
+	on GET("/shared") () -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send("shared", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/mine") () -> Effect[HttpResult[String]] by m: Member given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(m.identity, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/team/:team") (team: String) -> Effect[HttpResult[String]] by m: Member given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send("team-\(team)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/plan/:plan") (plan: Plan) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let name = match plan {
+			Free => "free",
+			Pro => "pro",
+		}
+		let res <- Renderer.send(name, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	on GET("/sharded/:name") (
+		name: String
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send(shard(name), req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	// A sum of authenticated actors is closed too: no member of it is open.
+	on GET("/either/:team") (
+		team: String
+	) -> Effect[HttpResult[String]] by who: Member | Browser given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let res <- Renderer.send("team-\(team)", req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+
+	// A parameter that is rebound is not the request's input any more.
+	on GET("/canonical/:name") (
+		name: String
+	) -> Effect[HttpResult[String]] by Visitor given Renderer {
+		let req = Request {
+			method: Get,
+			url: "http://renderer/render",
+		}
+		let name = "shared"
+		let res <- Renderer.send(name, req)
+		match res {
+			Ok(r) => Ok(r.body),
+			Err(_) => ServerError("render failed"),
+		}
+	}
+}

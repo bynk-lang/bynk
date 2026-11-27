@@ -1,0 +1,2 @@
+# #4112: the route names an instance from a path parameter and is served by Visitor.
+bynk.container.unbounded_instances `Renderer.send` names a container instance from `name`

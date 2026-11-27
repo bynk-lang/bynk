@@ -1419,6 +1419,7 @@
 /reference/diagnostics/bynk.actor.signed_cookie_duplicate_key/
 /reference/diagnostics/bynk.actor.signed_cookie_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.signed_cookie_issue_needs_clock/
+/reference/diagnostics/bynk.actor.signed_cookie_issue_on_safe_method/
 /reference/diagnostics/bynk.actor.signed_cookie_issue_outside_handler/
 /reference/diagnostics/bynk.actor.signed_cookie_missing_secret/
 /reference/diagnostics/bynk.actor.signed_cookie_missing_ttl/
@@ -1533,6 +1534,7 @@
 /reference/diagnostics/bynk.container.build_missing/
 /reference/diagnostics/bynk.container.build_path/
 /reference/diagnostics/bynk.container.output_outside_project/
+/reference/diagnostics/bynk.container.unbounded_instances/
 /reference/diagnostics/bynk.context.consumes_cycle/
 /reference/diagnostics/bynk.context.duplicate_binding/
 /reference/diagnostics/bynk.context.external_construction/
