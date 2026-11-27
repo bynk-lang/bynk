@@ -35,9 +35,9 @@ export default {
             case "add": {
               __route = "call add";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "8bb22fea28eaeb12") {
-                globalThis.console.error("ContractMismatch shop.orders call add", { service: "add", expected: "8bb22fea28eaeb12", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "add", expected: "8bb22fea28eaeb12", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "a41451c24d802775") {
+                globalThis.console.error("ContractMismatch shop.orders call add", { service: "add", expected: "a41451c24d802775", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "add", expected: "a41451c24d802775", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
@@ -55,9 +55,9 @@ export default {
             case "find": {
               __route = "call find";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "024337254efec2d3") {
-                globalThis.console.error("ContractMismatch shop.orders call find", { service: "find", expected: "024337254efec2d3", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "find", expected: "024337254efec2d3", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "da18ac9971ffe677") {
+                globalThis.console.error("ContractMismatch shop.orders call find", { service: "find", expected: "da18ac9971ffe677", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "find", expected: "da18ac9971ffe677", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {
@@ -75,9 +75,9 @@ export default {
             case "list": {
               __route = "call list";
               const __contract = request.headers.get("X-Bynk-Contract");
-              if (__contract !== "c019ba352a5745c9") {
-                globalThis.console.error("ContractMismatch shop.orders call list", { service: "list", expected: "c019ba352a5745c9", actual: globalThis.String(__contract).slice(0, 16) });
-                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "list", expected: "c019ba352a5745c9", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+              if (__contract !== "d25f0dfa4ee55de1") {
+                globalThis.console.error("ContractMismatch shop.orders call list", { service: "list", expected: "d25f0dfa4ee55de1", actual: globalThis.String(__contract).slice(0, 16) });
+                return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "list", expected: "d25f0dfa4ee55de1", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
               }
               let args: __JsonValue;
               try {

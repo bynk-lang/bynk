@@ -1,16 +1,16 @@
 {
   "version": 1,
   "provides": {
-    "add": "87fd1c77bfc8b5be",
-    "find": "9e519bcc563e5608",
-    "list": "cc98e6e1f3ec5782",
-    "rename": "81e8be567e4ff756"
+    "add": "8aea9e0a901ed77c",
+    "find": "89db29fcbdc7d8c5",
+    "list": "3fdb215a3f59c8e0",
+    "rename": "66a17e3453b44d46"
   },
   "expects": {},
   "provides_shapes": {
-    "add": "Svc(\"add\",P(\"name\",B(\"String\")),Ret(R(N(\"PgRun\"),N(\"PgError\"))))",
-    "find": "Svc(\"find\",P(\"id\",B(\"Int\")),Ret(R(O(Rec(\"Order\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"qty\",B(\"Int\")))),N(\"PgReadError\"))))",
-    "list": "Svc(\"list\",Ret(R(B(\"String\"),N(\"PgError\"))))",
-    "rename": "Svc(\"rename\",P(\"old\",B(\"String\")),P(\"new\",B(\"String\")),Ret(R(L(N(\"PgRun\")),N(\"PgError\"))))"
+    "add": "Svc(\"add\",P(\"name\",B(\"String\")),Ret(R(Rec(\"PgRun\",F(\"rowCount\",B(\"Int\"))),Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\")))))))",
+    "find": "Svc(\"find\",P(\"id\",B(\"Int\")),Ret(R(O(Rec(\"Order\",F(\"id\",B(\"Int\")),F(\"name\",B(\"String\")),F(\"placed\",B(\"Instant\")),F(\"qty\",B(\"Int\")))),Sum(\"PgReadError\",V(\"PgDecode\",F(\"error\",N(\"DecodeError\"))),V(\"PgSql\",F(\"error\",Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\"))))))))))",
+    "list": "Svc(\"list\",Ret(R(B(\"String\"),Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\")))))))",
+    "rename": "Svc(\"rename\",P(\"old\",B(\"String\")),P(\"new\",B(\"String\")),Ret(R(L(Rec(\"PgRun\",F(\"rowCount\",B(\"Int\")))),Sum(\"PgError\",V(\"PgConnection\",F(\"message\",B(\"String\"))),V(\"PgConstraint\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgFailed\",F(\"message\",B(\"String\")),F(\"sqlstate\",B(\"String\"))),V(\"PgSerialization\",F(\"message\",B(\"String\")))))))"
   }
 }
