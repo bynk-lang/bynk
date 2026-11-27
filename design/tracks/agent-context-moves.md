@@ -1,20 +1,21 @@
 # Supported moves of agent-owning contexts between Workers
 
-- **Status:** Draft for review. Refs bynk-lang/bynk#3565. It follows on from #3562 (Worker
-  grouping, #551) and its V0 verification
+- **Status:** Settling. Spine bynk-lang/bynk#3565 (label `track`). It follows on from #3562
+  (Worker grouping, #551) and its V0 verification
   ([#3562 comment](https://github.com/bynk-lang/bynk/issues/3562#issuecomment-6896203799)).
 - **Ruling already given (maintainer, 27 November 2026, on #3565):** this goes into 1.0. The
   brief window of `1101` errors between phases 2 and 3 is **accepted and documented** in the
   first version; draining or queueing calls can come later. `bynk.deploy.agent_move_refused`
   stays exactly as it is until this lands.
-- **Posture:** a multi-slice increment of the deploy tooling, written in the shape of a track
-  doc ([ADR 0076](../decisions/0076-feature-track-posture.md),
-  [`tracks/durable-event-delivery.md`](../tracks/durable-event-delivery.md)) because it has
-  several `[DECISION]`s and slices. It changes no language surface: no grammar, no checker,
-  no editor behaviour (hover, completion, semantic tokens and signature help are unchanged,
-  because no source construct is added). It amends
+- **Posture:** feature track per [ADR 0076](../decisions/0076-feature-track-posture.md), run
+  GitHub-native per [ADR 0167](../decisions/0167-feature-tracks-run-github-native.md). It
+  spans several increments (§9) and is a safety boundary: the refusal it replaces exists so
+  that a deploy never silently starts an agent with empty state (§7.1). It changes no language
+  surface: no grammar, no checker, no editor behaviour (hover, completion, semantic tokens and
+  signature help are unchanged, because no source construct is added). It amends
   [ADR 0874](../decisions/0874-worker-groups.md)'s G5 and its "Future work" paragraph.
-- **Not a build authorisation.** Each slice in §9 is cut as an ordinary increment proposal.
+- **Not a build authorisation.** Each slice in §9 is cut as an ordinary increment proposal, a
+  sub-issue of the spine.
 
 Cloudflare facts carry their developers.cloudflare.com URL. Observed behaviour from the V0
 probe is marked **(V0)**. Facts about Bynk come from `main` at `24c0475e` and carry a
@@ -157,6 +158,14 @@ deployments of `Sf` and `St`.
 | `committed`, `going_live` | `K`'s namespaces belong to `Sf`, or to neither | **stops**: `bynk.deploy.move_state_unknown`, naming the classes and both scripts. Never declares `K` live on `St` (§7.1) |
 | any | a deployment of `Sf` or `St` newer than the one recorded, made by anything else | **stops**: `bynk.deploy.move_interleaved` (§7.2) |
 | any | the manifest no longer asks for this move | **stops**: `bynk.deploy.move_open` (D8) |
+
+**Resuming only goes forward.** Cloudflare's docs say "rollbacks cannot cross a lifecycle
+change" ([exports](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)),
+and every phase is one. So no step of the orchestration, and no recovery from a failed or
+interrupted phase, uses `wrangler rollback`: a failed phase is repeated or the move goes on to
+the next one. Before phase 2 the one way back is Cloudflare's documented cancel (D8), which
+is itself a forward deploy of `St`. From `committed` on there is no way back except a second,
+forward move (§6). This is also why `bynk revert` refuses across a move.
 
 **Resuming is idempotent.** The rule behind the rows above: before each phase, the re-read
 asks whether that phase's effect is already on the account, and if it is, the phase counts as
@@ -517,5 +526,5 @@ D14.
 
 ## 11. Docs delta
 
-Listed in §5. The book's guide and reference pages change in slices 3–6; this doc is the
-only change in its own PR.
+Listed in §5. The book's guide and reference pages change in slices 3–6; its settling PR
+adds only this doc and its row in `design/tracks/README.md`.
