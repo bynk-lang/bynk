@@ -1,0 +1,22 @@
+commons shop.messages
+
+uses bynk.locale as Locale
+uses bynk.locale { message as msg }
+uses bynk.locale.types
+
+messages "en" @reference {
+  "cart.greeting" => "Hello, {name}!"
+  "cart.farewell" => "Bye, {name}!"
+}
+
+fn viaAlias() -> Message {
+  Locale.message("cart.greting")
+}
+
+fn viaRename() -> Message {
+  msg("cart.farewel")
+}
+
+fn fine() -> Message {
+  Locale.message("cart.greeting")
+}

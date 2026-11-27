@@ -7855,6 +7855,8 @@ mod native_platform_closure_tests {
             use_views: Default::default(),
             ambiguous_uses: Default::default(),
             use_origin: Default::default(),
+            message_codes: None,
+            bundle_render_spellings: Default::default(),
         }
     }
 

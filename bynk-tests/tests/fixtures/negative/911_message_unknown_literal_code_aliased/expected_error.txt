@@ -1,0 +1,4 @@
+`cart.greting` is not a code
+`cart.farewel` is not a code
+# a literal is checked however `bynk.locale` is imported
+# exact

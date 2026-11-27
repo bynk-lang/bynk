@@ -85,6 +85,9 @@ impl UseEntry {
 pub struct UnitViews {
     pub views: BTreeMap<String, UnitTable>,
     pub ambiguous: BTreeMap<String, Vec<AmbiguousProvider>>,
+    /// #911: each qualified spelling of a message bundle's `render` this unit writes
+    /// (`Messages.render`), with the unit that declares the bundle.
+    pub bundle_renders: BTreeMap<String, String>,
     /// `(file index, error)`.
     pub errors: Vec<(usize, CompileError)>,
 }
@@ -149,7 +152,10 @@ pub fn build_unit_views<'a>(
                 (None, Some(items)) => {
                     for item in items {
                         if !names.contains(&item.name.name) {
-                            out.errors.push((e.file, unknown_name(t, &item.name)));
+                            let bundle_render = item.name.name == "render"
+                                && table_of(t).is_some_and(|u| u.has_bundle_render());
+                            out.errors
+                                .push((e.file, unknown_name(t, &item.name, bundle_render)));
                             continue;
                         }
                         let key = item.alias.as_ref().unwrap_or(&item.name).name.clone();
@@ -273,7 +279,18 @@ pub fn build_unit_views<'a>(
                     .collect()
             })
             .unwrap_or_default();
-        let (view, errors) = build_view(t, &used.importable(), &es, &mine, &out.ambiguous);
+        let bundle_render = used.has_bundle_render();
+        let mut spelled = Vec::new();
+        let (view, errors) = build_view(
+            t,
+            &used.importable(),
+            &es,
+            &mine,
+            &out.ambiguous,
+            bundle_render.then_some(&mut spelled),
+        );
+        out.bundle_renders
+            .extend(spelled.into_iter().map(|text| (text, t.to_string())));
         out.errors.extend(errors);
         out.views.insert(t.to_string(), view);
     }
@@ -330,7 +347,11 @@ fn ambiguous_provider(
 }
 
 /// `bynk.uses.unknown_name`.
-fn unknown_name(target: &str, name: &Ident) -> CompileError {
+fn unknown_name(target: &str, name: &Ident, bundle_render: bool) -> CompileError {
+    if bundle_render {
+        // #911: not a `private` declaration, but the unit's own bundle `render`.
+        return crate::resolver::cross_unit_render(target, name.span);
+    }
     CompileError::new(
         "bynk.uses.unknown_name",
         name.span,
@@ -348,6 +369,9 @@ fn build_view(
     entries: &[&UseEntry],
     bare: &[(String, String)],
     ambiguous: &BTreeMap<String, Vec<AmbiguousProvider>>,
+    // #911: `Some` when `target` declares a message bundle: collects the qualified spellings of
+    // its `render` this unit writes.
+    mut bundle_renders: Option<&mut Vec<String>>,
 ) -> (UnitTable, Vec<(usize, CompileError)>) {
     let mut errors: Vec<(usize, CompileError)> = Vec::new();
     // Qualified names read: declared name -> each qualified spelling written, in
@@ -358,7 +382,13 @@ fn build_view(
     for e in entries {
         for r in &e.qualified {
             if !public_names(used).contains(&r.name) {
-                errors.push((e.file, unknown_name_at(target, r)));
+                // #911: a bundle's `render` is named for what it is at the call site
+                // (`bynk.messages.cross_unit_render`, by `rewrite_private_references`, keyed by this
+                // spelling), so it is recorded here rather than reported twice.
+                match bundle_renders.as_deref_mut() {
+                    Some(spelled) if r.name == "render" => spelled.push(r.text.clone()),
+                    _ => errors.push((e.file, unknown_name_at(target, r))),
+                }
                 continue;
             }
             let spellings = qualified.entry(r.name.clone()).or_default();
@@ -584,6 +614,7 @@ pub fn attach_use_views(
         if let Some(table) = unit_tables.get_mut(&name) {
             table.use_views = views.views;
             table.ambiguous_uses = views.ambiguous;
+            table.bundle_render_spellings = views.bundle_renders;
         }
     }
     errors

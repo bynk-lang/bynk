@@ -1,0 +1,5 @@
+suite shop.custom {
+  case "a unit's own message function is not the bundle's builder" {
+    expect label() == "not.a.message.code"
+  }
+}

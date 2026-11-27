@@ -3807,6 +3807,22 @@ all its files, form one bundle, and the following rules hold over the bundle:
   (`bynk.messages.placeholder_mismatch`), each with the same ICU format kind
   (`bynk.messages.format_mismatch`).
 
+A message code is scoped to the unit that declares it. `message(code)`, and `render`
+over it, resolve only against the bundles declared in the unit where they are called,
+so a code's identity is its package, its unit and the code. A unit MUST NOT reach into
+another unit's bundles: the `render` a bundle generates is not importable, and a
+qualified or selected reference to it from another unit (`Messages.render`,
+`uses shop.messages { render }`) is `bynk.messages.cross_unit_render`, as is a bare
+`render` in a unit that does not `uses bynk.locale`. In a unit that does, a bare `render`
+is `bynk.locale`'s, which reads no bundle and returns the code, and a unit that also
+`uses` a unit declaring a bundle is warned (`bynk.locale.render_shadows_bundle`). Another unit's messages
+are used through a function that unit exports. In a unit that declares a bundle with a `@reference` block, and in
+its suites, a literal `message("code")` MUST name a code of that block
+(`bynk.messages.unknown_code`); a code that is not a literal, and a `Message` built as a
+record literal rather than through `message`, is not checked, and a
+unit that declares no bundle has nothing to check a literal against, its `render`
+being `bynk.locale`'s.
+
 The bundle gives its commons a generated
 `render(tag: LocaleTag, msg: Message) -> String`. `render` is total: it uses the
 template for `msg.code` in `tag`'s block, else in the reference block, else

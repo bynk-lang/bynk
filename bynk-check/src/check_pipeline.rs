@@ -568,6 +568,27 @@ fn declaration_errors(
     )
 }
 
+/// S3 (#1963): the project's policy, and this unit's blocked imports. A first-party unit's own
+/// bodies are the library's business, never the project's opt-in, so they check under a policy
+/// that blocks nothing.
+fn unit_stability(
+    pf: &ParsedFile,
+    ctx: &UnitCheckCtx,
+    imported_from: &HashMap<String, String>,
+) -> crate::stability::UnitStability {
+    if pf.is_synthetic() {
+        crate::stability::UnitStability {
+            policy: Arc::new(crate::stability::StabilityPolicy::permissive()),
+            blocked_imports: HashMap::new(),
+        }
+    } else {
+        crate::stability::UnitStability {
+            policy: ctx.policy.clone(),
+            blocked_imports: ctx.policy.blocked_imports(imported_from),
+        }
+    }
+}
+
 /// The shared resolve+check+context-checks core for one file, factored out
 /// of `check_unit_files` (see this module's own doc comment). Returns
 /// `Some(FileCheckResult)` only on the fully-clean, non-blocked path — the
@@ -734,6 +755,7 @@ pub fn check_file_core(
     let empty_types = HashMap::new();
     let empty_events = HashMap::new();
     let local_table = unit_info.get(name).map(|i| &i.table);
+    let local_uses = unit_info.get(name).map_or(&[][..], |i| i.uses.as_slice());
     let local_types = local_table.map(|t| &t.types).unwrap_or(&empty_types);
     let local_events = local_table.map(|t| &t.events).unwrap_or(&empty_events);
     let empty_fns = HashMap::new();
@@ -756,6 +778,10 @@ pub fn check_file_core(
     .with_local_fns(local_fns)
     // #3959: a commons' free functions may declare `given`.
     .with_is_commons(kind == UnitKind::Commons)
+    // #911: what a literal `message("code")` here is checked against.
+    .with_message_scope(crate::symbols::message_scope(name, local_uses, |u| {
+        unit_info.get(u).map(|i| &i.table)
+    }))
     // #1883, slice 1a: this unit's assets plus its `uses`d commons' ([DECISION G]).
     .with_assets(crate::assets::compose_unit_assets(name, unit_info))
     // #2387, slice 1: likewise this unit's embeds and its `uses`d commons'.
@@ -769,20 +795,7 @@ pub fn check_file_core(
     .with_extensible_enums(extensible_names(imported_from))
     // #3536: the first-party types this unit's braces leave out.
     .with_unselected_types(unit_info[name].table.unselected_names_in(imported_from))
-    // S3 (#1963): the project's policy, and this unit's blocked imports. A
-    // first-party unit's own bodies are the library's business, never the
-    // project's opt-in, so they check under a policy that blocks nothing.
-    .with_stability(if pf.is_synthetic() {
-        crate::stability::UnitStability {
-            policy: Arc::new(crate::stability::StabilityPolicy::permissive()),
-            blocked_imports: HashMap::new(),
-        }
-    } else {
-        crate::stability::UnitStability {
-            policy: ctx.policy.clone(),
-            blocked_imports: ctx.policy.blocked_imports(imported_from),
-        }
-    });
+    .with_stability(unit_stability(pf, ctx, imported_from));
     refs.enter_file(&pf.identity_path(), name, pf.is_synthetic());
     // v0.27: synthetic and test/integration files record no hints — neither
     // surfaces in an editor (the `assemble_index` rule).

@@ -1,0 +1,9 @@
+suite shop.cart {
+  case "a computed code that is not declared renders as itself" {
+    expect say("en", "nope", "Ada") == "nope {name=Ada}"
+  }
+
+  case "a declared code renders its template" {
+    expect say("fr", "greeting", "Ada") == "Votre panier, Ada."
+  }
+}
