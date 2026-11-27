@@ -53,6 +53,9 @@ const NON_DIAGNOSTIC_LOOKALIKES: &[&str] = &[
     "bynk.list.reverse",
     "bynk.string.join",
     "bynk.text.shout",
+    // #3959: the `[unstable] allow` entry for capability parameters, a
+    // built-in experimental item (`BUILTIN_EXPERIMENTAL`), not a code.
+    "bynk.given.parameters",
 ];
 
 /// Collect every `"bynk.x.y"` string literal across the compiler source,

@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability parameter (`given Store: Kv`) belongs to a free function in a commons, the one place capability-polymorphic code lives. A context function, a method, a handler, a provider and a suite helper name the capabilities they use directly, with concrete instances only, so a reader of a context sees exactly which resource each body touches. Write `given Sessions` there; a helper over two instances moves to a commons, which the context `uses`.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.parameter_outside_commons",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "context shop\n\nfn forget(id: String) -> Effect[()] given Store: Kv { … }   // ✗ a context function\n\nfn forget(id: String) -> Effect[()] given Sessions {         // ✓ the instance, by name\n\tSessions.delete(id)\n}",
+  "severity": "error",
+  "summary": "`given Name: Kind` on a context function, a method, a handler, a provider or a suite helper; only a commons function takes capability parameters."
+}

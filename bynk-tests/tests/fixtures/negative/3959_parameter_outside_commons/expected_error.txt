@@ -1,0 +1,2 @@
+bynk.given.parameter_outside_commons `Store: Kv` is a capability parameter, which only a commons function may declare
+bynk.given.parameter_outside_commons `Store: Kv` is a capability parameter, which only a commons function may declare

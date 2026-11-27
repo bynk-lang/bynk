@@ -1,0 +1,11 @@
+---
+#3959, §14.1 `bynk.given.kind_needs_parameter` in a test-only commons (track §4): its
+`given` follows the commons rule, not the suite helper's, so a bare `Kv` is refused here too.
+---
+commons lib.cache for tests
+
+consumes bynk.cloudflare { Kv }
+
+fn seed(key: String) -> Effect[()] given Kv {
+	Kv.put(key, "v")
+}

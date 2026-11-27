@@ -449,9 +449,13 @@ mod tests {
                 "bynk.cloudflare.Kv.getValue",
                 "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto",
-                "bynk.RequestHeaders.entries"
+                "bynk.RequestHeaders.entries",
+                "bynk.given.parameters"
             ]
         );
+        // #3959: capability parameters are one built-in experimental entry.
+        assert!(p.blocks("bynk.given.parameters"));
+        assert!(firstparty::names_first_party_item("bynk.given.parameters"));
         assert!(!p.blocks("bynk.cloudflare.Kv.list"));
         // #3752 (D12): a method of a built-in type, alone; its other methods
         // are stable, and an allow entry naming it is a first-party item.

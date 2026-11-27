@@ -1,0 +1,9 @@
+// #4550: a list element and the `..rest` bind the same name.
+commons app.dup
+
+fn first(xs: List[Int]) -> Int {
+	match xs {
+		[x, ..x] => 1,
+		_ => 0,
+	}
+}

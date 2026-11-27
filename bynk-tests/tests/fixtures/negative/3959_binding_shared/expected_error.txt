@@ -1,0 +1,2 @@
+bynk.given.binding_shared `Logger` is a shared capability of `remember`, so it is not bound
+# exact

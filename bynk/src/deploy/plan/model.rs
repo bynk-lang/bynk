@@ -930,6 +930,12 @@ impl<'a> Plan<'a> {
         self
     }
 
+    /// #3797: more warnings for the plan's `warnings`, found while the plan is derived and printed.
+    pub(crate) fn with_warnings(mut self, warnings: Vec<super::Entry>) -> Self {
+        self.warnings.extend(warnings);
+        self
+    }
+
     /// #3797: one more refusal for the plan's `refusals`, for a refusal made once the plan is
     /// derived: the plan is still printed, with it in the document.
     pub(crate) fn with_refusal(mut self, refusal: super::Entry) -> Self {

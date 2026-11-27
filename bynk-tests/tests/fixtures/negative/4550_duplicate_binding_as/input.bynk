@@ -1,0 +1,9 @@
+// #4550: an `as` name repeats a name its pattern already binds.
+commons app.dup
+
+fn get(o: Option[Int]) -> Int {
+	match o {
+		Some(a as a) => a,
+		None => 0,
+	}
+}

@@ -1251,6 +1251,22 @@ let totals = orders.map((Order { id, .. } as order) => order.total)
 - `as` stays contextual: only a pattern followed by `as` takes this reading, and `consumes … as`
   and `embeds … as` are unchanged.
 
+### Each name once
+
+A pattern binds each name at most once. `Both(a, a)`, `Order { id: x, total: x, .. }`,
+`[x, ..x]` and `Some(a as a)` are
+[`bynk.types.duplicate_pattern_binding`](/reference/diagnostics/bynk.types.duplicate_pattern_binding/),
+reported at the repeat, with the first binding marked. Otherwise the body would read one name for
+two values. The rule holds at every depth and in every pattern position: a match arm, `let … else`,
+a destructuring `let`, a lambda's pattern parameter, after `is`, and in a suite case. Rename one of
+the bindings, or write `_` where the value isn't needed.
+
+An or-pattern's alternatives are the exception, because they *must* bind the same names (the
+or-pattern rule above). `Dot(x) | Line(x, _)` binds `x` once, from whichever alternative matched.
+A name repeated *within* one alternative, as in `Dot(x) | Line(x, x)`, is still refused. A field
+listed twice in one record pattern is the separate
+[`bynk.types.duplicate_pattern_field`](/reference/diagnostics/bynk.types.duplicate_pattern_field/).
+
 ### Exhaustiveness and reachability
 
 Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable
