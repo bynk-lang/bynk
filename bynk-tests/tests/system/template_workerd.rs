@@ -148,7 +148,8 @@ fn a_template_fills_with_its_escapes_on_workerd() {
     let _ = fs::remove_dir_all(&tmp);
     let proj = tmp.join("proj");
     copy_dir(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/positive/3927_template_contexts"),
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/3927_template_contexts"),
         &proj,
     );
     if let Err(said) = compile(&proj, &tmp.join("out")) {

@@ -351,7 +351,13 @@ pub fn check_template(
     let analysed = html_template::analyse_template(text);
     for r in &analysed.analysis.markup {
         let at = match r.at {
-            At::Offset(o) => Span::new(o, o + 1),
+            At::Offset(o) => Span::new(
+                o,
+                o + text[o.min(text.len())..]
+                    .chars()
+                    .next()
+                    .map_or(0, char::len_utf8),
+            ),
             At::Hole(h) => {
                 let p = &analysed.split.placeholders[h];
                 Span::new(p.start, p.end)

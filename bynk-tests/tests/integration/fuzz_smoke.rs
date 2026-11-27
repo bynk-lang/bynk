@@ -196,3 +196,57 @@ fn mutated_corpus_never_panics_the_compiler() {
         }
     }
 }
+
+/// #3927: the `template` fuzz target's first invariant, over mutations of every template file
+/// in the fixtures: the typed-HTML tokeniser never panics, and every refusal points inside the
+/// input on a character boundary. (Its differential against `html5ever` runs in `bynk-check`'s
+/// own tests, `html_template_differential.rs`.)
+#[test]
+fn mutated_templates_never_panic_the_tokeniser() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let mut templates = Vec::new();
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for entry in rd.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().and_then(|e| e.to_str()) == Some("html")
+                && p.parent().is_some_and(|d| d.ends_with("embeds"))
+                && let Ok(text) = fs::read_to_string(&p)
+            {
+                templates.push((p, text));
+            }
+        }
+    }
+    templates.sort();
+    assert!(
+        templates.len() > 20,
+        "template discovery looks broken: {}",
+        templates.len()
+    );
+    let mut rng = Lcg(0x3927);
+    for (path, text) in templates {
+        for round in 0..20 {
+            let mutant = mutate(&text, &mut rng);
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                let a = bynk_check::html_template::analyse_template(&mutant);
+                for r in &a.analysis.markup {
+                    if let bynk_check::html_template::At::Offset(o) = r.at {
+                        assert!(
+                            o <= mutant.len() && mutant.is_char_boundary(o),
+                            "refusal at {o}"
+                        );
+                    }
+                }
+            }));
+            if result.is_err() {
+                panic!(
+                    "the tokeniser panicked on mutant {round} of {}:\n--- mutant ---\n{mutant}",
+                    path.display()
+                );
+            }
+        }
+    }
+}

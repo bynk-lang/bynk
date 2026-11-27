@@ -134,7 +134,8 @@ pub enum Initial {
     Data,
     Rcdata(String),
     Rawtext(String),
-    ScriptData,
+    /// Script data, ended by the end tag of the element named (`script`, in a page).
+    ScriptData(String),
     Plaintext,
 }
 
@@ -1302,7 +1303,7 @@ fn run(units: &[Unit], initial: Initial, tree: bool) -> Analysis {
         Initial::Data => (State::Data, String::new()),
         Initial::Rcdata(n) => (State::Rcdata, n),
         Initial::Rawtext(n) => (State::Rawtext, n),
-        Initial::ScriptData => (State::ScriptData, "script".to_string()),
+        Initial::ScriptData(n) => (State::ScriptData, n),
         Initial::Plaintext => (State::Plaintext, String::new()),
     };
     let mut tok = Tok {
